@@ -17,6 +17,7 @@ import { spanAtFrameCell } from "../../terminal/testing/frameProbe.js";
 import {
   attentionAndFailuresSnapshot,
   externalAgentSnapshot,
+  groupedManyProjectsSnapshot,
   manyProjectsSnapshot,
   noProjectsSnapshot,
 } from "../fixtures/scenarios.js";
@@ -88,6 +89,17 @@ function openAddProjectReview(state: GoldenDashboardState, gitRoot: boolean): Go
     id: "station",
     label: "Station",
   });
+}
+
+function markNewSessionSubmitting(state: GoldenDashboardState): GoldenDashboardState {
+  if (state.screen.name !== "newSession" || state.screen.flow.mode !== "review") return state;
+  return {
+    ...state,
+    screen: {
+      name: "newSession",
+      flow: { ...state.screen.flow, submissionLocalId: "create:station:golden" },
+    },
+  };
 }
 
 const CASES: ModalCase[] = [
@@ -371,6 +383,7 @@ const CASES: ModalCase[] = [
       "Project (P)",
       "Name (N)",
       "Agent (A)",
+      "Group (G)",
       "Create session (C)",
       "Enter create session",
     ],
@@ -387,8 +400,13 @@ const CASES: ModalCase[] = [
   },
   {
     name: "new session review agent focus",
-    keys: [{ input: "N" }, { input: "", upArrow: true }],
+    keys: [{ input: "N" }, { input: "", upArrow: true }, { input: "", upArrow: true }],
     expect: ["▸ Agent (A)", "Enter choose agent"],
+  },
+  {
+    name: "new session review Group focus",
+    keys: [{ input: "N" }, { input: "", upArrow: true }],
+    expect: ["▸ Group (G)", "Enter choose Group"],
   },
   {
     name: "new session healthy agent",
@@ -435,7 +453,14 @@ const CASES: ModalCase[] = [
     keys: [{ input: "N" }],
     snapshot: () => snapshotWithCodexHealth("degraded"),
     size: { width: 40, height: 16 },
-    expect: ["Project (P)", "Name (N)", "Agent (A)", "● degraded", "Create session (C)"],
+    expect: [
+      "Project (P)",
+      "Name (N)",
+      "Agent (A)",
+      "● degraded",
+      "Group (G)",
+      "Create session (C)",
+    ],
   },
   {
     name: "new session pick project",
@@ -451,6 +476,25 @@ const CASES: ModalCase[] = [
     name: "new session pick agent",
     keys: [{ input: "N" }, { input: "A" }],
     expect: ["Choose Agent", "↑↓ move   ↵ select   1-9/a-z jump   Esc back", "codex"],
+  },
+  {
+    name: "new session pick Group",
+    keys: [{ input: "N" }, { input: "G" }],
+    snapshot: groupedManyProjectsSnapshot,
+    expect: ["Choose Group", "U Ungrouped", "1 Design refresh", "N Create new Group"],
+  },
+  {
+    name: "new session edit inline Group",
+    keys: [{ input: "N" }, { input: "G" }, { input: "N" }, { input: "Release" }],
+    snapshot: groupedManyProjectsSnapshot,
+    expect: ["Create Group", "Group", "Release|", "Enter save · Esc discard"],
+  },
+  {
+    name: "new session creating progress",
+    keys: [{ input: "N" }],
+    prepare: markNewSessionSubmitting,
+    expect: ["Creating…", "Creating session…", "Group (G)"],
+    reject: ["Esc cancel"],
   },
   {
     name: "project default agent picker",

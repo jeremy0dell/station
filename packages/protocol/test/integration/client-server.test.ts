@@ -420,6 +420,7 @@ describe("protocol client/server", () => {
           projectId: "web",
           worktreeId: "wt_web_feature",
           title: "Hexagonal PT 12",
+          group: { kind: "existing", groupId: "grp_active" },
         }),
       ).resolves.toEqual({
         kind: "prepared",
@@ -439,8 +440,35 @@ describe("protocol client/server", () => {
         },
       });
       expect(preparedParams).toEqual([
-        { projectId: "web", worktreeId: "wt_web_feature", title: "Hexagonal PT 12" },
+        {
+          projectId: "web",
+          worktreeId: "wt_web_feature",
+          title: "Hexagonal PT 12",
+          group: { kind: "existing", groupId: "grp_active" },
+        },
       ]);
+      await client.prepareExternalLaunch({
+        projectId: "web",
+        worktreeId: "wt_web_inline",
+        group: { kind: "create", name: "Inline work" },
+      });
+      expect(preparedParams[1]).toEqual({
+        projectId: "web",
+        worktreeId: "wt_web_inline",
+        group: { kind: "create", name: "Inline work" },
+      });
+      const rejected = await sendRawRequest(socketPath, {
+        schemaVersion: STATION_SCHEMA_VERSION,
+        jsonrpc: "2.0",
+        id: "bad_group_placement",
+        method: "agent.prepareExternalLaunch",
+        params: {
+          projectId: "web",
+          worktreeId: "wt_web_feature",
+          group: { kind: "existing", groupId: "grp_active", name: "mixed" },
+        },
+      });
+      expect(rejected).toMatchObject({ error: { code: "PROTOCOL_VALIDATION_FAILED" } });
       await expect(
         client.reportExternalExit({
           terminalTargetId: "native:wt_web_feature",

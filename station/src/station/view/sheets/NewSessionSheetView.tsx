@@ -4,11 +4,22 @@ import {
   newSessionContentRowCount,
   newSessionEditNameContent,
   newSessionReviewContent,
+  selectNewSessionGroupChoices,
   selectNewSessionHarnessChoices,
   selectNewSessionProjectChoices,
- } from "@station/dashboard-core/selectors";
-import { selectedProject } from "@station/dashboard-core/state";
-import type { DashboardSnapshotView, DashboardStateView, NewSessionFlowStateView } from "@station/dashboard-core/state";
+} from "@station/dashboard-core/selectors";
+import {
+  NEW_SESSION_CREATE_GROUP_CHOICE_ID,
+  NEW_SESSION_GROUP_LIST_ID,
+  NEW_SESSION_UNGROUPED_CHOICE_ID,
+  newSessionExistingGroupChoiceId,
+  selectedProject,
+} from "@station/dashboard-core/state";
+import type {
+  DashboardSnapshotView,
+  DashboardStateView,
+  NewSessionFlowStateView,
+} from "@station/dashboard-core/state";
 import { providerHealthColor, useStationTheme } from "../../../theme/index.js";
 import { EditableTextInputView } from "../EditableTextInputView.js";
 import { AgentChoiceListView } from "./AgentChoiceListView.js";
@@ -20,6 +31,7 @@ import {
   SheetFooter,
   SheetLabelValue,
   SheetLine,
+  SheetProgressFooter,
 } from "./parts.js";
 
 type NewSessionProjectView = DashboardSnapshotView["projects"][number];
@@ -84,6 +96,19 @@ function renderMode(
       />
     );
   }
+  if (state.mode === "pickGroup") {
+    return (
+      <GroupPicker
+        snapshot={snapshot}
+        state={state}
+        width={contentWidth}
+        selectedId={selection.get(NEW_SESSION_GROUP_LIST_ID)}
+      />
+    );
+  }
+  if (state.mode === "editGroupDraft") {
+    return <EditGroupDraft state={state} project={project} width={contentWidth} />;
+  }
   if (state.mode === "editName") {
     return <EditName state={state} project={project} width={contentWidth} />;
   }
@@ -100,6 +125,10 @@ function titleForState(state: NewSessionFlowStateView): string {
       return "Choose Project";
     case "pickAgent":
       return "Choose Agent";
+    case "pickGroup":
+      return "Choose Group";
+    case "editGroupDraft":
+      return "Create Group";
   }
 }
 
@@ -155,7 +184,103 @@ function Review({
           },
         ]}
       />
-      <SheetFooter width={width}>{`↑↓ focus · ${content.helper} · Esc cancel`}</SheetFooter>
+      {state.submissionLocalId === undefined ? (
+        <SheetFooter width={width}>{`↑↓ focus · ${content.helper} · Esc cancel`}</SheetFooter>
+      ) : (
+        <SheetProgressFooter width={width}>{content.helper}</SheetProgressFooter>
+      )}
+    </>
+  );
+}
+
+function GroupPicker({
+  snapshot,
+  state,
+  width,
+  selectedId,
+}: {
+  snapshot: DashboardSnapshotView;
+  state: Extract<NewSessionFlowStateView, { mode: "pickGroup" }>;
+  width: number;
+  selectedId?: string;
+}) {
+  const choices = selectNewSessionGroupChoices(snapshot, state.selectedProjectId);
+  return (
+    <>
+      <SheetLine width={width}> </SheetLine>
+      <SheetChoiceLine
+        choiceKey="U"
+        label="Ungrouped"
+        detail=""
+        width={width}
+        current={state.groupSelection.kind === "ungrouped"}
+        selected={selectedId === NEW_SESSION_UNGROUPED_CHOICE_ID}
+      />
+      {choices.map((choice) => (
+        <SheetChoiceLine
+          key={choice.value.id}
+          choiceKey={choice.key}
+          label={choice.value.name}
+          detail=""
+          width={width}
+          current={
+            state.groupSelection.kind === "existing" &&
+            state.groupSelection.groupId === choice.value.id
+          }
+          selected={selectedId === newSessionExistingGroupChoiceId(choice.value.id)}
+        />
+      ))}
+      <SheetChoiceLine
+        choiceKey="N"
+        label={
+          state.groupSelection.kind === "create"
+            ? `Create “${state.groupSelection.name}”`
+            : "Create new Group"
+        }
+        detail=""
+        width={width}
+        current={state.groupSelection.kind === "create"}
+        selected={selectedId === NEW_SESSION_CREATE_GROUP_CHOICE_ID}
+      />
+      <SheetLine width={width}> </SheetLine>
+      <SheetFooter width={width}>{"↑↓ move   ↵ select   U ungrouped   N create   Esc back"}</SheetFooter>
+    </>
+  );
+}
+
+function EditGroupDraft({
+  state,
+  project,
+  width,
+}: {
+  state: Extract<NewSessionFlowStateView, { mode: "editGroupDraft" }>;
+  project: NewSessionProjectView | undefined;
+  width: number;
+}) {
+  return (
+    <>
+      <SheetLabelValue
+        width={width}
+        label="Project"
+        labelWidth={12}
+        value={project?.label ?? "-"}
+      />
+      <SheetControlRow
+        width={width}
+        label="Group"
+        value={
+          <EditableTextInputView
+            value={state.draftGroupName.value}
+            cursor={state.draftGroupName.cursor}
+            placeholder="Group name"
+            active
+          />
+        }
+        valueCells={state.draftGroupName.value.length + 1}
+        focused
+        mouseTarget={{ kind: "sheetBackdrop" }}
+      />
+      <SheetFooter width={width}>{"Type Group name · Enter save · Esc discard"}</SheetFooter>
     </>
   );
 }
@@ -292,6 +417,9 @@ function optionCountForState(
   }
   if (state.mode === "pickAgent" && project !== undefined) {
     return selectNewSessionHarnessChoices(snapshot, project).length;
+  }
+  if (state.mode === "pickGroup") {
+    return selectNewSessionGroupChoices(snapshot, state.selectedProjectId).length + 2;
   }
   return 0;
 }

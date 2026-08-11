@@ -14,6 +14,7 @@ import {
   removePendingStartAgentRow,
 } from "../localRows.js";
 import type { DashboardRuntimeEffectScope } from "../runtimeEffectScope.js";
+import { completeNewSessionSubmission, failNewSessionSubmission } from "../screens/newSession.js";
 import { FAILED_CREATE_ROW_TTL_MS } from "../timing.js";
 import { addTuiToast } from "../toasts.js";
 import type { DashboardState } from "../types.js";
@@ -107,6 +108,7 @@ async function runDashboardCapabilityOperation(input: {
           title: operation.title,
           hiddenBranch: operation.hiddenBranch,
           harness: operation.harness,
+          ...(operation.group === undefined ? {} : { group: operation.group }),
         };
         handle =
           operation.type === "createManagedSession"
@@ -146,7 +148,12 @@ async function runDashboardCapabilityOperation(input: {
       error: toSafeError(error, { clientLabel }),
       disposition: "remove-immediately",
     };
-    scope.commit(() => addSafeErrorToast(store, result.error));
+    scope.commit(() => {
+      if (operation.type === "createManagedSession") {
+        store.setState(failNewSessionSubmission(store.getState(), operation.localId, result.error));
+      }
+      addSafeErrorToast(store, result.error);
+    });
     return result;
   }
 
@@ -164,6 +171,9 @@ async function runDashboardCapabilityOperation(input: {
       disposition: "remove-immediately",
     };
     scope.commit(() => {
+      if (operation.type === "createManagedSession") {
+        store.setState(failNewSessionSubmission(store.getState(), operation.localId, result.error));
+      }
       removeCapabilityOptimisticRow(store, operation);
       addSafeErrorToast(store, result.error);
     });
@@ -194,9 +204,7 @@ function applyCapabilityOptimisticState(
   }
   if (
     handle.optimistic === "pending-create" &&
-    (operation.type === "createManagedSession" ||
-      operation.type === "quickCreateManagedSession" ||
-      operation.type === "forkManagedSession")
+    (operation.type === "quickCreateManagedSession" || operation.type === "forkManagedSession")
   ) {
     const pendingRow: Parameters<typeof addPendingCreateSessionRow>[1] = {
       localId: operation.localId,
@@ -227,6 +235,20 @@ function settleDashboardCapabilityOperation(input: {
   expiry: FailedCreateExpiryScheduler;
 }): void {
   const { store, operation, handle, result, expiry } = input;
+  if (operation.type === "createManagedSession") {
+    if (result.kind === "success") {
+      store.setState(completeNewSessionSubmission(store.getState(), operation.localId));
+      return;
+    }
+    const error = result.kind === "failure" ? result.error : undefined;
+    store.setState(failNewSessionSubmission(store.getState(), operation.localId, error));
+    if (result.kind === "notice") {
+      store.setState(addTuiToast(store.getState(), result.notice));
+    } else {
+      addSafeErrorToast(store, result.error);
+    }
+    return;
+  }
   if (result.kind === "success") {
     if (
       handle.successDisposition === "remove-immediately" &&
@@ -257,9 +279,7 @@ function settleDashboardCapabilityOperation(input: {
   }
   if (
     result.disposition === "retain-failed" &&
-    (operation.type === "createManagedSession" ||
-      operation.type === "quickCreateManagedSession" ||
-      operation.type === "forkManagedSession")
+    (operation.type === "quickCreateManagedSession" || operation.type === "forkManagedSession")
   ) {
     markCreateSessionRowFailed(store, operation.localId, result.error, expiry);
   } else {

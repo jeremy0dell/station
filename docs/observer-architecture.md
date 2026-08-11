@@ -623,15 +623,18 @@ handle remains.
 A new managed session repeats the full selected-harness preflight immediately
 before title, target, or process mutation, then durably seeds the session from
 canonical worktree title authority before target registration and process launch.
+Optional New Session Group placement is part of that transaction: an existing ID
+must still be a same-project root, while inline creation uses an Observer-minted ID.
 Failed fresh launch cleanup conditionally releases only the target still bound to
-that fresh session and discards its seed only after release is confirmed absent
-or complete.
+that fresh session and atomically discards the seed, membership, and owned inline
+Group only after release is confirmed absent or complete.
 
 When preparation mints a fresh session and receives a title, it persists that
 title before registering the managed target so reconcile cannot publish the new
 session under its branch. Terminal-preparation or process-launch failure releases
 the target before deleting the seed; if target release cannot be confirmed, the
-seed remains so a dangling target cannot lose its title. A title supplied while
+seed and coherent Group placement remain so a dangling target cannot lose its
+title or organizational identity. A title or Group placement supplied while
 returning an existing session is ignored.
 
 External exit reports carry the target plus the Station session expected to own
@@ -732,14 +735,17 @@ when it changes several tables:
   insert-only initialization of missing canonical worktree titles before session projection sync.
 - `SessionStore` owns explicit session lifecycle, canonical worktree-scoped title authority,
   synchronized per-session title projections, durable provider-native execution bindings,
-  recovery handles, turn readiness, and purpose-specific remembered-harness lookup. Rename,
-  fresh-session seeding, confirmed worktree retirement, and canonical-title/recovery import keep
-  their multi-table changes atomic.
-- `SessionGroupStore` owns Group definitions, exclusive direct membership, parent changes,
+  recovery handles, turn readiness, and purpose-specific remembered-harness lookup. A fresh-session
+  seed may atomically validate and place the session in an existing root Group or create its first
+  root Group; provenance-safe discard removes that membership and only an owned single-member inline
+  Group. Rename, seed/discard, confirmed worktree retirement, and canonical-title/recovery import
+  keep their multi-table changes atomic.
+- `SessionGroupStore` owns recorded Group definitions, exclusive direct membership, parent changes,
   deletion-to-ungroup with child reparenting, and atomic reconcile repair of parseable membership
   and parent relationships. Stale versions and expected assignments return conflicts without
   throwing; invariant or storage failures roll back the complete conversation. Empty definitions
-  remain durable.
+  remain durable. Fresh-session placement intentionally stays in `SessionStore` so session and
+  membership cannot commit through separate ports.
 - `WorktreeMetadataStore` owns current change, pull-request, and check metadata
   plus its expiry.
 

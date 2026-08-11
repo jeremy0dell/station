@@ -206,6 +206,64 @@ describe("dashboard runtime", () => {
     expect(capabilities.shellRequests).toEqual([{ kind: "project", projectId: "web" }]);
   });
 
+  it("retains deliberate New Session on failure without an optimistic root row", async () => {
+    const snapshot = createDashboardSnapshot();
+    const capabilities = createFakeDashboardCapabilities();
+    capabilities.createHandle = () =>
+      dashboardExecution({
+        kind: "failure",
+        disposition: "remove-immediately",
+        error: {
+          tag: "CommandValidationError",
+          code: "SESSION_GROUP_NOT_FOUND",
+          message: "The selected Group no longer exists.",
+        },
+      });
+    const store = createTestDashboardRuntime({
+      service: new FakeTuiObserverService(snapshot),
+      initialSnapshot: snapshot,
+      capabilities,
+    });
+
+    store.actions.handleKey({ input: "N" });
+    store.actions.handleKey({ input: "C" });
+
+    await waitFor(() =>
+      store.state
+        .getState()
+        .toasts.some((entry) => entry.toast.message === "The selected Group no longer exists."),
+    );
+    expect(store.state.getState().screen).toMatchObject({
+      name: "newSession",
+      flow: { mode: "review", reviewFocus: "group" },
+    });
+    expect(store.state.getState().localRows.pendingCreate).toEqual([]);
+    expect(store.state.getState().localRows.failedCreate).toEqual([]);
+  });
+
+  it("closes deliberate New Session only after successful settlement", async () => {
+    const snapshot = createDashboardSnapshot();
+    const capabilities = createFakeDashboardCapabilities();
+    const completion = deferred<Awaited<ReturnType<typeof dashboardExecution>["completion"]>>();
+    capabilities.createHandle = () => dashboardExecution(completion.promise);
+    const store = createTestDashboardRuntime({
+      service: new FakeTuiObserverService(snapshot),
+      initialSnapshot: snapshot,
+      capabilities,
+    });
+
+    store.actions.handleKey({ input: "N" });
+    store.actions.handleKey({ input: "C" });
+    expect(store.state.getState().screen).toMatchObject({
+      name: "newSession",
+      flow: { mode: "review", submissionLocalId: expect.any(String) },
+    });
+
+    completion.resolve({ kind: "success" });
+    await waitFor(() => store.state.getState().screen.name === "dashboard");
+    expect(store.state.getState().localRows.pendingCreate).toEqual([]);
+  });
+
   it("applies Quick Session optimistic state synchronously after screen focus", () => {
     const snapshot = createZeroWorktreeSnapshot();
     const capabilities = createFakeDashboardCapabilities();

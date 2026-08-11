@@ -5,6 +5,7 @@ import {
   type ProviderId,
   type ProviderProjectConfig,
   type SafeError,
+  type SessionGroupId,
   type SessionId,
   type SessionView,
   type StationSnapshot,
@@ -22,7 +23,12 @@ import {
   systemClock,
   toIsoTimestamp,
 } from "@station/runtime";
-import type { EventJournal, SessionStore } from "../../persistence/index.js";
+import type {
+  EventJournal,
+  SessionSeedGroupPlacement,
+  SessionSeedResult,
+  SessionStore,
+} from "../../persistence/index.js";
 import type { ProviderRegistry } from "../../providers/registry.js";
 import type { ObserverEventBus } from "../../runtime/eventBus.js";
 import type { StationLogger } from "../../stationLogger.js";
@@ -30,13 +36,21 @@ import { linkAbortSignals, throwIfAborted } from "../cancellation.js";
 
 export { throwIfAborted } from "../cancellation.js";
 
-import { worktreeMissingError } from "../errors.js";
+import {
+  sessionGroupAssignmentConflictError,
+  sessionGroupIdCollisionError,
+  sessionGroupMissingError,
+  sessionGroupNotRootError,
+  sessionGroupProjectMismatchError,
+  worktreeMissingError,
+} from "../errors.js";
 import type { CommandHandlerContext } from "../queue.js";
 
 export { resolveHarnessProviderOrThrow, resolveTerminalProviderOrThrow } from "../providers.js";
 
 export type SessionCommandIdFactory = {
   sessionId(): SessionId;
+  sessionGroupId(): SessionGroupId;
 };
 
 export type SessionCommandRuntime = {
@@ -60,6 +74,7 @@ type RunProviderMutationInput = {
 
 export const defaultSessionCommandIdFactory: SessionCommandIdFactory = {
   sessionId: () => `ses_${randomUUID()}`,
+  sessionGroupId: () => `grp_${randomUUID()}`,
 };
 
 export function findProjectOrThrow(
@@ -296,29 +311,52 @@ export async function seedSession(input: {
   projectId: string;
   worktreeId: string;
   initialTitle: string;
+  group?: SessionSeedGroupPlacement;
   clock?: RuntimeClock | undefined;
-}): Promise<void> {
+}): Promise<Extract<SessionSeedResult, { ok: true }>> {
   const seededAt = toIsoTimestamp((input.clock ?? systemClock).now());
-  await input.persistence.seedSession({
+  const result = await input.persistence.seedSession({
     sessionId: input.sessionId,
     projectId: input.projectId,
     worktreeId: input.worktreeId,
     initialTitle: input.initialTitle.trim(),
     createdAt: seededAt,
     lastSeenAt: seededAt,
+    ...(input.group === undefined ? {} : { group: input.group }),
   });
+  if (result.ok) return result;
+
+  const groupId = input.group?.groupId ?? "generated";
+  switch (result.reason) {
+    case "group_not_found":
+      throw sessionGroupMissingError(groupId, input.projectId);
+    case "group_project_mismatch":
+      throw sessionGroupProjectMismatchError(groupId, input.projectId);
+    case "group_not_root":
+      throw sessionGroupNotRootError(groupId, input.projectId);
+    case "group_id_collision":
+      throw sessionGroupIdCollisionError(input.projectId);
+    case "unexpected_assignment":
+      throw sessionGroupAssignmentConflictError(input.projectId);
+  }
 }
 
 export async function discardSessionSeedBestEffort(input: {
   persistence: SessionStore;
   sessionId: SessionId;
+  expectedGroupId?: SessionGroupId;
+  createdGroupId?: SessionGroupId;
   removedWorktree?: { projectId: string; worktreeId: string };
   context: CommandHandlerContext;
   logger?: StationLogger | undefined;
+  clock?: RuntimeClock | undefined;
 }): Promise<void> {
   try {
     await input.persistence.discardSessionSeed({
       sessionId: input.sessionId,
+      ...(input.expectedGroupId === undefined ? {} : { expectedGroupId: input.expectedGroupId }),
+      ...(input.createdGroupId === undefined ? {} : { createdGroupId: input.createdGroupId }),
+      discardedAt: toIsoTimestamp((input.clock ?? systemClock).now()),
       ...(input.removedWorktree === undefined ? {} : { removedWorktree: input.removedWorktree }),
     });
   } catch (error) {

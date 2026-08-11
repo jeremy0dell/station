@@ -13,7 +13,7 @@ import {
 } from "../../selectors/selectors.js";
 import type { DashboardSnapshotView } from "../../state/types.js";
 
-export type NewSessionReviewFieldId = "project" | "name" | "agent";
+export type NewSessionReviewFieldId = "project" | "name" | "agent" | "group";
 
 export type NewSessionStatusContent = {
   glyph: "●";
@@ -74,6 +74,13 @@ const REVIEW_CONTROLS: {
     focusId: "agent",
     helper: "Enter choose agent",
   },
+  group: {
+    actionId: "review.group",
+    label: "Group",
+    accelerator: "G",
+    focusId: "group",
+    helper: "Enter choose Group",
+  },
   create: {
     actionId: "review.create",
     label: "Create session",
@@ -125,6 +132,18 @@ export function newSessionReviewContent(
           (option) => option.id === state.selectedHarness,
         );
   const status = harness?.status ?? "unknown";
+  const groupSelection = state.groupSelection;
+  const groupValue =
+    groupSelection.kind === "ungrouped"
+      ? "Ungrouped"
+      : groupSelection.kind === "create"
+        ? `Create “${groupSelection.name}”`
+        : (snapshot.sessionGroups.find(
+            (group) =>
+              group.id === groupSelection.groupId &&
+              group.projectId === state.selectedProjectId &&
+              group.parentGroupId === undefined,
+          )?.name ?? "Ungrouped");
   const fields: NewSessionReviewFieldContent[] = [
     { ...REVIEW_CONTROLS.project, enabled: true, id: "project", value: project?.label ?? "-" },
     { ...REVIEW_CONTROLS.name, enabled: true, id: "name", value: state.title },
@@ -135,14 +154,19 @@ export function newSessionReviewContent(
       value: harness?.label ?? state.selectedHarness,
       status: { glyph: "●", text: status, tone: status },
     },
+    { ...REVIEW_CONTROLS.group, enabled: true, id: "group", value: groupValue },
   ];
   return {
     fields,
     create: {
       ...REVIEW_CONTROLS.create,
       enabled: newSessionActionEnabled(snapshot, state, "review.create"),
+      label: state.submissionLocalId === undefined ? REVIEW_CONTROLS.create.label : "Creating…",
     },
-    helper: REVIEW_CONTROLS[state.reviewFocus].helper,
+    helper:
+      state.submissionLocalId === undefined
+        ? REVIEW_CONTROLS[state.reviewFocus].helper
+        : "Creating session…",
   };
 }
 

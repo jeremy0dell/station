@@ -35,6 +35,8 @@ import type {
   SessionGroupRepairResult,
   SessionGroupStoreResult,
   SessionHarnessDerivedStateRepair,
+  SessionSeedGroupPlacement,
+  SessionSeedResult,
   SessionTurnReadinessMutation,
   WorktreeMetadataCurrentKind,
   WorktreeMetadataCurrentPayloadByKind,
@@ -145,7 +147,8 @@ export interface ReconcileStore {
  *
  * Maintains Observer-owned session lifecycle, provider-native execution bindings, canonical
  * worktree-scoped title authority, synchronized session projections, recovery, and readiness.
- * Canonical-title handoff and recovery import commit atomically before recovery can reconcile.
+ * Fresh-session seed, optional root Group placement, and provenance-safe discard are one atomic
+ * conversation; canonical-title handoff and recovery import also commit before recovery reconciles.
  */
 export interface SessionStore {
   listSessions(): Promise<PersistedSession[]>;
@@ -171,9 +174,13 @@ export interface SessionStore {
     initialTitle: string;
     createdAt: string;
     lastSeenAt: string;
-  }): Promise<PersistedSession>;
+    group?: SessionSeedGroupPlacement;
+  }): Promise<SessionSeedResult>;
   discardSessionSeed(input: {
     sessionId: string;
+    expectedGroupId?: SessionGroupId;
+    createdGroupId?: SessionGroupId;
+    discardedAt?: string;
     removedWorktree?: { projectId: string; worktreeId: string };
   }): Promise<{ discardedSessions: number; discardedWorktreeTitles: number }>;
   markSessionsEnded(input: {
@@ -219,7 +226,8 @@ export interface SessionStore {
 /**
  * DRIVEN PORT
  *
- * Maintains durable project-local Group definitions, exclusive membership, parentage, and atomic reconcile repair of parseable relationships.
+ * Maintains recorded project-local Group mutation and atomic reconcile repair of definitions,
+ * exclusive membership, and parentage. Fresh-session placement is owned by SessionStore.
  */
 export interface SessionGroupStore {
   listSessionGroups(): Promise<SessionGroupView[]>;

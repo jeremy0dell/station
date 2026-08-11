@@ -1,7 +1,11 @@
 import { deriveTuiInputMode, type TuiInputMode } from "../keymap.js";
 import type { DashboardState } from "../types.js";
 import { addProjectChooseListSpec, addProjectStartListSpec } from "./specs/addProject.js";
-import { newSessionPickAgentListSpec, newSessionPickProjectListSpec } from "./specs/newSession.js";
+import {
+  newSessionPickAgentListSpec,
+  newSessionPickGroupListSpec,
+  newSessionPickProjectListSpec,
+} from "./specs/newSession.js";
 import { projectCollapseListSpec, projectSettingsPickerListSpec } from "./specs/projectChoosers.js";
 import { projectDefaultAgentListSpec } from "./specs/projectDefaultAgent.js";
 import { projectSettingsAgentListSpec } from "./specs/projectSettingsAgent.js";
@@ -18,6 +22,7 @@ export const LIST_REGISTRY: Partial<Record<TuiInputMode, RegisteredListSpec>> = 
   projectDefaultAgent: projectDefaultAgentListSpec,
   newSessionPickProject: newSessionPickProjectListSpec,
   newSessionPickAgent: newSessionPickAgentListSpec,
+  newSessionPickGroup: newSessionPickGroupListSpec,
   projectCollapse: projectCollapseListSpec,
   projectSettingsPicker: projectSettingsPickerListSpec,
   projectSettings: projectSettingsAgentListSpec,

@@ -21,13 +21,13 @@ export type { AddProjectFlowStateView } from "../flows/addProject/types.js";
 export type {
   NewSessionActionId,
   NewSessionFlowStateView,
+  NewSessionGroupSelection,
 } from "../flows/newSession.js";
 export {
   createNewSessionFlow,
   selectedProject,
   transitionNewSessionFlow,
 } from "../flows/newSession.js";
-
 export type {
   PersistentFilterActionId,
   TuiSemanticAction,
@@ -38,21 +38,17 @@ export {
   QUIT_HINT_CLOSE,
   QUIT_HINT_DISMISS_ERROR,
 } from "../state/keymap.js";
-
 export type { TuiKey } from "../state/keys.js";
-
 export { addPendingProjectDefaultHarness } from "../state/localRows.js";
-
 export { createInitialTuiState } from "../state/screen.js";
-
 export { tuiScreenBehavior } from "../state/screenBehavior.js";
-
 export {
   applyAddProjectFolderLoaded,
   applyAddProjectFolderReviewed,
   applyAddProjectFolderReviewFailed,
   applyAddProjectSubmitted,
 } from "../state/screens/addProjectScreen.js";
+export { openNewSession } from "../state/screens/dashboard.js";
 
 export type { ForkSessionActionId } from "../state/screens/fork.js";
 
@@ -84,6 +80,12 @@ export {
 } from "../state/selection/addProject.js";
 
 export { LIST_REGISTRY } from "../state/selection/registry.js";
+export {
+  NEW_SESSION_CREATE_GROUP_CHOICE_ID,
+  NEW_SESSION_GROUP_LIST_ID,
+  NEW_SESSION_UNGROUPED_CHOICE_ID,
+  newSessionExistingGroupChoiceId,
+} from "../state/selection/specs/newSession.js";
 
 export type { TuiSelectionState } from "../state/selection/types.js";
 

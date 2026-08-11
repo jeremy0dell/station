@@ -56,6 +56,10 @@
         "layout": "agent-build-shell",
         "focus": true
       },
+      "group": {
+        "kind": "existing",
+        "groupId": "grp_cache"
+      },
       "initialPrompt": "Implement the cache contract tests."
     }
   },

@@ -700,12 +700,12 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
  [6] x batch-export                       opencode  exited                 #8 ✓ 
  [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 … 
  [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓ 
-                                                                                
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Create Session                                                               │
 │  Project (P) station                                                         │
 │  Name (N)    station-XXXXXX                                                  │
 │  Agent (A)   codex ● unknown                                                 │
+│  Group (G)   Ungrouped                                                       │
 │▸ Create session (C)                                                          │
 │ ↑↓ focus · Enter create session · Esc cancel                                 │
 └──────────────────────────────────────────────────────────────────────────────┘
@@ -728,12 +728,12 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
  [6] x batch-export                       opencode  exited                 #8 ✓ 
  [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 … 
  [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓ 
-                                                                                
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Create Session                                                               │
 │▸ Project (P) station                                                         │
 │  Name (N)    station-XXXXXX                                                  │
 │  Agent (A)   codex ● unknown                                                 │
+│  Group (G)   Ungrouped                                                       │
 │  Create session (C)                                                          │
 │ ↑↓ focus · Enter choose project · Esc cancel                                 │
 └──────────────────────────────────────────────────────────────────────────────┘
@@ -756,12 +756,12 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
  [6] x batch-export                       opencode  exited                 #8 ✓ 
  [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 … 
  [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓ 
-                                                                                
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Create Session                                                               │
 │  Project (P) station                                                         │
 │▸ Name (N)    station-XXXXXX                                                  │
 │  Agent (A)   codex ● unknown                                                 │
+│  Group (G)   Ungrouped                                                       │
 │  Create session (C)                                                          │
 │ ↑↓ focus · Enter edit name · Esc cancel                                      │
 └──────────────────────────────────────────────────────────────────────────────┘
@@ -784,14 +784,42 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
  [6] x batch-export                       opencode  exited                 #8 ✓ 
  [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 … 
  [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓ 
-                                                                                
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Create Session                                                               │
 │  Project (P) station                                                         │
 │  Name (N)    station-XXXXXX                                                  │
 │▸ Agent (A)   codex ● unknown                                                 │
+│  Group (G)   Ungrouped                                                       │
 │  Create session (C)                                                          │
 │ ↑↓ focus · Enter choose agent · Esc cancel                                   │
+└──────────────────────────────────────────────────────────────────────────────┘
+"
+`;
+
+exports[`modal flow golden frames renders the new session review Group focus 1`] = `
+"                                                                                
+FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
+─────────────────────────────────────────────────────────────────────────────── 
+       SESSION                            AGENT     STATUS            DIFF · PR 
+▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
+ [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
+ [2] - docs-cleanup                       codex     no agent                    
+ [3] ○ pty-buffer                         codex     idle                  #73 ✓ 
+ [4] + session-resume                     codex     starting                    
+ [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 … 
+                                                                                
+▼ observer  3 sessions · 3 agents                                 [sh] [qs] [▾] 
+ [6] x batch-export                       opencode  exited                 #8 ✓ 
+ [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 … 
+ [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓ 
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ Create Session                                                               │
+│  Project (P) station                                                         │
+│  Name (N)    station-XXXXXX                                                  │
+│  Agent (A)   codex ● unknown                                                 │
+│▸ Group (G)   Ungrouped                                                       │
+│  Create session (C)                                                          │
+│ ↑↓ focus · Enter choose Group · Esc cancel                                   │
 └──────────────────────────────────────────────────────────────────────────────┘
 "
 `;
@@ -812,12 +840,12 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
  [6] x batch-export                       opencode  exited                 #8 ✓ 
  [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 … 
  [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓ 
-                                                                                
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Create Session                                                               │
 │  Project (P) station                                                         │
 │  Name (N)    station-XXXXXX                                                  │
 │  Agent (A)   codex ● healthy                                                 │
+│  Group (G)   Ungrouped                                                       │
 │▸ Create session (C)                                                          │
 │ ↑↓ focus · Enter create session · Esc cancel                                 │
 └──────────────────────────────────────────────────────────────────────────────┘
@@ -840,12 +868,12 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
  [6] x batch-export                       opencode  exited                 #8 ✓ 
  [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 … 
  [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓ 
-                                                                                
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Create Session                                                               │
 │  Project (P) station                                                         │
 │  Name (N)    station-XXXXXX                                                  │
 │  Agent (A)   codex ● degraded                                                │
+│  Group (G)   Ungrouped                                                       │
 │▸ Create session (C)                                                          │
 │ ↑↓ focus · Enter create session · Esc cancel                                 │
 └──────────────────────────────────────────────────────────────────────────────┘
@@ -868,12 +896,12 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
  [6] x batch-export                       opencode  exited                 #8 ✓ 
  [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 … 
  [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓ 
-                                                                                
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Create Session                                                               │
 │  Project (P) station                                                         │
 │  Name (N)    station-XXXXXX                                                  │
 │  Agent (A)   codex ● unavailable                                             │
+│  Group (G)   Ungrouped                                                       │
 │▸ Create session (C)                                                          │
 │ ↑↓ focus · Enter create session · Esc cancel                                 │
 └──────────────────────────────────────────────────────────────────────────────┘
@@ -972,12 +1000,12 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0
 ▼ station  5 sessions · … [sh] [qs] [▾] 
  [1] ○ cli-help-man        idle         
  [2] - docs-cleanup        no agent     
- [3] ○ pty-buffer          idle         
 ┌──────────────────────────────────────┐
 │ Create Session                       │
 │  Project (P) station                 │
 │  Name (N)    station-XXXXXX          │
 │  Agent (A)   codex ● degraded        │
+│  Group (G)   Ungrouped               │
 │▸ Create session (C)                  │
 │ ↑↓ focus · Enter create session · Esc│
 └──────────────────────────────────────┘
@@ -1036,6 +1064,90 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 │ 2 opencode unknown                                                           │
 │                                                                              │
 │ ↑↓ move   ↵ select   1-9/a-z jump   Esc back                                 │
+└──────────────────────────────────────────────────────────────────────────────┘
+"
+`;
+
+exports[`modal flow golden frames renders the new session pick Group 1`] = `
+"                                                                                
+FLEET  ● 0 ready  ⠋ 3 working  ! 1 needs you  x 1 exited  ○ 6 idle  1 · 12 · 11 
+─────────────────────────────────────────────────────────────────────────────── 
+       SESSION                     AGENT     STATUS                 DIFF · PR   
+▼ station  12 sessions · 6 Groups · 11 agents                     [sh] [qs] [▾] 
+╭▼ Design refresh 2 sessions──────────────────────────────────────────[qs] [▾]╮ 
+│ [1] ⠋ group-contracts             codex     working           +84 -20 #481 …│ 
+│ [2] ○ group-keyboard              codex     idle               +16 -4 #482 ✓│ 
+╰─────────────────────────────────────────────────────────────────────────────╯ 
+╭▼ Input parity and minimum-width interaction verification 1 session──[qs] [▾]╮ 
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ Choose Group                                                                 │
+│                                                                              │
+│✓U Ungrouped                                                                  │
+│ 1 Design refresh                                                             │
+│ 2 Observer hardening                                                         │
+│ 3 Runtime cleanup                                                            │
+│ 4 Post-launch                                                                │
+│ 5 Release train                                                              │
+│ 6 Input parity and minimum-width interaction verification                    │
+│ N Create new Group                                                           │
+│                                                                              │
+│ ↑↓ move   ↵ select   U ungrouped   N create   Esc back                       │
+└──────────────────────────────────────────────────────────────────────────────┘
+"
+`;
+
+exports[`modal flow golden frames renders the new session edit inline Group 1`] = `
+"                                                                                
+FLEET  ● 0 ready  ⠋ 3 working  ! 1 needs you  x 1 exited  ○ 6 idle  1 · 12 · 11 
+─────────────────────────────────────────────────────────────────────────────── 
+       SESSION                     AGENT     STATUS                 DIFF · PR   
+▼ station  12 sessions · 6 Groups · 11 agents                     [sh] [qs] [▾] 
+╭▼ Design refresh 2 sessions──────────────────────────────────────────[qs] [▾]╮ 
+│ [1] ⠋ group-contracts             codex     working           +84 -20 #481 …│ 
+│ [2] ○ group-keyboard              codex     idle               +16 -4 #482 ✓│ 
+╰─────────────────────────────────────────────────────────────────────────────╯ 
+╭▼ Input parity and minimum-width interaction verification 1 session──[qs] [▾]╮ 
+│ [3] ○ input-routing               codex     idle                      +27 -6│ 
+╰─────────────────────────────────────────────────────────────────────────────╯ 
+╭▼ Observer hardening 3 sessions──────────────────────────────────────[qs] [▾]╮ 
+│ [4] ○ diagnostic-index            codex     idle                      +38 -7│ 
+│ [5] ! handoff-refusal             codex     Agent needs app… +53 -11 #476 x1│ 
+│ [6] ⠋ trace-readiness             codex     working           +91 -22 #478 …│ 
+╰─────────────────────────────────────────────────────────────────────────────╯ 
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ Create Group                                                                 │
+│ Project      station                                                         │
+│▸ Group       Release|                                                        │
+│ Type Group name · Enter save · Esc discard                                   │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+"
+`;
+
+exports[`modal flow golden frames renders the new session creating progress 1`] = `
+"                                                                                
+FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
+─────────────────────────────────────────────────────────────────────────────── 
+       SESSION                            AGENT     STATUS            DIFF · PR 
+▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
+ [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
+ [2] - docs-cleanup                       codex     no agent                    
+ [3] ○ pty-buffer                         codex     idle                  #73 ✓ 
+ [4] + session-resume                     codex     starting                    
+ [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 … 
+                                                                                
+▼ observer  3 sessions · 3 agents                                 [sh] [qs] [▾] 
+ [6] x batch-export                       opencode  exited                 #8 ✓ 
+ [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 … 
+ [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓ 
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ Create Session                                                               │
+│  Project (P) station                                                         │
+│  Name (N)    station-XXXXXX                                                  │
+│  Agent (A)   codex ● unknown                                                 │
+│  Group (G)   Ungrouped                                                       │
+│▸ Creating… (C)                                                               │
+│ Creating session….                                                           │
 └──────────────────────────────────────────────────────────────────────────────┘
 "
 `;

@@ -275,6 +275,27 @@ function openOverlay(harness: ReturnType<typeof attemptHarness>): void {
 }
 
 describe("createManagedLaunchAttempt", () => {
+  it("passes fresh-session Group placement only to Observer preparation", async () => {
+    const harness = attemptHarness();
+
+    await harness.runManagedLaunchAttempt(PANE_ID, {
+      ...TARGET,
+      title: "Release work",
+      harness: "codex",
+      group: { kind: "existing", groupId: "grp_release" },
+    });
+
+    expect(harness.prepareCalls).toEqual([
+      {
+        projectId: "station",
+        worktreeId: WORKTREE_ID,
+        title: "Release work",
+        harness: "codex",
+        group: { kind: "existing", groupId: "grp_release" },
+      },
+    ]);
+  });
+
   it("reveals an existing pane without preparing, while a background attempt does neither", async () => {
     const foreground = attemptHarness();
     foreground.store.actions.createPane(PANE_ID, { role: "primary-agent" });

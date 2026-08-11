@@ -3,6 +3,7 @@ import type {
   ProjectView,
   ProviderId,
   SafeError,
+  SessionGroupPlacementIntent,
   StationCommand,
   TerminalFocusOrigin,
 } from "@station/contracts";
@@ -22,6 +23,7 @@ export type CreateManagedSessionRequest = {
   title: string;
   hiddenBranch: string;
   harness: ProviderId;
+  group?: SessionGroupPlacementIntent;
 };
 
 /** Product values required to fork a managed session. */
@@ -52,20 +54,22 @@ export type ObserverManagedSessionCapabilitiesOptions = {
 /**
  * Create Observer-backed managed-session execution without dashboard state access.
  *
- * Create and Quick retain failed optimistic rows, while Fork preserves its existing
- * no-row behavior; renderer focus claims are resolved only for Create and Quick.
+ * Deliberate Create retains its sheet without an optimistic row, Quick retains failed
+ * optimistic rows, and Fork preserves its existing no-row behavior.
  */
 export function createObserverManagedSessionCapabilities(
   options: ObserverManagedSessionCapabilitiesOptions,
 ): ManagedSessionCapabilities {
   const create = (request: CreateManagedSessionRequest): DashboardExecutionHandle =>
-    dashboardExecution(runCreate(options, request), {
+    dashboardExecution(runCreate(options, request, "remove-immediately"));
+  const quickCreate = (request: CreateManagedSessionRequest): DashboardExecutionHandle =>
+    dashboardExecution(runCreate(options, request, "retain-failed"), {
       optimistic: "pending-create",
       successDisposition: "remove-immediately",
     });
   return {
     create,
-    quickCreate: create,
+    quickCreate,
     fork: (request) => dashboardExecution(runFork(options, request)),
   };
 }
@@ -73,6 +77,7 @@ export function createObserverManagedSessionCapabilities(
 async function runCreate(
   options: ObserverManagedSessionCapabilitiesOptions,
   request: CreateManagedSessionRequest,
+  disposition: "remove-immediately" | "retain-failed",
 ): Promise<DashboardExecutionResult> {
   try {
     const focusTarget = await resolveFocusTarget(options);
@@ -81,9 +86,10 @@ async function runCreate(
       title: request.title,
       branch: request.hiddenBranch,
       harnessProvider: request.harness,
+      ...(request.group === undefined ? {} : { group: request.group }),
     });
     if (command.type !== "session.create") {
-      return invalidCommandFailure("session.create", "retain-failed");
+      return invalidCommandFailure("session.create", disposition);
     }
     if (focusTarget !== undefined) {
       command = {
@@ -98,7 +104,7 @@ async function runCreate(
         },
       };
     }
-    const result = await dispatchAndWait(options, command, "retain-failed");
+    const result = await dispatchAndWait(options, command, disposition);
     if (result.kind !== "success") {
       return result;
     }
@@ -108,7 +114,7 @@ async function runCreate(
     return {
       kind: "failure",
       error: toSafeError(error, { clientLabel: options.clientLabel ?? "TUI" }),
-      disposition: "retain-failed",
+      disposition,
     };
   }
 }

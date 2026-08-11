@@ -1,6 +1,8 @@
 import type { StationSnapshot } from "@station/contracts";
+import { reconcileNewSessionFlow } from "../flows/newSession.js";
 import { reconcileDashboardFocus } from "./dashboardFocus.js";
 import { createEmptyTuiLocalRows, pruneLocalRowsForSnapshot } from "./localRows.js";
+import { seedNewSessionPickerCursor } from "./selection/specs/newSession.js";
 import type { CreateInitialTuiStateOptions, DashboardState } from "./types.js";
 
 export function createInitialTuiState(options: CreateInitialTuiStateOptions = {}): DashboardState {
@@ -32,7 +34,14 @@ export function createInitialTuiState(options: CreateInitialTuiStateOptions = {}
 }
 
 export function replaceSnapshot(state: DashboardState, snapshot: StationSnapshot): DashboardState {
-  const screen = reconcileProjectSurface(state, snapshot);
+  const projectSurface = reconcileProjectSurface(state, snapshot);
+  const screen =
+    projectSurface.name === "newSession"
+      ? {
+          name: "newSession" as const,
+          flow: reconcileNewSessionFlow(projectSurface.flow, snapshot),
+        }
+      : projectSurface;
   const next: DashboardState = {
     ...state,
     screen,
@@ -40,7 +49,7 @@ export function replaceSnapshot(state: DashboardState, snapshot: StationSnapshot
     loading: false,
     localRows: pruneLocalRowsForSnapshot(state.localRows, snapshot),
   };
-  return reconcileDashboardFocus(state, next);
+  return seedNewSessionPickerCursor(reconcileDashboardFocus(state, next));
 }
 
 function reconcileProjectSurface(

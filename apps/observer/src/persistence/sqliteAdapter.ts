@@ -396,10 +396,60 @@ export function createSqliteObserverPersistence(
       ),
 
     seedSession: (input) =>
-      transaction((database) => correlationStore.seedSession(database, input)),
+      transaction((database) => {
+        const groupBefore = sessionGroupSqlite.readSessionGroupState(database);
+        const placement = sessionGroupStore.placeSessionSeed(groupBefore, {
+          sessionId: input.sessionId,
+          projectId: input.projectId,
+          ...(input.group === undefined ? {} : { placement: input.group }),
+          updatedAt: input.createdAt,
+        });
+        if (!placement.result.ok) return placement.result;
+
+        const session = correlationStore.seedSession(database, input);
+        if (placement.changed) {
+          sessionGroupSqlite.writeSessionGroupState(database, groupBefore, placement.state);
+        }
+        return {
+          ok: true,
+          session,
+          ...(placement.result.createdGroupId !== undefined
+            ? { createdGroupId: placement.result.createdGroupId }
+            : {}),
+        };
+      }),
 
     discardSessionSeed: (input) =>
-      transaction((database) => correlationStore.discardSessionSeed(database, input)),
+      transaction((database) => {
+        const session = correlationStore
+          .listSessions(database)
+          .find((candidate) => candidate.id === input.sessionId);
+        const groupBefore = sessionGroupSqlite.readSessionGroupState(database);
+        if (session === undefined) {
+          if (
+            input.expectedGroupId !== undefined ||
+            input.createdGroupId !== undefined ||
+            groupBefore.assignments.has(input.sessionId)
+          ) {
+            throw new Error("Session seed no longer matches cleanup provenance.");
+          }
+          return correlationStore.discardSessionSeed(database, input);
+        }
+        const placement = sessionGroupStore.discardSessionSeedPlacement(groupBefore, {
+          sessionId: input.sessionId,
+          projectId: session.projectId,
+          ...(input.expectedGroupId === undefined
+            ? {}
+            : { expectedGroupId: input.expectedGroupId }),
+          ...(input.createdGroupId === undefined ? {} : { createdGroupId: input.createdGroupId }),
+          updatedAt: input.discardedAt ?? now(),
+        });
+        const result = correlationStore.discardSessionSeed(database, input);
+        if (placement.changed) {
+          sessionGroupSqlite.writeSessionGroupState(database, groupBefore, placement.state);
+        }
+        return result;
+      }),
 
     markSessionsEnded: (input) =>
       transaction((database) => correlationStore.markSessionsEnded(database, input)),

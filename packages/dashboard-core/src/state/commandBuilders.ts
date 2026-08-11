@@ -3,6 +3,7 @@ import type {
   ProviderId,
   SafeError,
   SessionGroupId,
+  SessionGroupPlacementIntent,
   SessionId,
   SessionView,
   StationCommand,
@@ -28,6 +29,7 @@ export type CreateSessionCommandInput = {
   branch: string;
   harnessProvider: ProviderId;
   initialPrompt?: string;
+  group?: SessionGroupPlacementIntent;
 };
 
 export type RenameSessionCommandInput = {
@@ -196,6 +198,9 @@ export function buildCreateSessionCommand(input: CreateSessionCommandInput): Sta
   };
   if (input.initialPrompt !== undefined && input.initialPrompt.length > 0) {
     payload.initialPrompt = input.initialPrompt;
+  }
+  if (input.group !== undefined) {
+    payload.group = input.group;
   }
   return {
     type: "session.create",

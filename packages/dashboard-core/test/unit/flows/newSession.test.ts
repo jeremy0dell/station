@@ -1,17 +1,22 @@
 import { describe, expect, it } from "vitest";
 import {
   chooseNewSessionAgentById,
+  chooseNewSessionGroupById,
   chooseNewSessionProjectById,
   createNewSessionFlow,
   createNewSessionNameToken,
   newSessionActionEnabled,
   newSessionIntentForAction,
   newSessionIntentForInput,
+  reconcileNewSessionFlow,
   transitionNewSessionFlow,
   validateNewSessionCreate,
 } from "../../../src/flows/newSession.js";
 import { selectNewSessionHarnessOptions } from "../../../src/selectors/selectors.js";
-import { createDashboardSnapshot } from "../../fixtures/snapshots.js";
+import {
+  createDashboardSnapshot,
+  createGroupedDashboardSnapshot,
+} from "../../fixtures/snapshots.js";
 
 describe("new session flow", () => {
   it("defaults to the first configured project and first configured agent", () => {
@@ -25,6 +30,7 @@ describe("new session flow", () => {
       title: "web-k7p3x9",
       branch: "web-k7p3x9",
       titleSource: "generated",
+      groupSelection: { kind: "ungrouped" },
       stepHistory: [],
     });
     expect(Object.hasOwn(state ?? {}, "draftName")).toBe(false);
@@ -109,6 +115,10 @@ describe("new session flow", () => {
       type: "transition",
       action: { type: "editName" },
     });
+    expect(newSessionIntentForInput(opened, input("G"))).toEqual({
+      type: "transition",
+      action: { type: "pickGroup" },
+    });
     expect(newSessionIntentForInput(opened, input("E"))).toEqual({ type: "none" });
     expect(newSessionIntentForInput(opened, input("p"))).toEqual({ type: "none" });
     expect(newSessionIntentForInput(opened, input("a"))).toEqual({ type: "none" });
@@ -125,6 +135,91 @@ describe("new session flow", () => {
       mode: "review",
       selectedHarness: "opencode",
     });
+  });
+
+  it("preselects only a same-project root Group", () => {
+    const snapshot = createGroupedDashboardSnapshot();
+
+    expect(
+      createNewSessionFlow(snapshot, "aaaaaa", { projectId: "web", groupId: "group_active" }),
+    ).toMatchObject({ groupSelection: { kind: "existing", groupId: "group_active" } });
+    expect(
+      createNewSessionFlow(snapshot, "aaaaaa", { projectId: "web", groupId: "group_build" }),
+    ).toMatchObject({ groupSelection: { kind: "ungrouped" } });
+    expect(
+      createNewSessionFlow(snapshot, "aaaaaa", { projectId: "web", groupId: "group_api" }),
+    ).toMatchObject({ groupSelection: { kind: "ungrouped" } });
+  });
+
+  it("commits an existing Group or a trimmed inline draft", () => {
+    const snapshot = createGroupedDashboardSnapshot();
+    const opened = createNewSessionFlow(snapshot, "aaaaaa");
+    if (opened === undefined) throw new Error("expected a flow");
+    const picker = transitionNewSessionFlow(opened, { type: "pickGroup" });
+    if (picker?.mode !== "pickGroup") throw new Error("expected Group picker");
+
+    expect(chooseNewSessionGroupById(picker, snapshot, "group_active")).toMatchObject({
+      mode: "review",
+      reviewFocus: "group",
+      groupSelection: { kind: "existing", groupId: "group_active" },
+    });
+    expect(chooseNewSessionGroupById(picker, snapshot, "group_build")).toBe(picker);
+
+    const editing = transitionNewSessionFlow(picker, { type: "editGroupDraft" });
+    if (editing?.mode !== "editGroupDraft") throw new Error("expected Group editor");
+    const typed = "  Release  ".split("").reduce((state, value) => {
+      const next = applyInput(state, value);
+      if (next.mode !== "editGroupDraft") throw new Error("expected Group editor");
+      return next;
+    }, editing);
+    expect(applyInput(typed, "\r", { return: true })).toMatchObject({
+      mode: "review",
+      reviewFocus: "group",
+      groupSelection: { kind: "create", name: "Release" },
+    });
+  });
+
+  it("resets Group placement on project change and invalid snapshot replacement", () => {
+    const snapshot = createGroupedDashboardSnapshot();
+    const opened = createNewSessionFlow(snapshot, "aaaaaa", {
+      projectId: "web",
+      groupId: "group_active",
+    });
+    if (opened === undefined) throw new Error("expected a flow");
+    const projectPicker = transitionNewSessionFlow(opened, { type: "pickProject" });
+    if (projectPicker?.mode !== "pickProject") throw new Error("expected project picker");
+    expect(chooseNewSessionProjectById(projectPicker, snapshot, "api", "bbbbbb")).toMatchObject({
+      selectedProjectId: "api",
+      groupSelection: { kind: "ungrouped" },
+    });
+
+    const renamed = {
+      ...snapshot,
+      sessionGroups: snapshot.sessionGroups.map((group) =>
+        group.id === "group_active" ? { ...group, name: "Renamed", version: 2 } : group,
+      ),
+    };
+    expect(reconcileNewSessionFlow(opened, renamed).groupSelection).toEqual({
+      kind: "existing",
+      groupId: "group_active",
+    });
+
+    for (const invalid of [
+      {
+        ...snapshot,
+        sessionGroups: snapshot.sessionGroups.filter((group) => group.id !== "group_active"),
+      },
+      {
+        ...snapshot,
+        sessionGroups: snapshot.sessionGroups.map((group) =>
+          group.id === "group_active" ? { ...group, parentGroupId: "group_empty" } : group,
+        ),
+      },
+    ]) {
+      expect(reconcileNewSessionFlow(opened, invalid).groupSelection).toEqual({
+        kind: "ungrouped",
+      });
+    }
   });
 
   it("uses wizard history for substep cancellation", () => {

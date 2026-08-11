@@ -398,7 +398,7 @@ function clickAway(state: DashboardState): DashboardState {
 }
 
 function requiredNewSessionFlow(): Extract<NewSessionFlowState, { mode: "review" }> {
-  const flow = createNewSessionFlow(snapshot, "abcdef", "web");
+  const flow = createNewSessionFlow(snapshot, "abcdef", { projectId: "web" });
   if (flow === undefined) {
     throw new Error("Expected the dashboard fixture to support New Session.");
   }

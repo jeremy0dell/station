@@ -297,12 +297,14 @@ describe("contract schemas", () => {
         worktreeId: "wt_api",
         harness: "codex",
         title: "  Hexagonal PT 12!  ",
+        group: { kind: "create", name: "  Active work  " },
       }),
     ).toEqual({
       projectId: "project_api",
       worktreeId: "wt_api",
       harness: "codex",
       title: "Hexagonal PT 12!",
+      group: { kind: "create", name: "Active work" },
     });
     expectFails(
       AgentPrepareExternalLaunchParamsSchema,
@@ -311,7 +313,11 @@ describe("contract schemas", () => {
     );
     expectParses(
       AgentPrepareExternalLaunchParamsSchema,
-      { projectId: "project_api", worktreeId: "wt_api" },
+      {
+        projectId: "project_api",
+        worktreeId: "wt_api",
+        group: { kind: "existing", groupId: "grp_active" },
+      },
       "external launch params without optional title",
     );
     expectFails(
@@ -1494,6 +1500,45 @@ describe("contract schemas", () => {
     ];
     for (const [index, command] of invalidCommands.entries()) {
       expectFails(StationCommandSchema, command, `invalid Session Group command ${index}`);
+    }
+  });
+
+  it("strictly validates atomic New Session Group placement", () => {
+    const base = {
+      type: "session.create",
+      payload: {
+        projectId: "web",
+        branch: "station-grouped",
+        harness: { provider: "codex" },
+        terminal: { provider: "tmux" },
+      },
+    } as const;
+    expectParses(StationCommandSchema, base, "ungrouped session create");
+    expectParses(
+      StationCommandSchema,
+      { ...base, payload: { ...base.payload, group: { kind: "existing", groupId: "grp_a" } } },
+      "existing Group placement",
+    );
+    expect(
+      StationCommandSchema.parse({
+        ...base,
+        payload: { ...base.payload, group: { kind: "create", name: "  New work  " } },
+      }),
+    ).toMatchObject({ payload: { group: { kind: "create", name: "New work" } } });
+
+    for (const [index, group] of [
+      { kind: "create", name: "   " },
+      { kind: "existing", groupId: "   " },
+      { kind: "existing", groupId: "grp_a", name: "mixed" },
+      { kind: "create", name: "New", groupId: "grp_a" },
+      { kind: "unknown", name: "New" },
+      { kind: "existing", groupId: "grp_a", extra: true },
+    ].entries()) {
+      expectFails(
+        StationCommandSchema,
+        { ...base, payload: { ...base.payload, group } },
+        `invalid session Group placement ${index}`,
+      );
     }
   });
 

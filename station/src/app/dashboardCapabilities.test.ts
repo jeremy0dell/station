@@ -25,9 +25,13 @@ function harness() {
   };
   let activationResult: ManagedLaunchResult = { kind: "success", landed: true };
   let createResult: ManagedLaunchResult = { kind: "success", landed: false };
+  const createRequests: Parameters<ManagedLaunch["create"]>[0][] = [];
   const managedLaunch: ManagedLaunch = {
     activate: async () => activationResult,
-    create: async () => createResult,
+    create: async (request) => {
+      createRequests.push(request);
+      return createResult;
+    },
     fork: async () => createResult,
   };
   const capabilities = createDashboardCapabilities({
@@ -42,6 +46,7 @@ function harness() {
     source,
     store,
     opened,
+    createRequests,
     setActivationResult: (result: ManagedLaunchResult) => (activationResult = result),
     setCreateResult: (result: ManagedLaunchResult) => (createResult = result),
   };
@@ -129,7 +134,13 @@ describe("native dashboard capabilities", () => {
     const fixture = harness();
     const project = manyProjectsSnapshot().projects.find((candidate) => candidate.id === "station");
     if (project === undefined) throw new Error("project fixture missing");
-    const request = { project, title: "New session", hiddenBranch: "station-new-123", harness: "codex" };
+    const request = {
+      project,
+      title: "New session",
+      hiddenBranch: "station-new-123",
+      harness: "codex",
+      group: { kind: "existing" as const, groupId: "grp_release" },
+    };
 
     fixture.setCreateResult({ kind: "failure", stage: "worktree", error: FAILURE });
     expect(await fixture.capabilities.managedSessions.create(request).completion).toMatchObject({
@@ -142,6 +153,22 @@ describe("native dashboard capabilities", () => {
       kind: "failure",
       disposition: "retain-failed",
     });
+    expect(fixture.createRequests).toEqual([
+      {
+        projectId: "station",
+        title: "New session",
+        branch: "station-new-123",
+        harness: "codex",
+        group: { kind: "existing", groupId: "grp_release" },
+      },
+      {
+        projectId: "station",
+        title: "New session",
+        branch: "station-new-123",
+        harness: "codex",
+        group: { kind: "existing", groupId: "grp_release" },
+      },
+    ]);
   });
 
   it("waits for a native Quick Session to reach the client snapshot", async () => {

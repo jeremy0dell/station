@@ -12,6 +12,12 @@ import type { ObserverCore } from "../reconcile/core.js";
 import type { ObserverEventBus } from "../runtime/eventBus.js";
 import { nowIso } from "../utils/time.js";
 import { throwIfAborted } from "./cancellation.js";
+import {
+  sessionGroupAssignmentConflictError,
+  sessionGroupIdCollisionError,
+  sessionGroupMissingError,
+  sessionGroupProjectMismatchError,
+} from "./errors.js";
 import type { CommandHandler, CommandHandlerContext } from "./queue.js";
 
 type SessionGroupCommand = Extract<StationCommand, { type: `sessionGroup.${string}` }>;
@@ -209,7 +215,7 @@ function validateReparentCommand(
     return;
   }
   if (target === undefined) {
-    throw groupMissingError(command.payload.groupId, command.payload.projectId);
+    throw sessionGroupMissingError(command.payload.groupId, command.payload.projectId);
   }
   if (command.payload.parentGroupId === target.id) {
     throw groupParentSelfError(target.projectId);
@@ -273,10 +279,10 @@ function requireProjectGroup(
 ): SessionGroupView {
   const group = groups.get(groupId);
   if (group === undefined) {
-    throw groupMissingError(groupId, projectId);
+    throw sessionGroupMissingError(groupId, projectId);
   }
   if (group.projectId !== projectId) {
-    throw groupProjectMismatchError(groupId, projectId);
+    throw sessionGroupProjectMismatchError(groupId, projectId);
   }
   return group;
 }
@@ -301,15 +307,9 @@ function sessionGroupConflict(
   const projectId = command.payload.projectId;
   switch (reason) {
     case "already_exists":
-      return {
-        tag: "CommandConflictError",
-        code: "SESSION_GROUP_ID_COLLISION",
-        message: "The Observer generated a Session Group id that already exists.",
-        hint: "Retry the command to generate a new Group id.",
-        projectId,
-      };
+      return sessionGroupIdCollisionError(projectId);
     case "not_found":
-      return groupMissingError(
+      return sessionGroupMissingError(
         command.type === "sessionGroup.create"
           ? "generated"
           : command.type === "sessionGroup.reparent"
@@ -326,13 +326,7 @@ function sessionGroupConflict(
         projectId,
       };
     case "unexpected_assignment":
-      return {
-        tag: "CommandConflictError",
-        code: "SESSION_GROUP_ASSIGNMENT_CONFLICT",
-        message: "A session's current Group assignment did not match the command expectation.",
-        hint: "Refresh the canonical Group state before retrying the membership change.",
-        projectId,
-      };
+      return sessionGroupAssignmentConflictError(projectId);
   }
 }
 
@@ -372,26 +366,6 @@ function projectMissingError(projectId: string): SafeError {
     code: "PROJECT_NOT_FOUND",
     message: "No configured project matches the requested project id.",
     hint: "Refresh Station and retry with a configured project.",
-    projectId,
-  };
-}
-
-function groupMissingError(groupId: string, projectId: string): SafeError {
-  return {
-    tag: "CommandValidationError",
-    code: "SESSION_GROUP_NOT_FOUND",
-    message: `No durable Session Group matches ${groupId}.`,
-    hint: "Refresh the canonical Group state and retry with a current Group id.",
-    projectId,
-  };
-}
-
-function groupProjectMismatchError(groupId: string, projectId: string): SafeError {
-  return {
-    tag: "CommandValidationError",
-    code: "SESSION_GROUP_PROJECT_MISMATCH",
-    message: `Session Group ${groupId} does not belong to the requested project.`,
-    hint: "Use only Groups from the session's configured project.",
     projectId,
   };
 }

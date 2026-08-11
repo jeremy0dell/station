@@ -415,6 +415,14 @@ export function createInMemoryObserverPersistence(
 
     seedSession: (input) =>
       transaction((draft) => {
+        const placement = sessionGroupStore.placeSessionSeed(draft.sessionGroups, {
+          sessionId: input.sessionId,
+          projectId: input.projectId,
+          ...(input.group === undefined ? {} : { placement: input.group }),
+          updatedAt: input.createdAt,
+        });
+        if (!placement.result.ok) return placement.result;
+
         const key = worktreeDisplayTitleKey(input.projectId, input.worktreeId);
         const title = resolveWorktreeDisplayTitle({
           projectId: input.projectId,
@@ -448,18 +456,53 @@ export function createInMemoryObserverPersistence(
             lastSeenAt: input.lastSeenAt,
           };
           draft.sessions.set(input.sessionId, session);
-          return session;
+          draft.sessionGroups = placement.state;
+          return {
+            ok: true,
+            session,
+            ...(placement.result.createdGroupId !== undefined
+              ? { createdGroupId: placement.result.createdGroupId }
+              : {}),
+          };
         }
         existing.projectId = input.projectId;
         existing.worktreeId = input.worktreeId;
         existing.title = canonical.title;
         existing.lastSeenAt = input.lastSeenAt;
         if (existing.lifecycle !== "ended") existing.lifecycle = "open";
-        return existing;
+        draft.sessionGroups = placement.state;
+        return {
+          ok: true,
+          session: existing,
+          ...(placement.result.createdGroupId !== undefined
+            ? { createdGroupId: placement.result.createdGroupId }
+            : {}),
+        };
       }),
 
     discardSessionSeed: (input) =>
       transaction((draft) => {
+        const session = draft.sessions.get(input.sessionId);
+        if (session === undefined) {
+          if (
+            input.expectedGroupId !== undefined ||
+            input.createdGroupId !== undefined ||
+            draft.sessionGroups.assignments.has(input.sessionId)
+          ) {
+            throw new Error("Session seed no longer matches cleanup provenance.");
+          }
+        } else {
+          const placement = sessionGroupStore.discardSessionSeedPlacement(draft.sessionGroups, {
+            sessionId: input.sessionId,
+            projectId: session.projectId,
+            ...(input.expectedGroupId === undefined
+              ? {}
+              : { expectedGroupId: input.expectedGroupId }),
+            ...(input.createdGroupId === undefined ? {} : { createdGroupId: input.createdGroupId }),
+            updatedAt: input.discardedAt ?? now(),
+          });
+          draft.sessionGroups = placement.state;
+        }
         const discardedSessions = draft.sessions.delete(input.sessionId) ? 1 : 0;
         const discardedWorktreeTitles =
           input.removedWorktree === undefined

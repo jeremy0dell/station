@@ -4,7 +4,12 @@ import {
   type ObserverService,
   type StationClientStateSource,
 } from "@station/client";
-import type { ProviderId, SafeError, StationCommand } from "@station/contracts";
+import type {
+  ProviderId,
+  SafeError,
+  SessionGroupPlacementIntent,
+  StationCommand,
+} from "@station/contracts";
 import type { ManagedTerminalAttacher } from "../../terminal/pty/managedTerminalAttacher.js";
 import type { PtyRegistry } from "../../terminal/registry/ptyRegistry.js";
 import type { StationStore } from "../../state/store.js";
@@ -23,9 +28,10 @@ export type ManagedHostedSessionRequest = {
   title: string;
   branch: string;
   harness: ProviderId;
+  group?: SessionGroupPlacementIntent;
 };
 
-export type ManagedHostedForkRequest = ManagedHostedSessionRequest & {
+export type ManagedHostedForkRequest = Omit<ManagedHostedSessionRequest, "group"> & {
   sourceWorktreeId: string;
   copyDirty: boolean;
 };
@@ -54,6 +60,7 @@ type HostedWorktreeLaunch = {
   title: string;
   branch: string;
   harness: ProviderId;
+  group?: SessionGroupPlacementIntent;
   command: Extract<StationCommand, { type: "worktree.create" | "worktree.fork" }>;
   verb: "create" | "fork";
 };
@@ -113,6 +120,7 @@ export function createManagedLaunch(deps: ManagedLaunchDeps): ManagedLaunch {
         title: spec.title,
         background: true,
         harness: spec.harness,
+        ...(spec.group === undefined ? {} : { group: spec.group }),
       });
       return attempt.kind === "failure"
         ? { kind: "failure", error: attempt.error, stage: "launch" }

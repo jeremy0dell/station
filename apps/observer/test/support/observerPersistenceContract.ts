@@ -1673,10 +1673,13 @@ export function observerPersistenceContract(
             lastSeenAt: later,
           });
           expect(reseeded).toMatchObject({
-            title: "original title",
-            lifecycle: "open",
-            createdAt: earlier,
-            lastSeenAt: later,
+            ok: true,
+            session: {
+              title: "original title",
+              lifecycle: "open",
+              createdAt: earlier,
+              lastSeenAt: later,
+            },
           });
 
           const worktree = createFakeWorktree({
@@ -2193,6 +2196,245 @@ export function observerPersistenceContract(
             persistence.deleteSessionTurnReadiness({ sessionId: "ses_z" }),
           ).resolves.toBe(1);
           await expect(persistence.listSessionTurnReadiness()).resolves.toEqual([]);
+        });
+      });
+    });
+
+    describe("SessionStore atomic Group placement", () => {
+      const seedInput = (sessionId: string) => ({
+        sessionId,
+        projectId: "web",
+        worktreeId: `wt_${sessionId}`,
+        initialTitle: sessionId,
+        createdAt: now,
+        lastSeenAt: now,
+      });
+
+      it("seeds ungrouped, existing-Group, and inline-Group sessions atomically", async () => {
+        await withPersistence(createFixture, async ({ persistence }) => {
+          await persistence.createSessionGroup({
+            id: "group_existing",
+            projectId: "web",
+            name: "Existing",
+            createdAt: earlier,
+          });
+          await expect(persistence.seedSession(seedInput("ses_ungrouped"))).resolves.toMatchObject({
+            ok: true,
+            session: { id: "ses_ungrouped" },
+          });
+          await expect(
+            persistence.seedSession({
+              ...seedInput("ses_existing"),
+              group: { kind: "existing", groupId: "group_existing" },
+            }),
+          ).resolves.toMatchObject({ ok: true, session: { id: "ses_existing" } });
+          await expect(
+            persistence.seedSession({
+              ...seedInput("ses_inline"),
+              group: { kind: "create", groupId: "group_inline", name: "Inline" },
+            }),
+          ).resolves.toMatchObject({
+            ok: true,
+            session: { id: "ses_inline" },
+            createdGroupId: "group_inline",
+          });
+          await expect(persistence.listSessionGroups()).resolves.toEqual([
+            expect.objectContaining({
+              id: "group_existing",
+              sessionIds: ["ses_existing"],
+              version: 2,
+              updatedAt: now,
+            }),
+            expect.objectContaining({
+              id: "group_inline",
+              name: "Inline",
+              sessionIds: ["ses_inline"],
+              version: 1,
+              createdAt: now,
+              updatedAt: now,
+            }),
+          ]);
+        });
+      });
+
+      it("rejects invalid placement without partial session, title, membership, or Group writes", async () => {
+        await withPersistence(createFixture, async ({ persistence }) => {
+          await persistence.createSessionGroup({
+            id: "group_root",
+            projectId: "web",
+            name: "Root",
+            initialMembers: [
+              { sessionId: "ses_assigned", projectId: "web", expectedGroupId: null },
+            ],
+            createdAt: earlier,
+          });
+          await persistence.createSessionGroup({
+            id: "group_nested",
+            projectId: "web",
+            name: "Nested",
+            parentGroupId: "group_root",
+            createdAt: earlier,
+          });
+          await persistence.createSessionGroup({
+            id: "group_other",
+            projectId: "api",
+            name: "Other",
+            createdAt: earlier,
+          });
+
+          const cases = [
+            ["ses_missing", { kind: "existing", groupId: "group_missing" }, "group_not_found"],
+            [
+              "ses_wrong_project",
+              { kind: "existing", groupId: "group_other" },
+              "group_project_mismatch",
+            ],
+            ["ses_nested", { kind: "existing", groupId: "group_nested" }, "group_not_root"],
+            [
+              "ses_collision",
+              { kind: "create", groupId: "group_root", name: "Collision" },
+              "group_id_collision",
+            ],
+            ["ses_assigned", { kind: "existing", groupId: "group_nested" }, "group_not_root"],
+          ] as const;
+          for (const [sessionId, group, reason] of cases) {
+            await expect(
+              persistence.seedSession({ ...seedInput(sessionId), group }),
+            ).resolves.toEqual({ ok: false, reason });
+          }
+          await persistence.createSessionGroup({
+            id: "group_destination",
+            projectId: "web",
+            name: "Destination",
+            createdAt: earlier,
+          });
+          await expect(
+            persistence.seedSession({
+              ...seedInput("ses_assigned"),
+              group: { kind: "existing", groupId: "group_destination" },
+            }),
+          ).resolves.toEqual({ ok: false, reason: "unexpected_assignment" });
+          await expect(persistence.seedSession(seedInput("ses_assigned"))).resolves.toEqual({
+            ok: false,
+            reason: "unexpected_assignment",
+          });
+
+          expect(
+            (await persistence.listSessions()).filter((session) => session.id.startsWith("ses_")),
+          ).toEqual([]);
+          expect(
+            (await persistence.listWorktreeDisplayTitles()).filter((title) =>
+              title.worktreeId.startsWith("wt_ses_"),
+            ),
+          ).toEqual([]);
+          expect(
+            (await persistence.listSessionGroups()).some((group) => group.id === "group_inline"),
+          ).toBe(false);
+        });
+      });
+
+      it("discards only the expected placement and owned inline Group", async () => {
+        await withPersistence(createFixture, async ({ persistence }) => {
+          await persistence.createSessionGroup({
+            id: "group_existing",
+            projectId: "web",
+            name: "Existing",
+            createdAt: earlier,
+          });
+          await persistence.seedSession({
+            ...seedInput("ses_existing_cleanup"),
+            group: { kind: "existing", groupId: "group_existing" },
+          });
+          await expect(
+            persistence.discardSessionSeed({
+              sessionId: "ses_existing_cleanup",
+              expectedGroupId: "group_existing",
+              discardedAt: later,
+            }),
+          ).resolves.toEqual({ discardedSessions: 1, discardedWorktreeTitles: 0 });
+          await expect(persistence.listSessionGroups()).resolves.toContainEqual(
+            expect.objectContaining({ id: "group_existing", sessionIds: [], version: 3 }),
+          );
+
+          await persistence.seedSession({
+            ...seedInput("ses_inline_cleanup"),
+            group: { kind: "create", groupId: "group_inline", name: "Inline" },
+          });
+          await expect(
+            persistence.discardSessionSeed({
+              sessionId: "ses_inline_cleanup",
+              expectedGroupId: "group_inline",
+              createdGroupId: "group_inline",
+              discardedAt: later,
+            }),
+          ).resolves.toEqual({ discardedSessions: 1, discardedWorktreeTitles: 0 });
+          expect(
+            (await persistence.listSessionGroups()).some((group) => group.id === "group_inline"),
+          ).toBe(false);
+
+          await persistence.seedSession({
+            ...seedInput("ses_provenance"),
+            group: { kind: "create", groupId: "group_provenance", name: "Provenance" },
+          });
+          await persistence.updateSessionGroupMembership({
+            id: "group_provenance",
+            expectedVersion: 1,
+            add: [{ sessionId: "ses_other", projectId: "web", expectedGroupId: null }],
+            updatedAt: later,
+          });
+          await expectPersistenceFailure(
+            persistence.discardSessionSeed({
+              sessionId: "ses_provenance",
+              expectedGroupId: "group_provenance",
+              createdGroupId: "group_provenance",
+              discardedAt: latest,
+            }),
+          );
+          expect(
+            (await persistence.listSessions()).some((session) => session.id === "ses_provenance"),
+          ).toBe(true);
+          await expect(persistence.listSessionGroups()).resolves.toContainEqual(
+            expect.objectContaining({
+              id: "group_provenance",
+              sessionIds: ["ses_other", "ses_provenance"],
+            }),
+          );
+
+          await persistence.createSessionGroup({
+            id: "group_moved",
+            projectId: "web",
+            name: "Moved",
+            createdAt: later,
+          });
+          await persistence.seedSession({
+            ...seedInput("ses_moved"),
+            group: { kind: "existing", groupId: "group_existing" },
+          });
+          await persistence.updateSessionGroupMembership({
+            id: "group_moved",
+            expectedVersion: 1,
+            add: [
+              {
+                sessionId: "ses_moved",
+                projectId: "web",
+                expectedGroupId: "group_existing",
+              },
+            ],
+            updatedAt: latest,
+          });
+          await expectPersistenceFailure(
+            persistence.discardSessionSeed({
+              sessionId: "ses_moved",
+              expectedGroupId: "group_existing",
+              discardedAt: latest,
+            }),
+          );
+          expect(
+            (await persistence.listSessions()).some((session) => session.id === "ses_moved"),
+          ).toBe(true);
+          await expect(persistence.listSessionGroups()).resolves.toContainEqual(
+            expect.objectContaining({ id: "group_moved", sessionIds: ["ses_moved"] }),
+          );
         });
       });
     });
@@ -2791,10 +3033,11 @@ export function observerPersistenceContract(
             createdAt: now,
             lastSeenAt: now,
           });
-          expect(session).not.toHaveProperty("harness");
-          expect(session).not.toHaveProperty("terminalProvider");
-          expect(session).not.toHaveProperty("state");
-          expect(session).not.toHaveProperty("endedAt");
+          if (!session.ok) throw new Error("Expected the optional session seed to succeed.");
+          expect(session.session).not.toHaveProperty("harness");
+          expect(session.session).not.toHaveProperty("terminalProvider");
+          expect(session.session).not.toHaveProperty("state");
+          expect(session.session).not.toHaveProperty("endedAt");
 
           const metadata = await persistence.upsertWorktreeMetadataCurrent({
             worktreeId: "wt_optional",

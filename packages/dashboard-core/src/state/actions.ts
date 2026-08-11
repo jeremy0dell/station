@@ -1,4 +1,4 @@
-import type { ProjectId, SessionId } from "@station/contracts";
+import type { ProjectId, SessionGroupId, SessionId } from "@station/contracts";
 import type { CreateGroupActionId } from "../components/GroupCreateSheet/content.js";
 import type { AddProjectActionId } from "../flows/addProject/actions.js";
 import type { NewSessionActionId } from "../flows/newSession.js";
@@ -10,7 +10,7 @@ import type { TuiKey } from "./keys.js";
 import { openDashboardRowShell } from "./rowActivation.js";
 import { tuiScreenBehavior } from "./screenBehavior.js";
 import { handleAddProjectAction, selectAddProjectRow } from "./screens/addProjectScreen.js";
-import { handleFirstProjectAddAction } from "./screens/dashboard.js";
+import { handleFirstProjectAddAction, openNewSession } from "./screens/dashboard.js";
 import {
   type ForkSessionActionId,
   handleForkSessionAction,
@@ -121,6 +121,7 @@ export type TuiSemanticAction =
 /** State-only dashboard events for focus, screen, selection, scrolling, and widget transitions. */
 export type DashboardStateAction =
   | { type: "dashboard.scroll"; delta: number }
+  | { type: "newSession.open"; projectId?: ProjectId; groupId?: SessionGroupId }
   | { type: "projectSettings.focusItem"; itemId: ProjectSettingsItemId }
   | { type: "addProject.selectRow"; index: number }
   | { type: "screen.clickAway" }
@@ -202,6 +203,11 @@ function handleDashboardStateAction(
   switch (action.type) {
     case "dashboard.scroll":
       return stateTransition(scrollDashboard(state, action.delta));
+    case "newSession.open":
+      return openNewSession(state, {
+        ...(action.projectId === undefined ? {} : { projectId: action.projectId }),
+        ...(action.groupId === undefined ? {} : { groupId: action.groupId }),
+      });
     case "projectSettings.focusItem":
       return stateTransition(focusProjectSettingsItem(state, action.itemId));
     case "addProject.selectRow":

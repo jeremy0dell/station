@@ -23,6 +23,8 @@ export type TuiInputMode =
   | "newSessionEditName"
   | "newSessionPickProject"
   | "newSessionPickAgent"
+  | "newSessionPickGroup"
+  | "newSessionEditGroupDraft"
   | "projectDefaultAgent"
   | "projectSettings"
   | "addProjectStart"
@@ -64,7 +66,9 @@ export function deriveTuiInputMode(state: DashboardStateView): TuiInputMode {
       if (screen.flow.mode === "review") return "newSessionReview";
       if (screen.flow.mode === "editName") return "newSessionEditName";
       if (screen.flow.mode === "pickProject") return "newSessionPickProject";
-      return "newSessionPickAgent";
+      if (screen.flow.mode === "pickAgent") return "newSessionPickAgent";
+      if (screen.flow.mode === "pickGroup") return "newSessionPickGroup";
+      return "newSessionEditGroupDraft";
     case "addProject":
       if (screen.flow.mode === "start") return "addProjectStart";
       if (screen.flow.mode === "choose") {

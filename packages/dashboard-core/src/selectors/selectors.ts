@@ -1,4 +1,4 @@
-import type { ProjectId, ProviderHealth, ProviderId } from "@station/contracts";
+import type { ProjectId, ProviderHealth, ProviderId, SessionGroupId } from "@station/contracts";
 import { pendingProjectDefaultHarnesses } from "../state/localRows.js";
 import type { DashboardSnapshotView, DashboardViewState } from "../state/types.js";
 
@@ -62,6 +62,8 @@ export type NewSessionHarnessOption = {
   update?: { installed: string; latest: string };
 };
 
+export type NewSessionGroupOption = DashboardSnapshotView["sessionGroups"][number];
+
 export function keyChoices<T>(values: readonly T[]): Array<KeyedChoice<T>> {
   return values.slice(0, SELECTION_KEYS.length).map((value, index) => {
     const key = SELECTION_KEYS[index];
@@ -107,6 +109,28 @@ export function selectNewSessionProjectChoices(
   snapshot: DashboardSnapshotView,
 ): Array<KeyedChoice<DashboardProjectView>> {
   return keyChoices(snapshot.projects);
+}
+
+export function selectNewSessionGroupChoices(
+  snapshot: DashboardSnapshotView,
+  projectId: ProjectId,
+): Array<KeyedChoice<NewSessionGroupOption>> {
+  return keyChoices(
+    snapshot.sessionGroups.filter(
+      (group) => group.projectId === projectId && group.parentGroupId === undefined,
+    ),
+  );
+}
+
+export function selectNewSessionRootGroup(
+  snapshot: DashboardSnapshotView,
+  projectId: ProjectId,
+  groupId: SessionGroupId,
+): NewSessionGroupOption | undefined {
+  return snapshot.sessionGroups.find(
+    (group) =>
+      group.id === groupId && group.projectId === projectId && group.parentGroupId === undefined,
+  );
 }
 
 export function selectNewSessionHarnessOptions(

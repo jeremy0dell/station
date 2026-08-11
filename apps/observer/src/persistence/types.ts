@@ -258,6 +258,22 @@ export type PersistedSession = {
   lastSeenAt: string;
 };
 
+export type SessionSeedGroupPlacement =
+  | { kind: "existing"; groupId: SessionGroupId }
+  | { kind: "create"; groupId: SessionGroupId; name: string };
+
+export type SessionSeedResult =
+  | { ok: true; session: PersistedSession; createdGroupId?: SessionGroupId }
+  | {
+      ok: false;
+      reason:
+        | "group_not_found"
+        | "group_project_mismatch"
+        | "group_not_root"
+        | "group_id_collision"
+        | "unexpected_assignment";
+    };
+
 export type PersistedSessionTurnReadiness = {
   sessionId: string;
   projectId: string;

@@ -84,11 +84,18 @@ describe("createManagedLaunch", () => {
 
   it("classifies post-worktree preparation failures as launch failures", async () => {
     const { launch, service } = launchHarness(withoutIdleAgent());
-    service.prepareExternalLaunch = async () => {
+    const prepared: Parameters<typeof service.prepareExternalLaunch>[0][] = [];
+    service.prepareExternalLaunch = async (params) => {
+      prepared.push(params);
       throw new Error("prepare failed");
     };
 
-    expect(await launch.create(CREATE_REQUEST)).toMatchObject({
+    expect(
+      await launch.create({
+        ...CREATE_REQUEST,
+        group: { kind: "create", name: "Release" },
+      }),
+    ).toMatchObject({
       kind: "failure",
       stage: "launch",
     });
@@ -100,5 +107,14 @@ describe("createManagedLaunch", () => {
         launchHarness: "codex",
       },
     });
+    expect(prepared).toEqual([
+      {
+        projectId: "station",
+        worktreeId: "wt_station_idle",
+        title: "Pty buffer",
+        harness: "codex",
+        group: { kind: "create", name: "Release" },
+      },
+    ]);
   });
 });

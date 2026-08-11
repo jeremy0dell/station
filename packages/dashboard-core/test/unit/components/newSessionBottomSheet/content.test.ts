@@ -66,6 +66,16 @@ describe("new-session review content", () => {
           value: "Codex",
           status: { glyph: "●", text: "healthy", tone: "healthy" },
         },
+        {
+          id: "group",
+          actionId: "review.group",
+          label: "Group",
+          accelerator: "G",
+          enabled: true,
+          focusId: "group",
+          helper: "Enter choose Group",
+          value: "Ungrouped",
+        },
       ],
       create: {
         actionId: "review.create",
@@ -101,6 +111,7 @@ describe("new-session review content", () => {
       ["project", "Enter choose project"],
       ["name", "Enter edit name"],
       ["agent", "Enter choose agent"],
+      ["group", "Enter choose Group"],
       ["create", "Enter create session"],
     ] as const;
 

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { CommandReceipt, CommandRecord, StationCommand } from "./commands.js";
+import { SessionGroupPlacementIntentSchema } from "./commands.js";
 import type {
   DiagnosticCollectionOptions,
   DiagnosticSnapshot,
@@ -151,6 +152,7 @@ export const AgentPrepareExternalLaunchParamsSchema = z
     worktreeId: WorktreeIdSchema,
     harness: ProviderIdSchema.optional(),
     title: userFacingTitleSchema.optional(),
+    group: SessionGroupPlacementIntentSchema.optional(),
   })
   .strict();
 
