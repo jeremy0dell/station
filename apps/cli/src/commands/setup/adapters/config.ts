@@ -14,6 +14,7 @@ import type {
   SetupConfigWriteOperation,
   SetupOperationOutcome,
 } from "@station/setup-core";
+import { SETUP_HARNESS_DEFINITIONS } from "../harnessDefinitions.js";
 import { SETUP_TOOL_DEFINITIONS } from "../toolDefinitions.js";
 import type { SetupFacts } from "./inspectionTypes.js";
 
@@ -140,7 +141,7 @@ export function setupConfigMutationInput(
       }
       return {
         id: harnessId,
-        command: harness.command,
+        command: detectedHarnessCommand(harness),
         installHooks: operation.trackingHarnessIds.includes(harnessId),
       };
     }),
@@ -198,6 +199,12 @@ function completedConfigOutcome(
           backupPath: result.backupPath,
         },
       };
+}
+
+function detectedHarnessCommand(fact: SetupFacts["harnesses"][number]): string {
+  if (!fact.command.includes("/") && fact.resolvedPath !== undefined) return fact.resolvedPath;
+  const defaultCommand = SETUP_HARNESS_DEFINITIONS[fact.id].commandFallback;
+  return detectedCommand(fact, defaultCommand);
 }
 
 function detectedCommand(

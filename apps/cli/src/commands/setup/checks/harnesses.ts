@@ -2,6 +2,8 @@ import type { CliSetupHarnessId } from "@station/contracts";
 import {
   type ExternalCommandInput,
   type ExternalCommandRunner,
+  type ResolveExecutablePathOptions,
+  resolveExecutablePath,
   runExternalCommand,
 } from "@station/runtime";
 import type { CliEnv } from "../../../env.js";
@@ -15,6 +17,7 @@ export type CheckHarnessesOptions = {
   env?: CliEnv;
   cwd?: string;
   homeDir?: string;
+  access?: (path: string) => Promise<void>;
   configuredHarnesses?: readonly string[];
   configuredCommands?: Readonly<Partial<Record<CliSetupHarnessId, string>>>;
 };
@@ -67,6 +70,8 @@ async function checkHarness(
         status: "ok",
         command: candidate,
       };
+      const resolvedPath = await resolveHarnessCommand(candidate, env, options);
+      if (resolvedPath !== undefined) fact.resolvedPath = resolvedPath;
       if (rawVersion.length > 0) fact.rawVersion = rawVersion;
       const version = parseHarnessVersion(rawVersion);
       if (version !== undefined) fact.version = version;
@@ -83,6 +88,17 @@ async function checkHarness(
     command,
     message: `${definition.label} CLI is not available.`,
   };
+}
+
+async function resolveHarnessCommand(
+  command: string,
+  env: CliEnv,
+  options: CheckHarnessesOptions,
+): Promise<string | undefined> {
+  const resolveOptions: ResolveExecutablePathOptions = {};
+  if (env.PATH !== undefined) resolveOptions.pathEnv = env.PATH;
+  if (options.access !== undefined) resolveOptions.access = options.access;
+  return resolveExecutablePath(command, resolveOptions);
 }
 
 function parseHarnessVersion(output: string): string | undefined {

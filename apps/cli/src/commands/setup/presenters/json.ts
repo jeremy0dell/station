@@ -646,6 +646,8 @@ function harnessCheck(facts: SetupFacts, harnessSelection: SetupHarnessSelection
   );
   if (selectedDefault !== undefined) {
     details.command = selectedDefault.command;
+    if (selectedDefault.resolvedPath !== undefined)
+      details.resolvedPath = selectedDefault.resolvedPath;
     details.defaultStatus = "available";
   }
   const selectedLabels = harnessSelection.requiredHarnessIds.map(

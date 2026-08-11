@@ -168,7 +168,9 @@ selected in the current guided run, to be runnable. For Claude, Codex, Cursor,
 and OpenCode, preparation also requires `install_hooks = true` and a successful
 read-only probe of the current Station-owned artifacts. Other configured
 non-default harnesses remain visible but do not block global setup. Pi loads its
-Station extension in process and has no equivalent external hook artifact.
+Station extension in process and has no equivalent external hook artifact; Station passes the
+canonical `stn-ingress` launcher through `STATION_INGRESS_BIN` on each Pi launch so event delivery
+is not dependent on the pane or tmux server `PATH`.
 
 Artifact preparation is not runtime delivery proof. In particular, Codex may
 still require review of Station's current hook definition through `/hooks`.
@@ -521,7 +523,7 @@ Advanced development/demo overrides:
 | `STATION_BUN` | Source/development Station host launches | Bun executable path/name for source/development host launches; fallback is `bun`. |
 | `STATION_HOST_ENTRY` | Source/development Station host launches | Non-standard source/development override for the host entry file. Usually leave unset. |
 | `STATION_HOST_HANDOFF` | Native Station TUI build-upgrade launch | Only exact `1` opts a busy same-protocol older Host into negotiated handoff with fixed `processes` fidelity, followed by warm pane reattach. There is no prompt, launcher flag, or config key; absent, empty, `true`, and every other value preserve the existing visible refusal. |
-| `STATION_INGRESS_BIN` | Generated Pi/OpenCode hook transport | Development/testing override for `stn-ingress`; fallback is the PATH name `stn-ingress`. |
+| `STATION_INGRESS_BIN` | Generated Pi/OpenCode hook transport | Station sets this to the canonical absolute `stn-ingress` launcher for Pi launches and generated hook/plugin artifacts; manual extension/plugin runs fall back to the PATH name `stn-ingress`. |
 | `STATION_DASHBOARD_COMMAND` | CLI TUI launcher | Explicit command override for the observer-backed, command-capable, pane-free dashboard renderer. Development/testing only. |
 | `STATION_TUI_COMMAND` / `STATION_TUI_SESSION_NAME` | tmux popup registry | Development popup routing overrides. |
 | `STATION_SHELL_AUTOCLOSE` | Native Station TUI | `1`/`true` or `0`/`false`; auto-close overlay when a `+sh` shell opens. |
