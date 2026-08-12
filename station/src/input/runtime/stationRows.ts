@@ -2,7 +2,8 @@ import type { StationClientStateSource } from "@station/client";
 import type { ProviderId, SessionView, WorktreeRow } from "@station/contracts";
 import { STATION_HOST_PROVIDER_ID } from "@station/host";
 
-const CANONICAL_APPEAR_TIMEOUT_MS = 10_000;
+const WORKTREE_APPEAR_TIMEOUT_MS = 10_000;
+const SESSION_APPEAR_TIMEOUT_MS = 10_000;
 
 export function findWorktreeRowById(
   store: StationClientStateSource,
@@ -104,45 +105,56 @@ export function waitForWorktreeByBranch(
   projectId: string,
   branch: string,
 ): Promise<WorktreeRow | undefined> {
-  return waitForCanonicalValue(store, () => findWorktreeRowByBranch(store, projectId, branch));
+  const existing = findWorktreeRowByBranch(store, projectId, branch);
+  if (existing !== undefined) {
+    return Promise.resolve(existing);
+  }
+  return new Promise((resolve) => {
+    const settle = (row: WorktreeRow | undefined): void => {
+      clearTimeout(timer);
+      unsubscribe();
+      resolve(row);
+    };
+    const timer = setTimeout(() => settle(undefined), WORKTREE_APPEAR_TIMEOUT_MS);
+    const unsubscribe = store.subscribe(() => {
+      const row = findWorktreeRowByBranch(store, projectId, branch);
+      if (row !== undefined) {
+        settle(row);
+      }
+    });
+  });
 }
 
-/** Wait for the session created on an exact Project branch to reach canonical client state. */
+/** Wait for the session created on an exact Project branch to reach the client snapshot. */
 export function waitForSessionByBranch(
   store: StationClientStateSource,
   projectId: string,
   branch: string,
 ): Promise<SessionView | undefined> {
-  return waitForCanonicalValue(store, () => {
+  const findSession = (): SessionView | undefined => {
     const snapshot = store.getState().snapshot;
-    const worktree = snapshot?.rows.find(
+    const worktreeId = snapshot?.rows.find(
       (row) => row.projectId === projectId && row.branch === branch,
-    );
+    )?.id;
     return snapshot?.sessions.find(
-      (session) => session.projectId === projectId && session.worktreeId === worktree?.id,
+      (session) => session.projectId === projectId && session.worktreeId === worktreeId,
     );
-  });
-}
-
-function waitForCanonicalValue<T>(
-  store: StationClientStateSource,
-  find: () => T | undefined,
-): Promise<T | undefined> {
-  const existing = find();
+  };
+  const existing = findSession();
   if (existing !== undefined) {
     return Promise.resolve(existing);
   }
   return new Promise((resolve) => {
-    const settle = (value: T | undefined): void => {
+    const settle = (session: SessionView | undefined): void => {
       clearTimeout(timer);
       unsubscribe();
-      resolve(value);
+      resolve(session);
     };
-    const timer = setTimeout(() => settle(undefined), CANONICAL_APPEAR_TIMEOUT_MS);
+    const timer = setTimeout(() => settle(undefined), SESSION_APPEAR_TIMEOUT_MS);
     const unsubscribe = store.subscribe(() => {
-      const value = find();
-      if (value !== undefined) {
-        settle(value);
+      const session = findSession();
+      if (session !== undefined) {
+        settle(session);
       }
     });
   });

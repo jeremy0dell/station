@@ -144,7 +144,7 @@ describe("native dashboard capabilities", () => {
     });
   });
 
-  it("waits for a native Quick Session to reach canonical state", async () => {
+  it("waits for a native Quick Session to reach the client snapshot", async () => {
     const fixture = harness();
     const snapshot = manyProjectsSnapshot();
     const project = snapshot.projects.find((candidate) => candidate.id === "station");
