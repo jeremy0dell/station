@@ -28,6 +28,7 @@ export function ProjectHeaderView({
   rowId,
   project,
   collapsed,
+  groupCount,
   focusedCellId,
   persistentFilterMatch,
 }: {
@@ -35,6 +36,7 @@ export function ProjectHeaderView({
   rowId: DashboardRowId;
   project: DashboardProjectView;
   collapsed: boolean;
+  groupCount: number;
   focusedCellId?: DashboardCellId | undefined;
   persistentFilterMatch?: DashboardPersistentFilterProjectMatch | undefined;
 }) {
@@ -55,6 +57,7 @@ export function ProjectHeaderView({
         rowId={rowId}
         project={project}
         collapsed={collapsed}
+        groupCount={groupCount}
         width={Math.max(1, columns - controlsWidth)}
         focused={focusedCellId === "identity"}
         dimmed={dimmed}
@@ -93,6 +96,7 @@ function ProjectHeaderPrimary({
   rowId,
   project,
   collapsed,
+  groupCount,
   width,
   focused,
   dimmed,
@@ -101,6 +105,7 @@ function ProjectHeaderPrimary({
   rowId: DashboardRowId;
   project: DashboardProjectView;
   collapsed: boolean;
+  groupCount: number;
   width: number;
   focused: boolean;
   dimmed: boolean;
@@ -122,6 +127,7 @@ function ProjectHeaderPrimary({
       <ProjectHeaderLabel
         project={project}
         collapsed={collapsed}
+        groupCount={groupCount}
         width={width}
         dimmed={dimmed}
         persistentFilterMatch={persistentFilterMatch}
@@ -178,18 +184,20 @@ function ProjectHeaderSeparator({ dimmed }: { dimmed: boolean }) {
 function ProjectHeaderLabel({
   project,
   collapsed,
+  groupCount,
   width,
   dimmed,
   persistentFilterMatch,
 }: {
   project: DashboardProjectView;
   collapsed: boolean;
+  groupCount: number;
   width: number;
   dimmed: boolean;
   persistentFilterMatch?: DashboardPersistentFilterProjectMatch | undefined;
 }) {
   const theme = useStationTheme();
-  const parts = projectHeaderLabelParts(project, collapsed);
+  const parts = projectHeaderLabelParts(project, collapsed, groupCount);
   const combined = truncateCells(`${parts.title}${parts.counts}`, width);
   const title = combined.slice(0, parts.title.length);
   const prefixLength = Math.min(title.length, parts.title.length - project.label.length);

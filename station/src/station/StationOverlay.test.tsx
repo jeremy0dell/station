@@ -9,6 +9,7 @@ import type { StationMouseEvent } from "../input/mouse.js";
 import type { MouseTargetRef } from "../input/router.js";
 import { spanAtFrameCell } from "../terminal/testing/frameProbe.js";
 import { routeStationMouse } from "./input/stationMouse.js";
+import { groupedManyProjectsSnapshot } from "./fixtures/scenarios.js";
 import { makeStationTestRuntime } from "./test/support/makeStationTestRuntime.js";
 import { StationOverlay, stationPopupLayout } from "./StationOverlay.js";
 import {
@@ -136,6 +137,30 @@ describe("StationOverlay", () => {
       kind: "station",
       target: { kind: "dashboardCell", rowId: dashboardRowIds.session("ses_wt_station_working"), cellId: "identity" },
     });
+  });
+
+  it("renders the same Group row and cell identities in native Station", async () => {
+    const { runtime: store } = makeStationTestRuntime({
+      snapshot: groupedManyProjectsSnapshot(),
+    });
+    const calls: MouseTargetRef[] = [];
+    const setup = await renderOverlay((target, event) => {
+      calls.push(target);
+      if (target.kind === "station") routeStationMouse(target.target, event, store);
+      return true;
+    }, store);
+    const groupId = dashboardRowIds.group("group_design_refresh");
+    const header = cellFor(setup.captureCharFrame(), "Design refresh");
+
+    expect(setup.captureCharFrame()).toContain("╭▼ Design refresh 2 sessions");
+    await setup.mockMouse.click(header.col, header.row, MouseButtons.LEFT);
+
+    expect(calls.at(-1)).toEqual({
+      kind: "station",
+      target: { kind: "dashboardCell", rowId: groupId, cellId: "identity" },
+    });
+    expect([...store.state.getState().collapsedGroupIds]).toEqual(["group_design_refresh"]);
+    expect(setup.captureCharFrame()).toContain("▶ Design refresh 2 sessions");
   });
 
   it("lets an inner screen consume popup click-away before the outer overlay", async () => {

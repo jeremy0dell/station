@@ -127,6 +127,7 @@ describe("PiHarnessProvider", () => {
       command: "pi-test",
       extensionPath: "/tmp/station/piExtension.js",
       configPath: "/tmp/station/config.toml",
+      hookBin: "/tmp/station/bin/stn-ingress",
       now: () => new Date(now),
     });
 
@@ -135,6 +136,7 @@ describe("PiHarnessProvider", () => {
       args: ["--extension", "/tmp/station/piExtension.js"],
       env: {
         STATION_CONFIG_PATH: "/tmp/station/config.toml",
+        STATION_INGRESS_BIN: "/tmp/station/bin/stn-ingress",
       },
     });
 

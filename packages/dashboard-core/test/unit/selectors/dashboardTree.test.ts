@@ -188,9 +188,12 @@ describe("dashboard tree", () => {
       "group:group_active",
       "session:ses_wt_web_attention",
       "session:ses_wt_web_idle",
+      "group-frame-end:group_active",
       "group:group_build",
       "session:ses_wt_web_working",
+      "group-frame-end:group_build",
       "group:group_empty",
+      "group-frame-end:group_empty",
       "session:ses_wt_web_exited",
       "session:ses_wt_web_unknown",
       "session:ses_wt_web_stuck",
@@ -198,7 +201,12 @@ describe("dashboard tree", () => {
       "project:api",
       "group:group_api",
       "session:ses_wt_api_working",
+      "group-frame-end:group_api",
     ]);
+    expect(tree.rowById.get(dashboardRowIds.project("web"))?.payload).toMatchObject({
+      type: "projectHeader",
+      groupCount: 3,
+    });
     expect(tree.rowById.get(dashboardRowIds.group("group_build"))).toMatchObject({
       depth: 1,
       parentId: "project:web",
@@ -220,6 +228,12 @@ describe("dashboard tree", () => {
       type: "groupHeader",
       sessionCount: 0,
       visibleSessionCount: 0,
+    });
+    expect(tree.rowById.get(dashboardRowIds.groupFrameEnd("group_empty"))).toMatchObject({
+      depth: 2,
+      parentId: "group:group_empty",
+      cells: [],
+      payload: { type: "groupFrameEnd", groupId: "group_empty" },
     });
   });
 
@@ -302,7 +316,14 @@ describe("dashboard tree", () => {
     const groupTree = selectDashboardTree(snapshot, groupState, groupState.screen);
 
     expect(groupTree.visibleIndexById.has(memberId)).toBe(false);
+    expect(groupTree.visibleIndexById.has(dashboardRowIds.groupFrameEnd("group_active"))).toBe(
+      false,
+    );
+    expect(groupTree.rowById.has(dashboardRowIds.groupFrameEnd("group_active"))).toBe(true);
     expect(groupTree.collapsedAncestorById.get(memberId)).toBe(
+      dashboardRowIds.group("group_active"),
+    );
+    expect(groupTree.collapsedAncestorById.get(dashboardRowIds.groupFrameEnd("group_active"))).toBe(
       dashboardRowIds.group("group_active"),
     );
 
@@ -366,6 +387,8 @@ describe("dashboard tree", () => {
       persistentFilterMatch: { matched: false },
     });
     expect(tree.visibleRows.map((row) => row.id)).toContain("group:group_empty");
+    expect(tree.visibleRows.map((row) => row.id)).toContain("group-frame-end:group_empty");
+    expect(tree.visibleRows.map((row) => row.id)).not.toContain("group-frame-end:group_build");
     expect(state.collapsedGroupIds.has("group_build")).toBe(true);
   });
 

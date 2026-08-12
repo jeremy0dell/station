@@ -97,6 +97,23 @@ describe("setup dependency checks", () => {
     ]);
   });
 
+  it("records the executable path that satisfied a bare harness command", async () => {
+    const binDir = "/setup/bin";
+    const facts = await checkSetupHarnesses({
+      env: { PATH: binDir },
+      access: fakeAccess([join(binDir, "pi")]),
+      runner: fakeRunner([], {
+        "pi --version": "pi 1.2.3\n",
+      }),
+    });
+
+    expect(facts.find((fact) => fact.id === "pi")).toMatchObject({
+      status: "ok",
+      command: "pi",
+      resolvedPath: join(binDir, "pi"),
+    });
+  });
+
   it("creates and proves a writable private state directory", async () => {
     const root = await tempRoot(tempRoots);
     const path = join(root, "state");

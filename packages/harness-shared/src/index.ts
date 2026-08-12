@@ -19,6 +19,7 @@ export {
 export { createHarnessHookAdapter } from "./hookAdapter.js";
 export { createJsonHookConfigEditor, isJsonObject } from "./hooks/jsonConfig.js";
 export {
+  type CommonLaunchEnvOptions,
   type CommonProviderDataInput,
   commonProviderData,
   harnessLaunchEnv,

@@ -93,14 +93,16 @@ export function fleetCountsLabel(
 export function projectHeaderLabelParts(
   project: DashboardProjectView,
   collapsed: boolean,
+  groupCount: number,
 ): { title: string; counts: string } {
   const caret = collapsed ? "▶" : "▼";
   const sessions = `${project.counts.sessions} ${plural(project.counts.sessions, "session")}`;
+  const groups = groupCount > 0 ? ` · ${groupCount} ${groupCount === 1 ? "Group" : "Groups"}` : "";
   const agents =
     project.counts.agents > 0
       ? ` · ${project.counts.agents} ${plural(project.counts.agents, "agent")}`
       : "";
-  return { title: `${caret} ${project.label}`, counts: `  ${sessions}${agents}` };
+  return { title: `${caret} ${project.label}`, counts: `  ${sessions}${groups}${agents}` };
 }
 
 export function emptyProjectLabel(): string {

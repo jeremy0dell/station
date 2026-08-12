@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { fleetCountsLabel, headerStrip } from "../../../src/components/Dashboard/content.js";
+import {
+  fleetCountsLabel,
+  headerStrip,
+  projectHeaderLabelParts,
+} from "../../../src/components/Dashboard/content.js";
+import { createGroupedDashboardSnapshot } from "../../fixtures/snapshots.js";
 
 const WIDGETS = [
   { text: "NYC 08:00 · TYO 21:00", compact: "NYC 08:00" },
@@ -51,5 +56,17 @@ describe("fleetCountsLabel", () => {
     expect(fleetCountsLabel({ projects: 1, sessions: 1, agents: 1 }, 60)).toBe(
       "1 project · 1 session · 1 agent",
     );
+  });
+});
+
+describe("projectHeaderLabelParts", () => {
+  it("places canonical Group counts between session and agent counts", () => {
+    const project = createGroupedDashboardSnapshot().projects[0];
+    if (project === undefined) throw new Error("missing grouped project fixture");
+
+    expect(projectHeaderLabelParts(project, false, 3)).toEqual({
+      title: "▼ web",
+      counts: "  6 sessions · 3 Groups · 6 agents",
+    });
   });
 });

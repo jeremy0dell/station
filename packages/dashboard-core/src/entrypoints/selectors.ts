@@ -110,6 +110,7 @@ export {
 } from "../selectors/dashboardSessionRows.js";
 export type {
   DashboardCellId,
+  DashboardGroupFrameEndPayload,
   DashboardGroupHeaderPayload,
   DashboardRowId,
   DashboardTreeRow,

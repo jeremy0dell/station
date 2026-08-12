@@ -9,6 +9,7 @@ export type CommonLaunchEnvOptions = {
   observerSocketPath?: string | undefined;
   stateDir?: string | undefined;
   hookSpoolDir?: string | undefined;
+  hookBin?: string | undefined;
   env?: Record<string, string | undefined> | undefined;
   carryEnv?: readonly LaunchEnvCarry[] | undefined;
 };
@@ -55,6 +56,10 @@ export function harnessLaunchEnv(
   }
   if (options.stateDir !== undefined) env.STATION_OBSERVER_STATE_DIR = options.stateDir;
   if (options.hookSpoolDir !== undefined) env.STATION_HOOK_SPOOL_DIR = options.hookSpoolDir;
+  if (options.hookBin !== undefined && options.hookBin.length > 0) {
+    // In-process harness extensions inherit pane/server env, so event delivery gets an explicit launcher.
+    env.STATION_INGRESS_BIN = options.hookBin;
+  }
   for (const carry of options.carryEnv ?? []) {
     carryLaunchEnv(env, carry, options.env);
   }

@@ -475,6 +475,20 @@ describe("buildContextMenuItems", () => {
       expect(items.map(({ id }) => id)).toEqual(["station.noActions"]);
       expect(resolveContextMenuAction(items[0])).toBeUndefined();
     }
+
+    const frameItems = buildContextMenuItems(
+      {
+        kind: "station",
+        target: {
+          kind: "dashboardCell",
+          rowId: dashboardRowIds.groupFrameEnd("grp_station_active"),
+          cellId: "identity",
+        },
+      },
+      store.getState(),
+      stationState,
+    );
+    expect(frameItems.map(({ id }) => id)).toEqual(["station.noActions"]);
   });
 
   it("keeps STATION row actions inert off the dashboard screen", () => {
