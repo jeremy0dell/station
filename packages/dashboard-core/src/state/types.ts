@@ -133,6 +133,16 @@ export type TuiObserverConnectionStatus =
 export type TuiScreen =
   | { name: "dashboard" }
   | { name: "help" }
+  | { name: "projectMenu"; projectId: ProjectId; focus: ProjectMenuActionId }
+  | {
+      name: "createGroup";
+      projectId: ProjectId;
+      draftName: EditableTextInputState;
+      quickSession: boolean;
+      focus: CreateGroupFocus;
+      submitting: boolean;
+      returnTo: CreateGroupReturnTarget;
+    }
   | {
       name: "persistentFilter";
       draft: EditableTextInputState;
@@ -198,6 +208,21 @@ export type WidgetSettingsFocus = "list" | "picker";
 export type ProjectSettingsFocus = "list" | "detail";
 /** Left-list item ids; extend alongside the registry in screens/projectSettings.ts. */
 export type ProjectSettingsItemId = "agent" | "remove";
+
+/** Actionable Project-menu rows in their rendered traversal order. */
+export type ProjectMenuActionId = "quickGroup" | "newGroup" | "defaultAgent" | "settings";
+
+/** Create Group control focus in rendered traversal order. */
+export type CreateGroupFocus = "name" | "quickSession" | "create" | "cancel";
+
+/** Surface restored when Create Group is cancelled before submission. */
+export type CreateGroupReturnTarget = "projectMenu" | "projectHeader";
+
+/** Readonly Project-menu state consumed by shared presentation. */
+export type ProjectMenuScreenView = Extract<DashboardScreenView, { name: "projectMenu" }>;
+
+/** Readonly Create-Group state consumed by shared presentation and content selectors. */
+export type CreateGroupScreenView = Extract<DashboardScreenView, { name: "createGroup" }>;
 
 export type CreateInitialTuiStateOptions = {
   initialSnapshot?: StationSnapshot;

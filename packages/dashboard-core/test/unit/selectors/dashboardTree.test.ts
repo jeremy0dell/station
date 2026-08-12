@@ -28,7 +28,7 @@ describe("dashboard tree", () => {
     ]);
     expect(tree.rowById.get(dashboardRowIds.project("web"))).toMatchObject({
       depth: 0,
-      cells: ["identity", "shell", "quickSession", "defaultAgent"],
+      cells: ["identity", "shell", "quickSession", "menu"],
       defaultCell: "identity",
       payload: { type: "projectHeader", collapsed: false },
     });
@@ -271,6 +271,52 @@ describe("dashboard tree", () => {
       "session:ses_wt_web_unknown",
       "session:ses_wt_web_stuck",
     ]);
+  });
+
+  it("shows one targeted pending row under its Group while suppressing its ungrouped canonical row", () => {
+    const base = createGroupedDashboardSnapshot();
+    const snapshot = {
+      ...base,
+      sessionGroups: base.sessionGroups.map((group) =>
+        group.id === "group_active"
+          ? { ...group, sessionIds: group.sessionIds.filter((id) => id !== "ses_wt_web_idle") }
+          : group,
+      ),
+    };
+    const state = createInitialTuiState({
+      initialSnapshot: snapshot,
+      localRows: {
+        pendingCreate: [
+          {
+            localId: "targeted",
+            projectId: "web",
+            title: "Quick Group session",
+            branch: "fix-nav-mobile",
+            targetGroupId: "group_empty",
+            createdAt: fixtureNow,
+          },
+        ],
+        failedCreate: [],
+        pendingRemove: [],
+        pendingStart: [],
+      },
+    });
+
+    const tree = selectDashboardTree(snapshot, state, state.screen);
+    const visibleMatches = tree.visibleRows.filter(
+      (row) =>
+        row.id === dashboardRowIds.create("targeted") ||
+        row.id === dashboardRowIds.session("ses_wt_web_idle"),
+    );
+    expect(visibleMatches).toHaveLength(1);
+    expect(visibleMatches[0]).toMatchObject({
+      id: dashboardRowIds.create("targeted"),
+      parentId: dashboardRowIds.group("group_empty"),
+    });
+    expect(tree.rowById.get(dashboardRowIds.group("group_empty"))?.payload).toMatchObject({
+      sessionCount: 0,
+      visibleSessionCount: 0,
+    });
   });
 
   it("orders equal labels by Group precedence and stable Group identity", () => {

@@ -83,7 +83,7 @@ describe("dashboard cursor", () => {
     state = moveDashboardCursorHorizontal(state, 1);
     expect(state.dashboardFocus?.cellId).toBe("quickSession");
     state = moveDashboardCursorHorizontal(state, 1);
-    expect(state.dashboardFocus?.cellId).toBe("defaultAgent");
+    expect(state.dashboardFocus?.cellId).toBe("menu");
     expect(moveDashboardCursorHorizontal(state, 1)).toBe(state);
   });
 

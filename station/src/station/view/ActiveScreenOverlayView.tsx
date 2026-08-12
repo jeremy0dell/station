@@ -11,10 +11,12 @@ import { NewSessionSheetView } from "./sheets/NewSessionSheetView.js";
 import { ProjectChoiceSheetView } from "./sheets/ProjectChoiceSheetView.js";
 import { ProjectDefaultAgentSheetView } from "./sheets/ProjectDefaultAgentSheetView.js";
 import { ProjectSettingsPanelView } from "./settings/ProjectSettingsPanelView.js";
+import { ProjectMenuView } from "./ProjectMenuView.js";
 import { WidgetSettingsPanelView } from "./settings/WidgetSettingsPanelView.js";
 import { RenameSessionSheetView } from "./sheets/RenameSessionSheetView.js";
 import { RemoveSessionSheetView } from "./sheets/RemoveSessionSheetView.js";
 import { ForkSessionSheetView } from "./sheets/ForkSessionSheetView.js";
+import { CreateGroupSheetView } from "./sheets/CreateGroupSheetView.js";
 import { stationMouseProps, useStationMouse } from "./stationMouseContext.js";
 
 export type ActiveScreenOverlayViewProps = {
@@ -28,6 +30,8 @@ export type ActiveScreenOverlayViewProps = {
   widgets?: DashboardStateView["widgets"];
   /** False when widget edits cannot be written back to config.toml. */
   widgetsPersisted?: boolean;
+  /** Absolute row containing the visible Project header that owns an open menu. */
+  projectMenuAnchorTop?: number;
 };
 
 export function ActiveScreenOverlayView(props: ActiveScreenOverlayViewProps) {
@@ -81,6 +85,7 @@ function renderActiveScreenOverlay({
   localRows,
   widgets = [],
   widgetsPersisted = true,
+  projectMenuAnchorTop = 0,
 }: ActiveScreenOverlayViewProps): ReactNode {
   switch (screen.name) {
     case "dashboard":
@@ -99,6 +104,17 @@ function renderActiveScreenOverlay({
     }
     case "help":
       return <HelpOverlayView columns={columns} rows={rows} />;
+    case "projectMenu":
+      return (
+        <ProjectMenuView
+          screen={screen}
+          columns={columns}
+          rows={rows}
+          anchorTop={projectMenuAnchorTop}
+        />
+      );
+    case "createGroup":
+      return <CreateGroupSheetView screen={screen} columns={columns} rows={rows} />;
     case "widgetSettings":
       return (
         <WidgetSettingsPanelView

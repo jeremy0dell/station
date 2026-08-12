@@ -1,6 +1,7 @@
 import type {
   ProjectView,
   ProviderId,
+  SessionGroupId,
   SessionId,
   StationCommand,
   WorktreeId,
@@ -23,6 +24,7 @@ export type CreateManagedSessionOperation = {
   title: string;
   hiddenBranch: string;
   harness: ProviderId;
+  targetGroupId?: SessionGroupId;
 };
 
 export type ForkManagedSessionOperation = {
@@ -89,6 +91,15 @@ export type RemoveProjectOperation = {
   command: Extract<StationCommand, { type: "project.remove" }>;
 };
 
+export type CreateSessionGroupOperation = {
+  type: "createSessionGroup";
+  projectId: ProjectView["id"];
+  name: string;
+  quickSession: boolean;
+  previousGroupIds: readonly SessionGroupId[];
+  command: Extract<StationCommand, { type: "sessionGroup.create" }>;
+};
+
 export type DashboardCapabilityOperation =
   | ActivateSessionOperation
   | CreateManagedSessionOperation
@@ -106,4 +117,5 @@ export type TuiOperation =
   | SearchProjectDirectoriesOperation
   | AddProjectOperation
   | SetProjectDefaultHarnessOperation
-  | RemoveProjectOperation;
+  | RemoveProjectOperation
+  | CreateSessionGroupOperation;

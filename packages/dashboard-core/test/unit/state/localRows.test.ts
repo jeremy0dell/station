@@ -8,7 +8,7 @@ import {
   removePendingStartAgentRow,
 } from "../../../src/state/localRows.js";
 import { createInitialTuiState } from "../../../src/state/screen.js";
-import { createCommandSnapshot } from "../../fixtures/snapshots.js";
+import { createCommandSnapshot, createGroupedDashboardSnapshot } from "../../fixtures/snapshots.js";
 
 describe("TUI local rows", () => {
   it("atomically replaces the matching pending create row with a failed row", () => {
@@ -119,6 +119,47 @@ describe("TUI local rows", () => {
 
     expect(
       pruneLocalRowsForSnapshot(localRows, { ...snapshot, sessions: [] }).pendingStart,
+    ).toEqual([]);
+  });
+
+  it("retains targeted placement only while the matching session is ungrouped", () => {
+    const snapshot = createGroupedDashboardSnapshot();
+    const pending = {
+      ...createEmptyTuiLocalRows(),
+      pendingCreate: [
+        {
+          localId: "create:web:fix-nav-mobile",
+          projectId: "web",
+          title: "Quick Group session",
+          branch: "fix-nav-mobile",
+          targetGroupId: "group_empty",
+          createdAt: "2026-06-01T12:00:00.000Z",
+        },
+      ],
+    };
+    const ungrouped = {
+      ...snapshot,
+      sessionGroups: snapshot.sessionGroups.map((group) =>
+        group.id === "group_active"
+          ? { ...group, sessionIds: group.sessionIds.filter((id) => id !== "ses_wt_web_idle") }
+          : group,
+      ),
+    };
+    expect(pruneLocalRowsForSnapshot(pending, ungrouped).pendingCreate).toHaveLength(1);
+
+    const converged = {
+      ...ungrouped,
+      sessionGroups: ungrouped.sessionGroups.map((group) =>
+        group.id === "group_empty" ? { ...group, sessionIds: ["ses_wt_web_idle"] } : group,
+      ),
+    };
+    expect(pruneLocalRowsForSnapshot(pending, converged).pendingCreate).toEqual([]);
+    expect(pruneLocalRowsForSnapshot(pending, snapshot).pendingCreate).toEqual([]);
+    expect(
+      pruneLocalRowsForSnapshot(pending, {
+        ...ungrouped,
+        sessionGroups: ungrouped.sessionGroups.filter((group) => group.id !== "group_empty"),
+      }).pendingCreate,
     ).toEqual([]);
   });
 });
