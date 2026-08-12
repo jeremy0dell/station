@@ -100,8 +100,12 @@ project-root sessions, inert Group closing-frame rows, and inert gaps. Every
 expanded Group ends with one cell-less frame row, including an empty Group, so
 the visible ring has truthful viewport height without gaining focus, a slot, or
 an action. `snapshot.sessionGroups` is the exclusive membership authority;
-optional parent links are deliberately flattened, while optimistic create rows
-remain at the project root until canonical replacement.
+optional parent links are deliberately flattened. Ordinary optimistic create
+rows remain at the project root. A Quick Group launch may temporarily target
+one pending row at its new Group and suppress the exact matching ungrouped
+canonical row while the expected membership command converges. That placement
+is renderer-local intent, never inferred or durable membership, and is pruned
+as soon as canonical truth places the session or removes its target.
 The renderer-local `GroupOrderingMode` chooses Groups-first or whole-block
 alphabetical interleaving without changing canonical arrays.
 The internal `treeGrid.ts` controller knows only immutable nodes, ordered cells,
@@ -121,9 +125,11 @@ the generic controller to ordinary dashboard traversal, canonical-session-only
 chooser traversal, and needs-attention traversal. Reconciliation preserves the
 exact row and cell when possible, moves a collapse-hidden child to its visible
 collapsed ancestor, and otherwise uses deterministic next/previous fallback.
+Project rows use `identity`, `shell`, `quickSession`, and `menu`; the Project
+menu owns Quick Group, New Group, default-agent, and settings transitions.
 Group rows use `identity`, `quickSession`, and `menu`; only identity toggles
-collapse in this slice, while the exact `[qs]` and `[▾]` targets remain
-focusable no-ops. A focused direct visible member decorates its Group with
+collapse, while the exact Group `[qs]` and `[▾]` targets remain focusable
+no-ops. A focused direct visible member decorates its Group with
 `containsFocusedRow`, leaving color and ring presentation to the renderer.
 
 The selectors entrypoint exposes branded dashboard row IDs, dashboard cell IDs,
@@ -163,8 +169,9 @@ projection, `state/screens/*` for pure screen transitions,
 `state/sourceBridge.ts` for mirroring canonical client state into the
 projection, `state/runtimeEffectScope.ts` for private effect admission and
 settlement, `state/capabilities/*` for semantic renderer authority,
-`state/operations/*` for scope-bound command flow, and `components/`/`widgets/`
-for shared layout and content logic. The `[tui]` config shapes live in
+`state/operations/*` for scope-bound command flow (including durable Group
+creation before optional Quick Session launch and expected membership), and
+`components/`/`widgets/` for shared layout and content logic. The `[tui]` config shapes live in
 `@station/contracts`; `@station/config` retains load/persist authority.
 
 ## Dependency direction and enforcement

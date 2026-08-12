@@ -984,9 +984,10 @@ describe("createStationInputRuntime open-pane wiring", () => {
 
 describe("createStationInputRuntime STATION context-menu actions", () => {
   function contextMenuHarness(snapshot: StationSnapshot = manyProjectsSnapshot()) {
+    const service = new FakeTuiObserverService(snapshot);
     const dashboardRuntime = createStationTestDashboardRuntime({
       source: new FakeStationSource(snapshot),
-      service: new FakeTuiObserverService(snapshot),
+      service,
       initialSnapshot: snapshot,
       persistentPopup: true,
       onDismiss: async () => {},
@@ -1011,7 +1012,7 @@ describe("createStationInputRuntime STATION context-menu actions", () => {
         },
         RIGHT_DOWN,
       );
-    return { runtime, store, dashboardRuntime, rightClickRow };
+    return { runtime, store, dashboardRuntime, service, rightClickRow };
   }
 
   it("opens the shared rename edit sheet from a row context menu", () => {
@@ -1129,14 +1130,55 @@ describe("createStationInputRuntime STATION context-menu actions", () => {
     });
   });
 
-  it("opens the default-agent picker from a project-header context menu", () => {
-    const { runtime, store, dashboardRuntime } = contextMenuHarness();
+  it("dispatches Quick Group from a project-header context menu", async () => {
+    const { runtime, dashboardRuntime, service } = contextMenuHarness();
 
-    // Right-click a project header opens the project menu: [Set Default Agent, Project Settings…].
     runtime.dispatchMouse(
       { kind: "station", target: { kind: "dashboardCell", rowId: dashboardRowIds.project("station"), cellId: "identity" } },
       RIGHT_DOWN,
     );
+    expect(runtime.handleSequence("\r")).toBe(true);
+    await waitFor(() => service.dispatched.some((command) => command.type === "sessionGroup.create"));
+
+    const command = service.dispatched.find(
+      (candidate) => candidate.type === "sessionGroup.create",
+    );
+    expect(command).toMatchObject({ payload: { projectId: "station" } });
+    expect(command?.type === "sessionGroup.create" ? command.payload.name : "").toMatch(
+      /^Quick Group [0-9a-f]{6}$/,
+    );
+    expect(dashboardRuntime.state.getState().screen).toEqual({ name: "dashboard" });
+  });
+
+  it("opens Create Group from a project-header context menu", () => {
+    const { runtime, dashboardRuntime } = contextMenuHarness();
+
+    runtime.dispatchMouse(
+      { kind: "station", target: { kind: "dashboardCell", rowId: dashboardRowIds.project("station"), cellId: "identity" } },
+      RIGHT_DOWN,
+    );
+    expect(runtime.handleSequence("\x1b[B")).toBe(true);
+    expect(runtime.handleSequence("\r")).toBe(true);
+
+    expect(dashboardRuntime.state.getState().screen).toMatchObject({
+      name: "createGroup",
+      projectId: "station",
+      quickSession: false,
+      focus: "name",
+      returnTo: "projectHeader",
+    });
+  });
+
+  it("opens the default-agent picker from a project-header context menu", () => {
+    const { runtime, store, dashboardRuntime } = contextMenuHarness();
+
+    // Quick Group and New Group lead the Project context menu.
+    runtime.dispatchMouse(
+      { kind: "station", target: { kind: "dashboardCell", rowId: dashboardRowIds.project("station"), cellId: "identity" } },
+      RIGHT_DOWN,
+    );
+    expect(runtime.handleSequence("\x1b[B")).toBe(true);
+    expect(runtime.handleSequence("\x1b[B")).toBe(true);
     expect(runtime.handleSequence("\r")).toBe(true);
 
     expect(store.getState().input.contextMenu).toBeNull();
@@ -1153,7 +1195,9 @@ describe("createStationInputRuntime STATION context-menu actions", () => {
       { kind: "station", target: { kind: "dashboardCell", rowId: dashboardRowIds.project("station"), cellId: "identity" } },
       RIGHT_DOWN,
     );
-    // Menu order: Set Default Agent, Project Settings… — one down reaches settings.
+    // Three rows down reaches Project Settings after the two Group actions.
+    expect(runtime.handleSequence("\x1b[B")).toBe(true);
+    expect(runtime.handleSequence("\x1b[B")).toBe(true);
     expect(runtime.handleSequence("\x1b[B")).toBe(true);
     expect(runtime.handleSequence("\r")).toBe(true);
 

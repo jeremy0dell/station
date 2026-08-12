@@ -2,6 +2,7 @@ import type {
   ProjectId,
   ProviderId,
   SafeError,
+  SessionGroupId,
   SessionId,
   StationSnapshot,
   WorktreeId,
@@ -15,6 +16,8 @@ export type PendingCreateSessionRow = {
   title: string;
   branch: string;
   harnessProvider?: ProviderId;
+  /** Temporary intended placement for convergence rendering; never canonical Group membership. */
+  targetGroupId?: SessionGroupId;
   createdAt: string;
 };
 
@@ -298,12 +301,33 @@ export function pruneLocalRowsForSnapshot(
     }),
   );
   const realWorktreeIds = new Set(snapshot.rows.map((row) => row.id));
+  const groupsBySessionId = new Map(
+    snapshot.sessionGroups.flatMap((group) =>
+      group.sessionIds.map((sessionId) => [sessionId, group.id] as const),
+    ),
+  );
+  const groupsById = new Map(snapshot.sessionGroups.map((group) => [group.id, group]));
+  const sessionsByProjectBranch = new Map<string, SessionId[]>();
+  for (const session of snapshot.sessions) {
+    const row = rowsByWorktreeId.get(session.worktreeId);
+    if (row === undefined) continue;
+    const key = `${session.projectId}\u0000${row.branch}`;
+    sessionsByProjectBranch.set(key, [...(sessionsByProjectBranch.get(key) ?? []), session.id]);
+  }
   const pruned = withPendingRenameTitles(
     {
       ...localRows,
-      pendingCreate: localRows.pendingCreate.filter(
-        (row) => !realRows.has(`${row.projectId}\u0000${row.branch}`),
-      ),
+      pendingCreate: localRows.pendingCreate.filter((row) => {
+        const key = `${row.projectId}\u0000${row.branch}`;
+        if (row.targetGroupId === undefined) return !realRows.has(key);
+        const target = groupsById.get(row.targetGroupId);
+        if (target?.projectId !== row.projectId) return false;
+        const sessionIds = sessionsByProjectBranch.get(key) ?? [];
+        return (
+          sessionIds.length === 0 ||
+          sessionIds.every((sessionId) => groupsBySessionId.get(sessionId) === undefined)
+        );
+      }),
       pendingRemove: localRows.pendingRemove.filter((row) => realWorktreeIds.has(row.worktreeId)),
       pendingStart: localRows.pendingStart.filter((row) => {
         const realRow = rowsByWorktreeId.get(row.worktreeId);

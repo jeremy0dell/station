@@ -19,6 +19,16 @@ export function dashboardFixedRows(): number {
   return Object.values(DASHBOARD_FIXED_ROW_HEIGHTS).reduce((total, rows) => total + rows, 0);
 }
 
+/** Shared absolute offset from the dashboard surface to its first projected tree row. */
+export function dashboardBodyTop(): number {
+  return (
+    DASHBOARD_FIXED_ROW_HEIGHTS.topSpacer +
+    DASHBOARD_FIXED_ROW_HEIGHTS.fleetBar +
+    DASHBOARD_FIXED_ROW_HEIGHTS.topDivider +
+    DASHBOARD_FIXED_ROW_HEIGHTS.topScrollIndicator
+  );
+}
+
 export function dashboardBodyRows(totalRows: number): number {
   return Math.max(1, Math.floor(totalRows) - dashboardFixedRows());
 }

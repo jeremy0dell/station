@@ -24,6 +24,8 @@ export type ContextMenuItemId =
   | "station.renameSession"
   | "station.forkSession"
   | "station.removeWorktree"
+  | "project.quickGroup"
+  | "project.newGroup"
   | "project.setDefaultAgent"
   | "project.openSettings"
   | "station.noActions"
@@ -37,6 +39,8 @@ export type ContextMenuItemAction =
   | { kind: "renameSession"; rowId: string }
   | { kind: "forkSession"; rowId: string }
   | { kind: "removeWorktree"; rowId: string }
+  | { kind: "quickGroup"; projectId: string }
+  | { kind: "newGroup"; projectId: string }
   | { kind: "setProjectDefaultAgent"; projectId: string }
   | { kind: "openProjectSettings"; projectId: string }
   // Run a configured automation, anchored on the pane the menu opened over.
