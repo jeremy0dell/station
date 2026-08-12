@@ -440,6 +440,52 @@ describe("observer command queue", () => {
     sqlite.close();
   });
 
+  it("drains a committed external mutation after the command deadline", async () => {
+    const { sqlite, persistence, queue } = createPersistenceAndQueue({ commandTimeoutMs: 5 });
+    let classificationFinished = false;
+    queue.registerHandler("observer.reconcile", async ({ markExternalMutationCommitted }) => {
+      markExternalMutationCommitted?.();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      classificationFinished = true;
+    });
+
+    await queue.dispatch(reconcileCommand);
+    await queue.drain();
+
+    expect(classificationFinished).toBe(true);
+    expect(await persistence.listCommands()).toEqual([
+      expect.objectContaining({ id: "cmd_1", status: "succeeded" }),
+    ]);
+    expect(
+      (await persistence.listEvents({ commandId: "cmd_1" })).map((event) => event.type),
+    ).toEqual(["command.accepted", "command.started", "command.succeeded"]);
+    sqlite.close();
+  });
+
+  it("records a committed handler failure after the command deadline", async () => {
+    const { sqlite, persistence, queue } = createPersistenceAndQueue({ commandTimeoutMs: 5 });
+    queue.registerHandler("observer.reconcile", async ({ markExternalMutationCommitted }) => {
+      markExternalMutationCommitted?.();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      throw new Error("injected committed classification failure");
+    });
+
+    await queue.dispatch(reconcileCommand);
+    await queue.drain();
+
+    expect(await persistence.listCommands()).toEqual([
+      expect.objectContaining({
+        id: "cmd_1",
+        status: "failed",
+        error: expect.objectContaining({ code: "COMMAND_EXECUTION_FAILED" }),
+      }),
+    ]);
+    expect(
+      (await persistence.listEvents({ commandId: "cmd_1" })).map((event) => event.type),
+    ).toEqual(["command.accepted", "command.started", "command.failed"]);
+    sqlite.close();
+  });
+
   it("shutdown interrupts an in-flight command and drains after failure is recorded", async () => {
     const { sqlite, persistence, queue } = createPersistenceAndQueue({ commandTimeoutMs: 1000 });
     let started = () => {};

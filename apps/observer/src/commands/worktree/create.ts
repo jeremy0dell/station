@@ -8,7 +8,8 @@ import { assertCommandType } from "../assertCommand.js";
 import type { HarnessLaunchPreflight } from "../harnessLaunchPreflight.js";
 import type { CommandHandler } from "../queue.js";
 import { reconcileAndPublish } from "../reconcile.js";
-import { findProjectOrThrow, runProviderMutation, throwIfAborted } from "../session/shared.js";
+import { findProjectOrThrow, throwIfAborted } from "../session/shared.js";
+import { runCreateWorktreeMutation } from "./createMutation.js";
 
 export type CreateWorktreeCreateHandlerOptions = {
   getProjects: () => readonly ProviderProjectConfig[];
@@ -49,22 +50,18 @@ export function createWorktreeCreateHandler(
       request.path = payload.path;
     }
 
-    await runProviderMutation(
-      {
-        clock: options.clock,
-        commandTimeoutMs: options.commandTimeoutMs,
-        signal: context.signal,
-        trace: context.trace,
-        operation: `provider.${options.providers.worktree.id}.createWorktree`,
-        fallback: {
-          tag: "WorktreeProviderError",
-          code: "WORKTREE_CREATE_FAILED",
-          message: "The worktree provider failed to create the worktree.",
-          provider: options.providers.worktree.id,
-        },
-      },
-      () => options.providers.worktree.createWorktree(request),
-    );
+    await runCreateWorktreeMutation({
+      providers: options.providers,
+      request,
+      failureMessage: "The worktree provider failed to create the worktree.",
+      repairReason: "repair:command:worktree.create",
+      core: options.core,
+      context,
+      eventBus: options.eventBus,
+      clock: options.clock,
+      commandTimeoutMs: options.commandTimeoutMs,
+      logger: options.logger,
+    });
     throwIfAborted(context.signal);
 
     await reconcileAndPublish({

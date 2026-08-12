@@ -10,7 +10,12 @@ import type {
 } from "@station/contracts";
 import { CommandReceiptSchema, StationCommandSchema } from "@station/contracts";
 import { createTraceContext } from "@station/observability";
-import { type RuntimeClock, runRuntimeBoundaryWithTimeout, systemClock } from "@station/runtime";
+import {
+  type RuntimeClock,
+  runRuntimeBoundary,
+  runRuntimeBoundaryWithTimeout,
+  systemClock,
+} from "@station/runtime";
 import { createErrorEnvelope, toSafeError } from "../diagnostics/errors.js";
 import type { CommandJournal, EventJournal, ObserverIdFactory } from "../persistence/index.js";
 import type { StationLogger } from "../stationLogger.js";
@@ -24,9 +29,14 @@ export type CommandHandlerContext = {
   signal: AbortSignal;
   /** Refuses cancellation before entry, then makes the handler drain to one completion. */
   beginCommit(): void;
+  /** Drains authoritative external mutation completion across a later timeout or cancellation. */
+  markExternalMutationCommitted?(): void;
 };
 
-type CommandExecutionContext = Omit<CommandHandlerContext, "signal" | "beginCommit">;
+type CommandExecutionContext = Omit<
+  CommandHandlerContext,
+  "signal" | "beginCommit" | "markExternalMutationCommitted"
+>;
 
 export type CommandHandler = (context: CommandHandlerContext) => Promise<void>;
 
@@ -221,8 +231,9 @@ async function executeCommand(
 
   const handler = handlers.get(context.command.type);
   let commitStarted = false;
+  let externalMutationCommitted = false;
   let handlerExecution: Promise<void> | undefined;
-  const result = await runRuntimeBoundaryWithTimeout(
+  let result = await runRuntimeBoundaryWithTimeout(
     {
       operation: `command.${context.command.type}`,
       clock,
@@ -257,27 +268,41 @@ async function executeCommand(
             throwIfAborted(linked.signal);
             commitStarted = true;
           },
+          markExternalMutationCommitted: () => {
+            externalMutationCommitted = true;
+          },
         });
         await handlerExecution;
-        if (!commitStarted) throwIfAborted(linked.signal);
+        if (!commitStarted && !externalMutationCommitted) throwIfAborted(linked.signal);
       } finally {
         linked.cleanup();
       }
     },
   );
 
-  let executionError: unknown = result.ok ? undefined : result.error;
-  if (!result.ok && commitStarted && handlerExecution !== undefined) {
-    try {
-      // A begun durable commit must reach one completion even if its runtime budget expires.
-      await handlerExecution;
-      executionError = undefined;
-    } catch (error) {
-      executionError = error;
-    }
+  if (
+    !result.ok &&
+    (commitStarted || externalMutationCommitted) &&
+    handlerExecution !== undefined
+  ) {
+    const committedExecution = handlerExecution;
+    result = await runRuntimeBoundary(
+      {
+        operation: `command.${context.command.type}.committed`,
+        clock,
+        error: {
+          tag: "CommandExecutionError",
+          code: "COMMAND_EXECUTION_FAILED",
+          message: "Observer command execution failed.",
+          traceId: context.trace.traceId,
+        },
+        trace: context.trace,
+      },
+      () => committedExecution,
+    );
   }
 
-  if (executionError === undefined) {
+  if (result.ok) {
     await persistence.markCommandSucceeded(context.commandId, nowIso(clock));
     const succeededEvent: StationEvent = {
       type: "command.succeeded",
@@ -302,7 +327,7 @@ async function executeCommand(
   }
 
   const safeError = toSafeError(
-    executionError,
+    result.error,
     {
       tag: "CommandExecutionError",
       code: "COMMAND_EXECUTION_FAILED",
@@ -312,7 +337,7 @@ async function executeCommand(
   );
   const envelope = createErrorEnvelope({
     id: idFactory.errorId(),
-    error: executionError,
+    error: result.error,
     fallback: {
       tag: "CommandExecutionError",
       code: "COMMAND_EXECUTION_FAILED",

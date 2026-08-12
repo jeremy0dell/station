@@ -59,6 +59,20 @@ describe("worktree removal preservation", () => {
       clock,
       runner: async (input) => {
         worktrunkCalls.push(input.args ?? []);
+        if (input.command === "git") {
+          if (input.args?.includes("--show-toplevel")) {
+            const head = await gitOutput(linked, "rev-parse", "HEAD");
+            const branch = await gitOutput(linked, "symbolic-ref", "--short", "HEAD");
+            return externalResult(
+              input,
+              `${linked}\n${join(repo, ".git")}\n${head}\nrefs/heads/${branch}\n`,
+            );
+          }
+          if (input.args?.includes("status")) {
+            return externalResult(input, await gitOutput(linked, "status", "--porcelain=v1"));
+          }
+          return externalResult(input, `${join(repo, ".git")}\n`);
+        }
         const branch = await gitOutput(linked, "symbolic-ref", "--short", "HEAD");
         const dirty = (await gitOutput(linked, "status", "--porcelain=v1")).length > 0;
         return externalResult(
@@ -235,13 +249,29 @@ describe("worktree removal preservation", () => {
       resolveRegistrationIdentity: async () => {
         if (!finalRaceArmed) return "git-registration:original";
         armedIdentityReads += 1;
-        return armedIdentityReads === 1
+        return armedIdentityReads <= 4
           ? "git-registration:original"
           : "git-registration:replacement";
       },
       runner: async (input) => {
         worktrunkCalls.push(input.args ?? []);
-        return externalResult(input, JSON.stringify([{ path: linked, branch: "feature" }]));
+        if (input.command !== "git") {
+          return externalResult(input, JSON.stringify([{ path: linked, branch: "feature" }]));
+        }
+        if (input.args?.includes("worktree")) {
+          return externalResult(
+            input,
+            `worktree ${linked}\0HEAD 2222222222222222222222222222222222222222\0branch refs/heads/feature\0\0`,
+          );
+        }
+        if (input.args?.includes("--show-toplevel")) {
+          return externalResult(
+            input,
+            `${linked}\n${join(repo, ".git")}\n${"2".repeat(40)}\nrefs/heads/feature\n`,
+          );
+        }
+        if (input.args?.includes("status")) return externalResult(input, "");
+        return externalResult(input, `${join(repo, ".git")}\n`);
       },
     });
     const terminal = new FakeTerminalProvider({ now });

@@ -1,6 +1,7 @@
 import { DEFAULT_WORKSPACE_CONFIG, type StationConfig } from "@station/config";
 import type {
   BuildHarnessLaunchRequest,
+  CreateWorktreeRequest,
   GetWorktreeRequest,
   HarnessLaunchPlan,
   HarnessProvider,
@@ -2729,6 +2730,79 @@ describe("worktree.create command", () => {
       error: unavailableHarnessError(),
     });
     expect(worktree.snapshot()).toMatchObject({ worktrees: [], created: [], removed: [] });
+    fixture.sqlite.close();
+  });
+
+  it("classifies a timed-out create as outcome unknown and repairs provider truth", async () => {
+    class DelayedConfirmationProvider extends FakeWorktreeProvider {
+      override async createWorktree(request: CreateWorktreeRequest): Promise<WorktreeObservation> {
+        const created = await super.createWorktree(request);
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        return created;
+      }
+    }
+
+    const worktree = new DelayedConfirmationProvider({ now });
+    const fixture = createFixture({ worktree, commandTimeoutMs: 50 });
+
+    const startedAt = performance.now();
+    const receipt = await fixture.queue.dispatch({
+      type: "worktree.create",
+      payload: { projectId: "web", branch: "indeterminate-create" },
+    });
+    await fixture.queue.drain();
+    const responseDurationMs = performance.now() - startedAt;
+
+    await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
+      status: "failed",
+      error: {
+        tag: "TimeoutError",
+        code: "WORKTREE_CREATE_OUTCOME_UNKNOWN",
+      },
+    });
+    expect(responseDurationMs).toBeLessThan(100);
+    expect(worktree.snapshot().worktrees).toHaveLength(1);
+    await vi.waitFor(() => expect(fixture.core.getSnapshot().rows).toHaveLength(1));
+    expect(await fixture.persistence.listSessions()).toEqual([]);
+    fixture.sqlite.close();
+  });
+
+  it("preserves the outcome-unknown error when timeout repair fails", async () => {
+    class FailedRepairProvider extends FakeWorktreeProvider {
+      override async createWorktree(request: CreateWorktreeRequest): Promise<WorktreeObservation> {
+        const created = await super.createWorktree(request);
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        return created;
+      }
+
+      override async listWorktrees(): Promise<WorktreeObservation[]> {
+        throw {
+          tag: "WorktreeProviderError",
+          code: "REPAIR_LIST_FAILED",
+          message: "Injected timeout repair failure.",
+          provider: this.id,
+        } satisfies SafeError;
+      }
+    }
+
+    const worktree = new FailedRepairProvider({ now });
+    const fixture = createFixture({ worktree, commandTimeoutMs: 50 });
+
+    const receipt = await fixture.queue.dispatch({
+      type: "worktree.create",
+      payload: { projectId: "web", branch: "failed-timeout-repair" },
+    });
+    await fixture.queue.drain();
+
+    await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
+      status: "failed",
+      error: {
+        tag: "TimeoutError",
+        code: "WORKTREE_CREATE_OUTCOME_UNKNOWN",
+      },
+    });
+    expect(worktree.snapshot().worktrees).toHaveLength(1);
+    expect(fixture.core.getSnapshot().rows).toEqual([]);
     fixture.sqlite.close();
   });
 });

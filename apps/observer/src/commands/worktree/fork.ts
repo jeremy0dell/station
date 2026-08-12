@@ -11,10 +11,10 @@ import { reconcileAndPublish } from "../reconcile.js";
 import {
   commandValidationError,
   findProjectOrThrow,
-  runProviderMutation,
   throwIfAborted,
   validateSnapshotRow,
 } from "../session/shared.js";
+import { runCreateWorktreeMutation } from "./createMutation.js";
 
 export type WorktreeForkHandlerOptions = {
   getProjects: () => readonly ProviderProjectConfig[];
@@ -71,22 +71,18 @@ export function createWorktreeForkHandler(options: WorktreeForkHandlerOptions): 
       request.seedFrom = { path: sourceRow.path, worktreeId: sourceRow.id };
     }
 
-    await runProviderMutation(
-      {
-        clock: options.clock,
-        commandTimeoutMs: options.commandTimeoutMs,
-        signal: context.signal,
-        trace: context.trace,
-        operation: `provider.${options.providers.worktree.id}.createWorktree`,
-        fallback: {
-          tag: "WorktreeProviderError",
-          code: "WORKTREE_CREATE_FAILED",
-          message: "The worktree provider failed to create the forked worktree.",
-          provider: options.providers.worktree.id,
-        },
-      },
-      () => options.providers.worktree.createWorktree(request),
-    );
+    await runCreateWorktreeMutation({
+      providers: options.providers,
+      request,
+      failureMessage: "The worktree provider failed to create the forked worktree.",
+      repairReason: "repair:command:worktree.fork",
+      core: options.core,
+      context,
+      eventBus: options.eventBus,
+      clock: options.clock,
+      commandTimeoutMs: options.commandTimeoutMs,
+      logger: options.logger,
+    });
     throwIfAborted(context.signal);
 
     await reconcileAndPublish({

@@ -416,7 +416,15 @@
           "specifier": "@station/contracts",
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "type-only",
-          "bindings": ["HarnessProvider", "HarnessRunId", "SafeError", "SessionView", "WorktreeRow"]
+          "bindings": [
+            "HarnessProvider",
+            "HarnessRunId",
+            "RemoveWorktreeRequest",
+            "RemoveWorktreeResult",
+            "SafeError",
+            "SessionView",
+            "WorktreeRow"
+          ]
         },
         {
           "specifier": "@station/runtime",
@@ -825,7 +833,7 @@
           "specifier": "@station/runtime",
           "resolvedPath": "packages/runtime/src/index.ts",
           "edgeKind": "runtime",
-          "bindings": ["runRuntimeBoundaryWithTimeout", "systemClock"]
+          "bindings": ["runRuntimeBoundary", "runRuntimeBoundaryWithTimeout", "systemClock"]
         },
         {
           "specifier": "@station/runtime",
@@ -1372,7 +1380,6 @@
             "removeWorktreeBestEffort",
             "resolveHarnessProviderOrThrow",
             "resolveTerminalProviderOrThrow",
-            "runProviderMutation",
             "seedSession",
             "sessionSeedGroupPlacement",
             "throwIfAborted"
@@ -1389,6 +1396,12 @@
           "resolvedPath": "apps/observer/src/commands/terminalIntentRunner.ts",
           "edgeKind": "type-only",
           "bindings": ["TerminalIntentRunner"]
+        },
+        {
+          "specifier": "../worktree/createMutation.js",
+          "resolvedPath": "apps/observer/src/commands/worktree/createMutation.ts",
+          "edgeKind": "runtime",
+          "bindings": ["runCreateWorktreeMutation"]
         },
         {
           "specifier": "../../persistence/index.js",
@@ -1490,7 +1503,6 @@
             "removeWorktreeBestEffort",
             "resolveHarnessProviderOrThrow",
             "resolveTerminalProviderOrThrow",
-            "runProviderMutation",
             "seedSession",
             "throwIfAborted",
             "validateSnapshotRow"
@@ -1507,6 +1519,12 @@
           "resolvedPath": "apps/observer/src/commands/terminalIntentRunner.ts",
           "edgeKind": "type-only",
           "bindings": ["TerminalIntentRunner"]
+        },
+        {
+          "specifier": "../worktree/createMutation.js",
+          "resolvedPath": "apps/observer/src/commands/worktree/createMutation.ts",
+          "edgeKind": "runtime",
+          "bindings": ["runCreateWorktreeMutation"]
         },
         {
           "specifier": "../../persistence/index.js",
@@ -1542,7 +1560,7 @@
           "specifier": "@station/contracts",
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "type-only",
-          "bindings": ["ProviderProjectConfig", "WorktreeObservation"]
+          "bindings": ["CreateWorktreeRequest", "ProviderProjectConfig", "WorktreeObservation"]
         },
         {
           "specifier": "@station/runtime",
@@ -2729,7 +2747,13 @@
           "specifier": "../session/shared.js",
           "resolvedPath": "apps/observer/src/commands/session/shared.ts",
           "edgeKind": "runtime",
-          "bindings": ["findProjectOrThrow", "runProviderMutation", "throwIfAborted"]
+          "bindings": ["findProjectOrThrow", "throwIfAborted"]
+        },
+        {
+          "specifier": "./createMutation.js",
+          "resolvedPath": "apps/observer/src/commands/worktree/createMutation.ts",
+          "edgeKind": "runtime",
+          "bindings": ["runCreateWorktreeMutation"]
         },
         {
           "specifier": "../../providers/registry.js",
@@ -2760,6 +2784,79 @@
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "type-only",
           "bindings": ["CreateWorktreeRequest", "ProviderProjectConfig"]
+        },
+        {
+          "specifier": "@station/runtime",
+          "resolvedPath": "packages/runtime/src/index.ts",
+          "edgeKind": "type-only",
+          "bindings": ["RuntimeClock"]
+        }
+      ]
+    },
+    {
+      "path": "apps/observer/src/commands/worktree/createMutation.ts",
+      "exports": [
+        {
+          "name": "runCreateWorktreeMutation",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "../queue.js",
+          "resolvedPath": "apps/observer/src/commands/queue.ts",
+          "edgeKind": "type-only",
+          "bindings": ["CommandHandlerContext"]
+        },
+        {
+          "specifier": "../reconcile.js",
+          "resolvedPath": "apps/observer/src/commands/reconcile.ts",
+          "edgeKind": "runtime",
+          "bindings": ["reconcileAndPublish"]
+        },
+        {
+          "specifier": "../session/shared.js",
+          "resolvedPath": "apps/observer/src/commands/session/shared.ts",
+          "edgeKind": "runtime",
+          "bindings": ["runProviderMutation"]
+        },
+        {
+          "specifier": "../../providers/registry.js",
+          "resolvedPath": "apps/observer/src/providers/registry.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ProviderRegistry"]
+        },
+        {
+          "specifier": "../../reconcile/core.js",
+          "resolvedPath": "apps/observer/src/reconcile/core.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ObserverCore"]
+        },
+        {
+          "specifier": "../../runtime/eventBus.js",
+          "resolvedPath": "apps/observer/src/runtime/eventBus.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ObserverEventBus"]
+        },
+        {
+          "specifier": "../../stationLogger.js",
+          "resolvedPath": "apps/observer/src/stationLogger.ts",
+          "edgeKind": "type-only",
+          "bindings": ["StationLogger"]
+        },
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "type-only",
+          "bindings": ["CreateWorktreeRequest", "WorktreeObservation"]
+        },
+        {
+          "specifier": "@station/runtime",
+          "resolvedPath": "packages/runtime/src/index.ts",
+          "edgeKind": "runtime",
+          "bindings": ["isSafeError"]
         },
         {
           "specifier": "@station/runtime",
@@ -2817,10 +2914,15 @@
           "bindings": [
             "commandValidationError",
             "findProjectOrThrow",
-            "runProviderMutation",
             "throwIfAborted",
             "validateSnapshotRow"
           ]
+        },
+        {
+          "specifier": "./createMutation.js",
+          "resolvedPath": "apps/observer/src/commands/worktree/createMutation.ts",
+          "edgeKind": "runtime",
+          "bindings": ["runCreateWorktreeMutation"]
         },
         {
           "specifier": "../../providers/registry.js",
@@ -2867,7 +2969,7 @@
           "name": "createWorktreeRemoveHandler",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Revalidates selected checkout and Git registration identity before coordinating removal. Provider-confirmed removal atomically ends sessions and retires canonical title authority."
+          "purpose": "Revalidates selected checkout and Git registration identity before coordinating removal. Provider-confirmed removal cannot be overwritten by later cancellation or event-journal degradation; it retries atomic session/title retirement once before publishing removal evidence."
         },
         {
           "name": "CreateWorktreeRemoveHandlerOptions",
@@ -2969,7 +3071,14 @@
           "specifier": "@station/contracts",
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "type-only",
-          "bindings": ["ProviderProjectConfig", "WorktreeRemovalRefusalDiagnosticDetail"]
+          "bindings": [
+            "CommandId",
+            "GetWorktreeRequest",
+            "ProviderProjectConfig",
+            "SafeError",
+            "TraceContext",
+            "WorktreeRemovalRefusalDiagnosticDetail"
+          ]
         },
         {
           "specifier": "@station/runtime",
@@ -13830,8 +13939,16 @@
       "declaration": "createWorktreeRemoveHandler",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Revalidates selected checkout and Git registration identity before coordinating removal. Provider-confirmed removal atomically ends sessions and retires canonical title authority.",
-      "dependencies": []
+      "purpose": "Revalidates selected checkout and Git registration identity before coordinating removal. Provider-confirmed removal cannot be overwritten by later cancellation or event-journal degradation; it retries atomic session/title retirement once before publishing removal evidence.",
+      "dependencies": [
+        {
+          "path": "apps/observer/src/stationLogger.ts",
+          "declaration": "StationLogger",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
     },
     {
       "path": "apps/observer/src/diagnostics/collector.ts",

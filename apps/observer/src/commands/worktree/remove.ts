@@ -1,5 +1,9 @@
 import {
+  type CommandId,
+  type GetWorktreeRequest,
   type ProviderProjectConfig,
+  type SafeError,
+  type TraceContext,
   type WorktreeRemovalRefusalDiagnosticDetail,
   WorktreeRemovalRefusalDiagnosticDetailSchema,
 } from "@station/contracts";
@@ -43,7 +47,8 @@ export type CreateWorktreeRemoveHandlerOptions = {
  * USE CASE
  *
  * Revalidates selected checkout and Git registration identity before coordinating removal.
- * Provider-confirmed removal atomically ends sessions and retires canonical title authority.
+ * Provider-confirmed removal cannot be overwritten by later cancellation or event-journal
+ * degradation; it retries atomic session/title retirement once before publishing removal evidence.
  */
 export function createWorktreeRemoveHandler(
   options: CreateWorktreeRemoveHandlerOptions,
@@ -76,7 +81,20 @@ export function createWorktreeRemoveHandler(
           provider: options.providers.worktree.id,
         },
       },
-      () => options.providers.worktree.listWorktrees(project),
+      async () => {
+        if (options.providers.worktree.getWorktree === undefined) {
+          return options.providers.worktree.listWorktrees(project);
+        }
+        const request: GetWorktreeRequest = {
+          worktreeId: payload.worktreeId,
+          projectId: row.projectId,
+          path: payload.expectedPath,
+          project,
+          signal: context.signal,
+        };
+        const current = await options.providers.worktree.getWorktree(request);
+        return current === null ? [] : [current];
+      },
     );
     throwIfAborted(context.signal);
     const resolution = resolveWorktreeRemovalTarget({
@@ -145,36 +163,119 @@ export function createWorktreeRemoveHandler(
       }
       throw error;
     }
-    throwIfAborted(context.signal);
-    await options.persistence.retireRemovedWorktreeSessionState({
-      projectId: row.projectId,
-      worktreeId: row.id,
-      endedAt: nowIso(options.clock),
-    });
+    let retirementError: unknown;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        await options.persistence.retireRemovedWorktreeSessionState({
+          projectId: row.projectId,
+          worktreeId: row.id,
+          endedAt: nowIso(options.clock),
+        });
+        retirementError = undefined;
+        break;
+      } catch (error) {
+        retirementError = error;
+      }
+    }
+    if (retirementError !== undefined) {
+      await options.logger
+        ?.error("Confirmed worktree removal retirement failed.", {
+          commandId: context.commandId,
+          traceId: context.trace.traceId,
+          projectId: row.projectId,
+          worktreeId: row.id,
+          error: retirementError,
+        })
+        .catch(() => undefined);
+      const error: SafeError = {
+        tag: "PersistenceError",
+        code: "WORKTREE_REMOVE_RETIREMENT_FAILED",
+        message:
+          "The worktree was removed, but Station could not retire its durable session state.",
+        hint: "Do not retry deletion; inspect Observer persistence health before repairing session state.",
+        projectId: row.projectId,
+        worktreeId: row.id,
+      };
+      if (previousSessionId !== undefined) error.sessionId = previousSessionId;
+      throw error;
+    }
 
-    const nextSnapshot = await reconcileAndPublish({
+    let removalEventError: unknown;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        await publishRemovedSessionIfAbsent({
+          previousSessionId,
+          nextSessionIds: new Set(),
+          persistence: options.persistence,
+          eventBus: options.eventBus,
+          context,
+          clock: options.clock,
+        });
+        await publishWorktreeRemoved({
+          worktreeId: row.id,
+          persistence: options.persistence,
+          eventBus: options.eventBus,
+          context,
+          clock: options.clock,
+        });
+        removalEventError = undefined;
+        break;
+      } catch (error) {
+        removalEventError = error;
+      }
+    }
+    if (removalEventError !== undefined) {
+      await options.logger
+        ?.error("Confirmed worktree removal event publication failed.", {
+          commandId: context.commandId,
+          traceId: context.trace.traceId,
+          projectId: row.projectId,
+          worktreeId: row.id,
+          error: removalEventError,
+        })
+        .catch(() => undefined);
+    }
+    scheduleRemovalReconcile({
       core: options.core,
       eventBus: options.eventBus,
       clock: options.clock,
-      reason: "command:worktree.remove",
       trace: context.trace,
-    });
-    await publishRemovedSessionIfAbsent({
-      previousSessionId,
-      nextSessionIds: new Set(nextSnapshot.sessions.map((session) => session.id)),
-      persistence: options.persistence,
-      eventBus: options.eventBus,
-      context,
-      clock: options.clock,
-    });
-    await publishWorktreeRemoved({
+      logger: options.logger,
+      commandId: context.commandId,
+      projectId: row.projectId,
       worktreeId: row.id,
-      persistence: options.persistence,
-      eventBus: options.eventBus,
-      context,
-      clock: options.clock,
     });
   };
+}
+
+function scheduleRemovalReconcile(input: {
+  core: ObserverCore;
+  eventBus?: ObserverEventBus | undefined;
+  clock?: RuntimeClock | undefined;
+  logger?: StationLogger | undefined;
+  commandId: CommandId;
+  trace: TraceContext;
+  projectId: string;
+  worktreeId: string;
+}): void {
+  // Confirmed removal events must not wait behind the inventory repair they make necessary.
+  void reconcileAndPublish({
+    core: input.core,
+    eventBus: input.eventBus,
+    clock: input.clock,
+    reason: "command:worktree.remove",
+    trace: input.trace,
+  }).catch((error: unknown) => {
+    void input.logger
+      ?.error("Deferred worktree removal convergence failed.", {
+        commandId: input.commandId,
+        traceId: input.trace.traceId,
+        projectId: input.projectId,
+        worktreeId: input.worktreeId,
+        error,
+      })
+      .catch(() => undefined);
+  });
 }
 
 function worktreeRemovalRefusalDiagnostic(
