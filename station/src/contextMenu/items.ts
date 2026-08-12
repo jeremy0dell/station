@@ -181,6 +181,16 @@ function buildProjectItems(
     setDefaultAgent.disabled = true;
   }
   return [
+    {
+      id: "project.quickGroup",
+      label: "Quick Group",
+      action: { kind: "quickGroup", projectId: project.id },
+    },
+    {
+      id: "project.newGroup",
+      label: "New Group…",
+      action: { kind: "newGroup", projectId: project.id },
+    },
     setDefaultAgent,
     {
       id: "project.openSettings",

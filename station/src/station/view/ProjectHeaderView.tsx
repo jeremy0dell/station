@@ -17,7 +17,7 @@ import {
 
 const SHELL_AFFORDANCE_LABEL = "[shell]";
 const SHELL_AFFORDANCE_LABEL_COMPACT = "[sh]";
-const DEFAULT_AGENT_AFFORDANCE_LABEL = "[▾]";
+const MENU_AFFORDANCE_LABEL = "[▾]";
 const QUICK_SESSION_AFFORDANCE_LABEL = "[quick session]";
 const QUICK_SESSION_AFFORDANCE_LABEL_COMPACT = "[qs]";
 const PROJECT_HEADER_SEPARATOR_COUNT = 3;
@@ -48,7 +48,7 @@ export function ProjectHeaderView({
   const controlsWidth =
     shellLabel.length +
     quickSessionLabel.length +
-    DEFAULT_AGENT_AFFORDANCE_LABEL.length +
+    MENU_AFFORDANCE_LABEL.length +
     PROJECT_HEADER_SEPARATOR_COUNT;
   const dimmed = persistentFilterMatch?.matched === false;
   return (
@@ -82,10 +82,10 @@ export function ProjectHeaderView({
       />
       <ProjectHeaderSeparator dimmed={dimmed} />
       <ProjectHeaderAction
-        label={DEFAULT_AGENT_AFFORDANCE_LABEL}
+        label={MENU_AFFORDANCE_LABEL}
         rowId={rowId}
-        cellId="defaultAgent"
-        focused={focusedCellId === "defaultAgent"}
+        cellId="menu"
+        focused={focusedCellId === "menu"}
         dimmed={dimmed}
       />
     </box>

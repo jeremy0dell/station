@@ -9,7 +9,6 @@ const FILTER_CONDITION_KEY_HINT = DASHBOARD_FILTER_CONDITION_KEYS.join("/");
 
 const STATION_HELP_CONTENT = [
   { text: "station help", align: "center" as const },
-  { text: "" },
   { key: "Ctrl-O", description: "open/close project view" },
   { key: "Ctrl-Q", description: "quit Station" },
   { key: "Ctrl-\\", description: "split pane right" },
@@ -23,6 +22,7 @@ const STATION_HELP_CONTENT = [
   { key: "↑/↓", description: "move cursor · wheel scroll" },
   { key: "↵", description: "open focused session" },
   { key: "tab", description: "next session needing you" },
+  { key: "G", description: "quick group" },
   { key: "/ ↵ Esc Q", description: "edit/apply/cancel-clear/retain-close filter" },
   {
     key: `Tab ${FILTER_CONDITION_KEY_HINT}`,

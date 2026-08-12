@@ -909,7 +909,7 @@ describe("routeStationMouse", () => {
     });
   });
 
-  it("gates quick-session and default-agent picker to dashboard mode", () => {
+  it("gates quick-session and Project menu to dashboard mode", () => {
     const store = makeStore();
     store.actions.handleKey({ input: "/" }); // enter filter mode
 
@@ -918,7 +918,7 @@ describe("routeStationMouse", () => {
     ).toEqual({ kind: "handled" });
     expect(
       routeStationMouse(
-        { kind: "dashboardCell", rowId: dashboardRowIds.project("station"), cellId: "defaultAgent" },
+        { kind: "dashboardCell", rowId: dashboardRowIds.project("station"), cellId: "menu" },
         LEFT_DOWN,
         store,
       ),
@@ -932,10 +932,10 @@ describe("routeStationMouse", () => {
     ).toEqual({ kind: "handled" });
   });
 
-  it("opens the project default-agent picker via [▾]", () => {
+  it("opens the Project menu via [▾]", () => {
     const store = makeStore();
     const outcome = routeStationMouse(
-      { kind: "dashboardCell", rowId: dashboardRowIds.project("station"), cellId: "defaultAgent" },
+      { kind: "dashboardCell", rowId: dashboardRowIds.project("station"), cellId: "menu" },
       LEFT_DOWN,
       store,
     );
@@ -943,13 +943,13 @@ describe("routeStationMouse", () => {
     expect(outcome).toEqual({ kind: "handled" });
     const screen = store.state.getState().screen;
     expect(screen).toBeDefined();
-    expect(screen?.name).toBe("projectDefaultAgent");
-    if (screen?.name === "projectDefaultAgent") {
+    expect(screen?.name).toBe("projectMenu");
+    if (screen?.name === "projectMenu") {
       expect(screen.projectId).toBe("station");
     }
     expect(store.state.getState().dashboardFocus).toEqual({
       rowId: dashboardRowIds.project("station"),
-      cellId: "defaultAgent",
+      cellId: "menu",
     });
   });
 
@@ -957,7 +957,12 @@ describe("routeStationMouse", () => {
     const fixture = makeStationTestRuntime({ terminalRows: 12 });
     const store = fixture.runtime;
     routeStationMouse(
-      { kind: "dashboardCell", rowId: dashboardRowIds.project("station"), cellId: "defaultAgent" },
+      { kind: "dashboardCell", rowId: dashboardRowIds.project("station"), cellId: "menu" },
+      LEFT_DOWN,
+      store,
+    );
+    routeStationMouse(
+      { kind: "projectMenuAction", actionId: "defaultAgent" },
       LEFT_DOWN,
       store,
     );
@@ -985,7 +990,7 @@ describe("routeStationMouse", () => {
     const store = makeStore();
     // Ghost project: no mutation, no router effect.
     routeStationMouse(
-      { kind: "dashboardCell", rowId: dashboardRowIds.project("ghost"), cellId: "defaultAgent" },
+      { kind: "dashboardCell", rowId: dashboardRowIds.project("ghost"), cellId: "menu" },
       LEFT_DOWN,
       store,
     );

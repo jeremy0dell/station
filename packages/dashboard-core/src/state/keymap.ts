@@ -5,6 +5,8 @@ import type { DashboardStateView } from "./types.js";
 export type TuiInputMode =
   | "dashboard"
   | "help"
+  | "projectMenu"
+  | "createGroup"
   | "persistentFilter"
   | "persistentFilterConditionField"
   | "persistentFilterConditionValues"
@@ -39,6 +41,10 @@ export function deriveTuiInputMode(state: DashboardStateView): TuiInputMode {
       return "dashboard";
     case "help":
       return "help";
+    case "projectMenu":
+      return "projectMenu";
+    case "createGroup":
+      return "createGroup";
     case "persistentFilter":
       if (screen.conditionEditor?.stage === "field") return "persistentFilterConditionField";
       if (screen.conditionEditor?.stage === "values") return "persistentFilterConditionValues";
@@ -229,6 +235,16 @@ export const TUI_DASHBOARD_BINDINGS = [
     help: {
       keys: "N",
       label: "new",
+    },
+  },
+  {
+    id: "tui.dashboard.quickGroup",
+    pattern: { kind: "char", char: "G" },
+    action: "tui.quickGroup.create",
+    outcome: "handled",
+    help: {
+      keys: "G",
+      label: "quick group",
     },
   },
   {

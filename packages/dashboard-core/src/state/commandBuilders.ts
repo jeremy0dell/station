@@ -2,6 +2,7 @@ import type {
   ProjectView,
   ProviderId,
   SafeError,
+  SessionGroupId,
   SessionId,
   SessionView,
   StationCommand,
@@ -53,6 +54,18 @@ export type SetProjectDefaultHarnessCommandInput = {
 
 export type RemoveProjectCommandInput = {
   projectId: ProjectView["id"];
+};
+
+export type CreateSessionGroupCommandInput = {
+  projectId: ProjectView["id"];
+  name: string;
+};
+
+export type UpdateSessionGroupMembershipCommandInput = {
+  projectId: ProjectView["id"];
+  groupId: SessionGroupId;
+  expectedVersion: number;
+  sessionId: SessionId;
 };
 
 export type BuildFocusCommandOptions = {
@@ -249,6 +262,32 @@ export function buildRemoveProjectCommand(
     type: "project.remove",
     payload: {
       projectId: input.projectId,
+    },
+  };
+}
+
+export function buildCreateSessionGroupCommand(
+  input: CreateSessionGroupCommandInput,
+): Extract<StationCommand, { type: "sessionGroup.create" }> {
+  return {
+    type: "sessionGroup.create",
+    payload: {
+      projectId: input.projectId,
+      name: input.name.trim(),
+    },
+  };
+}
+
+export function buildUpdateSessionGroupMembershipCommand(
+  input: UpdateSessionGroupMembershipCommandInput,
+): Extract<StationCommand, { type: "sessionGroup.updateMembership" }> {
+  return {
+    type: "sessionGroup.updateMembership",
+    payload: {
+      projectId: input.projectId,
+      groupId: input.groupId,
+      expectedVersion: input.expectedVersion,
+      add: [{ sessionId: input.sessionId, expectedGroupId: null }],
     },
   };
 }

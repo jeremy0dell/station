@@ -10,6 +10,7 @@ import { projectSettingsScreenBehavior } from "./screens/projectSettings.js";
 import { projectSettingsPickerScreenBehavior } from "./screens/projectSettingsPicker.js";
 import { removeWorktreeScreenBehavior } from "./screens/removeWorktree.js";
 import { renameSessionScreenBehavior } from "./screens/renameSession.js";
+import { createGroupScreenBehavior, projectMenuScreenBehavior } from "./screens/sessionGroups.js";
 import { widgetSettingsScreenBehavior } from "./screens/widgetSettings.js";
 import type { DashboardScreenView, DashboardState } from "./types.js";
 
@@ -31,6 +32,10 @@ export function tuiScreenBehavior(screen: DashboardScreenView): TuiScreenBehavio
       return dashboardScreenBehavior;
     case "help":
       return helpScreenBehavior;
+    case "projectMenu":
+      return projectMenuScreenBehavior;
+    case "createGroup":
+      return createGroupScreenBehavior;
     case "persistentFilter":
       return persistentFilterScreenBehavior(screen);
     case "projectCollapse":

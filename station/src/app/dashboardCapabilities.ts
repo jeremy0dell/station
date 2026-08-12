@@ -10,6 +10,7 @@ import type { StationStore } from "../state/store.js";
 import { agentWorktreePaneId, projectPaneId, worktreePaneId } from "../state/types.js";
 import type { ManagedLaunch, ManagedLaunchResult } from "../input/runtime/managedLaunch.js";
 import type { PaneEffects } from "../input/runtime/paneEffects.js";
+import { waitForSessionByBranch } from "../input/runtime/stationRows.js";
 
 /** Native composition inputs for semantic dashboard execution. */
 export type CreateNativeDashboardCapabilitiesOptions = {
@@ -36,13 +37,31 @@ export function createDashboardCapabilities(
       options.store.actions.closeOverlay();
     },
   });
+  const runManagedSessionCreate = (
+    request: Parameters<DashboardCapabilities["managedSessions"]["create"]>[0],
+  ): Promise<ManagedLaunchResult> =>
+    options.managedLaunch.create({
+      projectId: request.project.id,
+      title: request.title,
+      branch: request.hiddenBranch,
+      harness: request.harness,
+    });
   const createManagedSession: DashboardCapabilities["managedSessions"]["create"] = (request) =>
+    managedSessionExecution(runManagedSessionCreate(request));
+  const quickCreateManagedSession: DashboardCapabilities["managedSessions"]["quickCreate"] = (
+    request,
+  ) =>
     managedSessionExecution(
-      options.managedLaunch.create({
-        projectId: request.project.id,
-        title: request.title,
-        branch: request.hiddenBranch,
-        harness: request.harness,
+      runManagedSessionCreate(request).then(async (result) => {
+        if (result.kind === "success") {
+          // Native preparation publishes its session through an asynchronous Observer reconcile.
+          await waitForSessionByBranch(
+            options.clientState,
+            request.project.id,
+            request.hiddenBranch,
+          );
+        }
+        return result;
       }),
     );
   const closeDashboard: DashboardCapabilities["dismissal"]["dismissDashboard"] = () => {
@@ -91,7 +110,7 @@ export function createDashboardCapabilities(
     },
     managedSessions: {
       create: createManagedSession,
-      quickCreate: createManagedSession,
+      quickCreate: quickCreateManagedSession,
       fork: (request) => {
         if (request.inheritedHarness === undefined) {
           return managedSessionFailure({

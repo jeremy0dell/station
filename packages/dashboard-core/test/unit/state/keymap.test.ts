@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { SELECTION_KEYS } from "../../../src/selectors/selectors.js";
 import {
   dashboardBindingHelp,
   deriveTuiInputMode,
@@ -19,6 +20,7 @@ describe("dashboard key bindings", () => {
     expect(matchDashboardBinding({ input: "", rightArrow: true })?.action).toBe("tui.focus.right");
     expect(matchDashboardBinding({ input: "\r", return: true })?.action).toBe("tui.focus.activate");
     expect(matchDashboardBinding({ input: "N" })?.action).toBe("tui.newSession.open");
+    expect(matchDashboardBinding({ input: "G" })?.action).toBe("tui.quickGroup.create");
     expect(matchDashboardBinding({ input: "?" })?.action).toBe("tui.help.open");
   });
 
@@ -51,6 +53,12 @@ describe("dashboard key bindings", () => {
     expect(isSlotKey({ input: "i" })).toBe(true);
     expect(matchDashboardBinding({ input: "i" })?.action).toBe("tui.row.activateSlot");
   });
+
+  it("keeps lowercase g in the landed session-slot grammar", () => {
+    expect(SELECTION_KEYS).toContain("g");
+    expect(isSlotKey({ input: "g" })).toBe(true);
+    expect(matchDashboardBinding({ input: "g" })?.action).toBe("tui.row.activateSlot");
+  });
 });
 
 describe("dashboard lifecycle keys", () => {
@@ -79,6 +87,10 @@ describe("dashboard footer binding metadata", () => {
     expect(dashboardBindingHelp("tui.dashboard.quit")).toEqual({
       keys: "Q",
       label: "quit",
+    });
+    expect(dashboardBindingHelp("tui.dashboard.quickGroup")).toEqual({
+      keys: "G",
+      label: "quick group",
     });
   });
 });
