@@ -1,5 +1,14 @@
 import { DEFAULT_WORKSPACE_CONFIG, type StationConfig } from "@station/config";
-import type { HarnessProvider, TerminalIntent, TerminalIntentReceipt } from "@station/contracts";
+import type {
+  HarnessProvider,
+  ProviderProjectConfig,
+  RemoveWorktreeRequest,
+  StationEvent,
+  TerminalIntent,
+  TerminalIntentReceipt,
+  WorktreeObservation,
+  WorktreeProvider,
+} from "@station/contracts";
 import {
   createFakeHarnessRun,
   createFakeTerminalTarget,
@@ -8,17 +17,19 @@ import {
   FakeTerminalProvider,
   FakeWorktreeProvider,
 } from "@station/testing";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   createCommandQueue,
   createObserverCore,
   createObserverEventBus,
   createSqliteObserverPersistence,
+  type ObserverCore,
   openObserverSqlite,
   ProviderRegistry,
   registerObserverCommandHandlers,
   type TerminalIntentRunner,
 } from "../../src/internal";
+import type { StationLogger } from "../../src/stationLogger.js";
 import { createUnexpectedProjectConfigWriter } from "../support/projectConfigWriter.js";
 
 const now = "2026-05-21T12:00:00.000Z";
@@ -310,6 +321,31 @@ describe("cleanup command handlers", () => {
     fixture.sqlite.close();
   });
 
+  it("rejects a worktree that becomes dirty after selection", async () => {
+    const fixture = createFixture({ dirty: false, state: "none" });
+    await fixture.core.reconcile("pre-cleanup");
+    fixture.worktreeObservation.dirty = true;
+
+    const receipt = await fixture.queue.dispatch({
+      type: "worktree.remove",
+      payload: {
+        worktreeId: "wt_web_cleanup",
+        projectId: "web",
+        expectedPath: "/tmp/station/web/cleanup",
+        expectedBranch: "cleanup",
+        expectedRegistrationIdentity: "git-registration:cleanup",
+      },
+    });
+    await fixture.queue.drain();
+
+    await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
+      status: "failed",
+      error: { code: "WORKTREE_DIRTY_REQUIRES_FORCE" },
+    });
+    expect(fixture.worktree.snapshot().removed).toEqual([]);
+    fixture.sqlite.close();
+  });
+
   it("rejects project root removal before calling the worktree provider", async () => {
     const fixture = createFixture({ state: "none", projectRootPath: true });
     await fixture.core.reconcile("pre-cleanup");
@@ -422,6 +458,7 @@ describe("cleanup command handlers", () => {
         }),
       ]),
     );
+    await fixture.core.reconcile("verify-active-removal-convergence");
     expect(fixture.core.getSnapshot().rows).toEqual([]);
     expect(
       (await fixture.persistence.listSessions())
@@ -436,6 +473,619 @@ describe("cleanup command handlers", () => {
         (title) => title.projectId === "web" && title.worktreeId === "wt_web_cleanup",
       ),
     ).toBe(false);
+    fixture.sqlite.close();
+  });
+
+  it("completes confirmed removal before a blocked repair reconcile", async () => {
+    let blockingProvider: BlockingPostRemoveProvider | undefined;
+    const fixture = createFixture({
+      state: "none",
+      worktreeFactory: (observation) => {
+        blockingProvider = new BlockingPostRemoveProvider(observation);
+        return blockingProvider;
+      },
+    });
+    await fixture.core.reconcile("pre-blocked-removal");
+    const selected = fixture.core.getSnapshot().rows[0];
+    if (selected?.registrationIdentity === undefined || blockingProvider === undefined) {
+      throw new Error("Expected a verified removal selection and blocking provider.");
+    }
+
+    const receipt = await fixture.queue.dispatch({
+      type: "worktree.remove",
+      payload: {
+        worktreeId: selected.id,
+        projectId: selected.projectId,
+        expectedPath: selected.path,
+        expectedBranch: selected.branch,
+        expectedRegistrationIdentity: selected.registrationIdentity,
+        force: true,
+      },
+    });
+    const completion = fixture.queue.drain().then(() => true);
+    await blockingProvider.postRemoveListStarted;
+    let timeout: NodeJS.Timeout | undefined;
+    const completedWhileBlocked = await Promise.race([
+      completion,
+      new Promise<false>((resolve) => {
+        timeout = setTimeout(resolve, 100, false);
+      }),
+    ]);
+    if (timeout !== undefined) clearTimeout(timeout);
+    const rowsWhileBlocked = fixture.core.getSnapshot().rows.length;
+    const eventsWhileBlocked = await fixture.persistence.listEvents({
+      commandId: receipt.commandId,
+    });
+    const reconciledEvents = fixture.eventBus
+      .subscribe({ type: "observer.reconciled" })
+      [Symbol.asyncIterator]();
+    blockingProvider.releasePostRemoveList();
+    await completion;
+    await reconciledEvents.next();
+    await reconciledEvents.return?.();
+
+    expect(completedWhileBlocked).toBe(true);
+    expect(rowsWhileBlocked).toBe(1);
+    expect(eventsWhileBlocked).toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: "worktree.removed" })]),
+    );
+    await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
+      status: "succeeded",
+    });
+    expect(blockingProvider.snapshot().removed).toHaveLength(1);
+    expect(fixture.core.getSnapshot().rows).toEqual([]);
+    fixture.sqlite.close();
+  });
+
+  it("retains list-backed removal preflight when targeted lookup is unavailable", async () => {
+    let blockingProvider: BlockingPostRemoveProvider | undefined;
+    const fixture = createFixture({
+      state: "none",
+      targetedLookupSupported: false,
+      worktreeFactory: (observation) => {
+        blockingProvider = new BlockingPostRemoveProvider(observation);
+        return blockingProvider;
+      },
+    });
+    await fixture.core.reconcile("pre-fallback-removal");
+    const selected = fixture.core.getSnapshot().rows[0];
+    if (selected?.registrationIdentity === undefined || blockingProvider === undefined) {
+      throw new Error("Expected a verified removal selection and blocking provider.");
+    }
+
+    const receipt = await fixture.queue.dispatch({
+      type: "worktree.remove",
+      payload: {
+        worktreeId: selected.id,
+        projectId: selected.projectId,
+        expectedPath: selected.path,
+        expectedBranch: selected.branch,
+        expectedRegistrationIdentity: selected.registrationIdentity,
+        force: true,
+      },
+    });
+    const completion = fixture.queue.drain().then(() => true);
+    await blockingProvider.postRemoveListStarted;
+    const completedWhileBlocked = await Promise.race([
+      completion,
+      new Promise<false>((resolve) => setTimeout(resolve, 50, false)),
+    ]);
+    expect(completedWhileBlocked).toBe(false);
+    expect(blockingProvider.snapshot().removed).toEqual([]);
+
+    blockingProvider.releasePostRemoveList();
+    await completion;
+    await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
+      status: "succeeded",
+    });
+    expect(blockingProvider.snapshot().removed).toHaveLength(1);
+    fixture.sqlite.close();
+  });
+
+  it("keeps confirmed removal successful when deferred reconcile fails", async () => {
+    const loggedErrors: Array<{ message: string; attributes?: Record<string, unknown> }> = [];
+    const logger: StationLogger = {
+      async info(): Promise<void> {},
+      async warn(): Promise<void> {},
+      async error(message, attributes): Promise<void> {
+        loggedErrors.push({ message, ...(attributes === undefined ? {} : { attributes }) });
+      },
+    };
+    const fixture = createFixture({
+      state: "none",
+      postRemoveReconcileFailure: new Error("injected repair failure"),
+      logger,
+    });
+    await fixture.core.reconcile("pre-failed-removal-repair");
+    const selected = fixture.core.getSnapshot().rows[0];
+    if (selected?.registrationIdentity === undefined) {
+      throw new Error("Expected a verified removal selection.");
+    }
+
+    const receipt = await fixture.queue.dispatch({
+      type: "worktree.remove",
+      payload: {
+        worktreeId: selected.id,
+        projectId: selected.projectId,
+        expectedPath: selected.path,
+        expectedBranch: selected.branch,
+        expectedRegistrationIdentity: selected.registrationIdentity,
+        force: true,
+      },
+    });
+    await fixture.queue.drain();
+
+    await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
+      status: "succeeded",
+    });
+    expect(fixture.worktree.snapshot().removed).toHaveLength(1);
+    await expect(fixture.persistence.listEvents({ commandId: receipt.commandId })).resolves.toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: "worktree.removed" })]),
+    );
+    await vi.waitFor(() => {
+      expect(loggedErrors).toEqual([
+        expect.objectContaining({
+          message: "Deferred worktree removal convergence failed.",
+          attributes: expect.objectContaining({
+            commandId: receipt.commandId,
+            worktreeId: selected.id,
+            error: expect.any(Error),
+          }),
+        }),
+      ]);
+    });
+    await fixture.core.reconcile("explicit-repair-after-failure");
+    expect(fixture.core.getSnapshot().rows).toEqual([]);
+    fixture.sqlite.close();
+  });
+
+  it("keeps confirmed removal successful when queue shutdown races its return", async () => {
+    let shutdownProvider: ShutdownAfterConfirmedRemoveProvider | undefined;
+    const fixture = createFixture({
+      state: "working",
+      worktreeFactory: (observation) => {
+        shutdownProvider = new ShutdownAfterConfirmedRemoveProvider(observation);
+        return shutdownProvider;
+      },
+    });
+    await fixture.core.reconcile("pre-shutdown-race-removal");
+    const selected = fixture.core.getSnapshot().rows[0];
+    if (selected?.registrationIdentity === undefined || shutdownProvider === undefined) {
+      throw new Error("Expected a verified removal selection and shutdown provider.");
+    }
+
+    let shutdown: Promise<void> | undefined;
+    shutdownProvider.onConfirmedRemoval = () => {
+      shutdown = fixture.queue.shutdown();
+    };
+    const receipt = await fixture.queue.dispatch({
+      type: "worktree.remove",
+      payload: {
+        worktreeId: selected.id,
+        projectId: selected.projectId,
+        expectedPath: selected.path,
+        expectedBranch: selected.branch,
+        expectedRegistrationIdentity: selected.registrationIdentity,
+        force: true,
+      },
+    });
+    await fixture.queue.drain();
+    await shutdown;
+
+    expect(shutdown).toBeDefined();
+    expect(shutdownProvider.snapshot().removed).toHaveLength(1);
+    await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
+      status: "succeeded",
+    });
+    await expect(fixture.persistence.listEvents({ commandId: receipt.commandId })).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: "session.removed" }),
+        expect.objectContaining({ type: "worktree.removed" }),
+      ]),
+    );
+    await expect(fixture.persistence.listSessions()).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "ses_web_cleanup", lifecycle: "ended" }),
+      ]),
+    );
+    fixture.sqlite.close();
+  });
+
+  it("drains confirmed removal classification after the command deadline", async () => {
+    const fixture = createFixture({
+      state: "working",
+      commandTimeoutMs: 15,
+      worktreeRetirementDelayMs: 45,
+    });
+    await fixture.core.reconcile("pre-post-removal-timeout");
+    const selected = fixture.core.getSnapshot().rows[0];
+    if (selected?.registrationIdentity === undefined) {
+      throw new Error("Expected a verified removal selection.");
+    }
+
+    const receipt = await fixture.queue.dispatch({
+      type: "worktree.remove",
+      payload: {
+        worktreeId: selected.id,
+        projectId: selected.projectId,
+        expectedPath: selected.path,
+        expectedBranch: selected.branch,
+        expectedRegistrationIdentity: selected.registrationIdentity,
+        force: true,
+      },
+    });
+    await fixture.queue.drain();
+
+    expect(fixture.worktree.snapshot().removed).toHaveLength(1);
+    await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
+      status: "succeeded",
+    });
+    await expect(fixture.persistence.listEvents({ commandId: receipt.commandId })).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: "session.removed" }),
+        expect.objectContaining({ type: "worktree.removed" }),
+        expect.objectContaining({ type: "command.succeeded" }),
+      ]),
+    );
+    await expect(fixture.persistence.listSessions()).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "ses_web_cleanup", lifecycle: "ended" }),
+      ]),
+    );
+    fixture.sqlite.close();
+  });
+
+  it("retries transient confirmed-removal retirement before publishing evidence", async () => {
+    const fixture = createFixture({ state: "working", worktreeRetirementFailures: 1 });
+    await fixture.core.reconcile("pre-transient-retirement-failure");
+    const selected = fixture.core.getSnapshot().rows[0];
+    if (selected?.registrationIdentity === undefined) {
+      throw new Error("Expected a verified removal selection.");
+    }
+
+    const receipt = await fixture.queue.dispatch({
+      type: "worktree.remove",
+      payload: {
+        worktreeId: selected.id,
+        projectId: selected.projectId,
+        expectedPath: selected.path,
+        expectedBranch: selected.branch,
+        expectedRegistrationIdentity: selected.registrationIdentity,
+        force: true,
+      },
+    });
+    await fixture.queue.drain();
+
+    expect(fixture.worktree.snapshot().removed).toHaveLength(1);
+    expect(fixture.worktreeRetirementAttempts()).toBe(2);
+    await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
+      status: "succeeded",
+    });
+    await expect(fixture.persistence.listEvents({ commandId: receipt.commandId })).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: "session.removed" }),
+        expect.objectContaining({ type: "worktree.removed" }),
+      ]),
+    );
+    await expect(fixture.persistence.listSessions()).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "ses_web_cleanup", lifecycle: "ended" }),
+      ]),
+    );
+    fixture.sqlite.close();
+  });
+
+  it("keeps persistent confirmed-removal retirement failure explicit and evidence-free", async () => {
+    const fixture = createFixture({
+      state: "working",
+      worktreeRetirementFailures: "persistent",
+    });
+    await fixture.core.reconcile("pre-persistent-retirement-failure");
+    const selected = fixture.core.getSnapshot().rows[0];
+    if (selected?.registrationIdentity === undefined) {
+      throw new Error("Expected a verified removal selection.");
+    }
+
+    const receipt = await fixture.queue.dispatch({
+      type: "worktree.remove",
+      payload: {
+        worktreeId: selected.id,
+        projectId: selected.projectId,
+        expectedPath: selected.path,
+        expectedBranch: selected.branch,
+        expectedRegistrationIdentity: selected.registrationIdentity,
+        force: true,
+      },
+    });
+    await fixture.queue.drain();
+
+    expect(fixture.worktree.snapshot().removed).toHaveLength(1);
+    expect(fixture.worktreeRetirementAttempts()).toBe(2);
+    await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
+      status: "failed",
+      error: { code: "WORKTREE_REMOVE_RETIREMENT_FAILED" },
+    });
+    expect(
+      (await fixture.persistence.listEvents({ commandId: receipt.commandId })).filter((event) =>
+        event.type.endsWith(".removed"),
+      ),
+    ).toEqual([]);
+    await expect(fixture.persistence.listSessions()).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "ses_web_cleanup", lifecycle: "open" }),
+      ]),
+    );
+    expect(fixture.core.getSnapshot().rows).toHaveLength(1);
+    fixture.sqlite.close();
+  });
+
+  it("repairs a durable confirmed-removal retirement failure without repeating cleanup", async () => {
+    const fixture = createFixture({
+      state: "working",
+      worktreeRetirementFailures: 2,
+    });
+    await fixture.core.reconcile("pre-durable-retirement-repair");
+    const selected = fixture.core.getSnapshot().rows[0];
+    if (selected?.registrationIdentity === undefined) {
+      throw new Error("Expected a verified removal selection.");
+    }
+    const command = {
+      type: "worktree.remove" as const,
+      payload: {
+        worktreeId: selected.id,
+        projectId: selected.projectId,
+        expectedPath: selected.path,
+        expectedBranch: selected.branch,
+        expectedRegistrationIdentity: selected.registrationIdentity,
+        force: true,
+      },
+    };
+    const operationId = "cleanup-durable-retirement-repair";
+
+    const original = await fixture.queue.dispatch(command, { operationId });
+    await fixture.queue.drain();
+    await expect(fixture.persistence.getCommand(original.commandId)).resolves.toMatchObject({
+      status: "failed",
+      error: { code: "WORKTREE_REMOVE_RETIREMENT_FAILED" },
+    });
+    expect(fixture.worktreeRetirementAttempts()).toBe(2);
+    const cleanupBefore = {
+      removed: fixture.worktree.snapshot().removed,
+      stopped: fixture.harness.snapshot().stopped,
+      closed: fixture.terminal.snapshot().closed,
+    };
+
+    const [first, concurrent] = await Promise.all([
+      fixture.queue.dispatch(command, { operationId }),
+      fixture.queue.dispatch(command, { operationId }),
+    ]);
+    await fixture.queue.drain();
+
+    expect(concurrent).toEqual(first);
+    expect(fixture.worktreeRetirementAttempts()).toBe(3);
+    expect({
+      removed: fixture.worktree.snapshot().removed,
+      stopped: fixture.harness.snapshot().stopped,
+      closed: fixture.terminal.snapshot().closed,
+    }).toEqual(cleanupBefore);
+    await expect(fixture.persistence.getCommand(original.commandId)).resolves.toMatchObject({
+      status: "succeeded",
+    });
+    await expect(
+      fixture.persistence.listEvents({ commandId: original.commandId }),
+    ).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: "command.failed" }),
+        expect.objectContaining({ type: "session.removed" }),
+        expect.objectContaining({ type: "worktree.removed" }),
+        expect.objectContaining({ type: "command.succeeded" }),
+      ]),
+    );
+    await expect(fixture.persistence.listSessions()).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "ses_web_cleanup", lifecycle: "ended" }),
+      ]),
+    );
+    await expect(fixture.persistence.listWorktreeDisplayTitles()).resolves.toEqual([]);
+    await vi.waitFor(() => expect(fixture.core.getSnapshot().rows).toEqual([]));
+    fixture.sqlite.close();
+  });
+
+  it("attempts persistent durable retirement recovery once per queue lifetime", async () => {
+    const fixture = createFixture({
+      state: "working",
+      worktreeRetirementFailures: "persistent",
+    });
+    await fixture.core.reconcile("pre-persistent-durable-retirement-repair");
+    const selected = fixture.core.getSnapshot().rows[0];
+    if (selected?.registrationIdentity === undefined) {
+      throw new Error("Expected a verified removal selection.");
+    }
+    const command = {
+      type: "worktree.remove" as const,
+      payload: {
+        worktreeId: selected.id,
+        projectId: selected.projectId,
+        expectedPath: selected.path,
+        expectedBranch: selected.branch,
+        expectedRegistrationIdentity: selected.registrationIdentity,
+        force: true,
+      },
+    };
+    const operationId = "cleanup-persistent-durable-retirement-repair";
+
+    const original = await fixture.queue.dispatch(command, { operationId });
+    await fixture.queue.drain();
+    const cleanupBefore = {
+      removed: fixture.worktree.snapshot().removed,
+      stopped: fixture.harness.snapshot().stopped,
+      closed: fixture.terminal.snapshot().closed,
+    };
+    await Promise.all([
+      fixture.queue.dispatch(command, { operationId }),
+      fixture.queue.dispatch(command, { operationId }),
+    ]);
+    await fixture.queue.drain();
+
+    expect(fixture.worktreeRetirementAttempts()).toBe(4);
+    expect({
+      removed: fixture.worktree.snapshot().removed,
+      stopped: fixture.harness.snapshot().stopped,
+      closed: fixture.terminal.snapshot().closed,
+    }).toEqual(cleanupBefore);
+    await expect(fixture.persistence.getCommand(original.commandId)).resolves.toMatchObject({
+      status: "failed",
+      error: { code: "WORKTREE_REMOVE_RETIREMENT_FAILED" },
+    });
+    expect(
+      (await fixture.persistence.listEvents({ commandId: original.commandId })).filter((event) =>
+        event.type.endsWith(".removed"),
+      ),
+    ).toEqual([]);
+    await expect(fixture.persistence.listSessions()).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "ses_web_cleanup", lifecycle: "open" }),
+      ]),
+    );
+    await expect(fixture.persistence.listWorktreeDisplayTitles()).resolves.toHaveLength(1);
+    fixture.sqlite.close();
+  });
+
+  it("does not commit cancellation handling when the provider declines removal", async () => {
+    const fixture = createFixture({
+      state: "none",
+      worktreeFactory: (observation) => new NotConfirmedRemovalProvider(observation),
+    });
+    await fixture.core.reconcile("pre-unconfirmed-removal");
+    const selected = fixture.core.getSnapshot().rows[0];
+    if (selected?.registrationIdentity === undefined) {
+      throw new Error("Expected a verified removal selection.");
+    }
+
+    const command = {
+      type: "worktree.remove" as const,
+      payload: {
+        worktreeId: selected.id,
+        projectId: selected.projectId,
+        expectedPath: selected.path,
+        expectedBranch: selected.branch,
+        expectedRegistrationIdentity: selected.registrationIdentity,
+        force: true,
+      },
+    };
+    const operationId = "cleanup-provider-declined-removal";
+    const receipt = await fixture.queue.dispatch(command, { operationId });
+    await fixture.queue.drain();
+    await fixture.queue.dispatch(command, { operationId });
+    await fixture.queue.drain();
+
+    await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
+      status: "failed",
+      error: { code: "WORKTREE_REMOVE_NOT_CONFIRMED" },
+    });
+    expect(fixture.worktree.snapshot().worktrees).toHaveLength(1);
+    expect(fixture.worktree.snapshot().removed).toEqual([]);
+    expect(fixture.worktreeRetirementAttempts()).toBe(0);
+    await expect(
+      fixture.persistence.listEvents({ commandId: receipt.commandId }),
+    ).resolves.not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: "worktree.removed" })]),
+    );
+    fixture.sqlite.close();
+  });
+
+  it("repairs a partial confirmed-removal event write without duplication", async () => {
+    const fixture = createFixture({ state: "working", worktreeRemovalEventFailures: 1 });
+    await fixture.core.reconcile("pre-removal-event-repair");
+    const selected = fixture.core.getSnapshot().rows[0];
+    if (selected?.registrationIdentity === undefined) {
+      throw new Error("Expected a verified removal selection.");
+    }
+
+    const receipt = await fixture.queue.dispatch({
+      type: "worktree.remove",
+      payload: {
+        worktreeId: selected.id,
+        projectId: selected.projectId,
+        expectedPath: selected.path,
+        expectedBranch: selected.branch,
+        expectedRegistrationIdentity: selected.registrationIdentity,
+        force: true,
+      },
+    });
+    await fixture.queue.drain();
+
+    await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
+      status: "succeeded",
+    });
+    expect(fixture.worktreeRemovalEventAttempts()).toBe(2);
+    const removalEvents = (
+      await fixture.persistence.listEvents({ commandId: receipt.commandId })
+    ).filter((event) => event.type.endsWith(".removed"));
+    expect(removalEvents.map((event) => event.type)).toEqual([
+      "session.removed",
+      "worktree.removed",
+    ]);
+    await vi.waitFor(() => expect(fixture.core.getSnapshot().rows).toEqual([]));
+    fixture.sqlite.close();
+  });
+
+  it("keeps confirmed removal successful when event persistence stays degraded", async () => {
+    const loggedErrors: Array<{ message: string; attributes?: Record<string, unknown> }> = [];
+    const logger: StationLogger = {
+      async info(): Promise<void> {},
+      async warn(): Promise<void> {},
+      async error(message, attributes): Promise<void> {
+        loggedErrors.push({ message, ...(attributes === undefined ? {} : { attributes }) });
+      },
+    };
+    const fixture = createFixture({
+      state: "working",
+      worktreeRemovalEventFailures: "persistent",
+      logger,
+    });
+    await fixture.core.reconcile("pre-persistent-removal-event-failure");
+    const selected = fixture.core.getSnapshot().rows[0];
+    if (selected?.registrationIdentity === undefined) {
+      throw new Error("Expected a verified removal selection.");
+    }
+
+    const receipt = await fixture.queue.dispatch({
+      type: "worktree.remove",
+      payload: {
+        worktreeId: selected.id,
+        projectId: selected.projectId,
+        expectedPath: selected.path,
+        expectedBranch: selected.branch,
+        expectedRegistrationIdentity: selected.registrationIdentity,
+        force: true,
+      },
+    });
+    await fixture.queue.drain();
+
+    await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
+      status: "succeeded",
+    });
+    expect(fixture.worktreeRemovalEventAttempts()).toBe(2);
+    await expect(fixture.persistence.listEvents({ commandId: receipt.commandId })).resolves.toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: "session.removed" })]),
+    );
+    await expect(
+      fixture.persistence.listEvents({ commandId: receipt.commandId }),
+    ).resolves.not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: "worktree.removed" })]),
+    );
+    await vi.waitFor(() => expect(fixture.core.getSnapshot().rows).toEqual([]));
+    expect(loggedErrors).toEqual([
+      expect.objectContaining({
+        message: "Confirmed worktree removal event publication failed.",
+        attributes: expect.objectContaining({
+          commandId: receipt.commandId,
+          worktreeId: selected.id,
+          error: expect.any(Error),
+        }),
+      }),
+    ]);
     fixture.sqlite.close();
   });
 
@@ -476,6 +1126,7 @@ describe("cleanup command handlers", () => {
         force: true,
       },
     ]);
+    await fixture.core.reconcile("verify-composed-removal-convergence");
     fixture.sqlite.close();
   });
 
@@ -514,6 +1165,7 @@ describe("cleanup command handlers", () => {
         expectedRegistrationIdentity: "git-registration:cleanup",
       },
     ]);
+    await fixture.core.reconcile("verify-exited-removal-convergence");
     expect(fixture.core.getSnapshot().rows).toEqual([]);
     await expect(fixture.persistence.listSessions()).resolves.toEqual(
       expect.arrayContaining([
@@ -565,6 +1217,7 @@ describe("cleanup command handlers", () => {
         force: true,
       },
     ]);
+    await fixture.core.reconcile("verify-missing-target-removal-convergence");
     expect(fixture.core.getSnapshot().rows).toEqual([]);
     fixture.sqlite.close();
   });
@@ -606,6 +1259,7 @@ describe("cleanup command handlers", () => {
         force: true,
       },
     ]);
+    await fixture.core.reconcile("verify-stopless-removal-convergence");
     fixture.sqlite.close();
   });
 
@@ -650,13 +1304,65 @@ function createFixture(input: {
   terminalCloseTargetMissing?: boolean;
   projectRootPath?: boolean;
   terminalIntentRunner?: TerminalIntentRunner;
+  worktreeFactory?: (observation: WorktreeObservation) => FakeWorktreeProvider;
+  targetedLookupSupported?: boolean;
+  worktreeRemovalEventFailures?: number | "persistent";
+  worktreeRetirementFailures?: number | "persistent";
+  worktreeRetirementDelayMs?: number;
+  postRemoveReconcileFailure?: Error;
+  logger?: StationLogger;
+  commandTimeoutMs?: number;
 }) {
   const clock = { now: () => new Date(now) };
   const sqlite = openObserverSqlite({ clock });
   const ids = observerIds();
   const persistence = createSqliteObserverPersistence({ sqlite, clock, idFactory: ids });
+  let worktreeRemovalEventAttempts = 0;
+  let worktreeRetirementAttempts = 0;
+  const commandPersistence = {
+    ...persistence,
+    recordEvent: async (
+      event: StationEvent,
+      options?: Parameters<typeof persistence.recordEvent>[1],
+    ) => {
+      if (event.type === "worktree.removed") {
+        worktreeRemovalEventAttempts += 1;
+        if (
+          input.worktreeRemovalEventFailures === "persistent" ||
+          (input.worktreeRemovalEventFailures !== undefined &&
+            worktreeRemovalEventAttempts <= input.worktreeRemovalEventFailures)
+        ) {
+          throw new Error("injected worktree.removed persistence failure");
+        }
+      }
+      return persistence.recordEvent(event, options);
+    },
+    retireRemovedWorktreeSessionState: async (
+      retirement: Parameters<typeof persistence.retireRemovedWorktreeSessionState>[0],
+    ) => {
+      worktreeRetirementAttempts += 1;
+      if (input.worktreeRetirementDelayMs !== undefined) {
+        await new Promise((resolve) => setTimeout(resolve, input.worktreeRetirementDelayMs));
+      }
+      if (
+        input.worktreeRetirementFailures === "persistent" ||
+        (input.worktreeRetirementFailures !== undefined &&
+          worktreeRetirementAttempts <= input.worktreeRetirementFailures)
+      ) {
+        throw new Error("injected worktree retirement persistence failure");
+      }
+      return persistence.retireRemovedWorktreeSessionState(retirement);
+    },
+  };
   const eventBus = createObserverEventBus();
-  const queue = createCommandQueue({ persistence, clock, idFactory: ids, eventBus });
+  const queue = createCommandQueue({
+    persistence: commandPersistence,
+    clock,
+    idFactory: ids,
+    eventBus,
+    ...(input.logger === undefined ? {} : { logger: input.logger }),
+    ...(input.commandTimeoutMs === undefined ? {} : { commandTimeoutMs: input.commandTimeoutMs }),
+  });
   const worktreeObservation = createFakeWorktree({
     id: "wt_web_cleanup",
     projectId: "web",
@@ -666,10 +1372,12 @@ function createFixture(input: {
     dirty: input.dirty ?? false,
     now,
   });
-  const worktree = new FakeWorktreeProvider({
-    now,
-    worktrees: [worktreeObservation],
-  });
+  const worktree =
+    input.worktreeFactory?.(worktreeObservation) ??
+    new FakeWorktreeProvider({
+      now,
+      worktrees: [worktreeObservation],
+    });
   const terminalOptions: ConstructorParameters<typeof FakeTerminalProvider>[0] = {
     now,
     targets:
@@ -719,21 +1427,41 @@ function createFixture(input: {
   });
   const harnessProvider =
     input.harnessStopSupported === false ? withoutNativeStop(harness) : harness;
+  const worktreeProvider =
+    input.targetedLookupSupported === false ? withoutTargetedLookup(worktree) : worktree;
   const providers = new ProviderRegistry({
-    worktree,
+    worktree: worktreeProvider,
     terminal,
     harnesses: [harnessProvider],
   });
-  const core = createObserverCore({ config, providers, persistence, clock });
+  const baseCore = createObserverCore({
+    config,
+    providers,
+    persistence: commandPersistence,
+    clock,
+    ...(input.logger === undefined ? {} : { logger: input.logger }),
+    ...(input.commandTimeoutMs === undefined ? {} : { commandTimeoutMs: input.commandTimeoutMs }),
+  });
+  const core: ObserverCore =
+    input.postRemoveReconcileFailure === undefined
+      ? baseCore
+      : {
+          ...baseCore,
+          reconcile: (reason) =>
+            reason === "command:worktree.remove"
+              ? Promise.reject(input.postRemoveReconcileFailure)
+              : baseCore.reconcile(reason),
+        };
   registerObserverCommandHandlers({
     projectConfigWriter: createUnexpectedProjectConfigWriter(),
     queue,
     core,
     providers,
     projects: config.projects,
-    persistence,
+    persistence: commandPersistence,
     eventBus,
     clock,
+    ...(input.logger === undefined ? {} : { logger: input.logger }),
     ...(input.terminalIntentRunner === undefined
       ? {}
       : { terminalIntentRunner: input.terminalIntentRunner }),
@@ -747,9 +1475,66 @@ function createFixture(input: {
     core,
     worktree,
     worktreeObservation,
+    worktreeRemovalEventAttempts: () => worktreeRemovalEventAttempts,
+    worktreeRetirementAttempts: () => worktreeRetirementAttempts,
     terminal,
     harness,
   };
+}
+
+class BlockingPostRemoveProvider extends FakeWorktreeProvider {
+  listCalls = 0;
+  readonly postRemoveListStarted: Promise<void>;
+  #markPostRemoveListStarted: (() => void) | undefined;
+  #releasePostRemoveList: (() => void) | undefined;
+  readonly #postRemoveListRelease: Promise<void>;
+
+  constructor(worktree: WorktreeObservation) {
+    super({ now, worktrees: [worktree] });
+    this.postRemoveListStarted = new Promise((resolve) => {
+      this.#markPostRemoveListStarted = resolve;
+    });
+    this.#postRemoveListRelease = new Promise((resolve) => {
+      this.#releasePostRemoveList = resolve;
+    });
+  }
+
+  releasePostRemoveList(): void {
+    this.#releasePostRemoveList?.();
+  }
+
+  override async listWorktrees(project: ProviderProjectConfig): Promise<WorktreeObservation[]> {
+    this.listCalls += 1;
+    if (this.listCalls === 2) {
+      this.#markPostRemoveListStarted?.();
+      await this.#postRemoveListRelease;
+    }
+    return super.listWorktrees(project);
+  }
+}
+
+class ShutdownAfterConfirmedRemoveProvider extends FakeWorktreeProvider {
+  onConfirmedRemoval: (() => void) | undefined;
+
+  constructor(worktree: WorktreeObservation) {
+    super({ now, worktrees: [worktree] });
+  }
+
+  override async removeWorktree(request: RemoveWorktreeRequest) {
+    const result = await super.removeWorktree(request);
+    this.onConfirmedRemoval?.();
+    return result;
+  }
+}
+
+class NotConfirmedRemovalProvider extends FakeWorktreeProvider {
+  constructor(worktree: WorktreeObservation) {
+    super({ now, worktrees: [worktree] });
+  }
+
+  override async removeWorktree(request: RemoveWorktreeRequest) {
+    return { worktreeId: request.worktreeId, removed: false, reason: "injected refusal" };
+  }
 }
 
 class CapturingTerminalIntentRunner implements TerminalIntentRunner {
@@ -777,6 +1562,16 @@ function withoutNativeStop(provider: FakeHarnessProvider): HarnessProvider {
       if (property === "capabilities") {
         return () => ({ ...target.capabilities(), canStop: false });
       }
+      const value = Reflect.get(target, property, receiver);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+}
+
+function withoutTargetedLookup(provider: FakeWorktreeProvider): WorktreeProvider {
+  return new Proxy(provider, {
+    get(target, property, receiver) {
+      if (property === "getWorktree") return undefined;
       const value = Reflect.get(target, property, receiver);
       return typeof value === "function" ? value.bind(target) : value;
     },

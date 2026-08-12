@@ -3,10 +3,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DEFAULT_WORKSPACE_CONFIG, type StationConfig } from "@station/config";
 import type {
+  AgentPrepareExternalLaunchResult,
   BuildHarnessLaunchRequest,
   HarnessHooksStatus,
   HarnessLaunchPlan,
   HarnessRunObservation,
+  ProviderProjectConfig,
+  WorktreeObservation,
 } from "@station/contracts";
 import { StationTerminalProvider } from "@station/terminal";
 import {
@@ -101,6 +104,90 @@ describe("observer external-launch reconcile", () => {
       }),
     ]);
 
+    fixture.sqlite.close();
+  });
+
+  it("does not await health publication queued behind an in-flight reconcile", async () => {
+    const stateDir = await mkdtemp(join(tmpdir(), "station-observer-ext-"));
+    const worktree = createFakeWorktree({
+      id: "wt_web_feature",
+      projectId: "web",
+      branch: "feature",
+      path: "/tmp/station/web/feature",
+      now,
+    });
+    const worktreeProvider = new BlockingListWorktreeProvider({
+      now,
+      worktrees: [worktree],
+    });
+    const fixture = createFixture(providerIngressSpoolDir(stateDir), {
+      worktree: worktreeProvider,
+    });
+    await fixture.api.reconcile("seed");
+
+    const blocked = worktreeProvider.blockNextList();
+    const reconcile = fixture.api.reconcile("blocked-worktree-list");
+    await blocked.started;
+    const listCallsBeforeLaunch = worktreeProvider.listCalls;
+    let timeout: NodeJS.Timeout | undefined;
+    let result: AgentPrepareExternalLaunchResult;
+    try {
+      result = await Promise.race([
+        fixture.api.prepareExternalLaunch({
+          projectId: "web",
+          worktreeId: "wt_web_feature",
+        }),
+        new Promise<never>((_, reject) => {
+          timeout = setTimeout(
+            () => reject(new Error("External launch waited for the in-flight reconcile.")),
+            250,
+          );
+        }),
+      ]);
+    } finally {
+      if (timeout !== undefined) clearTimeout(timeout);
+      blocked.release();
+    }
+
+    expect(result.kind).toBe("prepared");
+    expect(worktreeProvider.listCalls).toBe(listCallsBeforeLaunch);
+    expect(await fixture.station.listTargets()).toHaveLength(1);
+    await reconcile;
+    await waitForStableCount(() => worktreeProvider.listCalls);
+    await fixture.api.reconcile("flush-post-launch-reconcile");
+    fixture.sqlite.close();
+  });
+
+  it("coalesces a burst of launch-triggered maintenance scans", async () => {
+    const stateDir = await mkdtemp(join(tmpdir(), "station-observer-ext-"));
+    const worktrees = Array.from({ length: 4 }, (_, index) =>
+      createFakeWorktree({
+        id: `wt_web_feature_${index}`,
+        projectId: "web",
+        branch: `feature-${index}`,
+        path: `/tmp/station/web/feature-${index}`,
+        now,
+      }),
+    );
+    const worktreeProvider = new BlockingListWorktreeProvider({ now, worktrees });
+    const fixture = createFixture(providerIngressSpoolDir(stateDir), {
+      worktree: worktreeProvider,
+    });
+    await fixture.api.reconcile("seed-launch-burst");
+    const listCallsBeforeLaunch = worktreeProvider.listCalls;
+
+    await Promise.all(
+      worktrees.map((worktree) =>
+        fixture.api.prepareExternalLaunch({ projectId: "web", worktreeId: worktree.id }),
+      ),
+    );
+    await waitForStableCount(() => worktreeProvider.listCalls);
+    await fixture.api.reconcile("launch-burst-barrier");
+
+    const postLaunchScans = worktreeProvider.listCalls - listCallsBeforeLaunch - 1;
+    expect(postLaunchScans).toBe(1);
+    expect(await fixture.station.listTargets()).toHaveLength(4);
+    expect(await fixture.persistence.listSessions()).toHaveLength(4);
     fixture.sqlite.close();
   });
 
@@ -272,8 +359,9 @@ function createFixture(
   spoolDir: string,
   options: {
     harness?: FakeHarnessProvider;
-    logger?: StationLogger;
     config?: StationConfig;
+    worktree?: FakeWorktreeProvider;
+    logger?: StationLogger;
   } = {},
 ) {
   const clock = { now: () => new Date(now) };
@@ -284,20 +372,22 @@ function createFixture(
   const station = new StationTerminalProvider({ clock });
   const harness = options.harness ?? new FakeHarnessProvider({ now });
   const providers = new ProviderRegistry({
-    worktree: new FakeWorktreeProvider({
-      now,
-      worktrees: [
-        createFakeWorktree({
-          id: "wt_web_feature",
-          projectId: "web",
-          branch: "feature",
-          path: "/tmp/station/web/feature",
-          remote: { host: "github.com", owner: "example", repo: "web" },
-          headSha: "2222222222222222222222222222222222222222",
-          now,
-        }),
-      ],
-    }),
+    worktree:
+      options.worktree ??
+      new FakeWorktreeProvider({
+        now,
+        worktrees: [
+          createFakeWorktree({
+            id: "wt_web_feature",
+            projectId: "web",
+            branch: "feature",
+            path: "/tmp/station/web/feature",
+            remote: { host: "github.com", owner: "example", repo: "web" },
+            headSha: "2222222222222222222222222222222222222222",
+            now,
+          }),
+        ],
+      }),
     terminal: new FakeTerminalProvider({ now }),
     managedTerminal: station,
     harnesses: [harness],
@@ -317,7 +407,43 @@ function createFixture(
     clock,
     ...(options.logger === undefined ? {} : { logger: options.logger }),
   });
-  return { api, harness, persistence, sqlite };
+  return { api, harness, persistence, sqlite, station };
+}
+
+class BlockingListWorktreeProvider extends FakeWorktreeProvider {
+  listCalls = 0;
+  #blocked:
+    | {
+        started: Promise<void>;
+        markStarted: () => void;
+        wait: Promise<void>;
+        release: () => void;
+      }
+    | undefined;
+
+  blockNextList(): { started: Promise<void>; release: () => void } {
+    let markStarted = () => undefined;
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    let release = () => undefined;
+    const wait = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    this.#blocked = { started, markStarted, wait, release };
+    return { started, release };
+  }
+
+  override async listWorktrees(project: ProviderProjectConfig): Promise<WorktreeObservation[]> {
+    this.listCalls += 1;
+    const blocked = this.#blocked;
+    if (blocked !== undefined) {
+      this.#blocked = undefined;
+      blocked.markStarted();
+      await blocked.wait;
+    }
+    return super.listWorktrees(project);
+  }
 }
 
 class MissingHooksHarness extends FakeHarnessProvider {
@@ -366,4 +492,20 @@ async function waitFor(predicate: () => boolean | Promise<boolean>): Promise<voi
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
   throw new Error("Timed out waiting for predicate.");
+}
+
+async function waitForStableCount(read: () => number): Promise<void> {
+  let previous = read();
+  let stableSince = Date.now();
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    const current = read();
+    if (current !== previous) {
+      previous = current;
+      stableSince = Date.now();
+    } else if (Date.now() - stableSince >= 150) {
+      return;
+    }
+  }
+  throw new Error("Timed out waiting for reconcile call count to stabilize.");
 }

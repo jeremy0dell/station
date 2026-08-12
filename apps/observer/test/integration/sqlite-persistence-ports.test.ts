@@ -46,7 +46,7 @@ describe("SQLite-only Observer persistence behavior", () => {
 
     const upgraded = openObserverSqlite({ path, clock: { now: () => new Date(now) } });
     try {
-      expect(upgraded.health().schemaVersion).toBe(17);
+      expect(upgraded.health().schemaVersion).toBe(18);
       const persistence = createSqliteObserverPersistence({ sqlite: upgraded });
       await persistence.createSessionGroup({
         id: "group_durable",
@@ -125,6 +125,68 @@ describe("SQLite-only Observer persistence behavior", () => {
       ]);
     } finally {
       sqlite.close();
+    }
+  });
+
+  it("serves pure reads while another connection reserves the writer", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "station-command-recovery-read-"));
+    const path = join(directory, "observer.sqlite");
+    const sqlite = openObserverSqlite({ path, clock: { now: () => new Date(now) } });
+    const persistence = createSqliteObserverPersistence({
+      sqlite,
+      clock: { now: () => new Date(now) },
+    });
+    await persistence.recordCommandAccepted({
+      commandId: "cmd_recovery_read",
+      command: { type: "observer.reconcile", payload: { reason: "recovery-read" } },
+      createdAt: now,
+    });
+    const writer = openSqlDatabase(path);
+    try {
+      writer.exec("BEGIN IMMEDIATE");
+      await expect(persistence.getCommand("cmd_recovery_read")).resolves.toEqual(
+        expect.objectContaining({ id: "cmd_recovery_read", status: "accepted" }),
+      );
+      await expect(persistence.listCommands()).resolves.toEqual([
+        expect.objectContaining({ id: "cmd_recovery_read", status: "accepted" }),
+      ]);
+      await expect(
+        persistence.listCommandRecoveryCandidates({ failedCommandTypes: [] }),
+      ).resolves.toEqual([
+        expect.objectContaining({ id: "cmd_recovery_read", status: "accepted" }),
+      ]);
+      const emptyReads = [
+        () => persistence.listCommandErrors("cmd_recovery_read"),
+        () => persistence.listEvents(),
+        () => persistence.listProviderObservations(),
+        () => persistence.listCurrentProviderEntityObservations(),
+        () => persistence.listWorktreeMetadataCurrent(),
+        () => persistence.listSessions(),
+        () => persistence.listWorktreeDisplayTitles(),
+        () => persistence.listSessionHarnessExecutions(),
+        () => persistence.listSessionRecoveryHandles(),
+        () => persistence.listSessionTurnReadiness(),
+      ];
+      for (const read of emptyReads) await expect(read()).resolves.toEqual([]);
+      await expect(
+        persistence.getSessionHarnessExecution({ provider: "codex", sessionId: "ses_missing" }),
+      ).resolves.toBeUndefined();
+      await expect(
+        persistence.findRememberedHarnessProviderForWorktree({
+          projectId: "web",
+          worktreeId: "wt_missing",
+          worktreePath: "/tmp/station/web/missing",
+        }),
+      ).resolves.toBeUndefined();
+      await expect(
+        persistence.getSessionRecoveryHandle("recovery_missing"),
+      ).resolves.toBeUndefined();
+      expect(persistence.health()).toMatchObject({ status: "healthy" });
+      writer.exec("ROLLBACK");
+    } finally {
+      writer.close();
+      sqlite.close();
+      await rm(directory, { recursive: true, force: true });
     }
   });
 
@@ -477,6 +539,7 @@ describe("SQLite-only Observer persistence behavior", () => {
         [15, "drop_recovery_breadcrumbs"],
         [16, "worktree_display_titles"],
         [17, "session_groups"],
+        [18, "command_recovery_lookup"],
       ]);
       await expect(persistence.listSessions()).resolves.toEqual([
         expect.objectContaining({

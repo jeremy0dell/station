@@ -539,10 +539,28 @@ describe("observer providers", () => {
     const tempDir = await mkdtemp(join(tmpdir(), "station-worktrunk-command-"));
     try {
       const worktrunkCommand = join(tempDir, "wt");
+      const gitCommand = join(tempDir, "git");
       const logPath = join(tempDir, "wt.log");
       const projectRoot = join(tempDir, "web");
       const createdWorktreePath = join(projectRoot, "feature");
       await mkdir(projectRoot, { recursive: true });
+      await writeFile(
+        gitCommand,
+        [
+          "#!/bin/sh",
+          'if [ "$3" = "config" ]; then printf "false\\n"; exit 0; fi',
+          'if [ "$3" = "status" ]; then exit 0; fi',
+          'if [ "$3" = "worktree" ]; then',
+          `  printf 'worktree %s\\0HEAD 2222222222222222222222222222222222222222\\0branch refs/heads/feature\\0\\0' ${JSON.stringify(createdWorktreePath)}`,
+          "  exit 0",
+          "fi",
+          "exit 2",
+          "",
+        ].join("\n"),
+        "utf8",
+      );
+      await chmod(gitCommand, 0o700);
+      vi.stubEnv("PATH", `${tempDir}:${process.env.PATH ?? ""}`);
       await writeFile(
         worktrunkCommand,
         [
@@ -622,8 +640,7 @@ describe("observer providers", () => {
       await expect(readFile(logPath, "utf8")).resolves.toBe(
         [
           "switch --no-hooks --create feature --base main --no-cd --format=json",
-          "list --format=json",
-          `-C ${createdWorktreePath} remove --no-hooks --format=json`,
+          `-C ${createdWorktreePath} remove --no-hooks --foreground --format=json`,
           "",
         ].join("\n"),
       );

@@ -12,7 +12,11 @@ import type {
   StationEvent,
 } from "@station/contracts";
 import { STATION_SCHEMA_VERSION, StationEventSchema } from "@station/contracts";
-import { Effect, runRuntimeBoundaryWithTimeout } from "@station/runtime";
+import {
+  Effect,
+  runRuntimeBoundaryWithRetryAndTimeout,
+  runRuntimeBoundaryWithTimeout,
+} from "@station/runtime";
 import { z } from "zod";
 import {
   type ProtocolMethod,
@@ -86,7 +90,8 @@ const ProtocolEventEnvelopeMessageSchema = z
 /**
  * ADAPTER
  *
- * Presents Observer operations to clients through validated NDJSON requests.
+ * Presents Observer operations to clients through validated NDJSON requests and replays a lost
+ * command-dispatch response once with the same durable operation identity.
  */
 export function createObserverClient(options: CreateObserverClientOptions): ObserverClient {
   const requestId = options.requestId ?? defaultRequestId;
@@ -139,17 +144,22 @@ async function requestProtocolMethod<TMethod extends ProtocolMethod>(
 ): Promise<ProtocolResult<TMethod>> {
   const expectedObserver =
     method === "observer.health" ? undefined : resolveExpectedObserver(options);
-  const result = await runRuntimeBoundaryWithTimeout(
-    protocolClientBoundary(method, requestTimeoutMs(options)),
-    ({ signal }) =>
-      openRequestConnection(options, signal, async (connection) => {
-        const iterator = connection.messages()[Symbol.asyncIterator]();
-        if (expectedObserver !== undefined) {
-          await assertExpectedObserver(connection, iterator, `${id}_health`, expectedObserver);
-        }
-        return readResponseForRequest(connection, iterator, id, method, params);
-      }),
-  );
+  const task = ({ signal }: { signal: AbortSignal }) =>
+    openRequestConnection(options, signal, async (connection) => {
+      const iterator = connection.messages()[Symbol.asyncIterator]();
+      if (expectedObserver !== undefined) {
+        await assertExpectedObserver(connection, iterator, `${id}_health`, expectedObserver);
+      }
+      return readResponseForRequest(connection, iterator, id, method, params);
+    });
+  const boundary = protocolClientBoundary(method, requestTimeoutMs(options));
+  const result =
+    method === "command.dispatch"
+      ? await runRuntimeBoundaryWithRetryAndTimeout(
+          { ...boundary, retry: { retries: 1, delayMs: 10 } },
+          task,
+        )
+      : await runRuntimeBoundaryWithTimeout(boundary, task);
 
   return unwrapBoundaryResult(result);
 }

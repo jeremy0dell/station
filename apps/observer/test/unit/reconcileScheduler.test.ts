@@ -109,6 +109,47 @@ describe("reconcile scheduler", () => {
     ]);
   });
 
+  it("drops queued work on shutdown", async () => {
+    const reasons: string[] = [];
+    const scheduler = createReconcileScheduler({
+      debounceMs: 20,
+      reconcile: async (reason) => {
+        reasons.push(reason);
+      },
+    });
+
+    scheduler.request("agent.prepareExternalLaunch");
+    await scheduler.shutdown();
+    await sleep(30);
+
+    expect(reasons).toEqual([]);
+  });
+
+  it("waits for an active reconcile on shutdown", async () => {
+    const reconcile = deferred<void>();
+    const started = deferred<void>();
+    const scheduler = createReconcileScheduler({
+      debounceMs: 0,
+      reconcile: async () => {
+        started.resolve();
+        await reconcile.promise;
+      },
+    });
+
+    scheduler.request("agent.prepareExternalLaunch");
+    await started.promise;
+    let stopped = false;
+    const shutdown = scheduler.shutdown().then(() => {
+      stopped = true;
+    });
+    await drainMicrotasks();
+    expect(stopped).toBe(false);
+
+    reconcile.resolve();
+    await shutdown;
+    expect(stopped).toBe(true);
+  });
+
   it("waits for a backlog quiet period before follow-up reconcile", async () => {
     const reasons: string[] = [];
     const firstReconcile = deferred<void>();

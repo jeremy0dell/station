@@ -14,6 +14,7 @@ import type { HarnessLaunchPreflight } from "../harnessLaunchPreflight.js";
 import type { CommandHandler } from "../queue.js";
 import { reconcileAndPublish } from "../reconcile.js";
 import type { TerminalIntentRunner } from "../terminalIntentRunner.js";
+import { runCreateWorktreeMutation } from "../worktree/createMutation.js";
 import {
   buildEnsureAgentWorkspaceIntent,
   defaultSessionCommandIdFactory,
@@ -23,7 +24,6 @@ import {
   removeWorktreeBestEffort,
   resolveHarnessProviderOrThrow,
   resolveTerminalProviderOrThrow,
-  runProviderMutation,
   type SessionCommandIdFactory,
   seedSession,
   sessionSeedGroupPlacement,
@@ -70,35 +70,28 @@ export function createSessionCreateHandler(
     await options.launchPreflight(payload.harness.provider, context.signal);
     const sessionId = idFactory.sessionId();
     const group = sessionSeedGroupPlacement(payload.group, idFactory.sessionGroupId);
-    const runtime = {
-      clock: options.clock,
-      commandTimeoutMs: options.commandTimeoutMs,
-      signal: context.signal,
-      trace: context.trace,
-    };
     let createdWorktree: WorktreeObservation | undefined;
     let sessionSeeded = false;
     let groupProvenance: SessionSeedGroupProvenance | undefined;
 
     try {
-      const worktree = await runProviderMutation(
-        {
-          ...runtime,
-          operation: `provider.${options.providers.worktree.id}.createWorktree`,
-          fallback: {
-            tag: "WorktreeProviderError",
-            code: "WORKTREE_CREATE_FAILED",
-            message: "The worktree provider failed to create the session worktree.",
-            provider: options.providers.worktree.id,
-          },
-        },
-        () =>
-          options.providers.worktree.createWorktree({
-            project,
-            branch: payload.branch,
-            ...(payload.base === undefined ? {} : { base: payload.base }),
-          }),
-      );
+      const request = {
+        project,
+        branch: payload.branch,
+        ...(payload.base === undefined ? {} : { base: payload.base }),
+      };
+      const worktree = await runCreateWorktreeMutation({
+        providers: options.providers,
+        request,
+        failureMessage: "The worktree provider failed to create the session worktree.",
+        repairReason: "repair:command:session.create",
+        core: options.core,
+        context,
+        eventBus: options.eventBus,
+        clock: options.clock,
+        commandTimeoutMs: options.commandTimeoutMs,
+        logger: options.logger,
+      });
       createdWorktree = worktree;
       throwIfAborted(context.signal);
 

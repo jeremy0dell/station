@@ -216,6 +216,29 @@ export function createInMemoryObserverPersistence(
           .map((command) => commandWithDiagnostics(draft, command)),
       ),
 
+    listCommandRecoveryCandidates: ({ failedCommandTypes }) =>
+      transaction((draft) => {
+        const failedTypes = new Set(failedCommandTypes);
+        const completedCommandIds = new Set(
+          [...draft.events.values()]
+            .filter((event) => event.type === "command.succeeded")
+            .map((event) => event.commandId),
+        );
+        return [...draft.commands.values()]
+          .filter(
+            (command) =>
+              command.status === "accepted" ||
+              (command.status === "succeeded" && !completedCommandIds.has(command.id)) ||
+              (command.status === "started" && command.command.type === "worktree.remove") ||
+              (command.status === "failed" && failedTypes.has(command.command.type)),
+          )
+          .sort(
+            (left, right) =>
+              compareAsc(left.createdAt, right.createdAt) || compareAsc(left.id, right.id),
+          )
+          .map((command) => commandWithDiagnostics(draft, command));
+      }),
+
     listCommandErrors: (commandId) =>
       transaction((draft) =>
         sortedCommandErrors(draft).filter(

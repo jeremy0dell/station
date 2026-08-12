@@ -41,7 +41,8 @@ export type ProtocolServerOptions = {
 /**
  * ADAPTER
  *
- * Exposes Observer operations through validated NDJSON requests on a Unix socket.
+ * Exposes Observer operations through validated NDJSON requests on a Unix socket and routes the
+ * command request identity into durable admission replay.
  */
 export async function startProtocolServer(
   options: ProtocolServerOptions,
@@ -159,7 +160,7 @@ async function routeSingleResponseRequest(
       }
       case "command.dispatch": {
         const params = CommandDispatchParamsSchema.parse(request.params);
-        return await api.dispatch(params.command);
+        return await api.dispatch(params.command, { operationId: request.id });
       }
       case "command.get": {
         const params = CommandGetParamsSchema.parse(request.params);

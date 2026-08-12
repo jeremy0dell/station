@@ -2,7 +2,7 @@ import type { ProviderProjectConfig, SafeError, WorktreeRow } from "@station/con
 import { worktreeHasLiveAgent } from "@station/contracts";
 import type { RuntimeClock } from "@station/runtime";
 import type { FeatureFlagEvaluator } from "../../features/evaluator.js";
-import type { EventJournal, SessionStore } from "../../persistence/index.js";
+import type { EventJournal, ObservationStore, SessionStore } from "../../persistence/index.js";
 import type { ProviderRegistry } from "../../providers/registry.js";
 import type { ObserverCore } from "../../reconcile/core.js";
 import type { ObserverEventBus } from "../../runtime/eventBus.js";
@@ -12,7 +12,6 @@ import { nowIso } from "../../utils/time.js";
 import { assertCommandType } from "../assertCommand.js";
 import type { HarnessLaunchPreflight } from "../harnessLaunchPreflight.js";
 import type { CommandHandler } from "../queue.js";
-import { reconcileAndPublish } from "../reconcile.js";
 import type { TerminalIntentRunner } from "../terminalIntentRunner.js";
 import {
   buildEnsureAgentWorkspaceIntent,
@@ -21,7 +20,7 @@ import {
   discardSessionSeedBestEffort,
   findProjectOrThrow,
   lookupWorktree,
-  publishSessionCreated,
+  reconcileAndPublishSessionCreated,
   resolveTerminalProviderOrThrow,
   type SessionCommandIdFactory,
   seedSession,
@@ -36,7 +35,7 @@ export type CreateSessionResumeAgentHandlerOptions = {
   terminalIntentRunner: TerminalIntentRunner;
   launchPreflight: HarnessLaunchPreflight;
   core: ObserverCore;
-  persistence: SessionStore & EventJournal;
+  persistence: SessionStore & EventJournal & ObservationStore;
   featureFlags: FeatureFlagEvaluator;
   eventBus?: ObserverEventBus | undefined;
   clock?: RuntimeClock | undefined;
@@ -95,7 +94,8 @@ export function createSessionResumeAgentHandler(
       row === undefined
         ? await lookupWorktree({
             providers: options.providers,
-            projectId: payload.projectId,
+            persistence: options.persistence,
+            project,
             worktreeId: payload.worktreeId,
             runtime,
           })
@@ -167,21 +167,30 @@ export function createSessionResumeAgentHandler(
       throw error;
     }
 
-    const nextSnapshot = await reconcileAndPublish({
+    const convergence = reconcileAndPublishSessionCreated({
       core: options.core,
       eventBus: options.eventBus,
+      persistence: options.persistence,
+      context,
+      sessionId,
       clock: options.clock,
       reason: "command:session.resumeAgent",
-      trace: context.trace,
     });
-    await publishSessionCreated({
-      snapshot: nextSnapshot,
-      sessionId,
-      persistence: options.persistence,
-      eventBus: options.eventBus,
-      context,
-      clock: options.clock,
-    });
+    if (row === undefined) {
+      // A targeted restart lookup must not wait behind the full discovery it bypassed.
+      void convergence.catch((error: unknown) => {
+        void options.logger
+          ?.warn("Deferred session resume convergence failed.", {
+            commandId: context.commandId,
+            traceId: context.trace.traceId,
+            sessionId,
+            error,
+          })
+          .catch(() => undefined);
+      });
+      return;
+    }
+    await convergence;
   };
 }
 

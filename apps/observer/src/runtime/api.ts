@@ -1,5 +1,6 @@
 import { type ConfigDiagnostic, emptyConfig, type StationConfig } from "@station/config";
 import type {
+  CommandDispatchOptions,
   CommandId,
   CommandRecord,
   DiagnosticCollectionOptions,
@@ -82,6 +83,7 @@ import { logReconcileSchedulerProfile } from "./reconcileProfiling.js";
 import {
   type CreateReconcileSchedulerOptions,
   createReconcileScheduler,
+  type ReconcileScheduler,
 } from "./reconcileScheduler.js";
 import { createSpoolDrainer, type SpoolDrainDeps } from "./spoolDrain.js";
 
@@ -277,6 +279,7 @@ export function createObserverApi(options: CreateObserverApiOptions): ObserverAp
       buildStop(
         options,
         harnessIngressQueue,
+        reconcileScheduler,
         metadataRefresh,
         stopProviderHealthPublication,
         clock,
@@ -285,7 +288,8 @@ export function createObserverApi(options: CreateObserverApiOptions): ObserverAp
     getSessionRecoveryReadiness: async () => sessionRecoveryReadiness(options),
     subscribe: (filter?: EventFilter): AsyncIterable<StationEvent> =>
       options.eventBus.subscribe(filter),
-    dispatch: (command: StationCommand) => options.commandQueue.dispatch(command),
+    dispatch: (command: StationCommand, dispatchOptions?: CommandDispatchOptions) =>
+      options.commandQueue.dispatch(command, dispatchOptions),
     getCommand: (commandId: CommandId) => getCommandById(options, commandId),
     runDoctor: (doctorOptions?: DoctorOptions): Promise<DoctorReport> =>
       runDoctor(buildDiagnosticDeps(options, clock), doctorOptions),
@@ -299,9 +303,8 @@ export function createObserverApi(options: CreateObserverApiOptions): ObserverAp
     reportHarnessEvent: async (report: HarnessEventReport): Promise<HarnessEventReportReceipt> =>
       harnessIngressQueue.enqueue(report),
     prepareExternalLaunch: (params) =>
-      prepareExternalLaunchSafe(options, worktreeMutations, reconciling, reconcileDeps, params),
-    reportExternalExit: (params) =>
-      reportExternalExitSafe(options, reconciling, reconcileDeps, params),
+      prepareExternalLaunchSafe(options, worktreeMutations, reconcileScheduler, params),
+    reportExternalExit: (params) => reportExternalExitSafe(options, reconcileScheduler, params),
   };
 
   return api;
@@ -328,22 +331,14 @@ function sessionRecoveryReadiness(options: CreateObserverApiOptions): SessionRec
   return readiness;
 }
 
-function reconcileAfterExternalLaunch(
-  deps: ReconcileExecutorDeps,
-  guard: { reconciling: boolean },
-  reason: string,
-  logger?: StationLogger,
-): void {
-  void runReconcile(deps, guard, reason).catch(async (error) => {
-    await logger?.error("Post-external-launch reconcile failed.", { reason, error });
-  });
+function reconcileAfterExternalLaunch(scheduler: ReconcileScheduler, reason: string): void {
+  scheduler.request(reason);
 }
 
 async function prepareExternalLaunchSafe(
   options: CreateObserverApiOptions,
   worktreeMutations: WorktreeMutationCoordinator,
-  reconciling: { reconciling: boolean },
-  reconcileDeps: ReconcileExecutorDeps,
+  reconcileScheduler: ReconcileScheduler,
   params: Parameters<ObserverApi["prepareExternalLaunch"]>[0],
 ): ReturnType<ObserverApi["prepareExternalLaunch"]> {
   const deps = assertProvidersAvailable(options, worktreeMutations);
@@ -373,31 +368,20 @@ async function prepareExternalLaunchSafe(
   }
   const { outcome, reconcile } = result;
   if (reconcile) {
-    reconcileAfterExternalLaunch(
-      reconcileDeps,
-      reconciling,
-      "agent.prepareExternalLaunch",
-      options.logger,
-    );
+    reconcileAfterExternalLaunch(reconcileScheduler, "agent.prepareExternalLaunch");
   }
   return outcome;
 }
 
 async function reportExternalExitSafe(
   options: CreateObserverApiOptions,
-  reconciling: { reconciling: boolean },
-  reconcileDeps: ReconcileExecutorDeps,
+  reconcileScheduler: ReconcileScheduler,
   params: Parameters<ObserverApi["reportExternalExit"]>[0],
 ): ReturnType<ObserverApi["reportExternalExit"]> {
   const providers = assertProviderRegistryAvailable(options);
   const { outcome, reconcile } = await reportExternalExit({ providers }, params);
   if (reconcile) {
-    reconcileAfterExternalLaunch(
-      reconcileDeps,
-      reconciling,
-      "agent.reportExternalExit",
-      options.logger,
-    );
+    reconcileAfterExternalLaunch(reconcileScheduler, "agent.reportExternalExit");
   }
   return outcome;
 }
@@ -582,12 +566,14 @@ async function buildHealth(
 async function buildStop(
   options: CreateObserverApiOptions,
   harnessIngressQueue: HarnessIngressQueue,
+  reconcileScheduler: ReconcileScheduler,
   metadataRefresh: WorktreeMetadataRefreshService | undefined,
   stopProviderHealthPublication: () => Promise<void>,
   clock: RuntimeClock,
 ): Promise<ObserverStopReceipt> {
   await options.onShutdownStarted?.();
   const providerHealthStopped = stopProviderHealthPublication();
+  await reconcileScheduler.shutdown();
   await harnessIngressQueue.shutdown();
   await metadataRefresh?.shutdown();
   await providerHealthStopped;

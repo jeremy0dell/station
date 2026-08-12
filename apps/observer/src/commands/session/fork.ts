@@ -1,4 +1,8 @@
-import type { ProviderProjectConfig, WorktreeObservation } from "@station/contracts";
+import type {
+  CreateWorktreeRequest,
+  ProviderProjectConfig,
+  WorktreeObservation,
+} from "@station/contracts";
 import type { RuntimeClock } from "@station/runtime";
 import type { EventJournal, SessionStore } from "../../persistence/index.js";
 import type { ProviderRegistry } from "../../providers/registry.js";
@@ -10,6 +14,7 @@ import type { HarnessLaunchPreflight } from "../harnessLaunchPreflight.js";
 import type { CommandHandler } from "../queue.js";
 import { reconcileAndPublish } from "../reconcile.js";
 import type { TerminalIntentRunner } from "../terminalIntentRunner.js";
+import { runCreateWorktreeMutation } from "../worktree/createMutation.js";
 import {
   buildEnsureAgentWorkspaceIntent,
   commandValidationError,
@@ -21,7 +26,6 @@ import {
   removeWorktreeBestEffort,
   resolveHarnessProviderOrThrow,
   resolveTerminalProviderOrThrow,
-  runProviderMutation,
   type SessionCommandIdFactory,
   seedSession,
   throwIfAborted,
@@ -89,12 +93,6 @@ export function createSessionForkHandler(options: CreateSessionForkHandlerOption
     await options.launchPreflight(harnessProviderId, context.signal);
 
     const sessionId = idFactory.sessionId();
-    const runtime = {
-      clock: options.clock,
-      commandTimeoutMs: options.commandTimeoutMs,
-      signal: context.signal,
-      trace: context.trace,
-    };
     const copyDirty = payload.copyDirty ?? true;
     // Pin the new branch base to the source branch HEAD so the seeded apply is
     // conflict-free; an explicit base override may reintroduce conflicts.
@@ -104,25 +102,26 @@ export function createSessionForkHandler(options: CreateSessionForkHandlerOption
     let sessionSeeded = false;
 
     try {
-      const worktree = await runProviderMutation(
-        {
-          ...runtime,
-          operation: `provider.${options.providers.worktree.id}.createWorktree`,
-          fallback: {
-            tag: "WorktreeProviderError",
-            code: "WORKTREE_CREATE_FAILED",
-            message: "The worktree provider failed to create the forked worktree.",
-            provider: options.providers.worktree.id,
-          },
-        },
-        () =>
-          options.providers.worktree.createWorktree({
-            project,
-            branch: payload.branch,
-            base,
-            ...(copyDirty ? { seedFrom: { path: sourceRow.path, worktreeId: sourceRow.id } } : {}),
-          }),
-      );
+      const request: CreateWorktreeRequest = {
+        project,
+        branch: payload.branch,
+        base,
+      };
+      if (copyDirty) {
+        request.seedFrom = { path: sourceRow.path, worktreeId: sourceRow.id };
+      }
+      const worktree = await runCreateWorktreeMutation({
+        providers: options.providers,
+        request,
+        failureMessage: "The worktree provider failed to create the forked worktree.",
+        repairReason: "repair:command:session.fork",
+        core: options.core,
+        context,
+        eventBus: options.eventBus,
+        clock: options.clock,
+        commandTimeoutMs: options.commandTimeoutMs,
+        logger: options.logger,
+      });
       createdWorktree = worktree;
       throwIfAborted(context.signal);
 

@@ -11,8 +11,10 @@ import { stringifyJson } from "./json.js";
 import {
   commandErrorFromRow,
   commandFromRow,
+  eventFromRow,
   type SqliteCommandErrorRow,
   type SqliteCommandRow,
+  type SqliteEventRow,
 } from "./rows.js";
 import type { PersistedCommand, PersistedCommandError } from "./types.js";
 
@@ -130,6 +132,81 @@ export function listCommands(database: SqlDatabase): PersistedCommand[] {
     }
   }
   return commands;
+}
+
+export function listCommandRecoveryCandidates(
+  database: SqlDatabase,
+  input: { failedCommandTypes: StationCommand["type"][] },
+): PersistedCommand[] {
+  const invalidSucceededEventCommandIds = invalidSucceededEventCommands(database);
+  const conditions = [
+    `(status = 'accepted')`,
+    `(status = 'succeeded' AND NOT EXISTS (
+      SELECT 1 FROM events WHERE events.command_id = commands.id AND events.type = 'command.succeeded'
+    ))`,
+    `(status = 'started' AND type = 'worktree.remove')`,
+  ];
+  if (input.failedCommandTypes.length > 0) {
+    conditions.push(
+      `(status = 'failed' AND type IN (${input.failedCommandTypes.map(() => "?").join(", ")}))`,
+    );
+  }
+  const rows = database
+    .prepare(`SELECT * FROM commands WHERE ${conditions.join(" OR ")} ORDER BY created_at, id`)
+    .all(...input.failedCommandTypes) as SqliteCommandRow[];
+  if (invalidSucceededEventCommandIds.length > 0) {
+    const invalid = new Set(invalidSucceededEventCommandIds);
+    rows.push(
+      ...(
+        database
+          .prepare("SELECT * FROM commands WHERE status = 'succeeded'")
+          .all() as SqliteCommandRow[]
+      ).filter((row) => invalid.has(row.id)),
+    );
+    rows.sort(
+      (left, right) =>
+        (left.created_at < right.created_at ? -1 : left.created_at > right.created_at ? 1 : 0) ||
+        (left.id < right.id ? -1 : left.id > right.id ? 1 : 0),
+    );
+  }
+  const commands: PersistedCommand[] = [];
+  for (const row of rows) {
+    try {
+      commands.push(
+        commandWithDiagnostics(commandFromRow(row), commandErrorRows(database, row.id)),
+      );
+    } catch {
+      // Recovery is best effort across legacy rows; invalid payloads remain available to diagnostics.
+    }
+  }
+  return commands;
+}
+
+function invalidSucceededEventCommands(database: SqlDatabase): string[] {
+  const recordedRows = database
+    .prepare(
+      `SELECT DISTINCT command_id FROM events
+       WHERE type = 'command.succeeded' AND command_id IS NOT NULL`,
+    )
+    .all() as { command_id: string }[];
+  // SQLite rejects only invalid JSON syntax; the shared event schema still owns validity.
+  const rows = database
+    .prepare(
+      `SELECT * FROM events
+       WHERE type = 'command.succeeded' AND json_valid(payload_json)`,
+    )
+    .all() as SqliteEventRow[];
+  const recorded = new Set(recordedRows.map(({ command_id }) => command_id));
+  const valid = new Set<string>();
+  for (const row of rows) {
+    try {
+      const event = eventFromRow(row);
+      if (event.event.type === "command.succeeded") valid.add(event.event.commandId);
+    } catch {
+      // Indexed row metadata is only coarse evidence; the shared schema owns payload validity.
+    }
+  }
+  return [...recorded].filter((commandId) => !valid.has(commandId));
 }
 
 export function listCommandErrors(

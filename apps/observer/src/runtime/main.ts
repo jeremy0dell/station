@@ -316,9 +316,14 @@ async function runClaimedObserverRuntime(input: {
   });
   let stopping: Promise<void> | undefined;
   let stopReceipt: Promise<ObserverStopReceipt> | undefined;
+  let commandShutdown: Promise<void> | undefined;
   let observerApi: ObserverApi;
   let shutdownExitCode = 0;
   let displaced = false;
+  const shutdownCommandQueue = (): Promise<void> => {
+    commandShutdown ??= commandQueue.shutdown();
+    return commandShutdown;
+  };
   const stopObserver = async (exitCode = 0) => {
     shutdownExitCode = Math.max(shutdownExitCode, exitCode);
     stopping ??= runShutdownWithBackstop(
@@ -336,7 +341,7 @@ async function runClaimedObserverRuntime(input: {
           shutdownError = error;
         }
         try {
-          await commandQueue.shutdown();
+          await shutdownCommandQueue();
         } catch (error) {
           shutdownError ??= error;
         }
@@ -435,7 +440,13 @@ async function runClaimedObserverRuntime(input: {
     ...observerApi,
     health: () => startupGate.runHealth(observerApi.health),
     stop: async () => {
-      startupGate.requestStop();
+      if (startupGate.requestStop()) {
+        void shutdownCommandQueue().catch((error) =>
+          logger
+            .error("Pre-ready command shutdown failed.", { socketPath, error })
+            .catch(() => undefined),
+        );
+      }
       const shutdown = stopObserver();
       void shutdown.catch((error) =>
         logger.error("Observer shutdown failed.", { socketPath, error }).catch(() => undefined),
@@ -498,6 +509,7 @@ async function runClaimedObserverRuntime(input: {
         void api.stop();
       },
     });
+    await commandQueue.recoverDurableCommands();
     const startupCommit = startupGate.settleReady(() => claim.release());
     shouldReconcile = startupCommit.status === "ready";
     if (startupCommit.status === "ready" && startupCommit.claimRelease.status === "failed") {
@@ -706,7 +718,8 @@ function resolvePath(input: string, homeDir: string): string {
 }
 
 type ObserverStartupGate = {
-  requestStop(): void;
+  /** Returns whether startup work still needs cancellation. */
+  requestStop(): boolean;
   assertReadyForOperation(): void;
   settleReady(releaseClaim: () => ObserverBootClaimReleaseResult): ObserverStartupCommit;
   settleFailed(): void;
@@ -735,9 +748,11 @@ export function createObserverStartupGate(): ObserverStartupGate {
 
   return {
     requestStop: () => {
-      if (state === "stopping" || state === "failed") return;
+      if (state === "stopping" || state === "failed") return false;
+      const wasStarting = state === "starting";
       if (state === "ready") ready = pending();
       state = "stopping";
+      return wasStarting;
     },
     assertReadyForOperation: () => {
       if (state === "ready") return;

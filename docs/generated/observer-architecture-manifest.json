@@ -416,7 +416,15 @@
           "specifier": "@station/contracts",
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "type-only",
-          "bindings": ["HarnessProvider", "HarnessRunId", "SafeError", "SessionView", "WorktreeRow"]
+          "bindings": [
+            "HarnessProvider",
+            "HarnessRunId",
+            "RemoveWorktreeRequest",
+            "RemoveWorktreeResult",
+            "SafeError",
+            "SessionView",
+            "WorktreeRow"
+          ]
         },
         {
           "specifier": "@station/runtime",
@@ -537,7 +545,7 @@
           "name": "assertHarnessLaunchPreconditionsOrThrow",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Freshly verifies the selected harness health and hook delivery immediately before launch mutation."
+          "purpose": "Freshly verifies selected-harness health and hook delivery immediately before launch mutation. Health gating awaits fresh cache evidence without waiting for serialized snapshot publication."
         },
         {
           "name": "HarnessLaunchPreflight",
@@ -746,6 +754,18 @@
           "purpose": null
         },
         {
+          "name": "CommandRecoveryContext",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "CommandRecoveryHandler",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "createCommandQueue",
           "kind": "function",
           "role": null,
@@ -775,7 +795,7 @@
           "specifier": "../persistence/index.js",
           "resolvedPath": "apps/observer/src/persistence/index.ts",
           "edgeKind": "type-only",
-          "bindings": ["CommandJournal", "EventJournal", "ObserverIdFactory"]
+          "bindings": ["CommandJournal", "EventJournal", "ObserverIdFactory", "PersistedCommand"]
         },
         {
           "specifier": "../stationLogger.js",
@@ -793,7 +813,13 @@
           "specifier": "node:crypto",
           "resolvedPath": "node:crypto",
           "edgeKind": "runtime",
-          "bindings": ["randomUUID"]
+          "bindings": ["createHash", "randomUUID"]
+        },
+        {
+          "specifier": "node:util",
+          "resolvedPath": "node:util",
+          "edgeKind": "runtime",
+          "bindings": ["isDeepStrictEqual"]
         },
         {
           "specifier": "@station/contracts",
@@ -806,8 +832,10 @@
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "type-only",
           "bindings": [
+            "CommandDispatchOptions",
             "CommandId",
             "CommandReceipt",
+            "SafeError",
             "StationCommand",
             "StationEvent",
             "TerminalClosePayload",
@@ -825,7 +853,7 @@
           "specifier": "@station/runtime",
           "resolvedPath": "packages/runtime/src/index.ts",
           "edgeKind": "runtime",
-          "bindings": ["runRuntimeBoundaryWithTimeout", "systemClock"]
+          "bindings": ["runRuntimeBoundary", "runRuntimeBoundaryWithTimeout", "systemClock"]
         },
         {
           "specifier": "@station/runtime",
@@ -1078,7 +1106,7 @@
           "specifier": "./worktree/remove.js",
           "resolvedPath": "apps/observer/src/commands/worktree/remove.ts",
           "edgeKind": "runtime",
-          "bindings": ["createWorktreeRemoveHandler"]
+          "bindings": ["createWorktreeRemoveHandler", "createWorktreeRemoveRecoveryHandler"]
         },
         {
           "specifier": "../features/evaluator.js",
@@ -1096,7 +1124,7 @@
           "specifier": "../persistence/index.js",
           "resolvedPath": "apps/observer/src/persistence/index.ts",
           "edgeKind": "type-only",
-          "bindings": ["EventJournal", "SessionGroupStore", "SessionStore"]
+          "bindings": ["EventJournal", "ObservationStore", "SessionGroupStore", "SessionStore"]
         },
         {
           "specifier": "../providers/registry.js",
@@ -1372,7 +1400,6 @@
             "removeWorktreeBestEffort",
             "resolveHarnessProviderOrThrow",
             "resolveTerminalProviderOrThrow",
-            "runProviderMutation",
             "seedSession",
             "sessionSeedGroupPlacement",
             "throwIfAborted"
@@ -1389,6 +1416,12 @@
           "resolvedPath": "apps/observer/src/commands/terminalIntentRunner.ts",
           "edgeKind": "type-only",
           "bindings": ["TerminalIntentRunner"]
+        },
+        {
+          "specifier": "../worktree/createMutation.js",
+          "resolvedPath": "apps/observer/src/commands/worktree/createMutation.ts",
+          "edgeKind": "runtime",
+          "bindings": ["runCreateWorktreeMutation"]
         },
         {
           "specifier": "../../persistence/index.js",
@@ -1490,7 +1523,6 @@
             "removeWorktreeBestEffort",
             "resolveHarnessProviderOrThrow",
             "resolveTerminalProviderOrThrow",
-            "runProviderMutation",
             "seedSession",
             "throwIfAborted",
             "validateSnapshotRow"
@@ -1507,6 +1539,12 @@
           "resolvedPath": "apps/observer/src/commands/terminalIntentRunner.ts",
           "edgeKind": "type-only",
           "bindings": ["TerminalIntentRunner"]
+        },
+        {
+          "specifier": "../worktree/createMutation.js",
+          "resolvedPath": "apps/observer/src/commands/worktree/createMutation.ts",
+          "edgeKind": "runtime",
+          "bindings": ["runCreateWorktreeMutation"]
         },
         {
           "specifier": "../../persistence/index.js",
@@ -1542,7 +1580,7 @@
           "specifier": "@station/contracts",
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "type-only",
-          "bindings": ["ProviderProjectConfig", "WorktreeObservation"]
+          "bindings": ["CreateWorktreeRequest", "ProviderProjectConfig", "WorktreeObservation"]
         },
         {
           "specifier": "@station/runtime",
@@ -1769,12 +1807,6 @@
           "bindings": ["CommandHandler"]
         },
         {
-          "specifier": "../reconcile.js",
-          "resolvedPath": "apps/observer/src/commands/reconcile.ts",
-          "edgeKind": "runtime",
-          "bindings": ["reconcileAndPublish"]
-        },
-        {
           "specifier": "./shared.js",
           "resolvedPath": "apps/observer/src/commands/session/shared.ts",
           "edgeKind": "runtime",
@@ -1785,7 +1817,7 @@
             "discardSessionSeedBestEffort",
             "findProjectOrThrow",
             "lookupWorktree",
-            "publishSessionCreated",
+            "reconcileAndPublishSessionCreated",
             "resolveTerminalProviderOrThrow",
             "seedSession",
             "throwIfAborted",
@@ -1815,7 +1847,7 @@
           "specifier": "../../persistence/index.js",
           "resolvedPath": "apps/observer/src/persistence/index.ts",
           "edgeKind": "type-only",
-          "bindings": ["EventJournal", "SessionStore"]
+          "bindings": ["EventJournal", "ObservationStore", "SessionStore"]
         },
         {
           "specifier": "../../providers/registry.js",
@@ -1926,6 +1958,12 @@
         },
         {
           "name": "publishSessionCreated",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "reconcileAndPublishSessionCreated",
           "kind": "function",
           "role": null,
           "purpose": null
@@ -2048,11 +2086,18 @@
           "bindings": ["CommandHandlerContext"]
         },
         {
+          "specifier": "../reconcile.js",
+          "resolvedPath": "apps/observer/src/commands/reconcile.ts",
+          "edgeKind": "runtime",
+          "bindings": ["reconcileAndPublish"]
+        },
+        {
           "specifier": "../../persistence/index.js",
           "resolvedPath": "apps/observer/src/persistence/index.ts",
           "edgeKind": "type-only",
           "bindings": [
             "EventJournal",
+            "ObservationStore",
             "SessionSeedGroupPlacement",
             "SessionSeedGroupProvenance",
             "SessionSeedResult",
@@ -2064,6 +2109,12 @@
           "resolvedPath": "apps/observer/src/providers/registry.ts",
           "edgeKind": "type-only",
           "bindings": ["ProviderRegistry"]
+        },
+        {
+          "specifier": "../../reconcile/core.js",
+          "resolvedPath": "apps/observer/src/reconcile/core.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ObserverCore"]
         },
         {
           "specifier": "../../runtime/eventBus.js",
@@ -2161,12 +2212,6 @@
           "bindings": ["CommandHandler"]
         },
         {
-          "specifier": "../reconcile.js",
-          "resolvedPath": "apps/observer/src/commands/reconcile.ts",
-          "edgeKind": "runtime",
-          "bindings": ["reconcileAndPublish"]
-        },
-        {
           "specifier": "./shared.js",
           "resolvedPath": "apps/observer/src/commands/session/shared.ts",
           "edgeKind": "runtime",
@@ -2177,7 +2222,7 @@
             "discardSessionSeedBestEffort",
             "findProjectOrThrow",
             "lookupWorktree",
-            "publishSessionCreated",
+            "reconcileAndPublishSessionCreated",
             "rememberedHarnessProviderForWorktree",
             "resolveHarnessProviderOrThrow",
             "resolveTerminalProviderOrThrow",
@@ -2203,7 +2248,7 @@
           "specifier": "../../persistence/index.js",
           "resolvedPath": "apps/observer/src/persistence/index.ts",
           "edgeKind": "type-only",
-          "bindings": ["EventJournal", "SessionStore"]
+          "bindings": ["EventJournal", "ObservationStore", "SessionStore"]
         },
         {
           "specifier": "../../providers/registry.js",
@@ -2722,7 +2767,13 @@
           "specifier": "../session/shared.js",
           "resolvedPath": "apps/observer/src/commands/session/shared.ts",
           "edgeKind": "runtime",
-          "bindings": ["findProjectOrThrow", "runProviderMutation", "throwIfAborted"]
+          "bindings": ["findProjectOrThrow", "throwIfAborted"]
+        },
+        {
+          "specifier": "./createMutation.js",
+          "resolvedPath": "apps/observer/src/commands/worktree/createMutation.ts",
+          "edgeKind": "runtime",
+          "bindings": ["runCreateWorktreeMutation"]
         },
         {
           "specifier": "../../providers/registry.js",
@@ -2753,6 +2804,79 @@
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "type-only",
           "bindings": ["CreateWorktreeRequest", "ProviderProjectConfig"]
+        },
+        {
+          "specifier": "@station/runtime",
+          "resolvedPath": "packages/runtime/src/index.ts",
+          "edgeKind": "type-only",
+          "bindings": ["RuntimeClock"]
+        }
+      ]
+    },
+    {
+      "path": "apps/observer/src/commands/worktree/createMutation.ts",
+      "exports": [
+        {
+          "name": "runCreateWorktreeMutation",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "../queue.js",
+          "resolvedPath": "apps/observer/src/commands/queue.ts",
+          "edgeKind": "type-only",
+          "bindings": ["CommandHandlerContext"]
+        },
+        {
+          "specifier": "../reconcile.js",
+          "resolvedPath": "apps/observer/src/commands/reconcile.ts",
+          "edgeKind": "runtime",
+          "bindings": ["reconcileAndPublish"]
+        },
+        {
+          "specifier": "../session/shared.js",
+          "resolvedPath": "apps/observer/src/commands/session/shared.ts",
+          "edgeKind": "runtime",
+          "bindings": ["runProviderMutation"]
+        },
+        {
+          "specifier": "../../providers/registry.js",
+          "resolvedPath": "apps/observer/src/providers/registry.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ProviderRegistry"]
+        },
+        {
+          "specifier": "../../reconcile/core.js",
+          "resolvedPath": "apps/observer/src/reconcile/core.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ObserverCore"]
+        },
+        {
+          "specifier": "../../runtime/eventBus.js",
+          "resolvedPath": "apps/observer/src/runtime/eventBus.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ObserverEventBus"]
+        },
+        {
+          "specifier": "../../stationLogger.js",
+          "resolvedPath": "apps/observer/src/stationLogger.ts",
+          "edgeKind": "type-only",
+          "bindings": ["StationLogger"]
+        },
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "type-only",
+          "bindings": ["CreateWorktreeRequest", "WorktreeObservation"]
+        },
+        {
+          "specifier": "@station/runtime",
+          "resolvedPath": "packages/runtime/src/index.ts",
+          "edgeKind": "runtime",
+          "bindings": ["isSafeError"]
         },
         {
           "specifier": "@station/runtime",
@@ -2810,10 +2934,15 @@
           "bindings": [
             "commandValidationError",
             "findProjectOrThrow",
-            "runProviderMutation",
             "throwIfAborted",
             "validateSnapshotRow"
           ]
+        },
+        {
+          "specifier": "./createMutation.js",
+          "resolvedPath": "apps/observer/src/commands/worktree/createMutation.ts",
+          "edgeKind": "runtime",
+          "bindings": ["runCreateWorktreeMutation"]
         },
         {
           "specifier": "../../providers/registry.js",
@@ -2860,11 +2989,17 @@
           "name": "createWorktreeRemoveHandler",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Revalidates selected checkout and Git registration identity before coordinating removal. Provider-confirmed removal atomically ends sessions and retires canonical title authority."
+          "purpose": "Revalidates selected checkout and Git registration identity before coordinating removal. Provider-confirmed removal cannot be overwritten by later cancellation or event-journal degradation; it retries atomic session/title retirement once before publishing removal evidence. A durable retirement failure authorizes only recovery replay of that idempotent completion path."
         },
         {
           "name": "CreateWorktreeRemoveHandlerOptions",
           "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "createWorktreeRemoveRecoveryHandler",
+          "kind": "function",
           "role": null,
           "purpose": null
         }
@@ -2896,7 +3031,7 @@
           "specifier": "../queue.js",
           "resolvedPath": "apps/observer/src/commands/queue.ts",
           "edgeKind": "type-only",
-          "bindings": ["CommandHandler"]
+          "bindings": ["CommandHandler", "CommandRecoveryHandler"]
         },
         {
           "specifier": "../reconcile.js",
@@ -2962,7 +3097,14 @@
           "specifier": "@station/contracts",
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "type-only",
-          "bindings": ["ProviderProjectConfig", "WorktreeRemovalRefusalDiagnosticDetail"]
+          "bindings": [
+            "CommandId",
+            "GetWorktreeRequest",
+            "ProviderProjectConfig",
+            "SafeError",
+            "TraceContext",
+            "WorktreeRemovalRefusalDiagnosticDetail"
+          ]
         },
         {
           "specifier": "@station/runtime",
@@ -4146,6 +4288,18 @@
         },
         {
           "name": "CommandQueue",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "CommandRecoveryContext",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "CommandRecoveryHandler",
           "kind": "type",
           "role": null,
           "purpose": null
@@ -6725,6 +6879,25 @@
       ]
     },
     {
+      "path": "apps/observer/src/migrations/018_command_recovery_lookup.ts",
+      "exports": [
+        {
+          "name": "commandRecoveryLookupMigration",
+          "kind": "const",
+          "role": null,
+          "purpose": null
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "./migration.js",
+          "resolvedPath": "apps/observer/src/migrations/migration.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ObserverSqliteMigration"]
+        }
+      ]
+    },
+    {
       "path": "apps/observer/src/migrations/index.ts",
       "exports": [
         {
@@ -6850,6 +7023,12 @@
           "bindings": ["sessionGroupsMigration"]
         },
         {
+          "specifier": "./018_command_recovery_lookup.js",
+          "resolvedPath": "apps/observer/src/migrations/018_command_recovery_lookup.ts",
+          "edgeKind": "runtime",
+          "bindings": ["commandRecoveryLookupMigration"]
+        },
+        {
           "specifier": "./migration.js",
           "resolvedPath": "apps/observer/src/migrations/migration.ts",
           "edgeKind": "type-only",
@@ -6880,6 +7059,12 @@
         },
         {
           "name": "listCommandErrors",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "listCommandRecoveryCandidates",
           "kind": "function",
           "role": null,
           "purpose": null
@@ -6926,13 +7111,13 @@
           "specifier": "./rows.js",
           "resolvedPath": "apps/observer/src/persistence/rows.ts",
           "edgeKind": "runtime",
-          "bindings": ["commandErrorFromRow", "commandFromRow"]
+          "bindings": ["commandErrorFromRow", "commandFromRow", "eventFromRow"]
         },
         {
           "specifier": "./rows.js",
           "resolvedPath": "apps/observer/src/persistence/rows.ts",
           "edgeKind": "type-only",
-          "bindings": ["SqliteCommandErrorRow", "SqliteCommandRow"]
+          "bindings": ["SqliteCommandErrorRow", "SqliteCommandRow", "SqliteEventRow"]
         },
         {
           "specifier": "./types.js",
@@ -8084,7 +8269,8 @@
             "SafeErrorSchema",
             "SessionGroupViewSchema",
             "StationCommandSchema",
-            "StationEventSchema"
+            "StationEventSchema",
+            "stationEventCommandId"
           ]
         },
         {
@@ -10449,7 +10635,7 @@
           "specifier": "./reconcileScheduler.js",
           "resolvedPath": "apps/observer/src/runtime/reconcileScheduler.ts",
           "edgeKind": "type-only",
-          "bindings": ["CreateReconcileSchedulerOptions"]
+          "bindings": ["CreateReconcileSchedulerOptions", "ReconcileScheduler"]
         },
         {
           "specifier": "./spoolDrain.js",
@@ -10504,6 +10690,7 @@
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "type-only",
           "bindings": [
+            "CommandDispatchOptions",
             "CommandId",
             "CommandRecord",
             "DiagnosticCollectionOptions",
@@ -11941,14 +12128,7 @@
           "purpose": null
         }
       ],
-      "imports": [
-        {
-          "specifier": "@station/runtime",
-          "resolvedPath": "packages/runtime/src/index.ts",
-          "edgeKind": "runtime",
-          "bindings": ["Effect"]
-        }
-      ]
+      "imports": []
     },
     {
       "path": "apps/observer/src/runtime/server.ts",
@@ -13557,7 +13737,7 @@
       "declaration": "assertHarnessLaunchPreconditionsOrThrow",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Freshly verifies the selected harness health and hook delivery immediately before launch mutation.",
+      "purpose": "Freshly verifies selected-harness health and hook delivery immediately before launch mutation. Health gating awaits fresh cache evidence without waiting for serialized snapshot publication.",
       "dependencies": []
     },
     {
@@ -13823,8 +14003,16 @@
       "declaration": "createWorktreeRemoveHandler",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Revalidates selected checkout and Git registration identity before coordinating removal. Provider-confirmed removal atomically ends sessions and retires canonical title authority.",
-      "dependencies": []
+      "purpose": "Revalidates selected checkout and Git registration identity before coordinating removal. Provider-confirmed removal cannot be overwritten by later cancellation or event-journal degradation; it retries atomic session/title retirement once before publishing removal evidence. A durable retirement failure authorizes only recovery replay of that idempotent completion path.",
+      "dependencies": [
+        {
+          "path": "apps/observer/src/stationLogger.ts",
+          "declaration": "StationLogger",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
     },
     {
       "path": "apps/observer/src/diagnostics/collector.ts",
@@ -14415,13 +14603,6 @@
           "kind": "function",
           "role": "USE CASE",
           "edgeKind": "runtime"
-        },
-        {
-          "path": "apps/observer/src/stationLogger.ts",
-          "declaration": "StationLogger",
-          "kind": "interface",
-          "role": "DRIVEN PORT",
-          "edgeKind": "type-only"
         },
         {
           "path": "packages/contracts/src/observer.ts",
@@ -15272,7 +15453,7 @@
       "declaration": "WorktrunkProvider",
       "kind": "class",
       "role": "ADAPTER",
-      "purpose": "Translates Worktrunk lifecycle output and commands into Station worktree contracts. Hook diagnostics use an atomic requester runtime when supplied and retain the whole Observer composition expectation as a fallback. Checkout roots are validated before Worktrunk runs, managed roots override Worktrunk's project-specific path templates, and removal revalidates native Git identity, path, and branch before mutation.",
+      "purpose": "Translates Worktrunk lifecycle output and commands into Station worktree contracts. Hook diagnostics use an atomic requester runtime when supplied and retain the whole Observer composition expectation as a fallback. Checkout roots are validated before Worktrunk runs, managed roots override Worktrunk's project-specific path templates, mutation cancellation reaches owned Git/Worktrunk subprocesses, cancelled removals confirm post-mutation completion through fresh Git evidence, seeded dirty state refreshes from the created checkout only, restart lookup validates durable hints and stable native path aliases through targeted Git evidence while native identity stays stable between reads, managed-root aliases stay stable across inventory, and removal revalidates native Git identity, path, branch, and unforced dirty state before mutation.",
       "dependencies": [
         {
           "path": "packages/contracts/src/providers.ts",
@@ -15383,7 +15564,7 @@
       "declaration": "WorktreeProvider",
       "kind": "interface",
       "role": "DRIVEN PORT",
-      "purpose": "Supplies worktree lifecycle evidence and mutations without exposing provider mechanics. Removal adapters must revalidate opaque registration identity, path, and branch immediately before mutation.",
+      "purpose": "Supplies worktree lifecycle evidence and mutations without exposing provider mechanics. Create adapters cooperatively cancel owned reads and subprocesses; targeted lookups treat supplied path aliases and registration identity as hints requiring current native validation; removal adapters revalidate opaque registration identity, path, branch, and unforced dirty state immediately before mutation.",
       "dependencies": []
     },
     {
@@ -15415,7 +15596,7 @@
       "declaration": "createObserverClient",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Presents Observer operations to clients through validated NDJSON requests.",
+      "purpose": "Presents Observer operations to clients through validated NDJSON requests and replays a lost command-dispatch response once with the same durable operation identity.",
       "dependencies": []
     },
     {
@@ -15423,7 +15604,7 @@
       "declaration": "startProtocolServer",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Exposes Observer operations through validated NDJSON requests on a Unix socket.",
+      "purpose": "Exposes Observer operations through validated NDJSON requests on a Unix socket and routes the command request identity into durable admission replay.",
       "dependencies": [
         {
           "path": "packages/contracts/src/observer.ts",

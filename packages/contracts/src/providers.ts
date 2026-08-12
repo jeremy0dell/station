@@ -159,6 +159,8 @@ export type CreateWorktreeRequest = {
   // The observer resolves the source worktree's absolute path; the UI never
   // supplies filesystem paths directly.
   seedFrom?: { path: string; worktreeId?: WorktreeId };
+  /** Cooperative cancellation for provider reads and subprocesses owned by this mutation. */
+  signal?: AbortSignal;
 };
 
 export type RemoveWorktreeRequest = {
@@ -168,6 +170,8 @@ export type RemoveWorktreeRequest = {
   expectedRegistrationIdentity: string;
   projectId?: ProjectId;
   force?: boolean;
+  /** Cooperative cancellation for provider reads and subprocesses before removal is confirmed. */
+  signal?: AbortSignal;
 };
 
 export type RemoveWorktreeResult = {
@@ -180,6 +184,10 @@ export type GetWorktreeRequest = {
   worktreeId?: WorktreeId;
   projectId?: ProjectId;
   path?: string;
+  project?: ProviderProjectConfig;
+  expectedRegistrationIdentity?: string;
+  /** Cooperative cancellation for provider validation reads and subprocesses. */
+  signal?: AbortSignal;
 };
 
 export type RawWorktreeEvent = {
@@ -456,7 +464,9 @@ export type RepositoryChecksRequest = z.infer<typeof RepositoryChecksRequestSche
  * DRIVEN PORT
  *
  * Supplies worktree lifecycle evidence and mutations without exposing provider mechanics.
- * Removal adapters must revalidate opaque registration identity, path, and branch immediately before mutation.
+ * Create adapters cooperatively cancel owned reads and subprocesses; targeted lookups treat supplied
+ * path aliases and registration identity as hints requiring current native validation; removal adapters revalidate
+ * opaque registration identity, path, branch, and unforced dirty state immediately before mutation.
  */
 export interface WorktreeProvider {
   id: ProviderId;

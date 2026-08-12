@@ -1,7 +1,7 @@
-import { Effect } from "@station/runtime";
-
 export type ReconcileScheduler = {
   request(reason: string): void;
+  /** Refuses queued work and waits for an active reconcile before shutdown continues. */
+  shutdown(): Promise<void>;
 };
 
 export type CreateReconcileSchedulerOptions = {
@@ -30,12 +30,18 @@ export function createReconcileScheduler(
   const debounceMs = options.debounceMs ?? defaultDebounceMs;
   const backlogDebounceMs = options.backlogDebounceMs ?? defaultBacklogDebounceMs;
   let running = false;
+  let stopped = false;
   let timerScheduled = false;
+  let timer: NodeJS.Timeout | undefined;
+  let activeFlush: Promise<void> | undefined;
   let firstQueuedAt: number | undefined;
   const queuedReasons: string[] = [];
 
   return {
     request: (reason) => {
+      if (stopped) {
+        return;
+      }
       if (queuedReasons.length === 0) {
         firstQueuedAt = Date.now();
       }
@@ -45,19 +51,40 @@ export function createReconcileScheduler(
       }
       scheduleFlush(debounceMs);
     },
+    shutdown: async () => {
+      stopped = true;
+      queuedReasons.length = 0;
+      firstQueuedAt = undefined;
+      if (timer !== undefined) {
+        clearTimeout(timer);
+        timer = undefined;
+      }
+      timerScheduled = false;
+      await activeFlush;
+    },
   };
 
   function scheduleFlush(delayMs: number): void {
     timerScheduled = true;
-    void sleep(delayMs).then(
-      () => {
-        timerScheduled = false;
-        void flush().catch((error: unknown) => reportError(error));
-      },
-      () => {
-        timerScheduled = false;
-      },
-    );
+    const start = () => {
+      timer = undefined;
+      timerScheduled = false;
+      if (stopped) {
+        return;
+      }
+      const flight = flush().catch((error: unknown) => reportError(error));
+      activeFlush = flight;
+      void flight.finally(() => {
+        if (activeFlush === flight) {
+          activeFlush = undefined;
+        }
+      });
+    };
+    if (delayMs <= 0) {
+      queueMicrotask(start);
+    } else {
+      timer = setTimeout(start, delayMs);
+    }
   }
 
   async function flush(): Promise<void> {
@@ -87,7 +114,7 @@ export function createReconcileScheduler(
         durationMs: Math.max(0, Date.now() - startedAt),
         queuedAfter,
       });
-      if (queuedReasons.length > 0 && !timerScheduled) {
+      if (!stopped && queuedReasons.length > 0 && !timerScheduled) {
         scheduleFlush(backlogDebounceMs);
       }
     }
@@ -117,12 +144,4 @@ function summarizeReasons(reasons: string[]): string {
     return `hook:batch(${reasons.length})`;
   }
   return `scheduled:batch(${reasons.length})`;
-}
-
-async function sleep(ms: number): Promise<void> {
-  if (ms <= 0) {
-    await Promise.resolve();
-    return;
-  }
-  await Effect.runPromise(Effect.sleep(`${ms} millis`));
 }

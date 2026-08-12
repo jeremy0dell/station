@@ -479,6 +479,65 @@ describe("observer reconcile with fake providers", () => {
     });
   });
 
+  it("caps concurrent project reads at four and preserves configured order", async () => {
+    const projects: StationConfig["projects"] = Array.from({ length: 8 }, (_, index) => {
+      const id = `project-${index}`;
+      return {
+        id,
+        label: id,
+        root: `/tmp/station/${id}`,
+        defaults: {
+          harness: "fake-harness",
+          terminal: "fake-terminal",
+          layout: "agent-shell",
+        },
+        worktrunk: { enabled: true },
+      };
+    });
+    const worktree = new FakeWorktreeProvider({
+      now,
+      worktrees: projects.map((project, index) =>
+        createFakeWorktree({
+          id: `wt_${index}`,
+          projectId: project.id,
+          path: `${project.root}/worktree`,
+          now,
+        }),
+      ),
+    });
+    let active = 0;
+    let maxActive = 0;
+    const originalList = worktree.listWorktrees.bind(worktree);
+    worktree.listWorktrees = async (project) => {
+      active += 1;
+      maxActive = Math.max(maxActive, active);
+      try {
+        const projectIndex = projects.findIndex((candidate) => candidate.id === project.id);
+        await new Promise((resolve) => setTimeout(resolve, (projects.length - projectIndex) * 2));
+        return originalList(project);
+      } finally {
+        active -= 1;
+      }
+    };
+    const providers = new ProviderRegistry({
+      worktree,
+      terminal: new FakeTerminalProvider({ now }),
+      harnesses: [new FakeHarnessProvider({ now })],
+    });
+    const core = createObserverCore({
+      config: { ...config, projects },
+      providers,
+      clock: { now: () => new Date(now) },
+    });
+
+    const snapshot = await core.reconcile("bounded-project-fan-out");
+
+    expect(maxActive).toBe(4);
+    expect(snapshot.rows.map((row) => row.projectId)).toEqual(
+      projects.map((project) => project.id),
+    );
+  });
+
   it("retries safe provider reads and serializes concurrent reconciles", async () => {
     const worktree = new FakeWorktreeProvider({
       now,

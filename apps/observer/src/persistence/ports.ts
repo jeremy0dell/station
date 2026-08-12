@@ -66,6 +66,10 @@ export interface CommandJournal {
   }): Promise<PersistedCommand>;
   getCommand(commandId: CommandId): Promise<PersistedCommand | undefined>;
   listCommands(): Promise<PersistedCommand[]>;
+  /** Selects coarse durable recovery candidates; queue policy still validates their evidence. */
+  listCommandRecoveryCandidates(input: {
+    failedCommandTypes: StationCommand["type"][];
+  }): Promise<PersistedCommand[]>;
   listCommandErrors(commandId?: CommandId): Promise<PersistedCommandError[]>;
 }
 

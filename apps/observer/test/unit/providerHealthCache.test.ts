@@ -89,6 +89,37 @@ describe("provider health cache", () => {
     expect(listener).toHaveBeenCalledWith(healthyResult("fake"));
   });
 
+  it("lets launch waiters use fresh cache evidence while ordinary refresh awaits publication", async () => {
+    let releaseListener = () => undefined;
+    const listenerBlocked = new Promise<void>((resolve) => {
+      releaseListener = resolve;
+    });
+    let markListenerStarted = () => undefined;
+    const listenerStarted = new Promise<void>((resolve) => {
+      markListenerStarted = resolve;
+    });
+    const cache = new ProviderHealthCache({
+      targets: [target("fake", async () => healthyResult("fake"))],
+    });
+    cache.onProbeCompleted(async () => {
+      markListenerStarted();
+      await listenerBlocked;
+    });
+
+    let refreshCompleted = false;
+    const refresh = cache.refresh("fake").then(() => {
+      refreshCompleted = true;
+    });
+    await cache.refreshUntilCached("fake");
+
+    expect(cache.read("fake")?.status).toBe("healthy");
+    expect(refreshCompleted).toBe(false);
+    await listenerStarted;
+    releaseListener();
+    await refresh;
+    expect(refreshCompleted).toBe(true);
+  });
+
   it("keeps refresh non-rejecting when a completion listener fails", async () => {
     const cache = new ProviderHealthCache({
       targets: [target("fake", async () => healthyResult("fake"))],

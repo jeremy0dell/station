@@ -1,6 +1,8 @@
 import type {
   HarnessProvider,
   HarnessRunId,
+  RemoveWorktreeRequest,
+  RemoveWorktreeResult,
   SafeError,
   SessionView,
   WorktreeRow,
@@ -159,34 +161,52 @@ export async function removeWorktreeThroughProvider(
     expectedBranch: input.target.branch,
     expectedRegistrationIdentity: input.target.registrationIdentity,
   };
-  const providerRequest: typeof request & { force?: boolean } = { ...request };
+  const providerRequest: RemoveWorktreeRequest = {
+    ...request,
+    signal: input.context.signal,
+  };
   if (input.force) {
     providerRequest.force = true;
   }
-  const result = await runProviderMutation(
-    {
-      operation: `provider.${input.providers.worktree.id}.removeWorktree`,
-      clock: input.clock,
-      commandTimeoutMs: input.commandTimeoutMs,
-      signal: input.context.signal,
-      trace: input.context.trace,
-      fallback: {
-        tag: "WorktreeProviderError",
-        code: "WORKTREE_REMOVE_FAILED",
-        message: "The worktree provider failed to remove the worktree.",
-        provider: input.providers.worktree.id,
+  let confirmedResult: RemoveWorktreeResult | undefined;
+  try {
+    confirmedResult = await runProviderMutation(
+      {
+        operation: `provider.${input.providers.worktree.id}.removeWorktree`,
+        clock: input.clock,
+        commandTimeoutMs: input.commandTimeoutMs,
+        signal: input.context.signal,
+        trace: input.context.trace,
+        fallback: {
+          tag: "WorktreeProviderError",
+          code: "WORKTREE_REMOVE_FAILED",
+          message: "The worktree provider failed to remove the worktree.",
+          provider: input.providers.worktree.id,
+        },
+        timeoutFallback: {
+          tag: "TimeoutError",
+          code: "WORKTREE_REMOVE_TIMEOUT",
+          message: "The worktree provider timed out while removing the worktree.",
+          provider: input.providers.worktree.id,
+        },
       },
-      timeoutFallback: {
-        tag: "TimeoutError",
-        code: "WORKTREE_REMOVE_TIMEOUT",
-        message: "The worktree provider timed out while removing the worktree.",
-        provider: input.providers.worktree.id,
+      async () => {
+        const result = await input.providers.worktree.removeWorktree(providerRequest);
+        confirmedResult = result;
+        if (result.removed) {
+          input.context.markExternalMutationCommitted?.();
+        }
+        return result;
       },
-    },
-    () => input.providers.worktree.removeWorktree(providerRequest),
-  );
+    );
+  } catch (error) {
+    // Cancellation may win the boundary after the provider has authoritatively confirmed deletion.
+    if (confirmedResult?.removed !== true) {
+      throw error;
+    }
+  }
 
-  if (!result.removed) {
+  if (confirmedResult?.removed !== true) {
     const error: SafeError = {
       tag: "WorktreeProviderError",
       code: "WORKTREE_REMOVE_NOT_CONFIRMED",

@@ -1,7 +1,12 @@
 import type { ProviderProjectConfig, StationCommand } from "@station/contracts";
 import type { RuntimeClock } from "@station/runtime";
 import { createFeatureFlagEvaluator, type FeatureFlagEvaluator } from "../features/evaluator.js";
-import type { EventJournal, SessionGroupStore, SessionStore } from "../persistence/index.js";
+import type {
+  EventJournal,
+  ObservationStore,
+  SessionGroupStore,
+  SessionStore,
+} from "../persistence/index.js";
 import type { ProviderRegistry } from "../providers/registry.js";
 import type { ObserverCore } from "../reconcile/core.js";
 import type { ObserverEventBus } from "../runtime/eventBus.js";
@@ -39,7 +44,10 @@ import { createTerminalCloseHandler, createTerminalFocusHandler } from "./termin
 import { createTerminalIntentRunner, type TerminalIntentRunner } from "./terminalIntentRunner.js";
 import { createWorktreeCreateHandler } from "./worktree/create.js";
 import { createWorktreeForkHandler } from "./worktree/fork.js";
-import { createWorktreeRemoveHandler } from "./worktree/remove.js";
+import {
+  createWorktreeRemoveHandler,
+  createWorktreeRemoveRecoveryHandler,
+} from "./worktree/remove.js";
 
 export type RegisterObserverCommandHandlersOptions = {
   queue: CommandQueue;
@@ -47,7 +55,7 @@ export type RegisterObserverCommandHandlersOptions = {
   providers: ProviderRegistry;
   projects: readonly ProviderProjectConfig[];
   getProjects?: (() => readonly ProviderProjectConfig[]) | undefined;
-  persistence: SessionStore & SessionGroupStore & EventJournal;
+  persistence: SessionStore & SessionGroupStore & EventJournal & ObservationStore;
   featureFlags?: FeatureFlagEvaluator | undefined;
   eventBus?: ObserverEventBus | undefined;
   clock?: RuntimeClock | undefined;
@@ -261,6 +269,16 @@ export function registerObserverCommandHandlers(
   for (const commandType of commandTypes) {
     options.queue.registerHandler(commandType, handlers[commandType]);
   }
+  options.queue.registerRecoveryHandler(
+    "worktree.remove",
+    createWorktreeRemoveRecoveryHandler({
+      core: options.core,
+      persistence: options.persistence,
+      eventBus: options.eventBus,
+      clock: options.clock,
+      logger: options.logger,
+    }),
+  );
 
   void options.logger?.info("Observer command handlers registered.", {
     commandTypes,
