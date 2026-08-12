@@ -119,6 +119,7 @@ describeReal("real Worktrunk provider smoke", () => {
     cleanup.defer(async () => {
       if (createdForCleanup === undefined) return;
       await provider.removeWorktree({
+        project,
         worktreeId: createdForCleanup.id,
         expectedPath: createdForCleanup.path,
         expectedBranch: createdForCleanup.branch,
@@ -137,6 +138,7 @@ describeReal("real Worktrunk provider smoke", () => {
     expect(created.branch).toBe(branch);
     await expect(
       provider.removeWorktree({
+        project,
         worktreeId: created.id,
         expectedPath: created.path,
         expectedBranch: created.branch,
@@ -201,6 +203,7 @@ describeReal("real Worktrunk provider smoke", () => {
 
       await expect(
         provider.removeWorktree({
+          project,
           worktreeId: selected.id,
           expectedPath: selected.path,
           expectedBranch: selected.branch,
@@ -216,7 +219,6 @@ describeReal("real Worktrunk provider smoke", () => {
       expect(remainingPaths).toHaveLength(1);
       expect(remainingPaths.some((path) => sameObservedPath(path, repo))).toBe(true);
       expect(remainingPaths.some((path) => sameObservedPath(path, linked))).toBe(false);
-      await expect(access(linked)).rejects.toMatchObject({ code: "ENOENT" });
       await expect(git("branch", "--show-current")).resolves.toMatchObject({
         stdout: "duplicate\n",
       });

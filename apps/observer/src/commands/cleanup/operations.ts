@@ -1,6 +1,7 @@
 import type {
   HarnessProvider,
   HarnessRunId,
+  RemoveWorktreeRequest,
   SafeError,
   SessionView,
   WorktreeRow,
@@ -18,7 +19,6 @@ import {
   terminalCloseIntentForSession,
   terminalCloseIntentForWorktree,
 } from "../terminalIntents.js";
-import type { VerifiedWorktreeRemovalTarget } from "./guards.js";
 
 export type CleanupRuntime = {
   clock?: RuntimeClock | undefined;
@@ -146,23 +146,10 @@ export async function closeTerminalForWorktree(
 export async function removeWorktreeThroughProvider(
   input: {
     providers: ProviderRegistry;
-    row: WorktreeRow;
-    target: VerifiedWorktreeRemovalTarget;
-    force: boolean;
+    request: RemoveWorktreeRequest;
     context: CommandHandlerContext;
   } & CleanupRuntime,
 ): Promise<void> {
-  const request = {
-    worktreeId: input.row.id,
-    projectId: input.row.projectId,
-    expectedPath: input.target.path,
-    expectedBranch: input.target.branch,
-    expectedRegistrationIdentity: input.target.registrationIdentity,
-  };
-  const providerRequest: typeof request & { force?: boolean } = { ...request };
-  if (input.force) {
-    providerRequest.force = true;
-  }
   const result = await runProviderMutation(
     {
       operation: `provider.${input.providers.worktree.id}.removeWorktree`,
@@ -183,7 +170,7 @@ export async function removeWorktreeThroughProvider(
         provider: input.providers.worktree.id,
       },
     },
-    () => input.providers.worktree.removeWorktree(providerRequest),
+    () => input.providers.worktree.removeWorktree(input.request),
   );
 
   if (!result.removed) {
@@ -192,8 +179,8 @@ export async function removeWorktreeThroughProvider(
       code: "WORKTREE_REMOVE_NOT_CONFIRMED",
       message: "The worktree provider did not confirm removal.",
       provider: input.providers.worktree.id,
-      projectId: input.row.projectId,
-      worktreeId: input.row.id,
+      projectId: input.request.project.id,
+      worktreeId: input.request.worktreeId,
     };
     throw error;
   }

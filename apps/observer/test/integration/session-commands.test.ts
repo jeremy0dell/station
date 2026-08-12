@@ -879,7 +879,7 @@ describe("session command vertical slice", () => {
     });
     expect(worktree.snapshot().removed).toEqual([
       {
-        projectId: "web",
+        project: expect.objectContaining({ id: "web" }),
         worktreeId: "wt_web_cleanup_open",
         expectedPath: "/tmp/station/web/cleanup-open",
         expectedBranch: "cleanup-open",
@@ -936,7 +936,7 @@ describe("session command vertical slice", () => {
     expect(terminal.snapshot().closed).toEqual(["term_fake"]);
     expect(worktree.snapshot().removed).toEqual([
       {
-        projectId: "web",
+        project: expect.objectContaining({ id: "web" }),
         worktreeId: "wt_web_cleanup_build",
         expectedPath: "/tmp/station/web/cleanup-build",
         expectedBranch: "cleanup-build",
@@ -983,7 +983,7 @@ describe("session command vertical slice", () => {
     expect(terminal.snapshot().closed).toEqual(["term_fake"]);
     expect(worktree.snapshot().removed).toEqual([
       {
-        projectId: "web",
+        project: expect.objectContaining({ id: "web" }),
         worktreeId: "wt_web_cleanup_launch",
         expectedPath: "/tmp/station/web/cleanup-launch",
         expectedBranch: "cleanup-launch",
@@ -2314,7 +2314,7 @@ describe("session command vertical slice", () => {
     });
     expect(worktree.snapshot().removed).toEqual([
       {
-        projectId: "web",
+        project: expect.objectContaining({ id: "web" }),
         worktreeId: "wt_web_cleanup_failure",
         expectedPath: "/tmp/station/web/cleanup-failure",
         expectedBranch: "cleanup-failure",

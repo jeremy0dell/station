@@ -8,7 +8,7 @@ import {
   FakeTerminalProvider,
   FakeWorktreeProvider,
 } from "@station/testing";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   createCommandQueue,
   createObserverCore,
@@ -339,9 +339,11 @@ describe("cleanup command handlers", () => {
     fixture.sqlite.close();
   });
 
-  it("refuses a stale feature selection that now owns the default branch before cleanup", async () => {
+  it("uses targeted evidence to refuse a stale default-branch selection before cleanup", async () => {
     const fixture = createFixture({ state: "working" });
     await fixture.core.reconcile("pre-cleanup");
+    const inventory = vi.spyOn(fixture.worktree, "listWorktrees");
+    const inspection = vi.spyOn(fixture.worktree, "inspectWorktreeForRemoval");
     fixture.worktreeObservation.branch = "main";
 
     const receipt = await fixture.queue.dispatch({
@@ -368,6 +370,14 @@ describe("cleanup command handlers", () => {
     expect(fixture.harness.snapshot().stopped).toEqual([]);
     expect(fixture.terminal.snapshot().closed).toEqual([]);
     expect(fixture.worktree.snapshot().removed).toEqual([]);
+    expect(inspection).toHaveBeenCalledOnce();
+    expect(inspection).toHaveBeenCalledWith(
+      expect.objectContaining({
+        project: expect.objectContaining({ id: "web" }),
+        worktreeId: "wt_web_cleanup",
+      }),
+    );
+    expect(inventory).not.toHaveBeenCalled();
     fixture.sqlite.close();
   });
 
@@ -402,7 +412,7 @@ describe("cleanup command handlers", () => {
     expect(fixture.terminal.snapshot().closed).toEqual(["term_web_cleanup"]);
     expect(fixture.worktree.snapshot().removed).toEqual([
       {
-        projectId: "web",
+        project: expect.objectContaining({ id: "web" }),
         worktreeId: "wt_web_cleanup",
         expectedPath: "/tmp/station/web/cleanup",
         expectedBranch: "cleanup",
@@ -468,7 +478,7 @@ describe("cleanup command handlers", () => {
     expect(fixture.terminal.snapshot().closed).toEqual([]);
     expect(fixture.worktree.snapshot().removed).toEqual([
       {
-        projectId: "web",
+        project: expect.objectContaining({ id: "web" }),
         worktreeId: "wt_web_cleanup",
         expectedPath: "/tmp/station/web/cleanup",
         expectedBranch: "cleanup",
@@ -507,7 +517,7 @@ describe("cleanup command handlers", () => {
     expect(fixture.terminal.snapshot().closed).toEqual([]);
     expect(fixture.worktree.snapshot().removed).toEqual([
       {
-        projectId: "web",
+        project: expect.objectContaining({ id: "web" }),
         worktreeId: "wt_web_cleanup",
         expectedPath: "/tmp/station/web/cleanup",
         expectedBranch: "cleanup",
@@ -557,7 +567,7 @@ describe("cleanup command handlers", () => {
     expect(fixture.terminal.snapshot().closed).toEqual([]);
     expect(fixture.worktree.snapshot().removed).toEqual([
       {
-        projectId: "web",
+        project: expect.objectContaining({ id: "web" }),
         worktreeId: "wt_web_cleanup",
         expectedPath: "/tmp/station/web/cleanup",
         expectedBranch: "cleanup",
@@ -598,7 +608,7 @@ describe("cleanup command handlers", () => {
     expect(fixture.terminal.snapshot().closed).toEqual(["term_web_cleanup"]);
     expect(fixture.worktree.snapshot().removed).toEqual([
       {
-        projectId: "web",
+        project: expect.objectContaining({ id: "web" }),
         worktreeId: "wt_web_cleanup",
         expectedPath: "/tmp/station/web/cleanup",
         expectedBranch: "cleanup",

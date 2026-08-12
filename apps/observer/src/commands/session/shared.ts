@@ -482,7 +482,7 @@ export async function launchHarnessInTerminal(
 
 export async function removeWorktreeBestEffort(input: {
   providers: ProviderRegistry;
-  projectId: string;
+  project: ProviderProjectConfig;
   worktreeId: string;
   expectedPath: string;
   expectedBranch: string;
@@ -498,7 +498,7 @@ export async function removeWorktreeBestEffort(input: {
       traceId: input.context.trace.traceId,
       provider: input.providers.worktree.id,
       operation: "removeWorktree",
-      projectId: input.projectId,
+      projectId: input.project.id,
       worktreeId: input.worktreeId,
       refusalReason: "registration_unverified",
     });
@@ -521,7 +521,7 @@ export async function removeWorktreeBestEffort(input: {
       },
       () =>
         input.providers.worktree.removeWorktree({
-          projectId: input.projectId,
+          project: input.project,
           worktreeId: input.worktreeId,
           expectedPath: input.expectedPath,
           expectedBranch: input.expectedBranch,
@@ -536,7 +536,7 @@ export async function removeWorktreeBestEffort(input: {
       traceId: input.context.trace.traceId,
       provider: input.providers.worktree.id,
       operation: "removeWorktree",
-      projectId: input.projectId,
+      projectId: input.project.id,
       worktreeId: input.worktreeId,
       error,
     });

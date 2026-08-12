@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { lstat, mkdtemp, readFile, rm } from "node:fs/promises";
+import { lstat, mkdtemp, readFile, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, normalize, relative, resolve } from "node:path";
 import type {
@@ -48,6 +48,13 @@ import { doctorWorktrunkHooks } from "./hooks.js";
 import { applyRecoveryBreadcrumbMetadata } from "./metadata.js";
 import { parseWorktrunkListJson, parseWorktrunkListPayload } from "./parse.js";
 import {
+  type GitCheckoutRemovalIdentity,
+  type GitWorktreeRemovalEvidence,
+  parseGitCheckoutRemovalIdentity,
+  parseGitCommonDirectory,
+  parseGitWorktreeRemovalEvidence,
+} from "./removalEvidence.js";
+import {
   WORKTRUNK_HOOK_NAMES,
   type WorktrunkHookExpectation,
   type WorktrunkProviderOptions,
@@ -58,6 +65,16 @@ type WorktrunkRunPolicy = {
   signal?: AbortSignal;
   timeoutMs?: number;
 };
+
+type WorktreeRemovalInspection = {
+  observation: WorktreeObservation;
+  nativeIdentity: GitCheckoutRemovalIdentity;
+  nativeEvidence: GitWorktreeRemovalEvidence;
+  managedRootSnapshot: ManagedRootSnapshot | undefined;
+  branchIsShared: boolean;
+};
+
+type ManagedRootSnapshot = { canonicalPath: string | null };
 
 const defaultCapabilities: WorktreeCapabilities = {
   canCreate: true,
@@ -74,8 +91,8 @@ const defaultCapabilities: WorktreeCapabilities = {
  * Translates Worktrunk lifecycle output and commands into Station worktree contracts.
  * Hook diagnostics use an atomic requester runtime when supplied and retain the whole Observer composition
  * expectation as a fallback. Checkout roots are validated before Worktrunk runs, managed roots override
- * Worktrunk's project-specific path templates, and removal revalidates native Git identity, path, and
- * branch before mutation.
+ * Worktrunk's project-specific path templates, and removal uses current native Git evidence without
+ * requiring cached inventory before repeating exact target and safety validation at mutation time.
  */
 export class WorktrunkProvider implements WorktreeProvider {
   readonly id: ProviderId = "worktrunk";
@@ -89,7 +106,6 @@ export class WorktrunkProvider implements WorktreeProvider {
   readonly #clock: RuntimeClock;
   readonly #resolveRegistrationIdentity: (worktreePath: string) => Promise<string | undefined>;
   readonly #observations = new Map<string, WorktreeObservation>();
-  readonly #projects = new Map<string, ProviderProjectConfig>();
   readonly #projectConfigIdentifiers = new Map<string, string | null>();
 
   constructor(options: WorktrunkProviderOptions = {}) {
@@ -265,7 +281,6 @@ export class WorktrunkProvider implements WorktreeProvider {
     if (!project.worktrunk.enabled) {
       return [];
     }
-    this.#projects.set(project.id, project);
     await this.#assertProjectRootUsable(project, policy);
 
     const observations = await this.#readWorktrees(project, policy);
@@ -308,7 +323,6 @@ export class WorktrunkProvider implements WorktreeProvider {
   }
 
   async createWorktree(request: CreateWorktreeRequest): Promise<WorktreeObservation> {
-    this.#projects.set(request.project.id, request.project);
     await this.#assertProjectRootUsable(request.project);
     const base = request.base ?? request.project.worktrunk.base;
     const pathEnv = worktreePathEnv(request.project, request.branch, request.path);
@@ -365,7 +379,7 @@ export class WorktrunkProvider implements WorktreeProvider {
         },
       );
     }
-    // Cache before seeding so the cleanup path can resolve the worktree if seeding fails.
+    // Preserve the created observation for existing targeted reads while seeding runs.
     this.#observations.set(found.id, found);
     if (request.seedFrom !== undefined) {
       try {
@@ -374,6 +388,7 @@ export class WorktrunkProvider implements WorktreeProvider {
         // Seeding failed after the worktree was created. Remove it so callers never
         // inherit a half-seeded worktree; best-effort, then rethrow the seed cause.
         await this.removeWorktree({
+          project: request.project,
           worktreeId: found.id,
           expectedPath: found.path,
           expectedBranch: found.branch,
@@ -450,110 +465,52 @@ export class WorktrunkProvider implements WorktreeProvider {
   }
 
   async removeWorktree(request: RemoveWorktreeRequest): Promise<RemoveWorktreeResult> {
-    const observation = this.#observations.get(request.worktreeId);
-    if (observation === undefined) {
-      throw worktreeRemovalRefusalError({
-        code: "WORKTRUNK_WORKTREE_NOT_FOUND",
-        message: "Worktrunk remove requires a previously observed worktree.",
-        hint: "Run listWorktrees before removeWorktree so the provider can resolve the target.",
-        request,
-        canonicalPath: request.expectedPath,
-        observedBranch: request.expectedBranch,
-        refusalReason: "missing_target",
-      });
-    }
-    const cachedRefusalReason = changedRemovalIdentityReason(observation, request);
-    if (cachedRefusalReason !== undefined) {
-      throw worktreeRemovalRefusalError({
-        code: "WORKTRUNK_WORKTREE_CHANGED",
-        message: "Worktrunk remove received stale checkout identity.",
-        hint: "Refresh and reselect the worktree before retrying removal.",
-        request,
-        projectId: observation.projectId,
-        canonicalPath: observation.path,
-        observedBranch: observation.branch,
-        refusalReason: cachedRefusalReason,
-      });
-    }
-    const project = this.#projects.get(observation.projectId);
-    if (project === undefined) {
-      throw worktreeRemovalRefusalError({
-        code: "WORKTRUNK_WORKTREE_NOT_FOUND",
-        message: "Worktrunk remove requires the repository root from a previous project listing.",
-        hint: "Run listWorktrees for the project before removeWorktree.",
-        request,
-        projectId: observation.projectId,
-        canonicalPath: observation.path,
-        observedBranch: observation.branch,
-        refusalReason: "protection_unverified",
-      });
-    }
-    await this.#assertProjectRootUsable(project);
-
-    const currentWorktrees = await this.#readWorktrees(project, { retries: 1 });
-    const identityMatches = currentWorktrees.filter(
-      (worktree) => worktree.id === request.worktreeId,
-    );
-    const pathMatches = currentWorktrees.filter((worktree) =>
-      samePath(worktree.path, request.expectedPath),
-    );
-    if (identityMatches.length === 0 && pathMatches.length === 0) {
+    const inspection = await this.#inspectRemovalTarget(request, false);
+    if (inspection === null) {
       throw worktreeRemovalRefusalError({
         code: "WORKTRUNK_WORKTREE_NOT_FOUND",
         message: "Worktrunk remove could not confirm that the selected worktree still exists.",
-        hint: "Run listWorktrees again before retrying removal.",
+        hint: "Refresh and reselect the worktree before retrying removal.",
         request,
-        projectId: project.id,
+        projectId: request.project.id,
         canonicalPath: request.expectedPath,
         observedBranch: request.expectedBranch,
         refusalReason: "missing_target",
       });
     }
-    const selected = identityMatches[0];
-    const pathMatch = pathMatches[0];
-    const finalRefusalReason =
-      identityMatches.length !== 1 || pathMatches.length !== 1
-        ? "ambiguous_identity"
-        : selected === undefined || pathMatch === undefined || selected.id !== pathMatch.id
-          ? "identity_changed"
-          : selected.state !== "exists"
-            ? "missing_target"
-            : changedRemovalIdentityReason(selected, request);
-    if (finalRefusalReason !== undefined || selected === undefined || pathMatch === undefined) {
+    const selected = inspection.observation;
+    const refusalReason = changedRemovalIdentityReason(selected, request);
+    if (refusalReason !== undefined) {
       throw worktreeRemovalRefusalError({
         code: "WORKTRUNK_WORKTREE_CHANGED",
         message: "The selected worktree changed before Worktrunk could remove it.",
         hint: "Refresh and reselect the worktree before retrying removal.",
         request,
-        projectId: project.id,
-        canonicalPath: selected?.path ?? pathMatch?.path ?? request.expectedPath,
-        observedBranch: selected?.branch ?? pathMatch?.branch ?? request.expectedBranch,
-        refusalReason: finalRefusalReason ?? "ambiguous_identity",
+        projectId: request.project.id,
+        canonicalPath: selected.path,
+        observedBranch: selected.branch,
+        refusalReason,
       });
     }
-    const branchIsShared =
-      !selected.branch.startsWith("detached:") &&
-      currentWorktrees.some(
-        (worktree) =>
-          worktree.state === "exists" &&
-          worktree.branch === selected.branch &&
-          !samePath(worktree.path, selected.path),
-      );
+    assertRemovalProtection(selected, request);
+
     const removalFlags: string[] = [];
     if (request.force === true) {
       removalFlags.push("--force");
     }
-    if (branchIsShared) {
+    if (inspection.branchIsShared) {
       removalFlags.push("--no-delete-branch");
     } else if (request.force === true) {
       removalFlags.push("--force-delete");
     }
 
+    await this.#assertFinalRemovalTarget(request, inspection);
+
     // Worktrunk 0.64 needs selected-checkout context and cannot delete a branch shared elsewhere.
     await this.#run(
       this.#args([
         "-C",
-        selected.path,
+        inspection.nativeIdentity.path,
         "remove",
         ...this.#automationHookArgs(),
         ...removalFlags,
@@ -571,6 +528,300 @@ export class WorktrunkProvider implements WorktreeProvider {
       worktreeId: request.worktreeId,
       removed: true,
     };
+  }
+
+  async inspectWorktreeForRemoval(
+    request: RemoveWorktreeRequest,
+  ): Promise<WorktreeObservation | null> {
+    return (await this.#inspectRemovalTarget(request))?.observation ?? null;
+  }
+
+  async #inspectRemovalTarget(
+    request: RemoveWorktreeRequest,
+    inspectDirty = true,
+  ): Promise<WorktreeRemovalInspection | null> {
+    if (!request.project.worktrunk.enabled) return null;
+    await this.#assertProjectRootUsable(request.project);
+    const managedRootSnapshot = await captureManagedRootSnapshot(request.project);
+    const initialEvidence = await this.#readRemovalEvidence(request.project);
+    const initialMatches = await matchingRemovalEvidence(initialEvidence, request.expectedPath);
+    const initialSelected = initialMatches[0];
+    if (initialSelected === undefined || initialSelected.state !== "exists") {
+      return null;
+    }
+    if (initialMatches.length !== 1) {
+      throw worktreeRemovalRefusalError({
+        code: "WORKTRUNK_WORKTREE_CHANGED",
+        message: "Git returned ambiguous registration evidence for the selected worktree.",
+        hint: "Refresh and inspect the repository's worktree registrations before retrying.",
+        request,
+        projectId: request.project.id,
+        canonicalPath: request.expectedPath,
+        observedBranch: request.expectedBranch,
+        refusalReason: "ambiguous_identity",
+      });
+    }
+
+    const registrationBefore = await this.#resolveRegistrationIdentity(request.expectedPath);
+    if (registrationBefore === undefined) {
+      throw unverifiedRemovalRegistrationError(request);
+    }
+    const targetIdentity = parseGitCheckoutRemovalIdentity(
+      await this.#readTargetedGit(
+        [
+          "-C",
+          request.expectedPath,
+          "rev-parse",
+          "--path-format=absolute",
+          "--show-toplevel",
+          "--git-common-dir",
+          "HEAD",
+          "--symbolic-full-name",
+          "HEAD",
+        ],
+        "Git failed to validate the selected worktree.",
+      ),
+    );
+    const projectCommonDir = parseGitCommonDirectory(
+      await this.#readTargetedGit(
+        ["-C", request.project.root, "rev-parse", "--path-format=absolute", "--git-common-dir"],
+        "Git failed to validate the selected worktree's project.",
+      ),
+    );
+    if (
+      !(await sameExistingPath(targetIdentity.path, request.expectedPath)) ||
+      !(await sameExistingPath(targetIdentity.commonDir, projectCommonDir))
+    ) {
+      throw worktreeRemovalRefusalError({
+        code: "WORKTRUNK_WORKTREE_CHANGED",
+        message: "The selected checkout no longer belongs to the configured project.",
+        hint: "Refresh and reselect the worktree before retrying removal.",
+        request,
+        projectId: request.project.id,
+        canonicalPath: targetIdentity.path,
+        observedBranch: targetIdentity.branch,
+        refusalReason: "protection_unverified",
+      });
+    }
+    if ((await this.#resolveRegistrationIdentity(request.expectedPath)) !== registrationBefore) {
+      throw changedRemovalRegistrationError(request, request.expectedPath, targetIdentity.branch);
+    }
+    const finalEvidence = await this.#readRemovalEvidence(request.project);
+    const finalMatches = await matchingRemovalEvidence(finalEvidence, request.expectedPath);
+    const selected = finalMatches[0];
+    if (selected === undefined || selected.state !== "exists") {
+      return null;
+    }
+    if (finalMatches.length !== 1) {
+      throw worktreeRemovalRefusalError({
+        code: "WORKTRUNK_WORKTREE_CHANGED",
+        message: "Git returned ambiguous registration evidence for the selected worktree.",
+        hint: "Refresh and inspect the repository's worktree registrations before retrying.",
+        request,
+        projectId: request.project.id,
+        canonicalPath: request.expectedPath,
+        observedBranch: selected.branch,
+        refusalReason: "ambiguous_identity",
+      });
+    }
+    if (
+      !samePath(selected.path, targetIdentity.path) ||
+      selected.branch !== targetIdentity.branch ||
+      selected.headSha !== targetIdentity.headSha
+    ) {
+      throw worktreeRemovalRefusalError({
+        code: "WORKTRUNK_WORKTREE_CHANGED",
+        message: "The selected checkout changed during removal validation.",
+        hint: "Refresh and reselect the worktree before retrying removal.",
+        request,
+        projectId: request.project.id,
+        canonicalPath: selected.path,
+        observedBranch: selected.branch,
+        refusalReason:
+          selected.branch === targetIdentity.branch ? "identity_changed" : "branch_changed",
+      });
+    }
+    await assertManagedRemovalTarget(request.project, selected, request, managedRootSnapshot);
+
+    const isPrimaryCheckout =
+      initialSelected.isPrimaryCheckout ||
+      selected.isPrimaryCheckout ||
+      (await sameExistingPath(selected.path, request.project.root));
+    const status =
+      inspectDirty && request.force !== true
+        ? await this.#readTargetedGit(
+            ["-C", targetIdentity.path, "status", "--porcelain=v1", "--untracked-files=normal"],
+            "Git failed to inspect the worktree before removal.",
+          )
+        : undefined;
+    const registrationIdentity = await this.#resolveRegistrationIdentity(request.expectedPath);
+    if (registrationIdentity === undefined) {
+      throw unverifiedRemovalRegistrationError(request, selected);
+    }
+    if (registrationIdentity !== registrationBefore) {
+      throw changedRemovalRegistrationError(request, request.expectedPath, selected.branch);
+    }
+    const observedBranch = sameRemovalBranch(selected, request.expectedBranch)
+      ? request.expectedBranch
+      : selected.branch;
+    const observation: WorktreeObservation = {
+      id: request.worktreeId,
+      provider: this.id,
+      projectId: request.project.id,
+      branch: observedBranch,
+      path: request.expectedPath,
+      state: "exists",
+      source: "worktrunk",
+      confidence: "high",
+      reason: "Validated current native Git evidence for worktree removal.",
+      observedAt: toIsoTimestamp(this.#clock.now()),
+      registrationIdentity,
+      headSha: selected.headSha,
+      isPrimaryCheckout,
+    };
+    if (status !== undefined) observation.dirty = status.length > 0;
+    const branchIsShared =
+      !selected.branch.startsWith("detached:") &&
+      finalEvidence.some(
+        (candidate) =>
+          candidate.state === "exists" &&
+          candidate.branch === selected.branch &&
+          !samePath(candidate.path, selected.path),
+      );
+    return {
+      observation,
+      nativeIdentity: targetIdentity,
+      nativeEvidence: selected,
+      managedRootSnapshot,
+      branchIsShared,
+    };
+  }
+
+  async #assertFinalRemovalTarget(
+    request: RemoveWorktreeRequest,
+    inspection: WorktreeRemovalInspection,
+  ): Promise<void> {
+    const expected = inspection.nativeIdentity;
+    const current = parseGitCheckoutRemovalIdentity(
+      await this.#readTargetedGit(
+        [
+          "-C",
+          expected.path,
+          "rev-parse",
+          "--path-format=absolute",
+          "--show-toplevel",
+          "--git-common-dir",
+          "HEAD",
+          "--symbolic-full-name",
+          "HEAD",
+        ],
+        "Git failed to complete final worktree removal validation.",
+      ),
+    );
+    if (
+      !samePath(current.path, expected.path) ||
+      !samePath(current.commonDir, expected.commonDir) ||
+      current.branch !== expected.branch ||
+      current.headSha !== expected.headSha ||
+      !(await sameExistingPath(current.path, request.expectedPath))
+    ) {
+      throw worktreeRemovalRefusalError({
+        code: "WORKTRUNK_WORKTREE_CHANGED",
+        message: "The selected checkout changed at the Worktrunk removal boundary.",
+        hint: "Refresh and reselect the worktree before retrying removal.",
+        request,
+        projectId: request.project.id,
+        canonicalPath: current.path,
+        observedBranch: current.branch,
+        refusalReason: current.branch === expected.branch ? "identity_changed" : "branch_changed",
+      });
+    }
+    if (request.force !== true) {
+      const status = await this.#readTargetedGit(
+        ["-C", current.path, "status", "--porcelain=v1", "--untracked-files=normal"],
+        "Git failed to complete final worktree removal validation.",
+      );
+      if (status.length > 0) {
+        assertRemovalProtection({ ...inspection.observation, dirty: true }, request);
+      }
+    }
+    await assertManagedRemovalTarget(
+      request.project,
+      inspection.nativeEvidence,
+      request,
+      inspection.managedRootSnapshot,
+    );
+    const registrationIdentity = await this.#resolveRegistrationIdentity(request.expectedPath);
+    if (registrationIdentity === undefined) {
+      throw unverifiedRemovalRegistrationError(request);
+    }
+    if (
+      registrationIdentity !== request.expectedRegistrationIdentity ||
+      registrationIdentity !== inspection.observation.registrationIdentity
+    ) {
+      throw changedRemovalRegistrationError(request, current.path, current.branch);
+    }
+  }
+
+  async #readRemovalEvidence(
+    project: ProviderProjectConfig,
+  ): Promise<GitWorktreeRemovalEvidence[]> {
+    const stdout = await this.#readTargetedGit(
+      ["-C", project.root, "worktree", "list", "--porcelain", "-z"],
+      "Git failed to revalidate the worktree removal target.",
+      512 * 1024,
+    );
+    return parseGitWorktreeRemovalEvidence(stdout);
+  }
+
+  async #readTargetedGit(
+    args: string[],
+    message: string,
+    maxOutputChars = 16 * 1024,
+  ): Promise<string> {
+    const result = await runRuntimeBoundaryWithRetryAndTimeout(
+      {
+        operation: "provider.worktrunk.inspectWorktreeForRemoval",
+        clock: this.#clock,
+        timeoutMs: this.#timeoutMs,
+        error: {
+          tag: "WorktreeProviderError",
+          code: "WORKTRUNK_COMMAND_FAILED",
+          message,
+          provider: this.id,
+        },
+        timeoutError: {
+          tag: "TimeoutError",
+          code: "WORKTRUNK_TIMEOUT",
+          message,
+          provider: this.id,
+        },
+        retry: {
+          retries: 1,
+          delayMs: 10,
+          shouldRetry: (error) => error.code !== "WORKTRUNK_TIMEOUT",
+        },
+      },
+      ({ signal }) =>
+        runExternalCommand(
+          {
+            command: "git",
+            args,
+            unsetEnv: gitLocalEnvironmentVariables,
+            signal,
+            maxOutputChars,
+          },
+          this.#runner,
+        ),
+    );
+    if (result.ok) {
+      return result.value.stdout;
+    }
+    throw new WorktrunkProviderError(
+      result.error.code === "WORKTRUNK_TIMEOUT" ? "WORKTRUNK_TIMEOUT" : "WORKTRUNK_COMMAND_FAILED",
+      message,
+      { cause: result.error },
+    );
   }
 
   async getWorktree(request: GetWorktreeRequest): Promise<WorktreeObservation | null> {
@@ -1042,6 +1293,154 @@ function samePath(left: string, right: string): boolean {
   return canonicalPathForComparison(left) === canonicalPathForComparison(right);
 }
 
+async function sameExistingPath(left: string, right: string): Promise<boolean> {
+  if (samePath(left, right)) return true;
+  const [canonicalLeft, canonicalRight] = await Promise.all([
+    realpath(left).catch(() => undefined),
+    realpath(right).catch(() => undefined),
+  ]);
+  return (
+    canonicalLeft !== undefined &&
+    canonicalRight !== undefined &&
+    samePath(canonicalLeft, canonicalRight)
+  );
+}
+
+async function matchingRemovalEvidence(
+  evidence: readonly GitWorktreeRemovalEvidence[],
+  path: string,
+): Promise<GitWorktreeRemovalEvidence[]> {
+  const exactMatches = evidence.filter((candidate) => samePath(candidate.path, path));
+  if (exactMatches.length > 0) return exactMatches;
+
+  const canonicalPath = await realpath(path).catch(() => undefined);
+  if (canonicalPath === undefined) return [];
+  const matches = await Promise.all(
+    evidence.map(async (candidate) => {
+      const canonicalCandidate = await realpath(candidate.path).catch(() => undefined);
+      return canonicalCandidate !== undefined && samePath(canonicalCandidate, canonicalPath)
+        ? candidate
+        : undefined;
+    }),
+  );
+  return matches.filter((candidate) => candidate !== undefined);
+}
+
+async function assertManagedRemovalTarget(
+  project: ProviderProjectConfig,
+  evidence: GitWorktreeRemovalEvidence,
+  request: RemoveWorktreeRequest,
+  snapshot: ManagedRootSnapshot | undefined,
+): Promise<void> {
+  if (snapshot === undefined) return;
+  const managedRoot = resolveManagedRoot(project);
+  if (managedRoot === undefined) return;
+  const [canonicalRoot, canonicalTarget] = await Promise.all([
+    realpath(managedRoot).catch(() => undefined),
+    realpath(evidence.path).catch(() => undefined),
+  ]);
+  if (
+    snapshot.canonicalPath !== null &&
+    canonicalRoot !== undefined &&
+    canonicalTarget !== undefined &&
+    samePath(canonicalRoot, snapshot.canonicalPath) &&
+    isPathInside(canonicalTarget, snapshot.canonicalPath)
+  ) {
+    return;
+  }
+  throw worktreeRemovalRefusalError({
+    code: "WORKTRUNK_WORKTREE_CHANGED",
+    message: "Station could not verify that the selected checkout remains in its managed root.",
+    hint: "Refresh the project and inspect its managed worktree root before retrying removal.",
+    request,
+    projectId: project.id,
+    canonicalPath: evidence.path,
+    observedBranch: evidence.branch,
+    refusalReason: "protection_unverified",
+  });
+}
+
+async function captureManagedRootSnapshot(
+  project: ProviderProjectConfig,
+): Promise<ManagedRootSnapshot | undefined> {
+  const managedRoot = resolveManagedRoot(project);
+  if (managedRoot === undefined || project.worktrunk.includeExternal !== false) return undefined;
+  return { canonicalPath: await realpath(managedRoot).catch(() => null) };
+}
+
+function assertRemovalProtection(
+  observation: WorktreeObservation,
+  request: RemoveWorktreeRequest,
+): void {
+  if (observation.isPrimaryCheckout === true) {
+    throw worktreeRemovalRefusalError({
+      code: "WORKTRUNK_WORKTREE_CHANGED",
+      message: "The project root checkout cannot be removed as a worktree.",
+      hint: "Close the session without removing the checkout, or choose a managed worktree.",
+      request,
+      projectId: request.project.id,
+      canonicalPath: observation.path,
+      observedBranch: observation.branch,
+      refusalReason: "primary_checkout",
+    });
+  }
+
+  const configuredDefaultBranch = request.project.defaultBranch ?? request.project.worktrunk.base;
+  const defaultBranches =
+    configuredDefaultBranch === undefined
+      ? []
+      : configuredDefaultBranchCandidates(configuredDefaultBranch);
+  if (defaultBranches.length === 0) {
+    throw worktreeRemovalRefusalError({
+      code: "WORKTRUNK_WORKTREE_CHANGED",
+      message: "Station could not verify which checkout owns the repository default branch.",
+      hint: "Configure the project's default branch, refresh, and retry.",
+      request,
+      projectId: request.project.id,
+      canonicalPath: observation.path,
+      observedBranch: observation.branch,
+      refusalReason: "protection_unverified",
+    });
+  }
+  if (defaultBranches.includes(observation.branch)) {
+    throw worktreeRemovalRefusalError({
+      code: "WORKTRUNK_WORKTREE_CHANGED",
+      message: `The selected checkout currently owns the repository default branch '${observation.branch}'.`,
+      hint: "Move the default branch back to its protected checkout, refresh, and reselect the disposable worktree.",
+      request,
+      projectId: request.project.id,
+      canonicalPath: observation.path,
+      observedBranch: observation.branch,
+      refusalReason: "default_branch",
+    });
+  }
+  if (observation.dirty === true && request.force !== true) {
+    throw worktreeRemovalRefusalError({
+      code: "WORKTREE_DIRTY_REQUIRES_FORCE",
+      message: "This worktree has uncommitted changes and cannot be removed without force.",
+      hint: "Review the worktree changes, or confirm the removal with force.",
+      request,
+      projectId: request.project.id,
+      canonicalPath: observation.path,
+      observedBranch: observation.branch,
+      refusalReason: "dirty",
+    });
+  }
+}
+
+function configuredDefaultBranchCandidates(value: string): string[] {
+  const configured = value.trim();
+  if (configured === "") return [];
+  if (configured.startsWith("refs/heads/")) {
+    return [configured.slice("refs/heads/".length)].filter(Boolean);
+  }
+  const remoteRef = configured.match(/^refs\/remotes\/[^/]+\/(.+)$/)?.[1];
+  if (remoteRef !== undefined) return [remoteRef];
+  const slash = configured.indexOf("/");
+  if (slash < 1 || slash === configured.length - 1) return [configured];
+  return [...new Set([configured, configured.slice(slash + 1)])];
+}
+
 function changedRemovalIdentityReason(
   observation: WorktreeObservation,
   request: RemoveWorktreeRequest,
@@ -1059,6 +1458,53 @@ function changedRemovalIdentityReason(
     return "registration_changed";
   }
   return undefined;
+}
+
+function sameRemovalBranch(
+  evidence: Pick<GitWorktreeRemovalEvidence, "branch" | "headSha">,
+  expected: string,
+): boolean {
+  if (evidence.branch === expected) {
+    return true;
+  }
+  if (!evidence.branch.startsWith("detached:") || !expected.startsWith("detached:")) {
+    return false;
+  }
+  const expectedHead = expected.slice("detached:".length);
+  return /^[0-9a-f]{4,64}$/.test(expectedHead) && evidence.headSha.startsWith(expectedHead);
+}
+
+function unverifiedRemovalRegistrationError(
+  request: RemoveWorktreeRequest,
+  evidence?: GitWorktreeRemovalEvidence,
+): WorktrunkProviderError {
+  return worktreeRemovalRefusalError({
+    code: "WORKTRUNK_WORKTREE_CHANGED",
+    message: "Station could not verify the selected checkout's Git registration.",
+    hint: "Refresh and reselect the worktree before retrying removal.",
+    request,
+    projectId: request.project.id,
+    canonicalPath: evidence?.path ?? request.expectedPath,
+    observedBranch: evidence?.branch ?? request.expectedBranch,
+    refusalReason: "registration_unverified",
+  });
+}
+
+function changedRemovalRegistrationError(
+  request: RemoveWorktreeRequest,
+  path: string,
+  branch: string,
+): WorktrunkProviderError {
+  return worktreeRemovalRefusalError({
+    code: "WORKTRUNK_WORKTREE_CHANGED",
+    message: "The selected Git checkout registration changed during removal validation.",
+    hint: "Refresh and reselect the worktree before retrying removal.",
+    request,
+    projectId: request.project.id,
+    canonicalPath: path,
+    observedBranch: branch,
+    refusalReason: "registration_changed",
+  });
 }
 
 function worktreeRemovalRefusalError(input: {

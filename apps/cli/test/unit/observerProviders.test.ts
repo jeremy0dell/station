@@ -539,6 +539,7 @@ describe("observer providers", () => {
     const tempDir = await mkdtemp(join(tmpdir(), "station-worktrunk-command-"));
     try {
       const worktrunkCommand = join(tempDir, "wt");
+      const gitCommand = join(tempDir, "git");
       const logPath = join(tempDir, "wt.log");
       const projectRoot = join(tempDir, "web");
       const createdWorktreePath = join(projectRoot, "feature");
@@ -572,6 +573,32 @@ describe("observer providers", () => {
         "utf8",
       );
       await chmod(worktrunkCommand, 0o700);
+      await writeFile(
+        gitCommand,
+        [
+          "#!/bin/sh",
+          'if [ "$3" = "worktree" ]; then',
+          `  printf 'worktree %s\\0HEAD 2222222222222222222222222222222222222222\\0branch refs/heads/main\\0\\0worktree %s\\0HEAD 1111111111111111111111111111111111111111\\0branch refs/heads/feature\\0\\0' ${JSON.stringify(projectRoot)} ${JSON.stringify(createdWorktreePath)}`,
+          "  exit 0",
+          "fi",
+          'if [ "$3" = "rev-parse" ] && [ "$5" = "--show-toplevel" ]; then',
+          `  printf '%s\\n%s\\n%s\\n%s\\n' ${JSON.stringify(createdWorktreePath)} ${JSON.stringify(join(projectRoot, ".git"))} 1111111111111111111111111111111111111111 refs/heads/feature`,
+          "  exit 0",
+          "fi",
+          'if [ "$3" = "rev-parse" ]; then',
+          `  printf '%s\\n' ${JSON.stringify(join(projectRoot, ".git"))}`,
+          "  exit 0",
+          "fi",
+          'if [ "$3" = "status" ]; then',
+          "  exit 0",
+          "fi",
+          "exit 2",
+          "",
+        ].join("\n"),
+        "utf8",
+      );
+      await chmod(gitCommand, 0o700);
+      vi.stubEnv("PATH", `${tempDir}:${process.env.PATH ?? ""}`);
       const registry = createProviderRegistry({
         ...config,
         defaults: {
@@ -613,6 +640,7 @@ describe("observer providers", () => {
       }
       await mkdir(createdWorktreePath, { recursive: true });
       await registry.worktree.removeWorktree({
+        project,
         worktreeId: created.id,
         expectedPath: created.path,
         expectedBranch: created.branch,
@@ -622,7 +650,6 @@ describe("observer providers", () => {
       await expect(readFile(logPath, "utf8")).resolves.toBe(
         [
           "switch --no-hooks --create feature --base main --no-cd --format=json",
-          "list --format=json",
           `-C ${createdWorktreePath} remove --no-hooks --format=json`,
           "",
         ].join("\n"),

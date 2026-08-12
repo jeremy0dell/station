@@ -391,12 +391,15 @@ canonical order before command success; validated no-ops emit no Group event. Th
 does not read providers or publish `observer.reconciled`.
 
 `worktree.remove` carries the selected worktree ID, canonical path, branch, and
-opaque Git registration identity. Its use case refreshes provider evidence and
-uniquely re-resolves that identity before terminal or worktree cleanup, refusing
-primary, default-branch, stale, missing, or ambiguous targets. The worktree
-adapter rechecks the expected registration identity, path, and branch immediately
-before mutation so an external checkout replacement cannot reuse the selected
-path and branch as removal identity. Adapter race refusals retain provider-neutral,
+opaque Git registration identity. Its use case asks capable providers for fresh,
+targeted evidence before terminal or worktree cleanup; providers without that
+capability retain the inventory fallback. Worktrunk's targeted path reads native
+Git evidence without requiring prior Worktrunk inventory or provider-cache state.
+It uniquely re-resolves the selected identity and refuses primary, default-branch,
+dirty, stale, missing, or ambiguous targets. The adapter independently repeats
+registration, path, branch, containment, and protection checks immediately before
+mutation so an external checkout replacement cannot reuse the selected path and
+branch as removal identity. Adapter race refusals retain provider-neutral,
 trace-correlated diagnostic evidence.
 
 ### Session Recovery Cutover

@@ -162,11 +162,11 @@ export type CreateWorktreeRequest = {
 };
 
 export type RemoveWorktreeRequest = {
+  project: ProviderProjectConfig;
   worktreeId: WorktreeId;
   expectedPath: string;
   expectedBranch: string;
   expectedRegistrationIdentity: string;
-  projectId?: ProjectId;
   force?: boolean;
 };
 
@@ -456,7 +456,8 @@ export type RepositoryChecksRequest = z.infer<typeof RepositoryChecksRequestSche
  * DRIVEN PORT
  *
  * Supplies worktree lifecycle evidence and mutations without exposing provider mechanics.
- * Removal adapters must revalidate opaque registration identity, path, and branch immediately before mutation.
+ * Removal inspection reads current native evidence without inventory-cache authority; removal adapters repeat
+ * exact registration, path, branch, containment, primary-checkout, and dirty-state validation before mutation.
  */
 export interface WorktreeProvider {
   id: ProviderId;
@@ -469,6 +470,7 @@ export interface WorktreeProvider {
   ): Promise<WorktreeObservation[]>;
   listWorktrees(project: ProviderProjectConfig): Promise<WorktreeObservation[]>;
   createWorktree(request: CreateWorktreeRequest): Promise<WorktreeObservation>;
+  inspectWorktreeForRemoval?(request: RemoveWorktreeRequest): Promise<WorktreeObservation | null>;
   removeWorktree(request: RemoveWorktreeRequest): Promise<RemoveWorktreeResult>;
   getWorktree?(request: GetWorktreeRequest): Promise<WorktreeObservation | null>;
 }

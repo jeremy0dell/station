@@ -360,12 +360,6 @@
       ],
       "imports": [
         {
-          "specifier": "./guards.js",
-          "resolvedPath": "apps/observer/src/commands/cleanup/guards.ts",
-          "edgeKind": "type-only",
-          "bindings": ["VerifiedWorktreeRemovalTarget"]
-        },
-        {
           "specifier": "../providers.js",
           "resolvedPath": "apps/observer/src/commands/providers.ts",
           "edgeKind": "runtime",
@@ -416,7 +410,14 @@
           "specifier": "@station/contracts",
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "type-only",
-          "bindings": ["HarnessProvider", "HarnessRunId", "SafeError", "SessionView", "WorktreeRow"]
+          "bindings": [
+            "HarnessProvider",
+            "HarnessRunId",
+            "RemoveWorktreeRequest",
+            "SafeError",
+            "SessionView",
+            "WorktreeRow"
+          ]
         },
         {
           "specifier": "@station/runtime",
@@ -2860,7 +2861,7 @@
           "name": "createWorktreeRemoveHandler",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Revalidates selected checkout and Git registration identity before coordinating removal. Provider-confirmed removal atomically ends sessions and retires canonical title authority."
+          "purpose": "Uses targeted current evidence before cleanup, then requires independent final provider validation. Provider-confirmed removal atomically ends sessions and retires canonical title authority."
         },
         {
           "name": "CreateWorktreeRemoveHandlerOptions",
@@ -2962,7 +2963,11 @@
           "specifier": "@station/contracts",
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "type-only",
-          "bindings": ["ProviderProjectConfig", "WorktreeRemovalRefusalDiagnosticDetail"]
+          "bindings": [
+            "ProviderProjectConfig",
+            "RemoveWorktreeRequest",
+            "WorktreeRemovalRefusalDiagnosticDetail"
+          ]
         },
         {
           "specifier": "@station/runtime",
@@ -13823,7 +13828,7 @@
       "declaration": "createWorktreeRemoveHandler",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Revalidates selected checkout and Git registration identity before coordinating removal. Provider-confirmed removal atomically ends sessions and retires canonical title authority.",
+      "purpose": "Uses targeted current evidence before cleanup, then requires independent final provider validation. Provider-confirmed removal atomically ends sessions and retires canonical title authority.",
       "dependencies": []
     },
     {
@@ -15272,7 +15277,7 @@
       "declaration": "WorktrunkProvider",
       "kind": "class",
       "role": "ADAPTER",
-      "purpose": "Translates Worktrunk lifecycle output and commands into Station worktree contracts. Hook diagnostics use an atomic requester runtime when supplied and retain the whole Observer composition expectation as a fallback. Checkout roots are validated before Worktrunk runs, managed roots override Worktrunk's project-specific path templates, and removal revalidates native Git identity, path, and branch before mutation.",
+      "purpose": "Translates Worktrunk lifecycle output and commands into Station worktree contracts. Hook diagnostics use an atomic requester runtime when supplied and retain the whole Observer composition expectation as a fallback. Checkout roots are validated before Worktrunk runs, managed roots override Worktrunk's project-specific path templates, and removal uses current native Git evidence without requiring cached inventory before repeating exact target and safety validation at mutation time.",
       "dependencies": [
         {
           "path": "packages/contracts/src/providers.ts",
@@ -15383,7 +15388,7 @@
       "declaration": "WorktreeProvider",
       "kind": "interface",
       "role": "DRIVEN PORT",
-      "purpose": "Supplies worktree lifecycle evidence and mutations without exposing provider mechanics. Removal adapters must revalidate opaque registration identity, path, and branch immediately before mutation.",
+      "purpose": "Supplies worktree lifecycle evidence and mutations without exposing provider mechanics. Removal inspection reads current native evidence without inventory-cache authority; removal adapters repeat exact registration, path, branch, containment, primary-checkout, and dirty-state validation before mutation.",
       "dependencies": []
     },
     {

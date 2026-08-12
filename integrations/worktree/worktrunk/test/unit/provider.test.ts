@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ProviderProjectConfig } from "@station/contracts";
@@ -29,6 +29,54 @@ function testProvider(options: WorktrunkProviderOptions): WorktrunkProvider {
     resolveRegistrationIdentity: async (path) => `git-registration:${path}`,
     ...options,
   });
+}
+
+function gitWorktreePorcelain(
+  worktrees: readonly { path: string; branch: string; headSha?: string; detached?: boolean }[],
+): string {
+  return worktrees
+    .map((worktree, index) => {
+      const headSha = worktree.headSha ?? (index + 1).toString(16).repeat(40);
+      const branch = worktree.detached ? "detached" : `branch refs/heads/${worktree.branch}`;
+      return `worktree ${worktree.path}\0HEAD ${headSha}\0${branch}\0\0`;
+    })
+    .join("");
+}
+
+function gitRemovalProbeResult(
+  input: ExternalCommandInput,
+  options: {
+    targetPath: string;
+    targetBranch: string;
+    targetHeadSha?: string;
+    targetCommonDir?: string;
+    projectCommonDir?: string;
+    status?: string;
+    detached?: boolean;
+  },
+): ExternalCommandResult | undefined {
+  if (input.command !== "git") return undefined;
+  const args = input.args ?? [];
+  const projectCommonDir = options.projectCommonDir ?? join(project.root, ".git");
+  if (args.includes("--show-toplevel")) {
+    return result(
+      input,
+      [
+        options.targetPath,
+        options.targetCommonDir ?? projectCommonDir,
+        options.targetHeadSha ?? "2".repeat(40),
+        options.detached ? "HEAD" : `refs/heads/${options.targetBranch}`,
+        "",
+      ].join("\n"),
+    );
+  }
+  if (args.includes("rev-parse") && args.includes("--git-common-dir")) {
+    return result(input, `${projectCommonDir}\n`);
+  }
+  if (args.includes("status")) {
+    return result(input, options.status ?? "");
+  }
+  return undefined;
 }
 
 describe("WorktrunkProvider", () => {
@@ -391,29 +439,39 @@ describe("WorktrunkProvider", () => {
 
   it("creates and removes worktrees using Worktrunk lifecycle commands", async () => {
     const calls: ExternalCommandInput[] = [];
+    const linkedPath = "/tmp/station/web/feature";
     const provider = testProvider({
       command: "wt",
       clock: { now: () => new Date(now) },
       runner: async (input) => {
         calls.push(input);
-        if (input.args?.[0] === "switch") {
+        const probe = gitRemovalProbeResult(input, {
+          targetPath: linkedPath,
+          targetBranch: "feature",
+        });
+        if (probe !== undefined) return probe;
+        if (input.command === "git" && input.args?.includes("worktree")) {
           return result(
             input,
-            JSON.stringify([{ path: "/tmp/station/web/feature", branch: "feature" }]),
+            gitWorktreePorcelain([
+              { path: project.root, branch: "main" },
+              { path: linkedPath, branch: "feature" },
+            ]),
           );
+        }
+        if (input.args?.[0] === "switch") {
+          return result(input, JSON.stringify([{ path: linkedPath, branch: "feature" }]));
         }
         if (input.args?.[0] === "remove") {
           return result(input, "{}");
         }
-        return result(
-          input,
-          JSON.stringify([{ path: "/tmp/station/web/feature", branch: "feature" }]),
-        );
+        return result(input, JSON.stringify([{ path: linkedPath, branch: "feature" }]));
       },
     });
 
     const created = await provider.createWorktree({ project, branch: "feature" });
     const removed = await provider.removeWorktree({
+      project,
       worktreeId: created.id,
       expectedPath: created.path,
       expectedBranch: created.branch,
@@ -422,11 +480,270 @@ describe("WorktrunkProvider", () => {
     });
 
     expect(removed).toEqual({ worktreeId: created.id, removed: true });
-    expect(calls.map((call) => call.args)).toEqual([
+    expect(calls.filter((call) => call.command === "wt").map((call) => call.args)).toEqual([
       ["switch", "--create", "feature", "--base", "main", "--no-cd", "--format=json"],
-      ["list", "--format=json"],
       ["-C", "/tmp/station/web/feature", "remove", "--force", "--force-delete", "--format=json"],
     ]);
+    expect(calls.filter((call) => call.command === "git").map((call) => call.args)).toEqual([
+      ["-C", project.root, "worktree", "list", "--porcelain", "-z"],
+      [
+        "-C",
+        linkedPath,
+        "rev-parse",
+        "--path-format=absolute",
+        "--show-toplevel",
+        "--git-common-dir",
+        "HEAD",
+        "--symbolic-full-name",
+        "HEAD",
+      ],
+      ["-C", project.root, "rev-parse", "--path-format=absolute", "--git-common-dir"],
+      ["-C", project.root, "worktree", "list", "--porcelain", "-z"],
+      [
+        "-C",
+        linkedPath,
+        "rev-parse",
+        "--path-format=absolute",
+        "--show-toplevel",
+        "--git-common-dir",
+        "HEAD",
+        "--symbolic-full-name",
+        "HEAD",
+      ],
+    ]);
+    expect(calls.some((call) => call.command === "git" && call.args?.includes("status"))).toBe(
+      false,
+    );
+  });
+
+  it("removes a known target without prior Worktrunk inventory", async () => {
+    const calls: ExternalCommandInput[] = [];
+    const linkedPath = "/tmp/station/web/feature";
+    const provider = testProvider({
+      command: "wt",
+      useLifecycleHooks: false,
+      clock: { now: () => new Date(now) },
+      runner: async (input) => {
+        calls.push(input);
+        const probe = gitRemovalProbeResult(input, {
+          targetPath: linkedPath,
+          targetBranch: "feature",
+        });
+        if (probe !== undefined) return probe;
+        if (input.command === "wt" && input.args?.includes("list")) {
+          throw new Error("Worktrunk inventory is unavailable.");
+        }
+        if (input.command === "git" && input.args?.includes("config")) {
+          return result(input, "false\n");
+        }
+        if (input.command === "git" && input.args?.includes("worktree")) {
+          return result(
+            input,
+            gitWorktreePorcelain([
+              { path: project.root, branch: "main" },
+              { path: linkedPath, branch: "feature" },
+            ]),
+          );
+        }
+        if (input.command === "wt" && input.args?.includes("remove")) {
+          return result(input, "{}");
+        }
+        return result(input, "");
+      },
+    });
+
+    await expect(
+      provider.removeWorktree({
+        project,
+        worktreeId: "wt_web_feature",
+        expectedPath: linkedPath,
+        expectedBranch: "feature",
+        expectedRegistrationIdentity: `git-registration:${linkedPath}`,
+      }),
+    ).resolves.toEqual({ worktreeId: "wt_web_feature", removed: true });
+
+    const worktrunkCalls = calls.filter((call) => call.command === "wt");
+    expect(worktrunkCalls).toEqual([
+      expect.objectContaining({
+        args: ["-C", linkedPath, "remove", "--no-hooks", "--format=json"],
+      }),
+    ]);
+    expect(worktrunkCalls[0]?.args).not.toContain("--foreground");
+  });
+
+  it("refuses removal when Worktrunk is disabled without invoking external commands", async () => {
+    const calls: ExternalCommandInput[] = [];
+    const disabledProject = {
+      ...project,
+      worktrunk: { ...project.worktrunk, enabled: false },
+    };
+    const provider = testProvider({
+      command: "wt",
+      runner: async (input) => {
+        calls.push(input);
+        return result(input, "{}");
+      },
+    });
+
+    await expect(
+      provider.removeWorktree({
+        project: disabledProject,
+        worktreeId: "wt_web_feature",
+        expectedPath: "/tmp/station/web/feature",
+        expectedBranch: "feature",
+        expectedRegistrationIdentity: "git-registration:/tmp/station/web/feature",
+      }),
+    ).rejects.toMatchObject({ code: "WORKTRUNK_WORKTREE_NOT_FOUND" });
+    expect(calls).toEqual([]);
+  });
+
+  it("accepts a detached HEAD prefix but refuses an unverifiable detached fallback", async () => {
+    const calls: ExternalCommandInput[] = [];
+    const linkedPath = "/tmp/station/web/detached";
+    const provider = testProvider({
+      command: "wt",
+      useLifecycleHooks: false,
+      clock: { now: () => new Date(now) },
+      runner: async (input) => {
+        calls.push(input);
+        const probe = gitRemovalProbeResult(input, {
+          targetPath: linkedPath,
+          targetBranch: "detached",
+          detached: true,
+        });
+        if (probe !== undefined) return probe;
+        if (input.command === "git" && input.args?.includes("worktree")) {
+          return result(
+            input,
+            gitWorktreePorcelain([
+              { path: project.root, branch: "main" },
+              {
+                path: linkedPath,
+                branch: "detached",
+                headSha: "2".repeat(40),
+                detached: true,
+              },
+            ]),
+          );
+        }
+        return result(input, "{}");
+      },
+    });
+    const request = {
+      project,
+      worktreeId: "wt_web_detached",
+      expectedPath: linkedPath,
+      expectedRegistrationIdentity: `git-registration:${linkedPath}`,
+    } as const;
+
+    await expect(
+      provider.removeWorktree({ ...request, expectedBranch: "detached:2222222" }),
+    ).resolves.toEqual({ worktreeId: request.worktreeId, removed: true });
+    await expect(
+      provider.removeWorktree({ ...request, expectedBranch: "detached:detached" }),
+    ).rejects.toMatchObject({
+      code: "WORKTRUNK_WORKTREE_CHANGED",
+      diagnosticDetails: [expect.objectContaining({ refusalReason: "branch_changed" })],
+    });
+    expect(calls.filter((call) => call.command === "wt").map((call) => call.args)).toEqual([
+      ["-C", linkedPath, "remove", "--no-hooks", "--format=json"],
+    ]);
+  });
+
+  it("invokes removal through Git's final native path instead of a caller path alias", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-wt-remove-alias-"));
+    const nativePath = join(root, "native");
+    const aliasPath = join(root, "alias");
+    await mkdir(nativePath);
+    await symlink(nativePath, aliasPath);
+    const calls: ExternalCommandInput[] = [];
+    const provider = testProvider({
+      command: "wt",
+      useLifecycleHooks: false,
+      clock: { now: () => new Date(now) },
+      runner: async (input) => {
+        calls.push(input);
+        const probe = gitRemovalProbeResult(input, {
+          targetPath: nativePath,
+          targetBranch: "feature",
+        });
+        if (probe !== undefined) return probe;
+        if (input.command === "git" && input.args?.includes("worktree")) {
+          return result(
+            input,
+            gitWorktreePorcelain([
+              { path: project.root, branch: "main" },
+              { path: nativePath, branch: "feature" },
+            ]),
+          );
+        }
+        return result(input, "{}");
+      },
+    });
+
+    try {
+      await provider.removeWorktree({
+        project,
+        worktreeId: "wt_web_feature",
+        expectedPath: aliasPath,
+        expectedBranch: "feature",
+        expectedRegistrationIdentity: `git-registration:${aliasPath}`,
+      });
+      expect(
+        calls.filter((call) => call.command === "git" && call.args?.includes("status")),
+      ).toEqual([
+        expect.objectContaining({
+          args: ["-C", nativePath, "status", "--porcelain=v1", "--untracked-files=normal"],
+        }),
+      ]);
+      expect(calls.filter((call) => call.command === "wt").map((call) => call.args)).toEqual([
+        ["-C", nativePath, "remove", "--no-hooks", "--format=json"],
+      ]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses an unprimed target whose Git common directory belongs to another repository", async () => {
+    const calls: ExternalCommandInput[] = [];
+    const linkedPath = "/tmp/station/web/foreign";
+    const provider = testProvider({
+      command: "wt",
+      clock: { now: () => new Date(now) },
+      runner: async (input) => {
+        calls.push(input);
+        const probe = gitRemovalProbeResult(input, {
+          targetPath: linkedPath,
+          targetBranch: "feature",
+          targetCommonDir: "/tmp/foreign-repository/.git",
+        });
+        if (probe !== undefined) return probe;
+        if (input.command === "git" && input.args?.includes("worktree")) {
+          return result(
+            input,
+            gitWorktreePorcelain([
+              { path: project.root, branch: "main" },
+              { path: linkedPath, branch: "feature" },
+            ]),
+          );
+        }
+        return result(input, "{}");
+      },
+    });
+
+    await expect(
+      provider.removeWorktree({
+        project,
+        worktreeId: "wt_web_foreign",
+        expectedPath: linkedPath,
+        expectedBranch: "feature",
+        expectedRegistrationIdentity: `git-registration:${linkedPath}`,
+      }),
+    ).rejects.toMatchObject({
+      code: "WORKTRUNK_WORKTREE_CHANGED",
+      diagnosticDetails: [expect.objectContaining({ refusalReason: "protection_unverified" })],
+    });
+    expect(calls.filter((call) => call.command === "wt")).toEqual([]);
   });
 
   it("retains a created worktree when its Git registration cannot be verified", async () => {
@@ -464,19 +781,31 @@ describe("WorktrunkProvider", () => {
         includeMain: false,
       },
     };
-    let listCalls = 0;
     const provider = testProvider({
       command: "wt",
       useLifecycleHooks: false,
       clock: { now: () => new Date(now) },
       runner: async (input) => {
         calls.push(input);
-        if (input.args?.includes("list")) {
-          listCalls += 1;
+        const probe = gitRemovalProbeResult(input, {
+          targetPath: linkedPath,
+          targetBranch: "duplicate",
+        });
+        if (probe !== undefined) return probe;
+        if (input.command === "wt" && input.args?.includes("list")) {
           return result(
             input,
             JSON.stringify([
-              { path: project.root, branch: listCalls === 1 ? "main" : "duplicate" },
+              { path: project.root, branch: "main" },
+              { path: linkedPath, branch: "duplicate" },
+            ]),
+          );
+        }
+        if (input.command === "git" && input.args?.includes("worktree")) {
+          return result(
+            input,
+            gitWorktreePorcelain([
+              { path: project.root, branch: "duplicate" },
               { path: linkedPath, branch: "duplicate" },
             ]),
           );
@@ -491,6 +820,7 @@ describe("WorktrunkProvider", () => {
     if (selected === undefined) throw new Error("Expected the linked worktree to be listed.");
 
     await provider.removeWorktree({
+      project: sharedProject,
       worktreeId: selected.id,
       expectedPath: selected.path,
       expectedBranch: selected.branch,
@@ -498,28 +828,28 @@ describe("WorktrunkProvider", () => {
       force: true,
     });
 
-    expect(calls.map((call) => call.args)).toEqual([
-      ["list", "--format=json"],
+    expect(calls.filter((call) => call.command === "wt").map((call) => call.args)).toEqual([
       ["list", "--format=json"],
       ["-C", linkedPath, "remove", "--no-hooks", "--force", "--no-delete-branch", "--format=json"],
     ]);
+    expect(
+      calls.filter((call) => call.command === "git" && call.args?.includes("worktree")),
+    ).toHaveLength(2);
   });
 
-  it("does not remove a worktree missing from the refreshed list", async () => {
+  it("does not remove a worktree missing from fresh native Git evidence", async () => {
     const calls: ExternalCommandInput[] = [];
     const linkedPath = "/tmp/station/web/feature";
-    let listCalls = 0;
     const provider = testProvider({
       command: "wt",
       clock: { now: () => new Date(now) },
       runner: async (input) => {
         calls.push(input);
-        if (input.args?.includes("list")) {
-          listCalls += 1;
-          return result(
-            input,
-            listCalls === 1 ? JSON.stringify([{ path: linkedPath, branch: "feature" }]) : "[]",
-          );
+        if (input.command === "wt" && input.args?.includes("list")) {
+          return result(input, JSON.stringify([{ path: linkedPath, branch: "feature" }]));
+        }
+        if (input.command === "git" && input.args?.includes("worktree")) {
+          return result(input, gitWorktreePorcelain([{ path: project.root, branch: "main" }]));
         }
         return result(input, "{}");
       },
@@ -531,37 +861,46 @@ describe("WorktrunkProvider", () => {
 
     await expect(
       provider.removeWorktree({
+        project,
         worktreeId: selected.id,
         expectedPath: selected.path,
         expectedBranch: selected.branch,
         expectedRegistrationIdentity: `git-registration:${selected.path}`,
       }),
     ).rejects.toMatchObject({ code: "WORKTRUNK_WORKTREE_NOT_FOUND" });
-    expect(calls.map((call) => call.args)).toEqual([
+    expect(calls.filter((call) => call.command === "wt").map((call) => call.args)).toEqual([
       ["list", "--format=json"],
-      ["list", "--format=json"],
+    ]);
+    expect(calls.filter((call) => call.command === "git").map((call) => call.args)).toEqual([
+      ["-C", project.root, "worktree", "list", "--porcelain", "-z"],
     ]);
   });
 
-  it("does not remove a selected worktree whose branch changed before mutation", async () => {
+  it("does not remove a selected worktree whose branch changed in native Git", async () => {
     const calls: ExternalCommandInput[] = [];
     const linkedPath = "/tmp/station/web/feature";
-    let listCalls = 0;
     const provider = testProvider({
       command: "wt",
       clock: { now: () => new Date(now) },
       runner: async (input) => {
         calls.push(input);
-        if (input.args?.includes("list")) {
-          listCalls += 1;
+        const probe = gitRemovalProbeResult(input, {
+          targetPath: linkedPath,
+          targetBranch: "main",
+        });
+        if (probe !== undefined) return probe;
+        if (input.command === "wt" && input.args?.includes("list")) {
           return result(
             input,
-            JSON.stringify([
-              {
-                path: linkedPath,
-                branch: listCalls === 1 ? "feature" : "main",
-                is_main: false,
-              },
+            JSON.stringify([{ path: linkedPath, branch: "feature", is_main: false }]),
+          );
+        }
+        if (input.command === "git" && input.args?.includes("worktree")) {
+          return result(
+            input,
+            gitWorktreePorcelain([
+              { path: project.root, branch: "feature-root" },
+              { path: linkedPath, branch: "main" },
             ]),
           );
         }
@@ -575,16 +914,490 @@ describe("WorktrunkProvider", () => {
 
     await expect(
       provider.removeWorktree({
+        project,
         worktreeId: selected.id,
         expectedPath: selected.path,
         expectedBranch: selected.branch,
         expectedRegistrationIdentity: `git-registration:${selected.path}`,
       }),
     ).rejects.toMatchObject({ code: "WORKTRUNK_WORKTREE_CHANGED" });
-    expect(calls.map((call) => call.args)).toEqual([
-      ["list", "--format=json"],
+    expect(calls.filter((call) => call.command === "wt").map((call) => call.args)).toEqual([
       ["list", "--format=json"],
     ]);
+    expect(calls.filter((call) => call.command === "wt" && call.args?.includes("remove"))).toEqual(
+      [],
+    );
+  });
+
+  it("refuses dirty native Git evidence unless removal is forced", async () => {
+    const calls: ExternalCommandInput[] = [];
+    const linkedPath = "/tmp/station/web/feature";
+    const provider = testProvider({
+      command: "wt",
+      clock: { now: () => new Date(now) },
+      runner: async (input) => {
+        calls.push(input);
+        const probe = gitRemovalProbeResult(input, {
+          targetPath: linkedPath,
+          targetBranch: "feature",
+          status: " M tracked.txt\n",
+        });
+        if (probe !== undefined) return probe;
+        if (input.command === "git" && input.args?.includes("worktree")) {
+          return result(
+            input,
+            gitWorktreePorcelain([
+              { path: project.root, branch: "main" },
+              { path: linkedPath, branch: "feature" },
+            ]),
+          );
+        }
+        return result(input, "{}");
+      },
+    });
+
+    await expect(
+      provider.removeWorktree({
+        project,
+        worktreeId: "wt_web_feature",
+        expectedPath: linkedPath,
+        expectedBranch: "feature",
+        expectedRegistrationIdentity: `git-registration:${linkedPath}`,
+      }),
+    ).rejects.toMatchObject({
+      code: "WORKTREE_DIRTY_REQUIRES_FORCE",
+      diagnosticDetails: [expect.objectContaining({ refusalReason: "dirty" })],
+    });
+    expect(calls.filter((call) => call.command === "wt")).toEqual([]);
+  });
+
+  it("refuses a checkout that becomes dirty at the final removal boundary", async () => {
+    const calls: ExternalCommandInput[] = [];
+    const linkedPath = "/tmp/station/web/feature";
+    let targetIdentityReads = 0;
+    let dirty = false;
+    const provider = testProvider({
+      command: "wt",
+      runner: async (input) => {
+        calls.push(input);
+        if (input.command === "git" && input.args?.includes("--show-toplevel")) {
+          targetIdentityReads += 1;
+          if (targetIdentityReads === 2) dirty = true;
+        }
+        if (input.command === "git" && input.args?.includes("status")) {
+          return result(input, dirty ? " M tracked.txt\n" : "");
+        }
+        const probe = gitRemovalProbeResult(input, {
+          targetPath: linkedPath,
+          targetBranch: "feature",
+        });
+        if (probe !== undefined) return probe;
+        if (input.command === "git" && input.args?.includes("worktree")) {
+          return result(
+            input,
+            gitWorktreePorcelain([
+              { path: project.root, branch: "main" },
+              { path: linkedPath, branch: "feature" },
+            ]),
+          );
+        }
+        return result(input, "{}");
+      },
+    });
+
+    await expect(
+      provider.removeWorktree({
+        project,
+        worktreeId: "wt_web_feature",
+        expectedPath: linkedPath,
+        expectedBranch: "feature",
+        expectedRegistrationIdentity: `git-registration:${linkedPath}`,
+      }),
+    ).rejects.toMatchObject({
+      code: "WORKTREE_DIRTY_REQUIRES_FORCE",
+      diagnosticDetails: [expect.objectContaining({ refusalReason: "dirty" })],
+    });
+    expect(targetIdentityReads).toBe(2);
+    expect(calls.filter((call) => call.command === "wt")).toEqual([]);
+  });
+
+  it("refuses registration replacement during final native identity validation", async () => {
+    const calls: ExternalCommandInput[] = [];
+    const linkedPath = "/tmp/station/web/feature";
+    let targetIdentityReads = 0;
+    let registrationIdentity = "git-registration:original";
+    const provider = new WorktrunkProvider({
+      command: "wt",
+      resolveRegistrationIdentity: async () => registrationIdentity,
+      runner: async (input) => {
+        calls.push(input);
+        if (input.command === "git" && input.args?.includes("--show-toplevel")) {
+          targetIdentityReads += 1;
+          if (targetIdentityReads === 2) registrationIdentity = "git-registration:replacement";
+        }
+        const probe = gitRemovalProbeResult(input, {
+          targetPath: linkedPath,
+          targetBranch: "feature",
+        });
+        if (probe !== undefined) return probe;
+        if (input.command === "git" && input.args?.includes("worktree")) {
+          return result(
+            input,
+            gitWorktreePorcelain([
+              { path: project.root, branch: "main" },
+              { path: linkedPath, branch: "feature" },
+            ]),
+          );
+        }
+        return result(input, "{}");
+      },
+    });
+
+    await expect(
+      provider.removeWorktree({
+        project,
+        worktreeId: "wt_web_feature",
+        expectedPath: linkedPath,
+        expectedBranch: "feature",
+        expectedRegistrationIdentity: "git-registration:original",
+      }),
+    ).rejects.toMatchObject({
+      code: "WORKTRUNK_WORKTREE_CHANGED",
+      diagnosticDetails: [expect.objectContaining({ refusalReason: "registration_changed" })],
+    });
+    expect(targetIdentityReads).toBe(2);
+    expect(calls.filter((call) => call.command === "wt")).toEqual([]);
+  });
+
+  it("refuses removal of the project root checkout", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-wt-primary-remove-"));
+    await mkdir(join(root, ".git"));
+    const guardedProject = { ...project, root };
+    const calls: ExternalCommandInput[] = [];
+    const provider = testProvider({
+      command: "wt",
+      clock: { now: () => new Date(now) },
+      runner: async (input) => {
+        calls.push(input);
+        const probe = gitRemovalProbeResult(input, {
+          targetPath: root,
+          targetBranch: "main",
+          targetHeadSha: "1".repeat(40),
+          projectCommonDir: join(root, ".git"),
+        });
+        if (probe !== undefined) return probe;
+        if (input.command === "git" && input.args?.includes("config")) {
+          return result(input, "false\n");
+        }
+        if (input.command === "git" && input.args?.includes("worktree")) {
+          return result(input, gitWorktreePorcelain([{ path: root, branch: "main" }]));
+        }
+        return result(input, "{}");
+      },
+    });
+
+    try {
+      await expect(
+        provider.removeWorktree({
+          project: guardedProject,
+          worktreeId: "wt_web_main",
+          expectedPath: root,
+          expectedBranch: "main",
+          expectedRegistrationIdentity: `git-registration:${root}`,
+        }),
+      ).rejects.toMatchObject({
+        code: "WORKTRUNK_WORKTREE_CHANGED",
+        diagnosticDetails: [expect.objectContaining({ refusalReason: "primary_checkout" })],
+      });
+      expect(calls.filter((call) => call.command === "wt")).toEqual([]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses the native primary checkout when the configured root is linked", async () => {
+    const calls: ExternalCommandInput[] = [];
+    const primaryPath = "/tmp/station/web-primary";
+    const linkedProject = { ...project, root: "/tmp/station/web-linked" };
+    const provider = testProvider({
+      command: "wt",
+      runner: async (input) => {
+        calls.push(input);
+        const probe = gitRemovalProbeResult(input, {
+          targetPath: primaryPath,
+          targetBranch: "legacy-primary",
+          targetHeadSha: "1".repeat(40),
+          projectCommonDir: join(linkedProject.root, ".git"),
+        });
+        if (probe !== undefined) return probe;
+        if (input.command === "git" && input.args?.includes("worktree")) {
+          return result(
+            input,
+            gitWorktreePorcelain([
+              { path: primaryPath, branch: "legacy-primary", headSha: "1".repeat(40) },
+              { path: linkedProject.root, branch: "feature" },
+            ]),
+          );
+        }
+        return result(input, "{}");
+      },
+    });
+
+    await expect(
+      provider.removeWorktree({
+        project: linkedProject,
+        worktreeId: "wt_web_primary",
+        expectedPath: primaryPath,
+        expectedBranch: "legacy-primary",
+        expectedRegistrationIdentity: `git-registration:${primaryPath}`,
+      }),
+    ).rejects.toMatchObject({
+      code: "WORKTRUNK_WORKTREE_CHANGED",
+      diagnosticDetails: [expect.objectContaining({ refusalReason: "primary_checkout" })],
+    });
+    expect(calls.filter((call) => call.command === "wt")).toEqual([]);
+  });
+
+  it("refuses removal of a checkout that owns the configured default branch", async () => {
+    const calls: ExternalCommandInput[] = [];
+    const linkedPath = "/tmp/station/web/default-linked";
+    const provider = testProvider({
+      command: "wt",
+      clock: { now: () => new Date(now) },
+      runner: async (input) => {
+        calls.push(input);
+        const probe = gitRemovalProbeResult(input, {
+          targetPath: linkedPath,
+          targetBranch: "main",
+        });
+        if (probe !== undefined) return probe;
+        if (input.command === "git" && input.args?.includes("worktree")) {
+          return result(
+            input,
+            gitWorktreePorcelain([
+              { path: project.root, branch: "root-branch" },
+              { path: linkedPath, branch: "main" },
+            ]),
+          );
+        }
+        return result(input, "{}");
+      },
+    });
+
+    await expect(
+      provider.removeWorktree({
+        project,
+        worktreeId: "wt_web_main",
+        expectedPath: linkedPath,
+        expectedBranch: "main",
+        expectedRegistrationIdentity: `git-registration:${linkedPath}`,
+      }),
+    ).rejects.toMatchObject({
+      code: "WORKTRUNK_WORKTREE_CHANGED",
+      diagnosticDetails: [expect.objectContaining({ refusalReason: "default_branch" })],
+    });
+    expect(calls.filter((call) => call.command === "wt")).toEqual([]);
+  });
+
+  it("refuses an external checkout when the managed root is authoritative", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-wt-managed-remove-"));
+    const projectRoot = join(root, "repo");
+    const managedRoot = join(projectRoot, ".worktrees");
+    const externalPath = join(root, "external");
+    await mkdir(managedRoot, { recursive: true });
+    await mkdir(externalPath);
+    const managedProject = {
+      ...project,
+      root: projectRoot,
+      worktrunk: {
+        ...project.worktrunk,
+        managedRoot: ".worktrees",
+        includeExternal: false,
+      },
+    };
+    const calls: ExternalCommandInput[] = [];
+    const provider = testProvider({
+      command: "wt",
+      clock: { now: () => new Date(now) },
+      runner: async (input) => {
+        calls.push(input);
+        const probe = gitRemovalProbeResult(input, {
+          targetPath: externalPath,
+          targetBranch: "feature",
+          projectCommonDir: join(projectRoot, ".git"),
+        });
+        if (probe !== undefined) return probe;
+        if (input.command === "git" && input.args?.includes("worktree")) {
+          return result(
+            input,
+            gitWorktreePorcelain([
+              { path: projectRoot, branch: "main" },
+              { path: externalPath, branch: "feature" },
+            ]),
+          );
+        }
+        return result(input, "{}");
+      },
+    });
+
+    try {
+      await expect(
+        provider.removeWorktree({
+          project: managedProject,
+          worktreeId: "wt_web_external",
+          expectedPath: externalPath,
+          expectedBranch: "feature",
+          expectedRegistrationIdentity: `git-registration:${externalPath}`,
+        }),
+      ).rejects.toMatchObject({
+        code: "WORKTRUNK_WORKTREE_CHANGED",
+        diagnosticDetails: [expect.objectContaining({ refusalReason: "protection_unverified" })],
+      });
+      expect(calls.filter((call) => call.command === "wt")).toEqual([]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses removal when the managed-root symlink changes during validation", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-wt-managed-race-"));
+    const projectRoot = join(root, "repo");
+    const originalManagedRoot = join(root, "managed-original");
+    const externalRoot = join(root, "external");
+    const externalPath = join(externalRoot, "feature");
+    const managedRootLink = join(projectRoot, ".worktrees");
+    await mkdir(projectRoot, { recursive: true });
+    await mkdir(originalManagedRoot);
+    await mkdir(externalPath, { recursive: true });
+    await symlink(originalManagedRoot, managedRootLink);
+    const managedProject = {
+      ...project,
+      root: projectRoot,
+      worktrunk: {
+        ...project.worktrunk,
+        managedRoot: managedRootLink,
+        includeExternal: false,
+      },
+    };
+    const calls: ExternalCommandInput[] = [];
+    let inventoryReads = 0;
+    const provider = testProvider({
+      command: "wt",
+      runner: async (input) => {
+        calls.push(input);
+        const probe = gitRemovalProbeResult(input, {
+          targetPath: externalPath,
+          targetBranch: "feature",
+          projectCommonDir: join(projectRoot, ".git"),
+        });
+        if (probe !== undefined) return probe;
+        if (input.command === "git" && input.args?.includes("worktree")) {
+          inventoryReads += 1;
+          if (inventoryReads === 2) {
+            await rm(managedRootLink);
+            await symlink(externalRoot, managedRootLink);
+          }
+          return result(
+            input,
+            gitWorktreePorcelain([
+              { path: projectRoot, branch: "main" },
+              { path: externalPath, branch: "feature" },
+            ]),
+          );
+        }
+        return result(input, "{}");
+      },
+    });
+
+    try {
+      await expect(
+        provider.removeWorktree({
+          project: managedProject,
+          worktreeId: "wt_web_external",
+          expectedPath: externalPath,
+          expectedBranch: "feature",
+          expectedRegistrationIdentity: `git-registration:${externalPath}`,
+        }),
+      ).rejects.toMatchObject({
+        code: "WORKTRUNK_WORKTREE_CHANGED",
+        diagnosticDetails: [expect.objectContaining({ refusalReason: "protection_unverified" })],
+      });
+      expect(calls.filter((call) => call.command === "wt")).toEqual([]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses a managed-root retarget at the final removal boundary", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-wt-managed-final-race-"));
+    const projectRoot = join(root, "repo");
+    const managedRoot = join(root, "managed");
+    const externalRoot = join(root, "external");
+    const targetPath = join(managedRoot, "feature");
+    const managedRootLink = join(projectRoot, ".worktrees");
+    await mkdir(projectRoot, { recursive: true });
+    await mkdir(targetPath, { recursive: true });
+    await mkdir(externalRoot);
+    await symlink(managedRoot, managedRootLink);
+    const managedProject = {
+      ...project,
+      root: projectRoot,
+      worktrunk: {
+        ...project.worktrunk,
+        managedRoot: managedRootLink,
+        includeExternal: false,
+      },
+    };
+    const calls: ExternalCommandInput[] = [];
+    let identityReads = 0;
+    const provider = testProvider({
+      command: "wt",
+      runner: async (input) => {
+        calls.push(input);
+        if (input.command === "git" && input.args?.includes("--show-toplevel")) {
+          identityReads += 1;
+          if (identityReads === 2) {
+            await rm(managedRootLink);
+            await symlink(externalRoot, managedRootLink);
+          }
+        }
+        const probe = gitRemovalProbeResult(input, {
+          targetPath,
+          targetBranch: "feature",
+          projectCommonDir: join(projectRoot, ".git"),
+        });
+        if (probe !== undefined) return probe;
+        if (input.command === "git" && input.args?.includes("worktree")) {
+          return result(
+            input,
+            gitWorktreePorcelain([
+              { path: projectRoot, branch: "main" },
+              { path: targetPath, branch: "feature" },
+            ]),
+          );
+        }
+        return result(input, "{}");
+      },
+    });
+
+    try {
+      await expect(
+        provider.removeWorktree({
+          project: managedProject,
+          worktreeId: "wt_web_feature",
+          expectedPath: targetPath,
+          expectedBranch: "feature",
+          expectedRegistrationIdentity: `git-registration:${targetPath}`,
+        }),
+      ).rejects.toMatchObject({
+        code: "WORKTRUNK_WORKTREE_CHANGED",
+        diagnosticDetails: [expect.objectContaining({ refusalReason: "protection_unverified" })],
+      });
+      expect(identityReads).toBe(2);
+      expect(calls.filter((call) => call.command === "wt")).toEqual([]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   it("seeds the new worktree's working tree from a source path when seedFrom is set", async () => {
@@ -705,78 +1518,96 @@ describe("WorktrunkProvider", () => {
 
   it("skips Worktrunk hooks for automated mutations when lifecycle hooks are disabled", async () => {
     const calls: ExternalCommandInput[] = [];
+    const linkedPath = "/tmp/station/web/feature";
     const provider = testProvider({
       command: "wt",
       useLifecycleHooks: false,
       clock: { now: () => new Date(now) },
       runner: async (input) => {
         calls.push(input);
-        if (input.args?.[0] === "switch") {
+        const probe = gitRemovalProbeResult(input, {
+          targetPath: linkedPath,
+          targetBranch: "feature",
+        });
+        if (probe !== undefined) return probe;
+        if (input.command === "git" && input.args?.includes("worktree")) {
           return result(
             input,
-            JSON.stringify([{ path: "/tmp/station/web/feature", branch: "feature" }]),
+            gitWorktreePorcelain([
+              { path: project.root, branch: "main" },
+              { path: linkedPath, branch: "feature" },
+            ]),
           );
+        }
+        if (input.args?.[0] === "switch") {
+          return result(input, JSON.stringify([{ path: linkedPath, branch: "feature" }]));
         }
         if (input.args?.[0] === "remove") {
           return result(input, "{}");
         }
-        return result(
-          input,
-          JSON.stringify([{ path: "/tmp/station/web/feature", branch: "feature" }]),
-        );
+        return result(input, JSON.stringify([{ path: linkedPath, branch: "feature" }]));
       },
     });
 
     const created = await provider.createWorktree({ project, branch: "feature" });
     await provider.removeWorktree({
+      project,
       worktreeId: created.id,
       expectedPath: created.path,
       expectedBranch: created.branch,
       expectedRegistrationIdentity: `git-registration:${created.path}`,
     });
 
-    expect(calls.map((call) => call.args)).toEqual([
+    expect(calls.filter((call) => call.command === "wt").map((call) => call.args)).toEqual([
       ["switch", "--no-hooks", "--create", "feature", "--base", "main", "--no-cd", "--format=json"],
-      ["list", "--format=json"],
       ["-C", "/tmp/station/web/feature", "remove", "--no-hooks", "--format=json"],
     ]);
   });
 
   it("pre-approves Worktrunk hook prompts for automated mutations when lifecycle hooks are enabled", async () => {
     const calls: ExternalCommandInput[] = [];
+    const linkedPath = "/tmp/station/web/feature";
     const provider = testProvider({
       command: "wt",
       useLifecycleHooks: true,
       clock: { now: () => new Date(now) },
       runner: async (input) => {
         calls.push(input);
-        if (input.args?.[0] === "switch") {
+        const probe = gitRemovalProbeResult(input, {
+          targetPath: linkedPath,
+          targetBranch: "feature",
+        });
+        if (probe !== undefined) return probe;
+        if (input.command === "git" && input.args?.includes("worktree")) {
           return result(
             input,
-            JSON.stringify([{ path: "/tmp/station/web/feature", branch: "feature" }]),
+            gitWorktreePorcelain([
+              { path: project.root, branch: "main" },
+              { path: linkedPath, branch: "feature" },
+            ]),
           );
+        }
+        if (input.args?.[0] === "switch") {
+          return result(input, JSON.stringify([{ path: linkedPath, branch: "feature" }]));
         }
         if (input.args?.[0] === "remove") {
           return result(input, "{}");
         }
-        return result(
-          input,
-          JSON.stringify([{ path: "/tmp/station/web/feature", branch: "feature" }]),
-        );
+        return result(input, JSON.stringify([{ path: linkedPath, branch: "feature" }]));
       },
     });
 
     const created = await provider.createWorktree({ project, branch: "feature" });
     await provider.removeWorktree({
+      project,
       worktreeId: created.id,
       expectedPath: created.path,
       expectedBranch: created.branch,
       expectedRegistrationIdentity: `git-registration:${created.path}`,
     });
 
-    expect(calls.map((call) => call.args)).toEqual([
+    expect(calls.filter((call) => call.command === "wt").map((call) => call.args)).toEqual([
       ["switch", "--yes", "--create", "feature", "--base", "main", "--no-cd", "--format=json"],
-      ["list", "--format=json"],
       ["-C", "/tmp/station/web/feature", "remove", "--yes", "--format=json"],
     ]);
   });
@@ -1136,6 +1967,7 @@ describe("WorktrunkProvider", () => {
 
     await expect(
       provider.removeWorktree({
+        project: guardedProject,
         worktreeId: selected.id,
         expectedPath: selected.path,
         expectedBranch: selected.branch,
@@ -1364,6 +2196,11 @@ describe("WorktrunkProvider", () => {
       timeoutMs: 5,
       clock: { now: () => new Date(now) },
       runner: async (input) => {
+        const probe = gitRemovalProbeResult(input, {
+          targetPath: "/tmp/station/web/feature",
+          targetBranch: "feature",
+        });
+        if (probe !== undefined) return probe;
         if (input.command === "wt" && input.args?.includes("remove")) {
           removeArgs = input.args;
           return new Promise((_, reject) => {
@@ -1380,6 +2217,15 @@ describe("WorktrunkProvider", () => {
             }
           });
         }
+        if (input.command === "git" && input.args?.includes("worktree")) {
+          return result(
+            input,
+            gitWorktreePorcelain([
+              { path: project.root, branch: "main" },
+              { path: "/tmp/station/web/feature", branch: "feature" },
+            ]),
+          );
+        }
         return result(
           input,
           JSON.stringify([{ path: "/tmp/station/web/feature", branch: "feature" }]),
@@ -1393,6 +2239,7 @@ describe("WorktrunkProvider", () => {
 
     await expect(
       provider.removeWorktree({
+        project,
         worktreeId: selected.id,
         expectedPath: selected.path,
         expectedBranch: selected.branch,
@@ -1403,6 +2250,7 @@ describe("WorktrunkProvider", () => {
       code: "WORKTRUNK_TIMEOUT",
     });
     expect(removeArgs).toEqual(["-C", "/tmp/station/web/feature", "remove", "--format=json"]);
+    expect(removeArgs).not.toContain("--foreground");
     expect(aborted).toBe(true);
   });
 

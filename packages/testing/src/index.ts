@@ -46,6 +46,7 @@ type FakeWorktreeProviderMethod =
   | "health"
   | "listWorktrees"
   | "createWorktree"
+  | "inspectWorktreeForRemoval"
   | "removeWorktree"
   | "getWorktree";
 
@@ -364,14 +365,16 @@ export class FakeWorktreeProvider implements WorktreeProvider {
   async removeWorktree(request: RemoveWorktreeRequest): Promise<RemoveWorktreeResult> {
     maybeThrow(this.#failures, "removeWorktree");
     const recorded: RemoveWorktreeRequest = {
+      project: request.project,
       worktreeId: request.worktreeId,
       expectedPath: request.expectedPath,
       expectedBranch: request.expectedBranch,
       expectedRegistrationIdentity: request.expectedRegistrationIdentity,
     };
-    if (request.projectId !== undefined) recorded.projectId = request.projectId;
     if (request.force !== undefined) recorded.force = request.force;
-    const index = this.#worktrees.findIndex((worktree) => worktree.id === request.worktreeId);
+    const index = this.#worktrees.findIndex(
+      (worktree) => worktree.projectId === request.project.id && worktree.id === request.worktreeId,
+    );
     const selected = this.#worktrees[index];
     if (
       selected !== undefined &&
@@ -396,6 +399,23 @@ export class FakeWorktreeProvider implements WorktreeProvider {
       worktreeId: request.worktreeId,
       removed: index >= 0,
     };
+  }
+
+  async inspectWorktreeForRemoval(
+    request: RemoveWorktreeRequest,
+  ): Promise<WorktreeObservation | null> {
+    maybeThrow(this.#failures, "inspectWorktreeForRemoval");
+    return (
+      this.#worktrees.find(
+        (worktree) =>
+          worktree.projectId === request.project.id && worktree.path === request.expectedPath,
+      ) ??
+      this.#worktrees.find(
+        (worktree) =>
+          worktree.projectId === request.project.id && worktree.id === request.worktreeId,
+      ) ??
+      null
+    );
   }
 
   async getWorktree(request: GetWorktreeRequest): Promise<WorktreeObservation | null> {

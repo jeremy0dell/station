@@ -267,6 +267,9 @@ describe("diagnostics schemas", () => {
     };
 
     expect(DiagnosticDetailSchema.parse(refusal)).toEqual(refusal);
+    expect(DiagnosticDetailSchema.safeParse({ ...refusal, refusalReason: "dirty" }).success).toBe(
+      true,
+    );
     expect(
       DiagnosticDetailSchema.safeParse({ ...refusal, refusalReason: "provider_private_reason" })
         .success,

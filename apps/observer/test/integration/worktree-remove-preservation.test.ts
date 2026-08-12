@@ -59,6 +59,9 @@ describe("worktree removal preservation", () => {
       clock,
       runner: async (input) => {
         worktrunkCalls.push(input.args ?? []);
+        if (input.command === "git") {
+          return runRealGit(input);
+        }
         const branch = await gitOutput(linked, "symbolic-ref", "--short", "HEAD");
         const dirty = (await gitOutput(linked, "status", "--porcelain=v1")).length > 0;
         return externalResult(
@@ -213,6 +216,14 @@ describe("worktree removal preservation", () => {
     const stateDir = join(root, "state");
     await mkdir(repo, { recursive: true });
     await mkdir(stateDir, { recursive: true });
+    await git(repo, "init", "-b", "main");
+    await git(repo, "config", "user.email", "station@example.invalid");
+    await git(repo, "config", "user.name", "station");
+    await writeFile(join(repo, "tracked.txt"), "base\n");
+    await git(repo, "add", "tracked.txt");
+    await git(repo, "commit", "-m", "initial");
+    await git(repo, "branch", "feature");
+    await git(repo, "worktree", "add", linked, "feature");
     const clock = { now: () => new Date(now) };
     const sqlite = openObserverSqlite({ path: join(stateDir, "observer.sqlite"), clock });
     const ids = observerIds();
@@ -235,12 +246,15 @@ describe("worktree removal preservation", () => {
       resolveRegistrationIdentity: async () => {
         if (!finalRaceArmed) return "git-registration:original";
         armedIdentityReads += 1;
-        return armedIdentityReads === 1
+        return armedIdentityReads <= 4
           ? "git-registration:original"
           : "git-registration:replacement";
       },
       runner: async (input) => {
         worktrunkCalls.push(input.args ?? []);
+        if (input.command === "git") {
+          return runRealGit(input);
+        }
         return externalResult(input, JSON.stringify([{ path: linked, branch: "feature" }]));
       },
     });
@@ -320,6 +334,7 @@ describe("worktree removal preservation", () => {
       );
     } finally {
       await queue.shutdown();
+      await git(repo, "worktree", "remove", "--force", linked).catch(() => undefined);
       sqlite.close();
       await rm(root, { recursive: true, force: true });
     }
@@ -372,6 +387,15 @@ function externalResult(input: ExternalCommandInput, stdout: string): ExternalCo
     stderr: "",
     exitCode: 0,
   };
+}
+
+async function runRealGit(input: ExternalCommandInput): Promise<ExternalCommandResult> {
+  const output = await execFileAsync(input.command, input.args ?? [], {
+    cwd: input.cwd,
+    env: environmentWithoutGitLocals(),
+    encoding: "buffer",
+  });
+  return externalResult(input, output.stdout.toString("utf8"));
 }
 
 function observerIds() {

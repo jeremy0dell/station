@@ -1,5 +1,6 @@
 import {
   type ProviderProjectConfig,
+  type RemoveWorktreeRequest,
   type WorktreeRemovalRefusalDiagnosticDetail,
   WorktreeRemovalRefusalDiagnosticDetailSchema,
 } from "@station/contracts";
@@ -42,7 +43,7 @@ export type CreateWorktreeRemoveHandlerOptions = {
 /**
  * USE CASE
  *
- * Revalidates selected checkout and Git registration identity before coordinating removal.
+ * Uses targeted current evidence before cleanup, then requires independent final provider validation.
  * Provider-confirmed removal atomically ends sessions and retires canonical title authority.
  */
 export function createWorktreeRemoveHandler(
@@ -62,9 +63,22 @@ export function createWorktreeRemoveHandler(
     );
     const previousSessionId = stationSession?.id ?? row.agent?.sessionId;
     const force = payload.force === true;
+    const removalRequest: RemoveWorktreeRequest = {
+      project,
+      worktreeId: row.id,
+      expectedPath: payload.expectedPath,
+      expectedBranch: payload.expectedBranch,
+      expectedRegistrationIdentity: payload.expectedRegistrationIdentity,
+    };
+    if (force) removalRequest.force = true;
+    const inspectWorktreeForRemoval = options.providers.worktree.inspectWorktreeForRemoval;
+    const removalInspectionOperation =
+      inspectWorktreeForRemoval === undefined
+        ? "listWorktrees.removeRevalidation"
+        : "inspectWorktreeForRemoval";
     const currentWorktrees = await runProviderMutation(
       {
-        operation: `provider.${options.providers.worktree.id}.listWorktrees.removeRevalidation`,
+        operation: `provider.${options.providers.worktree.id}.${removalInspectionOperation}`,
         clock: options.clock,
         commandTimeoutMs: options.commandTimeoutMs,
         signal: context.signal,
@@ -76,7 +90,16 @@ export function createWorktreeRemoveHandler(
           provider: options.providers.worktree.id,
         },
       },
-      () => options.providers.worktree.listWorktrees(project),
+      async () => {
+        if (inspectWorktreeForRemoval === undefined) {
+          return options.providers.worktree.listWorktrees(project);
+        }
+        const current = await inspectWorktreeForRemoval.call(
+          options.providers.worktree,
+          removalRequest,
+        );
+        return current === null ? [] : [current];
+      },
     );
     throwIfAborted(context.signal);
     const resolution = resolveWorktreeRemovalTarget({
@@ -122,9 +145,7 @@ export function createWorktreeRemoveHandler(
     try {
       await removeWorktreeThroughProvider({
         providers: options.providers,
-        row,
-        target: resolution.target,
-        force,
+        request: removalRequest,
         context,
         clock: options.clock,
         commandTimeoutMs: options.commandTimeoutMs,

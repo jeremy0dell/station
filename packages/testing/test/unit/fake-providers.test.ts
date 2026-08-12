@@ -214,8 +214,17 @@ describe("fake providers", () => {
     ).resolves.toMatchObject({ runId: "run_web_cleanup", stopped: true });
     await expect(terminal.closeTarget("term_web_cleanup")).resolves.toBeUndefined();
     await expect(
+      worktree.inspectWorktreeForRemoval({
+        project,
+        worktreeId: "wt_web_cleanup",
+        expectedPath: "/tmp/station/web/cleanup",
+        expectedBranch: "cleanup",
+        expectedRegistrationIdentity: "fake-registration:wt_web_cleanup:/tmp/station/web/cleanup",
+      }),
+    ).resolves.toMatchObject({ id: "wt_web_cleanup", projectId: "web" });
+    await expect(
       worktree.removeWorktree({
-        projectId: "web",
+        project,
         worktreeId: "wt_web_cleanup",
         expectedPath: "/tmp/station/web/cleanup",
         expectedBranch: "cleanup",
@@ -237,7 +246,7 @@ describe("fake providers", () => {
     expect(terminal.snapshot().targets).toEqual([]);
     expect(worktree.snapshot().removed).toEqual([
       {
-        projectId: "web",
+        project,
         worktreeId: "wt_web_cleanup",
         expectedPath: "/tmp/station/web/cleanup",
         expectedBranch: "cleanup",
