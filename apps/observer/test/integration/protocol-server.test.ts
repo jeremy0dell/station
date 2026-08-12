@@ -374,7 +374,7 @@ describe("observer protocol server", () => {
     await fixture.queue.drain();
 
     await expect(client.getCommand(receipt.commandId)).resolves.toMatchObject({
-      id: "cmd_1",
+      id: receipt.commandId,
       status: "succeeded",
     });
     const groupReceipt = await client.dispatch({
@@ -383,7 +383,7 @@ describe("observer protocol server", () => {
     });
     await fixture.queue.drain();
     await expect(client.getCommand(groupReceipt.commandId)).resolves.toMatchObject({
-      id: "cmd_2",
+      id: groupReceipt.commandId,
       status: "succeeded",
     });
     await expect(client.getSnapshot()).resolves.toMatchObject({

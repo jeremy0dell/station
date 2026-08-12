@@ -1,5 +1,7 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 import type {
+  CommandDispatchOptions,
   CommandId,
   CommandReceipt,
   StationCommand,
@@ -17,7 +19,12 @@ import {
   systemClock,
 } from "@station/runtime";
 import { createErrorEnvelope, toSafeError } from "../diagnostics/errors.js";
-import type { CommandJournal, EventJournal, ObserverIdFactory } from "../persistence/index.js";
+import type {
+  CommandJournal,
+  EventJournal,
+  ObserverIdFactory,
+  PersistedCommand,
+} from "../persistence/index.js";
 import type { StationLogger } from "../stationLogger.js";
 import { nowIso } from "../utils/time.js";
 import { commandCancellationError, linkAbortSignals, throwIfAborted } from "./cancellation.js";
@@ -41,7 +48,7 @@ type CommandExecutionContext = Omit<
 export type CommandHandler = (context: CommandHandlerContext) => Promise<void>;
 
 export type CommandQueue = {
-  dispatch(command: StationCommand): Promise<CommandReceipt>;
+  dispatch(command: StationCommand, options?: CommandDispatchOptions): Promise<CommandReceipt>;
   drain(): Promise<void>;
   shutdown(): Promise<void>;
   registerHandler(commandType: StationCommand["type"], handler: CommandHandler): void;
@@ -74,13 +81,46 @@ export function createCommandQueue(options: CreateCommandQueueOptions): CommandQ
   );
   // Commands serialize by the narrowest stable identity we can infer; unrelated scopes run in parallel.
   const scopeChains = new Map<string, Promise<void>>();
+  const operationAdmissionChains = new Map<CommandId, Promise<void>>();
+  const executingCommandIds = new Set<CommandId>();
   const pending = new Set<Promise<void>>();
   const controllers = new Set<AbortController>();
   const commandTimeoutMs = options.commandTimeoutMs ?? 30_000;
   let shuttingDown = false;
 
+  const scheduleExecution = (
+    context: CommandExecutionContext,
+    controller = new AbortController(),
+  ): void => {
+    if (shuttingDown || executingCommandIds.has(context.commandId)) return;
+    const scope = commandScope(context.command);
+    const previous = scopeChains.get(scope) ?? Promise.resolve();
+    const execution = previous.then(() =>
+      executeCommand(options.persistence, handlers, clock, idFactory, context, {
+        ...(options.eventBus === undefined ? {} : { eventBus: options.eventBus }),
+        ...(options.logger === undefined ? {} : { logger: options.logger }),
+        signal: controller.signal,
+        commandTimeoutMs,
+      }),
+    );
+    // Keep the per-scope chain non-throwing; failures are persisted and later commands still run.
+    const settled = execution.catch(() => undefined);
+    scopeChains.set(scope, settled);
+    executingCommandIds.add(context.commandId);
+    controllers.add(controller);
+    pending.add(settled);
+    settled.finally(() => {
+      executingCommandIds.delete(context.commandId);
+      controllers.delete(controller);
+      pending.delete(settled);
+      if (scopeChains.get(scope) === settled) {
+        scopeChains.delete(scope);
+      }
+    });
+  };
+
   const queue: CommandQueue = {
-    dispatch: async (inputCommand) => {
+    dispatch: async (inputCommand, dispatchOptions) => {
       const command = StationCommandSchema.parse(inputCommand);
       if (shuttingDown) {
         const receipt: CommandReceipt = {
@@ -95,79 +135,63 @@ export function createCommandQueue(options: CreateCommandQueueOptions): CommandQ
         };
         return CommandReceiptSchema.parse(receipt);
       }
-      const commandId = idFactory.commandId();
-      const trace = createTraceContext({ operation: `command.${command.type}` });
-      const controller = new AbortController();
-      const acceptedEvent: StationEvent = {
-        type: "command.accepted",
-        commandId,
-        command,
-        traceId: trace.traceId,
-        spanId: trace.spanId,
-      };
-      await options.persistence.recordCommandAccepted({
-        commandId,
-        command,
-        createdAt: nowIso(clock),
-        traceId: trace.traceId,
-        spanId: trace.spanId,
-      });
-      await options.persistence.recordEvent(acceptedEvent, {
-        commandId,
-        traceId: trace.traceId,
-        spanId: trace.spanId,
-        createdAt: nowIso(clock),
-      });
-      await options.logger?.info("Command accepted.", {
-        commandId,
-        commandType: command.type,
-        traceId: trace.traceId,
-        spanId: trace.spanId,
-      });
-      options.eventBus?.publish(acceptedEvent);
-
-      const scope = commandScope(command);
-      const previous = scopeChains.get(scope) ?? Promise.resolve();
-      const execution = previous.then(() =>
-        executeCommand(
-          options.persistence,
-          handlers,
-          clock,
-          idFactory,
-          {
-            commandId,
-            trace,
-            command,
-          },
-          {
-            ...(options.eventBus === undefined ? {} : { eventBus: options.eventBus }),
-            ...(options.logger === undefined ? {} : { logger: options.logger }),
-            signal: controller.signal,
-            commandTimeoutMs,
-          },
-        ),
-      );
-      // Keep the per-scope chain non-throwing; failures are persisted and later commands still run.
-      const settled = execution.catch(() => undefined);
-      scopeChains.set(scope, settled);
-      controllers.add(controller);
-      pending.add(settled);
-      settled.finally(() => {
-        controllers.delete(controller);
-        pending.delete(settled);
-        if (scopeChains.get(scope) === settled) {
-          scopeChains.delete(scope);
+      const commandId =
+        dispatchOptions?.operationId === undefined
+          ? idFactory.commandId()
+          : commandIdForOperation(dispatchOptions.operationId);
+      const admit = async (): Promise<CommandReceipt> => {
+        if (dispatchOptions?.operationId !== undefined) {
+          const replay = await recordedOperation(options.persistence, commandId, command);
+          if (replay !== undefined) {
+            if (replay.receipt.accepted) await resumeAcceptedOperation(replay.recorded);
+            return replay.receipt;
+          }
         }
-      });
-
-      const receipt: CommandReceipt = {
-        commandId,
-        traceId: trace.traceId,
-        spanId: trace.spanId,
-        accepted: true,
-        status: "accepted",
+        const trace = createTraceContext({ operation: `command.${command.type}` });
+        const acceptedEvent: StationEvent = {
+          type: "command.accepted",
+          commandId,
+          command,
+          traceId: trace.traceId,
+          spanId: trace.spanId,
+        };
+        try {
+          await options.persistence.recordCommandAccepted({
+            commandId,
+            command,
+            createdAt: nowIso(clock),
+            traceId: trace.traceId,
+            spanId: trace.spanId,
+          });
+        } catch (error) {
+          if (dispatchOptions?.operationId !== undefined) {
+            const replay = await recordedOperation(options.persistence, commandId, command);
+            if (replay !== undefined) {
+              if (replay.receipt.accepted) await resumeAcceptedOperation(replay.recorded);
+              return replay.receipt;
+            }
+          }
+          throw error;
+        }
+        await options.persistence.recordEvent(acceptedEvent, {
+          commandId,
+          traceId: trace.traceId,
+          spanId: trace.spanId,
+          createdAt: nowIso(clock),
+        });
+        await options.logger?.info("Command accepted.", {
+          commandId,
+          commandType: command.type,
+          traceId: trace.traceId,
+          spanId: trace.spanId,
+        });
+        options.eventBus?.publish(acceptedEvent);
+        scheduleExecution({ commandId, trace, command });
+        return acceptedReceipt(commandId, trace);
       };
-      return CommandReceiptSchema.parse(receipt);
+      return dispatchOptions?.operationId === undefined
+        ? admit()
+        : withOperationAdmission(operationAdmissionChains, commandId, admit);
     },
 
     drain: async () => {
@@ -189,7 +213,121 @@ export function createCommandQueue(options: CreateCommandQueueOptions): CommandQ
     },
   };
 
+  async function resumeAcceptedOperation(recorded: PersistedCommand): Promise<void> {
+    if (recorded.status !== "accepted" || executingCommandIds.has(recorded.id) || shuttingDown) {
+      return;
+    }
+    const trace = traceFromRecordedCommand(recorded);
+    const acceptedEvents = await options.persistence.listEvents({
+      commandId: recorded.id,
+      type: "command.accepted",
+    });
+    if (acceptedEvents.length === 0) {
+      const acceptedEvent: StationEvent = {
+        type: "command.accepted",
+        commandId: recorded.id,
+        command: recorded.command,
+        traceId: trace.traceId,
+        spanId: trace.spanId,
+      };
+      await options.persistence.recordEvent(acceptedEvent, {
+        commandId: recorded.id,
+        traceId: trace.traceId,
+        spanId: trace.spanId,
+        createdAt: recorded.createdAt,
+      });
+      options.eventBus?.publish(acceptedEvent);
+    }
+    const current = await options.persistence.getCommand(recorded.id);
+    if (current?.status === "accepted") {
+      scheduleExecution({ commandId: current.id, trace, command: current.command });
+    }
+  }
+
   return queue;
+}
+
+function commandIdForOperation(operationId: string): CommandId {
+  const digest = createHash("sha256").update(operationId).digest("hex");
+  return `cmd_op_${digest}`;
+}
+
+async function recordedOperation(
+  persistence: CommandJournal,
+  commandId: CommandId,
+  command: StationCommand,
+): Promise<{ recorded: PersistedCommand; receipt: CommandReceipt } | undefined> {
+  const recorded = await persistence.getCommand(commandId);
+  if (recorded === undefined) return undefined;
+  if (!isDeepStrictEqual(recorded.command, command)) {
+    return {
+      recorded,
+      receipt: CommandReceiptSchema.parse({
+        commandId,
+        accepted: false,
+        status: "rejected",
+        error: {
+          tag: "CommandValidationError",
+          code: "COMMAND_OPERATION_CONFLICT",
+          message: "This command operation identity was already used for different input.",
+          hint: "Retry only the original command or dispatch a new operation.",
+          commandId,
+        },
+      }),
+    };
+  }
+  return { recorded, receipt: receiptFromRecordedOperation(recorded) };
+}
+
+function traceFromRecordedCommand(recorded: PersistedCommand): TraceContext {
+  const fallback = createTraceContext({ operation: `command.${recorded.command.type}` });
+  return {
+    traceId: recorded.traceId ?? fallback.traceId,
+    spanId: recorded.spanId ?? fallback.spanId,
+    operation: `command.${recorded.command.type}`,
+  };
+}
+
+async function withOperationAdmission<T>(
+  chains: Map<CommandId, Promise<void>>,
+  commandId: CommandId,
+  task: () => Promise<T>,
+): Promise<T> {
+  const previous = chains.get(commandId) ?? Promise.resolve();
+  let release: () => void = () => undefined;
+  const turn = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const current = previous.then(() => turn);
+  chains.set(commandId, current);
+  await previous;
+  try {
+    return await task();
+  } finally {
+    release();
+    if (chains.get(commandId) === current) chains.delete(commandId);
+  }
+}
+
+function acceptedReceipt(commandId: CommandId, trace: TraceContext): CommandReceipt {
+  return CommandReceiptSchema.parse({
+    commandId,
+    traceId: trace.traceId,
+    spanId: trace.spanId,
+    accepted: true,
+    status: "accepted",
+  });
+}
+
+function receiptFromRecordedOperation(recorded: PersistedCommand): CommandReceipt {
+  const receipt: CommandReceipt = {
+    commandId: recorded.id,
+    accepted: true,
+    status: "accepted",
+  };
+  if (recorded.traceId !== undefined) receipt.traceId = recorded.traceId;
+  if (recorded.spanId !== undefined) receipt.spanId = recorded.spanId;
+  return CommandReceiptSchema.parse(receipt);
 }
 
 async function executeCommand(

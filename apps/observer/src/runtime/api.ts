@@ -1,5 +1,6 @@
 import { type ConfigDiagnostic, emptyConfig, type StationConfig } from "@station/config";
 import type {
+  CommandDispatchOptions,
   CommandId,
   CommandRecord,
   DiagnosticCollectionOptions,
@@ -287,7 +288,8 @@ export function createObserverApi(options: CreateObserverApiOptions): ObserverAp
     getSessionRecoveryReadiness: async () => sessionRecoveryReadiness(options),
     subscribe: (filter?: EventFilter): AsyncIterable<StationEvent> =>
       options.eventBus.subscribe(filter),
-    dispatch: (command: StationCommand) => options.commandQueue.dispatch(command),
+    dispatch: (command: StationCommand, dispatchOptions?: CommandDispatchOptions) =>
+      options.commandQueue.dispatch(command, dispatchOptions),
     getCommand: (commandId: CommandId) => getCommandById(options, commandId),
     runDoctor: (doctorOptions?: DoctorOptions): Promise<DoctorReport> =>
       runDoctor(buildDiagnosticDeps(options, clock), doctorOptions),

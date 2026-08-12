@@ -22,9 +22,11 @@ describe("protocol client/server", () => {
     const { socketPath } = await createTempSocketPath();
     const commands = new Map<string, CommandRecord>();
     const snapshot = emptySnapshot();
+    let dispatchOperationId: string | undefined;
     const api = createFakeObserverApi({
       snapshot,
-      dispatch: async (command) => {
+      dispatch: async (command, options) => {
+        dispatchOperationId = options?.operationId;
         const record: CommandRecord = {
           id: "cmd_1",
           type: command.type,
@@ -65,6 +67,7 @@ describe("protocol client/server", () => {
       accepted: true,
       status: "accepted",
     });
+    expect(dispatchOperationId).toBe("req_4");
     await expect(client.getCommand("cmd_1")).resolves.toMatchObject({
       id: "cmd_1",
       type: "worktree.create",
@@ -572,6 +575,50 @@ describe("protocol client/server", () => {
         tag: "TimeoutError",
         code: "PROTOCOL_REQUEST_TIMEOUT",
       });
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("retries a lost dispatch response with the same operation identity", async () => {
+    const { socketPath } = await createTempSocketPath();
+    const requestIds: string[] = [];
+    let connectionCount = 0;
+    const server = await listenUnixSocket({
+      socketPath,
+      onConnection: async (connection) => {
+        connectionCount += 1;
+        const iterator = connection.messages()[Symbol.asyncIterator]();
+        const request = ProtocolRequestSchema.parse((await iterator.next()).value);
+        requestIds.push(request.id);
+        if (connectionCount === 1) {
+          connection.close();
+          return;
+        }
+        connection.send(
+          protocolSuccessResponse(request.id, "command.dispatch", {
+            commandId: "cmd_recovered",
+            accepted: true,
+            status: "accepted",
+          }),
+        );
+      },
+    });
+    const client = createObserverClient({
+      socketPath,
+      timeoutMs: 500,
+      requestId: () => "req_lost_dispatch",
+    });
+
+    try {
+      await expect(
+        client.dispatch({
+          type: "worktree.create",
+          payload: { projectId: "web", branch: "recovered" },
+        }),
+      ).resolves.toMatchObject({ commandId: "cmd_recovered", accepted: true });
+      expect(connectionCount).toBe(2);
+      expect(requestIds).toEqual(["req_lost_dispatch", "req_lost_dispatch"]);
     } finally {
       await server.close();
     }

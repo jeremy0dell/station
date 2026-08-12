@@ -1,4 +1,4 @@
-import type { StationCommand } from "@station/contracts";
+import type { StationCommand, StationEvent } from "@station/contracts";
 import { describe, expect, it } from "vitest";
 import { createCommandQueue } from "../../src/commands/queue";
 import { createSqliteObserverPersistence } from "../../src/persistence";
@@ -100,6 +100,169 @@ const createApiSessionGroupCommand: StationCommand = {
 };
 
 describe("observer command queue", () => {
+  it("returns the original durable receipt after queue reconstruction", async () => {
+    const { sqlite, persistence, queue } = createPersistenceAndQueue();
+    const handled: string[] = [];
+    const handler = async ({ commandId }: { commandId: string }) => {
+      handled.push(commandId);
+    };
+    queue.registerHandler("observer.reconcile", handler);
+
+    const first = await queue.dispatch(reconcileCommand, { operationId: "req_lost_response" });
+    await queue.drain();
+
+    const reconstructed = createCommandQueue({
+      persistence,
+      clock: { now: () => new Date(now) },
+    });
+    reconstructed.registerHandler("observer.reconcile", handler);
+    const replay = await reconstructed.dispatch(reconcileCommand, {
+      operationId: "req_lost_response",
+    });
+    await reconstructed.drain();
+
+    expect(replay).toEqual(first);
+    expect(handled).toEqual([first.commandId]);
+    expect(await persistence.listCommands()).toHaveLength(1);
+    sqlite.close();
+  });
+
+  it("recovers a stranded accepted operation exactly once", async () => {
+    const { sqlite, persistence } = createPersistenceAndQueue();
+    let injected = false;
+    const faultPersistence = {
+      ...persistence,
+      recordEvent: async (
+        event: StationEvent,
+        options?: Parameters<typeof persistence.recordEvent>[1],
+      ) => {
+        if (!injected && event.type === "command.accepted") {
+          injected = true;
+          throw new Error("injected accepted-event write failure");
+        }
+        return persistence.recordEvent(event, options);
+      },
+    };
+    const interrupted = createCommandQueue({
+      persistence: faultPersistence,
+      clock: { now: () => new Date(now) },
+    });
+    interrupted.registerHandler("observer.reconcile", async () => undefined);
+
+    await expect(
+      interrupted.dispatch(reconcileCommand, { operationId: "req_stranded_accepted" }),
+    ).rejects.toThrow("injected accepted-event write failure");
+    await interrupted.shutdown();
+
+    const handled: string[] = [];
+    const reconstructed = createCommandQueue({
+      persistence,
+      clock: { now: () => new Date(now) },
+    });
+    reconstructed.registerHandler("observer.reconcile", async ({ commandId }) => {
+      handled.push(commandId);
+    });
+    const [first, concurrent] = await Promise.all([
+      reconstructed.dispatch(reconcileCommand, { operationId: "req_stranded_accepted" }),
+      reconstructed.dispatch(reconcileCommand, { operationId: "req_stranded_accepted" }),
+    ]);
+    await reconstructed.drain();
+
+    expect(concurrent).toEqual(first);
+    expect(handled).toEqual([first.commandId]);
+    await expect(persistence.getCommand(first.commandId)).resolves.toMatchObject({
+      status: "succeeded",
+    });
+    expect(
+      (await persistence.listEvents({ commandId: first.commandId })).map((event) => event.type),
+    ).toEqual(["command.accepted", "command.started", "command.succeeded"]);
+    sqlite.close();
+  });
+
+  it("does not replay a started operation through another queue", async () => {
+    const { sqlite, persistence, queue } = createPersistenceAndQueue();
+    let release = () => undefined;
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let markStarted = () => undefined;
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    queue.registerHandler("observer.reconcile", async () => {
+      markStarted();
+      await blocked;
+    });
+    const first = await queue.dispatch(reconcileCommand, {
+      operationId: "req_started_not_replayable",
+    });
+    await started;
+
+    let replayHandled = 0;
+    const reconstructed = createCommandQueue({
+      persistence,
+      clock: { now: () => new Date(now) },
+    });
+    reconstructed.registerHandler("observer.reconcile", async () => {
+      replayHandled += 1;
+    });
+    const replay = await reconstructed.dispatch(reconcileCommand, {
+      operationId: "req_started_not_replayable",
+    });
+    await reconstructed.drain();
+
+    expect(replay).toEqual(first);
+    expect(replayHandled).toBe(0);
+    release();
+    await queue.drain();
+    sqlite.close();
+  });
+
+  it("rejects an operation identity reused with different input", async () => {
+    const { sqlite, persistence, queue } = createPersistenceAndQueue();
+    const handled: string[] = [];
+    queue.registerHandler("observer.reconcile", async ({ commandId }) => {
+      handled.push(commandId);
+    });
+    queue.registerHandler("session.rename", async ({ commandId }) => {
+      handled.push(commandId);
+    });
+
+    const first = await queue.dispatch(reconcileCommand, { operationId: "req_conflict" });
+    await queue.drain();
+    const conflict = await queue.dispatch(renameSessionCommand, { operationId: "req_conflict" });
+    await queue.drain();
+
+    expect(conflict).toMatchObject({
+      commandId: first.commandId,
+      accepted: false,
+      status: "rejected",
+      error: { code: "COMMAND_OPERATION_CONFLICT" },
+    });
+    expect(handled).toEqual([first.commandId]);
+    expect(await persistence.listCommands()).toHaveLength(1);
+    sqlite.close();
+  });
+
+  it("admits concurrent exact operation replays only once", async () => {
+    const { sqlite, persistence, queue } = createPersistenceAndQueue();
+    const handled: string[] = [];
+    queue.registerHandler("observer.reconcile", async ({ commandId }) => {
+      handled.push(commandId);
+    });
+
+    const [first, replay] = await Promise.all([
+      queue.dispatch(reconcileCommand, { operationId: "req_concurrent" }),
+      queue.dispatch(reconcileCommand, { operationId: "req_concurrent" }),
+    ]);
+    await queue.drain();
+
+    expect(replay).toEqual(first);
+    expect(handled).toEqual([first.commandId]);
+    expect(await persistence.listCommands()).toHaveLength(1);
+    sqlite.close();
+  });
+
   it("records accepted, started, and succeeded lifecycle events", async () => {
     const { sqlite, persistence, queue } = createPersistenceAndQueue();
     const handled: string[] = [];

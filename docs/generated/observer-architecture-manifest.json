@@ -783,7 +783,7 @@
           "specifier": "../persistence/index.js",
           "resolvedPath": "apps/observer/src/persistence/index.ts",
           "edgeKind": "type-only",
-          "bindings": ["CommandJournal", "EventJournal", "ObserverIdFactory"]
+          "bindings": ["CommandJournal", "EventJournal", "ObserverIdFactory", "PersistedCommand"]
         },
         {
           "specifier": "../stationLogger.js",
@@ -801,7 +801,13 @@
           "specifier": "node:crypto",
           "resolvedPath": "node:crypto",
           "edgeKind": "runtime",
-          "bindings": ["randomUUID"]
+          "bindings": ["createHash", "randomUUID"]
+        },
+        {
+          "specifier": "node:util",
+          "resolvedPath": "node:util",
+          "edgeKind": "runtime",
+          "bindings": ["isDeepStrictEqual"]
         },
         {
           "specifier": "@station/contracts",
@@ -814,6 +820,7 @@
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "type-only",
           "bindings": [
+            "CommandDispatchOptions",
             "CommandId",
             "CommandReceipt",
             "StationCommand",
@@ -10620,6 +10627,7 @@
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "type-only",
           "bindings": [
+            "CommandDispatchOptions",
             "CommandId",
             "CommandRecord",
             "DiagnosticCollectionOptions",
@@ -15532,7 +15540,7 @@
       "declaration": "createObserverClient",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Presents Observer operations to clients through validated NDJSON requests.",
+      "purpose": "Presents Observer operations to clients through validated NDJSON requests and replays a lost command-dispatch response once with the same durable operation identity.",
       "dependencies": []
     },
     {
@@ -15540,7 +15548,7 @@
       "declaration": "startProtocolServer",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Exposes Observer operations through validated NDJSON requests on a Unix socket.",
+      "purpose": "Exposes Observer operations through validated NDJSON requests on a Unix socket and routes the command request identity into durable admission replay.",
       "dependencies": [
         {
           "path": "packages/contracts/src/observer.ts",

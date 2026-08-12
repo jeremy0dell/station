@@ -52,6 +52,11 @@ export const ObserverProcessIdentitySchema = z
   })
   .strict();
 
+export type CommandDispatchOptions = {
+  /** Stable identity for safe durable command recovery or replaying its recorded receipt. */
+  operationId?: string;
+};
+
 export type ObserverProcessIdentity = z.infer<typeof ObserverProcessIdentitySchema>;
 
 export const ObserverSqliteHealthSummarySchema = z
@@ -222,7 +227,7 @@ export type ObserverApi = {
   getSnapshot(options?: { includeDebug?: boolean }): Promise<StationSnapshot>;
   getSessionRecoveryReadiness(): Promise<SessionRecoveryReadiness>;
   subscribe(filter?: EventFilter): AsyncIterable<StationEvent>;
-  dispatch(command: StationCommand): Promise<CommandReceipt>;
+  dispatch(command: StationCommand, options?: CommandDispatchOptions): Promise<CommandReceipt>;
   getCommand(commandId: CommandId): Promise<CommandRecord | undefined>;
   reconcile(reason?: string): Promise<ReconcileReceipt>;
   ingestProviderHookEvent(event: ProviderHookEvent): Promise<ProviderHookReceipt>;

@@ -380,6 +380,13 @@ unrelated scopes may run concurrently. Failure is normalized into `SafeError`,
 persisted with trace correlation, and published. A failed command does not
 poison the following command in its scope.
 
+The protocol client retries a lost dispatch response once with the same request
+identity. Command admission derives the same durable command ID and returns the
+recorded receipt for exact replay. A stranded `accepted` record resumes once and
+repairs missing acceptance evidence, while `started` and terminal records never
+reexecute. Reusing an identity with different command input refuses before
+mutation; a fresh request identity always denotes a distinct command.
+
 Recorded `sessionGroup.create`, `sessionGroup.rename`,
 `sessionGroup.updateMembership`, `sessionGroup.reparent`, and `sessionGroup.delete` commands serialize by
 project. Inside the snapshot-writer turn they validate configured-project and
@@ -694,6 +701,7 @@ expires.
 | Socket ownership evidence | Connect success proves listening. Only `ECONNREFUSED`, or Bun's existing-path `ENOENT`, plus strict zero-holder `lsof` evidence proves stale. Permission failures, timeouts, live holders, evidence failure, path replacement, and non-socket collisions are inaccessible and authorize no spawn, unlink, stop, or signal. |
 | Observer build ordering | Health and pidfile `version` carry display SemVer plus reserved `station.<sha256>` build metadata derived from both repository inputs and production package outputs. Exact identified selectors attach. At one display version, the lexicographically greater immutable build identity is the only candidate allowed to replace; the loser and any missing legacy identity refuse, so neither silently delegates to different code. Each source process verifies the published identity once before adopting it and reuses that selector without further Git or hash I/O for its lifetime. Different display versions retain SemVer precedence and the existing exact-string equal-precedence tiebreak, except that the declared public reset orders `0.0.0-pre-alpha.*` after internal `0.7.1-rc.*` previews. Missing, invalid, or stale identities refuse. Replacement requires complete corroborating identity and never uses automatic SIGKILL. |
 | Command ordering | Commands serialize by session, worktree, project, terminal target, or command-specific fallback scope. Different scopes can execute concurrently. |
+| Command admission replay | A protocol request identity deterministically addresses one durable command record. Exact replay returns its original receipt and may resume only a never-started accepted record; changed input for that identity refuses. The client retries only dispatch transport and preserves the identity across attempts. |
 | Managed target release | Station target IDs are deterministic per worktree, so release is compare-and-delete on target plus expected Station session. A delayed old exit or failed-launch cleanup cannot remove a replacement binding; `false` proves absence or supersession, while rejection leaves cleanup uncertain. |
 | Command timeout and cancellation | Handlers receive a signal combining the runtime timeout and queue shutdown. A handler with a non-cancellable durable section calls `beginCommit` after read-only validation and immediately before its first write; cancellation may prevent entry, but the queue drains a begun commit to one completion. Create and fork pass that signal into provider-owned reads and subprocesses; a timeout that cannot prove whether mutation completed returns an outcome-unknown error and schedules nonblocking reconcile repair. A provider-confirmed irreversible removal marks its external mutation committed so later timeout or cancellation drains synchronous classification instead of overwriting accurate success. Other cancellation remains cooperative, and the process shutdown backstop handles ignored signals. |
 | Snapshot writer ordering | Full reconciles, Group mutation commits, and harness-report authorization plus base projection share a non-poisoning promise chain. A Group mutation projects only its command project and never scans providers, repairs other durable state, or publishes a reconcile event. Readiness persistence revalidates the live snapshot after its write. Scheduled reconcile requests coalesce; queued work after a run receives a later flush. |
