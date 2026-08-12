@@ -2030,6 +2030,12 @@
         {
           "specifier": "@station/contracts",
           "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "runtime",
+          "bindings": ["worktreeHasLiveAgent"]
+        },
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "type-only",
           "bindings": [
             "EnsureAgentWorkspaceIntent",

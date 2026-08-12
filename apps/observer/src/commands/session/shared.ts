@@ -80,7 +80,7 @@ export function findProjectOrThrow(
 }
 
 export function assertNoCurrentAgent(row: WorktreeRow | undefined): void {
-  if (!worktreeHasLiveAgent(row)) {
+  if (row === undefined || row.agent === undefined || !worktreeHasLiveAgent(row)) {
     return;
   }
   const error: SafeError = {
