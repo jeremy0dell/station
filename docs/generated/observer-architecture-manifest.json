@@ -15272,7 +15272,7 @@
       "declaration": "WorktrunkProvider",
       "kind": "class",
       "role": "ADAPTER",
-      "purpose": "Translates Worktrunk lifecycle output and commands into Station worktree contracts. Hook diagnostics use an atomic requester runtime when supplied and retain the whole Observer composition expectation as a fallback. Checkout roots are validated before Worktrunk runs, managed roots override Worktrunk's project-specific path templates, and removal revalidates native Git identity, path, and branch before mutation.",
+      "purpose": "Translates Worktrunk lifecycle output and commands into Station worktree contracts. Hook diagnostics use an atomic requester runtime when supplied and retain the whole Observer composition expectation as a fallback. Checkout roots are validated before Worktrunk runs, managed roots override Worktrunk's project-specific path templates, mutation cancellation reaches owned Git/Worktrunk subprocesses, cancelled removals confirm post-mutation completion through fresh Git evidence, seeded dirty state refreshes from the created checkout only, restart lookup validates durable hints and stable native path aliases through targeted Git evidence while native identity stays stable between reads, managed-root aliases stay stable across inventory, and removal revalidates native Git identity, path, branch, and unforced dirty state before mutation.",
       "dependencies": [
         {
           "path": "packages/contracts/src/providers.ts",
@@ -15383,7 +15383,7 @@
       "declaration": "WorktreeProvider",
       "kind": "interface",
       "role": "DRIVEN PORT",
-      "purpose": "Supplies worktree lifecycle evidence and mutations without exposing provider mechanics. Removal adapters must revalidate opaque registration identity, path, and branch immediately before mutation.",
+      "purpose": "Supplies worktree lifecycle evidence and mutations without exposing provider mechanics. Create adapters cooperatively cancel owned reads and subprocesses; targeted lookups treat supplied path aliases and registration identity as hints requiring current native validation; removal adapters revalidate opaque registration identity, path, branch, and unforced dirty state immediately before mutation.",
       "dependencies": []
     },
     {

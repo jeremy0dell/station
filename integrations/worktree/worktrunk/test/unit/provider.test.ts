@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ProviderProjectConfig } from "@station/contracts";
@@ -25,13 +25,435 @@ const project: ProviderProjectConfig = {
 };
 
 function testProvider(options: WorktrunkProviderOptions): WorktrunkProvider {
+  const runner = options.runner;
   return new WorktrunkProvider({
     resolveRegistrationIdentity: async (path) => `git-registration:${path}`,
     ...options,
+    ...(runner === undefined
+      ? {}
+      : {
+          runner: async (input) => {
+            const output = await runner(input);
+            return input.command === "git" && input.args?.includes("worktree")
+              ? { ...output, stdout: gitPorcelainFromTestList(output.stdout) }
+              : output;
+          },
+        }),
   });
 }
 
+function gitPorcelainFromTestList(stdout: string): string {
+  if (stdout.startsWith("worktree ")) {
+    return stdout;
+  }
+  const payload = JSON.parse(stdout) as Array<{
+    path: string;
+    branch?: string;
+    state?: string;
+    worktree?: { state?: string };
+  }>;
+  return payload
+    .map((item) => {
+      const fields = [
+        `worktree ${item.path}`,
+        "HEAD 2222222222222222222222222222222222222222",
+        ...(item.branch === undefined ? ["detached"] : [`branch refs/heads/${item.branch}`]),
+      ];
+      const state = item.worktree?.state ?? item.state;
+      if (state === "missing" || state === "prunable") fields.push("prunable test fixture");
+      return `${fields.join("\0")}\0\0`;
+    })
+    .join("");
+}
+
 describe("WorktrunkProvider", () => {
+  it("recovers a current worktree from a validated restart hint without listing", async () => {
+    const calls: ExternalCommandInput[] = [];
+    const targetPath = "/tmp/station/web/feature";
+    const commonDir = "/tmp/station/web/.git";
+    const worktreeId = "wt_web_feature_restart";
+    const provider = testProvider({
+      command: "wt",
+      clock: { now: () => new Date(now) },
+      runner: async (input) => {
+        calls.push(input);
+        if (input.args?.includes("--show-toplevel")) {
+          return result(
+            input,
+            `${targetPath}\n${commonDir}\n${"2".repeat(40)}\nrefs/heads/feature\n`,
+          );
+        }
+        if (input.args?.includes("status")) return result(input, "");
+        return result(input, `${commonDir}\n`);
+      },
+    });
+
+    await expect(
+      provider.getWorktree({
+        project,
+        projectId: project.id,
+        worktreeId,
+        path: targetPath,
+        expectedRegistrationIdentity: `git-registration:${targetPath}`,
+      }),
+    ).resolves.toMatchObject({
+      id: worktreeId,
+      projectId: project.id,
+      path: targetPath,
+      branch: "feature",
+      headSha: "2".repeat(40),
+      registrationIdentity: `git-registration:${targetPath}`,
+    });
+    expect(calls).toHaveLength(3);
+    expect(calls.every((call) => call.command === "git")).toBe(true);
+  });
+
+  it("refuses a restart hint when native registration identity changed", async () => {
+    const calls: ExternalCommandInput[] = [];
+    const targetPath = "/tmp/station/web/feature";
+    const provider = new WorktrunkProvider({
+      command: "wt",
+      clock: { now: () => new Date(now) },
+      resolveRegistrationIdentity: async () => "replacement-registration",
+      runner: async (input) => {
+        calls.push(input);
+        return result(input, "");
+      },
+    });
+
+    await expect(
+      provider.getWorktree({
+        project,
+        projectId: project.id,
+        worktreeId: "wt_web_feature_restart",
+        path: targetPath,
+        expectedRegistrationIdentity: "stale-registration",
+      }),
+    ).resolves.toBeNull();
+    expect(calls).toEqual([]);
+  });
+
+  it("refuses a registration replaced and restored across targeted Git reads", async () => {
+    const calls: ExternalCommandInput[] = [];
+    const targetPath = "/tmp/station/web/feature";
+    const commonDir = "/tmp/station/web/.git";
+    const originalRegistration = "original-registration";
+    let registrationIdentity = originalRegistration;
+    const provider = new WorktrunkProvider({
+      command: "wt",
+      clock: { now: () => new Date(now) },
+      resolveRegistrationIdentity: async () => registrationIdentity,
+      runner: async (input) => {
+        calls.push(input);
+        if (input.args?.includes("--show-toplevel")) {
+          registrationIdentity = "replacement-registration";
+          return result(
+            input,
+            `${targetPath}\n${commonDir}\n${"3".repeat(40)}\nrefs/heads/replacement\n`,
+          );
+        }
+        if (input.args?.includes("status")) {
+          registrationIdentity = originalRegistration;
+          return result(input, "");
+        }
+        return result(
+          input,
+          input.args?.includes("--is-bare-repository") ? "false\n" : `${commonDir}\n`,
+        );
+      },
+    });
+
+    await expect(
+      provider.getWorktree({
+        project,
+        projectId: project.id,
+        worktreeId: "wt_web_feature_restart",
+        path: targetPath,
+        expectedRegistrationIdentity: originalRegistration,
+      }),
+    ).resolves.toBeNull();
+    expect(calls.some((call) => call.args?.includes("status"))).toBe(false);
+    expect(calls.some((call) => call.command === "wt")).toBe(false);
+  });
+
+  it("refuses a restart hint whose checkout belongs to another Git common directory", async () => {
+    const calls: ExternalCommandInput[] = [];
+    const targetPath = "/tmp/station/web/feature";
+    const provider = testProvider({
+      command: "wt",
+      clock: { now: () => new Date(now) },
+      runner: async (input) => {
+        calls.push(input);
+        if (input.args?.includes("--show-toplevel")) {
+          return result(
+            input,
+            `${targetPath}\n/tmp/other/.git\n${"2".repeat(40)}\nrefs/heads/feature\n`,
+          );
+        }
+        return result(input, "/tmp/station/web/.git\n");
+      },
+    });
+
+    await expect(
+      provider.getWorktree({
+        project,
+        projectId: project.id,
+        worktreeId: "wt_web_feature_restart",
+        path: targetPath,
+        expectedRegistrationIdentity: `git-registration:${targetPath}`,
+      }),
+    ).resolves.toBeNull();
+    expect(calls).toHaveLength(2);
+    expect(calls.every((call) => call.command === "git")).toBe(true);
+  });
+
+  it("revalidates a complete hint instead of returning a warmed cache entry", async () => {
+    const calls: ExternalCommandInput[] = [];
+    const targetPath = "/tmp/station/web/feature";
+    const commonDir = "/tmp/station/web/.git";
+    let registrationIdentity = "original-registration";
+    const provider = new WorktrunkProvider({
+      command: "wt",
+      clock: { now: () => new Date(now) },
+      resolveRegistrationIdentity: async () => registrationIdentity,
+      runner: async (input) => {
+        calls.push(input);
+        if (input.command === "wt") {
+          return result(input, JSON.stringify([{ path: targetPath, branch: "feature" }]));
+        }
+        if (input.args?.includes("--show-toplevel")) {
+          return result(
+            input,
+            `${targetPath}\n${commonDir}\n${"3".repeat(40)}\nrefs/heads/current-feature\n`,
+          );
+        }
+        if (input.args?.includes("status")) return result(input, "");
+        return result(input, `${commonDir}\n`);
+      },
+    });
+    const [cached] = await provider.listWorktrees(project);
+    if (cached === undefined) throw new Error("Expected the fixture worktree to be cached.");
+    calls.length = 0;
+    const completeHint = {
+      project,
+      projectId: project.id,
+      worktreeId: cached.id,
+      path: targetPath,
+      expectedRegistrationIdentity: "original-registration",
+    };
+
+    registrationIdentity = "replacement-registration";
+    await expect(provider.getWorktree(completeHint)).resolves.toBeNull();
+    expect(calls).toEqual([]);
+
+    registrationIdentity = "original-registration";
+    await expect(provider.getWorktree(completeHint)).resolves.toMatchObject({
+      id: cached.id,
+      branch: "current-feature",
+      headSha: "3".repeat(40),
+      dirty: false,
+      registrationIdentity: "original-registration",
+    });
+    expect(calls).toHaveLength(3);
+    calls.length = 0;
+
+    await expect(provider.getWorktree({ worktreeId: cached.id })).resolves.toMatchObject({
+      id: cached.id,
+      branch: "current-feature",
+    });
+    expect(calls).toEqual([]);
+  });
+
+  it("keeps primary-checkout registration identity stable across targeted Git reads", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-wt-primary-identity-"));
+    const repositoryRoot = await realpath(root);
+    const git = (cwd: string, ...args: string[]) =>
+      nodeExternalCommandRunner({
+        command: "git",
+        args,
+        cwd,
+        unsetEnv: gitLocalEnvironmentVariables,
+      });
+    await git(repositoryRoot, "init", "-q", "-b", "main");
+    await git(
+      repositoryRoot,
+      "-c",
+      "user.email=t@example.com",
+      "-c",
+      "user.name=t",
+      "-c",
+      "commit.gpgsign=false",
+      "commit",
+      "--allow-empty",
+      "-qm",
+      "initial",
+    );
+    const primaryProject: ProviderProjectConfig = {
+      ...project,
+      root: repositoryRoot,
+      worktrunk: { ...project.worktrunk, includeMain: true },
+    };
+    const provider = new WorktrunkProvider({
+      command: "wt",
+      clock: { now: () => new Date(now) },
+      runner: async (input) =>
+        input.command === "wt"
+          ? result(input, JSON.stringify([{ path: repositoryRoot, branch: "main", is_main: true }]))
+          : nodeExternalCommandRunner(input),
+    });
+
+    try {
+      const [cached] = await provider.listWorktrees(primaryProject);
+      if (cached?.registrationIdentity === undefined) {
+        throw new Error("Expected the primary checkout registration identity.");
+      }
+      const request = {
+        project: primaryProject,
+        projectId: primaryProject.id,
+        worktreeId: cached.id,
+        path: cached.path,
+        expectedRegistrationIdentity: cached.registrationIdentity,
+      };
+
+      await expect(provider.getWorktree(request)).resolves.toMatchObject({
+        id: cached.id,
+        registrationIdentity: cached.registrationIdentity,
+      });
+      await expect(provider.getWorktree(request)).resolves.toMatchObject({
+        id: cached.id,
+        registrationIdentity: cached.registrationIdentity,
+      });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("validates stable path aliases and refuses a retargeted alias", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-wt-alias-"));
+    const repositoryRoot = join(root, "repo");
+    const repositoryAlias = join(root, "repo-alias");
+    const managedRoot = join(root, "managed");
+    const managedAlias = join(root, "managed-alias");
+    const featurePath = join(managedRoot, "feature");
+    const otherPath = join(managedRoot, "other");
+    const foreignRoot = join(root, "foreign");
+    const foreignPath = join(foreignRoot, "foreign");
+    const targetAlias = join(root, "target-alias");
+    const git = (cwd: string, ...args: string[]) =>
+      nodeExternalCommandRunner({
+        command: "git",
+        args,
+        cwd,
+        unsetEnv: gitLocalEnvironmentVariables,
+      });
+    try {
+      await mkdir(repositoryRoot);
+      await mkdir(managedRoot);
+      await mkdir(foreignRoot);
+      await git(repositoryRoot, "init", "-q", "-b", "main");
+      await writeFile(join(repositoryRoot, "README.md"), "alias fixture\n");
+      await git(repositoryRoot, "add", "README.md");
+      await git(
+        repositoryRoot,
+        "-c",
+        "user.email=test@example.invalid",
+        "-c",
+        "user.name=Test",
+        "-c",
+        "commit.gpgsign=false",
+        "commit",
+        "-qm",
+        "initial",
+      );
+      await git(repositoryRoot, "worktree", "add", "-q", "-b", "feature", featurePath, "HEAD");
+      await git(repositoryRoot, "worktree", "add", "-q", "-b", "other", otherPath, "HEAD");
+      await git(repositoryRoot, "worktree", "add", "-q", "-b", "foreign", foreignPath, "HEAD");
+      await symlink(repositoryRoot, repositoryAlias);
+      await symlink(managedRoot, managedAlias);
+      await symlink(featurePath, targetAlias);
+      let retargetManagedRootDuringList = false;
+      const provider = new WorktrunkProvider({
+        command: "wt",
+        runner: async (input) => {
+          if (input.command !== "wt") return nodeExternalCommandRunner(input);
+          if (retargetManagedRootDuringList) {
+            await rm(managedAlias);
+            await symlink(foreignRoot, managedAlias);
+          }
+          return result(
+            input,
+            JSON.stringify([
+              { path: repositoryRoot, branch: "main", is_main: true },
+              { path: featurePath, branch: "feature" },
+              { path: otherPath, branch: "other" },
+              { path: foreignPath, branch: "foreign" },
+            ]),
+          );
+        },
+      });
+      const aliasProject: ProviderProjectConfig = {
+        ...project,
+        root: repositoryAlias,
+        worktrunk: { ...project.worktrunk, includeMain: true, includeExternal: true },
+      };
+      const listed = await provider.listWorktrees(aliasProject);
+      const target = listed.find(({ path }) => path === featurePath);
+      if (target?.registrationIdentity === undefined) {
+        throw new Error("Expected an alias validation target.");
+      }
+
+      await expect(
+        provider.getWorktree({
+          project: aliasProject,
+          projectId: aliasProject.id,
+          worktreeId: target.id,
+          path: targetAlias,
+          expectedRegistrationIdentity: target.registrationIdentity,
+        }),
+      ).resolves.toMatchObject({ id: target.id, branch: "feature" });
+      await expect(
+        provider.listWorktrees({
+          ...aliasProject,
+          id: "web-managed-alias",
+          worktrunk: {
+            ...aliasProject.worktrunk,
+            managedRoot: managedAlias,
+            includeExternal: false,
+          },
+        }),
+      ).resolves.toEqual(
+        expect.arrayContaining([expect.objectContaining({ path: featurePath, branch: "feature" })]),
+      );
+
+      retargetManagedRootDuringList = true;
+      await expect(
+        provider.listWorktrees({
+          ...aliasProject,
+          id: "web-retargeted-managed-alias",
+          worktrunk: {
+            ...aliasProject.worktrunk,
+            managedRoot: managedAlias,
+            includeExternal: false,
+          },
+        }),
+      ).resolves.toEqual([expect.objectContaining({ path: repositoryRoot, branch: "main" })]);
+
+      await rm(targetAlias);
+      await symlink(otherPath, targetAlias);
+      await expect(
+        provider.getWorktree({
+          project: aliasProject,
+          projectId: aliasProject.id,
+          worktreeId: target.id,
+          path: targetAlias,
+          expectedRegistrationIdentity: target.registrationIdentity,
+        }),
+      ).resolves.toBeNull();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("lists worktrees through strict argv arrays", async () => {
     const calls: ExternalCommandInput[] = [];
     const provider = testProvider({
@@ -424,9 +846,106 @@ describe("WorktrunkProvider", () => {
     expect(removed).toEqual({ worktreeId: created.id, removed: true });
     expect(calls.map((call) => call.args)).toEqual([
       ["switch", "--create", "feature", "--base", "main", "--no-cd", "--format=json"],
-      ["list", "--format=json"],
-      ["-C", "/tmp/station/web/feature", "remove", "--force", "--force-delete", "--format=json"],
+      ["-C", project.root, "worktree", "list", "--porcelain", "-z"],
+      [
+        "-C",
+        "/tmp/station/web/feature",
+        "remove",
+        "--force",
+        "--force-delete",
+        "--foreground",
+        "--format=json",
+      ],
     ]);
+  });
+
+  it("revalidates removal with Git porcelain instead of another Worktrunk list", async () => {
+    const calls: ExternalCommandInput[] = [];
+    const linkedPath = "/tmp/station/web/feature";
+    const provider = testProvider({
+      command: "wt",
+      useLifecycleHooks: false,
+      clock: { now: () => new Date(now) },
+      runner: async (input) => {
+        calls.push(input);
+        if (input.command === "git" && input.args?.includes("worktree")) {
+          return result(
+            input,
+            `worktree ${linkedPath}\0HEAD 2222222222222222222222222222222222222222\0branch refs/heads/feature\0\0`,
+          );
+        }
+        if (input.args?.includes("status")) return result(input, "");
+        if (input.command === "git") {
+          return result(input, "false\n");
+        }
+        if (input.args?.includes("list")) {
+          return result(input, JSON.stringify([{ path: linkedPath, branch: "feature" }]));
+        }
+        return result(input, "{}");
+      },
+    });
+    const [selected] = await provider.listWorktrees(project);
+    if (selected?.registrationIdentity === undefined) {
+      throw new Error("Expected a verified removal target.");
+    }
+    calls.length = 0;
+
+    await provider.removeWorktree({
+      worktreeId: selected.id,
+      expectedPath: selected.path,
+      expectedBranch: selected.branch,
+      expectedRegistrationIdentity: selected.registrationIdentity,
+    });
+
+    expect(calls).toEqual([
+      expect.objectContaining({
+        command: "git",
+        args: ["-C", project.root, "worktree", "list", "--porcelain", "-z"],
+      }),
+      expect.objectContaining({
+        command: "git",
+        args: ["-C", linkedPath, "status", "--porcelain=v1", "--untracked-files=normal"],
+      }),
+      expect.objectContaining({
+        command: "wt",
+        args: ["-C", linkedPath, "remove", "--no-hooks", "--foreground", "--format=json"],
+      }),
+    ]);
+  });
+
+  it("refuses removal when the current Git registration cannot be verified", async () => {
+    const linkedPath = "/tmp/station/web/feature";
+    let registrationIsReadable = true;
+    const calls: ExternalCommandInput[] = [];
+    const provider = testProvider({
+      command: "wt",
+      clock: { now: () => new Date(now) },
+      resolveRegistrationIdentity: async () =>
+        registrationIsReadable ? `git-registration:${linkedPath}` : undefined,
+      runner: async (input) => {
+        calls.push(input);
+        return result(input, JSON.stringify([{ path: linkedPath, branch: "feature" }]));
+      },
+    });
+    const [selected] = await provider.listWorktrees(project);
+    if (selected?.registrationIdentity === undefined) {
+      throw new Error("Expected an initially verified target.");
+    }
+    registrationIsReadable = false;
+    calls.length = 0;
+
+    await expect(
+      provider.removeWorktree({
+        worktreeId: selected.id,
+        expectedPath: selected.path,
+        expectedBranch: selected.branch,
+        expectedRegistrationIdentity: selected.registrationIdentity,
+      }),
+    ).rejects.toMatchObject({
+      code: "WORKTRUNK_WORKTREE_CHANGED",
+      diagnosticDetails: [expect.objectContaining({ refusalReason: "registration_unverified" })],
+    });
+    expect(calls.filter((call) => call.command === "wt")).toEqual([]);
   });
 
   it("retains a created worktree when its Git registration cannot be verified", async () => {
@@ -500,8 +1019,17 @@ describe("WorktrunkProvider", () => {
 
     expect(calls.map((call) => call.args)).toEqual([
       ["list", "--format=json"],
-      ["list", "--format=json"],
-      ["-C", linkedPath, "remove", "--no-hooks", "--force", "--no-delete-branch", "--format=json"],
+      ["-C", project.root, "worktree", "list", "--porcelain", "-z"],
+      [
+        "-C",
+        linkedPath,
+        "remove",
+        "--no-hooks",
+        "--force",
+        "--no-delete-branch",
+        "--foreground",
+        "--format=json",
+      ],
     ]);
   });
 
@@ -539,7 +1067,7 @@ describe("WorktrunkProvider", () => {
     ).rejects.toMatchObject({ code: "WORKTRUNK_WORKTREE_NOT_FOUND" });
     expect(calls.map((call) => call.args)).toEqual([
       ["list", "--format=json"],
-      ["list", "--format=json"],
+      ["-C", project.root, "worktree", "list", "--porcelain", "-z"],
     ]);
   });
 
@@ -583,7 +1111,43 @@ describe("WorktrunkProvider", () => {
     ).rejects.toMatchObject({ code: "WORKTRUNK_WORKTREE_CHANGED" });
     expect(calls.map((call) => call.args)).toEqual([
       ["list", "--format=json"],
-      ["list", "--format=json"],
+      ["-C", project.root, "worktree", "list", "--porcelain", "-z"],
+    ]);
+  });
+
+  it("does not remove an unforced worktree that became dirty after selection", async () => {
+    const calls: ExternalCommandInput[] = [];
+    const linkedPath = "/tmp/station/web/feature";
+    const provider = testProvider({
+      command: "wt",
+      clock: { now: () => new Date(now) },
+      runner: async (input) => {
+        calls.push(input);
+        if (input.args?.includes("status")) return result(input, " M changed.txt\n");
+        return result(input, JSON.stringify([{ path: linkedPath, branch: "feature" }]));
+      },
+    });
+
+    const [selected] = await provider.listWorktrees(project);
+    if (selected?.registrationIdentity === undefined) {
+      throw new Error("Expected the linked worktree to be listed.");
+    }
+    calls.length = 0;
+
+    await expect(
+      provider.removeWorktree({
+        worktreeId: selected.id,
+        expectedPath: selected.path,
+        expectedBranch: selected.branch,
+        expectedRegistrationIdentity: selected.registrationIdentity,
+      }),
+    ).rejects.toMatchObject({
+      code: "WORKTREE_DIRTY_REQUIRES_FORCE",
+      diagnosticDetails: [expect.objectContaining({ refusalReason: "dirty" })],
+    });
+    expect(calls.map((call) => call.args)).toEqual([
+      ["-C", project.root, "worktree", "list", "--porcelain", "-z"],
+      ["-C", linkedPath, "status", "--porcelain=v1", "--untracked-files=normal"],
     ]);
   });
 
@@ -664,8 +1228,11 @@ describe("WorktrunkProvider", () => {
         seedFrom: { path: srcPath },
       });
 
-      // The post-seed re-list surfaces the copied dirty state on the returned observation.
+      // A target-scoped status read surfaces the copied dirty state without a full Worktrunk list.
       expect(created).toMatchObject({ branch: "feature", dirty: true });
+      expect(calls.filter((call) => call.command === "wt" && call.args?.[0] === "list")).toEqual(
+        [],
+      );
 
       // The full working tree really lands in the target (git did the materialization):
       // unstaged mod, staged mod, untracked (incl. nested), and the tracked deletion.
@@ -682,7 +1249,7 @@ describe("WorktrunkProvider", () => {
       // The seed is a temp-index snapshot — read-tree HEAD -> add -A -> write-tree against
       // a throwaway index in the source, materialized via read-tree -m -u in the target.
       const seedCalls = calls.filter((call) => call.command === "git");
-      expect(seedCalls).toHaveLength(4);
+      expect(seedCalls).toHaveLength(5);
       expect(seedCalls.slice(0, 3).map((call) => call.args)).toEqual([
         ["-C", srcPath, "read-tree", "HEAD"],
         ["-C", srcPath, "add", "-A"],
@@ -693,6 +1260,7 @@ describe("WorktrunkProvider", () => {
       ).toBe(true);
       expect(seedCalls[3]?.args?.slice(0, 5)).toEqual(["-C", tgtPath, "read-tree", "-m", "-u"]);
       expect(seedCalls[3]?.args?.[5]).toMatch(/^[0-9a-f]{40}$/);
+      expect(seedCalls[4]?.args).toEqual(["-C", tgtPath, "status", "--porcelain=v1", "-z"]);
 
       // The fork's base is pinned to the source branch so the seed materializes cleanly.
       const switchCall = calls.find((c) => c.command === "wt" && c.args?.[0] === "switch");
@@ -701,6 +1269,37 @@ describe("WorktrunkProvider", () => {
       await git(srcPath, "worktree", "remove", "--force", tgtPath).catch(() => undefined);
       await rm(root, { recursive: true, force: true });
     }
+  });
+
+  it("returns clean after seeding a clean tree without relisting the project", async () => {
+    const calls: ExternalCommandInput[] = [];
+    const targetPath = "/tmp/station/web/clean-feature";
+    const provider = testProvider({
+      command: "wt",
+      clock: { now: () => new Date(now) },
+      runner: async (input) => {
+        calls.push(input);
+        if (input.command === "wt") {
+          return result(input, JSON.stringify([{ path: targetPath, branch: "clean-feature" }]));
+        }
+        if (input.args?.includes("write-tree")) {
+          return result(input, `${"a".repeat(40)}\n`);
+        }
+        return result(input, "");
+      },
+    });
+
+    const created = await provider.createWorktree({
+      project,
+      branch: "clean-feature",
+      seedFrom: { path: "/tmp/station/web/source" },
+    });
+
+    expect(created).toMatchObject({ branch: "clean-feature", dirty: false });
+    expect(calls.filter((call) => call.command === "wt" && call.args?.[0] === "list")).toEqual([]);
+    expect(
+      calls.filter((call) => call.command === "git" && call.args?.includes("status")),
+    ).toHaveLength(1);
   });
 
   it("skips Worktrunk hooks for automated mutations when lifecycle hooks are disabled", async () => {
@@ -720,6 +1319,7 @@ describe("WorktrunkProvider", () => {
         if (input.args?.[0] === "remove") {
           return result(input, "{}");
         }
+        if (input.args?.includes("status")) return result(input, "");
         return result(
           input,
           JSON.stringify([{ path: "/tmp/station/web/feature", branch: "feature" }]),
@@ -737,8 +1337,9 @@ describe("WorktrunkProvider", () => {
 
     expect(calls.map((call) => call.args)).toEqual([
       ["switch", "--no-hooks", "--create", "feature", "--base", "main", "--no-cd", "--format=json"],
-      ["list", "--format=json"],
-      ["-C", "/tmp/station/web/feature", "remove", "--no-hooks", "--format=json"],
+      ["-C", project.root, "worktree", "list", "--porcelain", "-z"],
+      ["-C", "/tmp/station/web/feature", "status", "--porcelain=v1", "--untracked-files=normal"],
+      ["-C", "/tmp/station/web/feature", "remove", "--no-hooks", "--foreground", "--format=json"],
     ]);
   });
 
@@ -759,6 +1360,7 @@ describe("WorktrunkProvider", () => {
         if (input.args?.[0] === "remove") {
           return result(input, "{}");
         }
+        if (input.args?.includes("status")) return result(input, "");
         return result(
           input,
           JSON.stringify([{ path: "/tmp/station/web/feature", branch: "feature" }]),
@@ -776,8 +1378,9 @@ describe("WorktrunkProvider", () => {
 
     expect(calls.map((call) => call.args)).toEqual([
       ["switch", "--yes", "--create", "feature", "--base", "main", "--no-cd", "--format=json"],
-      ["list", "--format=json"],
-      ["-C", "/tmp/station/web/feature", "remove", "--yes", "--format=json"],
+      ["-C", project.root, "worktree", "list", "--porcelain", "-z"],
+      ["-C", "/tmp/station/web/feature", "status", "--porcelain=v1", "--untracked-files=normal"],
+      ["-C", "/tmp/station/web/feature", "remove", "--yes", "--foreground", "--format=json"],
     ]);
   });
 
@@ -1334,6 +1937,313 @@ describe("WorktrunkProvider", () => {
     });
   });
 
+  it("propagates create cancellation to the Worktrunk subprocess", async () => {
+    const controller = new AbortController();
+    let switchStarted: () => void = () => undefined;
+    const started = new Promise<void>((resolve) => {
+      switchStarted = resolve;
+    });
+    let aborted = false;
+    const provider = testProvider({
+      command: "wt",
+      clock: { now: () => new Date(now) },
+      runner: async (input) => {
+        if (input.command === "git") {
+          return result(input, "false\n");
+        }
+        switchStarted();
+        return new Promise((_, reject) => {
+          input.signal?.addEventListener(
+            "abort",
+            () => {
+              aborted = true;
+              reject(Object.assign(new Error("aborted"), { code: "ABORT_ERR" }));
+            },
+            { once: true },
+          );
+        });
+      },
+    });
+
+    const create = provider.createWorktree({
+      project,
+      branch: "feature",
+      signal: controller.signal,
+    });
+    await started;
+    controller.abort("test cancellation");
+
+    await expect(create).rejects.toMatchObject({ tag: "WorktreeProviderError" });
+    expect(aborted).toBe(true);
+  });
+
+  it("propagates targeted lookup cancellation to its Git subprocess", async () => {
+    const controller = new AbortController();
+    let validationStarted = () => undefined;
+    const started = new Promise<void>((resolve) => {
+      validationStarted = resolve;
+    });
+    let aborted = false;
+    const provider = testProvider({
+      command: "wt",
+      clock: { now: () => new Date(now) },
+      runner: async (input) => {
+        if (input.args?.includes("--is-bare-repository")) return result(input, "false\n");
+        validationStarted();
+        return new Promise((_, reject) => {
+          const abort = () => {
+            aborted = true;
+            reject(Object.assign(new Error("aborted"), { code: "ABORT_ERR" }));
+          };
+          if (input.signal?.aborted === true) abort();
+          else input.signal?.addEventListener("abort", abort, { once: true });
+        });
+      },
+    });
+
+    const lookup = provider.getWorktree({
+      project,
+      projectId: project.id,
+      worktreeId: "wt_web_feature_restart",
+      path: "/tmp/station/web/feature",
+      expectedRegistrationIdentity: "git-registration:/tmp/station/web/feature",
+      signal: controller.signal,
+    });
+    await started;
+    controller.abort("test cancellation");
+
+    await expect(lookup).rejects.toMatchObject({ code: "WORKTRUNK_CANCELLED" });
+    expect(aborted).toBe(true);
+  });
+
+  it("propagates removal cancellation before the Worktrunk subprocess", async () => {
+    const controller = new AbortController();
+    let revalidationStarted: () => void = () => undefined;
+    const started = new Promise<void>((resolve) => {
+      revalidationStarted = resolve;
+    });
+    let aborted = false;
+    const calls: ExternalCommandInput[] = [];
+    const provider = testProvider({
+      command: "wt",
+      clock: { now: () => new Date(now) },
+      runner: async (input) => {
+        calls.push(input);
+        if (input.command === "git" && input.args?.includes("worktree")) {
+          revalidationStarted();
+          return new Promise((_, reject) => {
+            const abort = () => {
+              aborted = true;
+              reject(Object.assign(new Error("aborted"), { code: "ABORT_ERR" }));
+            };
+            if (input.signal?.aborted === true) {
+              abort();
+            } else {
+              input.signal?.addEventListener("abort", abort, { once: true });
+            }
+          });
+        }
+        return result(
+          input,
+          JSON.stringify([{ path: "/tmp/station/web/feature", branch: "feature" }]),
+        );
+      },
+    });
+    const [selected] = await provider.listWorktrees(project);
+    if (selected?.registrationIdentity === undefined) {
+      throw new Error("Expected a verified removal target.");
+    }
+
+    const removal = provider.removeWorktree({
+      worktreeId: selected.id,
+      expectedPath: selected.path,
+      expectedBranch: selected.branch,
+      expectedRegistrationIdentity: selected.registrationIdentity,
+      signal: controller.signal,
+    });
+    await started;
+    controller.abort("test cancellation");
+
+    await expect(removal).rejects.toMatchObject({ tag: "WorktreeProviderError" });
+    expect(aborted).toBe(true);
+    expect(calls.filter((call) => call.command === "wt" && call.args?.includes("remove"))).toEqual(
+      [],
+    );
+  });
+
+  it("propagates removal cancellation from the final status check", async () => {
+    const controller = new AbortController();
+    let statusStarted = () => undefined;
+    const started = new Promise<void>((resolve) => {
+      statusStarted = resolve;
+    });
+    let aborted = false;
+    const calls: ExternalCommandInput[] = [];
+    const linkedPath = "/tmp/station/web/feature";
+    const provider = testProvider({
+      command: "wt",
+      runner: async (input) => {
+        calls.push(input);
+        if (input.args?.includes("status")) {
+          statusStarted();
+          return new Promise((_, reject) => {
+            input.signal?.addEventListener(
+              "abort",
+              () => {
+                aborted = true;
+                reject(Object.assign(new Error("aborted"), { code: "ABORT_ERR" }));
+              },
+              { once: true },
+            );
+          });
+        }
+        return result(input, JSON.stringify([{ path: linkedPath, branch: "feature" }]));
+      },
+    });
+    const [selected] = await provider.listWorktrees(project);
+    if (selected?.registrationIdentity === undefined) {
+      throw new Error("Expected a verified removal target.");
+    }
+
+    const removal = provider.removeWorktree({
+      worktreeId: selected.id,
+      expectedPath: selected.path,
+      expectedBranch: selected.branch,
+      expectedRegistrationIdentity: selected.registrationIdentity,
+      signal: controller.signal,
+    });
+    await started;
+    controller.abort("test cancellation");
+
+    await expect(removal).rejects.toMatchObject({ code: "WORKTRUNK_CANCELLED" });
+    expect(aborted).toBe(true);
+    expect(calls.filter((call) => call.command === "wt" && call.args?.includes("remove"))).toEqual(
+      [],
+    );
+  });
+
+  it("preserves a final removal status timeout without invoking Worktrunk", async () => {
+    const calls: ExternalCommandInput[] = [];
+    const linkedPath = "/tmp/station/web/feature";
+    let statusAborted = false;
+    const provider = testProvider({
+      command: "wt",
+      timeoutMs: 5,
+      runner: async (input) => {
+        calls.push(input);
+        if (input.args?.includes("--is-bare-repository")) return result(input, "false\n");
+        if (input.args?.includes("status")) {
+          return new Promise((_, reject) => {
+            input.signal?.addEventListener(
+              "abort",
+              () => {
+                statusAborted = true;
+                reject(Object.assign(new Error("aborted"), { code: "ABORT_ERR" }));
+              },
+              { once: true },
+            );
+          });
+        }
+        return result(input, JSON.stringify([{ path: linkedPath, branch: "feature" }]));
+      },
+    });
+    const [selected] = await provider.listWorktrees(project);
+    if (selected?.registrationIdentity === undefined) {
+      throw new Error("Expected a verified removal target.");
+    }
+    calls.length = 0;
+
+    await expect(
+      provider.removeWorktree({
+        worktreeId: selected.id,
+        expectedPath: selected.path,
+        expectedBranch: selected.branch,
+        expectedRegistrationIdentity: selected.registrationIdentity,
+      }),
+    ).rejects.toMatchObject({ code: "WORKTRUNK_TIMEOUT" });
+    expect(statusAborted).toBe(true);
+    expect(calls.filter((call) => call.args?.includes("status"))).toHaveLength(1);
+    expect(calls.filter((call) => call.command === "wt" && call.args?.includes("remove"))).toEqual(
+      [],
+    );
+  });
+
+  it.each([
+    { committed: false, gitReadable: true, expected: "cancelled" },
+    { committed: true, gitReadable: true, expected: "removed" },
+    { committed: true, gitReadable: false, expected: "outcome unknown without evidence" },
+  ] as const)("classifies cancellation at the Worktrunk removal completion edge as $expected", async ({
+    committed,
+    gitReadable,
+  }) => {
+    const controller = new AbortController();
+    const linkedPath = "/tmp/station/web/feature";
+    let removalStarted: () => void = () => undefined;
+    const started = new Promise<void>((resolve) => {
+      removalStarted = resolve;
+    });
+    let removed = false;
+    let gitCalls = 0;
+    const gitSignals: boolean[] = [];
+    const provider = testProvider({
+      command: "wt",
+      clock: { now: () => new Date(now) },
+      runner: async (input) => {
+        if (input.command === "git" && input.args?.includes("worktree")) {
+          gitCalls += 1;
+          gitSignals.push(input.signal?.aborted === true);
+          if (gitCalls >= 2 && !gitReadable) {
+            throw Object.assign(new Error("unreadable"), { code: "EIO" });
+          }
+          return result(
+            input,
+            JSON.stringify(removed ? [] : [{ path: linkedPath, branch: "feature" }]),
+          );
+        }
+        if (input.args?.includes("status")) return result(input, "");
+        if (input.args?.includes("remove")) {
+          removalStarted();
+          return new Promise((_, reject) => {
+            input.signal?.addEventListener(
+              "abort",
+              () => {
+                removed = committed;
+                reject(Object.assign(new Error("aborted"), { code: "ABORT_ERR" }));
+              },
+              { once: true },
+            );
+          });
+        }
+        return result(input, JSON.stringify([{ path: linkedPath, branch: "feature" }]));
+      },
+    });
+    const [selected] = await provider.listWorktrees(project);
+    if (selected?.registrationIdentity === undefined) {
+      throw new Error("Expected a verified removal target.");
+    }
+
+    const removal = provider.removeWorktree({
+      worktreeId: selected.id,
+      expectedPath: selected.path,
+      expectedBranch: selected.branch,
+      expectedRegistrationIdentity: selected.registrationIdentity,
+      signal: controller.signal,
+    });
+    await started;
+    controller.abort("test cancellation");
+
+    if (committed && gitReadable) {
+      await expect(removal).resolves.toEqual({ worktreeId: selected.id, removed: true });
+    } else if (!gitReadable) {
+      await expect(removal).rejects.toMatchObject({
+        code: "WORKTRUNK_REMOVE_OUTCOME_UNKNOWN",
+      });
+    } else {
+      await expect(removal).rejects.toMatchObject({ code: "WORKTRUNK_CANCELLED" });
+    }
+    expect(gitSignals).toEqual(gitReadable ? [false, false] : [false, false, false]);
+  });
+
   it("aborts Worktrunk subprocesses on timeout with a typed provider error", async () => {
     let aborted = false;
     const provider = testProvider({
@@ -1380,6 +2290,15 @@ describe("WorktrunkProvider", () => {
             }
           });
         }
+        if (input.command === "git" && input.args?.includes("worktree")) {
+          return result(
+            input,
+            "worktree /tmp/station/web/feature\0HEAD 2222222222222222222222222222222222222222\0branch refs/heads/feature\0\0",
+          );
+        }
+        if (input.command === "git" && input.args?.includes("status")) {
+          return result(input, "");
+        }
         return result(
           input,
           JSON.stringify([{ path: "/tmp/station/web/feature", branch: "feature" }]),
@@ -1402,7 +2321,13 @@ describe("WorktrunkProvider", () => {
       tag: "WorktreeProviderError",
       code: "WORKTRUNK_TIMEOUT",
     });
-    expect(removeArgs).toEqual(["-C", "/tmp/station/web/feature", "remove", "--format=json"]);
+    expect(removeArgs).toEqual([
+      "-C",
+      "/tmp/station/web/feature",
+      "remove",
+      "--foreground",
+      "--format=json",
+    ]);
     expect(aborted).toBe(true);
   });
 

@@ -187,7 +187,7 @@ ownership even where current ownership is still a deviation.
 | Recorded mutations | Driving | `StationCommand`, `dispatch`, command handlers | CLI, Station client, protocol client | Commands persist acceptance and completion; the production handler map is compile-time exhaustive over the command union. |
 | Provider hook delivery | Driving | provider hook ingress | `stn-ingress`, protocol method, offline spool, provider hook adapters | Raw input is validated once and provider vocabulary is normalized at the adapter boundary. |
 | Harness status delivery | Driving | harness event report ingress | harness hooks, provider hook adapters, protocol clients | Reports are deduplicated, queued, projected, persisted, and followed by reconcile. |
-| Worktree operations | Driven | `WorktreeProvider` | Worktrunk and test adapters | Strong purpose-owned port. |
+| Worktree operations | Driven | `WorktreeProvider` | Worktrunk and test adapters | Strong purpose-owned port; targeted lookups and removals revalidate current Git identity, managed-root containment, and unforced dirty state before returning evidence or mutating. Mutation requests carry cooperative cancellation into adapter-owned reads and subprocesses. |
 | Terminal operations | Driven | `TerminalProvider` | tmux, Station terminal, and test adapters | General topology and operations are provider-owned. |
 | Managed terminal lifecycle | Driven | `ManagedTerminalLifecycle` | Station terminal adapter, optionally backed by Station Host | Explicit injected role returning only an opaque target identity and declaring whether launched processes persist beyond the caller; Host backing may add spawn/list/close/attachment lifecycle, while Station retains native presentation and host-backed targets remain externally non-focusable. |
 | Harness operations | Driven | `HarnessProvider`, `SessionRecoveryArtifactLocator` | Claude, Codex, Cursor, OpenCode, Pi, scripted, and test adapters | Strong purpose-owned ports with provider-local parsing, compatibility admission, and exact recovery-artifact location; unsupported artifact providers make migration ineligible. |
@@ -245,7 +245,7 @@ No single layer owns all truth.
 | State | Authority and lifetime |
 | --- | --- |
 | Loaded config | Authoritative for managed projects, defaults, provider choices, feature policy, and configured hooks. Durable in TOML; loaded into process memory at startup and updated through explicit config operations. |
-| Provider observations | Each provider is authoritative only for external facts it can prove. Live reads and normalized ingress observations may be persisted with retention, but cached evidence does not outrank a newer provider read. |
+| Provider observations | Each provider is authoritative only for external facts it can prove. Live reads and normalized ingress observations may be persisted with retention, but cached evidence does not outrank a newer provider read. A persisted worktree observation may supply a targeted lookup's path and registration hint only when the provider revalidates current native evidence before returning it. |
 | Provider-owned identity | Worktree, target, harness-run, native execution, and external endpoint identity stays owned by the provider that minted it. Application code may carry opaque IDs but must not reconstruct their format. |
 | Observer-minted state | Command, event, error, report, session, Session Group, correlation, readiness, and recovery identities are legitimate internal facts minted by the observer. The observer does not invent external facts. |
 | Observer SQLite | Durable observer memory for commands, events, ingress dedupe, observations, correlations, sessions, project-local Session Groups, canonical worktree display titles, native-execution bindings, metadata caches, recovery handles, and readiness. Group membership is exclusive per session, while Group deletion changes only organizational rows. Display-title authority is keyed by `(projectId, worktreeId)` and survives transient provider observation gaps; it is not branch or provider identity. |
@@ -394,10 +394,12 @@ does not read providers or publish `observer.reconciled`.
 opaque Git registration identity. Its use case refreshes provider evidence and
 uniquely re-resolves that identity before terminal or worktree cleanup, refusing
 primary, default-branch, stale, missing, or ambiguous targets. The worktree
-adapter rechecks the expected registration identity, path, and branch immediately
-before mutation so an external checkout replacement cannot reuse the selected
-path and branch as removal identity. Adapter race refusals retain provider-neutral,
-trace-correlated diagnostic evidence.
+adapter rechecks the expected registration identity, path, branch, managed-root
+containment, and unforced dirty state immediately before mutation so an external
+checkout replacement cannot reuse the selected path and branch as removal
+identity. Targeted reads treat supplied paths and registration identities as hints
+and return only current Git-validated observations. Adapter race refusals retain
+provider-neutral, trace-correlated diagnostic evidence.
 
 ### Session Recovery Cutover
 

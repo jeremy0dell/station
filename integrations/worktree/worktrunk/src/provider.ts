@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { lstat, mkdtemp, readFile, rm } from "node:fs/promises";
+import { lstat, mkdtemp, readFile, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, normalize, relative, resolve } from "node:path";
 import type {
@@ -48,6 +48,10 @@ import { doctorWorktrunkHooks } from "./hooks.js";
 import { applyRecoveryBreadcrumbMetadata } from "./metadata.js";
 import { parseWorktrunkListJson, parseWorktrunkListPayload } from "./parse.js";
 import {
+  type GitWorktreeRemovalEvidence,
+  parseGitWorktreeRemovalEvidence,
+} from "./removalEvidence.js";
+import {
   WORKTRUNK_HOOK_NAMES,
   type WorktrunkHookExpectation,
   type WorktrunkProviderOptions,
@@ -74,8 +78,12 @@ const defaultCapabilities: WorktreeCapabilities = {
  * Translates Worktrunk lifecycle output and commands into Station worktree contracts.
  * Hook diagnostics use an atomic requester runtime when supplied and retain the whole Observer composition
  * expectation as a fallback. Checkout roots are validated before Worktrunk runs, managed roots override
- * Worktrunk's project-specific path templates, and removal revalidates native Git identity, path, and
- * branch before mutation.
+ * Worktrunk's project-specific path templates, mutation cancellation reaches owned Git/Worktrunk
+ * subprocesses, cancelled removals confirm post-mutation completion through fresh Git evidence,
+ * seeded dirty state refreshes from the created checkout only, restart lookup validates
+ * durable hints and stable native path aliases through targeted Git evidence while native identity
+ * stays stable between reads, managed-root aliases stay stable across inventory, and removal
+ * revalidates native Git identity, path, branch, and unforced dirty state before mutation.
  */
 export class WorktrunkProvider implements WorktreeProvider {
   readonly id: ProviderId = "worktrunk";
@@ -268,9 +276,12 @@ export class WorktrunkProvider implements WorktreeProvider {
     this.#projects.set(project.id, project);
     await this.#assertProjectRootUsable(project, policy);
 
+    const managedRootSnapshot = await captureManagedRootSnapshot(project);
     const observations = await this.#readWorktrees(project, policy);
-    const managedObservations = observations.filter((observation) =>
-      isManagedWorktreeObservation(project, observation),
+    const managedObservations = await filterManagedWorktreeObservations(
+      project,
+      observations,
+      managedRootSnapshot,
     );
     const withBreadcrumbs = await Promise.all(
       managedObservations.map((observation) =>
@@ -309,7 +320,9 @@ export class WorktrunkProvider implements WorktreeProvider {
 
   async createWorktree(request: CreateWorktreeRequest): Promise<WorktreeObservation> {
     this.#projects.set(request.project.id, request.project);
-    await this.#assertProjectRootUsable(request.project);
+    const signalPolicy: WorktrunkRunPolicy =
+      request.signal === undefined ? {} : { signal: request.signal };
+    await this.#assertProjectRootUsable(request.project, signalPolicy);
     const base = request.base ?? request.project.worktrunk.base;
     const pathEnv = worktreePathEnv(request.project, request.branch, request.path);
     const managedPathArgs = await this.#managedWorktreePathArgs(request.project, pathEnv);
@@ -330,7 +343,7 @@ export class WorktrunkProvider implements WorktreeProvider {
         message: "Worktrunk failed to create a worktree.",
         ...(base === undefined ? {} : { unresolvedBase: base }),
       },
-      {},
+      signalPolicy,
       pathEnv,
     );
 
@@ -339,11 +352,13 @@ export class WorktrunkProvider implements WorktreeProvider {
       providerId: this.id,
       observedAt: toIsoTimestamp(this.#clock.now()),
     });
-    const observations = (
-      await Promise.all(
-        commandObservations.map((observation) => this.#withRegistrationIdentity(observation)),
-      )
-    ).filter((observation) => isManagedWorktreeObservation(request.project, observation));
+    const withRegistrationIdentity = await Promise.all(
+      commandObservations.map((observation) => this.#withRegistrationIdentity(observation)),
+    );
+    const observations = await filterManagedWorktreeObservations(
+      request.project,
+      withRegistrationIdentity,
+    );
     const found =
       observations.find((observation) => observation.branch === request.branch) ??
       observations.find((observation) => observation.path === request.path) ??
@@ -383,14 +398,17 @@ export class WorktrunkProvider implements WorktreeProvider {
         this.#observations.delete(found.id);
         throw seedError;
       }
-      // Re-list so the seeded dirty state is observed before we return; listWorktrees
-      // refreshes the observation cache, so the caller sees the post-seed status.
-      const refreshed = (await this.listWorktrees(request.project)).find(
-        (observation) => observation.id === found.id,
+      const status = await this.#runSeedCommand(
+        "git",
+        ["-C", found.path, "status", "--porcelain=v1", "-z"],
+        {
+          failureMessage:
+            "Worktrunk created and seeded the worktree but failed to read its working tree status.",
+        },
       );
-      if (refreshed !== undefined) {
-        return refreshed;
-      }
+      const refreshed = { ...found, dirty: status.stdout.length > 0 };
+      this.#observations.set(refreshed.id, refreshed);
+      return refreshed;
     }
     return found;
   }
@@ -427,7 +445,7 @@ export class WorktrunkProvider implements WorktreeProvider {
   async #runSeedCommand(
     command: string,
     args: string[],
-    options?: { env?: Record<string, string> },
+    options?: { env?: Record<string, string>; failureMessage?: string },
   ) {
     try {
       return await runExternalCommand(
@@ -443,13 +461,65 @@ export class WorktrunkProvider implements WorktreeProvider {
     } catch (cause) {
       throw new WorktrunkProviderError(
         "WORKTRUNK_SEED_FAILED",
-        "Worktrunk created the worktree but failed to seed its working tree from the source.",
+        options?.failureMessage ??
+          "Worktrunk created the worktree but failed to seed its working tree from the source.",
         { cause },
       );
     }
   }
 
+  async #readRemovalEvidence(
+    project: ProviderProjectConfig,
+    policy: WorktrunkRunPolicy = {},
+  ): Promise<GitWorktreeRemovalEvidence[]> {
+    const args = ["-C", project.root, "worktree", "list", "--porcelain", "-z"];
+    const result = await runRuntimeBoundaryWithRetryAndTimeout(
+      {
+        operation: "provider.worktrunk.gitWorktreeList",
+        clock: this.#clock,
+        timeoutMs: this.#timeoutMs,
+        error: {
+          tag: "WorktreeProviderError",
+          code: "WORKTRUNK_COMMAND_FAILED",
+          message: "Git failed to revalidate the worktree removal target.",
+          provider: this.id,
+        },
+        timeoutError: {
+          tag: "TimeoutError",
+          code: "WORKTRUNK_TIMEOUT",
+          message: "Git worktree revalidation timed out.",
+          provider: this.id,
+        },
+        retry: {
+          retries: 1,
+          delayMs: 10,
+        },
+      },
+      ({ signal }) =>
+        runExternalCommand(
+          {
+            command: "git",
+            args,
+            unsetEnv: gitLocalEnvironmentVariables,
+            signal: mergeAbortSignals(signal, policy.signal),
+            maxOutputChars: 512 * 1024,
+          },
+          this.#runner,
+        ),
+    );
+    if (!result.ok) {
+      throw new WorktrunkProviderError(
+        "WORKTRUNK_COMMAND_FAILED",
+        "Git failed to revalidate the worktree removal target.",
+        { cause: result.error },
+      );
+    }
+    return parseGitWorktreeRemovalEvidence(result.value.stdout);
+  }
+
   async removeWorktree(request: RemoveWorktreeRequest): Promise<RemoveWorktreeResult> {
+    const signalPolicy: WorktrunkRunPolicy =
+      request.signal === undefined ? {} : { signal: request.signal };
     const observation = this.#observations.get(request.worktreeId);
     if (observation === undefined) {
       throw worktreeRemovalRefusalError({
@@ -488,16 +558,13 @@ export class WorktrunkProvider implements WorktreeProvider {
         refusalReason: "protection_unverified",
       });
     }
-    await this.#assertProjectRootUsable(project);
+    await this.#assertProjectRootUsable(project, signalPolicy);
 
-    const currentWorktrees = await this.#readWorktrees(project, { retries: 1 });
-    const identityMatches = currentWorktrees.filter(
-      (worktree) => worktree.id === request.worktreeId,
-    );
+    const currentWorktrees = await this.#readRemovalEvidence(project, signalPolicy);
     const pathMatches = currentWorktrees.filter((worktree) =>
       samePath(worktree.path, request.expectedPath),
     );
-    if (identityMatches.length === 0 && pathMatches.length === 0) {
+    if (pathMatches.length === 0) {
       throw worktreeRemovalRefusalError({
         code: "WORKTRUNK_WORKTREE_NOT_FOUND",
         message: "Worktrunk remove could not confirm that the selected worktree still exists.",
@@ -509,29 +576,52 @@ export class WorktrunkProvider implements WorktreeProvider {
         refusalReason: "missing_target",
       });
     }
-    const selected = identityMatches[0];
-    const pathMatch = pathMatches[0];
+    const selected = pathMatches[0];
+    const registrationIdentity =
+      selected?.state === "exists"
+        ? await this.#resolveRegistrationIdentity(selected.path)
+        : undefined;
     const finalRefusalReason =
-      identityMatches.length !== 1 || pathMatches.length !== 1
+      pathMatches.length !== 1
         ? "ambiguous_identity"
-        : selected === undefined || pathMatch === undefined || selected.id !== pathMatch.id
-          ? "identity_changed"
+        : selected === undefined
+          ? "missing_target"
           : selected.state !== "exists"
             ? "missing_target"
-            : changedRemovalIdentityReason(selected, request);
-    if (finalRefusalReason !== undefined || selected === undefined || pathMatch === undefined) {
+            : changedGitRemovalIdentityReason(selected, registrationIdentity, request);
+    if (finalRefusalReason !== undefined || selected === undefined) {
       throw worktreeRemovalRefusalError({
         code: "WORKTRUNK_WORKTREE_CHANGED",
         message: "The selected worktree changed before Worktrunk could remove it.",
         hint: "Refresh and reselect the worktree before retrying removal.",
         request,
         projectId: project.id,
-        canonicalPath: selected?.path ?? pathMatch?.path ?? request.expectedPath,
-        observedBranch: selected?.branch ?? pathMatch?.branch ?? request.expectedBranch,
+        canonicalPath: selected?.path ?? request.expectedPath,
+        observedBranch: selected?.branch ?? request.expectedBranch,
         refusalReason: finalRefusalReason ?? "ambiguous_identity",
       });
     }
+    if (request.force !== true) {
+      const status = await this.#readTargetedGit(
+        ["-C", selected.path, "status", "--porcelain=v1", "--untracked-files=normal"],
+        "Git failed to inspect the worktree before removal.",
+        signalPolicy,
+      );
+      if (status.length > 0) {
+        throw worktreeRemovalRefusalError({
+          code: "WORKTREE_DIRTY_REQUIRES_FORCE",
+          message: "This worktree has uncommitted changes and cannot be removed without force.",
+          hint: "Review the worktree changes, or confirm the removal with force.",
+          request,
+          projectId: project.id,
+          canonicalPath: selected.path,
+          observedBranch: selected.branch ?? request.expectedBranch,
+          refusalReason: "dirty",
+        });
+      }
+    }
     const branchIsShared =
+      selected.branch !== undefined &&
       !selected.branch.startsWith("detached:") &&
       currentWorktrees.some(
         (worktree) =>
@@ -550,22 +640,50 @@ export class WorktrunkProvider implements WorktreeProvider {
     }
 
     // Worktrunk 0.64 needs selected-checkout context and cannot delete a branch shared elsewhere.
-    await this.#run(
-      this.#args([
-        "-C",
-        selected.path,
-        "remove",
-        ...this.#automationHookArgs(),
-        ...removalFlags,
-        // Omit --foreground so staged-trash cleanup can remain detached after logical removal.
-        "--format=json",
-      ]),
-      undefined,
-      {
-        code: "WORKTRUNK_COMMAND_FAILED",
-        message: "Worktrunk failed to remove a worktree.",
-      },
-    );
+    try {
+      await this.#run(
+        this.#args([
+          "-C",
+          selected.path,
+          "remove",
+          ...this.#automationHookArgs(),
+          ...removalFlags,
+          "--foreground",
+          "--format=json",
+        ]),
+        undefined,
+        {
+          code: "WORKTRUNK_COMMAND_FAILED",
+          message: "Worktrunk failed to remove a worktree.",
+        },
+        signalPolicy,
+      );
+    } catch (error) {
+      if (!(error instanceof WorktrunkProviderError) || error.code !== "WORKTRUNK_CANCELLED") {
+        throw error;
+      }
+      // Caller cancellation can win after deletion; only fresh Git absence confirms that edge.
+      let currentEvidence: GitWorktreeRemovalEvidence[];
+      try {
+        currentEvidence = await this.#readRemovalEvidence(project, {});
+      } catch (cause) {
+        throw new WorktrunkProviderError(
+          "WORKTRUNK_REMOVE_OUTCOME_UNKNOWN",
+          "Worktrunk removal was cancelled after it started, and Git could not confirm the outcome.",
+          {
+            cause,
+            hint: "Refresh worktrees and inspect the selected path before retrying removal.",
+          },
+        );
+      }
+      if (
+        currentEvidence.some(
+          (worktree) => worktree.state === "exists" && samePath(worktree.path, selected.path),
+        )
+      ) {
+        throw error;
+      }
+    }
     this.#observations.delete(request.worktreeId);
     return {
       worktreeId: request.worktreeId,
@@ -574,16 +692,190 @@ export class WorktrunkProvider implements WorktreeProvider {
   }
 
   async getWorktree(request: GetWorktreeRequest): Promise<WorktreeObservation | null> {
-    if (request.worktreeId !== undefined) {
-      return this.#observations.get(request.worktreeId) ?? null;
+    if (
+      request.worktreeId === undefined ||
+      request.path === undefined ||
+      request.project === undefined
+    ) {
+      if (request.worktreeId !== undefined) {
+        const cached = this.#observations.get(request.worktreeId);
+        if (
+          cached !== undefined &&
+          (request.projectId === undefined || cached.projectId === request.projectId)
+        ) {
+          return cached;
+        }
+      }
+      if (request.path !== undefined) {
+        const cached = [...this.#observations.values()].find(
+          (observation) => observation.path === request.path,
+        );
+        if (
+          cached !== undefined &&
+          (request.worktreeId === undefined || cached.id === request.worktreeId) &&
+          (request.projectId === undefined || cached.projectId === request.projectId)
+        ) {
+          return cached;
+        }
+      }
+      return null;
     }
-    if (request.path !== undefined) {
-      return (
-        [...this.#observations.values()].find((observation) => observation.path === request.path) ??
-        null
-      );
+
+    const registrationIdentity = await this.#resolveRegistrationIdentity(request.path);
+    if (
+      registrationIdentity === undefined ||
+      (request.expectedRegistrationIdentity !== undefined &&
+        registrationIdentity !== request.expectedRegistrationIdentity)
+    ) {
+      return null;
     }
-    return null;
+    const signalPolicy: WorktrunkRunPolicy =
+      request.signal === undefined ? {} : { signal: request.signal };
+    await this.#assertProjectRootUsable(request.project, signalPolicy);
+    const targetOutput = await this.#readTargetedGit(
+      [
+        "-C",
+        request.path,
+        "rev-parse",
+        "--path-format=absolute",
+        "--show-toplevel",
+        "--git-common-dir",
+        "HEAD",
+        "--symbolic-full-name",
+        "HEAD",
+      ],
+      "Git failed to validate the hinted worktree.",
+      signalPolicy,
+    );
+    if ((await this.#resolveRegistrationIdentity(request.path)) !== registrationIdentity) {
+      return null;
+    }
+    const target = targetOutput.trim().split("\n");
+    const projectCommonDir = (
+      await this.#readTargetedGit(
+        ["-C", request.project.root, "rev-parse", "--path-format=absolute", "--git-common-dir"],
+        "Git failed to validate the hinted worktree project.",
+        signalPolicy,
+      )
+    ).trim();
+    if ((await this.#resolveRegistrationIdentity(request.path)) !== registrationIdentity) {
+      return null;
+    }
+    const [topLevel, commonDir, headSha, branchRef] = target;
+    if (
+      topLevel === undefined ||
+      commonDir === undefined ||
+      headSha === undefined ||
+      branchRef === undefined ||
+      !(await sameExistingPath(topLevel, request.path)) ||
+      !(await sameExistingPath(commonDir, projectCommonDir))
+    ) {
+      return null;
+    }
+    const dirty =
+      (
+        await this.#readTargetedGit(
+          ["-C", request.path, "status", "--porcelain=v1", "--untracked-files=normal"],
+          "Git failed to inspect the hinted worktree status.",
+          signalPolicy,
+        )
+      ).length > 0;
+    const observation: WorktreeObservation = {
+      id: request.worktreeId,
+      provider: this.id,
+      projectId: request.project.id,
+      branch: branchRef.startsWith("refs/heads/")
+        ? branchRef.slice("refs/heads/".length)
+        : `detached:${headSha.slice(0, 10)}`,
+      path: topLevel,
+      state: "exists",
+      source: "worktrunk",
+      confidence: "high",
+      reason: "Validated a durable worktree hint against current Git identity.",
+      observedAt: toIsoTimestamp(this.#clock.now()),
+      registrationIdentity,
+      headSha,
+      dirty,
+      isPrimaryCheckout: await sameExistingPath(topLevel, request.project.root),
+    };
+    const finalRegistrationIdentity = await this.#resolveRegistrationIdentity(request.path);
+    if (
+      finalRegistrationIdentity !== registrationIdentity ||
+      (await filterManagedWorktreeObservations(request.project, [observation])).length === 0
+    ) {
+      return null;
+    }
+    this.#projects.set(request.project.id, request.project);
+    this.#observations.set(observation.id, observation);
+    return observation;
+  }
+
+  async #readTargetedGit(
+    args: string[],
+    message: string,
+    policy: WorktrunkRunPolicy = {},
+  ): Promise<string> {
+    const result = await runRuntimeBoundaryWithRetryAndTimeout(
+      {
+        operation: "provider.worktrunk.targetedWorktreeLookup",
+        clock: this.#clock,
+        timeoutMs: policy.timeoutMs ?? this.#timeoutMs,
+        error: {
+          tag: "WorktreeProviderError",
+          code: "WORKTRUNK_COMMAND_FAILED",
+          message,
+          provider: this.id,
+        },
+        timeoutError: {
+          tag: "TimeoutError",
+          code: "WORKTRUNK_TIMEOUT",
+          message,
+          provider: this.id,
+        },
+        retry: {
+          retries: 1,
+          delayMs: 10,
+          shouldRetry: (error) =>
+            error.code !== "WORKTRUNK_TIMEOUT" &&
+            error.code !== "EXTERNAL_COMMAND_ABORTED" &&
+            error.tag !== "CancellationError",
+        },
+      },
+      ({ signal }) =>
+        runExternalCommand(
+          {
+            command: "git",
+            args,
+            unsetEnv: gitLocalEnvironmentVariables,
+            signal: mergeAbortSignals(signal, policy.signal),
+            maxOutputChars: 16 * 1024,
+          },
+          this.#runner,
+        ),
+    );
+    if (!result.ok) {
+      if (result.error.code === "WORKTRUNK_TIMEOUT") {
+        throw new WorktrunkProviderError("WORKTRUNK_TIMEOUT", message, {
+          cause: result.error,
+        });
+      }
+      if (
+        result.error.code === "EXTERNAL_COMMAND_ABORTED" ||
+        result.error.tag === "CancellationError"
+      ) {
+        throw new WorktrunkProviderError(
+          "WORKTRUNK_CANCELLED",
+          "Worktrunk command was cancelled.",
+          {
+            cause: result.error,
+          },
+        );
+      }
+      throw new WorktrunkProviderError("WORKTRUNK_COMMAND_FAILED", message, {
+        cause: result.error,
+      });
+    }
+    return result.value.stdout;
   }
 
   #args(args: string[]): string[] {
@@ -956,20 +1248,59 @@ function parseCommandObservation(
   }
 }
 
-function isManagedWorktreeObservation(
+async function filterManagedWorktreeObservations(
   project: ProviderProjectConfig,
-  observation: WorktreeObservation,
-): boolean {
-  if (isMainWorktree(project, observation)) {
-    return project.worktrunk.includeMain !== false;
-  }
-
+  observations: WorktreeObservation[],
+  expectedManagedRoot?: ManagedRootSnapshot,
+): Promise<WorktreeObservation[]> {
   const managedRoot = resolveManagedRoot(project);
   if (managedRoot === undefined || project.worktrunk.includeExternal !== false) {
-    return true;
+    return observations.filter(
+      (observation) =>
+        !isMainWorktree(project, observation) || project.worktrunk.includeMain !== false,
+    );
   }
+  const canonicalManagedRoot = await realpath(managedRoot).catch(() => undefined);
+  if (
+    expectedManagedRoot !== undefined &&
+    (expectedManagedRoot.canonicalPath === null
+      ? canonicalManagedRoot !== undefined
+      : canonicalManagedRoot === undefined ||
+        !samePath(expectedManagedRoot.canonicalPath, canonicalManagedRoot))
+  ) {
+    return observations.filter(
+      (observation) =>
+        isMainWorktree(project, observation) && project.worktrunk.includeMain !== false,
+    );
+  }
+  const managed = await Promise.all(
+    observations.map(async (observation) => {
+      if (isMainWorktree(project, observation)) return project.worktrunk.includeMain !== false;
+      if (
+        isPathInside(observation.path, managedRoot) ||
+        (canonicalManagedRoot !== undefined && isPathInside(observation.path, canonicalManagedRoot))
+      ) {
+        return true;
+      }
+      const canonicalObservationPath = await realpath(observation.path).catch(() => undefined);
+      return (
+        canonicalManagedRoot !== undefined &&
+        canonicalObservationPath !== undefined &&
+        isPathInside(canonicalObservationPath, canonicalManagedRoot)
+      );
+    }),
+  );
+  return observations.filter((_, index) => managed[index] === true);
+}
 
-  return isPathInside(observation.path, managedRoot);
+type ManagedRootSnapshot = { canonicalPath: string | null };
+
+async function captureManagedRootSnapshot(
+  project: ProviderProjectConfig,
+): Promise<ManagedRootSnapshot | undefined> {
+  const managedRoot = resolveManagedRoot(project);
+  if (managedRoot === undefined || project.worktrunk.includeExternal !== false) return undefined;
+  return { canonicalPath: await realpath(managedRoot).catch(() => null) };
 }
 
 function isMainWorktree(project: ProviderProjectConfig, observation: WorktreeObservation): boolean {
@@ -1042,6 +1373,19 @@ function samePath(left: string, right: string): boolean {
   return canonicalPathForComparison(left) === canonicalPathForComparison(right);
 }
 
+async function sameExistingPath(left: string, right: string): Promise<boolean> {
+  if (samePath(left, right)) return true;
+  const [canonicalLeft, canonicalRight] = await Promise.all([
+    realpath(left).catch(() => undefined),
+    realpath(right).catch(() => undefined),
+  ]);
+  return (
+    canonicalLeft !== undefined &&
+    canonicalRight !== undefined &&
+    samePath(canonicalLeft, canonicalRight)
+  );
+}
+
 function changedRemovalIdentityReason(
   observation: WorktreeObservation,
   request: RemoveWorktreeRequest,
@@ -1059,6 +1403,43 @@ function changedRemovalIdentityReason(
     return "registration_changed";
   }
   return undefined;
+}
+
+function changedGitRemovalIdentityReason(
+  evidence: GitWorktreeRemovalEvidence,
+  registrationIdentity: string | undefined,
+  request: RemoveWorktreeRequest,
+): WorktreeRemovalRefusalReason | undefined {
+  if (!samePath(evidence.path, request.expectedPath)) {
+    return "path_changed";
+  }
+  if (
+    evidence.branch === undefined ||
+    !sameRemovalBranch(evidence.branch, request.expectedBranch)
+  ) {
+    return "branch_changed";
+  }
+  if (registrationIdentity === undefined) {
+    return "registration_unverified";
+  }
+  if (registrationIdentity !== request.expectedRegistrationIdentity) {
+    return "registration_changed";
+  }
+  return undefined;
+}
+
+function sameRemovalBranch(current: string, expected: string): boolean {
+  if (current === expected) {
+    return true;
+  }
+  if (!current.startsWith("detached:") || !expected.startsWith("detached:")) {
+    return false;
+  }
+  const currentIdentity = current.slice("detached:".length);
+  const expectedIdentity = expected.slice("detached:".length);
+  return (
+    currentIdentity.startsWith(expectedIdentity) || expectedIdentity.startsWith(currentIdentity)
+  );
 }
 
 function worktreeRemovalRefusalError(input: {
@@ -1114,7 +1495,6 @@ async function nativeGitRegistrationIdentity(worktreePath: string): Promise<stri
           before.dev.toString(),
           before.ino.toString(),
           before.birthtimeNs.toString(),
-          before.ctimeNs.toString(),
           marker,
         ].join("\0"),
       )

@@ -15,6 +15,7 @@ export const WorktreeRemovalRefusalReasonSchema = z.enum([
   "ambiguous_identity",
   "branch_changed",
   "default_branch",
+  "dirty",
   "identity_changed",
   "missing_target",
   "path_changed",
