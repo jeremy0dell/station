@@ -57,7 +57,17 @@ export function sessionGroupIdCollisionError(projectId: string): SafeError {
   };
 }
 
-export function sessionGroupAssignmentConflictError(projectId: string): SafeError {
+export function sessionGroupMembershipAssignmentConflictError(projectId: string): SafeError {
+  return {
+    tag: "CommandConflictError",
+    code: "SESSION_GROUP_ASSIGNMENT_CONFLICT",
+    message: "A session's current Group assignment did not match the command expectation.",
+    hint: "Refresh the canonical Group state before retrying the membership change.",
+    projectId,
+  };
+}
+
+export function sessionGroupPlacementAssignmentConflictError(projectId: string): SafeError {
   return {
     tag: "CommandConflictError",
     code: "SESSION_GROUP_ASSIGNMENT_CONFLICT",

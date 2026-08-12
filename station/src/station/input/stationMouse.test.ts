@@ -709,6 +709,26 @@ describe("routeStationMouse", () => {
     expect(store.state.getState().screen).toMatchObject({
       flow: { mode: "editGroupDraft" },
     });
+
+    store.actions.handleKey({ input: "Release" });
+    routeStationMouse(
+      { kind: "newSessionAction", actionId: "editGroupDraft.save" },
+      LEFT_DOWN,
+      store,
+    );
+    expect(store.state.getState().screen).toMatchObject({
+      flow: { mode: "review", groupSelection: { kind: "create", name: "Release" } },
+    });
+
+    store.actions.handleKey({ input: "G" });
+    routeStationMouse({ kind: "sheetChoice", choiceKey: "N" }, LEFT_DOWN, store);
+    store.actions.handleKey({ input: "Discarded" });
+    routeStationMouse(
+      { kind: "newSessionAction", actionId: "editGroupDraft.back" },
+      LEFT_DOWN,
+      store,
+    );
+    expect(store.state.getState().screen).toMatchObject({ flow: { mode: "pickGroup" } });
   });
 
   it("treats right-click as inert at the STATION router layer", () => {

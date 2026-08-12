@@ -460,8 +460,8 @@ export function createInMemoryObserverPersistence(
           return {
             ok: true,
             session,
-            ...(placement.result.createdGroupId !== undefined
-              ? { createdGroupId: placement.result.createdGroupId }
+            ...(placement.result.groupProvenance !== undefined
+              ? { groupProvenance: placement.result.groupProvenance }
               : {}),
           };
         }
@@ -474,8 +474,8 @@ export function createInMemoryObserverPersistence(
         return {
           ok: true,
           session: existing,
-          ...(placement.result.createdGroupId !== undefined
-            ? { createdGroupId: placement.result.createdGroupId }
+          ...(placement.result.groupProvenance !== undefined
+            ? { groupProvenance: placement.result.groupProvenance }
             : {}),
         };
       }),
@@ -485,8 +485,7 @@ export function createInMemoryObserverPersistence(
         const session = draft.sessions.get(input.sessionId);
         if (session === undefined) {
           if (
-            input.expectedGroupId !== undefined ||
-            input.createdGroupId !== undefined ||
+            input.groupProvenance !== undefined ||
             draft.sessionGroups.assignments.has(input.sessionId)
           ) {
             throw new Error("Session seed no longer matches cleanup provenance.");
@@ -495,10 +494,9 @@ export function createInMemoryObserverPersistence(
           const placement = sessionGroupStore.discardSessionSeedPlacement(draft.sessionGroups, {
             sessionId: input.sessionId,
             projectId: session.projectId,
-            ...(input.expectedGroupId === undefined
+            ...(input.groupProvenance === undefined
               ? {}
-              : { expectedGroupId: input.expectedGroupId }),
-            ...(input.createdGroupId === undefined ? {} : { createdGroupId: input.createdGroupId }),
+              : { groupProvenance: input.groupProvenance }),
             updatedAt: input.discardedAt ?? now(),
           });
           draft.sessionGroups = placement.state;

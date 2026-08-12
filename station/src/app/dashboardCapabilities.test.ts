@@ -44,6 +44,7 @@ function harness() {
   return {
     capabilities,
     source,
+    service,
     store,
     opened,
     createRequests,
@@ -169,6 +170,172 @@ describe("native dashboard capabilities", () => {
         group: { kind: "existing", groupId: "grp_release" },
       },
     ]);
+  });
+
+  it("keeps deliberate New Session pending until exact existing-Group membership is canonical", async () => {
+    const fixture = harness();
+    const snapshot = manyProjectsSnapshot();
+    const project = snapshot.projects.find((candidate) => candidate.id === "station");
+    const session = snapshot.sessions.find((candidate) => candidate.projectId === "station");
+    if (project === undefined || session === undefined) throw new Error("station fixture missing");
+    const branch = "station-deliberate-group-123456";
+    const request = {
+      project,
+      title: branch,
+      hiddenBranch: branch,
+      harness: "codex" as const,
+      group: { kind: "existing" as const, groupId: "grp_release" },
+    };
+    const completion = fixture.capabilities.managedSessions.create(request).completion;
+    let settled = false;
+    void completion.then(() => {
+      settled = true;
+    });
+
+    const sessionOnly = {
+      ...snapshot,
+      rows: snapshot.rows.map((row) =>
+        row.id === session.worktreeId ? { ...row, branch } : row,
+      ),
+    };
+    fixture.source.setSnapshot(sessionOnly);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(settled).toBe(false);
+
+    fixture.source.setSnapshot({
+      ...sessionOnly,
+      sessionGroups: [
+        {
+          id: "grp_release",
+          projectId: "station",
+          name: "Release",
+          sessionIds: [session.id],
+          version: 1,
+          createdAt: session.createdAt,
+          updatedAt: session.createdAt,
+        },
+      ],
+    });
+    expect(await completion).toEqual({ kind: "success" });
+  });
+
+  it("matches deliberate inline-Group placement by canonical membership and name", async () => {
+    const fixture = harness();
+    const snapshot = manyProjectsSnapshot();
+    const project = snapshot.projects.find((candidate) => candidate.id === "station");
+    const session = snapshot.sessions.find((candidate) => candidate.projectId === "station");
+    if (project === undefined || session === undefined) throw new Error("station fixture missing");
+    const branch = "station-deliberate-inline-123456";
+    const completion = fixture.capabilities.managedSessions.create({
+      project,
+      title: branch,
+      hiddenBranch: branch,
+      harness: "codex",
+      group: { kind: "create", name: "Release" },
+    }).completion;
+
+    fixture.source.setSnapshot({
+      ...snapshot,
+      rows: snapshot.rows.map((row) =>
+        row.id === session.worktreeId ? { ...row, branch } : row,
+      ),
+      sessionGroups: [
+        {
+          id: "grp_minted",
+          projectId: "station",
+          name: "Release",
+          sessionIds: [session.id],
+          version: 1,
+          createdAt: session.createdAt,
+          updatedAt: session.createdAt,
+        },
+      ],
+    });
+    expect(await completion).toEqual({ kind: "success" });
+  });
+
+  it("refreshes once after placement timeout and warns without enabling duplicate retry", async () => {
+    const realSetTimeout = globalThis.setTimeout;
+    const longTimers: Array<() => void> = [];
+    globalThis.setTimeout = ((
+      callback: (...callbackArgs: unknown[]) => void,
+      ms?: number,
+      ...rest: unknown[]
+    ) => {
+      if (typeof ms === "number" && ms >= 5_000) {
+        longTimers.push(() => callback(...rest));
+        return 0 as unknown as ReturnType<typeof setTimeout>;
+      }
+      return realSetTimeout(callback, ms, ...rest);
+    }) as typeof globalThis.setTimeout;
+    try {
+      const snapshot = manyProjectsSnapshot();
+      const project = snapshot.projects.find((candidate) => candidate.id === "station");
+      const session = snapshot.sessions.find((candidate) => candidate.projectId === "station");
+      if (project === undefined || session === undefined) throw new Error("station fixture missing");
+      const request = {
+        project,
+        title: "Refreshed",
+        hiddenBranch: "station-refresh-123456",
+        harness: "codex" as const,
+      };
+
+      const refreshed = harness();
+      refreshed.service.setSnapshot({
+        ...snapshot,
+        rows: snapshot.rows.map((row) =>
+          row.id === session.worktreeId ? { ...row, branch: request.hiddenBranch } : row,
+        ),
+      });
+      const refreshedCompletion = refreshed.capabilities.managedSessions.create(request).completion;
+      await new Promise((resolve) => realSetTimeout(resolve, 0));
+      longTimers.shift()?.();
+      expect(await refreshedCompletion).toEqual({ kind: "success" });
+      expect(refreshed.service.loadCount).toBe(1);
+
+      const unconfirmed = harness();
+      const warningCompletion = unconfirmed.capabilities.managedSessions.create({
+        ...request,
+        hiddenBranch: "station-unconfirmed-123456",
+      }).completion;
+      await new Promise((resolve) => realSetTimeout(resolve, 0));
+      longTimers.shift()?.();
+      expect(await warningCompletion).toEqual({
+        kind: "success",
+        notice: {
+          kind: "error",
+          message: "The session was created, but Station could not confirm its Group placement.",
+          hint: "Refresh the dashboard before creating another session.",
+        },
+      });
+      expect(unconfirmed.service.loadCount).toBe(1);
+    } finally {
+      globalThis.setTimeout = realSetTimeout;
+    }
+  });
+
+  it("settles a retained-worktree notice as non-retryable deliberate completion", async () => {
+    const fixture = harness();
+    const project = manyProjectsSnapshot().projects.find(
+      (candidate) => candidate.id === "station",
+    );
+    if (project === undefined) throw new Error("project fixture missing");
+    fixture.setCreateResult({
+      kind: "notice",
+      notice: { kind: "error", message: "Station retained the worktree." },
+    });
+
+    await expect(
+      fixture.capabilities.managedSessions.create({
+        project,
+        title: "Retained",
+        hiddenBranch: "station-retained-123456",
+        harness: "codex",
+      }).completion,
+    ).resolves.toEqual({
+      kind: "success",
+      notice: { kind: "error", message: "Station retained the worktree." },
+    });
   });
 
   it("waits for a native Quick Session to reach the client snapshot", async () => {

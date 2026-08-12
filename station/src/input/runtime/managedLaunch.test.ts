@@ -13,6 +13,12 @@ const CREATE_REQUEST = {
   harness: "codex" as const,
 };
 
+const GROUP_FAILURE = {
+  tag: "CommandValidationError" as const,
+  code: "SESSION_GROUP_NOT_FOUND",
+  message: "The selected Group no longer exists.",
+};
+
 function launchHarness(snapshot: StationSnapshot, observer = true) {
   const service = new FakeTuiObserverService(snapshot);
   const launch = createManagedLaunch({
@@ -116,5 +122,78 @@ describe("createManagedLaunch", () => {
         group: { kind: "create", name: "Release" },
       },
     ]);
+  });
+
+  it("rolls back the exact fresh worktree after Group placement rejection", async () => {
+    const { launch, service } = launchHarness(withoutIdleAgent());
+    service.prepareExternalLaunch = async () => {
+      throw GROUP_FAILURE;
+    };
+
+    await expect(
+      launch.create({
+        ...CREATE_REQUEST,
+        group: { kind: "existing", groupId: "grp_deleted" },
+      }),
+    ).resolves.toMatchObject({
+      kind: "failure",
+      stage: "worktree",
+      error: { code: "SESSION_GROUP_NOT_FOUND" },
+    });
+    expect(service.dispatched[1]).toEqual({
+      type: "worktree.remove",
+      payload: {
+        projectId: "station",
+        worktreeId: "wt_station_idle",
+        expectedPath: "/Users/example/.worktrees/station/pty-buffer",
+        expectedBranch: "pty-buffer",
+        expectedRegistrationIdentity: "git-registration:wt_station_idle",
+      },
+    });
+  });
+
+  it("retains the fresh worktree and prevents retry when safe rollback is unconfirmed", async () => {
+    const { launch, service } = launchHarness(withoutIdleAgent());
+    service.prepareExternalLaunch = async () => {
+      service.nextCompletion = {
+        status: "failed",
+        commandId: "cmd_tui_1",
+        error: {
+          tag: "CommandConflictError",
+          code: "WORKTREE_REMOVE_STALE_SELECTION",
+          message: "The worktree changed before removal.",
+        },
+      };
+      throw GROUP_FAILURE;
+    };
+
+    await expect(
+      launch.create({
+        ...CREATE_REQUEST,
+        group: { kind: "existing", groupId: "grp_deleted" },
+      }),
+    ).resolves.toEqual({
+      kind: "notice",
+      notice: {
+        kind: "error",
+        message:
+          "The selected Group no longer exists. Station kept the new worktree because safe rollback was not confirmed.",
+        hint: "Refresh the dashboard, then open or remove that worktree before retrying this branch.",
+      },
+    });
+    expect(service.dispatched.at(-1)?.type).toBe("worktree.remove");
+  });
+
+  it("does not remove a fresh worktree for unrelated preparation failures", async () => {
+    const { launch, service } = launchHarness(withoutIdleAgent());
+    service.prepareExternalLaunch = async () => {
+      throw new Error("prepare failed");
+    };
+
+    await launch.create({
+      ...CREATE_REQUEST,
+      group: { kind: "existing", groupId: "grp_release" },
+    });
+    expect(service.dispatched.map((command) => command.type)).toEqual(["worktree.create"]);
   });
 });

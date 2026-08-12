@@ -238,6 +238,9 @@ function settleDashboardCapabilityOperation(input: {
   if (operation.type === "createManagedSession") {
     if (result.kind === "success") {
       store.setState(completeNewSessionSubmission(store.getState(), operation.localId));
+      if (result.notice !== undefined) {
+        store.setState(addTuiToast(store.getState(), result.notice));
+      }
       return;
     }
     const error = result.kind === "failure" ? result.error : undefined;
@@ -255,6 +258,9 @@ function settleDashboardCapabilityOperation(input: {
       !(operation.type === "quickCreateManagedSession" && operation.targetGroupId !== undefined)
     ) {
       removeCapabilityOptimisticRow(store, operation);
+    }
+    if (result.notice !== undefined) {
+      store.setState(addTuiToast(store.getState(), result.notice));
     }
     return;
   }

@@ -36,6 +36,7 @@ import type {
   SessionGroupStoreResult,
   SessionHarnessDerivedStateRepair,
   SessionSeedGroupPlacement,
+  SessionSeedGroupProvenance,
   SessionSeedResult,
   SessionTurnReadinessMutation,
   WorktreeMetadataCurrentKind,
@@ -176,10 +177,10 @@ export interface SessionStore {
     lastSeenAt: string;
     group?: SessionSeedGroupPlacement;
   }): Promise<SessionSeedResult>;
+  /** Discards only the placement described by the seed result; any Group drift aborts atomically. */
   discardSessionSeed(input: {
     sessionId: string;
-    expectedGroupId?: SessionGroupId;
-    createdGroupId?: SessionGroupId;
+    groupProvenance?: SessionSeedGroupProvenance;
     discardedAt?: string;
     removedWorktree?: { projectId: string; worktreeId: string };
   }): Promise<{ discardedSessions: number; discardedWorktreeTitles: number }>;

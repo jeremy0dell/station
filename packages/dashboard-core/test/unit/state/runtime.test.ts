@@ -264,6 +264,36 @@ describe("dashboard runtime", () => {
     expect(store.state.getState().localRows.pendingCreate).toEqual([]);
   });
 
+  it("closes deliberate New Session and surfaces a non-retryable success notice", async () => {
+    const snapshot = createDashboardSnapshot();
+    const capabilities = createFakeDashboardCapabilities();
+    capabilities.createHandle = () =>
+      dashboardExecution({
+        kind: "success",
+        notice: {
+          kind: "error",
+          message: "The session was created, but its placement is not visible yet.",
+        },
+      });
+    const store = createTestDashboardRuntime({
+      service: new FakeTuiObserverService(snapshot),
+      initialSnapshot: snapshot,
+      capabilities,
+    });
+
+    store.actions.handleKey({ input: "N" });
+    store.actions.handleKey({ input: "C" });
+
+    await waitFor(() => store.state.getState().screen.name === "dashboard");
+    expect(store.state.getState().toasts).toContainEqual(
+      expect.objectContaining({
+        toast: expect.objectContaining({
+          message: "The session was created, but its placement is not visible yet.",
+        }),
+      }),
+    );
+  });
+
   it("applies Quick Session optimistic state synchronously after screen focus", () => {
     const snapshot = createZeroWorktreeSnapshot();
     const capabilities = createFakeDashboardCapabilities();

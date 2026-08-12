@@ -62,6 +62,7 @@ export {
 } from "../components/HelpOverlay/helpPanel.js";
 
 export {
+  newSessionEditGroupDraftContent,
   newSessionEditNameContent,
   newSessionReviewContent,
 } from "../components/NewSessionBottomSheet/content.js";

@@ -1113,11 +1113,11 @@ FLEET  ● 0 ready  ⠋ 3 working  ! 1 needs you  x 1 exited  ○ 6 idle  1 · 1
 │ [4] ○ diagnostic-index            codex     idle                      +38 -7│ 
 │ [5] ! handoff-refusal             codex     Agent needs app… +53 -11 #476 x1│ 
 │ [6] ⠋ trace-readiness             codex     working           +91 -22 #478 …│ 
-╰─────────────────────────────────────────────────────────────────────────────╯ 
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Create Group                                                                 │
 │ Project      station                                                         │
 │▸ Group       Release|                                                        │
+│  Save (Enter)    Back (Esc)                                                  │
 │ Type Group name · Enter save · Esc discard                                   │
 │                                                                              │
 └──────────────────────────────────────────────────────────────────────────────┘

@@ -1,4 +1,4 @@
-import type { ObserverService, StationClientStateSource } from "@station/client";
+import type { ClientNotice, ObserverService, StationClientStateSource } from "@station/client";
 import type { SafeError } from "@station/contracts";
 import { createObserverActivationCapabilities, dashboardExecution } from "@station/dashboard-core/runtime";
 import type { DashboardCapabilities, DashboardExecutionHandle, DashboardExecutionResult } from "@station/dashboard-core/runtime";
@@ -10,7 +10,17 @@ import type { StationStore } from "../state/store.js";
 import { agentWorktreePaneId, projectPaneId, worktreePaneId } from "../state/types.js";
 import type { ManagedLaunch, ManagedLaunchResult } from "../input/runtime/managedLaunch.js";
 import type { PaneEffects } from "../input/runtime/paneEffects.js";
-import { waitForSessionByBranch } from "../input/runtime/stationRows.js";
+import {
+  findSessionPlacementByBranch,
+  waitForSessionByBranch,
+  waitForSessionPlacementByBranch,
+} from "../input/runtime/stationRows.js";
+
+const SESSION_PLACEMENT_UNCONFIRMED_NOTICE = {
+  kind: "error",
+  message: "The session was created, but Station could not confirm its Group placement.",
+  hint: "Refresh the dashboard before creating another session.",
+} satisfies ClientNotice;
 
 /** Native composition inputs for semantic dashboard execution. */
 export type CreateNativeDashboardCapabilitiesOptions = {
@@ -22,8 +32,8 @@ export type CreateNativeDashboardCapabilitiesOptions = {
 };
 
 /**
- * Compose native dashboard capabilities from canonical client state, workspace
- * pane authority, and promise-based managed-launch execution.
+ * Compose native dashboard capabilities from canonical client state, workspace pane authority,
+ * promise-based managed launch, and relationship-complete deliberate-create settlement.
  */
 export function createDashboardCapabilities(
   options: CreateNativeDashboardCapabilitiesOptions,
@@ -48,7 +58,38 @@ export function createDashboardCapabilities(
       ...(request.group === undefined ? {} : { group: request.group }),
     });
   const createManagedSession: DashboardCapabilities["managedSessions"]["create"] = (request) =>
-    managedSessionExecution(runManagedSessionCreate(request));
+    dashboardExecution(
+      runManagedSessionCreate(request).then(async (result): Promise<DashboardExecutionResult> => {
+        if (result.kind === "failure") return managedSessionResult(result);
+        if (result.kind === "notice") return { kind: "success", notice: result.notice };
+
+        const session = await waitForSessionPlacementByBranch(
+          options.clientState,
+          request.project.id,
+          request.hiddenBranch,
+          request.group,
+        );
+        if (session !== undefined) return { kind: "success" };
+
+        try {
+          const refreshed = await options.observerService.loadSnapshot();
+          if (
+            findSessionPlacementByBranch(
+              refreshed,
+              request.project.id,
+              request.hiddenBranch,
+              request.group,
+            ) !== undefined
+          ) {
+            return { kind: "success" };
+          }
+        } catch {
+          // Launch already succeeded, so refresh failure must not make Create retryable.
+        }
+        return { kind: "success", notice: SESSION_PLACEMENT_UNCONFIRMED_NOTICE };
+      }),
+      { successDisposition: "wait-for-canonical" },
+    );
   const quickCreateManagedSession: DashboardCapabilities["managedSessions"]["quickCreate"] = (
     request,
   ) =>
@@ -181,21 +222,19 @@ function managedSessionExecution(
   completion: Promise<ManagedLaunchResult>,
 ): DashboardExecutionHandle {
   return dashboardExecution(
-    completion.then((result): DashboardExecutionResult => {
-      if (result.kind === "success") {
-        return { kind: "success" };
-      }
-      if (result.kind === "notice") {
-        return result;
-      }
-      return {
-        kind: "failure",
-        error: result.error,
-        disposition: result.stage === "launch" ? "retain-failed" : "remove-immediately",
-      };
-    }),
+    completion.then(managedSessionResult),
     { optimistic: "pending-create", successDisposition: "wait-for-canonical" },
   );
+}
+
+function managedSessionResult(result: ManagedLaunchResult): DashboardExecutionResult {
+  if (result.kind === "success") return { kind: "success" };
+  if (result.kind === "notice") return result;
+  return {
+    kind: "failure",
+    error: result.error,
+    disposition: result.stage === "launch" ? "retain-failed" : "remove-immediately",
+  };
 }
 
 function managedSessionFailure(error: SafeError): DashboardExecutionHandle {

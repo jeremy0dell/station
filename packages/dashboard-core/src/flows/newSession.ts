@@ -107,6 +107,7 @@ export type NewSessionFlowState =
 export type NewSessionFlowStateView = ReadonlyDeep<NewSessionFlowState>;
 export type NewSessionReviewStateView = ReadonlyDeep<NewSessionReviewState>;
 export type NewSessionEditNameStateView = ReadonlyDeep<NewSessionEditNameState>;
+export type NewSessionEditGroupDraftStateView = ReadonlyDeep<NewSessionEditGroupDraftState>;
 type NewSessionSnapshotView = ReadonlyDeep<StationSnapshot>;
 
 export type NewSessionFlowAction =
@@ -155,7 +156,11 @@ export type NewSessionInputIntent =
     };
 
 type NewSessionActionDefinition =
-  | { mode: "review" | "editName"; intent: "transition"; action: NewSessionFlowAction }
+  | {
+      mode: "review" | "editName" | "editGroupDraft";
+      intent: "transition";
+      action: NewSessionFlowAction;
+    }
   | { mode: "review"; intent: "submit" };
 
 const NEW_SESSION_ACTIONS = {
@@ -171,6 +176,16 @@ const NEW_SESSION_ACTIONS = {
   },
   "editName.save": { mode: "editName", intent: "transition", action: { type: "commitName" } },
   "editName.back": { mode: "editName", intent: "transition", action: { type: "cancel" } },
+  "editGroupDraft.save": {
+    mode: "editGroupDraft",
+    intent: "transition",
+    action: { type: "commitGroupDraft" },
+  },
+  "editGroupDraft.back": {
+    mode: "editGroupDraft",
+    intent: "transition",
+    action: { type: "cancel" },
+  },
 } as const satisfies Readonly<Record<string, NewSessionActionDefinition>>;
 
 export type NewSessionActionId = keyof typeof NEW_SESSION_ACTIONS;
@@ -183,6 +198,9 @@ export function newSessionActionEnabled(
 ): boolean {
   if (NEW_SESSION_ACTIONS[actionId].mode !== state.mode) return false;
   if (state.mode === "review" && state.submissionLocalId !== undefined) return false;
+  if (actionId === "editGroupDraft.save") {
+    return state.mode === "editGroupDraft" && state.draftGroupName.value.trim().length > 0;
+  }
   return (
     actionId !== "review.create" ||
     (snapshot !== undefined &&
@@ -371,6 +389,10 @@ export function newSessionActionForInput(
     if (input.input === "G") return "review.group";
     return input.input === "C" ? "review.create" : undefined;
   }
+  if (state.mode === "editGroupDraft") {
+    if (input.key.escape === true) return "editGroupDraft.back";
+    return isReturn(input) ? "editGroupDraft.save" : undefined;
+  }
   if (state.mode !== "editName") return undefined;
   if (input.key.escape === true) return "editName.back";
   if (input.key.ctrl === true && input.input === "s") return "editName.save";
@@ -522,7 +544,6 @@ function editGroupDraftInputIntent(
   _state: ReadonlyDeep<NewSessionEditGroupDraftState>,
   input: NewSessionInput,
 ): NewSessionInputIntent {
-  if (isReturn(input)) return transitionIntent({ type: "commitGroupDraft" });
   const intent = editableTextInputIntentForInput(input);
   return intent.type === "edit"
     ? transitionIntent({ type: "editGroupDraftInput", action: intent.action })

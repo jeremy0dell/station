@@ -349,6 +349,20 @@ function trackingPersistence() {
     findRememberedHarnessProviderForWorktree: async () => undefined,
     seedSession: async (input: Parameters<SessionStore["seedSession"]>[0]) => {
       seeded.push(input);
+      const groupProvenance =
+        input.group === undefined
+          ? undefined
+          : input.group.kind === "existing"
+            ? { kind: "existing" as const, groupId: input.group.groupId }
+            : {
+                kind: "created" as const,
+                groupId: input.group.groupId,
+                projectId: input.projectId,
+                name: input.group.name,
+                version: 1,
+                createdAt: input.createdAt,
+                updatedAt: input.createdAt,
+              };
       return {
         ok: true,
         session: {
@@ -359,7 +373,7 @@ function trackingPersistence() {
           createdAt: input.createdAt,
           lastSeenAt: input.lastSeenAt,
         },
-        ...(input.group?.kind === "create" ? { createdGroupId: input.group.groupId } : {}),
+        ...(groupProvenance === undefined ? {} : { groupProvenance }),
       };
     },
     renameSession: async (input: Parameters<SessionStore["renameSession"]>[0]) => {
@@ -1264,8 +1278,15 @@ describe("prepareExternalLaunch", () => {
     expect(persistence.discarded).toEqual([
       {
         sessionId: "ses_inline_failed",
-        expectedGroupId: "grp_inline_failed",
-        createdGroupId: "grp_inline_failed",
+        groupProvenance: {
+          kind: "created",
+          groupId: "grp_inline_failed",
+          projectId: "web",
+          name: "Temporary",
+          version: 1,
+          createdAt: now,
+          updatedAt: now,
+        },
         discardedAt: now,
       },
     ]);

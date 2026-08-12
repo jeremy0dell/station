@@ -479,13 +479,13 @@
       "path": "apps/observer/src/commands/errors.ts",
       "exports": [
         {
-          "name": "sessionGroupAssignmentConflictError",
+          "name": "sessionGroupIdCollisionError",
           "kind": "function",
           "role": null,
           "purpose": null
         },
         {
-          "name": "sessionGroupIdCollisionError",
+          "name": "sessionGroupMembershipAssignmentConflictError",
           "kind": "function",
           "role": null,
           "purpose": null
@@ -498,6 +498,12 @@
         },
         {
           "name": "sessionGroupNotRootError",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "sessionGroupPlacementAssignmentConflictError",
           "kind": "function",
           "role": null,
           "purpose": null
@@ -1368,6 +1374,7 @@
             "resolveTerminalProviderOrThrow",
             "runProviderMutation",
             "seedSession",
+            "sessionSeedGroupPlacement",
             "throwIfAborted"
           ]
         },
@@ -1387,7 +1394,7 @@
           "specifier": "../../persistence/index.js",
           "resolvedPath": "apps/observer/src/persistence/index.ts",
           "edgeKind": "type-only",
-          "bindings": ["EventJournal", "SessionStore"]
+          "bindings": ["EventJournal", "SessionSeedGroupProvenance", "SessionStore"]
         },
         {
           "specifier": "../../providers/registry.js",
@@ -1417,11 +1424,7 @@
           "specifier": "@station/contracts",
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "type-only",
-          "bindings": [
-            "ProviderProjectConfig",
-            "SessionGroupPlacementIntent",
-            "WorktreeObservation"
-          ]
+          "bindings": ["ProviderProjectConfig", "WorktreeObservation"]
         },
         {
           "specifier": "@station/runtime",
@@ -1982,6 +1985,12 @@
           "purpose": null
         },
         {
+          "name": "sessionSeedGroupPlacement",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "throwIfAborted",
           "kind": "function",
           "role": null,
@@ -2018,10 +2027,10 @@
           "resolvedPath": "apps/observer/src/commands/errors.ts",
           "edgeKind": "runtime",
           "bindings": [
-            "sessionGroupAssignmentConflictError",
             "sessionGroupIdCollisionError",
             "sessionGroupMissingError",
             "sessionGroupNotRootError",
+            "sessionGroupPlacementAssignmentConflictError",
             "sessionGroupProjectMismatchError",
             "worktreeMissingError"
           ]
@@ -2045,6 +2054,7 @@
           "bindings": [
             "EventJournal",
             "SessionSeedGroupPlacement",
+            "SessionSeedGroupProvenance",
             "SessionSeedResult",
             "SessionStore"
           ]
@@ -2090,6 +2100,7 @@
             "ProviderProjectConfig",
             "SafeError",
             "SessionGroupId",
+            "SessionGroupPlacementIntent",
             "SessionId",
             "SessionView",
             "StationSnapshot",
@@ -2272,8 +2283,8 @@
           "resolvedPath": "apps/observer/src/commands/errors.ts",
           "edgeKind": "runtime",
           "bindings": [
-            "sessionGroupAssignmentConflictError",
             "sessionGroupIdCollisionError",
+            "sessionGroupMembershipAssignmentConflictError",
             "sessionGroupMissingError",
             "sessionGroupProjectMismatchError"
           ]
@@ -5406,6 +5417,12 @@
           "purpose": null
         },
         {
+          "name": "SessionSeedGroupProvenance",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "SessionSeedResult",
           "kind": "type",
           "role": null,
@@ -7483,6 +7500,12 @@
           "purpose": null
         },
         {
+          "name": "SessionSeedGroupProvenance",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "SessionSeedResult",
           "kind": "type",
           "role": null,
@@ -7842,6 +7865,7 @@
             "SessionGroupStoreResult",
             "SessionHarnessDerivedStateRepair",
             "SessionSeedGroupPlacement",
+            "SessionSeedGroupProvenance",
             "SessionSeedResult",
             "SessionTurnReadinessMutation",
             "WorktreeMetadataCurrentKind",
@@ -8164,6 +8188,7 @@
             "SessionGroupRepairResult",
             "SessionGroupStoreResult",
             "SessionSeedGroupPlacement",
+            "SessionSeedGroupProvenance",
             "SessionSeedResult"
           ]
         },
@@ -8812,6 +8837,12 @@
         },
         {
           "name": "SessionSeedGroupPlacement",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "SessionSeedGroupProvenance",
           "kind": "type",
           "role": null,
           "purpose": null
@@ -10601,6 +10632,7 @@
             "findProjectOrThrow",
             "rememberedHarnessProviderForWorktree",
             "seedSession",
+            "sessionSeedGroupPlacement",
             "worktreeObservationFromRow"
           ]
         },
@@ -10614,7 +10646,7 @@
           "specifier": "../persistence/index.js",
           "resolvedPath": "apps/observer/src/persistence/index.ts",
           "edgeKind": "type-only",
-          "bindings": ["SessionStore"]
+          "bindings": ["SessionSeedGroupProvenance", "SessionStore"]
         },
         {
           "specifier": "../providers/registry.js",
@@ -10670,7 +10702,6 @@
             "ManagedOpenWorkspaceResult",
             "ManagedTerminalLifecycle",
             "SafeError",
-            "SessionGroupPlacementIntent",
             "SessionView"
           ]
         },

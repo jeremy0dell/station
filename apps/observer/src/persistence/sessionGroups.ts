@@ -9,6 +9,7 @@ import type {
   SessionGroupRepairResult,
   SessionGroupStoreResult,
   SessionSeedGroupPlacement,
+  SessionSeedGroupProvenance,
   SessionSeedResult,
 } from "./types.js";
 
@@ -134,7 +135,8 @@ export function placeSessionSeed(
     updatedAt: string;
   },
 ): SessionGroupMutation<
-  { ok: true; createdGroupId?: SessionGroupId } | Exclude<SessionSeedResult, { ok: true }>
+  | { ok: true; groupProvenance?: SessionSeedGroupProvenance }
+  | Exclude<SessionSeedResult, { ok: true }>
 > {
   const current = state.assignments.get(input.sessionId);
   if (input.placement === undefined) {
@@ -153,7 +155,11 @@ export function placeSessionSeed(
     const draft = cloneSessionGroupState(state);
     draft.assignments.set(input.sessionId, { groupId: group.id, projectId: input.projectId });
     touchGroups(draft, new Set([group.id]), input.updatedAt);
-    return { state: draft, changed: true, result: { ok: true } };
+    return {
+      state: draft,
+      changed: true,
+      result: { ok: true, groupProvenance: { kind: "existing", groupId: group.id } },
+    };
   }
 
   if (state.groups.has(input.placement.groupId)) {
@@ -175,7 +181,18 @@ export function placeSessionSeed(
   return {
     state: draft,
     changed: true,
-    result: { ok: true, createdGroupId: group.id },
+    result: {
+      ok: true,
+      groupProvenance: {
+        kind: "created",
+        groupId: group.id,
+        projectId: group.projectId,
+        name: group.name,
+        version: group.version,
+        createdAt: group.createdAt,
+        updatedAt: group.updatedAt,
+      },
+    },
   };
 }
 
@@ -184,14 +201,14 @@ export function discardSessionSeedPlacement(
   input: {
     sessionId: string;
     projectId: string;
-    expectedGroupId?: SessionGroupId;
-    createdGroupId?: SessionGroupId;
+    groupProvenance?: SessionSeedGroupProvenance;
     updatedAt: string;
   },
 ): SessionGroupMutation<{ discardedMemberships: number; discardedGroups: number }> {
   const current = state.assignments.get(input.sessionId);
-  if (input.expectedGroupId === undefined) {
-    if (input.createdGroupId !== undefined || current !== undefined) {
+  const provenance = input.groupProvenance;
+  if (provenance === undefined) {
+    if (current !== undefined) {
       throw new Error("Session seed Group assignment no longer matches cleanup provenance.");
     }
     return {
@@ -200,7 +217,7 @@ export function discardSessionSeedPlacement(
       result: { discardedMemberships: 0, discardedGroups: 0 },
     };
   }
-  if (current?.groupId !== input.expectedGroupId || current.projectId !== input.projectId) {
+  if (current?.groupId !== provenance.groupId || current.projectId !== input.projectId) {
     throw new Error("Session seed Group assignment no longer matches cleanup provenance.");
   }
   const group = state.groups.get(current.groupId);
@@ -208,20 +225,29 @@ export function discardSessionSeedPlacement(
     throw new Error("Session seed Group definition no longer matches cleanup provenance.");
   }
 
-  const draft = cloneSessionGroupState(state);
-  if (input.createdGroupId !== undefined) {
+  if (provenance.kind === "created") {
     const members = [...state.assignments].filter(
-      ([, assignment]) => assignment.groupId === input.createdGroupId,
+      ([, assignment]) => assignment.groupId === provenance.groupId,
+    );
+    const hasChildren = [...state.groups.values()].some(
+      (candidate) => candidate.parentGroupId === provenance.groupId,
     );
     if (
-      input.createdGroupId !== input.expectedGroupId ||
+      group.projectId !== provenance.projectId ||
+      group.name !== provenance.name ||
+      group.version !== provenance.version ||
+      group.createdAt !== provenance.createdAt ||
+      group.updatedAt !== provenance.updatedAt ||
+      group.parentGroupId !== undefined ||
+      hasChildren ||
       members.length !== 1 ||
       members[0]?.[0] !== input.sessionId
     ) {
       throw new Error("Inline Session Group no longer matches cleanup provenance.");
     }
+    const draft = cloneSessionGroupState(state);
     draft.assignments.delete(input.sessionId);
-    draft.groups.delete(input.createdGroupId);
+    draft.groups.delete(provenance.groupId);
     return {
       state: draft,
       changed: true,
@@ -229,6 +255,7 @@ export function discardSessionSeedPlacement(
     };
   }
 
+  const draft = cloneSessionGroupState(state);
   draft.assignments.delete(input.sessionId);
   touchGroups(draft, new Set([group.id]), input.updatedAt);
   return {

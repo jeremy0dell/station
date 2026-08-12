@@ -737,9 +737,11 @@ when it changes several tables:
   synchronized per-session title projections, durable provider-native execution bindings,
   recovery handles, turn readiness, and purpose-specific remembered-harness lookup. A fresh-session
   seed may atomically validate and place the session in an existing root Group or create its first
-  root Group; provenance-safe discard removes that membership and only an owned single-member inline
-  Group. Rename, seed/discard, confirmed worktree retirement, and canonical-title/recovery import
-  keep their multi-table changes atomic.
+  root Group. Discard consumes the seed result's placement provenance: existing placement removes
+  only the still-matching membership, while inline placement deletes the Group only when its full
+  definition, root parentage, sole membership, and absence of children remain unchanged. Any drift
+  aborts session, title, membership, and Group cleanup together. Rename, seed/discard, confirmed
+  worktree retirement, and canonical-title/recovery import keep their multi-table changes atomic.
 - `SessionGroupStore` owns recorded Group definitions, exclusive direct membership, parent changes,
   deletion-to-ungroup with child reparenting, and atomic reconcile repair of parseable membership
   and parent relationships. Stale versions and expected assignments return conflicts without

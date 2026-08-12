@@ -167,11 +167,22 @@ describe("new session flow", () => {
 
     const editing = transitionNewSessionFlow(picker, { type: "editGroupDraft" });
     if (editing?.mode !== "editGroupDraft") throw new Error("expected Group editor");
+    expect(newSessionActionEnabled(snapshot, editing, "editGroupDraft.save")).toBe(false);
+    expect(newSessionActionEnabled(snapshot, editing, "editGroupDraft.back")).toBe(true);
     const typed = "  Release  ".split("").reduce((state, value) => {
       const next = applyInput(state, value);
       if (next.mode !== "editGroupDraft") throw new Error("expected Group editor");
       return next;
     }, editing);
+    expect(newSessionActionEnabled(snapshot, typed, "editGroupDraft.save")).toBe(true);
+    expect(newSessionIntentForAction(typed, "editGroupDraft.save")).toEqual({
+      type: "transition",
+      action: { type: "commitGroupDraft" },
+    });
+    expect(newSessionIntentForAction(typed, "editGroupDraft.back")).toEqual({
+      type: "transition",
+      action: { type: "cancel" },
+    });
     expect(applyInput(typed, "\r", { return: true })).toMatchObject({
       mode: "review",
       reviewFocus: "group",

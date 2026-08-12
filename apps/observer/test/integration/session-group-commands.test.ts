@@ -480,7 +480,11 @@ describe.each(storageKinds)("recorded Session Group commands with %s persistence
     });
     expect(assignment).toMatchObject({
       status: "failed",
-      error: { code: "SESSION_GROUP_ASSIGNMENT_CONFLICT" },
+      error: {
+        code: "SESSION_GROUP_ASSIGNMENT_CONFLICT",
+        message: "A session's current Group assignment did not match the command expectation.",
+        hint: "Refresh the canonical Group state before retrying the membership change.",
+      },
     });
     await expect(test.persistence.listSessionGroups()).resolves.toEqual([
       expect.objectContaining({ id: "grp_1", version: 1, sessionIds: ["ses_web_a"] }),

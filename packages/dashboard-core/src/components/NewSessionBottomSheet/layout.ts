@@ -15,7 +15,8 @@ export function newSessionContentRowCount(
     return 6;
   }
   if (state.mode === "editGroupDraft") {
-    return 4;
+    // Project context + Group input + Save + Back + contextual helper.
+    return 6;
   }
   // Project/Name/Agent/Group interactive rows + primary Create action + contextual helper.
   return 7;

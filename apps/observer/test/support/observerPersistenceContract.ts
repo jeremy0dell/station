@@ -2227,7 +2227,11 @@ export function observerPersistenceContract(
               ...seedInput("ses_existing"),
               group: { kind: "existing", groupId: "group_existing" },
             }),
-          ).resolves.toMatchObject({ ok: true, session: { id: "ses_existing" } });
+          ).resolves.toMatchObject({
+            ok: true,
+            session: { id: "ses_existing" },
+            groupProvenance: { kind: "existing", groupId: "group_existing" },
+          });
           await expect(
             persistence.seedSession({
               ...seedInput("ses_inline"),
@@ -2236,7 +2240,15 @@ export function observerPersistenceContract(
           ).resolves.toMatchObject({
             ok: true,
             session: { id: "ses_inline" },
-            createdGroupId: "group_inline",
+            groupProvenance: {
+              kind: "created",
+              groupId: "group_inline",
+              projectId: "web",
+              name: "Inline",
+              version: 1,
+              createdAt: now,
+              updatedAt: now,
+            },
           });
           await expect(persistence.listSessionGroups()).resolves.toEqual([
             expect.objectContaining({
@@ -2341,14 +2353,17 @@ export function observerPersistenceContract(
             name: "Existing",
             createdAt: earlier,
           });
-          await persistence.seedSession({
+          const existingSeed = await persistence.seedSession({
             ...seedInput("ses_existing_cleanup"),
             group: { kind: "existing", groupId: "group_existing" },
           });
+          if (!existingSeed.ok || existingSeed.groupProvenance === undefined) {
+            throw new Error("expected existing Group provenance");
+          }
           await expect(
             persistence.discardSessionSeed({
               sessionId: "ses_existing_cleanup",
-              expectedGroupId: "group_existing",
+              groupProvenance: existingSeed.groupProvenance,
               discardedAt: later,
             }),
           ).resolves.toEqual({ discardedSessions: 1, discardedWorktreeTitles: 0 });
@@ -2356,15 +2371,17 @@ export function observerPersistenceContract(
             expect.objectContaining({ id: "group_existing", sessionIds: [], version: 3 }),
           );
 
-          await persistence.seedSession({
+          const inlineSeed = await persistence.seedSession({
             ...seedInput("ses_inline_cleanup"),
             group: { kind: "create", groupId: "group_inline", name: "Inline" },
           });
+          if (!inlineSeed.ok || inlineSeed.groupProvenance === undefined) {
+            throw new Error("expected inline Group provenance");
+          }
           await expect(
             persistence.discardSessionSeed({
               sessionId: "ses_inline_cleanup",
-              expectedGroupId: "group_inline",
-              createdGroupId: "group_inline",
+              groupProvenance: inlineSeed.groupProvenance,
               discardedAt: later,
             }),
           ).resolves.toEqual({ discardedSessions: 1, discardedWorktreeTitles: 0 });
@@ -2372,10 +2389,13 @@ export function observerPersistenceContract(
             (await persistence.listSessionGroups()).some((group) => group.id === "group_inline"),
           ).toBe(false);
 
-          await persistence.seedSession({
+          const provenanceSeed = await persistence.seedSession({
             ...seedInput("ses_provenance"),
             group: { kind: "create", groupId: "group_provenance", name: "Provenance" },
           });
+          if (!provenanceSeed.ok || provenanceSeed.groupProvenance === undefined) {
+            throw new Error("expected owned Group provenance");
+          }
           await persistence.updateSessionGroupMembership({
             id: "group_provenance",
             expectedVersion: 1,
@@ -2385,8 +2405,7 @@ export function observerPersistenceContract(
           await expectPersistenceFailure(
             persistence.discardSessionSeed({
               sessionId: "ses_provenance",
-              expectedGroupId: "group_provenance",
-              createdGroupId: "group_provenance",
+              groupProvenance: provenanceSeed.groupProvenance,
               discardedAt: latest,
             }),
           );
@@ -2406,10 +2425,13 @@ export function observerPersistenceContract(
             name: "Moved",
             createdAt: later,
           });
-          await persistence.seedSession({
+          const movedSeed = await persistence.seedSession({
             ...seedInput("ses_moved"),
             group: { kind: "existing", groupId: "group_existing" },
           });
+          if (!movedSeed.ok || movedSeed.groupProvenance === undefined) {
+            throw new Error("expected moved-session Group provenance");
+          }
           await persistence.updateSessionGroupMembership({
             id: "group_moved",
             expectedVersion: 1,
@@ -2425,7 +2447,7 @@ export function observerPersistenceContract(
           await expectPersistenceFailure(
             persistence.discardSessionSeed({
               sessionId: "ses_moved",
-              expectedGroupId: "group_existing",
+              groupProvenance: movedSeed.groupProvenance,
               discardedAt: latest,
             }),
           );
@@ -2434,6 +2456,103 @@ export function observerPersistenceContract(
           ).toBe(true);
           await expect(persistence.listSessionGroups()).resolves.toContainEqual(
             expect.objectContaining({ id: "group_moved", sessionIds: ["ses_moved"] }),
+          );
+
+          const renamedSeed = await persistence.seedSession({
+            ...seedInput("ses_renamed"),
+            group: { kind: "create", groupId: "group_renamed", name: "Original" },
+          });
+          if (!renamedSeed.ok || renamedSeed.groupProvenance === undefined) {
+            throw new Error("expected renamed Group provenance");
+          }
+          await persistence.renameSessionGroup({
+            id: "group_renamed",
+            expectedVersion: 1,
+            name: "Renamed",
+            updatedAt: later,
+          });
+          await expectPersistenceFailure(
+            persistence.discardSessionSeed({
+              sessionId: "ses_renamed",
+              groupProvenance: renamedSeed.groupProvenance,
+              discardedAt: latest,
+            }),
+          );
+
+          await persistence.createSessionGroup({
+            id: "group_parent",
+            projectId: "web",
+            name: "Parent",
+            createdAt: earlier,
+          });
+          const reparentedSeed = await persistence.seedSession({
+            ...seedInput("ses_reparented"),
+            group: { kind: "create", groupId: "group_reparented", name: "Reparented" },
+          });
+          if (!reparentedSeed.ok || reparentedSeed.groupProvenance === undefined) {
+            throw new Error("expected reparented Group provenance");
+          }
+          await persistence.reparentSessionGroup({
+            id: "group_reparented",
+            expectedVersion: 1,
+            parentGroupId: "group_parent",
+            updatedAt: later,
+          });
+          await expectPersistenceFailure(
+            persistence.discardSessionSeed({
+              sessionId: "ses_reparented",
+              groupProvenance: reparentedSeed.groupProvenance,
+              discardedAt: latest,
+            }),
+          );
+
+          const parentSeed = await persistence.seedSession({
+            ...seedInput("ses_parent"),
+            group: { kind: "create", groupId: "group_with_child", name: "With child" },
+          });
+          if (!parentSeed.ok || parentSeed.groupProvenance === undefined) {
+            throw new Error("expected parent Group provenance");
+          }
+          await persistence.createSessionGroup({
+            id: "group_child_after_seed",
+            projectId: "web",
+            name: "Child",
+            parentGroupId: "group_with_child",
+            createdAt: later,
+          });
+          await expectPersistenceFailure(
+            persistence.discardSessionSeed({
+              sessionId: "ses_parent",
+              groupProvenance: parentSeed.groupProvenance,
+              discardedAt: latest,
+            }),
+          );
+          await expect(persistence.listSessions()).resolves.toEqual(
+            expect.arrayContaining([
+              expect.objectContaining({ id: "ses_renamed" }),
+              expect.objectContaining({ id: "ses_reparented" }),
+              expect.objectContaining({ id: "ses_parent" }),
+            ]),
+          );
+          await expect(persistence.listWorktreeDisplayTitles()).resolves.toEqual(
+            expect.arrayContaining([
+              expect.objectContaining({ worktreeId: "wt_ses_renamed" }),
+              expect.objectContaining({ worktreeId: "wt_ses_reparented" }),
+              expect.objectContaining({ worktreeId: "wt_ses_parent" }),
+            ]),
+          );
+          await expect(persistence.listSessionGroups()).resolves.toEqual(
+            expect.arrayContaining([
+              expect.objectContaining({ id: "group_renamed", name: "Renamed" }),
+              expect.objectContaining({
+                id: "group_reparented",
+                parentGroupId: "group_parent",
+              }),
+              expect.objectContaining({
+                id: "group_child_after_seed",
+                parentGroupId: "group_with_child",
+              }),
+            ]),
           );
         });
       });

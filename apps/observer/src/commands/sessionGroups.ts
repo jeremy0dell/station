@@ -13,8 +13,8 @@ import type { ObserverEventBus } from "../runtime/eventBus.js";
 import { nowIso } from "../utils/time.js";
 import { throwIfAborted } from "./cancellation.js";
 import {
-  sessionGroupAssignmentConflictError,
   sessionGroupIdCollisionError,
+  sessionGroupMembershipAssignmentConflictError,
   sessionGroupMissingError,
   sessionGroupProjectMismatchError,
 } from "./errors.js";
@@ -326,7 +326,7 @@ function sessionGroupConflict(
         projectId,
       };
     case "unexpected_assignment":
-      return sessionGroupAssignmentConflictError(projectId);
+      return sessionGroupMembershipAssignmentConflictError(projectId);
   }
 }
 

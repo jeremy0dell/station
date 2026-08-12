@@ -1,6 +1,7 @@
 import type { ProviderHealth } from "@station/contracts";
 import {
   type NewSessionActionId,
+  type NewSessionEditGroupDraftStateView,
   type NewSessionEditNameFocus,
   type NewSessionEditNameStateView,
   type NewSessionReviewFocus,
@@ -47,6 +48,11 @@ export type NewSessionEditNameContent = {
   controls: Readonly<
     Record<NewSessionEditNameFocus, NewSessionControlContent<NewSessionEditNameFocus>>
   >;
+  helper: string;
+};
+
+export type NewSessionEditGroupDraftContent = {
+  controls: Readonly<Record<"save" | "back", NewSessionControlContent<"save" | "back">>>;
   helper: string;
 };
 
@@ -119,6 +125,23 @@ const EDIT_NAME_CONTROLS: {
   },
 };
 
+const EDIT_GROUP_DRAFT_CONTROLS = {
+  save: {
+    actionId: "editGroupDraft.save",
+    label: "Save",
+    accelerator: "Enter",
+    focusId: "save",
+    helper: "Type Group name · Enter save · Esc discard",
+  },
+  back: {
+    actionId: "editGroupDraft.back",
+    label: "Back",
+    accelerator: "Esc",
+    focusId: "back",
+    helper: "Type Group name · Enter save · Esc discard",
+  },
+} as const;
+
 function newSessionGroupValue(
   snapshot: DashboardSnapshotView,
   state: NewSessionReviewStateView,
@@ -187,5 +210,20 @@ export function newSessionEditNameContent(
   return {
     controls: EDIT_NAME_CONTROLS,
     helper: EDIT_NAME_CONTROLS[state.editNameFocus].helper,
+  };
+}
+
+export function newSessionEditGroupDraftContent(
+  state: NewSessionEditGroupDraftStateView,
+): NewSessionEditGroupDraftContent {
+  return {
+    controls: {
+      save: {
+        ...EDIT_GROUP_DRAFT_CONTROLS.save,
+        enabled: newSessionActionEnabled(undefined, state, "editGroupDraft.save"),
+      },
+      back: { ...EDIT_GROUP_DRAFT_CONTROLS.back, enabled: true },
+    },
+    helper: EDIT_GROUP_DRAFT_CONTROLS.save.helper,
   };
 }

@@ -6,7 +6,6 @@ import type {
   ManagedOpenWorkspaceResult,
   ManagedTerminalLifecycle,
   SafeError,
-  SessionGroupPlacementIntent,
   SessionView,
 } from "@station/contracts";
 import { terminalTargetObservationFromBinding, worktreeHasLiveAgent } from "@station/contracts";
@@ -20,9 +19,10 @@ import {
   rememberedHarnessProviderForWorktree,
   type SessionCommandIdFactory,
   seedSession,
+  sessionSeedGroupPlacement,
   worktreeObservationFromRow,
 } from "../commands/session/shared.js";
-import type { SessionStore } from "../persistence/index.js";
+import type { SessionSeedGroupProvenance, SessionStore } from "../persistence/index.js";
 import type { ProviderRegistry } from "../providers/registry.js";
 import type { ObserverCore } from "../reconcile/core.js";
 import { resolveSessionRecovery } from "../sessionRecovery.js";
@@ -204,7 +204,7 @@ async function prepareExternalLaunchForWorktree(
   const seededAt = nowIso(deps.clock);
   let opened: ManagedOpenWorkspaceResult | undefined;
   let sessionSeeded = false;
-  let createdGroupId: ReturnType<SessionCommandIdFactory["sessionGroupId"]> | undefined;
+  let groupProvenance: SessionSeedGroupProvenance | undefined;
   try {
     if (freshSession) {
       const seed = await seedSession({
@@ -217,7 +217,7 @@ async function prepareExternalLaunchForWorktree(
         clock: deps.clock,
       });
       sessionSeeded = true;
-      createdGroupId = seed.createdGroupId;
+      groupProvenance = seed.groupProvenance;
       if (params.title !== undefined && params.title !== row.title) {
         // New-session intent may replace reconcile's branch fallback before the target becomes visible.
         await deps.persistence.renameSession({
@@ -285,8 +285,7 @@ async function prepareExternalLaunchForWorktree(
     if (freshSession && sessionSeeded && targetReleaseConfirmed) {
       await discardSessionSeedBestEffort(deps, {
         sessionId,
-        ...(group === undefined ? {} : { expectedGroupId: group.groupId }),
-        ...(createdGroupId === undefined ? {} : { createdGroupId }),
+        ...(groupProvenance === undefined ? {} : { groupProvenance }),
       });
     }
     throw error;
@@ -324,15 +323,13 @@ async function discardSessionSeedBestEffort(
   deps: Pick<ExternalLaunchDeps, "persistence" | "logger" | "clock">,
   input: {
     sessionId: string;
-    expectedGroupId?: ReturnType<SessionCommandIdFactory["sessionGroupId"]>;
-    createdGroupId?: ReturnType<SessionCommandIdFactory["sessionGroupId"]>;
+    groupProvenance?: SessionSeedGroupProvenance;
   },
 ): Promise<void> {
   try {
     await deps.persistence.discardSessionSeed({
       sessionId: input.sessionId,
-      ...(input.expectedGroupId === undefined ? {} : { expectedGroupId: input.expectedGroupId }),
-      ...(input.createdGroupId === undefined ? {} : { createdGroupId: input.createdGroupId }),
+      ...(input.groupProvenance === undefined ? {} : { groupProvenance: input.groupProvenance }),
       discardedAt: nowIso(deps.clock),
     });
   } catch (error) {
@@ -343,14 +340,6 @@ async function discardSessionSeedBestEffort(
       })
       .catch(() => undefined);
   }
-}
-
-function sessionSeedGroupPlacement(
-  intent: SessionGroupPlacementIntent | undefined,
-  sessionGroupId: () => ReturnType<SessionCommandIdFactory["sessionGroupId"]>,
-) {
-  if (intent === undefined || intent.kind === "existing") return intent;
-  return { kind: "create" as const, groupId: sessionGroupId(), name: intent.name };
 }
 
 async function resolveAutomaticRecovery(

@@ -9,7 +9,9 @@ import type {
   SafeError,
   SessionGroupPlacementIntent,
   StationCommand,
+  WorktreeRow,
 } from "@station/contracts";
+import { buildRemoveWorktreeCommand } from "@station/dashboard-core/runtime";
 import type { ManagedTerminalAttacher } from "../../terminal/pty/managedTerminalAttacher.js";
 import type { PtyRegistry } from "../../terminal/registry/ptyRegistry.js";
 import type { StationStore } from "../../state/store.js";
@@ -69,7 +71,7 @@ type HostedWorktreeLaunch = {
  * Create native managed-launch execution without receiving dashboard state or actions.
  *
  * Worktree dispatch/completion failures remain distinguishable from launch preparation
- * failures so the dashboard runtime can remove or retain its optimistic row correctly.
+ * failures; pre-launch Group rejection rolls back only the exact fresh worktree without force.
  */
 export function createManagedLaunch(deps: ManagedLaunchDeps): ManagedLaunch {
   const runManagedLaunchAttempt = createManagedLaunchAttempt(deps);
@@ -122,6 +124,14 @@ export function createManagedLaunch(deps: ManagedLaunchDeps): ManagedLaunch {
         harness: spec.harness,
         ...(spec.group === undefined ? {} : { group: spec.group }),
       });
+      if (
+        attempt.kind === "failure" &&
+        spec.verb === "create" &&
+        spec.group !== undefined &&
+        isSessionGroupPlacementFailure(attempt.error)
+      ) {
+        return rollbackRejectedGroupPlacement(service, row, attempt.error);
+      }
       return attempt.kind === "failure"
         ? { kind: "failure", error: attempt.error, stage: "launch" }
         : attempt;
@@ -166,6 +176,44 @@ export function createManagedLaunch(deps: ManagedLaunchDeps): ManagedLaunch {
         verb: "fork",
       }),
   };
+}
+
+async function rollbackRejectedGroupPlacement(
+  service: ObserverService,
+  row: WorktreeRow,
+  error: SafeError,
+): Promise<ManagedLaunchResult> {
+  try {
+    const rollback = await executeObserverCommand(service, buildRemoveWorktreeCommand(row, false), {
+      clientLabel: "Station",
+    });
+    if (rollback.status === "succeeded") {
+      return { kind: "failure", error, stage: "worktree" };
+    }
+  } catch {
+    // The original Group error remains the useful failure; the notice owns rollback uncertainty.
+  }
+  return {
+    kind: "notice",
+    notice: {
+      kind: "error",
+      message: `${error.message} Station kept the new worktree because safe rollback was not confirmed.`,
+      hint: "Refresh the dashboard, then open or remove that worktree before retrying this branch.",
+    },
+  };
+}
+
+function isSessionGroupPlacementFailure(error: SafeError): boolean {
+  switch (error.code) {
+    case "SESSION_GROUP_NOT_FOUND":
+    case "SESSION_GROUP_PROJECT_MISMATCH":
+    case "SESSION_GROUP_NOT_ROOT":
+    case "SESSION_GROUP_ID_COLLISION":
+    case "SESSION_GROUP_ASSIGNMENT_CONFLICT":
+      return true;
+    default:
+      return false;
+  }
 }
 
 function worktreeFailure(error: SafeError): Extract<ManagedLaunchResult, { kind: "failure" }> {

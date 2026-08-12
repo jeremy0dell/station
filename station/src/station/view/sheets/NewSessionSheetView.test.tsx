@@ -114,6 +114,35 @@ describe("NewSessionSheetView", () => {
     if (editor?.mode !== "editGroupDraft") throw new Error("expected Group editor");
     const edited = await render(snapshot, editor);
     expect(edited.setup.captureCharFrame()).toContain("Type Group name · Enter save · Esc discard");
+    expect(edited.setup.captureCharFrame()).toContain("Save (Enter)");
+    expect(edited.setup.captureCharFrame()).toContain("Back (Esc)");
+
+    const typed = transitionNewSessionFlow(editor, {
+      type: "editGroupDraftInput",
+      action: { type: "insert", input: "Release" },
+    });
+    if (typed?.mode !== "editGroupDraft") throw new Error("expected Group editor");
+    const actionable = await render(snapshot, typed);
+    const lines = actionable.setup.captureCharFrame().split("\n");
+    const buttonRow = lines.findIndex((line) => line.includes("Save (Enter)"));
+    await actionable.setup.mockMouse.click(
+      lines[buttonRow]?.indexOf("Save") ?? -1,
+      buttonRow,
+      MouseButtons.LEFT,
+    );
+    expect(actionable.targets.at(-1)).toEqual({
+      kind: "newSessionAction",
+      actionId: "editGroupDraft.save",
+    });
+    await actionable.setup.mockMouse.click(
+      lines[buttonRow]?.indexOf("Back") ?? -1,
+      buttonRow,
+      MouseButtons.LEFT,
+    );
+    expect(actionable.targets.at(-1)).toEqual({
+      kind: "newSessionAction",
+      actionId: "editGroupDraft.back",
+    });
   });
 
   it("shows bounded progress and disables duplicate Create activation", async () => {

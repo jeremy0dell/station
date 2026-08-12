@@ -154,6 +154,7 @@ export function cleanupForceRequired(row: WorktreeRow, action: CleanupActionKind
   return running;
 }
 
+/** Builds a provenance-qualified removal and refuses rows without Git registration identity. */
 export function buildRemoveWorktreeCommand(row: WorktreeRow, force: boolean): StationCommand {
   if (row.registrationIdentity === undefined) {
     throw {

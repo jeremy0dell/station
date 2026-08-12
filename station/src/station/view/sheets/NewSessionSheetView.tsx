@@ -2,6 +2,7 @@ import type { ProviderId } from "@station/contracts";
 import {
   bottomSheetContentWidth,
   newSessionContentRowCount,
+  newSessionEditGroupDraftContent,
   newSessionEditNameContent,
   newSessionReviewContent,
   selectNewSessionGroupChoices,
@@ -257,6 +258,7 @@ function EditGroupDraft({
   project: NewSessionProjectView | undefined;
   width: number;
 }) {
+  const content = newSessionEditGroupDraftContent(state);
   return (
     <>
       <SheetLabelValue
@@ -280,7 +282,36 @@ function EditGroupDraft({
         focused
         mouseTarget={{ kind: "sheetBackdrop" }}
       />
-      <SheetFooter width={width}>{"Type Group name · Enter save · Esc discard"}</SheetFooter>
+      <SheetButtonRow
+        width={width}
+        buttons={[
+          {
+            id: content.controls.save.actionId,
+            label: content.controls.save.label,
+            shortcut: content.controls.save.accelerator ?? "Enter",
+            tone: "primary",
+            focused: false,
+            disabled: !content.controls.save.enabled,
+            mouseTarget: {
+              kind: "newSessionAction",
+              actionId: content.controls.save.actionId,
+            },
+          },
+          {
+            id: content.controls.back.actionId,
+            label: content.controls.back.label,
+            shortcut: content.controls.back.accelerator ?? "Esc",
+            tone: "neutral",
+            focused: false,
+            disabled: !content.controls.back.enabled,
+            mouseTarget: {
+              kind: "newSessionAction",
+              actionId: content.controls.back.actionId,
+            },
+          },
+        ]}
+      />
+      <SheetFooter width={width}>{content.helper}</SheetFooter>
     </>
   );
 }

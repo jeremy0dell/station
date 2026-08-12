@@ -262,8 +262,21 @@ export type SessionSeedGroupPlacement =
   | { kind: "existing"; groupId: SessionGroupId }
   | { kind: "create"; groupId: SessionGroupId; name: string };
 
+/** Exact Group state established by a session seed and required for provenance-safe discard. */
+export type SessionSeedGroupProvenance =
+  | { kind: "existing"; groupId: SessionGroupId }
+  | {
+      kind: "created";
+      groupId: SessionGroupId;
+      projectId: string;
+      name: string;
+      version: number;
+      createdAt: string;
+      updatedAt: string;
+    };
+
 export type SessionSeedResult =
-  | { ok: true; session: PersistedSession; createdGroupId?: SessionGroupId }
+  | { ok: true; session: PersistedSession; groupProvenance?: SessionSeedGroupProvenance }
   | {
       ok: false;
       reason:

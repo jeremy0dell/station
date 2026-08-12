@@ -79,6 +79,11 @@ the stable selection through rename and resets missing, cross-project, or newly
 nested Groups to Ungrouped. Submission retains and disables the sheet until the
 single operation settles; success follows the composition's existing open/focus
 path, while failure restores Group or Create focus and reports one bounded toast.
+Native deliberate creation waits for the first canonical snapshot carrying the
+requested Group relationship and performs one explicit load after timeout. If
+launch succeeded but visibility remains uncertain—or safe cleanup retained the
+fresh worktree—the operation closes with a warning instead of permitting a
+duplicate branch submission.
 
 ## Dashboard hierarchy, cursor, and viewport
 

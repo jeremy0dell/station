@@ -1,10 +1,10 @@
-import type {
-  ProviderProjectConfig,
-  SessionGroupPlacementIntent,
-  WorktreeObservation,
-} from "@station/contracts";
+import type { ProviderProjectConfig, WorktreeObservation } from "@station/contracts";
 import type { RuntimeClock } from "@station/runtime";
-import type { EventJournal, SessionStore } from "../../persistence/index.js";
+import type {
+  EventJournal,
+  SessionSeedGroupProvenance,
+  SessionStore,
+} from "../../persistence/index.js";
 import type { ProviderRegistry } from "../../providers/registry.js";
 import type { ObserverCore } from "../../reconcile/core.js";
 import type { ObserverEventBus } from "../../runtime/eventBus.js";
@@ -26,6 +26,7 @@ import {
   runProviderMutation,
   type SessionCommandIdFactory,
   seedSession,
+  sessionSeedGroupPlacement,
   throwIfAborted,
 } from "./shared.js";
 
@@ -77,7 +78,7 @@ export function createSessionCreateHandler(
     };
     let createdWorktree: WorktreeObservation | undefined;
     let sessionSeeded = false;
-    let createdGroupId: ReturnType<SessionCommandIdFactory["sessionGroupId"]> | undefined;
+    let groupProvenance: SessionSeedGroupProvenance | undefined;
 
     try {
       const worktree = await runProviderMutation(
@@ -111,7 +112,7 @@ export function createSessionCreateHandler(
         clock: options.clock,
       });
       sessionSeeded = true;
-      createdGroupId = seed.createdGroupId;
+      groupProvenance = seed.groupProvenance;
       throwIfAborted(context.signal);
 
       const receipt = await options.terminalIntentRunner.submitIntent(
@@ -158,8 +159,7 @@ export function createSessionCreateHandler(
         await discardSessionSeedBestEffort({
           persistence: options.persistence,
           sessionId,
-          ...(group === undefined ? {} : { expectedGroupId: group.groupId }),
-          ...(createdGroupId === undefined ? {} : { createdGroupId }),
+          ...(groupProvenance === undefined ? {} : { groupProvenance }),
           ...(worktreeRemoved && createdWorktree !== undefined
             ? { removedWorktree: { projectId: project.id, worktreeId: createdWorktree.id } }
             : {}),
@@ -187,12 +187,4 @@ export function createSessionCreateHandler(
       clock: options.clock,
     });
   };
-}
-
-function sessionSeedGroupPlacement(
-  intent: SessionGroupPlacementIntent | undefined,
-  sessionGroupId: () => ReturnType<SessionCommandIdFactory["sessionGroupId"]>,
-) {
-  if (intent === undefined || intent.kind === "existing") return intent;
-  return { kind: "create" as const, groupId: sessionGroupId(), name: intent.name };
 }

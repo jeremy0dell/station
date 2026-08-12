@@ -413,8 +413,8 @@ export function createSqliteObserverPersistence(
         return {
           ok: true,
           session,
-          ...(placement.result.createdGroupId !== undefined
-            ? { createdGroupId: placement.result.createdGroupId }
+          ...(placement.result.groupProvenance !== undefined
+            ? { groupProvenance: placement.result.groupProvenance }
             : {}),
         };
       }),
@@ -426,11 +426,7 @@ export function createSqliteObserverPersistence(
           .find((candidate) => candidate.id === input.sessionId);
         const groupBefore = sessionGroupSqlite.readSessionGroupState(database);
         if (session === undefined) {
-          if (
-            input.expectedGroupId !== undefined ||
-            input.createdGroupId !== undefined ||
-            groupBefore.assignments.has(input.sessionId)
-          ) {
+          if (input.groupProvenance !== undefined || groupBefore.assignments.has(input.sessionId)) {
             throw new Error("Session seed no longer matches cleanup provenance.");
           }
           return correlationStore.discardSessionSeed(database, input);
@@ -438,10 +434,9 @@ export function createSqliteObserverPersistence(
         const placement = sessionGroupStore.discardSessionSeedPlacement(groupBefore, {
           sessionId: input.sessionId,
           projectId: session.projectId,
-          ...(input.expectedGroupId === undefined
+          ...(input.groupProvenance === undefined
             ? {}
-            : { expectedGroupId: input.expectedGroupId }),
-          ...(input.createdGroupId === undefined ? {} : { createdGroupId: input.createdGroupId }),
+            : { groupProvenance: input.groupProvenance }),
           updatedAt: input.discardedAt ?? now(),
         });
         const result = correlationStore.discardSessionSeed(database, input);
