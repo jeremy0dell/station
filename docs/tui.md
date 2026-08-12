@@ -29,6 +29,20 @@ the Node CLI to launch the Bun renderer:
   keeps the popup open.
 - `stn tui --dev-fake-dashboard` previews the dashboard with mock data (`STATION_SOURCE=mock`).
 
+After invoking the native workspace renderer, the CLI starts one process-local
+read-only update detection and planning check with no persistent cache. It never
+calls the selected plan's apply capability or waits for unfinished discovery:
+renderer resolution aborts the check, then an already-completed version-changing
+plan may print this line only after a normal zero-code, unsignaled exit:
+
+```text
+Station <version> is available — run `stn update`
+```
+
+The popup and fake-dashboard renderers never start discovery. Current,
+same-version development-revision, unavailable, ambiguous, failed, unfinished,
+nonzero, and signaled outcomes remain silent.
+
 ## Observer Build Admission
 
 Native Station, direct `stn tui --popup`, and public `stn popup` are

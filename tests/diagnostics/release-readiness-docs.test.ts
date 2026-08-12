@@ -5,6 +5,24 @@ import { describe, expect, it } from "vitest";
 const removedPersistenceOption = ["--persist", "path"].join("-");
 
 describe("release readiness docs", () => {
+  it("documents the native TUI update-notice lifecycle", async () => {
+    const [architecture, install, development, tui] = await Promise.all(
+      ["docs/architecture.md", "docs/install.md", "docs/development.md", "docs/tui.md"].map(read),
+    );
+    const notice = "Station <version> is available — run `stn update`";
+
+    expect(install).toContain(notice);
+    expect(tui).toContain(notice);
+    for (const document of [architecture, install, tui]) {
+      expect(document).toContain("one process-local");
+      expect(document).toContain("no persistent cache");
+      expect(document).toContain("version-changing");
+    }
+    expect(development).toContain("apps/cli/test/integration/tui-command.test.ts");
+    expect(development).toContain("tests/diagnostics/release-readiness-docs.test.ts");
+    expect(development).toContain("older published native binary");
+  });
+
   it("separates release guidance from contributor and test references", async () => {
     const [
       readme,

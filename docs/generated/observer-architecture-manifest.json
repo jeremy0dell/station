@@ -12722,7 +12722,7 @@
       "declaration": "runTuiCommand",
       "kind": "function",
       "role": "COMPOSITION ROOT",
-      "purpose": "Owns one launcher-minted UI run identity per renderer child, Observer startup and exact-selector admission before renderer and reconcile effects, resolved-config propagation, exact child outcome evidence, renderer selection, and popup control wiring.",
+      "purpose": "Owns one launcher-minted UI run identity per renderer child, Observer startup and exact-selector admission before renderer and reconcile effects, resolved-config propagation, exact child outcome evidence, renderer selection, popup control wiring, background read-only update planning, and post-cleanup normal-exit notices. Unfinished discovery is aborted without joining renderer shutdown.",
       "dependencies": [
         {
           "path": "apps/cli/src/commands/stationUiBuildAdmission.ts",
@@ -12772,41 +12772,6 @@
         {
           "path": "apps/cli/src/commands/update/scenario.ts",
           "declaration": "resolveUpdateScenario",
-          "kind": "function",
-          "role": "ADAPTER",
-          "edgeKind": "runtime"
-        },
-        {
-          "path": "apps/cli/src/update/devCheckoutUpdate.ts",
-          "declaration": "createDevCheckoutUpdateChannel",
-          "kind": "function",
-          "role": "ADAPTER",
-          "edgeKind": "runtime"
-        },
-        {
-          "path": "apps/cli/src/update/homebrewUpdate.ts",
-          "declaration": "createHomebrewUpdateChannel",
-          "kind": "function",
-          "role": "ADAPTER",
-          "edgeKind": "runtime"
-        },
-        {
-          "path": "apps/cli/src/update/installerBinaryUpdate.ts",
-          "declaration": "createInstallerBinaryUpdateChannel",
-          "kind": "function",
-          "role": "ADAPTER",
-          "edgeKind": "runtime"
-        },
-        {
-          "path": "apps/cli/src/update/miseUpdate.ts",
-          "declaration": "createMiseUpdateChannel",
-          "kind": "function",
-          "role": "ADAPTER",
-          "edgeKind": "runtime"
-        },
-        {
-          "path": "apps/cli/src/update/npmGlobalUpdate.ts",
-          "declaration": "createNpmGlobalUpdateChannel",
           "kind": "function",
           "role": "ADAPTER",
           "edgeKind": "runtime"
