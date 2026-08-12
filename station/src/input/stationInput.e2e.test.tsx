@@ -22,6 +22,7 @@ import { createStationInputRuntime } from "./stationInput.js";
 // arrive at the pty as the bytes a legacy terminal user would send.
 
 const SURFACE = { width: 70, height: 18 };
+const GHOSTTY_CTRL_Q_INPUT = "\x1b[57442;5u\x1b[113;5u";
 
 type Station = {
   registry: ReturnType<typeof createPtyRegistry>;
@@ -32,6 +33,10 @@ type Station = {
 
 function overlayVisible(station: Station): boolean {
   return selectStationOverlayVisible(station.store.getState());
+}
+
+function pressCapturedGhosttyCtrlQ(station: Station): void {
+  station.setup.renderer.stdin.emit("data", Buffer.from(GHOSTTY_CTRL_Q_INPUT));
 }
 
 describe("station input end to end", () => {
@@ -181,11 +186,14 @@ describe("station input end to end", () => {
     await waitFor(() => station.scripted.helpers.writes.join("") === "\x1bOB");
   });
 
-  it("ctrl-q triggers shutdown instead of typing into the shell", async () => {
+  it("captured Ghostty Ctrl-Q triggers shutdown instead of typing into the shell", async () => {
     const station = await renderScripted(true);
-    station.setup.mockInput.pressKey("q", { ctrl: true });
+    const writesBefore = [...station.scripted.helpers.writes];
+    pressCapturedGhosttyCtrlQ(station);
     await waitFor(() => station.shutdowns.length === 1);
-    expect(station.scripted.helpers.writes.join("")).not.toContain("\x11");
+    await station.setup.flush();
+    expect(station.shutdowns).toHaveLength(1);
+    expect(station.scripted.helpers.writes).toEqual(writesBefore);
   });
 
   it("ctrl-o toggles the overlay and the overlay swallows typing", async () => {
@@ -201,13 +209,17 @@ describe("station input end to end", () => {
     await waitFor(() => station.scripted.helpers.writes.join("").includes("ok"));
   });
 
-  it("Ctrl-Q stays live while the overlay is open", async () => {
+  it("captured Ghostty Ctrl-Q stays live while the overlay is open", async () => {
     const station = await renderScripted(false);
     station.setup.mockInput.pressKey("o", { ctrl: true });
     await waitFor(() => overlayVisible(station));
-    station.setup.mockInput.pressKey("q", { ctrl: true });
+    const writesBefore = [...station.scripted.helpers.writes];
+    pressCapturedGhosttyCtrlQ(station);
     await waitFor(() => station.shutdowns.length === 1);
-    expect(station.scripted.helpers.writes.join("")).not.toContain("\x11");
+    await station.setup.flush();
+    expect(station.shutdowns).toHaveLength(1);
+    expect(overlayVisible(station)).toBe(true);
+    expect(station.scripted.helpers.writes).toEqual(writesBefore);
   });
 
   it("paste flows to the pty and respects the child's bracketed-paste mode", async () => {
