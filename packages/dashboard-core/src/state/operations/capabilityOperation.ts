@@ -1,7 +1,11 @@
 import type { SafeError } from "@station/contracts";
 import type { StoreApi } from "zustand/vanilla";
 import { safeErrorToToast, toSafeError } from "../../services/errors/errors.js";
-import type { DashboardCapabilities, DashboardExecutionHandle } from "../capabilities/execution.js";
+import type {
+  DashboardCapabilities,
+  DashboardExecutionHandle,
+  DashboardExecutionResult,
+} from "../capabilities/execution.js";
 import {
   addPendingCreateSessionRow,
   addPendingStartAgentRow,
@@ -19,9 +23,12 @@ import {
 } from "./failedCreateExpiry.js";
 import type { DashboardCapabilityOperation } from "./types.js";
 
-/** Scope-bound executor for renderer-injected dashboard capabilities and settlement policy. */
+/**
+ * Scope-bound executor returning the settled capability result after applying optimistic and
+ * feedback policy, so composite operations can continue from the same execution.
+ */
 export type DashboardCapabilityOperationRunner = {
-  run(operation: DashboardCapabilityOperation): Promise<void>;
+  run(operation: DashboardCapabilityOperation): Promise<DashboardExecutionResult>;
 };
 
 export function createDashboardCapabilityOperationRunner(input: {
@@ -79,7 +86,7 @@ async function runDashboardCapabilityOperation(input: {
   clientLabel: string;
   scope: DashboardRuntimeEffectScope;
   expiry: FailedCreateExpiryScheduler;
-}): Promise<void> {
+}): Promise<DashboardExecutionResult> {
   const { store, capabilities, operation, clientLabel, scope, expiry } = input;
   let handle: DashboardExecutionHandle;
   try {
@@ -134,8 +141,13 @@ async function runDashboardCapabilityOperation(input: {
       }
     }
   } catch (error: unknown) {
-    scope.commit(() => addSafeErrorToast(store, toSafeError(error, { clientLabel })));
-    return;
+    const result: DashboardExecutionResult = {
+      kind: "failure",
+      error: toSafeError(error, { clientLabel }),
+      disposition: "remove-immediately",
+    };
+    scope.commit(() => addSafeErrorToast(store, result.error));
+    return result;
   }
 
   scope.commit(() => applyCapabilityOptimisticState(store, operation, handle));
@@ -144,11 +156,18 @@ async function runDashboardCapabilityOperation(input: {
     scope.commit(() =>
       settleDashboardCapabilityOperation({ store, operation, handle, result, expiry }),
     );
+    return result;
   } catch (error: unknown) {
+    const result: DashboardExecutionResult = {
+      kind: "failure",
+      error: toSafeError(error, { clientLabel }),
+      disposition: "remove-immediately",
+    };
     scope.commit(() => {
       removeCapabilityOptimisticRow(store, operation);
-      addSafeErrorToast(store, toSafeError(error, { clientLabel }));
+      addSafeErrorToast(store, result.error);
     });
+    return result;
   }
 }
 
@@ -192,6 +211,9 @@ function applyCapabilityOptimisticState(
       }
     } else {
       pendingRow.harnessProvider = operation.harness;
+      if (operation.targetGroupId !== undefined) {
+        pendingRow.targetGroupId = operation.targetGroupId;
+      }
     }
     store.setState(addPendingCreateSessionRow(store.getState(), pendingRow));
   }
@@ -206,13 +228,30 @@ function settleDashboardCapabilityOperation(input: {
 }): void {
   const { store, operation, handle, result, expiry } = input;
   if (result.kind === "success") {
-    if (handle.successDisposition === "remove-immediately") {
+    if (
+      handle.successDisposition === "remove-immediately" &&
+      !(operation.type === "quickCreateManagedSession" && operation.targetGroupId !== undefined)
+    ) {
       removeCapabilityOptimisticRow(store, operation);
     }
     return;
   }
   if (result.kind === "notice") {
-    removeCapabilityOptimisticRow(store, operation);
+    if (operation.type === "quickCreateManagedSession" && operation.targetGroupId !== undefined) {
+      markCreateSessionRowFailed(
+        store,
+        operation.localId,
+        {
+          tag: "CommandExecutionError",
+          code: "SESSION_CREATE_NOT_COMPLETED",
+          message: result.notice.message,
+          ...(result.notice.hint === undefined ? {} : { hint: result.notice.hint }),
+        },
+        expiry,
+      );
+    } else {
+      removeCapabilityOptimisticRow(store, operation);
+    }
     store.setState(addTuiToast(store.getState(), result.notice));
     return;
   }

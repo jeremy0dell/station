@@ -83,7 +83,7 @@ describe("dashboard cursor", () => {
     state = moveDashboardCursorHorizontal(state, 1);
     expect(state.dashboardFocus?.cellId).toBe("quickSession");
     state = moveDashboardCursorHorizontal(state, 1);
-    expect(state.dashboardFocus?.cellId).toBe("defaultAgent");
+    expect(state.dashboardFocus?.cellId).toBe("menu");
     expect(moveDashboardCursorHorizontal(state, 1)).toBe(state);
   });
 
@@ -112,6 +112,22 @@ describe("dashboard cursor", () => {
     expect(state.dashboardFocus?.cellId).toBe("menu");
     expect(moveDashboardCursorHorizontal(state, 1)).toBe(state);
     expect(moveDashboardCursorHorizontal(state, -1).dashboardFocus?.cellId).toBe("quickSession");
+  });
+
+  it("skips inert Group frame rows during vertical traversal", () => {
+    const snapshot = createGroupedDashboardSnapshot();
+    const state = createInitialTuiState({
+      initialSnapshot: snapshot,
+      dashboardFocus: {
+        rowId: dashboardRowIds.session("ses_wt_web_idle"),
+        cellId: "identity",
+      },
+    });
+
+    expect(moveDashboardCursor(state, 1).dashboardFocus).toEqual({
+      rowId: dashboardRowIds.group("group_build"),
+      cellId: "identity",
+    });
   });
 
   it("uses a chooser policy that skips headers, gaps, local rows, and pending sessions", () => {

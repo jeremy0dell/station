@@ -7,6 +7,7 @@ import type { CursorHookInstallResult } from "@station/cursor";
 import type { OpenCodePluginInstallResult } from "@station/opencode";
 import type { ExternalCommandInput, ExternalCommandResult } from "@station/runtime";
 import { describe, expect, it } from "vitest";
+import { setupConfigMutationInput } from "../../src/commands/setup/adapters/config.js";
 import {
   createHarnessTrackingAdapter,
   type SetupHarnessTrackingRunners,
@@ -22,6 +23,41 @@ import type { SetupCommandDeps } from "../../src/commands/setup/types.js";
 const trackedProviders = ["claude", "codex", "cursor", "opencode"] as const;
 
 describe("setup operation adapters", () => {
+  it("uses the resolved executable when setup creates a harness config block", () => {
+    const input = setupConfigMutationInput(
+      {
+        id: "write-config",
+        kind: "write-config",
+        tier: "required",
+        selected: true,
+        change: "create",
+        defaultHarnessId: "pi",
+        harnessIds: ["pi"],
+        trackingHarnessIds: [],
+        installWorktrunkTracking: false,
+      },
+      {
+        homeDir: "/home/test",
+        config: { status: "missing", path: "/home/test/.config/station/config.toml" },
+        worktrunk: { status: "ok", command: "wt", resolvedPath: "/opt/tools/wt" },
+        tmux: { status: "ok", command: "tmux", resolvedPath: "/opt/tools/tmux" },
+        harnesses: [
+          {
+            id: "pi",
+            label: "Pi",
+            status: "ok",
+            command: "pi",
+            resolvedPath: "/opt/tools/pi",
+          },
+        ],
+      } as SetupFacts,
+    );
+
+    expect(input.desired.harnesses).toEqual([
+      { id: "pi", command: "/opt/tools/pi", installHooks: false },
+    ]);
+  });
+
   it("streams genuine external installers through inherited stdio", async () => {
     const calls: ExternalCommandInput[] = [];
     const runner = async (input: ExternalCommandInput): Promise<ExternalCommandResult> => {

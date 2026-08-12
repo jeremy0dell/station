@@ -84,6 +84,24 @@ describe("dashboard viewport selector", () => {
     expect(collapsed.rowChoices.map((choice) => choice.value.id)).not.toContain("ses_wt_web_idle");
   });
 
+  it("lets inert Group frame rows consume ordinary viewport height without consuming slots", () => {
+    const snapshot = createGroupedDashboardSnapshot();
+    const viewport = selectDashboardViewport(
+      snapshot,
+      createInitialTuiState({ initialSnapshot: snapshot, scrollOffset: 3, terminalRows: 10 }),
+    );
+
+    expect(viewport.rows.map((row) => row.id)).toEqual([
+      "session:ses_wt_web_idle",
+      "group-frame-end:group_active",
+      "group:group_build",
+    ]);
+    expect(viewport.rows[1]?.cells).toEqual([]);
+    expect(viewport.displayRowChoices.map((choice) => [choice.key, choice.value.id])).toEqual([
+      ["1", "ses_wt_web_idle"],
+    ]);
+  });
+
   it("keeps pending-start sessions displayable but not actionable", () => {
     const snapshot = createDashboardSnapshot();
     const state = createInitialTuiState({

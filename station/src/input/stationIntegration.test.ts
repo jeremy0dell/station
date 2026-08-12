@@ -6,6 +6,7 @@
 // coordination store, and terminal passthrough is untouched when the
 // overlay is down.
 import { describe, expect, it } from "bun:test";
+import type { StationSnapshot } from "@station/contracts";
 import { dashboardRowIds } from "@station/dashboard-core/selectors";
 import { dashboardExecution } from "@station/dashboard-core/runtime";
 import type { DashboardCapabilities } from "@station/dashboard-core/runtime";
@@ -15,6 +16,7 @@ import {
 } from "../station/test/support/makeStationTestRuntime.js";
 import { createStationStore, type StationStore } from "../state/store.js";
 import { MAIN_PANE_ID, STATION_OVERLAY_ID } from "../state/types.js";
+import { groupedManyProjectsSnapshot } from "../station/fixtures/scenarios.js";
 import type { StationMouseEvent } from "./mouse.js";
 import { routeKey } from "./router.js";
 import {
@@ -28,12 +30,25 @@ import {
 } from "./keymap/stationBindings.js";
 import { createStationInputRuntime } from "./stationInput.js";
 
-function makeViewStore(station?: StationStore): StationTestDashboardRuntime {
+function makeViewStore(
+  station?: StationStore,
+  options: {
+    snapshot?: StationSnapshot;
+    terminalRows?: number;
+    activatedSessionIds?: string[];
+  } = {},
+): StationTestDashboardRuntime {
+  const { activatedSessionIds, ...runtimeOptions } = options;
   const capabilities: DashboardCapabilities | undefined =
     station === undefined
       ? undefined
       : {
-          activation: { activate: () => dashboardExecution({ kind: "success" }) },
+          activation: {
+            activate: ({ sessionId }) => {
+              activatedSessionIds?.push(sessionId);
+              return dashboardExecution({ kind: "success" });
+            },
+          },
           managedSessions: {
             create: () => dashboardExecution({ kind: "success" }),
             quickCreate: () => dashboardExecution({ kind: "success" }),
@@ -52,6 +67,7 @@ function makeViewStore(station?: StationStore): StationTestDashboardRuntime {
           },
         };
   return makeStationTestRuntime({
+    ...runtimeOptions,
     ...(capabilities === undefined ? {} : { capabilities }),
   }).runtime;
 }
@@ -104,6 +120,42 @@ describe("station overlay layer in the keymap stack", () => {
     // Esc in help mode closes the MODE, not the overlay.
     expect(routeKey("\x1b", station.getState(), keymap)).toEqual({ kind: "swallowed" });
     expect(view.state.getState().screen).toEqual({ name: "dashboard" });
+  });
+
+  it("routes Group arrows, Enter, and letter slots through the native keymap", () => {
+    const snapshot = groupedManyProjectsSnapshot();
+    const station = makeStationStore(true);
+    const activatedSessionIds: string[] = [];
+    const view = makeViewStore(station, { snapshot, terminalRows: 40, activatedSessionIds });
+    const keymap = createStationKeymap(view);
+    const groupId = dashboardRowIds.group("group_design_refresh");
+
+    expect(routeKey("\x1b[B", station.getState(), keymap)).toEqual({ kind: "swallowed" });
+    expect(routeKey("\x1b[B", station.getState(), keymap)).toEqual({ kind: "swallowed" });
+    expect(view.state.getState().dashboardFocus).toEqual({ rowId: groupId, cellId: "identity" });
+
+    routeKey("\x1b[C", station.getState(), keymap);
+    routeKey("\r", station.getState(), keymap);
+    expect(view.state.getState().dashboardFocus).toEqual({
+      rowId: groupId,
+      cellId: "quickSession",
+    });
+    expect([...view.state.getState().collapsedGroupIds]).toEqual([]);
+
+    routeKey("\x1b[C", station.getState(), keymap);
+    routeKey("\r", station.getState(), keymap);
+    expect(view.state.getState().dashboardFocus).toEqual({ rowId: groupId, cellId: "menu" });
+    expect([...view.state.getState().collapsedGroupIds]).toEqual([]);
+
+    routeKey("a", station.getState(), keymap);
+    expect(activatedSessionIds).toEqual(["ses_wt_runtime_cleanup"]);
+
+    view.actions.dispatch({
+      type: "dashboard.cell.activate",
+      rowId: groupId,
+      cellId: "identity",
+    });
+    expect([...view.state.getState().collapsedGroupIds]).toEqual(["group_design_refresh"]);
   });
 
   it("dispatches dashboard dismissal through native capability authority", () => {

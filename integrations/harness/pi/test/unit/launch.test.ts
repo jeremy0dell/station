@@ -15,6 +15,7 @@ describe("buildPiLaunchPlan", () => {
       observerSocketPath: "/tmp/station/run/observer.sock",
       stateDir: "/tmp/station/state",
       hookSpoolDir: "/tmp/station/state/spool/hooks",
+      hookBin: "/tmp/station/bin/stn-ingress",
     });
 
     expect(HarnessLaunchPlanSchema.parse(plan)).toEqual(plan);
@@ -36,6 +37,7 @@ describe("buildPiLaunchPlan", () => {
         STATION_OBSERVER_SOCKET_PATH: "/tmp/station/run/observer.sock",
         STATION_OBSERVER_STATE_DIR: "/tmp/station/state",
         STATION_HOOK_SPOOL_DIR: "/tmp/station/state/spool/hooks",
+        STATION_INGRESS_BIN: "/tmp/station/bin/stn-ingress",
       },
       providerData: {
         interactive: true,

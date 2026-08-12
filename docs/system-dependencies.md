@@ -6,7 +6,7 @@ Station integrates with Worktrunk, tmux, Claude Code, Codex, Cursor, Pi, and Ope
 stn setup
 ```
 
-This configures the core local workflow: the required tools, the selected/default agent CLI and its required Station tracking preparation, and a zero-project config. With no config, one runnable CLI is inferred; several runnable CLIs require an explicit guided selection. The first explicit selection becomes the default only for a new config. Add the first project explicitly in Station.
+This configures the core local workflow: the required tools, the selected/default agent CLI and its required Station tracking preparation, and a zero-project config. With no config, one runnable CLI is inferred; several runnable CLIs require an explicit guided selection. When setup creates or appends a selected harness block, it writes the resolved executable path when a bare command was satisfied through the setup process `PATH`, avoiding later Observer or tmux environment drift. The first explicit selection becomes the default only for a new config. Add the first project explicitly in Station.
 
 The compiled `stn` launches its TUI and Observer without Node.js, pnpm, or Bun. A local source checkout expects Node.js 24.2+ (and below 25), pnpm 11, and Bun 1.3.14 for development. Real-provider test lanes remain opt-in.
 `stn setup system --check` reports those versions, but it does not change the active Node or pnpm
@@ -238,7 +238,9 @@ drifted artifacts, probe failure, prepared state, and providers for which the ch
 resolved STATION config path, observer socket, state directory, spool directory,
 auto-start mode, and absolute `stn-ingress` launcher. Both
 `stn hooks doctor worktrunk` and full `stn doctor` validate that same expectation
-without requiring `--hook-bin`. Pi has no external artifact requirement. Codex artifact preparation
+without requiring `--hook-bin`. Pi has no external artifact requirement; Station injects the same
+absolute ingress launcher into Pi's launch environment as `STATION_INGRESS_BIN`, so Pi status events
+do not rely on bare launcher resolution in a pane or tmux server. Codex artifact preparation
 does not prove runtime delivery or hook trust: review may still be required through `/hooks`, and
 setup does not enable Codex's hook feature or bypass trust. To repair an artifact manually, run:
 

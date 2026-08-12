@@ -387,6 +387,8 @@ reattach; pane borders and neighboring panes must remain unlinked.
 - Treat the active UI as the full terminal canvas. Layout code should account for the terminal viewport, not a decorative parent container.
 - Native Station owns its opaque Station canvas. The standalone dashboard uses opaque terminal-default background intent for its unaccented canvas, panels, prompts, Help surface, and toasts; this behavior is provider-neutral and does not use transparency.
 - Keep header, body, footer, overlays, prompts, and toasts from overlapping at narrow or short terminal sizes.
+- Render canonical Groups as contiguous blocks in the projected row order. An expanded Group uses its header as the top edge, inert side rails around direct members, and one inert closing-frame row; an empty expanded Group therefore has a header and closing edge only. A collapsed Group keeps the bounded identity, `[qs]`, and `[▾]` targets but omits its members and closing edge. Only identity collapses in this slice; `[qs]` and `[▾]` are focusable no-ops.
+- Group rings use the quiet hairline role by default, bright working color while the header is focused, and dim working color while a direct member has focus. Exact target focus uses compact focus; member focus and hover keep the ordinary dashboard fills. Borders, separators, whitespace, and closing rows are inert, and viewport clipping may show any ordinary edge of the projected block without renderer-owned regrouping.
 - The tmux popup runs the same interactive observer-backed dashboard without
   native Station panes. Its close behavior and footer copy must match popup
   semantics, such as `q/esc:close` when a warm dismissal is expected. `Ctrl-O`
@@ -497,13 +499,15 @@ dashboard scrolling, and active modal surfaces intercept background clicks and s
 Dashboard focus follows rendered order through each Project header, its direct Group blocks and
 project-root sessions, or the stable Add Session action rendered when that Project is empty. The cursor is one branded
 `{ rowId, cellId }` identity. Entering a header vertically always selects `identity`; Left/Right then
-moves without wrapping through `identity` → `shell` → `quickSession` → `defaultAgent` for Projects
+moves without wrapping through `identity` → `shell` → `quickSession` → `menu` for Projects
 and `identity` → `quickSession` → `menu` for Groups. Group identity toggles collapse; Group quick
 session and menu remain focus-preserving no-ops until their workflow slices land. Up/Down leaves any header segment immediately, and Left/Right on a
 session row or empty-project action is inert. Remove, rename, and fork row choosers retain a separate
 visible, selectable canonical-session traversal; slots and Enter resolve through that same chooser
 policy. Next-needs-me uses its own canonical-session policy. `N` continues to open the session flow
-without changing dashboard focus. Gaps and optimistic create rows remain non-focusable.
+without changing dashboard focus, while uppercase `G` creates a Quick Group for the focused row's
+owning Project (or the first canonical Project when nothing valid is focused). Lowercase `g` remains
+a visible-session slot. Gaps and optimistic create rows remain non-focusable.
 
 Focused compact controls use the canonical theme's stronger bounded
 `interaction.compactFocus` fill. A project header's primary segment covers the rendered
@@ -521,13 +525,15 @@ Expanding and moving Down reaches the first visible child again.
 Snapshot replacement and accepted filter changes preserve stable focus identity, otherwise choose
 the next focusable item at the old position before the preceding item; resize preserves identity
 and scrolls it into view. The Default Agent picker retains its header focus beneath the screen, so
-Escape, click-away, unchanged selection, and a successful change return to `defaultAgent`; project
+Escape, click-away, unchanged selection, and a successful change return to `menu`; project
 removal while open uses the same deterministic focus fallback. The dashboard footer describes Enter
 as `activate` because it may activate a session row, project-header control, or empty-project action.
 
-This dashboard-core contract intentionally adds no Group pixels or hit boxes. #538 owns the explicit
-OpenTUI Group row, disclosure/count layout, colors, focus and containment rings, responsive shedding,
-hover, and native/standalone pointer presentation; it consumes the same tree rows and activation path.
+Activating a Project's `[▾]` opens a right-edge anchored menu with Quick Group, New Group…, Set
+default agent, and Project settings… in that order. Up/Down wraps, Enter activates, `G` selects Quick
+Group, and Escape or click-away returns to the same Project `menu` cell. The overlay opens above its
+Project row when it would overflow and clamps in narrow or short terminals without reflowing the
+dashboard. Native right-click exposes the same four actions through the shared core transitions.
 
 Bounded screens use one active-screen overlay layer. Dashboard-core exposes the narrow
 `TuiScreenBehavior` contract, and the owning screen module supplies its safe `clickAway`
@@ -557,6 +563,22 @@ renderer-control request to its CLI parent. The tmux adapter
 opens or focuses one cwd-bound shell window in the exact invoking client session,
 then dismisses that popup claim. Its separate propagation-stopping cell prevents
 it from also collapsing the project.
+
+New Group opens a bottom sheet with an empty Name, Quick session Off, and Name focused. Up/Down wraps
+through Name → Quick session → Create Group → Cancel; Left/Right switches the two buttons; Enter
+activates the focused control; and `N`, `Q`, and `C` focus, toggle, and submit. Submission trims the
+name and leaves the sheet inert and visible while `sessionGroup.create` is pending. Rejection keeps
+the draft and focus for retry; cancellation returns to the invoking Project menu, or to the Project
+header `menu` cell when opened from native context.
+
+Quick Group creates a durable `Quick Group <six-hex-token>` first, then invokes the ordinary Quick
+Session capability with the Project defaults. After the client has loaded canonical launch truth,
+dashboard-core correlates the issued Project and hidden branch and records one expected Group
+membership update. A targeted pending row bridges the launch under the new Group without changing
+canonical counts or showing a duplicate project-root row. Launch failure leaves the valid empty
+Group and ordinary failed-row/toast feedback; correlation or membership failure never retries or
+rolls back the Group or session and focuses their canonical surviving destination. Successful
+membership removes the transient row and focuses the canonical session without activating it again.
 
 The zero-project dashboard renders **Add your first project** as a pointer
 target that dispatches `dashboard.addProject`, producing the same Add Project

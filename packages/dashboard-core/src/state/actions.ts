@@ -1,4 +1,5 @@
 import type { ProjectId, SessionId } from "@station/contracts";
+import type { CreateGroupActionId } from "../components/GroupCreateSheet/content.js";
 import type { AddProjectActionId } from "../flows/addProject/actions.js";
 import type { NewSessionActionId } from "../flows/newSession.js";
 import type { DashboardCellId, DashboardRowId } from "../selectors/dashboardTree.js";
@@ -36,6 +37,13 @@ import {
   type RemoveWorktreeActionId,
 } from "./screens/removeWorktree.js";
 import { submitRenameSession } from "./screens/renameSession.js";
+import {
+  handleCreateGroupAction,
+  handleProjectMenuAction,
+  openCreateGroup,
+  type ProjectMenuInputActionId,
+  submitQuickGroup,
+} from "./screens/sessionGroups.js";
 import { openRenameEditForRow } from "./screens/sessionRows.js";
 import {
   openWidgetSettings,
@@ -46,6 +54,7 @@ import {
 } from "./screens/widgetSettings.js";
 import type { TuiRuntimeContext, TuiTransition } from "./transition.js";
 import type {
+  CreateGroupReturnTarget,
   DashboardFilterConditionField,
   DashboardState,
   ProjectSettingsItemId,
@@ -99,7 +108,15 @@ export type TuiSemanticAction =
   | { type: "newSession.activate"; actionId: NewSessionActionId }
   | { type: "removeWorktree.activate"; actionId: RemoveWorktreeActionId }
   | { type: "forkSession.activate"; actionId: ForkSessionActionId }
-  | { type: "renameSession.submit" };
+  | { type: "renameSession.submit" }
+  | { type: "projectMenu.activate"; actionId: ProjectMenuInputActionId }
+  | { type: "createGroup.activate"; actionId: CreateGroupActionId }
+  | {
+      type: "createGroup.open";
+      projectId: ProjectId;
+      returnTo: CreateGroupReturnTarget;
+    }
+  | { type: "sessionGroup.quickCreate"; projectId?: ProjectId };
 
 /** State-only dashboard events for focus, screen, selection, scrolling, and widget transitions. */
 export type DashboardStateAction =
@@ -162,6 +179,17 @@ export function handleTuiAction(
       return handleForkSessionAction(state, action.actionId);
     case "renameSession.submit":
       return submitRenameSession(state);
+    case "projectMenu.activate":
+      return handleProjectMenuAction(state, action.actionId);
+    case "createGroup.activate":
+      return handleCreateGroupAction(state, action.actionId);
+    case "createGroup.open":
+      return stateTransition(openCreateGroup(state, action.projectId, action.returnTo));
+    case "sessionGroup.quickCreate":
+      return submitQuickGroup(
+        state,
+        action.projectId === undefined ? {} : { projectId: action.projectId },
+      );
     default:
       return handleDashboardStateAction(state, action);
   }

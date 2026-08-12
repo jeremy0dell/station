@@ -875,12 +875,12 @@ describe("TUI screen transitions", () => {
     });
   });
 
-  it("preserves default-agent header focus through every safe picker return", () => {
+  it("preserves Project-menu header focus through every safe picker return", () => {
     const base = createInitialTuiState({
       initialSnapshot: createDashboardSnapshot(),
       dashboardFocus: {
         rowId: dashboardRowIds.project("web"),
-        cellId: "defaultAgent",
+        cellId: "menu",
       },
     });
     const expectedFocus = base.dashboardFocus;
@@ -912,7 +912,7 @@ describe("TUI screen transitions", () => {
       initialSnapshot: snapshot,
       dashboardFocus: {
         rowId: dashboardRowIds.project("web"),
-        cellId: "defaultAgent",
+        cellId: "menu",
       },
     });
     const opened = openProjectDefaultAgentPicker(base, "web");

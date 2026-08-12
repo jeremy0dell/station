@@ -48,6 +48,15 @@ export function projectSetupHarnessChecks(input: {
       value: unavailable.join(","),
     });
   }
+  const selectedDefault = facts.harnesses.find(
+    (harness) => harness.id === selection.defaultHarness,
+  );
+  if (selectedDefault?.resolvedPath !== undefined) {
+    harnessDetails.push({
+      label: setupMessageRef("detail.resolved-executable"),
+      value: selectedDefault.resolvedPath,
+    });
+  }
 
   const harness = projectHarnessCheck({
     plan,

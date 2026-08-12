@@ -200,6 +200,41 @@ describe("provider hook ingress command", () => {
     await expect(listHookSpoolFiles(fixture.hookSpoolDir)).resolves.toEqual([]);
   });
 
+  it("accepts Worktrunk lifecycle hooks without a JSON payload", async () => {
+    const fixture = await createTempState();
+    let observedEvent: ProviderHookEvent | undefined;
+
+    const receipt = await runProviderIngressCommand(
+      ["--socket", fixture.socketPath, "--state-dir", fixture.stateDir, "worktrunk", "post-create"],
+      { stdin: "" },
+      {
+        clock: { now: () => new Date(now) },
+        hookId: () => "hook_worktrunk_empty",
+        clientFactory: () =>
+          ({
+            health: async () => healthyObserver(fixture),
+            ingestProviderHookEvent: async (event: ProviderHookEvent) => {
+              observedEvent = event;
+              return {
+                schemaVersion: "0.10.0",
+                hookId: event.hookId ?? "hook_worktrunk_empty",
+                provider: event.provider,
+                event: event.event,
+                accepted: true,
+                status: "ingested",
+                receivedAt: event.receivedAt,
+                reconciled: false,
+              } satisfies ProviderHookReceipt;
+            },
+          }) as never,
+      },
+    );
+
+    expect(receipt.status).toBe("ingested");
+    expect(observedEvent).toBeDefined();
+    expect(Object.hasOwn(observedEvent ?? {}, "payload")).toBe(false);
+  });
+
   it("resolves observer delivery and spool paths from --config without explicit path flags", async () => {
     const fixture = await createTempState();
     const configPath = await writeConfigToml(fixture.root, fixture.config);
@@ -250,19 +285,67 @@ describe("provider hook ingress command", () => {
     expect(observedSpoolDir).toBe(fixture.hookSpoolDir);
   });
 
-  it("rejects removed Crush hook sender targets", async () => {
+  it.each([
+    "crush",
+    "toString",
+    "__proto__",
+  ])("rejects unsupported hook sender target %s", async (provider) => {
     const fixture = await createTempState();
 
     await expect(
       runProviderIngressCommand(
-        ["--socket", fixture.socketPath, "--state-dir", fixture.stateDir, "crush"],
+        ["--socket", fixture.socketPath, "--state-dir", fixture.stateDir, provider],
         {
           stdin: JSON.stringify({ event: "PreToolUse" }),
           env: stationEnv(),
         },
       ),
-    ).rejects.toThrow("Unsupported provider hook sender: crush");
+    ).rejects.toThrow(`Unsupported provider hook sender: ${provider}`);
     await expect(listHookSpoolFiles(fixture.hookSpoolDir)).resolves.toEqual([]);
+  });
+
+  it.each([
+    { provider: "claude", args: ["supplied"], expectedEvent: "unknown" },
+    { provider: "codex", args: ["supplied"], expectedEvent: "unknown" },
+    { provider: "cursor", args: ["beforeShellExecution"], expectedEvent: "beforeShellExecution" },
+    { provider: "cursor", args: [], expectedEvent: "unknown" },
+  ])("applies the $provider event policy to CLI event input", async ({
+    provider,
+    args,
+    expectedEvent,
+  }) => {
+    const fixture = await createTempState();
+
+    const receipt = await runProviderIngressCommand(
+      ["--socket", fixture.socketPath, "--state-dir", fixture.stateDir, provider, ...args],
+      { stdin: "" },
+      {
+        clock: { now: () => new Date(now) },
+        hookId: () => `hook_${provider}_event_policy`,
+      },
+    );
+
+    expect(receipt).toMatchObject({
+      provider,
+      event: expectedEvent,
+      status: "rejected",
+      error: { code: "HOOK_PAYLOAD_INVALID" },
+    });
+  });
+
+  it.each(["pi", "opencode"])("requires an event for %s ingress", async (provider) => {
+    const fixture = await createTempState();
+
+    const result = await runProviderIngressMain(
+      ["--socket", fixture.socketPath, "--state-dir", fixture.stateDir, provider],
+      { stdin: JSON.stringify({ event_type: "ignored" }), env: stationEnv() },
+    );
+
+    expect(result).toEqual({
+      code: 1,
+      stdout: "",
+      stderr: `Usage: stn-ingress [options] ${provider} <event>\n`,
+    });
   });
 
   it("delivers raw Codex hook payloads through observer.ingestProviderHookEvent", async () => {
@@ -443,6 +526,55 @@ describe("provider hook ingress command", () => {
         hook_event_name: "beforeShellExecution",
         session_id: "cursor_session_1",
         station_worktree_id: "wt_web_task",
+      },
+    });
+    await expect(listHookSpoolFiles(fixture.hookSpoolDir)).resolves.toEqual([]);
+  });
+
+  it("delivers raw Pi hook payloads through observer.ingestProviderHookEvent", async () => {
+    const fixture = await createTempState();
+    let observedEvent: ProviderHookEvent | undefined;
+
+    const receipt = await runProviderIngressCommand(
+      ["--socket", fixture.socketPath, "--state-dir", fixture.stateDir, "pi", "agent_end"],
+      {
+        stdin: JSON.stringify({ event_type: "agent_end", session_id: "pi_session_1" }),
+        env: stationEnv(),
+      },
+      {
+        clock: { now: () => new Date(now) },
+        hookId: () => "hook_pi_1",
+        clientFactory: () =>
+          ({
+            health: async () => healthyObserver(fixture),
+            ingestProviderHookEvent: async (event: ProviderHookEvent) => {
+              observedEvent = event;
+              return {
+                schemaVersion: "0.10.0",
+                hookId: event.hookId ?? "hook_pi_1",
+                provider: event.provider,
+                event: event.event,
+                accepted: true,
+                status: "ingested",
+                receivedAt: event.receivedAt,
+                reconciled: false,
+              } satisfies ProviderHookReceipt;
+            },
+          }) as never,
+      },
+    );
+
+    expect(receipt.status).toBe("ingested");
+    expect(observedEvent).toMatchObject({
+      provider: "pi",
+      kind: "harness",
+      event: "agent_end",
+      payload: {
+        event_type: "agent_end",
+        session_id: "pi_session_1",
+        station_project_id: "web",
+        station_worktree_id: "wt_web_task",
+        station_session_id: "ses_web_task",
       },
     });
     await expect(listHookSpoolFiles(fixture.hookSpoolDir)).resolves.toEqual([]);
@@ -711,6 +843,8 @@ describe("provider hook ingress command", () => {
   it("rejects malformed provider payloads before delivery or spool writes", async () => {
     const fixture = await createTempState();
     let delivered = false;
+    let started = false;
+    let spooled = false;
 
     const receipt = await runProviderIngressCommand(
       ["--socket", fixture.socketPath, "--state-dir", fixture.stateDir, "codex"],
@@ -730,6 +864,14 @@ describe("provider hook ingress command", () => {
             ingestHookEvent: ingest,
           } as never;
         },
+        spawnObserver: async () => {
+          started = true;
+          throw new Error("should not start for invalid payloads");
+        },
+        writeSpool: async () => {
+          spooled = true;
+          throw new Error("should not spool invalid payloads");
+        },
       },
     );
 
@@ -740,6 +882,8 @@ describe("provider hook ingress command", () => {
       },
     });
     expect(delivered).toBe(false);
+    expect(started).toBe(false);
+    expect(spooled).toBe(false);
     await expect(listHookSpoolFiles(fixture.hookSpoolDir)).resolves.toEqual([]);
   });
 });

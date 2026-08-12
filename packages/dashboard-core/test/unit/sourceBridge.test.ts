@@ -55,7 +55,7 @@ describe("applySnapshotSourceState", () => {
       initialSnapshot: snapshot,
       dashboardFocus: {
         rowId: dashboardRowIds.project("web"),
-        cellId: "defaultAgent",
+        cellId: "menu",
       },
     });
     const withoutWeb = {
@@ -74,6 +74,50 @@ describe("applySnapshotSourceState", () => {
       NOW,
     );
 
+    expect(replaced.dashboardFocus).toEqual({
+      rowId: dashboardRowIds.project("api"),
+      cellId: "identity",
+    });
+  });
+
+  it.each([
+    "projectMenu",
+    "createGroup",
+  ] as const)("closes a %s surface when its Project disappears", (screenName) => {
+    const snapshot = createDashboardSnapshot();
+    const screen =
+      screenName === "projectMenu"
+        ? ({ name: "projectMenu", projectId: "web", focus: "quickGroup" } as const)
+        : ({
+            name: "createGroup",
+            projectId: "web",
+            draftName: { value: "Draft", cursor: 5 },
+            quickSession: false,
+            focus: "name",
+            submitting: true,
+            returnTo: "projectMenu",
+          } as const);
+    const initial = {
+      ...createInitialTuiState({
+        initialSnapshot: snapshot,
+        dashboardFocus: { rowId: dashboardRowIds.project("web"), cellId: "menu" },
+      }),
+      screen,
+    };
+    const withoutWeb = {
+      ...snapshot,
+      projects: snapshot.projects.filter((project) => project.id !== "web"),
+      rows: snapshot.rows.filter((row) => row.projectId !== "web"),
+      sessions: snapshot.sessions.filter((session) => session.projectId !== "web"),
+    };
+
+    const replaced = applySnapshotSourceState(
+      initial,
+      { snapshot: withoutWeb, connection: { state: "connected", since: NOW } },
+      NOW,
+    );
+
+    expect(replaced.screen).toEqual({ name: "dashboard" });
     expect(replaced.dashboardFocus).toEqual({
       rowId: dashboardRowIds.project("api"),
       cellId: "identity",

@@ -137,6 +137,23 @@ function selectContextMenuItem(effects: StationInputEffects, itemIndex: number |
         dashboardRuntime.actions.dispatch({ type: "removeWorktree.openConfirm", rowId: action.rowId });
       }
       return;
+    case "quickGroup":
+      if (dashboardRuntime !== undefined) {
+        dashboardRuntime.actions.dispatch({
+          type: "sessionGroup.quickCreate",
+          projectId: action.projectId,
+        });
+      }
+      return;
+    case "newGroup":
+      if (dashboardRuntime !== undefined) {
+        dashboardRuntime.actions.dispatch({
+          type: "createGroup.open",
+          projectId: action.projectId,
+          returnTo: "projectHeader",
+        });
+      }
+      return;
     case "setProjectDefaultAgent":
       if (dashboardRuntime !== undefined) {
         dashboardRuntime.actions.dispatch({ type: "projectDefaultAgent.open", projectId: action.projectId });

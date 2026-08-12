@@ -463,6 +463,7 @@ describe("observer providers", () => {
       resume: true,
       configPath,
       extensionPath: piExtensionPath,
+      hookBin: ingressLauncher,
       observerSocketPath: observerPaths.socketPath,
       stateDir: observerPaths.stateDir,
       hookSpoolDir: observerPaths.hookSpoolDir,
@@ -963,7 +964,10 @@ describe("observer providers", () => {
           },
         ],
       },
-      { configPath: "/tmp/station/config.toml" },
+      {
+        configPath: "/tmp/station/config.toml",
+        providerHookIngressLauncher: "/tmp/station/bin/stn-ingress",
+      },
     );
     const provider = registry.harnesses.get("pi");
     const project = firstProject();
@@ -996,6 +1000,7 @@ describe("observer providers", () => {
       args: expect.arrayContaining(["--extension"]),
       env: {
         STATION_CONFIG_PATH: "/tmp/station/config.toml",
+        STATION_INGRESS_BIN: "/tmp/station/bin/stn-ingress",
       },
     });
   });

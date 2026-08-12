@@ -139,6 +139,9 @@ function buildLaunch(
   if (options.hookSpoolDir !== undefined) {
     launchOptions.hookSpoolDir = options.hookSpoolDir;
   }
+  if (options.hookBin !== undefined) {
+    launchOptions.hookBin = options.hookBin;
+  }
   return buildPiLaunchPlan(request, launchOptions);
 }
 

@@ -1,5 +1,5 @@
 // Deterministic STATION-view scenarios for layout work, golden-frame tests, and
-// the mock source (many-projects, attention-and-failures, disconnected).
+// the mock source (many-projects, grouped-many-projects, attention-and-failures, disconnected).
 // Fixture data self-identifies through contract channels (snapshot alerts), not code branches.
 import type { StationClientState } from "@station/client";
 import type {
@@ -18,6 +18,7 @@ const SCENARIO_NOW_MS = Date.parse(SCENARIO_NOW);
 export type StationScenarioName =
   | "baseline"
   | "many-projects"
+  | "grouped-many-projects"
   | "attention-and-failures"
   | "disconnected"
   | "showcase";
@@ -25,6 +26,7 @@ export type StationScenarioName =
 export const STATION_SCENARIO_NAMES: readonly StationScenarioName[] = [
   "baseline",
   "many-projects",
+  "grouped-many-projects",
   "attention-and-failures",
   "disconnected",
   "showcase",
@@ -41,6 +43,11 @@ export function scenarioState(name: StationScenarioName): StationClientState {
     case "many-projects":
       return {
         snapshot: manyProjectsSnapshot(),
+        connection: { state: "connected", since: SCENARIO_NOW_MS },
+      };
+    case "grouped-many-projects":
+      return {
+        snapshot: groupedManyProjectsSnapshot(),
         connection: { state: "connected", since: SCENARIO_NOW_MS },
       };
     case "attention-and-failures":
@@ -94,6 +101,101 @@ export function manyProjectsSnapshot(): StationSnapshot {
           id: "alert_station_mock",
           severity: "info",
           message: "Static many-projects fixture — not live observer data.",
+          createdAt: SCENARIO_NOW,
+        },
+      ],
+    },
+  );
+}
+
+export function groupedManyProjectsSnapshot(): StationSnapshot {
+  return snapshotFromRows(
+    [
+      scenarioRow({ id: "wt_group_contracts", project: STATION, branch: "group-contracts", state: "working", additions: 84, deletions: 20, pr: { number: 481, state: "open" }, checks: "running" }),
+      scenarioRow({ id: "wt_group_keyboard", project: STATION, branch: "group-keyboard", state: "idle", additions: 16, deletions: 4, pr: { number: 482, state: "open" }, checks: "pass" }),
+      scenarioRow({ id: "wt_handoff_refusal", project: STATION, branch: "handoff-refusal", state: "needs_attention", additions: 53, deletions: 11, pr: { number: 476, state: "open" }, checks: { state: "fail", failed: 1 } }),
+      scenarioRow({ id: "wt_trace_readiness", project: STATION, branch: "trace-readiness", state: "working", additions: 91, deletions: 22, pr: { number: 478, state: "open" }, checks: "running" }),
+      scenarioRow({ id: "wt_diagnostic_index", project: STATION, branch: "diagnostic-index", state: "idle", additions: 38, deletions: 7 }),
+      scenarioRow({ id: "wt_runtime_cleanup", project: STATION, branch: "runtime-cleanup", state: "idle", additions: 9, deletions: 2 }),
+      scenarioRow({ id: "wt_rc_manifest", project: STATION, branch: "rc-manifest", state: "idle", additions: 31, deletions: 3, pr: { number: 471, state: "open" }, checks: "pass" }),
+      scenarioRow({ id: "wt_installer_replay", project: STATION, branch: "installer-replay", state: "working", additions: 64, deletions: 12 }),
+      scenarioRow({ id: "wt_asset_proof", project: STATION, branch: "asset-proof", state: "exited", additions: 19, deletions: 2 }),
+      scenarioRow({ id: "wt_input_routing", project: STATION, branch: "input-routing", state: "idle", additions: 27, deletions: 6 }),
+      scenarioRow({ id: "wt_docs_refresh", project: STATION, branch: "docs-refresh", state: "idle", additions: 8, deletions: 2, pr: { number: 479, state: "open" }, checks: "pass" }),
+      scenarioRow({ id: "wt_main", project: STATION, branch: "main", state: "none" }),
+    ],
+    {
+      projects: [STATION],
+      retainedSessionWorktreeIds: ["wt_main"],
+      sessionGroups: [
+        {
+          id: "group_design_refresh",
+          projectId: STATION.id,
+          name: "Design refresh",
+          sessionIds: ["ses_wt_group_contracts", "ses_wt_group_keyboard"],
+          version: 1,
+          createdAt: SCENARIO_NOW,
+          updatedAt: SCENARIO_NOW,
+        },
+        {
+          id: "group_observer_hardening",
+          projectId: STATION.id,
+          name: "Observer hardening",
+          sessionIds: [
+            "ses_wt_handoff_refusal",
+            "ses_wt_trace_readiness",
+            "ses_wt_diagnostic_index",
+          ],
+          version: 1,
+          createdAt: SCENARIO_NOW,
+          updatedAt: SCENARIO_NOW,
+        },
+        {
+          id: "group_runtime_cleanup",
+          projectId: STATION.id,
+          name: "Runtime cleanup",
+          sessionIds: ["ses_wt_runtime_cleanup"],
+          version: 1,
+          createdAt: SCENARIO_NOW,
+          updatedAt: SCENARIO_NOW,
+        },
+        {
+          id: "group_post_launch",
+          projectId: STATION.id,
+          name: "Post-launch",
+          sessionIds: [],
+          version: 1,
+          createdAt: SCENARIO_NOW,
+          updatedAt: SCENARIO_NOW,
+        },
+        {
+          id: "group_release_train",
+          projectId: STATION.id,
+          name: "Release train",
+          sessionIds: [
+            "ses_wt_rc_manifest",
+            "ses_wt_installer_replay",
+            "ses_wt_asset_proof",
+          ],
+          version: 1,
+          createdAt: SCENARIO_NOW,
+          updatedAt: SCENARIO_NOW,
+        },
+        {
+          id: "group_input_parity",
+          projectId: STATION.id,
+          name: "Input parity and minimum-width interaction verification",
+          sessionIds: ["ses_wt_input_routing"],
+          version: 1,
+          createdAt: SCENARIO_NOW,
+          updatedAt: SCENARIO_NOW,
+        },
+      ],
+      alerts: [
+        {
+          id: "alert_grouped_many_projects_mock",
+          severity: "info",
+          message: "Static grouped-many-projects fixture — not live observer data.",
           createdAt: SCENARIO_NOW,
         },
       ],
@@ -351,6 +453,7 @@ function scenarioChecks(
 type SnapshotExtras = {
   projects: readonly ScenarioProject[];
   retainedSessionWorktreeIds?: readonly string[];
+  sessionGroups?: StationSnapshot["sessionGroups"];
   providerHealth?: Record<string, ProviderHealth>;
   alerts?: StationSnapshot["alerts"];
 };
@@ -389,7 +492,7 @@ function snapshotFromRows(rows: WorktreeRow[], extras: SnapshotExtras): StationS
     projects,
     rows,
     sessions,
-    sessionGroups: [],
+    sessionGroups: extras.sessionGroups ?? [],
     counts: {
       projects: projects.length,
       ...counts,

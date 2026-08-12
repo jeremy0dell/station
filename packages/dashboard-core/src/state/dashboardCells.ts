@@ -7,8 +7,8 @@ import {
 import { focusResolvedDashboardCursor, reconcileDashboardFocus } from "./dashboardFocus.js";
 import { activateDashboardRow } from "./rowActivation.js";
 import { toggleDashboardProjectCollapsed } from "./screens/projectCollapse.js";
-import { openProjectDefaultAgentPicker } from "./screens/projectDefaultAgent.js";
 import { submitQuickSession } from "./screens/quickSession.js";
+import { openProjectMenu } from "./screens/sessionGroups.js";
 import type { TuiTransition } from "./transition.js";
 import type { DashboardState } from "./types.js";
 
@@ -44,6 +44,7 @@ export function activateDashboardCell(
         ? submitQuickSession(focused, row.payload.project.id)
         : { state: focused };
     case "createLocalRow":
+    case "groupFrameEnd":
     case "projectGap":
       return { state: focused };
   }
@@ -69,10 +70,9 @@ function activateProjectCell(
       };
     case "quickSession":
       return submitQuickSession(state, projectId);
-    case "defaultAgent":
-      return { state: openProjectDefaultAgentPicker(state, projectId) };
-    case "addSession":
     case "menu":
+      return { state: openProjectMenu(state, projectId) };
+    case "addSession":
       return { state };
   }
 }

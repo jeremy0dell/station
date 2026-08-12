@@ -18,6 +18,11 @@ import { observerHarnessRunFromRun } from "../support/harnessRuns";
 
 const now = "2026-05-21T12:00:00.000Z";
 
+type SnapshotWithAgentTargetOptions = {
+  terminalState?: "open" | "stale";
+  agentState?: "idle" | "unknown";
+};
+
 const project = {
   id: "web",
   label: "web",
@@ -76,40 +81,7 @@ describe("session command validation helpers", () => {
   });
 
   it("rejects starting a second primary agent for the same worktree", () => {
-    const worktree = createFakeWorktree({ id: "wt_web_task", projectId: "web", now });
-    const snapshot = buildStationSnapshot({
-      generatedAt: now,
-      observer: {
-        pid: 4242,
-        startedAt: now,
-        version: "0.0.0",
-      },
-      projects: [project],
-      worktreeProviderId: "fake-worktree",
-      providerHealth: {},
-      worktrees: [worktree],
-      terminalTargets: [
-        createFakeTerminalTarget({
-          id: "term_web_task",
-          projectId: "web",
-          worktreeId: "wt_web_task",
-          sessionId: "ses_web_task",
-          harnessRunId: "run_web_task",
-          now,
-        }),
-      ],
-      harnessRuns: [
-        observerHarnessRunFromRun(
-          createFakeHarnessRun({
-            id: "run_web_task",
-            projectId: "web",
-            worktreeId: "wt_web_task",
-            sessionId: "ses_web_task",
-            now,
-          }),
-        ),
-      ],
-    });
+    const snapshot = snapshotWithAgentTarget();
 
     expect(() => assertNoCurrentAgent(snapshot.rows[0])).toThrowError(
       expect.objectContaining({
@@ -120,4 +92,52 @@ describe("session command validation helpers", () => {
       }),
     );
   });
+
+  it("allows starting over an unknown primary agent when its terminal target is stale", () => {
+    const snapshot = snapshotWithAgentTarget({ terminalState: "stale", agentState: "unknown" });
+
+    expect(() => assertNoCurrentAgent(snapshot.rows[0])).not.toThrow();
+  });
 });
+
+function snapshotWithAgentTarget(options: SnapshotWithAgentTargetOptions = {}) {
+  const worktree = createFakeWorktree({ id: "wt_web_task", projectId: "web", now });
+  const terminalState = options.terminalState ?? "open";
+  const agentState = options.agentState ?? "idle";
+
+  return buildStationSnapshot({
+    generatedAt: now,
+    observer: {
+      pid: 4242,
+      startedAt: now,
+      version: "0.0.0",
+    },
+    projects: [project],
+    worktreeProviderId: "fake-worktree",
+    providerHealth: {},
+    worktrees: [worktree],
+    terminalTargets: [
+      createFakeTerminalTarget({
+        id: "term_web_task",
+        projectId: "web",
+        worktreeId: "wt_web_task",
+        sessionId: "ses_web_task",
+        harnessRunId: "run_web_task",
+        state: terminalState,
+        now,
+      }),
+    ],
+    harnessRuns: [
+      observerHarnessRunFromRun(
+        createFakeHarnessRun({
+          id: "run_web_task",
+          projectId: "web",
+          worktreeId: "wt_web_task",
+          sessionId: "ses_web_task",
+          state: agentState,
+          now,
+        }),
+      ),
+    ],
+  });
+}
