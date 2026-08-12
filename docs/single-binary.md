@@ -1,6 +1,6 @@
 # Single-binary Station
 
-> **Status: implemented; distribution updated for `v0.0.0-pre-alpha.5.1`.** v1
+> **Status: implemented; distribution updated for `v0.0.0-pre-alpha.5.2`.** v1
 > was feasibility evidence, not an implementation-ready roadmap; an adversarial audit of commit `e0d4307`
 > found 11 blocking issues, all reproduced and confirmed (see
 > [Audit findings](#audit-findings-all-confirmed)). v1.1 is subtractive:
@@ -147,7 +147,7 @@ stn (bun build --compile, per platform, no ambient env)
   atomically published `station-build-id` sidecar and reverifies its repository
   inputs plus production package outputs; compiled and source output from the
   same whole-repository build therefore produce the same Observer selector while
-  retaining `{ version: "0.0.0-pre-alpha.5.1", compiled: false }` display semantics.
+  retaining `{ version: "0.0.0-pre-alpha.5.2", compiled: false }` display semantics.
   Self-spawns route through `selfExecArgv(target, developmentArgv)`: compiled →
   `[process.execPath]` for CLI or `[process.execPath, internalToken]` for an
   internal target; dev → today's command. All
@@ -396,7 +396,7 @@ Each native job runs the full binary smoke and uploads one archive:
 - `stn-v{version}-darwin-arm64.tar.gz`
 
 Here `{version}` is the package version without the tag's leading `v`, for
-example `stn-v0.0.0-pre-alpha.5.1-darwin-arm64.tar.gz`.
+example `stn-v0.0.0-pre-alpha.5.2-darwin-arm64.tar.gz`.
 
 Every archive contains exactly `stn`, the `stn-ingress` and
 `stn-tmux-popup` symlinks, and `LICENSE`. The aggregate job rejects missing or
@@ -500,7 +500,7 @@ existing Station Host protocol through that successor launcher. Bare
 `--handoff` retains the default fidelity, `--handoff=screen` requests semantic
 snapshots, and `--no-handoff` explicitly leaves the incumbent in place with a
 stale-Host warning. The immutable current public
-`v0.0.0-pre-alpha.5.1` installer predates the receipt, so a later exact-tag
+`v0.0.0-pre-alpha.5.2` installer predates the receipt, so a later exact-tag
 manual install is required once before automatic updates can own an existing
 layout.
 
@@ -532,7 +532,7 @@ The future-shell export appears only when physical current-process resolution
 is incomplete. The installer never reads, selects, creates, or edits shell
 startup files.
 
-Candidate `v0.0.0-pre-alpha.5.1` promotes only after all four native targets pass
+Candidate `v0.0.0-pre-alpha.5.2` promotes only after all four native targets pass
 automated and manual acceptance, including installation over an existing
 `v0.7.1-rc.8` internal preview despite the intentional public version reset.
 After promotion, all four targets test the unauthenticated public exact-tag URL
@@ -767,7 +767,7 @@ flow:
    GitHub credentials or a `gh` executable.
 9. With terminal A continuously running installed `stn --version`, terminal B
    repeatedly installs the draft → only complete `0.7.1-rc.8` or
-   `0.0.0-pre-alpha.5.1` output appears, never command-not-found or malformed
+   `0.0.0-pre-alpha.5.2` output appears, never command-not-found or malformed
    output; both aliases remain links to `stn`, so entrypoints never mix. Install
    the reset public version over the internal preview to prove the intentional
    lower SemVer is accepted.

@@ -90,7 +90,7 @@ describe("classifyObserverIncumbent", () => {
   });
 
   it("orders the public pre-alpha after the internal preview version line", () => {
-    const publicPreAlpha = observerBuildVersion("0.0.0-pre-alpha.5.1", higherBuildIdentity);
+    const publicPreAlpha = observerBuildVersion("0.0.0-pre-alpha.5.2", higherBuildIdentity);
     const internalPreview = observerBuildVersion("0.7.1-rc.8", lowerBuildIdentity);
 
     expect(decisionFor(publicPreAlpha, internalPreview)).toEqual({
