@@ -248,7 +248,7 @@ export function createQuickGroupName(
       .filter((group) => group.projectId === projectId)
       .map((group) => group.name) ?? [],
   );
-  for (;;) {
+  while (true) {
     const candidate = `Quick Group ${tokenFactory()}`;
     if (!names.has(candidate)) return candidate;
   }
