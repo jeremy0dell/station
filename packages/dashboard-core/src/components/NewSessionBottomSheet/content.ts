@@ -119,6 +119,28 @@ const EDIT_NAME_CONTROLS: {
   },
 };
 
+function newSessionGroupValue(
+  snapshot: DashboardSnapshotView,
+  state: NewSessionReviewStateView,
+): string {
+  const selection = state.groupSelection;
+  switch (selection.kind) {
+    case "ungrouped":
+      return "Ungrouped";
+    case "create":
+      return `Create “${selection.name}”`;
+    case "existing":
+      return (
+        snapshot.sessionGroups.find(
+          (group) =>
+            group.id === selection.groupId &&
+            group.projectId === state.selectedProjectId &&
+            group.parentGroupId === undefined,
+        )?.name ?? "Ungrouped"
+      );
+  }
+}
+
 /** Builds the renderer-neutral Create Session review model from typed snapshot state. */
 export function newSessionReviewContent(
   snapshot: DashboardSnapshotView,
@@ -132,18 +154,7 @@ export function newSessionReviewContent(
           (option) => option.id === state.selectedHarness,
         );
   const status = harness?.status ?? "unknown";
-  const groupSelection = state.groupSelection;
-  const groupValue =
-    groupSelection.kind === "ungrouped"
-      ? "Ungrouped"
-      : groupSelection.kind === "create"
-        ? `Create “${groupSelection.name}”`
-        : (snapshot.sessionGroups.find(
-            (group) =>
-              group.id === groupSelection.groupId &&
-              group.projectId === state.selectedProjectId &&
-              group.parentGroupId === undefined,
-          )?.name ?? "Ungrouped");
+  const groupValue = newSessionGroupValue(snapshot, state);
   const fields: NewSessionReviewFieldContent[] = [
     { ...REVIEW_CONTROLS.project, enabled: true, id: "project", value: project?.label ?? "-" },
     { ...REVIEW_CONTROLS.name, enabled: true, id: "name", value: state.title },
