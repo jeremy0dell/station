@@ -93,10 +93,11 @@ export function openObserverSqlite(options: OpenObserverSqliteOptions = {}): Obs
 export function runSqliteTransactionEffect<T>(
   sqlite: ObserverSqliteHandle,
   task: (database: SqlDatabase) => T,
+  mode: "deferred" | "immediate" = "immediate",
 ): Effect.Effect<T, RuntimeSafeError> {
   return Effect.try({
     try: () => {
-      sqlite.database.exec("BEGIN IMMEDIATE");
+      sqlite.database.exec(mode === "deferred" ? "BEGIN" : "BEGIN IMMEDIATE");
       try {
         const value = task(sqlite.database);
         sqlite.database.exec("COMMIT");
