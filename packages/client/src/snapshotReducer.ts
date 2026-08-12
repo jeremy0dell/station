@@ -56,11 +56,7 @@ export function applyStationEvent(
     });
   }
   if (event.type === "session.created") {
-    return withSnapshot(
-      snapshot,
-      { sessions: upsertSession(snapshot.sessions, event.session) },
-      true,
-    );
+    return unchanged(snapshot, true);
   }
   if (event.type === "session.updated") {
     return withSnapshot(
@@ -307,12 +303,4 @@ function mergeSessionPatch(session: SessionView, patch: OptionalPatch<SessionVie
   }
   if (patch.status !== undefined) next.status = { ...session.status, ...patch.status };
   return next;
-}
-
-function upsertSession(sessions: readonly SessionView[], session: SessionView): SessionView[] {
-  const index = sessions.findIndex((candidate) => candidate.id === session.id);
-  if (index === -1) {
-    return [...sessions, session];
-  }
-  return sessions.map((candidate) => (candidate.id === session.id ? session : candidate));
 }

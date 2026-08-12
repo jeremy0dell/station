@@ -2,6 +2,7 @@ import type {
   ProjectView,
   ProviderId,
   SessionGroupId,
+  SessionGroupPlacementIntent,
   SessionId,
   StationCommand,
   WorktreeId,
@@ -25,6 +26,7 @@ export type CreateManagedSessionOperation = {
   hiddenBranch: string;
   harness: ProviderId;
   targetGroupId?: SessionGroupId;
+  group?: SessionGroupPlacementIntent;
 };
 
 export type ForkManagedSessionOperation = {

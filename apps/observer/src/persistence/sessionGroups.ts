@@ -8,6 +8,9 @@ import type {
   SessionGroupRepairEvidence,
   SessionGroupRepairResult,
   SessionGroupStoreResult,
+  SessionSeedGroupPlacement,
+  SessionSeedGroupProvenance,
+  SessionSeedResult,
 } from "./types.js";
 
 type Assignment = { groupId: SessionGroupId; projectId: string };
@@ -121,6 +124,145 @@ export function createSessionGroup(
     draft.assignments.set(member.sessionId, { groupId: group.id, projectId: member.projectId });
   }
   return success(draft, [group.id], true);
+}
+
+export function placeSessionSeed(
+  state: SessionGroupPersistenceState,
+  input: {
+    sessionId: string;
+    projectId: string;
+    placement?: SessionSeedGroupPlacement;
+    updatedAt: string;
+  },
+): SessionGroupMutation<
+  | { ok: true; groupProvenance?: SessionSeedGroupProvenance }
+  | Exclude<SessionSeedResult, { ok: true }>
+> {
+  const current = state.assignments.get(input.sessionId);
+  if (input.placement === undefined) {
+    return current === undefined
+      ? { state, changed: false, result: { ok: true } }
+      : seedConflict(state, "unexpected_assignment");
+  }
+  if (input.placement.kind === "existing") {
+    const group = state.groups.get(input.placement.groupId);
+    if (group === undefined) return seedConflict(state, "group_not_found");
+    if (group.projectId !== input.projectId) {
+      return seedConflict(state, "group_project_mismatch");
+    }
+    if (group.parentGroupId !== undefined) return seedConflict(state, "group_not_root");
+    if (current !== undefined) return seedConflict(state, "unexpected_assignment");
+    const draft = cloneSessionGroupState(state);
+    draft.assignments.set(input.sessionId, { groupId: group.id, projectId: input.projectId });
+    touchGroups(draft, new Set([group.id]), input.updatedAt);
+    return {
+      state: draft,
+      changed: true,
+      result: { ok: true, groupProvenance: { kind: "existing", groupId: group.id } },
+    };
+  }
+
+  if (state.groups.has(input.placement.groupId)) {
+    return seedConflict(state, "group_id_collision");
+  }
+  if (current !== undefined) return seedConflict(state, "unexpected_assignment");
+  const draft = cloneSessionGroupState(state);
+  const group = SessionGroupViewSchema.parse({
+    id: input.placement.groupId,
+    projectId: input.projectId,
+    name: input.placement.name,
+    sessionIds: [],
+    version: 1,
+    createdAt: input.updatedAt,
+    updatedAt: input.updatedAt,
+  });
+  draft.groups.set(group.id, group);
+  draft.assignments.set(input.sessionId, { groupId: group.id, projectId: input.projectId });
+  return {
+    state: draft,
+    changed: true,
+    result: {
+      ok: true,
+      groupProvenance: {
+        kind: "created",
+        groupId: group.id,
+        projectId: group.projectId,
+        name: group.name,
+        version: group.version,
+        createdAt: group.createdAt,
+        updatedAt: group.updatedAt,
+      },
+    },
+  };
+}
+
+export function discardSessionSeedPlacement(
+  state: SessionGroupPersistenceState,
+  input: {
+    sessionId: string;
+    projectId: string;
+    groupProvenance?: SessionSeedGroupProvenance;
+    updatedAt: string;
+  },
+): SessionGroupMutation<{ discardedMemberships: number; discardedGroups: number }> {
+  const current = state.assignments.get(input.sessionId);
+  const provenance = input.groupProvenance;
+  if (provenance === undefined) {
+    if (current !== undefined) {
+      throw new Error("Session seed Group assignment no longer matches cleanup provenance.");
+    }
+    return {
+      state,
+      changed: false,
+      result: { discardedMemberships: 0, discardedGroups: 0 },
+    };
+  }
+  if (current?.groupId !== provenance.groupId || current.projectId !== input.projectId) {
+    throw new Error("Session seed Group assignment no longer matches cleanup provenance.");
+  }
+  const group = state.groups.get(current.groupId);
+  if (group === undefined || group.projectId !== input.projectId) {
+    throw new Error("Session seed Group definition no longer matches cleanup provenance.");
+  }
+
+  if (provenance.kind === "created") {
+    const members = [...state.assignments].filter(
+      ([, assignment]) => assignment.groupId === provenance.groupId,
+    );
+    const hasChildren = [...state.groups.values()].some(
+      (candidate) => candidate.parentGroupId === provenance.groupId,
+    );
+    if (
+      group.projectId !== provenance.projectId ||
+      group.name !== provenance.name ||
+      group.version !== provenance.version ||
+      group.createdAt !== provenance.createdAt ||
+      group.updatedAt !== provenance.updatedAt ||
+      group.parentGroupId !== undefined ||
+      hasChildren ||
+      members.length !== 1 ||
+      members[0]?.[0] !== input.sessionId
+    ) {
+      throw new Error("Inline Session Group no longer matches cleanup provenance.");
+    }
+    const draft = cloneSessionGroupState(state);
+    draft.assignments.delete(input.sessionId);
+    draft.groups.delete(provenance.groupId);
+    return {
+      state: draft,
+      changed: true,
+      result: { discardedMemberships: 1, discardedGroups: 1 },
+    };
+  }
+
+  const draft = cloneSessionGroupState(state);
+  draft.assignments.delete(input.sessionId);
+  touchGroups(draft, new Set([group.id]), input.updatedAt);
+  return {
+    state: draft,
+    changed: true,
+    result: { discardedMemberships: 1, discardedGroups: 0 },
+  };
 }
 
 export function renameSessionGroup(
@@ -425,5 +567,12 @@ function conflict(
   state: SessionGroupPersistenceState,
   reason: Exclude<SessionGroupStoreResult, { ok: true }>["reason"],
 ): SessionGroupMutation {
+  return { state, changed: false, result: { ok: false, reason } };
+}
+
+function seedConflict(
+  state: SessionGroupPersistenceState,
+  reason: Exclude<SessionSeedResult, { ok: true }>["reason"],
+): SessionGroupMutation<Exclude<SessionSeedResult, { ok: true }>> {
   return { state, changed: false, result: { ok: false, reason } };
 }

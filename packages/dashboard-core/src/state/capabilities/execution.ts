@@ -22,9 +22,9 @@ export type DashboardExecutionSuccessDisposition = "remove-immediately" | "wait-
 /** Whether a failed execution disappears or remains visible for the failed-row TTL. */
 export type DashboardExecutionFailureDisposition = "remove-immediately" | "retain-failed";
 
-/** Typed completion produced by every dashboard capability invocation. */
+/** Typed completion; successful work may carry a non-retryable warning for partial visibility. */
 export type DashboardExecutionResult =
-  | { kind: "success" }
+  | { kind: "success"; notice?: ClientNotice }
   | { kind: "notice"; notice: ClientNotice }
   | {
       kind: "failure";

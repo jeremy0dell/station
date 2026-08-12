@@ -1,6 +1,7 @@
 import type { ProviderHealth } from "@station/contracts";
 import {
   type NewSessionActionId,
+  type NewSessionEditGroupDraftStateView,
   type NewSessionEditNameFocus,
   type NewSessionEditNameStateView,
   type NewSessionReviewFocus,
@@ -13,7 +14,7 @@ import {
 } from "../../selectors/selectors.js";
 import type { DashboardSnapshotView } from "../../state/types.js";
 
-export type NewSessionReviewFieldId = "project" | "name" | "agent";
+export type NewSessionReviewFieldId = "project" | "name" | "agent" | "group";
 
 export type NewSessionStatusContent = {
   glyph: "●";
@@ -50,6 +51,11 @@ export type NewSessionEditNameContent = {
   helper: string;
 };
 
+export type NewSessionEditGroupDraftContent = {
+  controls: Readonly<Record<"save" | "back", NewSessionControlContent<"save" | "back">>>;
+  helper: string;
+};
+
 const REVIEW_CONTROLS: {
   readonly [TFocus in NewSessionReviewFocus]: Omit<NewSessionControlContent<TFocus>, "enabled">;
 } = {
@@ -73,6 +79,13 @@ const REVIEW_CONTROLS: {
     accelerator: "A",
     focusId: "agent",
     helper: "Enter choose agent",
+  },
+  group: {
+    actionId: "review.group",
+    label: "Group",
+    accelerator: "G",
+    focusId: "group",
+    helper: "Enter choose Group",
   },
   create: {
     actionId: "review.create",
@@ -112,6 +125,45 @@ const EDIT_NAME_CONTROLS: {
   },
 };
 
+const EDIT_GROUP_DRAFT_CONTROLS = {
+  save: {
+    actionId: "editGroupDraft.save",
+    label: "Save",
+    accelerator: "Enter",
+    focusId: "save",
+    helper: "Type Group name · Enter save · Esc discard",
+  },
+  back: {
+    actionId: "editGroupDraft.back",
+    label: "Back",
+    accelerator: "Esc",
+    focusId: "back",
+    helper: "Type Group name · Enter save · Esc discard",
+  },
+} as const;
+
+function newSessionGroupValue(
+  snapshot: DashboardSnapshotView,
+  state: NewSessionReviewStateView,
+): string {
+  const selection = state.groupSelection;
+  switch (selection.kind) {
+    case "ungrouped":
+      return "Ungrouped";
+    case "create":
+      return `Create “${selection.name}”`;
+    case "existing":
+      return (
+        snapshot.sessionGroups.find(
+          (group) =>
+            group.id === selection.groupId &&
+            group.projectId === state.selectedProjectId &&
+            group.parentGroupId === undefined,
+        )?.name ?? "Ungrouped"
+      );
+  }
+}
+
 /** Builds the renderer-neutral Create Session review model from typed snapshot state. */
 export function newSessionReviewContent(
   snapshot: DashboardSnapshotView,
@@ -125,6 +177,7 @@ export function newSessionReviewContent(
           (option) => option.id === state.selectedHarness,
         );
   const status = harness?.status ?? "unknown";
+  const groupValue = newSessionGroupValue(snapshot, state);
   const fields: NewSessionReviewFieldContent[] = [
     { ...REVIEW_CONTROLS.project, enabled: true, id: "project", value: project?.label ?? "-" },
     { ...REVIEW_CONTROLS.name, enabled: true, id: "name", value: state.title },
@@ -135,14 +188,19 @@ export function newSessionReviewContent(
       value: harness?.label ?? state.selectedHarness,
       status: { glyph: "●", text: status, tone: status },
     },
+    { ...REVIEW_CONTROLS.group, enabled: true, id: "group", value: groupValue },
   ];
   return {
     fields,
     create: {
       ...REVIEW_CONTROLS.create,
       enabled: newSessionActionEnabled(snapshot, state, "review.create"),
+      label: state.submissionLocalId === undefined ? REVIEW_CONTROLS.create.label : "Creating…",
     },
-    helper: REVIEW_CONTROLS[state.reviewFocus].helper,
+    helper:
+      state.submissionLocalId === undefined
+        ? REVIEW_CONTROLS[state.reviewFocus].helper
+        : "Creating session…",
   };
 }
 
@@ -152,5 +210,20 @@ export function newSessionEditNameContent(
   return {
     controls: EDIT_NAME_CONTROLS,
     helper: EDIT_NAME_CONTROLS[state.editNameFocus].helper,
+  };
+}
+
+export function newSessionEditGroupDraftContent(
+  state: NewSessionEditGroupDraftStateView,
+): NewSessionEditGroupDraftContent {
+  return {
+    controls: {
+      save: {
+        ...EDIT_GROUP_DRAFT_CONTROLS.save,
+        enabled: newSessionActionEnabled(undefined, state, "editGroupDraft.save"),
+      },
+      back: { ...EDIT_GROUP_DRAFT_CONTROLS.back, enabled: true },
+    },
+    helper: EDIT_GROUP_DRAFT_CONTROLS.save.helper,
   };
 }

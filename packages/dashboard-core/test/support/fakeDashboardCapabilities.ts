@@ -22,7 +22,7 @@ export class FakeDashboardCapabilities implements DashboardCapabilities {
   activationHandle: (request: SessionActivationRequest) => DashboardExecutionHandle = () =>
     dashboardExecution({ kind: "success" });
   createHandle: (request: CreateManagedSessionRequest) => DashboardExecutionHandle = () =>
-    dashboardExecution({ kind: "success" }, { optimistic: "pending-create" });
+    dashboardExecution({ kind: "success" });
   quickCreateHandle: (request: CreateManagedSessionRequest) => DashboardExecutionHandle = () =>
     dashboardExecution({ kind: "success" }, { optimistic: "pending-create" });
   forkHandle: (request: ForkManagedSessionRequest) => DashboardExecutionHandle = () =>

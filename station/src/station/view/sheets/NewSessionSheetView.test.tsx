@@ -6,7 +6,7 @@ import { act } from "react";
 import { createNewSessionFlow, transitionNewSessionFlow } from "@station/dashboard-core/state";
 import type { StationSnapshot } from "@station/contracts";
 import { spanAtFrameCell } from "../../../terminal/testing/frameProbe.js";
-import { manyProjectsSnapshot } from "../../fixtures/scenarios.js";
+import { groupedManyProjectsSnapshot, manyProjectsSnapshot } from "../../fixtures/scenarios.js";
 import type { StationMouseTarget } from "../../input/stationMouse.js";
 import { StationHoverProvider, StationMouseProvider } from "../stationMouseContext.js";
 import {
@@ -91,6 +91,79 @@ describe("NewSessionSheetView", () => {
     const createCol = lines[createRow]?.indexOf("Create session") ?? -1;
     await setup.mockMouse.click(createCol, createRow, MouseButtons.LEFT);
     expect(targets.at(-1)).toEqual({ kind: "newSessionAction", actionId: "review.create" });
+
+    const groupRow = lines.findIndex((line) => line.includes("Group (G)"));
+    const groupCol = lines[groupRow]?.indexOf("Group") ?? -1;
+    await setup.mockMouse.click(groupCol, groupRow, MouseButtons.LEFT);
+    expect(targets.at(-1)).toEqual({ kind: "newSessionAction", actionId: "review.group" });
+  });
+
+  it("renders root Group choices and the inline editor in the same sheet", async () => {
+    const snapshot = groupedManyProjectsSnapshot();
+    const review = createNewSessionFlow(snapshot, "aaaaaa");
+    if (review === undefined) throw new Error("expected new-session flow");
+    const picker = transitionNewSessionFlow(review, { type: "pickGroup" });
+    if (picker?.mode !== "pickGroup") throw new Error("expected Group picker");
+    const picked = await render(snapshot, picker);
+    const pickerFrame = picked.setup.captureCharFrame();
+    expect(pickerFrame).toContain("U Ungrouped");
+    expect(pickerFrame).toContain("1 Design refresh");
+    expect(pickerFrame).toContain("N Create new Group");
+
+    const editor = transitionNewSessionFlow(picker, { type: "editGroupDraft" });
+    if (editor?.mode !== "editGroupDraft") throw new Error("expected Group editor");
+    const edited = await render(snapshot, editor);
+    expect(edited.setup.captureCharFrame()).toContain("Type Group name · Enter save · Esc discard");
+    expect(edited.setup.captureCharFrame()).toContain("Save (Enter)");
+    expect(edited.setup.captureCharFrame()).toContain("Back (Esc)");
+
+    const typed = transitionNewSessionFlow(editor, {
+      type: "editGroupDraftInput",
+      action: { type: "insert", input: "Release" },
+    });
+    if (typed?.mode !== "editGroupDraft") throw new Error("expected Group editor");
+    const actionable = await render(snapshot, typed);
+    const lines = actionable.setup.captureCharFrame().split("\n");
+    const buttonRow = lines.findIndex((line) => line.includes("Save (Enter)"));
+    await actionable.setup.mockMouse.click(
+      lines[buttonRow]?.indexOf("Save") ?? -1,
+      buttonRow,
+      MouseButtons.LEFT,
+    );
+    expect(actionable.targets.at(-1)).toEqual({
+      kind: "newSessionAction",
+      actionId: "editGroupDraft.save",
+    });
+    await actionable.setup.mockMouse.click(
+      lines[buttonRow]?.indexOf("Back") ?? -1,
+      buttonRow,
+      MouseButtons.LEFT,
+    );
+    expect(actionable.targets.at(-1)).toEqual({
+      kind: "newSessionAction",
+      actionId: "editGroupDraft.back",
+    });
+  });
+
+  it("shows bounded progress and disables duplicate Create activation", async () => {
+    const snapshot = snapshotWithCodexStatus();
+    const review = createNewSessionFlow(snapshot, "aaaaaa");
+    if (review === undefined) throw new Error("expected new-session flow");
+    const { setup, targets } = await render(snapshot, {
+      ...review,
+      submissionLocalId: "create:station:test",
+    });
+    const lines = setup.captureCharFrame().split("\n");
+    const createRow = lines.findIndex((line) => line.includes("Creating…"));
+    expect(createRow).toBeGreaterThanOrEqual(0);
+    expect(setup.captureCharFrame()).toContain("Creating session…");
+    await setup.mockMouse.click(lines[createRow]?.indexOf("Creating") ?? -1, createRow, MouseButtons.LEFT);
+    expect(
+      targets.some(
+        (target) =>
+          target.kind === "newSessionAction" && target.actionId === "review.create",
+      ),
+    ).toBe(false);
   });
 
   it("hides the input cursor while Save or Back owns focus", async () => {

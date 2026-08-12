@@ -817,7 +817,10 @@ describe("TUI screen transitions", () => {
 
     const submitted = handleTuiKey(opened.state, { input: "\r", return: true });
 
-    expect(submitted.state.screen).toEqual({ name: "dashboard" });
+    expect(submitted.state.screen).toMatchObject({
+      name: "newSession",
+      flow: { mode: "review", submissionLocalId: expect.any(String) },
+    });
     expect(submitted.operations?.[0]).toMatchObject({
       type: "createManagedSession",
       project: { id: "web" },
@@ -826,6 +829,21 @@ describe("TUI screen transitions", () => {
     if (operation?.type !== "createManagedSession") throw new Error("expected create operation");
     expect(operation.title).toBe(operation.hiddenBranch);
     expect(submitted.state.localRows.pendingCreate).toEqual([]);
+    expect(handleTuiKey(submitted.state, { input: "\r", return: true }).operations).toBeUndefined();
+  });
+
+  it("submits the committed Group placement with the managed-session operation", () => {
+    const base = createInitialTuiState({ initialSnapshot: createGroupedDashboardSnapshot() });
+    const review = handleTuiKey(base, { input: "N" }).state;
+    const picker = handleTuiKey(review, { input: "G" }).state;
+    const grouped = handleTuiKey(picker, { input: "1" }).state;
+
+    expect(handleTuiKey(grouped, { input: "C" }).operations).toMatchObject([
+      {
+        type: "createManagedSession",
+        group: { kind: "existing", groupId: "group_active" },
+      },
+    ]);
   });
 
   it("keeps unavailable project submission inert in New Session", () => {

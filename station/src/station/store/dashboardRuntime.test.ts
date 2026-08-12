@@ -48,17 +48,17 @@ describe("createStationDashboardRuntime", () => {
     await waitForMockRejectionToast(store);
   });
 
-  it("routes N through create-session pending state and stub rejection feedback", async () => {
+  it("routes N through deliberate create state without an optimistic row", async () => {
     const store = makeStore();
 
     store.actions.handleKey({ input: "N" });
     store.actions.handleKey({ input: "\r", return: true });
 
-    expect(store.state.getState().localRows.pendingCreate).toHaveLength(1);
-    expect(store.state.getState().localRows.pendingCreate[0]).toMatchObject({
-      projectId: "station",
-      harnessProvider: "codex",
-    });
+    const screen = store.state.getState().screen;
+    if (screen.name !== "newSession") throw new Error("expected New Session screen");
+    if (screen.flow.mode !== "review") throw new Error("expected New Session review");
+    expect(screen.flow.submissionLocalId).toBeDefined();
+    expect(store.state.getState().localRows.pendingCreate).toEqual([]);
     await waitForMockRejectionToast(store);
   });
 

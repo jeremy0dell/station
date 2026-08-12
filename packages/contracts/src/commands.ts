@@ -91,6 +91,29 @@ export const TerminalCommandOptionsSchema = z
   })
   .strict();
 
+export const SessionGroupNameSchema = z.string().trim().min(1);
+
+export const ExistingSessionGroupPlacementIntentSchema = z
+  .object({
+    kind: z.literal("existing"),
+    groupId: SessionGroupIdSchema,
+  })
+  .strict();
+
+export const CreateSessionGroupPlacementIntentSchema = z
+  .object({
+    kind: z.literal("create"),
+    name: SessionGroupNameSchema,
+  })
+  .strict();
+
+export const SessionGroupPlacementIntentSchema = z.discriminatedUnion("kind", [
+  ExistingSessionGroupPlacementIntentSchema,
+  CreateSessionGroupPlacementIntentSchema,
+]);
+
+export type SessionGroupPlacementIntent = z.infer<typeof SessionGroupPlacementIntentSchema>;
+
 export const CreateSessionPayloadSchema = z
   .object({
     projectId: ProjectIdSchema,
@@ -100,6 +123,7 @@ export const CreateSessionPayloadSchema = z
     source: CommandSourceSchema.optional(),
     harness: HarnessCommandOptionsSchema,
     terminal: TerminalCommandOptionsSchema,
+    group: SessionGroupPlacementIntentSchema.optional(),
     initialPrompt: nonEmptyStringSchema.optional(),
   })
   .strict();
@@ -249,7 +273,7 @@ export const SessionGroupMembershipExpectationSchema = z
 export const CreateSessionGroupPayloadSchema = z
   .object({
     projectId: ProjectIdSchema,
-    name: z.string().trim().min(1),
+    name: SessionGroupNameSchema,
     initialSessionIds: uniqueSessionIdsSchema.optional(),
   })
   .strict();
@@ -261,7 +285,7 @@ export const RenameSessionGroupPayloadSchema = z
     projectId: ProjectIdSchema,
     groupId: SessionGroupIdSchema,
     expectedVersion: z.number().int().positive(),
-    name: z.string().trim().min(1),
+    name: SessionGroupNameSchema,
   })
   .strict();
 

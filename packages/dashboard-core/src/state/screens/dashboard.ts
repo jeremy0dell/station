@@ -1,3 +1,4 @@
+import type { ProjectId, SessionGroupId } from "@station/contracts";
 import { createNewSessionFlow, createNewSessionNameToken } from "../../flows/newSession.js";
 import { selectDashboardViewport } from "../../selectors/dashboardViewport.js";
 import { choiceValueByKey } from "../../selectors/selectors.js";
@@ -201,12 +202,15 @@ function mouseScrollDeltaForKey(key: TuiKey): -1 | 0 | 1 {
   return 0;
 }
 
-function openNewSession(state: DashboardState): TuiTransition {
+export function openNewSession(
+  state: DashboardState,
+  options: { projectId?: ProjectId; groupId?: SessionGroupId } = {},
+): TuiTransition {
   if (state.snapshot === undefined) {
     return { state };
   }
 
-  const flow = createNewSessionFlow(state.snapshot, createNewSessionNameToken());
+  const flow = createNewSessionFlow(state.snapshot, createNewSessionNameToken(), options);
   if (flow === undefined) {
     return {
       state: addTuiToast(

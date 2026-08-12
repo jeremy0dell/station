@@ -1,5 +1,11 @@
 import type { StationClientStateSource } from "@station/client";
-import type { ProviderId, SessionView, WorktreeRow } from "@station/contracts";
+import type {
+  ProviderId,
+  SessionGroupPlacementIntent,
+  SessionView,
+  StationSnapshot,
+  WorktreeRow,
+} from "@station/contracts";
 import { STATION_HOST_PROVIDER_ID } from "@station/host";
 
 const WORKTREE_APPEAR_TIMEOUT_MS = 10_000;
@@ -131,15 +137,62 @@ export function waitForSessionByBranch(
   projectId: string,
   branch: string,
 ): Promise<SessionView | undefined> {
-  const findSession = (): SessionView | undefined => {
-    const snapshot = store.getState().snapshot;
-    const worktreeId = snapshot?.rows.find(
-      (row) => row.projectId === projectId && row.branch === branch,
-    )?.id;
-    return snapshot?.sessions.find(
-      (session) => session.projectId === projectId && session.worktreeId === worktreeId,
-    );
-  };
+  const findSession = (): SessionView | undefined =>
+    findSessionByBranch(store.getState().snapshot, projectId, branch);
+  return waitForSessionMatch(store, findSession);
+}
+
+/** Returns a branch session only when its canonical Group relationship matches the intent. */
+export function findSessionPlacementByBranch(
+  snapshot: StationSnapshot | undefined,
+  projectId: string,
+  branch: string,
+  group: SessionGroupPlacementIntent | undefined,
+): SessionView | undefined {
+  const session = findSessionByBranch(snapshot, projectId, branch);
+  if (session === undefined || snapshot === undefined) return undefined;
+  const owningGroup = snapshot.sessionGroups.find((candidate) =>
+    candidate.sessionIds.includes(session.id),
+  );
+  if (group === undefined) return owningGroup === undefined ? session : undefined;
+  if (owningGroup?.projectId !== projectId || owningGroup.parentGroupId !== undefined) {
+    return undefined;
+  }
+  if (group.kind === "existing") {
+    return owningGroup.id === group.groupId ? session : undefined;
+  }
+  return owningGroup.name === group.name ? session : undefined;
+}
+
+/** Waits for the first relationship-complete session snapshot for an exact Project branch. */
+export function waitForSessionPlacementByBranch(
+  store: StationClientStateSource,
+  projectId: string,
+  branch: string,
+  group: SessionGroupPlacementIntent | undefined,
+): Promise<SessionView | undefined> {
+  const findSession = (): SessionView | undefined =>
+    findSessionPlacementByBranch(store.getState().snapshot, projectId, branch, group);
+  return waitForSessionMatch(store, findSession);
+}
+
+function findSessionByBranch(
+  snapshot: StationSnapshot | undefined,
+  projectId: string,
+  branch: string,
+): SessionView | undefined {
+  const worktreeId = snapshot?.rows.find(
+    (row) => row.projectId === projectId && row.branch === branch,
+  )?.id;
+  return snapshot?.sessions.find(
+    (session) => session.projectId === projectId && session.worktreeId === worktreeId,
+  );
+}
+
+function waitForSessionMatch(
+  store: StationClientStateSource,
+  findSession: () => SessionView | undefined,
+): Promise<SessionView | undefined> {
   const existing = findSession();
   if (existing !== undefined) {
     return Promise.resolve(existing);

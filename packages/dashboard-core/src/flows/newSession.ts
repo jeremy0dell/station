@@ -1,5 +1,12 @@
 import { randomUUID } from "node:crypto";
-import type { ProjectId, ProviderId, SafeError, StationSnapshot } from "@station/contracts";
+import type {
+  ProjectId,
+  ProviderId,
+  SafeError,
+  SessionGroupId,
+  SessionGroupPlacementIntent,
+  StationSnapshot,
+} from "@station/contracts";
 import { stableName, stableNameHash } from "@station/runtime";
 import {
   createEditableTextInputState,
@@ -8,7 +15,11 @@ import {
   editableTextInputIntentForInput,
   transitionEditableTextInput,
 } from "../components/EditableTextInput/editing.js";
-import { selectNewSessionHarnessOptions, selectNewSessionProject } from "../selectors/selectors.js";
+import {
+  selectNewSessionHarnessOptions,
+  selectNewSessionProject,
+  selectNewSessionRootGroup,
+} from "../selectors/selectors.js";
 import type { ReadonlyDeep } from "../state/readonly.js";
 import {
   backWizardStep,
@@ -19,7 +30,14 @@ import {
 } from "./stepWizard.js";
 
 export type NewSessionTitleSource = "generated" | "custom";
-export type NewSessionStep = "review" | "editName" | "pickProject" | "pickAgent";
+export type NewSessionStep =
+  | "review"
+  | "editName"
+  | "pickProject"
+  | "pickAgent"
+  | "pickGroup"
+  | "editGroupDraft";
+export type NewSessionGroupSelection = { kind: "ungrouped" } | SessionGroupPlacementIntent;
 
 type NewSessionBaseState = StepWizardState<NewSessionStep> & {
   selectedProjectId: ProjectId;
@@ -27,15 +45,21 @@ type NewSessionBaseState = StepWizardState<NewSessionStep> & {
   title: string;
   branch: string;
   titleSource: NewSessionTitleSource;
+  groupSelection: NewSessionGroupSelection;
 };
 
 /** The review menu's focus ring — which field ↵ acts on. */
-export type NewSessionReviewFocus = "name" | "project" | "agent" | "create";
+export type NewSessionReviewFocus = "name" | "project" | "agent" | "group" | "create";
 export type NewSessionEditNameFocus = "name" | "save" | "back";
 
-// Traversal order matches the review's top-to-bottom render (Project, Name,
-// Agent, then the Create action).
-const REVIEW_FIELDS: readonly NewSessionReviewFocus[] = ["project", "name", "agent", "create"];
+// Traversal order matches the review's top-to-bottom render.
+const REVIEW_FIELDS: readonly NewSessionReviewFocus[] = [
+  "project",
+  "name",
+  "agent",
+  "group",
+  "create",
+];
 
 function cycleReviewFocus(current: NewSessionReviewFocus, dir: -1 | 1): NewSessionReviewFocus {
   return cycleFocus(REVIEW_FIELDS, current, dir);
@@ -45,6 +69,7 @@ export type NewSessionReviewState = NewSessionBaseState & {
   mode: "review";
   /** Default "create" so ↵ still creates, preserving today's muscle memory. */
   reviewFocus: NewSessionReviewFocus;
+  submissionLocalId?: string;
 };
 
 export type NewSessionEditNameState = NewSessionBaseState & {
@@ -61,16 +86,28 @@ export type NewSessionPickAgentState = NewSessionBaseState & {
   mode: "pickAgent";
 };
 
+export type NewSessionPickGroupState = NewSessionBaseState & {
+  mode: "pickGroup";
+};
+
+export type NewSessionEditGroupDraftState = NewSessionBaseState & {
+  mode: "editGroupDraft";
+  draftGroupName: EditableTextInputState;
+};
+
 export type NewSessionFlowState =
   | NewSessionReviewState
   | NewSessionEditNameState
   | NewSessionPickProjectState
-  | NewSessionPickAgentState;
+  | NewSessionPickAgentState
+  | NewSessionPickGroupState
+  | NewSessionEditGroupDraftState;
 
 /** Deep-readonly New Session flow consumed by presentation and intent readers. */
 export type NewSessionFlowStateView = ReadonlyDeep<NewSessionFlowState>;
 export type NewSessionReviewStateView = ReadonlyDeep<NewSessionReviewState>;
 export type NewSessionEditNameStateView = ReadonlyDeep<NewSessionEditNameState>;
+export type NewSessionEditGroupDraftStateView = ReadonlyDeep<NewSessionEditGroupDraftState>;
 type NewSessionSnapshotView = ReadonlyDeep<StationSnapshot>;
 
 export type NewSessionFlowAction =
@@ -79,6 +116,11 @@ export type NewSessionFlowAction =
   | { type: "commitName" }
   | { type: "pickProject" }
   | { type: "pickAgent" }
+  | { type: "pickGroup" }
+  | { type: "editGroupDraft" }
+  | { type: "editGroupDraftInput"; action: EditableTextEditAction }
+  | { type: "commitGroupDraft" }
+  | { type: "chooseUngrouped" }
   | { type: "reviewFocus"; dir: -1 | 1 }
   | { type: "editNameFocusSet"; focus: NewSessionEditNameFocus }
   | { type: "cancel" };
@@ -114,13 +156,18 @@ export type NewSessionInputIntent =
     };
 
 type NewSessionActionDefinition =
-  | { mode: "review" | "editName"; intent: "transition"; action: NewSessionFlowAction }
+  | {
+      mode: "review" | "editName" | "editGroupDraft";
+      intent: "transition";
+      action: NewSessionFlowAction;
+    }
   | { mode: "review"; intent: "submit" };
 
 const NEW_SESSION_ACTIONS = {
   "review.project": { mode: "review", intent: "transition", action: { type: "pickProject" } },
   "review.name": { mode: "review", intent: "transition", action: { type: "editName" } },
   "review.agent": { mode: "review", intent: "transition", action: { type: "pickAgent" } },
+  "review.group": { mode: "review", intent: "transition", action: { type: "pickGroup" } },
   "review.create": { mode: "review", intent: "submit" },
   "editName.name": {
     mode: "editName",
@@ -129,6 +176,16 @@ const NEW_SESSION_ACTIONS = {
   },
   "editName.save": { mode: "editName", intent: "transition", action: { type: "commitName" } },
   "editName.back": { mode: "editName", intent: "transition", action: { type: "cancel" } },
+  "editGroupDraft.save": {
+    mode: "editGroupDraft",
+    intent: "transition",
+    action: { type: "commitGroupDraft" },
+  },
+  "editGroupDraft.back": {
+    mode: "editGroupDraft",
+    intent: "transition",
+    action: { type: "cancel" },
+  },
 } as const satisfies Readonly<Record<string, NewSessionActionDefinition>>;
 
 export type NewSessionActionId = keyof typeof NEW_SESSION_ACTIONS;
@@ -140,6 +197,10 @@ export function newSessionActionEnabled(
   actionId: NewSessionActionId,
 ): boolean {
   if (NEW_SESSION_ACTIONS[actionId].mode !== state.mode) return false;
+  if (state.mode === "review" && state.submissionLocalId !== undefined) return false;
+  if (actionId === "editGroupDraft.save") {
+    return state.mode === "editGroupDraft" && state.draftGroupName.value.trim().length > 0;
+  }
   return (
     actionId !== "review.create" ||
     (snapshot !== undefined &&
@@ -155,6 +216,7 @@ export type NewSessionCreateValidation =
       title: string;
       branch: string;
       harnessProvider: ProviderId;
+      group?: SessionGroupPlacementIntent;
     }
   | {
       ok: false;
@@ -177,11 +239,11 @@ export type NewSessionProjectResolution =
 export function createNewSessionFlow(
   snapshot: NewSessionSnapshotView,
   token: string,
-  projectId?: ProjectId,
+  options: { projectId?: ProjectId; groupId?: SessionGroupId } = {},
 ): NewSessionReviewState | undefined {
   const project =
-    projectId !== undefined
-      ? snapshot.projects.find((p) => p.id === projectId)
+    options.projectId !== undefined
+      ? snapshot.projects.find((p) => p.id === options.projectId)
       : snapshot.projects[0];
   if (project === undefined) {
     return undefined;
@@ -199,6 +261,11 @@ export function createNewSessionFlow(
     title: branch,
     branch,
     titleSource: "generated",
+    groupSelection:
+      options.groupId !== undefined &&
+      selectNewSessionRootGroup(snapshot, project.id, options.groupId) !== undefined
+        ? { kind: "existing", groupId: options.groupId }
+        : { kind: "ungrouped" },
   };
 }
 
@@ -232,6 +299,30 @@ export function transitionNewSessionFlow(
       return {
         ...enterWizardStep(baseState(state), "pickAgent"),
       } satisfies NewSessionPickAgentState;
+    case "pickGroup":
+      return {
+        ...enterWizardStep(baseState(state), "pickGroup"),
+      } satisfies NewSessionPickGroupState;
+    case "editGroupDraft":
+      return state.mode === "pickGroup"
+        ? {
+            ...enterWizardStep(baseState(state), "editGroupDraft"),
+            draftGroupName: createEditableTextInputState(),
+          }
+        : state;
+    case "editGroupDraftInput":
+      return state.mode === "editGroupDraft"
+        ? {
+            ...state,
+            draftGroupName: transitionEditableTextInput(state.draftGroupName, action.action),
+          }
+        : state;
+    case "commitGroupDraft":
+      return state.mode === "editGroupDraft" ? commitGroupDraft(state) : state;
+    case "chooseUngrouped":
+      return state.mode === "pickGroup"
+        ? toReviewState({ ...state, groupSelection: { kind: "ungrouped" } }, "group")
+        : state;
     case "reviewFocus":
       return state.mode === "review"
         ? { ...state, reviewFocus: cycleReviewFocus(state.reviewFocus, action.dir) }
@@ -245,9 +336,16 @@ export function newSessionIntentForInput(
   state: NewSessionFlowStateView,
   input: NewSessionInput,
 ): NewSessionInputIntent {
+  if (state.mode === "review" && state.submissionLocalId !== undefined) {
+    return { type: "none" };
+  }
   const actionId = newSessionActionForInput(state, input);
   if (actionId !== undefined) {
     return newSessionIntentForAction(state, actionId);
+  }
+  if (state.mode === "pickGroup") {
+    if (input.input === "U") return transitionIntent({ type: "chooseUngrouped" });
+    if (input.input === "N") return transitionIntent({ type: "editGroupDraft" });
   }
   if (input.key.escape === true) {
     return transitionIntent({ type: "cancel" });
@@ -257,10 +355,13 @@ export function newSessionIntentForInput(
       return reviewInputIntent(input);
     case "editName":
       return editNameInputIntent(state, input);
+    case "editGroupDraft":
+      return editGroupDraftInputIntent(state, input);
     // Pick steps are registered lists: the shared selectionMiddleware resolves
     // ↑↓/↵/slot before this handler runs, so nothing is left for it to intent.
     case "pickProject":
     case "pickAgent":
+    case "pickGroup":
       return { type: "none" };
   }
 }
@@ -285,7 +386,12 @@ export function newSessionActionForInput(
     if (input.input === "P") return "review.project";
     if (input.input === "N") return "review.name";
     if (input.input === "A") return "review.agent";
+    if (input.input === "G") return "review.group";
     return input.input === "C" ? "review.create" : undefined;
+  }
+  if (state.mode === "editGroupDraft") {
+    if (input.key.escape === true) return "editGroupDraft.back";
+    return isReturn(input) ? "editGroupDraft.save" : undefined;
   }
   if (state.mode !== "editName") return undefined;
   if (input.key.escape === true) return "editName.back";
@@ -352,12 +458,16 @@ export function validateNewSessionCreate(
     };
   }
 
+  const group = resolveGroupPlacement(snapshot, state);
+  if (!group.ok) return group;
+
   return {
     ok: true,
     project,
     title,
     branch: state.branch,
     harnessProvider: state.selectedHarness,
+    ...(group.placement === undefined ? {} : { group: group.placement }),
   };
 }
 
@@ -430,6 +540,16 @@ function editNameInputIntent(
   return { type: "none" };
 }
 
+function editGroupDraftInputIntent(
+  _state: ReadonlyDeep<NewSessionEditGroupDraftState>,
+  input: NewSessionInput,
+): NewSessionInputIntent {
+  const intent = editableTextInputIntentForInput(input);
+  return intent.type === "edit"
+    ? transitionIntent({ type: "editGroupDraftInput", action: intent.action })
+    : { type: "none" };
+}
+
 function cycleFocus<T extends string>(values: readonly T[], current: T, dir: -1 | 1): T {
   const index = values.indexOf(current);
   const next = (index + dir + values.length) % values.length;
@@ -459,6 +579,15 @@ function commitEditedName(state: NewSessionEditNameState): NewSessionReviewState
   };
 }
 
+function commitGroupDraft(
+  state: NewSessionEditGroupDraftState,
+): NewSessionEditGroupDraftState | NewSessionReviewState {
+  const name = state.draftGroupName.value.trim();
+  return name.length === 0
+    ? state
+    : toReviewState({ ...state, groupSelection: { kind: "create", name } }, "group");
+}
+
 /** Commit a project chosen by id (the shared selection engine's cursor/slot value). */
 export function chooseNewSessionProjectById(
   state: NewSessionPickProjectState,
@@ -484,12 +613,16 @@ function applyChosenProject(
     return state;
   }
   const branch = generatedSessionBranch(project.id, token);
+  const sameProject = project.id === state.selectedProjectId;
   return {
     ...toReviewState(state),
     selectedProjectId: project.id,
     selectedHarness: harness.id,
-    branch,
-    title: state.titleSource === "generated" ? branch : state.title,
+    branch: sameProject ? state.branch : branch,
+    title: state.titleSource === "generated" ? (sameProject ? state.title : branch) : state.title,
+    groupSelection: sameProject
+      ? reconcileGroupSelection(snapshot, project.id, state.groupSelection)
+      : { kind: "ungrouped" },
   };
 }
 
@@ -520,19 +653,59 @@ export function chooseNewSessionAgentById(
   };
 }
 
-function cancelNewSessionStep(state: NewSessionFlowState): NewSessionReviewState | undefined {
+export function chooseNewSessionGroupById(
+  state: NewSessionPickGroupState,
+  snapshot: NewSessionSnapshotView,
+  groupId: SessionGroupId,
+): NewSessionPickGroupState | NewSessionReviewState {
+  return selectNewSessionRootGroup(snapshot, state.selectedProjectId, groupId) === undefined
+    ? state
+    : toReviewState({ ...state, groupSelection: { kind: "existing", groupId } }, "group");
+}
+
+export function chooseNewSessionUngrouped(state: NewSessionPickGroupState): NewSessionReviewState {
+  return toReviewState({ ...state, groupSelection: { kind: "ungrouped" } }, "group");
+}
+
+export function reconcileNewSessionFlow(
+  state: NewSessionFlowState,
+  snapshot: NewSessionSnapshotView,
+): NewSessionFlowState {
+  const groupSelection = reconcileGroupSelection(
+    snapshot,
+    state.selectedProjectId,
+    state.groupSelection,
+  );
+  return sameGroupSelection(groupSelection, state.groupSelection)
+    ? state
+    : { ...state, groupSelection };
+}
+
+function cancelNewSessionStep(
+  state: NewSessionFlowState,
+): NewSessionReviewState | NewSessionPickGroupState | undefined {
+  if (state.mode === "editGroupDraft") {
+    return {
+      ...baseState(state),
+      mode: "pickGroup",
+      stepHistory: state.stepHistory.slice(0, -1),
+    } satisfies NewSessionPickGroupState;
+  }
   const previous = backWizardStep(baseState(state));
   if (previous === undefined) {
     return undefined;
   }
-  return toReviewState(previous);
+  return toReviewState(previous, state.mode === "pickGroup" ? "group" : "create");
 }
 
 // Every return-to-review path funnels here so the focus-reset policy has one owner.
-function toReviewState(state: NewSessionBaseState): NewSessionReviewState {
+function toReviewState(
+  state: NewSessionBaseState,
+  reviewFocus: NewSessionReviewFocus = "create",
+): NewSessionReviewState {
   return {
     ...resetWizardStep(baseState(state), "review"),
-    reviewFocus: "create",
+    reviewFocus,
   };
 }
 
@@ -545,5 +718,82 @@ function baseState(state: NewSessionBaseState): NewSessionBaseState {
     title: state.title,
     branch: state.branch,
     titleSource: state.titleSource,
+    groupSelection: state.groupSelection,
   };
+}
+
+function resolveGroupPlacement(
+  snapshot: NewSessionSnapshotView,
+  state: NewSessionFlowStateView,
+): { ok: true; placement?: SessionGroupPlacementIntent } | { ok: false; error: SafeError } {
+  if (state.groupSelection.kind === "ungrouped") return { ok: true };
+  if (state.groupSelection.kind === "create") {
+    const name = state.groupSelection.name.trim();
+    return name.length === 0
+      ? {
+          ok: false,
+          error: {
+            tag: "CommandValidationError",
+            code: "SESSION_GROUP_NAME_EMPTY",
+            message: "Group name cannot be empty.",
+          },
+        }
+      : { ok: true, placement: { kind: "create", name } };
+  }
+  const selection = state.groupSelection;
+  const group = snapshot.sessionGroups.find((candidate) => candidate.id === selection.groupId);
+  if (group === undefined) {
+    return {
+      ok: false,
+      error: {
+        tag: "CommandValidationError",
+        code: "SESSION_GROUP_NOT_FOUND",
+        message: "The selected Group no longer exists.",
+      },
+    };
+  }
+  if (group.projectId !== state.selectedProjectId) {
+    return {
+      ok: false,
+      error: {
+        tag: "CommandValidationError",
+        code: "SESSION_GROUP_PROJECT_MISMATCH",
+        message: "The selected Group belongs to another project.",
+      },
+    };
+  }
+  if (group.parentGroupId !== undefined) {
+    return {
+      ok: false,
+      error: {
+        tag: "CommandValidationError",
+        code: "SESSION_GROUP_NOT_ROOT",
+        message: "Nested Groups cannot receive a new session.",
+      },
+    };
+  }
+  return { ok: true, placement: selection };
+}
+
+function reconcileGroupSelection(
+  snapshot: NewSessionSnapshotView,
+  projectId: ProjectId,
+  selection: NewSessionGroupSelection,
+): NewSessionGroupSelection {
+  if (selection.kind !== "existing") return selection;
+  return selectNewSessionRootGroup(snapshot, projectId, selection.groupId) === undefined
+    ? { kind: "ungrouped" }
+    : selection;
+}
+
+function sameGroupSelection(
+  left: NewSessionGroupSelection,
+  right: NewSessionGroupSelection,
+): boolean {
+  if (left.kind !== right.kind) return false;
+  if (left.kind === "ungrouped") return true;
+  if (left.kind === "existing" && right.kind === "existing") {
+    return left.groupId === right.groupId;
+  }
+  return left.kind === "create" && right.kind === "create" && left.name === right.name;
 }

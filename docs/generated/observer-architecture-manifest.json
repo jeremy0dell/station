@@ -479,6 +479,42 @@
       "path": "apps/observer/src/commands/errors.ts",
       "exports": [
         {
+          "name": "sessionGroupIdCollisionError",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "sessionGroupMembershipAssignmentConflictError",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "sessionGroupMissingError",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "sessionGroupNotRootError",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "sessionGroupPlacementAssignmentConflictError",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "sessionGroupProjectMismatchError",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "worktreeMissingError",
           "kind": "function",
           "role": null,
@@ -1289,7 +1325,7 @@
           "name": "createSessionCreateHandler",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Preflights the selected harness, creates a session worktree on its generated branch, durably seeds its independent title, and launches its primary agent; cleanup retires title authority only after verified rollback."
+          "purpose": "Preflights the selected harness, creates a session worktree on its generated branch, durably seeds its independent title with optional atomic root Group placement or inline Group creation, and launches its primary agent; cleanup removes owned placement only after verified rollback."
         },
         {
           "name": "CreateSessionCreateHandlerOptions",
@@ -1338,6 +1374,7 @@
             "resolveTerminalProviderOrThrow",
             "runProviderMutation",
             "seedSession",
+            "sessionSeedGroupPlacement",
             "throwIfAborted"
           ]
         },
@@ -1357,7 +1394,7 @@
           "specifier": "../../persistence/index.js",
           "resolvedPath": "apps/observer/src/persistence/index.ts",
           "edgeKind": "type-only",
-          "bindings": ["EventJournal", "SessionStore"]
+          "bindings": ["EventJournal", "SessionSeedGroupProvenance", "SessionStore"]
         },
         {
           "specifier": "../../providers/registry.js",
@@ -1948,6 +1985,12 @@
           "purpose": null
         },
         {
+          "name": "sessionSeedGroupPlacement",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "throwIfAborted",
           "kind": "function",
           "role": null,
@@ -1983,7 +2026,14 @@
           "specifier": "../errors.js",
           "resolvedPath": "apps/observer/src/commands/errors.ts",
           "edgeKind": "runtime",
-          "bindings": ["worktreeMissingError"]
+          "bindings": [
+            "sessionGroupIdCollisionError",
+            "sessionGroupMissingError",
+            "sessionGroupNotRootError",
+            "sessionGroupPlacementAssignmentConflictError",
+            "sessionGroupProjectMismatchError",
+            "worktreeMissingError"
+          ]
         },
         {
           "specifier": "../providers.js",
@@ -2001,7 +2051,13 @@
           "specifier": "../../persistence/index.js",
           "resolvedPath": "apps/observer/src/persistence/index.ts",
           "edgeKind": "type-only",
-          "bindings": ["EventJournal", "SessionStore"]
+          "bindings": [
+            "EventJournal",
+            "SessionSeedGroupPlacement",
+            "SessionSeedGroupProvenance",
+            "SessionSeedResult",
+            "SessionStore"
+          ]
         },
         {
           "specifier": "../../providers/registry.js",
@@ -2043,6 +2099,8 @@
             "ProviderId",
             "ProviderProjectConfig",
             "SafeError",
+            "SessionGroupId",
+            "SessionGroupPlacementIntent",
             "SessionId",
             "SessionView",
             "StationSnapshot",
@@ -2219,6 +2277,17 @@
           "resolvedPath": "apps/observer/src/commands/cancellation.ts",
           "edgeKind": "runtime",
           "bindings": ["throwIfAborted"]
+        },
+        {
+          "specifier": "./errors.js",
+          "resolvedPath": "apps/observer/src/commands/errors.ts",
+          "edgeKind": "runtime",
+          "bindings": [
+            "sessionGroupIdCollisionError",
+            "sessionGroupMembershipAssignmentConflictError",
+            "sessionGroupMissingError",
+            "sessionGroupProjectMismatchError"
+          ]
         },
         {
           "specifier": "./queue.js",
@@ -5315,7 +5384,7 @@
           "name": "SessionGroupStore",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Maintains durable project-local Group definitions, exclusive membership, parentage, and atomic reconcile repair of parseable relationships."
+          "purpose": "Maintains recorded project-local Group mutation and atomic reconcile repair of definitions, exclusive membership, and parentage. Fresh-session placement is owned by SessionStore."
         },
         {
           "name": "SessionGroupStoreConflictReason",
@@ -5342,10 +5411,28 @@
           "purpose": null
         },
         {
+          "name": "SessionSeedGroupPlacement",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "SessionSeedGroupProvenance",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "SessionSeedResult",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "SessionStore",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Maintains Observer-owned session lifecycle, provider-native execution bindings, canonical worktree-scoped title authority, synchronized session projections, recovery, and readiness. Canonical-title handoff and recovery import commit atomically before recovery can reconcile."
+          "purpose": "Maintains Observer-owned session lifecycle, provider-native execution bindings, canonical worktree-scoped title authority, synchronized session projections, recovery, and readiness. Fresh-session seed, optional root Group placement, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles."
         },
         {
           "name": "SessionTurnReadinessMutation",
@@ -7380,7 +7467,7 @@
           "name": "SessionGroupStore",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Maintains durable project-local Group definitions, exclusive membership, parentage, and atomic reconcile repair of parseable relationships."
+          "purpose": "Maintains recorded project-local Group mutation and atomic reconcile repair of definitions, exclusive membership, and parentage. Fresh-session placement is owned by SessionStore."
         },
         {
           "name": "SessionGroupStoreConflictReason",
@@ -7407,10 +7494,28 @@
           "purpose": null
         },
         {
+          "name": "SessionSeedGroupPlacement",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "SessionSeedGroupProvenance",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "SessionSeedResult",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "SessionStore",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Maintains Observer-owned session lifecycle, provider-native execution bindings, canonical worktree-scoped title authority, synchronized session projections, recovery, and readiness. Canonical-title handoff and recovery import commit atomically before recovery can reconcile."
+          "purpose": "Maintains Observer-owned session lifecycle, provider-native execution bindings, canonical worktree-scoped title authority, synchronized session projections, recovery, and readiness. Fresh-session seed, optional root Group placement, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles."
         },
         {
           "name": "SessionTurnReadinessMutation",
@@ -7714,13 +7819,13 @@
           "name": "SessionGroupStore",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Maintains durable project-local Group definitions, exclusive membership, parentage, and atomic reconcile repair of parseable relationships."
+          "purpose": "Maintains recorded project-local Group mutation and atomic reconcile repair of definitions, exclusive membership, and parentage. Fresh-session placement is owned by SessionStore."
         },
         {
           "name": "SessionStore",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Maintains Observer-owned session lifecycle, provider-native execution bindings, canonical worktree-scoped title authority, synchronized session projections, recovery, and readiness. Canonical-title handoff and recovery import commit atomically before recovery can reconcile."
+          "purpose": "Maintains Observer-owned session lifecycle, provider-native execution bindings, canonical worktree-scoped title authority, synchronized session projections, recovery, and readiness. Fresh-session seed, optional root Group placement, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles."
         },
         {
           "name": "WorktreeMetadataStore",
@@ -7759,6 +7864,9 @@
             "SessionGroupRepairResult",
             "SessionGroupStoreResult",
             "SessionHarnessDerivedStateRepair",
+            "SessionSeedGroupPlacement",
+            "SessionSeedGroupProvenance",
+            "SessionSeedResult",
             "SessionTurnReadinessMutation",
             "WorktreeMetadataCurrentKind",
             "WorktreeMetadataCurrentPayloadByKind"
@@ -8009,6 +8117,12 @@
           "purpose": null
         },
         {
+          "name": "discardSessionSeedPlacement",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "emptySessionGroupState",
           "kind": "function",
           "role": null,
@@ -8016,6 +8130,12 @@
         },
         {
           "name": "listSessionGroups",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "placeSessionSeed",
           "kind": "function",
           "role": null,
           "purpose": null
@@ -8066,7 +8186,10 @@
             "SessionGroupMemberExpectation",
             "SessionGroupRepairEvidence",
             "SessionGroupRepairResult",
-            "SessionGroupStoreResult"
+            "SessionGroupStoreResult",
+            "SessionSeedGroupPlacement",
+            "SessionSeedGroupProvenance",
+            "SessionSeedResult"
           ]
         },
         {
@@ -8708,6 +8831,24 @@
         },
         {
           "name": "SessionHarnessExecutionEvidence",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "SessionSeedGroupPlacement",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "SessionSeedGroupProvenance",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "SessionSeedResult",
           "kind": "type",
           "role": null,
           "purpose": null
@@ -10454,7 +10595,7 @@
           "name": "prepareExternalLaunch",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Returns a live or attachable managed identity first, then exactly recovers the canonical open Station session before permitting a fresh identity. Both launch paths preflight only the selected provider and pass provider-neutral resume options to the harness. Failed cleanup releases only the exact opened binding and never discards retained recovery state; local fallbacks preserve the managed terminal's output policy while attachments consume compatibility remotely."
+          "purpose": "Returns a live or attachable managed identity first, then exactly recovers the canonical open Station session before permitting a fresh identity. Both launch paths preflight only the selected provider and pass provider-neutral resume options to the harness. A fresh identity is atomically seeded into its optional root Group before target publication, and confirmed failed launch cleanup removes its membership and owned inline Group without touching retained recovery state."
         },
         {
           "name": "reportExternalExit",
@@ -10490,14 +10631,22 @@
             "defaultSessionCommandIdFactory",
             "findProjectOrThrow",
             "rememberedHarnessProviderForWorktree",
+            "seedSession",
+            "sessionSeedGroupPlacement",
             "worktreeObservationFromRow"
           ]
+        },
+        {
+          "specifier": "../commands/session/shared.js",
+          "resolvedPath": "apps/observer/src/commands/session/shared.ts",
+          "edgeKind": "type-only",
+          "bindings": ["SessionCommandIdFactory"]
         },
         {
           "specifier": "../persistence/index.js",
           "resolvedPath": "apps/observer/src/persistence/index.ts",
           "edgeKind": "type-only",
-          "bindings": ["SessionStore"]
+          "bindings": ["SessionSeedGroupProvenance", "SessionStore"]
         },
         {
           "specifier": "../providers/registry.js",
@@ -13570,7 +13719,7 @@
       "declaration": "createSessionCreateHandler",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Preflights the selected harness, creates a session worktree on its generated branch, durably seeds its independent title, and launches its primary agent; cleanup retires title authority only after verified rollback.",
+      "purpose": "Preflights the selected harness, creates a session worktree on its generated branch, durably seeds its independent title with optional atomic root Group placement or inline Group creation, and launches its primary agent; cleanup removes owned placement only after verified rollback.",
       "dependencies": []
     },
     {
@@ -13975,7 +14124,7 @@
       "declaration": "SessionGroupStore",
       "kind": "interface",
       "role": "DRIVEN PORT",
-      "purpose": "Maintains durable project-local Group definitions, exclusive membership, parentage, and atomic reconcile repair of parseable relationships.",
+      "purpose": "Maintains recorded project-local Group mutation and atomic reconcile repair of definitions, exclusive membership, and parentage. Fresh-session placement is owned by SessionStore.",
       "dependencies": []
     },
     {
@@ -13983,7 +14132,7 @@
       "declaration": "SessionStore",
       "kind": "interface",
       "role": "DRIVEN PORT",
-      "purpose": "Maintains Observer-owned session lifecycle, provider-native execution bindings, canonical worktree-scoped title authority, synchronized session projections, recovery, and readiness. Canonical-title handoff and recovery import commit atomically before recovery can reconcile.",
+      "purpose": "Maintains Observer-owned session lifecycle, provider-native execution bindings, canonical worktree-scoped title authority, synchronized session projections, recovery, and readiness. Fresh-session seed, optional root Group placement, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles.",
       "dependencies": []
     },
     {
@@ -14288,7 +14437,7 @@
       "declaration": "prepareExternalLaunch",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Returns a live or attachable managed identity first, then exactly recovers the canonical open Station session before permitting a fresh identity. Both launch paths preflight only the selected provider and pass provider-neutral resume options to the harness. Failed cleanup releases only the exact opened binding and never discards retained recovery state; local fallbacks preserve the managed terminal's output policy while attachments consume compatibility remotely.",
+      "purpose": "Returns a live or attachable managed identity first, then exactly recovers the canonical open Station session before permitting a fresh identity. Both launch paths preflight only the selected provider and pass provider-neutral resume options to the harness. A fresh identity is atomically seeded into its optional root Group before target publication, and confirmed failed launch cleanup removes its membership and owned inline Group without touching retained recovery state.",
       "dependencies": [
         {
           "path": "apps/observer/src/commands/harnessLaunchPreflight.ts",

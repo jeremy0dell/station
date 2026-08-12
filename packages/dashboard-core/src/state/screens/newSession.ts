@@ -1,3 +1,4 @@
+import type { SafeError } from "@station/contracts";
 import {
   createNewSessionNameToken,
   type NewSessionActionId,
@@ -73,6 +74,9 @@ function cancelNewSession(state: DashboardState): DashboardState {
   if (state.screen.name !== "newSession") {
     return state;
   }
+  if (state.screen.flow.mode === "review" && state.screen.flow.submissionLocalId !== undefined) {
+    return state;
+  }
   return applyNewSessionAction(state, { type: "cancel" });
 }
 
@@ -96,7 +100,11 @@ function applyNewSessionFlow(
 }
 
 function submitNewSession(state: DashboardState): TuiTransition {
-  if (state.screen.name !== "newSession" || state.snapshot === undefined) {
+  if (
+    state.screen.name !== "newSession" ||
+    state.screen.flow.mode !== "review" ||
+    state.snapshot === undefined
+  ) {
     return {
       state: {
         ...state,
@@ -108,18 +116,55 @@ function submitNewSession(state: DashboardState): TuiTransition {
   const validation = validateNewSessionCreate(state.snapshot, state.screen.flow);
   if (!validation.ok) return { state };
 
-  // Close the pure screen before execution so every renderer observes the dashboard first.
+  if (state.screen.flow.submissionLocalId !== undefined) return { state };
+  const localId = `create:${validation.project.id}:${createNewSessionNameToken()}`;
   return {
-    state: { ...state, screen: { name: "dashboard" } },
+    state: {
+      ...state,
+      screen: {
+        name: "newSession",
+        flow: { ...state.screen.flow, submissionLocalId: localId },
+      },
+    },
     operations: [
       {
         type: "createManagedSession",
-        localId: `create:${validation.project.id}:${createNewSessionNameToken()}`,
+        localId,
         project: validation.project,
         title: validation.title,
         hiddenBranch: validation.branch,
         harness: validation.harnessProvider,
+        ...(validation.group === undefined ? {} : { group: validation.group }),
       },
     ],
   };
+}
+
+export function completeNewSessionSubmission(
+  state: DashboardState,
+  localId: string,
+): DashboardState {
+  return state.screen.name === "newSession" &&
+    state.screen.flow.mode === "review" &&
+    state.screen.flow.submissionLocalId === localId
+    ? { ...state, screen: { name: "dashboard" } }
+    : state;
+}
+
+export function failNewSessionSubmission(
+  state: DashboardState,
+  localId: string,
+  error?: SafeError,
+): DashboardState {
+  if (
+    state.screen.name !== "newSession" ||
+    state.screen.flow.mode !== "review" ||
+    state.screen.flow.submissionLocalId !== localId
+  ) {
+    return state;
+  }
+  const flow = { ...state.screen.flow };
+  delete flow.submissionLocalId;
+  flow.reviewFocus = error?.code.startsWith("SESSION_GROUP_") === true ? "group" : "create";
+  return { ...state, screen: { name: "newSession", flow } };
 }

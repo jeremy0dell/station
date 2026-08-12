@@ -349,7 +349,32 @@ function trackingPersistence() {
     findRememberedHarnessProviderForWorktree: async () => undefined,
     seedSession: async (input: Parameters<SessionStore["seedSession"]>[0]) => {
       seeded.push(input);
-      return {} as Awaited<ReturnType<SessionStore["seedSession"]>>;
+      const groupProvenance =
+        input.group === undefined
+          ? undefined
+          : input.group.kind === "existing"
+            ? { kind: "existing" as const, groupId: input.group.groupId }
+            : {
+                kind: "created" as const,
+                groupId: input.group.groupId,
+                projectId: input.projectId,
+                name: input.group.name,
+                version: 1,
+                createdAt: input.createdAt,
+                updatedAt: input.createdAt,
+              };
+      return {
+        ok: true,
+        session: {
+          id: input.sessionId,
+          projectId: input.projectId,
+          worktreeId: input.worktreeId,
+          title: input.initialTitle,
+          createdAt: input.createdAt,
+          lastSeenAt: input.lastSeenAt,
+        },
+        ...(groupProvenance === undefined ? {} : { groupProvenance }),
+      };
     },
     renameSession: async (input: Parameters<SessionStore["renameSession"]>[0]) => {
       renamed.push(input);
@@ -504,6 +529,69 @@ describe("prepareExternalLaunch", () => {
     ]);
   });
 
+  it("atomically places a fresh external session in an existing root Group", async () => {
+    const station = new FakeManagedTerminalLifecycle();
+    const persistence = createInMemoryObserverPersistence({
+      clock: { now: () => new Date(now) },
+    });
+    await persistence.createSessionGroup({
+      id: "grp_existing",
+      projectId: "web",
+      name: "Existing",
+      createdAt: now,
+    });
+    const launchDeps = {
+      ...deps([row()], station, undefined, persistence),
+      idFactory: { sessionId: () => "ses_grouped_external" },
+    };
+
+    const result = await prepareExternalLaunch(launchDeps, {
+      ...prepareParams,
+      group: { kind: "existing", groupId: "grp_existing" },
+    });
+
+    expect(result.outcome).toMatchObject({
+      kind: "prepared",
+      sessionId: "ses_grouped_external",
+    });
+    await expect(persistence.listSessionGroups()).resolves.toEqual([
+      expect.objectContaining({
+        id: "grp_existing",
+        version: 2,
+        sessionIds: ["ses_grouped_external"],
+      }),
+    ]);
+  });
+
+  it("rejects a newly nested Group before publishing a managed target", async () => {
+    const station = new FakeManagedTerminalLifecycle();
+    const persistence = createInMemoryObserverPersistence({
+      clock: { now: () => new Date(now) },
+    });
+    await persistence.createSessionGroup({
+      id: "grp_parent",
+      projectId: "web",
+      name: "Parent",
+      createdAt: now,
+    });
+    await persistence.createSessionGroup({
+      id: "grp_nested",
+      projectId: "web",
+      name: "Nested",
+      parentGroupId: "grp_parent",
+      createdAt: now,
+    });
+
+    await expect(
+      prepareExternalLaunch(deps([row()], station, undefined, persistence), {
+        ...prepareParams,
+        group: { kind: "existing", groupId: "grp_nested" },
+      }),
+    ).rejects.toMatchObject({ code: "SESSION_GROUP_NOT_ROOT" });
+    await expect(persistence.listSessions()).resolves.toEqual([]);
+    expect(await station.listTargets()).toEqual([]);
+  });
+
   it("propagates local output compatibility from the managed terminal adapter", async () => {
     const station = new FakeManagedTerminalLifecycle({
       outputCompatibility: "top-region-scrollback",
@@ -647,7 +735,11 @@ describe("prepareExternalLaunch", () => {
     const harness = new HookableHarness(false);
     const result = await prepareExternalLaunch(
       deps([row({ agentSessionId: "ses_existing" })], station, [harness], persistence.store),
-      { ...prepareParams, title: "Do not rename me" },
+      {
+        ...prepareParams,
+        title: "Do not rename me",
+        group: { kind: "create", name: "Must be ignored" },
+      },
     );
     expect(result).toEqual({
       outcome: {
@@ -1154,6 +1246,52 @@ describe("prepareExternalLaunch", () => {
     ]);
   });
 
+  it("discards confirmed failed inline Group placement with minted provenance", async () => {
+    const station = new FakeManagedTerminalLifecycle({
+      launchFailure: {
+        tag: "TerminalProviderError",
+        code: "MANAGED_LAUNCH_FAILED",
+        message: "launch failed",
+      },
+    });
+    const persistence = trackingPersistence();
+    const launchDeps = {
+      ...deps([row()], station, undefined, persistence.store),
+      idFactory: {
+        sessionId: () => "ses_inline_failed",
+        sessionGroupId: () => "grp_inline_failed",
+      },
+    };
+
+    await expect(
+      prepareExternalLaunch(launchDeps, {
+        ...prepareParams,
+        group: { kind: "create", name: "Temporary" },
+      }),
+    ).rejects.toMatchObject({ code: "MANAGED_LAUNCH_FAILED" });
+    expect(persistence.seeded).toEqual([
+      expect.objectContaining({
+        sessionId: "ses_inline_failed",
+        group: { kind: "create", groupId: "grp_inline_failed", name: "Temporary" },
+      }),
+    ]);
+    expect(persistence.discarded).toEqual([
+      {
+        sessionId: "ses_inline_failed",
+        groupProvenance: {
+          kind: "created",
+          groupId: "grp_inline_failed",
+          projectId: "web",
+          name: "Temporary",
+          version: 1,
+          createdAt: now,
+          updatedAt: now,
+        },
+        discardedAt: now,
+      },
+    ]);
+  });
+
   it("preserves the launch failure and seed when target release is uncertain", async () => {
     const station = new FakeManagedTerminalLifecycle({
       launchFailure: {
@@ -1170,10 +1308,20 @@ describe("prepareExternalLaunch", () => {
     const persistence = trackingPersistence();
 
     await expect(
-      prepareExternalLaunch(deps([row()], station, undefined, persistence.store), {
-        ...prepareParams,
-        title: "Hexagonal PT 12",
-      }),
+      prepareExternalLaunch(
+        {
+          ...deps([row()], station, undefined, persistence.store),
+          idFactory: {
+            sessionId: () => "ses_uncertain",
+            sessionGroupId: () => "grp_uncertain",
+          },
+        },
+        {
+          ...prepareParams,
+          title: "Hexagonal PT 12",
+          group: { kind: "create", name: "Retained" },
+        },
+      ),
     ).rejects.toMatchObject({ code: "MANAGED_LAUNCH_FAILED" });
     expect(station.released).toEqual([
       {
@@ -1183,6 +1331,11 @@ describe("prepareExternalLaunch", () => {
       },
     ]);
     expect(persistence.discarded).toEqual([]);
+    expect(persistence.seeded[0]?.group).toEqual({
+      kind: "create",
+      groupId: "grp_uncertain",
+      name: "Retained",
+    });
     expect(await station.listTargets()).toHaveLength(1);
   });
 

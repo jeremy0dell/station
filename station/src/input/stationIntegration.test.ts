@@ -193,7 +193,7 @@ describe("station overlay layer in the keymap stack", () => {
     });
   });
 
-  it("dispatches direct C through the semantic managed-session capability", () => {
+  it("dispatches direct C through the semantic managed-session capability", async () => {
     const view = makeViewStore();
     const station = makeStationStore(true);
     const keymap = createStationKeymap(view);
@@ -201,6 +201,7 @@ describe("station overlay layer in the keymap stack", () => {
     routeKey("\x1b[B", station.getState(), keymap);
 
     expect(routeKey("C", station.getState(), keymap)).toEqual({ kind: "swallowed" });
+    await waitFor(() => view.state.getState().screen.name === "dashboard");
     expect(view.state.getState().screen).toEqual({ name: "dashboard" });
   });
 
@@ -245,6 +246,14 @@ describe("station overlay layer in the keymap stack", () => {
     expect(view.state.getState().screen).toEqual({ name: "dashboard" });
   });
 });
+
+async function waitFor(assertion: () => boolean): Promise<void> {
+  const deadline = Date.now() + 500;
+  while (!assertion()) {
+    if (Date.now() > deadline) throw new Error("timed out waiting for assertion");
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+}
 
 describe("station input through the station runtime", () => {
   function makeRuntime(

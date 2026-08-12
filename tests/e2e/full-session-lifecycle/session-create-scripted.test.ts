@@ -97,6 +97,7 @@ describe("full session lifecycle e2e", () => {
       clock,
       idFactory: {
         sessionId: () => "ses_web_task",
+        sessionGroupId: () => "grp_web_task",
       },
     });
     const api = createObserverApi({
@@ -119,6 +120,7 @@ describe("full session lifecycle e2e", () => {
         payload: {
           projectId: "web",
           branch: "task",
+          group: { kind: "create", name: "Scripted work" },
           harness: { provider: "scripted", mode: "interactive" },
           terminal: { provider: "fake-terminal", layout: "agent-build-shell", focus: false },
           initialPrompt: "Complete the file task.",
@@ -145,6 +147,15 @@ describe("full session lifecycle e2e", () => {
           {
             id: "ses_web_task",
             worktreeId: "wt_web_task",
+          },
+        ],
+        sessionGroups: [
+          {
+            id: "grp_web_task",
+            projectId: "web",
+            name: "Scripted work",
+            sessionIds: ["ses_web_task"],
+            version: 1,
           },
         ],
       });

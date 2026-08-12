@@ -62,6 +62,7 @@ export {
 } from "../components/HelpOverlay/helpPanel.js";
 
 export {
+  newSessionEditGroupDraftContent,
   newSessionEditNameContent,
   newSessionReviewContent,
 } from "../components/NewSessionBottomSheet/content.js";
@@ -133,9 +134,11 @@ export type { FleetSummary } from "../selectors/fleetSummary.js";
 export { selectFleetSummary } from "../selectors/fleetSummary.js";
 export type {
   KeyedChoice,
+  NewSessionGroupOption,
   NewSessionHarnessOption,
 } from "../selectors/selectors.js";
 export {
+  selectNewSessionGroupChoices,
   selectNewSessionHarnessChoices,
   selectNewSessionProjectChoices,
   selectProjectChooserChoices,

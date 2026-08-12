@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  newSessionEditGroupDraftContent,
   newSessionEditNameContent,
   newSessionReviewContent,
 } from "../../../../src/components/NewSessionBottomSheet/content.js";
@@ -66,6 +67,16 @@ describe("new-session review content", () => {
           value: "Codex",
           status: { glyph: "●", text: "healthy", tone: "healthy" },
         },
+        {
+          id: "group",
+          actionId: "review.group",
+          label: "Group",
+          accelerator: "G",
+          enabled: true,
+          focusId: "group",
+          helper: "Enter choose Group",
+          value: "Ungrouped",
+        },
       ],
       create: {
         actionId: "review.create",
@@ -101,6 +112,7 @@ describe("new-session review content", () => {
       ["project", "Enter choose project"],
       ["name", "Enter edit name"],
       ["agent", "Enter choose agent"],
+      ["group", "Enter choose Group"],
       ["create", "Enter create session"],
     ] as const;
 
@@ -149,5 +161,42 @@ describe("new-session review content", () => {
       },
       helper: "Type name · Left/Right cursor · ↓ actions · Enter save",
     });
+  });
+
+  it("carries semantic Save and Back controls for the inline Group editor", () => {
+    const { state } = reviewState();
+    const picker = transitionNewSessionFlow(state, { type: "pickGroup" });
+    if (picker?.mode !== "pickGroup") throw new Error("expected Group picker");
+    const editing = transitionNewSessionFlow(picker, { type: "editGroupDraft" });
+    if (editing?.mode !== "editGroupDraft") throw new Error("expected Group editor");
+
+    expect(newSessionEditGroupDraftContent(editing)).toEqual({
+      controls: {
+        save: {
+          actionId: "editGroupDraft.save",
+          label: "Save",
+          accelerator: "Enter",
+          enabled: false,
+          focusId: "save",
+          helper: "Type Group name · Enter save · Esc discard",
+        },
+        back: {
+          actionId: "editGroupDraft.back",
+          label: "Back",
+          accelerator: "Esc",
+          enabled: true,
+          focusId: "back",
+          helper: "Type Group name · Enter save · Esc discard",
+        },
+      },
+      helper: "Type Group name · Enter save · Esc discard",
+    });
+
+    const typed = transitionNewSessionFlow(editing, {
+      type: "editGroupDraftInput",
+      action: { type: "insert", input: "Release" },
+    });
+    if (typed?.mode !== "editGroupDraft") throw new Error("expected Group editor");
+    expect(newSessionEditGroupDraftContent(typed).controls.save.enabled).toBe(true);
   });
 });

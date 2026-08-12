@@ -1,6 +1,10 @@
 import type { ProviderProjectConfig, WorktreeObservation } from "@station/contracts";
 import type { RuntimeClock } from "@station/runtime";
-import type { EventJournal, SessionStore } from "../../persistence/index.js";
+import type {
+  EventJournal,
+  SessionSeedGroupProvenance,
+  SessionStore,
+} from "../../persistence/index.js";
 import type { ProviderRegistry } from "../../providers/registry.js";
 import type { ObserverCore } from "../../reconcile/core.js";
 import type { ObserverEventBus } from "../../runtime/eventBus.js";
@@ -22,6 +26,7 @@ import {
   runProviderMutation,
   type SessionCommandIdFactory,
   seedSession,
+  sessionSeedGroupPlacement,
   throwIfAborted,
 } from "./shared.js";
 
@@ -43,8 +48,8 @@ export type CreateSessionCreateHandlerOptions = {
  * USE CASE
  *
  * Preflights the selected harness, creates a session worktree on its generated branch, durably
- * seeds its independent title, and launches its primary agent; cleanup retires title authority
- * only after verified rollback.
+ * seeds its independent title with optional atomic root Group placement or inline Group creation,
+ * and launches its primary agent; cleanup removes owned placement only after verified rollback.
  */
 export function createSessionCreateHandler(
   options: CreateSessionCreateHandlerOptions,
@@ -64,6 +69,7 @@ export function createSessionCreateHandler(
     resolveHarnessProviderOrThrow(options.providers, payload.harness.provider);
     await options.launchPreflight(payload.harness.provider, context.signal);
     const sessionId = idFactory.sessionId();
+    const group = sessionSeedGroupPlacement(payload.group, idFactory.sessionGroupId);
     const runtime = {
       clock: options.clock,
       commandTimeoutMs: options.commandTimeoutMs,
@@ -72,6 +78,7 @@ export function createSessionCreateHandler(
     };
     let createdWorktree: WorktreeObservation | undefined;
     let sessionSeeded = false;
+    let groupProvenance: SessionSeedGroupProvenance | undefined;
 
     try {
       const worktree = await runProviderMutation(
@@ -95,15 +102,17 @@ export function createSessionCreateHandler(
       createdWorktree = worktree;
       throwIfAborted(context.signal);
 
-      await seedSession({
+      const seed = await seedSession({
         persistence: options.persistence,
         sessionId,
         projectId: project.id,
         worktreeId: worktree.id,
         initialTitle: payload.title ?? payload.branch,
+        ...(group === undefined ? {} : { group }),
         clock: options.clock,
       });
       sessionSeeded = true;
+      groupProvenance = seed.groupProvenance;
       throwIfAborted(context.signal);
 
       const receipt = await options.terminalIntentRunner.submitIntent(
@@ -150,11 +159,13 @@ export function createSessionCreateHandler(
         await discardSessionSeedBestEffort({
           persistence: options.persistence,
           sessionId,
+          ...(groupProvenance === undefined ? {} : { groupProvenance }),
           ...(worktreeRemoved && createdWorktree !== undefined
             ? { removedWorktree: { projectId: project.id, worktreeId: createdWorktree.id } }
             : {}),
           context,
           logger: options.logger,
+          clock: options.clock,
         });
       }
       throw error;

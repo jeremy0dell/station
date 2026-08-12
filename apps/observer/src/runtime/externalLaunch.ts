@@ -17,9 +17,12 @@ import {
   defaultSessionCommandIdFactory,
   findProjectOrThrow,
   rememberedHarnessProviderForWorktree,
+  type SessionCommandIdFactory,
+  seedSession,
+  sessionSeedGroupPlacement,
   worktreeObservationFromRow,
 } from "../commands/session/shared.js";
-import type { SessionStore } from "../persistence/index.js";
+import type { SessionSeedGroupProvenance, SessionStore } from "../persistence/index.js";
 import type { ProviderRegistry } from "../providers/registry.js";
 import type { ObserverCore } from "../reconcile/core.js";
 import { resolveSessionRecovery } from "../sessionRecovery.js";
@@ -35,6 +38,7 @@ export type ExternalLaunchDeps = {
   configPath?: string | undefined;
   sessionResumeAgentEnabled?: boolean | undefined;
   logger?: StationLogger | undefined;
+  idFactory?: Partial<SessionCommandIdFactory> | undefined;
   worktreeMutations: WorktreeMutationCoordinator;
 };
 
@@ -51,9 +55,9 @@ export type ExternalLaunchOutcome<T> = {
  *
  * Returns a live or attachable managed identity first, then exactly recovers the canonical open
  * Station session before permitting a fresh identity. Both launch paths preflight only the selected
- * provider and pass provider-neutral resume options to the harness. Failed cleanup releases only
- * the exact opened binding and never discards retained recovery state; local fallbacks preserve the
- * managed terminal's output policy while attachments consume compatibility remotely.
+ * provider and pass provider-neutral resume options to the harness. A fresh identity is atomically
+ * seeded into its optional root Group before target publication, and confirmed failed launch cleanup
+ * removes its membership and owned inline Group without touching retained recovery state.
  */
 export async function prepareExternalLaunch(
   deps: ExternalLaunchDeps,
@@ -192,21 +196,28 @@ async function prepareExternalLaunchForWorktree(
   // The worktree mutation coordinator serializes distinct clients through this
   // mutation boundary; the managed lifecycle still owns binding-generation CAS.
   const freshSession = retainedSession === undefined;
-  const sessionId = retainedSession?.id ?? defaultSessionCommandIdFactory.sessionId();
+  const idFactory = { ...defaultSessionCommandIdFactory, ...deps.idFactory };
+  const sessionId = retainedSession?.id ?? idFactory.sessionId();
+  const group = freshSession
+    ? sessionSeedGroupPlacement(params.group, idFactory.sessionGroupId)
+    : undefined;
   const seededAt = nowIso(deps.clock);
   let opened: ManagedOpenWorkspaceResult | undefined;
   let sessionSeeded = false;
+  let groupProvenance: SessionSeedGroupProvenance | undefined;
   try {
     if (freshSession) {
-      await deps.persistence.seedSession({
+      const seed = await seedSession({
+        persistence: deps.persistence,
         sessionId,
         projectId: project.id,
         worktreeId: worktree.id,
         initialTitle: params.title ?? row.title,
-        createdAt: seededAt,
-        lastSeenAt: seededAt,
+        ...(group === undefined ? {} : { group }),
+        clock: deps.clock,
       });
       sessionSeeded = true;
+      groupProvenance = seed.groupProvenance;
       if (params.title !== undefined && params.title !== row.title) {
         // New-session intent may replace reconcile's branch fallback before the target becomes visible.
         await deps.persistence.renameSession({
@@ -272,7 +283,10 @@ async function prepareExternalLaunchForWorktree(
       logger: deps.logger,
     });
     if (freshSession && sessionSeeded && targetReleaseConfirmed) {
-      await discardSessionSeedBestEffort(deps, sessionId);
+      await discardSessionSeedBestEffort(deps, {
+        sessionId,
+        ...(groupProvenance === undefined ? {} : { groupProvenance }),
+      });
     }
     throw error;
   }
@@ -306,14 +320,24 @@ async function releaseOpenedTargetBestEffort(input: {
 }
 
 async function discardSessionSeedBestEffort(
-  deps: Pick<ExternalLaunchDeps, "persistence" | "logger">,
-  sessionId: string,
+  deps: Pick<ExternalLaunchDeps, "persistence" | "logger" | "clock">,
+  input: {
+    sessionId: string;
+    groupProvenance?: SessionSeedGroupProvenance;
+  },
 ): Promise<void> {
   try {
-    await deps.persistence.discardSessionSeed({ sessionId });
+    await deps.persistence.discardSessionSeed({
+      sessionId: input.sessionId,
+      ...(input.groupProvenance === undefined ? {} : { groupProvenance: input.groupProvenance }),
+      discardedAt: nowIso(deps.clock),
+    });
   } catch (error) {
     await deps.logger
-      ?.warn("External launch cleanup could not discard its session seed.", { sessionId, error })
+      ?.warn("External launch cleanup could not discard its session seed.", {
+        sessionId: input.sessionId,
+        error,
+      })
       .catch(() => undefined);
   }
 }

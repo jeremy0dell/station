@@ -685,6 +685,52 @@ describe("routeStationMouse", () => {
     });
   });
 
+  it("activates existing, ungrouped, and inline-create Group choices by pointer", () => {
+    const store = makeStore(groupedManyProjectsSnapshot());
+    store.actions.handleKey({ input: "N" });
+    store.actions.handleKey({ input: "G" });
+
+    routeStationMouse({ kind: "sheetChoice", choiceKey: "1" }, LEFT_DOWN, store);
+    expect(store.state.getState().screen).toMatchObject({
+      flow: {
+        mode: "review",
+        groupSelection: { kind: "existing", groupId: "group_design_refresh" },
+      },
+    });
+
+    store.actions.handleKey({ input: "G" });
+    routeStationMouse({ kind: "sheetChoice", choiceKey: "U" }, LEFT_DOWN, store);
+    expect(store.state.getState().screen).toMatchObject({
+      flow: { mode: "review", groupSelection: { kind: "ungrouped" } },
+    });
+
+    store.actions.handleKey({ input: "G" });
+    routeStationMouse({ kind: "sheetChoice", choiceKey: "N" }, LEFT_DOWN, store);
+    expect(store.state.getState().screen).toMatchObject({
+      flow: { mode: "editGroupDraft" },
+    });
+
+    store.actions.handleKey({ input: "Release" });
+    routeStationMouse(
+      { kind: "newSessionAction", actionId: "editGroupDraft.save" },
+      LEFT_DOWN,
+      store,
+    );
+    expect(store.state.getState().screen).toMatchObject({
+      flow: { mode: "review", groupSelection: { kind: "create", name: "Release" } },
+    });
+
+    store.actions.handleKey({ input: "G" });
+    routeStationMouse({ kind: "sheetChoice", choiceKey: "N" }, LEFT_DOWN, store);
+    store.actions.handleKey({ input: "Discarded" });
+    routeStationMouse(
+      { kind: "newSessionAction", actionId: "editGroupDraft.back" },
+      LEFT_DOWN,
+      store,
+    );
+    expect(store.state.getState().screen).toMatchObject({ flow: { mode: "pickGroup" } });
+  });
+
   it("treats right-click as inert at the STATION router layer", () => {
     const store = makeStore();
     const before = store.state.getState().screen;
@@ -1228,7 +1274,7 @@ describe("routeStationMouse widget settings", () => {
     expect(store.state.getState().screen).toMatchObject({ name: "newSession", flow: { mode: "review" } });
   });
 
-  it("dispatches direct Create through the semantic capability path", () => {
+  it("dispatches direct Create through the semantic capability path", async () => {
     const store = makeStore();
     store.actions.handleKey({ input: "N" });
     store.actions.handleKey({ input: "", downArrow: true });
@@ -1239,6 +1285,7 @@ describe("routeStationMouse widget settings", () => {
       store,
     );
     expect(outcome).toEqual({ kind: "handled" });
+    await waitFor(() => store.state.getState().screen.name === "dashboard");
     expect(store.state.getState().screen).toEqual({ name: "dashboard" });
   });
 

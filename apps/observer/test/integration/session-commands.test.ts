@@ -119,6 +119,144 @@ describe("session command vertical slice", () => {
     fixture.sqlite.close();
   });
 
+  it("publishes the first created-session snapshot with existing Group membership", async () => {
+    const fixture = createFixture({
+      sessionIds: ["ses_grouped_existing"],
+      harness: new FakeHarnessProvider({
+        now,
+        runs: [
+          createFakeHarnessRun({
+            id: "run_grouped_existing",
+            projectId: "web",
+            worktreeId: "wt_web_grouped_existing",
+            sessionId: "ses_grouped_existing",
+            state: "idle",
+            now,
+          }),
+        ],
+      }),
+    });
+    await fixture.persistence.createSessionGroup({
+      id: "grp_existing",
+      projectId: "web",
+      name: "Existing",
+      createdAt: now,
+    });
+
+    const receipt = await fixture.queue.dispatch({
+      type: "session.create",
+      payload: {
+        projectId: "web",
+        branch: "grouped-existing",
+        group: { kind: "existing", groupId: "grp_existing" },
+        harness: { provider: "fake-harness" },
+        terminal: { provider: "fake-terminal", focus: false },
+      },
+    });
+    await fixture.queue.drain();
+
+    await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
+      status: "succeeded",
+    });
+    expect(fixture.core.getSnapshot().sessionGroups).toEqual([
+      expect.objectContaining({
+        id: "grp_existing",
+        sessionIds: ["ses_grouped_existing"],
+        version: 2,
+      }),
+    ]);
+    expect(fixture.core.getSnapshot().sessions).toEqual([
+      expect.objectContaining({ id: "ses_grouped_existing" }),
+    ]);
+    fixture.sqlite.close();
+  });
+
+  it("creates an inline root Group as part of the session seed", async () => {
+    const fixture = createFixture({
+      sessionIds: ["ses_grouped_inline"],
+      sessionGroupIds: ["grp_inline"],
+      harness: new FakeHarnessProvider({
+        now,
+        runs: [
+          createFakeHarnessRun({
+            id: "run_grouped_inline",
+            projectId: "web",
+            worktreeId: "wt_web_grouped_inline",
+            sessionId: "ses_grouped_inline",
+            state: "idle",
+            now,
+          }),
+        ],
+      }),
+    });
+
+    const receipt = await fixture.queue.dispatch({
+      type: "session.create",
+      payload: {
+        projectId: "web",
+        branch: "grouped-inline",
+        group: { kind: "create", name: "Release" },
+        harness: { provider: "fake-harness" },
+        terminal: { provider: "fake-terminal", focus: false },
+      },
+    });
+    await fixture.queue.drain();
+
+    await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
+      status: "succeeded",
+    });
+    expect(fixture.core.getSnapshot().sessionGroups).toEqual([
+      {
+        id: "grp_inline",
+        projectId: "web",
+        name: "Release",
+        sessionIds: ["ses_grouped_inline"],
+        version: 1,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+    fixture.sqlite.close();
+  });
+
+  it("fails closed when an existing placement is no longer a root Group", async () => {
+    const worktree = new FakeWorktreeProvider({ now });
+    const fixture = createFixture({ worktree, sessionIds: ["ses_nested_refused"] });
+    await fixture.persistence.createSessionGroup({
+      id: "grp_parent",
+      projectId: "web",
+      name: "Parent",
+      createdAt: now,
+    });
+    await fixture.persistence.createSessionGroup({
+      id: "grp_nested",
+      projectId: "web",
+      name: "Nested",
+      parentGroupId: "grp_parent",
+      createdAt: now,
+    });
+
+    const receipt = await fixture.queue.dispatch({
+      type: "session.create",
+      payload: {
+        projectId: "web",
+        branch: "nested-refused",
+        group: { kind: "existing", groupId: "grp_nested" },
+        harness: { provider: "fake-harness" },
+        terminal: { provider: "fake-terminal" },
+      },
+    });
+    await fixture.queue.drain();
+
+    await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
+      status: "failed",
+      error: { code: "SESSION_GROUP_NOT_ROOT" },
+    });
+    await expect(fixture.persistence.listSessions()).resolves.toEqual([]);
+    expect(worktree.snapshot().worktrees).toEqual([]);
+    fixture.sqlite.close();
+  });
+
   it("passes the opened terminal target into harness launch construction", async () => {
     const harness = new CapturingHarnessProvider({ now });
     const fixture = createFixture({
@@ -713,13 +851,19 @@ describe("session command vertical slice", () => {
         },
       },
     });
-    const fixture = createFixture({ worktree, terminal, sessionIds: ["ses_cleanup_open"] });
+    const fixture = createFixture({
+      worktree,
+      terminal,
+      sessionIds: ["ses_cleanup_open"],
+      sessionGroupIds: ["grp_cleanup_open"],
+    });
 
     const receipt = await fixture.queue.dispatch({
       type: "session.create",
       payload: {
         projectId: "web",
         branch: "cleanup-open",
+        group: { kind: "create", name: "Temporary" },
         harness: { provider: "fake-harness" },
         terminal: { provider: "fake-terminal" },
       },
@@ -746,6 +890,7 @@ describe("session command vertical slice", () => {
     expect(worktree.snapshot().worktrees).toEqual([]);
     await expect(fixture.persistence.listSessions()).resolves.toEqual([]);
     await expect(fixture.persistence.listWorktreeDisplayTitles()).resolves.toEqual([]);
+    await expect(fixture.persistence.listSessionGroups()).resolves.toEqual([]);
     fixture.sqlite.close();
   });
 
@@ -2245,6 +2390,7 @@ function createFixture(
     terminalIntentRunner?: TerminalIntentRunner;
     managedTerminal?: ManagedTerminalLifecycle;
     sessionIds?: string[];
+    sessionGroupIds?: string[];
     featureFlags?: { sessionResumeAgent?: boolean };
   } = {},
 ) {
@@ -2275,6 +2421,7 @@ function createFixture(
     featureFlags,
   });
   const sessionIds = [...(options.sessionIds ?? [])];
+  const sessionGroupIds = [...(options.sessionGroupIds ?? [])];
   registerObserverCommandHandlers({
     projectConfigWriter: createUnexpectedProjectConfigWriter(),
     queue,
@@ -2290,6 +2437,7 @@ function createFixture(
       : { terminalIntentRunner: options.terminalIntentRunner }),
     idFactory: {
       sessionId: () => sessionIds.shift() ?? "ses_fallback",
+      sessionGroupId: () => sessionGroupIds.shift() ?? "grp_fallback",
     },
   });
   return { sqlite, persistence, eventBus, queue, providers, core };

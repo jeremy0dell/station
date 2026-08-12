@@ -364,15 +364,16 @@ reattach; pane borders and neighboring panes must remain unlinked.
 - `@station/client` owns canonical in-process snapshot and connection truth. Its runtime-backed service commits snapshot loads and reconcile results to that same state source before resolving. Snapshot-only native and standalone consumers read `StationClientStateSource`; dashboard-core mirrors the exact snapshot identity only to combine it with screens, filter, focus, collapse, scrolling, widgets, optimistic rows, and toasts.
 - `DashboardStateSource` returns `DashboardStateView`, a recursively readonly type projection that includes snapshots, screens, local rows, widgets, arrays, maps, and sets. The projection preserves the store's exact object and notification identities: it performs no runtime copying, freezing, or proxying. Dashboard readers and Station consumers must accept the exported readonly view types rather than importing private mutable state models.
 - Presentation receives the readonly `DashboardStateSource` for dashboard projection and the canonical client source where snapshot-only rendering requires it. Input adapters receive only their explicit dashboard state and action capabilities, while native and standalone composition roots alone own full runtime lifecycle and inject terminal-specific implementations of the four semantic capability groups. Config persistence receives only the dashboard subscription and `pushToast` capability it needs.
-- Native and standalone input adapters dispatch the closed dashboard action contract rather than importing reducers, replacing runtime state, or returning renderer-control intents. Dashboard-core invokes the injected semantic capability and owns optimistic rows, success/failure dispositions, notices, toasts, and expiry; capability implementations receive stable product requests and canonical client state, never dashboard state or mutation methods. Failed create rows retain the four-second `expiresAt` authority but share one runtime-owned timer targeting the earliest deadline; each firing removes every expired row and schedules the next deadline.
-- New Session and Fork Session expose **Name** as the editable product concept. New Session initially names itself after its generated branch; Fork Session uses `<source>-fork` while its hidden branch carries a collision-resistant token that changes on each fresh open, so an unobserved Git-ref collision is recoverable by retrying. Later name edits may contain spaces and punctuation and never mutate that hidden branch identity. Quick Session uses its generated branch as the default name.
+- Native and standalone input adapters dispatch the closed dashboard action contract rather than importing reducers, replacing runtime state, or returning renderer-control intents. Dashboard-core invokes the injected semantic capability and owns optimistic rows, success/failure dispositions, notices, toasts, and expiry; capability implementations receive stable product requests and canonical client state, never dashboard state or mutation methods. Failed Quick Session rows retain the four-second `expiresAt` authority but share one runtime-owned timer targeting the earliest deadline; each firing removes every expired row and schedules the next deadline. Deliberate New Session has no optimistic or failed root row: its retained sheet is the progress and retry surface. Native successful-but-unconfirmed creation closes that sheet with a refresh-before-retry warning instead of reopening a duplicate submission path.
+- New Session and Fork Session expose **Name** as the editable product concept. New Session initially names itself after its generated branch; Fork Session uses `<source>-fork` while its hidden branch carries a collision-resistant token that changes on each fresh open, so an unobserved Git-ref collision is recoverable by retrying. Later name edits may contain spaces and punctuation and never mutate that hidden branch identity. Quick Session uses its generated branch as the default name. New Session also exposes **Group** between Agent and Create: `G` opens a root-only chooser with `U` Ungrouped, normal slots, and `N` inline Create. Project changes and invalid snapshot replacements reset placement to Ungrouped; Group renames preserve selection by ID.
 - Station service code may use `@station/runtime` (and the shared `@station/client`) for observer IO, subscriptions, command dispatch, timeout, retry, cancellation, and cleanup boundaries. Prefer Effect in boundary code when a single path must coordinate async iterators, cancellation/interruption, cleanup, retry/reconnect, timeouts, and typed error conversion. Keep that Effect usage behind Promise/AsyncIterable facades for React callers.
 - The UI may filter, group, sort, label, and decorate snapshot rows. It must not infer agent truth from provider-specific details.
 - Treat `snapshot.sessions` as session-membership and session/activity-count truth. Dashboard rows,
   filtering, selection, and actions project those sessions and join `snapshot.rows` only for checkout
   metadata; bare worktrees remain inventory and do not appear in the primary session list.
   `snapshot.sessionGroups` exclusively organizes those sessions under their Project; the current
-  dashboard flattens optional parent links and leaves optimistic creates at the Project root.
+  dashboard flattens optional parent links and leaves Quick Session/Fork optimistic creates at the
+  Project root. Deliberate grouped creation first appears from a canonical snapshot with membership.
 - `terminal.focusable` describes external dashboard control, not native Station
   interaction. Native row activation resolves an advertised managed attachment
   and creates or reveals the local pane without dispatching `terminal.focus`;
@@ -611,13 +612,15 @@ submits through a shared semantic action. Copy-focused Enter toggles rather than
 on Name or Fork submits. The managed-session capability hosts native forks in a Station pane and
 routes standalone/tmux forks through the shared Observer-backed implementation.
 
-Create Session review renders Project, Name, and Agent as compact field controls, followed by a
-compact Create button. Labels, bold yellow accelerators (`P`, `N`, `A`, and `C`), values, and inline
+Create Session review renders Project, Name, Agent, and Group as compact field controls, followed by a
+compact Create button. Labels, bold yellow accelerators (`P`, `N`, `A`, `G`, and `C`), values, and inline
 health status use separate spans so their roles and associations remain visible. Arrow focus uses
 a non-color marker and contextual Enter helper without painting the full row as selected. The name
 editor gives Name, Save, and Back independent semantic controls and hides the text cursor while an
 action owns focus. Down moves from the Name field into the button row, Left/Right moves between Save
 and Back, and Up returns to Name; Left/Right remains text-cursor movement while Name owns focus.
+The inline Group editor likewise exposes Save and Back as semantic pointer controls; pointer Save/Back
+and keyboard Enter/Escape invoke the same flow actions, and blank trimmed names keep Save inert.
 Selecting Name sets focus directly and never generates arrow input. Native pointer Create, focused Enter, and
 direct `C` pass through one semantic Create resolver and shared validation before invoking the
 managed-session capability; when validation disables Create, all three activation paths remain

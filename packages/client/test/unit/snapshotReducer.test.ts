@@ -131,7 +131,7 @@ describe("client snapshot reducer", () => {
     expect(removed.snapshot.rows.map((candidate) => candidate.id)).not.toContain("wt_web_added");
   });
 
-  it("requests canonical totals after session membership changes", () => {
+  it("waits for canonical relationship-complete state after session creation", () => {
     const snapshot = createCommandSnapshot("idle");
     const existingSession = snapshot.sessions[0];
     if (existingSession === undefined) {
@@ -146,11 +146,16 @@ describe("client snapshot reducer", () => {
       },
     });
 
-    expect(created.snapshot.sessions).toHaveLength(2);
+    expect(created.snapshot).toBe(snapshot);
+    expect(created.snapshot.sessions).toHaveLength(1);
     expect(created.snapshot.counts.sessions).toBe(1);
     expect(created.needsSnapshotRefresh).toBe(true);
 
-    const removed = applyStationEvent(created.snapshot, {
+    const canonical = {
+      ...created.snapshot,
+      sessions: [...created.snapshot.sessions, { ...existingSession, id: "ses_web_second" }],
+    };
+    const removed = applyStationEvent(canonical, {
       type: "session.removed",
       sessionId: "ses_web_second",
     });

@@ -72,6 +72,19 @@ Semantic execution enters through capabilities selected at composition
 replacement or synthetic key replay. The runtime owns subscriptions, timers,
 operation bookkeeping, and cancellation; disposal is idempotent and testable.
 
+New Session owns one bounded review flow shared by native and standalone
+renderers. Its Group field selects Ungrouped, a current same-project root Group
+by stable ID, or a trimmed inline-create draft. Snapshot replacement preserves
+the stable selection through rename and resets missing, cross-project, or newly
+nested Groups to Ungrouped. Submission retains and disables the sheet until the
+single operation settles; success follows the composition's existing open/focus
+path, while failure restores Group or Create focus and reports one bounded toast.
+Native deliberate creation waits for the first canonical snapshot carrying the
+requested Group relationship and performs one explicit load after timeout. If
+launch succeeded but visibility remains uncertain—or safe cleanup retained the
+fresh worktree—the operation closes with a warning instead of permitting a
+duplicate branch submission.
+
 ## Dashboard hierarchy, cursor, and viewport
 
 Dashboard structure has one projection path:
@@ -106,6 +119,9 @@ one pending row at its new Group and suppress the exact matching ungrouped
 canonical row while the expected membership command converges. That placement
 is renderer-local intent, never inferred or durable membership, and is pruned
 as soon as canonical truth places the session or removes its target.
+Quick Session and Fork otherwise place optimistic create rows at the project
+root until canonical replacement; deliberate New Session retains its sheet and
+never creates such a row.
 The renderer-local `GroupOrderingMode` chooses Groups-first or whole-block
 alphabetical interleaving without changing canonical arrays.
 The internal `treeGrid.ts` controller knows only immutable nodes, ordered cells,
