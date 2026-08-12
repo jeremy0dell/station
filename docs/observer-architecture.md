@@ -763,10 +763,11 @@ independent of SQLite row translation.
 
 `createSqliteObserverPersistence` is the named `ADAPTER` that implements the
 bundle and `PersistenceHealthSource`. SQL, `Sqlite*Row` representations, parsing
-and translation, `BEGIN IMMEDIATE` transaction boundaries, driver differences,
-schema health, and migrations remain at the SQLite edge. Runtime composition
-opens and closes the concrete SQLite handle around that adapter; application
-core never receives it.
+and translation, transaction boundaries, driver differences, schema health, and
+migrations remain at the SQLite edge. Mutations use `BEGIN IMMEDIATE`; pure reads
+use deferred snapshots so concurrent readers do not claim the writer reservation.
+Runtime composition opens and closes the concrete SQLite handle around that adapter;
+application core never receives it.
 
 The typechecked `createInMemoryObserverPersistence` test fixture implements
 exactly the eight-port bundle over private process-local state, with synchronous

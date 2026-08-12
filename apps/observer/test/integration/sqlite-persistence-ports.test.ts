@@ -128,6 +128,67 @@ describe("SQLite-only Observer persistence behavior", () => {
     }
   });
 
+  it("serves pure reads while another connection reserves the writer", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "station-pure-read-contention-"));
+    const path = join(directory, "observer.sqlite");
+    const sqlite = openObserverSqlite({ path, clock: { now: () => new Date(now) } });
+    const persistence = createSqliteObserverPersistence({
+      sqlite,
+      clock: { now: () => new Date(now) },
+    });
+    await persistence.recordCommandAccepted({
+      commandId: "cmd_pure_read",
+      command: { type: "observer.reconcile", payload: { reason: "pure-read" } },
+      createdAt: now,
+    });
+    const writer = openSqlDatabase(path);
+    try {
+      writer.exec("BEGIN IMMEDIATE");
+      await expect(persistence.getCommand("cmd_pure_read")).resolves.toEqual(
+        expect.objectContaining({ id: "cmd_pure_read", status: "accepted" }),
+      );
+      await expect(persistence.listCommands()).resolves.toEqual([
+        expect.objectContaining({ id: "cmd_pure_read", status: "accepted" }),
+      ]);
+      const emptyReads = [
+        () => persistence.listCommandErrors("cmd_pure_read"),
+        () => persistence.listEvents(),
+        () => persistence.listProviderObservations(),
+        () => persistence.listCurrentProviderEntityObservations(),
+        () => persistence.listWorktreeMetadataCurrent(),
+        () => persistence.listSessions(),
+        () => persistence.listSessionGroups(),
+        () => persistence.listWorktreeDisplayTitles(),
+        () => persistence.listSessionHarnessExecutions(),
+        () => persistence.listSessionRecoveryHandles(),
+        () => persistence.listSessionTurnReadiness(),
+      ];
+      for (const read of emptyReads) await expect(read()).resolves.toEqual([]);
+      await expect(
+        persistence.getSessionHarnessExecution({ provider: "codex", sessionId: "ses_missing" }),
+      ).resolves.toBeUndefined();
+      await expect(
+        persistence.findRememberedHarnessProviderForWorktree({
+          projectId: "web",
+          worktreeId: "wt_missing",
+          worktreePath: "/tmp/station/web/missing",
+        }),
+      ).resolves.toBeUndefined();
+      await expect(
+        persistence.getSessionRecoveryHandle("recovery_missing"),
+      ).resolves.toBeUndefined();
+      expect(persistence.health()).toMatchObject({ status: "healthy" });
+      await expect(persistence.recordEvent({ type: "observer.started", at: now })).rejects.toThrow(
+        "PERSISTENCE_TRANSACTION_FAILED",
+      );
+      writer.exec("ROLLBACK");
+    } finally {
+      writer.close();
+      sqlite.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("migrates historical session lifecycle without treating legacy NULL as open", async () => {
     const directory = await mkdtemp(join(tmpdir(), "station-session-lifecycle-"));
     const path = join(directory, "observer.sqlite");
