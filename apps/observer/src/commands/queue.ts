@@ -4,6 +4,7 @@ import type {
   CommandDispatchOptions,
   CommandId,
   CommandReceipt,
+  SafeError,
   StationCommand,
   StationEvent,
   TerminalClosePayload,
@@ -47,11 +48,30 @@ type CommandExecutionContext = Omit<
 
 export type CommandHandler = (context: CommandHandlerContext) => Promise<void>;
 
+export type CommandRecoveryContext = {
+  commandId: CommandId;
+  trace: TraceContext;
+  command: StationCommand;
+  error: SafeError;
+  trigger: "replay" | "startup";
+};
+
+/** Repairs durable terminal state without invoking the original mutation handler. */
+export type CommandRecoveryHandler = (
+  context: CommandRecoveryContext,
+) => Promise<"ignored" | "pending" | "recovered">;
+
 export type CommandQueue = {
   dispatch(command: StationCommand, options?: CommandDispatchOptions): Promise<CommandReceipt>;
+  /** Resumes accepted work and repairs evidence-backed states before startup readiness. */
+  recoverDurableCommands(): Promise<void>;
   drain(): Promise<void>;
   shutdown(): Promise<void>;
   registerHandler(commandType: StationCommand["type"], handler: CommandHandler): void;
+  registerRecoveryHandler(
+    commandType: StationCommand["type"],
+    handler: CommandRecoveryHandler,
+  ): void;
 };
 
 export type CreateCommandQueueOptions = {
@@ -79,9 +99,11 @@ export function createCommandQueue(options: CreateCommandQueueOptions): CommandQ
   const handlers = new Map<StationCommand["type"], CommandHandler>(
     Object.entries(options.handlers ?? {}) as [StationCommand["type"], CommandHandler][],
   );
+  const recoveryHandlers = new Map<StationCommand["type"], CommandRecoveryHandler>();
   // Commands serialize by the narrowest stable identity we can infer; unrelated scopes run in parallel.
   const scopeChains = new Map<string, Promise<void>>();
   const operationAdmissionChains = new Map<CommandId, Promise<void>>();
+  const attemptedRecoveryCommandIds = new Set<CommandId>();
   const executingCommandIds = new Set<CommandId>();
   const pending = new Set<Promise<void>>();
   const controllers = new Set<AbortController>();
@@ -92,7 +114,7 @@ export function createCommandQueue(options: CreateCommandQueueOptions): CommandQ
     context: CommandExecutionContext,
     controller = new AbortController(),
   ): void => {
-    if (shuttingDown || executingCommandIds.has(context.commandId)) return;
+    if (shuttingDown) return;
     const scope = commandScope(context.command);
     const previous = scopeChains.get(scope) ?? Promise.resolve();
     const execution = previous.then(() =>
@@ -119,6 +141,141 @@ export function createCommandQueue(options: CreateCommandQueueOptions): CommandQ
     });
   };
 
+  const repairSucceededEvent = async (current: PersistedCommand): Promise<void> => {
+    const succeededEvents = await options.persistence.listEvents({
+      commandId: current.id,
+      type: "command.succeeded",
+    });
+    if (succeededEvents.length > 0) return;
+    const trace = traceFromRecordedCommand(current);
+    const succeededEvent: StationEvent = {
+      type: "command.succeeded",
+      commandId: current.id,
+      traceId: trace.traceId,
+      spanId: trace.spanId,
+    };
+    await options.persistence.recordEvent(succeededEvent, {
+      commandId: current.id,
+      traceId: trace.traceId,
+      spanId: trace.spanId,
+      createdAt: current.finishedAt ?? nowIso(clock),
+    });
+    options.eventBus?.publish(succeededEvent);
+  };
+
+  const recoverRecordedOperation = async (
+    recorded: PersistedCommand,
+    trigger: CommandRecoveryContext["trigger"] = "replay",
+  ): Promise<void> => {
+    let current = (await options.persistence.getCommand(recorded.id)) ?? recorded;
+    if (current.status === "started" && current.command.type === "worktree.remove") {
+      const worktreeId = current.command.payload.worktreeId;
+      const events = await options.persistence.listEvents({ commandId: current.id });
+      const confirmedRemoval = events.some(
+        ({ event }) => event.type === "worktree.removed" && event.worktreeId === worktreeId,
+      );
+      if (confirmedRemoval) {
+        current = await options.persistence.markCommandSucceeded(current.id, nowIso(clock));
+      }
+    }
+    if (current.status === "succeeded") {
+      await repairSucceededEvent(current);
+      return;
+    }
+    if (current.status === "failed") {
+      const failedEvents = await options.persistence.listEvents({
+        commandId: current.id,
+        type: "command.failed",
+      });
+      if (failedEvents.length === 0 && current.error !== undefined) {
+        const trace = traceFromRecordedCommand(current);
+        const failedEvent: StationEvent = {
+          type: "command.failed",
+          commandId: current.id,
+          error: current.error,
+          traceId: trace.traceId,
+          spanId: trace.spanId,
+        };
+        await options.persistence.recordEvent(failedEvent, {
+          commandId: current.id,
+          traceId: trace.traceId,
+          spanId: trace.spanId,
+          createdAt: current.finishedAt ?? nowIso(clock),
+        });
+        options.eventBus?.publish(failedEvent);
+      }
+      const recoveryHandler = recoveryHandlers.get(current.command.type);
+      if (
+        recoveryHandler !== undefined &&
+        current.error !== undefined &&
+        !attemptedRecoveryCommandIds.has(current.id)
+      ) {
+        // A durable failure receives one repair sequence per queue lifetime; restart permits another.
+        attemptedRecoveryCommandIds.add(current.id);
+        const trace = traceFromRecordedCommand(current);
+        try {
+          const recovery = await recoveryHandler({
+            commandId: current.id,
+            trace,
+            command: current.command,
+            error: current.error,
+            trigger,
+          });
+          if (recovery === "ignored") {
+            attemptedRecoveryCommandIds.delete(current.id);
+          } else if (recovery === "recovered") {
+            current = await options.persistence.markCommandSucceeded(current.id, nowIso(clock));
+            attemptedRecoveryCommandIds.delete(current.id);
+            await repairSucceededEvent(current);
+          }
+        } catch (error) {
+          await options.logger
+            ?.error("Command terminal-state recovery failed.", {
+              commandId: current.id,
+              commandType: current.command.type,
+              traceId: trace.traceId,
+              error,
+            })
+            .catch(() => undefined);
+        }
+      }
+      return;
+    }
+    if (current.status !== "accepted" || executingCommandIds.has(current.id)) {
+      return;
+    }
+    const trace = traceFromRecordedCommand(current);
+    const acceptedEvents = await options.persistence.listEvents({
+      commandId: current.id,
+      type: "command.accepted",
+    });
+    if (acceptedEvents.length === 0) {
+      const acceptedEvent: StationEvent = {
+        type: "command.accepted",
+        commandId: current.id,
+        command: current.command,
+        traceId: trace.traceId,
+        spanId: trace.spanId,
+      };
+      await options.persistence.recordEvent(acceptedEvent, {
+        commandId: current.id,
+        traceId: trace.traceId,
+        spanId: trace.spanId,
+        createdAt: current.createdAt,
+      });
+      options.eventBus?.publish(acceptedEvent);
+    }
+    current = (await options.persistence.getCommand(current.id)) ?? current;
+    if (current.status !== "accepted") {
+      // Re-enter repair when another durable owner advances the command during acceptance repair.
+      await recoverRecordedOperation(current, trigger);
+      return;
+    }
+    if (!executingCommandIds.has(current.id)) {
+      scheduleExecution({ commandId: current.id, trace, command: current.command });
+    }
+  };
+
   const queue: CommandQueue = {
     dispatch: async (inputCommand, dispatchOptions) => {
       const command = StationCommandSchema.parse(inputCommand);
@@ -143,7 +300,9 @@ export function createCommandQueue(options: CreateCommandQueueOptions): CommandQ
         if (dispatchOptions?.operationId !== undefined) {
           const replay = await recordedOperation(options.persistence, commandId, command);
           if (replay !== undefined) {
-            if (replay.receipt.accepted) await resumeAcceptedOperation(replay.recorded);
+            if (replay.receipt.accepted) {
+              await recoverRecordedOperation(replay.recorded);
+            }
             return replay.receipt;
           }
         }
@@ -167,7 +326,9 @@ export function createCommandQueue(options: CreateCommandQueueOptions): CommandQ
           if (dispatchOptions?.operationId !== undefined) {
             const replay = await recordedOperation(options.persistence, commandId, command);
             if (replay !== undefined) {
-              if (replay.receipt.accepted) await resumeAcceptedOperation(replay.recorded);
+              if (replay.receipt.accepted) {
+                await recoverRecordedOperation(replay.recorded);
+              }
               return replay.receipt;
             }
           }
@@ -187,11 +348,53 @@ export function createCommandQueue(options: CreateCommandQueueOptions): CommandQ
         });
         options.eventBus?.publish(acceptedEvent);
         scheduleExecution({ commandId, trace, command });
-        return acceptedReceipt(commandId, trace);
+
+        const receipt: CommandReceipt = {
+          commandId,
+          traceId: trace.traceId,
+          spanId: trace.spanId,
+          accepted: true,
+          status: "accepted",
+        };
+        return CommandReceiptSchema.parse(receipt);
       };
       return dispatchOptions?.operationId === undefined
         ? admit()
         : withOperationAdmission(operationAdmissionChains, commandId, admit);
+    },
+
+    recoverDurableCommands: async () => {
+      const recoverable = await options.persistence.listCommandRecoveryCandidates({
+        failedCommandTypes: [...recoveryHandlers.keys()],
+      });
+      const recover = async (command: PersistedCommand): Promise<void> => {
+        try {
+          await withOperationAdmission(operationAdmissionChains, command.id, () =>
+            recoverRecordedOperation(command, "startup"),
+          );
+        } catch (error) {
+          await options.logger
+            ?.error("Command startup recovery failed.", {
+              commandId: command.id,
+              commandType: command.command.type,
+              error,
+            })
+            .catch(() => undefined);
+        }
+      };
+      const accepted = recoverable.filter((command) => command.status === "accepted");
+      const terminal = recoverable.filter((command) => command.status !== "accepted");
+      await Promise.all([
+        ...terminal.map(recover),
+        (async () => {
+          // Preserve durable admission order before scope chains begin executing accepted work.
+          for (const command of accepted) {
+            if (shuttingDown) break;
+            await recover(command);
+          }
+        })(),
+      ]);
+      await queue.drain();
     },
 
     drain: async () => {
@@ -211,38 +414,11 @@ export function createCommandQueue(options: CreateCommandQueueOptions): CommandQ
     registerHandler: (commandType, handler) => {
       handlers.set(commandType, handler);
     },
-  };
 
-  async function resumeAcceptedOperation(recorded: PersistedCommand): Promise<void> {
-    if (recorded.status !== "accepted" || executingCommandIds.has(recorded.id) || shuttingDown) {
-      return;
-    }
-    const trace = traceFromRecordedCommand(recorded);
-    const acceptedEvents = await options.persistence.listEvents({
-      commandId: recorded.id,
-      type: "command.accepted",
-    });
-    if (acceptedEvents.length === 0) {
-      const acceptedEvent: StationEvent = {
-        type: "command.accepted",
-        commandId: recorded.id,
-        command: recorded.command,
-        traceId: trace.traceId,
-        spanId: trace.spanId,
-      };
-      await options.persistence.recordEvent(acceptedEvent, {
-        commandId: recorded.id,
-        traceId: trace.traceId,
-        spanId: trace.spanId,
-        createdAt: recorded.createdAt,
-      });
-      options.eventBus?.publish(acceptedEvent);
-    }
-    const current = await options.persistence.getCommand(recorded.id);
-    if (current?.status === "accepted") {
-      scheduleExecution({ commandId: current.id, trace, command: current.command });
-    }
-  }
+    registerRecoveryHandler: (commandType, handler) => {
+      recoveryHandlers.set(commandType, handler);
+    },
+  };
 
   return queue;
 }
@@ -258,7 +434,9 @@ async function recordedOperation(
   command: StationCommand,
 ): Promise<{ recorded: PersistedCommand; receipt: CommandReceipt } | undefined> {
   const recorded = await persistence.getCommand(commandId);
-  if (recorded === undefined) return undefined;
+  if (recorded === undefined) {
+    return undefined;
+  }
   if (!isDeepStrictEqual(recorded.command, command)) {
     return {
       recorded,
@@ -305,18 +483,10 @@ async function withOperationAdmission<T>(
     return await task();
   } finally {
     release();
-    if (chains.get(commandId) === current) chains.delete(commandId);
+    if (chains.get(commandId) === current) {
+      chains.delete(commandId);
+    }
   }
-}
-
-function acceptedReceipt(commandId: CommandId, trace: TraceContext): CommandReceipt {
-  return CommandReceiptSchema.parse({
-    commandId,
-    traceId: trace.traceId,
-    spanId: trace.spanId,
-    accepted: true,
-    status: "accepted",
-  });
 }
 
 function receiptFromRecordedOperation(recorded: PersistedCommand): CommandReceipt {
@@ -391,30 +561,34 @@ async function executeCommand(
       trace: context.trace,
     },
     async ({ signal }) => {
-      // Combine runtime timeout and queue shutdown into the signal handlers receive.
-      const linked = linkAbortSignals(signal, runtime?.signal);
-      try {
-        // Check before and after handler work because provider calls may notice abort cooperatively.
-        throwIfAborted(linked.signal);
-        if (handler === undefined) {
-          throw missingCommandHandlerError();
-        }
-        handlerExecution = handler({
-          ...context,
-          signal: linked.signal,
-          beginCommit: () => {
+      handlerExecution = (async () => {
+        // Combine runtime timeout and queue shutdown into the signal handlers receive.
+        const linked = linkAbortSignals(signal, runtime?.signal);
+        try {
+          // Check before and after handler work because provider calls may notice abort cooperatively.
+          throwIfAborted(linked.signal);
+          if (handler === undefined) {
+            throw missingCommandHandlerError();
+          }
+          await handler({
+            ...context,
+            signal: linked.signal,
+            beginCommit: () => {
+              throwIfAborted(linked.signal);
+              commitStarted = true;
+            },
+            markExternalMutationCommitted: () => {
+              externalMutationCommitted = true;
+            },
+          });
+          if (!commitStarted && !externalMutationCommitted) {
             throwIfAborted(linked.signal);
-            commitStarted = true;
-          },
-          markExternalMutationCommitted: () => {
-            externalMutationCommitted = true;
-          },
-        });
-        await handlerExecution;
-        if (!commitStarted && !externalMutationCommitted) throwIfAborted(linked.signal);
-      } finally {
-        linked.cleanup();
-      }
+          }
+        } finally {
+          linked.cleanup();
+        }
+      })();
+      await handlerExecution;
     },
   );
 

@@ -1,7 +1,8 @@
-import { access, chmod, mkdtemp, rm } from "node:fs/promises";
+import { access, chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DEFAULT_WORKSPACE_CONFIG, type StationConfig } from "@station/config";
+import type { CreateWorktreeRequest } from "@station/contracts";
 import { componentLogPath } from "@station/observability";
 import { createObserverClient } from "@station/protocol";
 import {
@@ -201,6 +202,96 @@ describe("observer protocol server", () => {
       await runtime.catch(() => undefined);
     }
   });
+
+  it("cancels accepted mutation recovery when stopped before readiness", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-pre-ready-stop-"));
+    const stateDir = join(root, "state");
+    const projectRoot = join(root, "project");
+    const configPath = join(root, "config.toml");
+    const socketPath = join(root, "observer.sock");
+    await mkdir(stateDir, { recursive: true });
+    await mkdir(projectRoot, { recursive: true });
+    await writeFile(configPath, preReadyStopConfig(projectRoot), "utf8");
+    const commandId = "cmd_pre_ready_stop";
+    const seeded = openObserverSqlite({ path: join(stateDir, "observer.sqlite") });
+    const seededPersistence = createSqliteObserverPersistence({ sqlite: seeded });
+    await seededPersistence.recordCommandAccepted({
+      commandId,
+      command: {
+        type: "worktree.create",
+        payload: { projectId: "web", branch: "pre-ready-stop" },
+      },
+      createdAt: now,
+    });
+    seeded.close();
+    let providerStarted = () => undefined;
+    const providerStart = new Promise<void>((resolveStart) => {
+      providerStarted = resolveStart;
+    });
+    let releaseProvider = () => undefined;
+    const providerRelease = new Promise<void>((resolveRelease) => {
+      releaseProvider = resolveRelease;
+    });
+    class BlockingCreateProvider extends FakeWorktreeProvider {
+      override async createWorktree(request: CreateWorktreeRequest) {
+        providerStarted();
+        await releaseOrAbort(providerRelease, request.signal);
+        return super.createWorktree(request);
+      }
+    }
+    const forcedExit = vi.fn();
+    const processExit = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    const runtime = runObserverMain(
+      [
+        "--config",
+        configPath,
+        "--socket",
+        socketPath,
+        "--state-dir",
+        stateDir,
+        "--startup-timeout-ms",
+        "2000",
+      ],
+      {
+        buildVersion: observerBuildVersion,
+        exit: forcedExit,
+        providerRegistryFactory: () =>
+          new ProviderRegistry({
+            worktree: new BlockingCreateProvider({ id: "worktrunk", now }),
+            terminal: new FakeTerminalProvider({ now }),
+            harnesses: [new FakeHarnessProvider({ now })],
+          }),
+      },
+    );
+    const client = createObserverClient({ socketPath, requestId: ids("pre-ready-stop") });
+    try {
+      await providerStart;
+      const stopped = Promise.all([client.stop(), runtime]);
+      await expect(
+        Promise.race([
+          stopped.then(() => true),
+          new Promise<false>((resolveTimeout) => setTimeout(() => resolveTimeout(false), 500)),
+        ]),
+      ).resolves.toBe(true);
+      releaseProvider();
+      await stopped;
+      const inspected = openObserverSqlite({ path: join(stateDir, "observer.sqlite") });
+      const inspectedPersistence = createSqliteObserverPersistence({ sqlite: inspected });
+      await expect(inspectedPersistence.getCommand(commandId)).resolves.toMatchObject({
+        status: "failed",
+        error: expect.objectContaining({ code: "COMMAND_CANCELLED" }),
+      });
+      inspected.close();
+      expect(forcedExit).not.toHaveBeenCalled();
+    } finally {
+      releaseProvider();
+      await client.stop().catch(() => undefined);
+      await runtime.catch(() => undefined);
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 2100));
+      processExit.mockRestore();
+      await rm(root, { recursive: true, force: true });
+    }
+  }, 5000);
 
   it("keeps production duplicate inspection report-only without blocking health", async () => {
     const { dir, socketPath } = await createTempSocketPath();
@@ -408,6 +499,42 @@ describe("observer protocol server", () => {
     await server.close();
     fixture.sqlite.close();
   });
+
+  it("replays one protocol command identity without a second durable execution", async () => {
+    const { socketPath } = await createTempSocketPath();
+    const fixture = createObserverFixture(socketPath);
+    const server = await startObserverServer({
+      socketPath,
+      api: fixture.api,
+      clock: fixture.clock,
+    });
+    const client = createObserverClient({
+      socketPath,
+      requestId: () => "req_replayed_command",
+    });
+    const command = {
+      type: "observer.reconcile" as const,
+      payload: { reason: "replayed-command" },
+    };
+
+    try {
+      const first = await client.dispatch(command);
+      await fixture.queue.drain();
+      const replay = await client.dispatch(command);
+      await fixture.queue.drain();
+
+      expect(replay).toEqual(first);
+      expect(await fixture.persistence.listCommands()).toHaveLength(1);
+      expect(
+        (await fixture.persistence.listEvents({ commandId: first.commandId })).map(
+          (event) => event.type,
+        ),
+      ).toEqual(["command.accepted", "command.started", "command.succeeded"]);
+    } finally {
+      await server.close();
+      fixture.sqlite.close();
+    }
+  });
 });
 
 function createObserverFixture(socketPath: string) {
@@ -464,7 +591,7 @@ function createObserverFixture(socketPath: string) {
     eventBus,
     clock,
   });
-  return { api, queue, sqlite, clock };
+  return { api, queue, sqlite, persistence, clock };
 }
 
 const config: StationConfig = {
@@ -509,4 +636,42 @@ function observerIds() {
 function ids(prefix: string): () => string {
   let id = 0;
   return () => `${prefix}_${++id}`;
+}
+
+function preReadyStopConfig(projectRoot: string): string {
+  return [
+    "schema_version = 1",
+    "",
+    "[defaults]",
+    'worktree_provider = "worktrunk"',
+    'terminal = "fake-terminal"',
+    'harness = "fake-harness"',
+    'layout = "agent-shell"',
+    "",
+    "[[projects]]",
+    'id = "web"',
+    'label = "web"',
+    `root = ${JSON.stringify(projectRoot)}`,
+    'default_branch = "main"',
+    "",
+    "[projects.worktrunk]",
+    "enabled = true",
+    'base = "main"',
+    "",
+  ].join("\n");
+}
+
+async function releaseOrAbort(release: Promise<void>, signal?: AbortSignal): Promise<void> {
+  await new Promise<void>((resolveRelease, reject) => {
+    const onAbort = () => reject(signal?.reason);
+    if (signal?.aborted === true) {
+      onAbort();
+      return;
+    }
+    signal?.addEventListener("abort", onAbort, { once: true });
+    void release.then(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolveRelease();
+    });
+  });
 }

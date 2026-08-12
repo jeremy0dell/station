@@ -490,6 +490,57 @@ describe("observer persistence", () => {
     sqlite.close();
   });
 
+  it("selects succeeded commands whose indexed success evidence fails strict parsing", async () => {
+    const sqlite = openObserverSqlite({ clock: { now: () => new Date(now) } });
+    const persistence = createSqliteObserverPersistence({
+      sqlite,
+      clock: { now: () => new Date(now) },
+      idFactory: ids(),
+    });
+    const commandIds = ["cmd_bad_json", "cmd_bad_identity", "cmd_extra_field"] as const;
+    for (const commandId of commandIds) {
+      await persistence.recordCommandAccepted({ commandId, command, createdAt: now });
+      await persistence.markCommandStarted(commandId, now);
+      await persistence.markCommandSucceeded(commandId, now);
+    }
+    const insertEvent = sqlite.database.prepare(`
+      INSERT INTO events (id, type, source, command_id, trace_id, span_id, payload_json, created_at)
+      VALUES (?, 'command.succeeded', 'observer', ?, NULL, NULL, ?, ?)
+    `);
+    insertEvent.run("evt_bad_json", commandIds[0], "{", now);
+    insertEvent.run(
+      "evt_bad_identity",
+      commandIds[1],
+      JSON.stringify({ type: "command.succeeded", commandId: "cmd_other" }),
+      now,
+    );
+    insertEvent.run(
+      "evt_extra_field",
+      commandIds[2] ?? "",
+      JSON.stringify({ type: "command.succeeded", commandId: commandIds[2], legacy: true }),
+      now,
+    );
+
+    expect(
+      (await persistence.listCommandRecoveryCandidates({ failedCommandTypes: [] })).map(
+        ({ id }) => id,
+      ),
+    ).toEqual([...commandIds].sort());
+    await expect(persistence.listEvents({ type: "command.succeeded" })).resolves.toEqual([]);
+    insertEvent.run(
+      "evt_repaired_json",
+      commandIds[0] ?? "",
+      JSON.stringify({ type: "command.succeeded", commandId: commandIds[0] }),
+      now,
+    );
+    expect(
+      (await persistence.listCommandRecoveryCandidates({ failedCommandTypes: [] })).map(
+        ({ id }) => id,
+      ),
+    ).toEqual(commandIds.slice(1).sort());
+    sqlite.close();
+  });
+
   it("drops retired provider hook event rows rather than upgrading them", async () => {
     const sqlite = openObserverSqlite({ clock: { now: () => new Date(now) } });
     const persistence = createSqliteObserverPersistence({

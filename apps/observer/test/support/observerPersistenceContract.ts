@@ -193,6 +193,85 @@ export function observerPersistenceContract(
         });
       });
 
+      it("selects unresolved command recovery candidates without deciding their evidence", async () => {
+        await withPersistence(createFixture, async ({ persistence }) => {
+          const removeCommand: StationCommand = {
+            type: "worktree.remove",
+            payload: {
+              worktreeId: "wt_recovery",
+              expectedPath: "/tmp/station/recovery",
+              expectedBranch: "recovery",
+              expectedRegistrationIdentity: "registration:recovery",
+              force: true,
+            },
+          };
+          await persistence.recordCommandAccepted({
+            commandId: "cmd_complete",
+            command,
+            createdAt: now,
+          });
+          await persistence.markCommandStarted("cmd_complete", now);
+          await persistence.markCommandSucceeded("cmd_complete", now);
+          await persistence.recordEvent(
+            { type: "command.succeeded", commandId: "cmd_complete" },
+            { commandId: "cmd_complete", createdAt: now },
+          );
+          await persistence.recordCommandAccepted({
+            commandId: "cmd_missing_success",
+            command,
+            createdAt: now,
+          });
+          await persistence.markCommandStarted("cmd_missing_success", now);
+          await persistence.markCommandSucceeded("cmd_missing_success", now);
+          await persistence.recordCommandAccepted({
+            commandId: "cmd_started_remove",
+            command: removeCommand,
+            createdAt: now,
+          });
+          await persistence.markCommandStarted("cmd_started_remove", now);
+          await persistence.recordCommandAccepted({
+            commandId: "cmd_failed_registered",
+            command,
+            createdAt: now,
+          });
+          await persistence.markCommandStarted("cmd_failed_registered", now);
+          const safeError = contractSafeError("RECOVERY_CANDIDATE");
+          await persistence.markCommandFailed({
+            commandId: "cmd_failed_registered",
+            safeError,
+            envelope: contractEnvelope({
+              id: "err_recovery_candidate",
+              commandId: "cmd_failed_registered",
+              createdAt: now,
+            }),
+            finishedAt: now,
+          });
+          await persistence.recordCommandAccepted({
+            commandId: "cmd_accepted",
+            command,
+            createdAt: now,
+          });
+
+          await expect(
+            persistence.listCommandRecoveryCandidates({
+              failedCommandTypes: ["observer.reconcile"],
+            }),
+          ).resolves.toEqual([
+            expect.objectContaining({ id: "cmd_accepted" }),
+            expect.objectContaining({ id: "cmd_failed_registered" }),
+            expect.objectContaining({ id: "cmd_missing_success" }),
+            expect.objectContaining({ id: "cmd_started_remove" }),
+          ]);
+          await expect(
+            persistence.listCommandRecoveryCandidates({ failedCommandTypes: [] }),
+          ).resolves.toEqual([
+            expect.objectContaining({ id: "cmd_accepted" }),
+            expect.objectContaining({ id: "cmd_missing_success" }),
+            expect.objectContaining({ id: "cmd_started_remove" }),
+          ]);
+        });
+      });
+
       it("rejects duplicate and invalid commands without changing prior state", async () => {
         await withPersistence(createFixture, async ({ persistence }) => {
           await persistence.recordCommandAccepted({

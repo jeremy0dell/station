@@ -44,7 +44,10 @@ import { createTerminalCloseHandler, createTerminalFocusHandler } from "./termin
 import { createTerminalIntentRunner, type TerminalIntentRunner } from "./terminalIntentRunner.js";
 import { createWorktreeCreateHandler } from "./worktree/create.js";
 import { createWorktreeForkHandler } from "./worktree/fork.js";
-import { createWorktreeRemoveHandler } from "./worktree/remove.js";
+import {
+  createWorktreeRemoveHandler,
+  createWorktreeRemoveRecoveryHandler,
+} from "./worktree/remove.js";
 
 export type RegisterObserverCommandHandlersOptions = {
   queue: CommandQueue;
@@ -266,6 +269,16 @@ export function registerObserverCommandHandlers(
   for (const commandType of commandTypes) {
     options.queue.registerHandler(commandType, handlers[commandType]);
   }
+  options.queue.registerRecoveryHandler(
+    "worktree.remove",
+    createWorktreeRemoveRecoveryHandler({
+      core: options.core,
+      persistence: options.persistence,
+      eventBus: options.eventBus,
+      clock: options.clock,
+      logger: options.logger,
+    }),
+  );
 
   void options.logger?.info("Observer command handlers registered.", {
     commandTypes,

@@ -11,7 +11,7 @@ describe("observer startup gate", () => {
     gate.settleReady(() => ({ status: "released" }));
     expect(() => gate.assertReadyForOperation()).not.toThrow();
 
-    gate.requestStop();
+    expect(gate.requestStop()).toBe(false);
     expect(() => gate.assertReadyForOperation()).toThrow(
       expect.objectContaining({ code: "OBSERVER_STOPPING" }),
     );
@@ -24,7 +24,8 @@ describe("observer startup gate", () => {
       shutdownReleased = true;
     });
 
-    gate.requestStop();
+    expect(gate.requestStop()).toBe(true);
+    expect(gate.requestStop()).toBe(false);
     await Promise.resolve();
     expect(shutdownReleased).toBe(false);
 

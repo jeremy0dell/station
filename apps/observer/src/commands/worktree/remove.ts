@@ -26,7 +26,7 @@ import {
   resolveWorktreeRowOrThrow,
   stopHarnessForWorktree,
 } from "../cleanup/index.js";
-import type { CommandHandler } from "../queue.js";
+import type { CommandHandler, CommandRecoveryHandler } from "../queue.js";
 import { reconcileAndPublish } from "../reconcile.js";
 import { findProjectOrThrow, runProviderMutation, throwIfAborted } from "../session/shared.js";
 import type { TerminalIntentRunner } from "../terminalIntentRunner.js";
@@ -49,6 +49,7 @@ export type CreateWorktreeRemoveHandlerOptions = {
  * Revalidates selected checkout and Git registration identity before coordinating removal.
  * Provider-confirmed removal cannot be overwritten by later cancellation or event-journal
  * degradation; it retries atomic session/title retirement once before publishing removal evidence.
+ * A durable retirement failure authorizes only recovery replay of that idempotent completion path.
  */
 export function createWorktreeRemoveHandler(
   options: CreateWorktreeRemoveHandlerOptions,
@@ -276,6 +277,103 @@ function scheduleRemovalReconcile(input: {
       })
       .catch(() => undefined);
   });
+}
+
+/** Recovers only provider-confirmed removal retirement; it never invokes external cleanup. */
+export function createWorktreeRemoveRecoveryHandler(
+  options: Pick<
+    CreateWorktreeRemoveHandlerOptions,
+    "core" | "persistence" | "eventBus" | "clock" | "logger"
+  >,
+): CommandRecoveryHandler {
+  return async (context) => {
+    if (
+      context.command.type !== "worktree.remove" ||
+      context.error.code !== "WORKTREE_REMOVE_RETIREMENT_FAILED" ||
+      context.error.projectId === undefined ||
+      (context.command.payload.projectId !== undefined &&
+        context.error.projectId !== context.command.payload.projectId) ||
+      context.error.worktreeId !== context.command.payload.worktreeId
+    ) {
+      return "ignored";
+    }
+
+    let retirementError: unknown;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        await options.persistence.retireRemovedWorktreeSessionState({
+          projectId: context.error.projectId,
+          worktreeId: context.command.payload.worktreeId,
+          endedAt: nowIso(options.clock),
+        });
+        retirementError = undefined;
+        break;
+      } catch (error) {
+        retirementError = error;
+      }
+    }
+    if (retirementError !== undefined) {
+      await options.logger
+        ?.error("Confirmed worktree removal retirement recovery failed.", {
+          commandId: context.commandId,
+          traceId: context.trace.traceId,
+          projectId: context.command.payload.projectId,
+          worktreeId: context.command.payload.worktreeId,
+          error: retirementError,
+        })
+        .catch(() => undefined);
+      return "pending";
+    }
+
+    let removalEventError: unknown;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        await publishRemovedSessionIfAbsent({
+          previousSessionId: context.error.sessionId,
+          nextSessionIds: new Set(),
+          persistence: options.persistence,
+          eventBus: options.eventBus,
+          context,
+          clock: options.clock,
+        });
+        await publishWorktreeRemoved({
+          worktreeId: context.command.payload.worktreeId,
+          persistence: options.persistence,
+          eventBus: options.eventBus,
+          context,
+          clock: options.clock,
+        });
+        removalEventError = undefined;
+        break;
+      } catch (error) {
+        removalEventError = error;
+      }
+    }
+    if (removalEventError !== undefined) {
+      await options.logger
+        ?.error("Recovered worktree removal event publication failed.", {
+          commandId: context.commandId,
+          traceId: context.trace.traceId,
+          projectId: context.command.payload.projectId,
+          worktreeId: context.command.payload.worktreeId,
+          error: removalEventError,
+        })
+        .catch(() => undefined);
+    }
+    if (context.trigger === "replay") {
+      scheduleRemovalReconcile({
+        core: options.core,
+        eventBus: options.eventBus,
+        clock: options.clock,
+        logger: options.logger,
+        commandId: context.commandId,
+        trace: context.trace,
+        projectId: context.error.projectId,
+        worktreeId: context.command.payload.worktreeId,
+      });
+    }
+    return "recovered";
+  };
 }
 
 function worktreeRemovalRefusalDiagnostic(

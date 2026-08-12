@@ -1,7 +1,9 @@
 import { createFakeTerminalTarget, createFakeWorktree } from "@station/testing";
 import { describe, expect, it } from "vitest";
 import {
+  eventFromRow,
   providerObservationFromRow,
+  type SqliteEventRow,
   type SqliteProviderObservationRow,
 } from "../../src/persistence/rows";
 
@@ -66,6 +68,27 @@ describe("persistence row conversion", () => {
     if (observation.entityKind === "terminal_target") {
       expect(observation.payload.providerData).toBeUndefined();
     }
+  });
+
+  it("rejects event rows whose indexed metadata contradicts the strict payload", () => {
+    const row: SqliteEventRow = {
+      id: "evt_1",
+      type: "command.succeeded",
+      source: "observer",
+      command_id: "cmd_1",
+      trace_id: null,
+      span_id: null,
+      payload_json: JSON.stringify({ type: "command.succeeded", commandId: "cmd_1" }),
+      created_at: now,
+    };
+
+    expect(eventFromRow(row)).toMatchObject({ type: "command.succeeded", commandId: "cmd_1" });
+    expect(() => eventFromRow({ ...row, type: "command.failed" })).toThrow(
+      "metadata does not match",
+    );
+    expect(() => eventFromRow({ ...row, command_id: "cmd_other" })).toThrow(
+      "metadata does not match",
+    );
   });
 });
 

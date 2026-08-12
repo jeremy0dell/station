@@ -20,9 +20,11 @@ export function fakeObserverCommandQueue(): CommandQueue {
     dispatch: async () => {
       throw new Error("dispatch is not used by this test.");
     },
+    recoverDurableCommands: async () => undefined,
     drain: async () => undefined,
     shutdown: async () => undefined,
     registerHandler: () => undefined,
+    registerRecoveryHandler: () => undefined,
   };
 }
 

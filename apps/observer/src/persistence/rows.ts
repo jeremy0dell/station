@@ -5,6 +5,7 @@ import {
   SessionGroupViewSchema,
   StationCommandSchema,
   StationEventSchema,
+  stationEventCommandId,
 } from "@station/contracts";
 import { parseJson } from "./json.js";
 import { parseProviderObservation } from "./observationParser.js";
@@ -137,6 +138,13 @@ export function commandErrorFromRow(row: SqliteCommandErrorRow): PersistedComman
 
 export function eventFromRow(row: SqliteEventRow): PersistedEvent {
   const event = StationEventSchema.parse(parseJson(row.payload_json));
+  const payloadCommandId = stationEventCommandId(event);
+  if (
+    row.type !== event.type ||
+    (payloadCommandId !== undefined && row.command_id !== payloadCommandId)
+  ) {
+    throw new Error("Event row metadata does not match its payload.");
+  }
   const persistedEvent: PersistedEvent = {
     id: row.id,
     type: event.type,

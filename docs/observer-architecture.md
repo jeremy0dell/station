@@ -187,7 +187,7 @@ ownership even where current ownership is still a deviation.
 | Recorded mutations | Driving | `StationCommand`, `dispatch`, command handlers | CLI, Station client, protocol client | Commands persist acceptance and completion; the production handler map is compile-time exhaustive over the command union. |
 | Provider hook delivery | Driving | provider hook ingress | `stn-ingress`, protocol method, offline spool, provider hook adapters | Raw input is validated once and provider vocabulary is normalized at the adapter boundary. |
 | Harness status delivery | Driving | harness event report ingress | harness hooks, provider hook adapters, protocol clients | Reports are deduplicated, queued, projected, persisted, and followed by reconcile. |
-| Worktree operations | Driven | `WorktreeProvider` | Worktrunk and test adapters | Strong purpose-owned port; targeted lookups and removals revalidate current Git identity, managed-root containment, and unforced dirty state before returning evidence or mutating. Mutation requests carry cooperative cancellation into adapter-owned reads and subprocesses. |
+| Worktree operations | Driven | `WorktreeProvider` | Worktrunk and test adapters | Strong purpose-owned port; mutation requests carry cooperative cancellation into adapter-owned reads and subprocesses, while cancelled removals use fresh Git evidence to distinguish preserved targets from completed deletion. |
 | Terminal operations | Driven | `TerminalProvider` | tmux, Station terminal, and test adapters | General topology and operations are provider-owned. |
 | Managed terminal lifecycle | Driven | `ManagedTerminalLifecycle` | Station terminal adapter, optionally backed by Station Host | Explicit injected role returning only an opaque target identity and declaring whether launched processes persist beyond the caller; Host backing may add spawn/list/close/attachment lifecycle, while Station retains native presentation and host-backed targets remain externally non-focusable. |
 | Harness operations | Driven | `HarnessProvider`, `SessionRecoveryArtifactLocator` | Claude, Codex, Cursor, OpenCode, Pi, scripted, and test adapters | Strong purpose-owned ports with provider-local parsing, compatibility admission, and exact recovery-artifact location; unsupported artifact providers make migration ineligible. |
@@ -245,7 +245,7 @@ No single layer owns all truth.
 | State | Authority and lifetime |
 | --- | --- |
 | Loaded config | Authoritative for managed projects, defaults, provider choices, feature policy, and configured hooks. Durable in TOML; loaded into process memory at startup and updated through explicit config operations. |
-| Provider observations | Each provider is authoritative only for external facts it can prove. Live reads and normalized ingress observations may be persisted with retention, but cached evidence does not outrank a newer provider read. A persisted worktree observation may supply a targeted lookup's path and registration hint only when the provider revalidates current native evidence before returning it. |
+| Provider observations | Each provider is authoritative only for external facts it can prove. Live reads and normalized ingress observations may be persisted with retention, but cached evidence does not outrank a newer provider read. A persisted worktree observation may supply a restart lookup's path and registration hint only when the provider revalidates current targeted evidence before returning it. |
 | Provider-owned identity | Worktree, target, harness-run, native execution, and external endpoint identity stays owned by the provider that minted it. Application code may carry opaque IDs but must not reconstruct their format. |
 | Observer-minted state | Command, event, error, report, session, Session Group, correlation, readiness, and recovery identities are legitimate internal facts minted by the observer. The observer does not invent external facts. |
 | Observer SQLite | Durable observer memory for commands, events, ingress dedupe, observations, correlations, sessions, project-local Session Groups, canonical worktree display titles, native-execution bindings, metadata caches, recovery handles, and readiness. Group membership is exclusive per session, while Group deletion changes only organizational rows. Display-title authority is keyed by `(projectId, worktreeId)` and survives transient provider observation gaps; it is not branch or provider identity. |
@@ -344,7 +344,8 @@ defined startup failure path and shutdown owner.
 
 The API stop path first aborts and awaits duplicate inspection, then stops
 provider-health publication, refuses queued reconciles and awaits an active scheduler flush,
-drains harness ingress, marks metadata refresh terminal, aborts active local and repository reads, shuts down ref invalidation,
+drains harness ingress, marks metadata refresh
+terminal, aborts active local and repository reads, shuts down ref invalidation,
 and waits for the refresh flight before process shutdown. Ref-watcher shutdown
 invalidates callbacks first, clears debounce timers, attempts every close despite
 individual failures, and makes later replacement and callbacks no-ops. During
@@ -356,6 +357,11 @@ new commands, aborts running handlers cooperatively, and waits for their
 per-scope chains; configured event hooks and the protocol server then close
 before SQLite. A bounded process backstop prevents a handler that ignores
 cancellation from keeping a stopped Observer alive indefinitely.
+Before readiness, stop begins command-queue cancellation immediately so accepted
+recovery cannot hold startup settlement; ready-state shutdown retains the ordinary
+API-first ordering. Recovery stops admitting accepted rows once shutdown begins,
+leaving never-started records durable for a later owner while started cooperative
+handlers record cancellation.
 
 The exact socket, pidfile, listener-abandonment, displacement, and explicit CLI
 stop/restart ordering is part of the canonical
@@ -367,8 +373,8 @@ architecture-level ownership specification.
 ### Command Execution
 
 ```text
-client -> transport validation -> ObserverApi.dispatch
-       -> validate command -> persist accepted -> publish accepted
+client -> transport validation + replay identity -> ObserverApi.dispatch
+       -> validate command -> resolve or persist durable admission -> publish accepted
        -> serialize by command scope -> persist/publish started
        -> handler -> policies and driven ports -> reconcile when required
        -> persist/publish succeeded or failed -> command query/completion wait
@@ -380,13 +386,6 @@ unrelated scopes may run concurrently. Failure is normalized into `SafeError`,
 persisted with trace correlation, and published. A failed command does not
 poison the following command in its scope.
 
-The protocol client retries a lost dispatch response once with the same request
-identity. Command admission derives the same durable command ID and returns the
-recorded receipt for exact replay. A stranded `accepted` record resumes once and
-repairs missing acceptance evidence, while `started` and terminal records never
-reexecute. Reusing an identity with different command input refuses before
-mutation; a fresh request identity always denotes a distinct command.
-
 Recorded `sessionGroup.create`, `sessionGroup.rename`,
 `sessionGroup.updateMembership`, `sessionGroup.reparent`, and `sessionGroup.delete` commands serialize by
 project. Inside the snapshot-writer turn they validate configured-project and
@@ -397,25 +396,57 @@ Changed Group events derive from the mutation result and are persisted and publi
 canonical order before command success; validated no-ops emit no Group event. This path
 does not read providers or publish `observer.reconciled`.
 
-`session.startAgent` and `session.resumeAgent` use current targeted provider evidence when
-the selected worktree is absent from the snapshot. A persisted path and registration
-identity may seed that lookup, but only the provider's fresh validation authorizes launch;
-full-inventory convergence runs afterward without holding foreground completion.
+The protocol client retries a lost dispatch response once with the same request
+identity. Command admission derives the same durable command ID after process or
+queue reconstruction and returns the recorded receipt. An exact replay schedules
+a stranded `accepted` record once, repairing its missing acceptance event when
+needed. `started` records never execute again because work may already have
+crossed an external mutation boundary. A started removal becomes succeeded only
+when its own durable `worktree.removed` event names the selected worktree and
+proves provider-confirmed completion; current provider state, session state, or a
+session event alone is not provenance. Replay also repairs a missing success event
+for an already-succeeded record and reconstructs a missing failure event from an
+already-failed record's persisted public `SafeError`; neither repair reexecutes a handler.
+One recovery-only handler may repair a known terminal failure at most once per queue
+lifetime. The current handler accepts only a provider-confirmed removal whose exact
+command/error identities say durable session retirement failed; it repeats no external
+cleanup, retries only the idempotent retirement transaction, then publishes removal and
+success evidence. A persistent repair failure remains failed and evidence-free until a
+later process can attempt recovery again. After binding and watching its socket, the owning
+Observer runs one durable-command recovery pass before readiness; it repairs missing terminal
+events and evidence-backed started removals, runs registered failed-command recovery without
+invoking original mutation handlers, and resumes accepted commands through their ordinary
+scope-serialized handlers. Recovery drains resumed work before readiness; ambiguous started
+commands remain untouched, and per-command failure is logged without blocking peers. Startup repairs fold snapshot
+convergence into the normal single startup reconcile; client-triggered replay retains its
+non-blocking deferred reconcile. `CommandJournal` selects unresolved coarse candidates with
+indexed lifecycle-event evidence; it parses indexed success rows through the shared strict schema
+so corrupt row metadata or payloads cannot suppress repair. The queue still parses each command
+candidate and owns final evidence ranking.
+Reusing that identity with different command input refuses before mutation; a
+fresh identity remains a distinct command and is never inferred from branch or
+path coincidence.
 
 `worktree.remove` carries the selected worktree ID, canonical path, branch, and
 opaque Git registration identity. Its use case refreshes provider evidence and
 uniquely re-resolves that identity before terminal or worktree cleanup, refusing
 primary, default-branch, stale, missing, or ambiguous targets. The worktree
-adapter rechecks the expected registration identity, path, branch, managed-root
-containment, and unforced dirty state immediately before mutation so an external
-checkout replacement cannot reuse the selected path and branch as removal
-identity. Targeted reads treat supplied paths and registration identities as hints
-and return only current Git-validated observations. Adapter race refusals retain
-provider-neutral, trace-correlated diagnostic evidence. After provider-confirmed
-removal, the command retries atomic session/title retirement once, publishes
-removal evidence, and schedules full-inventory repair without holding command
-completion behind it. Cancellation after that irreversible confirmation cannot
-replace the authoritative removal result.
+adapter rechecks the expected registration identity, path, and branch immediately
+before mutation so an external checkout replacement cannot reuse the selected
+path and branch as removal identity. Adapter race refusals retain provider-neutral,
+trace-correlated diagnostic evidence. After provider-confirmed removal, the
+command retries the atomic session/title retirement transaction once, publishes
+removal evidence, and starts reconcile repair without holding completion behind the inventory scan. Repair
+failure or cancellation after confirmation cannot replace the removal result.
+If both synchronous retirement attempts fail, the failed command itself preserves
+provider confirmation and exact project/worktree/session repair identity. Exact replay
+can later retire only that durable state and complete evidence; it never calls Worktrunk,
+the harness, or the terminal again.
+Before confirmation, the command's cooperative signal reaches provider-owned Git
+and Worktrunk subprocesses so cancellation can still prevent deletion. Removal
+events are idempotent per command and retry once after a partial journal failure;
+persistent event degradation is logged and left to snapshot reconcile without
+changing the provider-confirmed command result.
 
 ### Session Recovery Cutover
 
@@ -701,9 +732,9 @@ expires.
 | Socket ownership evidence | Connect success proves listening. Only `ECONNREFUSED`, or Bun's existing-path `ENOENT`, plus strict zero-holder `lsof` evidence proves stale. Permission failures, timeouts, live holders, evidence failure, path replacement, and non-socket collisions are inaccessible and authorize no spawn, unlink, stop, or signal. |
 | Observer build ordering | Health and pidfile `version` carry display SemVer plus reserved `station.<sha256>` build metadata derived from both repository inputs and production package outputs. Exact identified selectors attach. At one display version, the lexicographically greater immutable build identity is the only candidate allowed to replace; the loser and any missing legacy identity refuse, so neither silently delegates to different code. Each source process verifies the published identity once before adopting it and reuses that selector without further Git or hash I/O for its lifetime. Different display versions retain SemVer precedence and the existing exact-string equal-precedence tiebreak, except that the declared public reset orders `0.0.0-pre-alpha.*` after internal `0.7.1-rc.*` previews. Missing, invalid, or stale identities refuse. Replacement requires complete corroborating identity and never uses automatic SIGKILL. |
 | Command ordering | Commands serialize by session, worktree, project, terminal target, or command-specific fallback scope. Different scopes can execute concurrently. |
-| Command admission replay | A protocol request identity deterministically addresses one durable command record. Exact replay returns its original receipt and may resume only a never-started accepted record; changed input for that identity refuses. The client retries only dispatch transport and preserves the identity across attempts. |
 | Managed target release | Station target IDs are deterministic per worktree, so release is compare-and-delete on target plus expected Station session. A delayed old exit or failed-launch cleanup cannot remove a replacement binding; `false` proves absence or supersession, while rejection leaves cleanup uncertain. |
-| Command timeout and cancellation | Handlers receive a signal combining the runtime timeout and queue shutdown. A handler with a non-cancellable durable section calls `beginCommit` after read-only validation and immediately before its first write; cancellation may prevent entry, but the queue drains a begun commit to one completion. Create and fork pass that signal into provider-owned reads and subprocesses; a timeout that cannot prove whether mutation completed returns an outcome-unknown error and schedules nonblocking reconcile repair. A provider-confirmed irreversible removal marks its external mutation committed so later timeout or cancellation drains synchronous classification instead of overwriting accurate success. Other cancellation remains cooperative, and the process shutdown backstop handles ignored signals. |
+| Command admission replay | A protocol request identity deterministically addresses one durable command record. Exact replay returns its original receipt without another event or handler run; changed input for that identity refuses. The client retries only the dispatch transport once and preserves the identity across attempts. |
+| Command timeout and cancellation | Handlers receive a signal combining the runtime timeout and queue shutdown. A handler with a non-cancellable durable section calls `beginCommit` after read-only validation and immediately before its first write; cancellation may prevent entry, but the queue drains a begun commit to one completion. Create and fork timeouts report an outcome-unknown error because an external tool may already have mutated, then start non-blocking reconcile repair without delaying the response behind inventory discovery. A provider-confirmed irreversible removal marks its external mutation committed so a later timeout or cancellation drains synchronous classification instead of overwriting accurate success; its pre-confirmation Git and Worktrunk subprocesses remain cancellable. Other cancellation remains cooperative, and the process shutdown backstop handles ignored signals. |
 | Snapshot writer ordering | Full reconciles, Group mutation commits, and harness-report authorization plus base projection share a non-poisoning promise chain. A Group mutation projects only its command project and never scans providers, repairs other durable state, or publishes a reconcile event. Readiness persistence revalidates the live snapshot after its write. Scheduled reconcile requests coalesce; queued work after a run receives a later flush. |
 | Persisted harness compatibility | A harness adapter may use a provider-local strict schema to reject recognizable observations accepted by an earlier build. Unparseable legacy data remains admitted. Reconcile excludes only provider-rejected observations, then atomically replaces the affected session's derived native binding and readiness from the remaining admitted history; a succeeded acknowledgement remains authoritative. |
 | Provider reads | Reads are timeboxed, retried at the runtime boundary, and concurrency-limited. Failures become provider health and reconcile errors. |
@@ -782,10 +813,11 @@ independent of SQLite row translation.
 
 `createSqliteObserverPersistence` is the named `ADAPTER` that implements the
 bundle and `PersistenceHealthSource`. SQL, `Sqlite*Row` representations, parsing
-and translation, `BEGIN IMMEDIATE` transaction boundaries, driver differences,
-schema health, and migrations remain at the SQLite edge. Runtime composition
-opens and closes the concrete SQLite handle around that adapter; application
-core never receives it.
+and translation, transaction boundaries, driver differences, schema health, and
+migrations remain at the SQLite edge. Mutations use `BEGIN IMMEDIATE`; pure reads
+use deferred snapshots so concurrent readers do not claim the writer reservation.
+Runtime composition opens and closes the concrete SQLite handle around that adapter;
+application core never receives it.
 
 The typechecked `createInMemoryObserverPersistence` test fixture implements
 exactly the eight-port bundle over private process-local state, with synchronous

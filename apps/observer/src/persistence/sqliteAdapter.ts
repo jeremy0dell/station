@@ -63,6 +63,8 @@ export function createSqliteObserverPersistence(
       }
       return mutation.result;
     });
+  const readTransaction = <T>(task: (database: SqlDatabase) => T): Promise<T> =>
+    Effect.runPromise(runSqliteTransactionEffect(options.sqlite, task, "deferred"));
 
   return {
     health: () => options.sqlite.health(),
@@ -94,12 +96,15 @@ export function createSqliteObserverPersistence(
       ),
 
     getCommand: (commandId) =>
-      transaction((database) => commandStore.getCommand(database, commandId)),
+      readTransaction((database) => commandStore.getCommand(database, commandId)),
 
-    listCommands: () => transaction(commandStore.listCommands),
+    listCommands: () => readTransaction(commandStore.listCommands),
+
+    listCommandRecoveryCandidates: (input) =>
+      readTransaction((database) => commandStore.listCommandRecoveryCandidates(database, input)),
 
     listCommandErrors: (commandId) =>
-      transaction((database) => commandStore.listCommandErrors(database, commandId)),
+      readTransaction((database) => commandStore.listCommandErrors(database, commandId)),
 
     recordEvent: (event, eventOptions = {}) =>
       transaction((database) => {
@@ -211,7 +216,7 @@ export function createSqliteObserverPersistence(
         return { deduped: false, observations };
       }),
 
-    listEvents: (filter = {}) => transaction((database) => listEvents(database, filter)),
+    listEvents: (filter = {}) => readTransaction((database) => listEvents(database, filter)),
 
     recordProviderObservation: (input) =>
       transaction((database) =>
@@ -223,7 +228,7 @@ export function createSqliteObserverPersistence(
       ),
 
     listProviderObservations: (listOptions = {}) =>
-      transaction((database) =>
+      readTransaction((database) =>
         listProviderObservations(database, {
           ...(listOptions.entityKind === undefined ? {} : { entityKind: listOptions.entityKind }),
           ...(listOptions.includeExpired === undefined
@@ -235,7 +240,7 @@ export function createSqliteObserverPersistence(
       ),
 
     listCurrentProviderEntityObservations: (listOptions = {}) =>
-      transaction((database) =>
+      readTransaction((database) =>
         listCurrentProviderEntityObservations(database, {
           ...(listOptions.entityKind === undefined ? {} : { entityKind: listOptions.entityKind }),
           ...(listOptions.includeExpired === undefined
@@ -257,7 +262,7 @@ export function createSqliteObserverPersistence(
       ),
 
     listWorktreeMetadataCurrent: (listOptions = {}) =>
-      transaction((database) =>
+      readTransaction((database) =>
         worktreeMetadataCurrentStore.listWorktreeMetadataCurrent(database, {
           ...(listOptions.kind === undefined ? {} : { kind: listOptions.kind }),
           ...(listOptions.includeExpired === undefined
@@ -287,7 +292,7 @@ export function createSqliteObserverPersistence(
         });
       }),
 
-    listSessions: () => transaction(correlationStore.listSessions),
+    listSessions: () => readTransaction(correlationStore.listSessions),
 
     listSessionGroups: () =>
       transaction((database) =>
@@ -343,15 +348,15 @@ export function createSqliteObserverPersistence(
       ),
 
     listWorktreeDisplayTitles: () =>
-      transaction(worktreeDisplayTitleStore.listWorktreeDisplayTitles),
+      readTransaction(worktreeDisplayTitleStore.listWorktreeDisplayTitles),
 
     getSessionHarnessExecution: (input) =>
-      transaction((database) =>
+      readTransaction((database) =>
         sessionHarnessExecutionStore.getSessionHarnessExecution(database, input),
       ),
 
     listSessionHarnessExecutions: () =>
-      transaction(sessionHarnessExecutionStore.listSessionHarnessExecutions),
+      readTransaction(sessionHarnessExecutionStore.listSessionHarnessExecutions),
 
     repairSessionHarnessDerivedState: (input) =>
       transaction((database) => {
@@ -391,7 +396,7 @@ export function createSqliteObserverPersistence(
       }),
 
     findRememberedHarnessProviderForWorktree: (input) =>
-      transaction((database) =>
+      readTransaction((database) =>
         correlationStore.findRememberedHarnessProviderForWorktree(database, input),
       ),
 
@@ -481,12 +486,12 @@ export function createSqliteObserverPersistence(
       ),
 
     getSessionRecoveryHandle: (handleId) =>
-      transaction((database) =>
+      readTransaction((database) =>
         sessionRecoveryHandleStore.getSessionRecoveryHandle(database, handleId),
       ),
 
     listSessionRecoveryHandles: (listOptions = {}) =>
-      transaction((database) =>
+      readTransaction((database) =>
         sessionRecoveryHandleStore.listSessionRecoveryHandles(database, listOptions),
       ),
 
@@ -501,7 +506,7 @@ export function createSqliteObserverPersistence(
       }),
 
     listSessionTurnReadiness: () =>
-      transaction((database) => sessionTurnReadinessStore.listSessionTurnReadiness(database)),
+      readTransaction((database) => sessionTurnReadinessStore.listSessionTurnReadiness(database)),
 
     deleteSessionTurnReadiness: (input) =>
       transaction((database) =>

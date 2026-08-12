@@ -754,6 +754,18 @@
           "purpose": null
         },
         {
+          "name": "CommandRecoveryContext",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "CommandRecoveryHandler",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "createCommandQueue",
           "kind": "function",
           "role": null,
@@ -823,6 +835,7 @@
             "CommandDispatchOptions",
             "CommandId",
             "CommandReceipt",
+            "SafeError",
             "StationCommand",
             "StationEvent",
             "TerminalClosePayload",
@@ -1093,7 +1106,7 @@
           "specifier": "./worktree/remove.js",
           "resolvedPath": "apps/observer/src/commands/worktree/remove.ts",
           "edgeKind": "runtime",
-          "bindings": ["createWorktreeRemoveHandler"]
+          "bindings": ["createWorktreeRemoveHandler", "createWorktreeRemoveRecoveryHandler"]
         },
         {
           "specifier": "../features/evaluator.js",
@@ -2976,11 +2989,17 @@
           "name": "createWorktreeRemoveHandler",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Revalidates selected checkout and Git registration identity before coordinating removal. Provider-confirmed removal cannot be overwritten by later cancellation or event-journal degradation; it retries atomic session/title retirement once before publishing removal evidence."
+          "purpose": "Revalidates selected checkout and Git registration identity before coordinating removal. Provider-confirmed removal cannot be overwritten by later cancellation or event-journal degradation; it retries atomic session/title retirement once before publishing removal evidence. A durable retirement failure authorizes only recovery replay of that idempotent completion path."
         },
         {
           "name": "CreateWorktreeRemoveHandlerOptions",
           "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "createWorktreeRemoveRecoveryHandler",
+          "kind": "function",
           "role": null,
           "purpose": null
         }
@@ -3012,7 +3031,7 @@
           "specifier": "../queue.js",
           "resolvedPath": "apps/observer/src/commands/queue.ts",
           "edgeKind": "type-only",
-          "bindings": ["CommandHandler"]
+          "bindings": ["CommandHandler", "CommandRecoveryHandler"]
         },
         {
           "specifier": "../reconcile.js",
@@ -4269,6 +4288,18 @@
         },
         {
           "name": "CommandQueue",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "CommandRecoveryContext",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "CommandRecoveryHandler",
           "kind": "type",
           "role": null,
           "purpose": null
@@ -6848,6 +6879,25 @@
       ]
     },
     {
+      "path": "apps/observer/src/migrations/018_command_recovery_lookup.ts",
+      "exports": [
+        {
+          "name": "commandRecoveryLookupMigration",
+          "kind": "const",
+          "role": null,
+          "purpose": null
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "./migration.js",
+          "resolvedPath": "apps/observer/src/migrations/migration.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ObserverSqliteMigration"]
+        }
+      ]
+    },
+    {
       "path": "apps/observer/src/migrations/index.ts",
       "exports": [
         {
@@ -6973,6 +7023,12 @@
           "bindings": ["sessionGroupsMigration"]
         },
         {
+          "specifier": "./018_command_recovery_lookup.js",
+          "resolvedPath": "apps/observer/src/migrations/018_command_recovery_lookup.ts",
+          "edgeKind": "runtime",
+          "bindings": ["commandRecoveryLookupMigration"]
+        },
+        {
           "specifier": "./migration.js",
           "resolvedPath": "apps/observer/src/migrations/migration.ts",
           "edgeKind": "type-only",
@@ -7003,6 +7059,12 @@
         },
         {
           "name": "listCommandErrors",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "listCommandRecoveryCandidates",
           "kind": "function",
           "role": null,
           "purpose": null
@@ -7049,13 +7111,13 @@
           "specifier": "./rows.js",
           "resolvedPath": "apps/observer/src/persistence/rows.ts",
           "edgeKind": "runtime",
-          "bindings": ["commandErrorFromRow", "commandFromRow"]
+          "bindings": ["commandErrorFromRow", "commandFromRow", "eventFromRow"]
         },
         {
           "specifier": "./rows.js",
           "resolvedPath": "apps/observer/src/persistence/rows.ts",
           "edgeKind": "type-only",
-          "bindings": ["SqliteCommandErrorRow", "SqliteCommandRow"]
+          "bindings": ["SqliteCommandErrorRow", "SqliteCommandRow", "SqliteEventRow"]
         },
         {
           "specifier": "./types.js",
@@ -8207,7 +8269,8 @@
             "SafeErrorSchema",
             "SessionGroupViewSchema",
             "StationCommandSchema",
-            "StationEventSchema"
+            "StationEventSchema",
+            "stationEventCommandId"
           ]
         },
         {
@@ -13947,7 +14010,7 @@
       "declaration": "createWorktreeRemoveHandler",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Revalidates selected checkout and Git registration identity before coordinating removal. Provider-confirmed removal cannot be overwritten by later cancellation or event-journal degradation; it retries atomic session/title retirement once before publishing removal evidence.",
+      "purpose": "Revalidates selected checkout and Git registration identity before coordinating removal. Provider-confirmed removal cannot be overwritten by later cancellation or event-journal degradation; it retries atomic session/title retirement once before publishing removal evidence. A durable retirement failure authorizes only recovery replay of that idempotent completion path.",
       "dependencies": [
         {
           "path": "apps/observer/src/stationLogger.ts",

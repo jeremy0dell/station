@@ -819,6 +819,138 @@ describe("cleanup command handlers", () => {
     fixture.sqlite.close();
   });
 
+  it("repairs a durable confirmed-removal retirement failure without repeating cleanup", async () => {
+    const fixture = createFixture({
+      state: "working",
+      worktreeRetirementFailures: 2,
+    });
+    await fixture.core.reconcile("pre-durable-retirement-repair");
+    const selected = fixture.core.getSnapshot().rows[0];
+    if (selected?.registrationIdentity === undefined) {
+      throw new Error("Expected a verified removal selection.");
+    }
+    const command = {
+      type: "worktree.remove" as const,
+      payload: {
+        worktreeId: selected.id,
+        projectId: selected.projectId,
+        expectedPath: selected.path,
+        expectedBranch: selected.branch,
+        expectedRegistrationIdentity: selected.registrationIdentity,
+        force: true,
+      },
+    };
+    const operationId = "cleanup-durable-retirement-repair";
+
+    const original = await fixture.queue.dispatch(command, { operationId });
+    await fixture.queue.drain();
+    await expect(fixture.persistence.getCommand(original.commandId)).resolves.toMatchObject({
+      status: "failed",
+      error: { code: "WORKTREE_REMOVE_RETIREMENT_FAILED" },
+    });
+    expect(fixture.worktreeRetirementAttempts()).toBe(2);
+    const cleanupBefore = {
+      removed: fixture.worktree.snapshot().removed,
+      stopped: fixture.harness.snapshot().stopped,
+      closed: fixture.terminal.snapshot().closed,
+    };
+
+    const [first, concurrent] = await Promise.all([
+      fixture.queue.dispatch(command, { operationId }),
+      fixture.queue.dispatch(command, { operationId }),
+    ]);
+    await fixture.queue.drain();
+
+    expect(concurrent).toEqual(first);
+    expect(fixture.worktreeRetirementAttempts()).toBe(3);
+    expect({
+      removed: fixture.worktree.snapshot().removed,
+      stopped: fixture.harness.snapshot().stopped,
+      closed: fixture.terminal.snapshot().closed,
+    }).toEqual(cleanupBefore);
+    await expect(fixture.persistence.getCommand(original.commandId)).resolves.toMatchObject({
+      status: "succeeded",
+    });
+    await expect(
+      fixture.persistence.listEvents({ commandId: original.commandId }),
+    ).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: "command.failed" }),
+        expect.objectContaining({ type: "session.removed" }),
+        expect.objectContaining({ type: "worktree.removed" }),
+        expect.objectContaining({ type: "command.succeeded" }),
+      ]),
+    );
+    await expect(fixture.persistence.listSessions()).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "ses_web_cleanup", lifecycle: "ended" }),
+      ]),
+    );
+    await expect(fixture.persistence.listWorktreeDisplayTitles()).resolves.toEqual([]);
+    await vi.waitFor(() => expect(fixture.core.getSnapshot().rows).toEqual([]));
+    fixture.sqlite.close();
+  });
+
+  it("attempts persistent durable retirement recovery once per queue lifetime", async () => {
+    const fixture = createFixture({
+      state: "working",
+      worktreeRetirementFailures: "persistent",
+    });
+    await fixture.core.reconcile("pre-persistent-durable-retirement-repair");
+    const selected = fixture.core.getSnapshot().rows[0];
+    if (selected?.registrationIdentity === undefined) {
+      throw new Error("Expected a verified removal selection.");
+    }
+    const command = {
+      type: "worktree.remove" as const,
+      payload: {
+        worktreeId: selected.id,
+        projectId: selected.projectId,
+        expectedPath: selected.path,
+        expectedBranch: selected.branch,
+        expectedRegistrationIdentity: selected.registrationIdentity,
+        force: true,
+      },
+    };
+    const operationId = "cleanup-persistent-durable-retirement-repair";
+
+    const original = await fixture.queue.dispatch(command, { operationId });
+    await fixture.queue.drain();
+    const cleanupBefore = {
+      removed: fixture.worktree.snapshot().removed,
+      stopped: fixture.harness.snapshot().stopped,
+      closed: fixture.terminal.snapshot().closed,
+    };
+    await Promise.all([
+      fixture.queue.dispatch(command, { operationId }),
+      fixture.queue.dispatch(command, { operationId }),
+    ]);
+    await fixture.queue.drain();
+
+    expect(fixture.worktreeRetirementAttempts()).toBe(4);
+    expect({
+      removed: fixture.worktree.snapshot().removed,
+      stopped: fixture.harness.snapshot().stopped,
+      closed: fixture.terminal.snapshot().closed,
+    }).toEqual(cleanupBefore);
+    await expect(fixture.persistence.getCommand(original.commandId)).resolves.toMatchObject({
+      status: "failed",
+      error: { code: "WORKTREE_REMOVE_RETIREMENT_FAILED" },
+    });
+    expect(
+      (await fixture.persistence.listEvents({ commandId: original.commandId })).filter((event) =>
+        event.type.endsWith(".removed"),
+      ),
+    ).toEqual([]);
+    await expect(fixture.persistence.listSessions()).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "ses_web_cleanup", lifecycle: "open" }),
+      ]),
+    );
+    await expect(fixture.persistence.listWorktreeDisplayTitles()).resolves.toHaveLength(1);
+    fixture.sqlite.close();
+  });
+
   it("does not commit cancellation handling when the provider declines removal", async () => {
     const fixture = createFixture({
       state: "none",
@@ -830,8 +962,8 @@ describe("cleanup command handlers", () => {
       throw new Error("Expected a verified removal selection.");
     }
 
-    const receipt = await fixture.queue.dispatch({
-      type: "worktree.remove",
+    const command = {
+      type: "worktree.remove" as const,
       payload: {
         worktreeId: selected.id,
         projectId: selected.projectId,
@@ -840,7 +972,11 @@ describe("cleanup command handlers", () => {
         expectedRegistrationIdentity: selected.registrationIdentity,
         force: true,
       },
-    });
+    };
+    const operationId = "cleanup-provider-declined-removal";
+    const receipt = await fixture.queue.dispatch(command, { operationId });
+    await fixture.queue.drain();
+    await fixture.queue.dispatch(command, { operationId });
     await fixture.queue.drain();
 
     await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
