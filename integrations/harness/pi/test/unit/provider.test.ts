@@ -3,8 +3,12 @@ import type {
   HarnessRunObservation,
   RawHarnessEvent,
 } from "@station/contracts";
-import type { ExternalCommandInput, ExternalCommandResult } from "@station/runtime";
-import { describe, expect, it } from "vitest";
+import {
+  type ExternalCommandInput,
+  type ExternalCommandResult,
+  safeErrorFromUnknown,
+} from "@station/runtime";
+import { describe, expect, it, vi } from "vitest";
 import { createPiHarnessProvider } from "../../src/provider";
 
 const now = "2026-05-27T12:00:00.000Z";
@@ -99,6 +103,7 @@ describe("PiHarnessProvider", () => {
   });
 
   it("maps health failures to typed harness provider health", async () => {
+    vi.stubEnv("PATH", "/observer/bin:/usr/bin");
     const provider = createPiHarnessProvider({
       command: "missing-pi",
       now: () => new Date(now),
@@ -110,7 +115,8 @@ describe("PiHarnessProvider", () => {
       },
     });
 
-    await expect(provider.health()).resolves.toMatchObject({
+    const health = await provider.health();
+    expect(health).toMatchObject({
       providerId: "pi",
       providerType: "harness",
       status: "unavailable",
@@ -120,6 +126,14 @@ describe("PiHarnessProvider", () => {
         provider: "pi",
       },
     });
+    if (health.lastError === undefined) throw new Error("expected Pi health failure");
+    expect(
+      safeErrorFromUnknown(health.lastError, {
+        tag: "HarnessProviderError",
+        code: "HARNESS_PI_UNAVAILABLE",
+        message: "Pi is not available.",
+      }).diagnosticDetails,
+    ).toEqual([expect.objectContaining({ pathEnv: "/observer/bin:/usr/bin" })]);
   });
 
   it("applies provider launch defaults and discovers terminal-bound runs", async () => {

@@ -56,8 +56,9 @@ stn event-hooks doctor
 correlate trace ids, command ids, diagnostic ids, root-cause codes, redacted
 command diagnostics, and suggested next commands without contacting the observer.
 When a command error envelope includes external-command diagnostics, trace output
-can show the command, cwd, exit code, duration, and bounded stdout/stderr
-snippets after redaction. `causeAssessment` distinguishes a correlated,
+can show the command, cwd, exit code, duration, bounded stdout/stderr snippets,
+and the effective `PATH` for an `ENOENT` executable lookup failure, after
+redaction. `causeAssessment` distinguishes a correlated,
 diagnostic-index-declared root cause from an observed command/error failure or
 insufficient evidence. A generic error code is failure evidence, not proof of
 the mechanism beneath it.
@@ -259,7 +260,8 @@ README.txt
 Command records, events, logs, and error envelopes carry `commandId`, `traceId`,
 and `spanId` where available. Failed command records can also carry optional
 redacted diagnostics such as external command, cwd, exit code, duration, and
-bounded stdout/stderr snippets.
+bounded stdout/stderr snippets. Missing-executable diagnostics additionally retain
+the effective child `PATH`; other environment variables are not recorded.
 
 `diagnostic-index.json` is derived evidence, not runtime truth. It correlates config diagnostics, SQLite health, provider health, command failures, events, error envelopes, hook spool state, logs, and row/session facts into:
 

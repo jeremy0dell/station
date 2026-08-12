@@ -307,7 +307,7 @@ describe("buildContextMenuItems", () => {
     ]);
   });
 
-  it("labels external unstoppable-agent removal as a worktree action", () => {
+  it("labels unstoppable-agent removal as a worktree action", () => {
     const store = createStationStore();
     const stationState = createInitialTuiState({ initialSnapshot: externalAgentSnapshot() });
 

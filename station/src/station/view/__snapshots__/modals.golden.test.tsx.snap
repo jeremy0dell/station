@@ -486,10 +486,10 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
  [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓
 ┌──────────────────────────────────────────────────────────────────┐
 │ Cannot delete worktree                                           │h] [qs] [▾]
-│ This agent was started outside Station.                          │14 -6 #5 x1
-│ Station can see its status, but cannot stop it.                  │  +3 -1 #10
+│ Station cannot stop the active agent.                            │14 -6 #5 x1
+│ Stop it in its terminal before deleting the worktree.            │  +3 -1 #10
 │                                                                  │
-│ Stop or remove it from its original terminal or external tooling.│h] [qs] [▾]
+│                                                                  │h] [qs] [▾]
 │                                                                  │
 │ Esc/Enter:close                                                  │───────────
 └──────────────────────────────────────────────────────────────────┘

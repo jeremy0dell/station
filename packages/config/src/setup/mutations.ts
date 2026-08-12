@@ -1,5 +1,5 @@
 import { type CliSetupHarnessId, CliSetupHarnessIdSchema } from "@station/contracts";
-import { setHarnessInstallHooksInToml } from "../harnesses/installHooks.js";
+import { setHarnessCommandInToml, setHarnessInstallHooksInToml } from "../harnesses/toml.js";
 import { loadConfigFromToml } from "../load/index.js";
 import { quoteTomlString } from "../tomlEdit.js";
 
@@ -9,6 +9,7 @@ export type SetupConfigDesiredState = {
     readonly id: CliSetupHarnessId;
     readonly command: string;
     readonly installHooks: boolean;
+    readonly replaceExistingCommand?: string;
   }[];
   readonly worktrunkCommand: string;
   readonly tmuxCommand?: string;
@@ -64,6 +65,18 @@ export async function planSetupConfigMutation(
   let content = input.current.source;
   for (const harness of input.desired.harnesses) {
     const configured = loaded.config.harness?.[harness.id];
+    if (
+      configured !== undefined &&
+      harness.replaceExistingCommand !== undefined &&
+      configured.command !== harness.replaceExistingCommand
+    ) {
+      content = await setHarnessCommandInToml(content, {
+        harness: harness.id,
+        command: harness.replaceExistingCommand,
+        configPath: input.configPath,
+        homeDir: input.homeDir,
+      });
+    }
     if (configured !== undefined && harness.installHooks && configured.installHooks !== true) {
       content = await setHarnessInstallHooksInToml(content, {
         harness: harness.id,

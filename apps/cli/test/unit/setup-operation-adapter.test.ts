@@ -58,6 +58,90 @@ describe("setup operation adapters", () => {
     ]);
   });
 
+  it.each([
+    ["pi", "/opt/tools/pi", "/opt/tools/pi"],
+    ["pi-wrapper", "/opt/tools/pi-wrapper", undefined],
+    ["/authored/pi", "/authored/pi", undefined],
+    ["pi", undefined, undefined],
+  ] as const)("repairs only an existing canonical harness command %#", (configuredCommand, resolvedPath, expectedReplacement) => {
+    const input = setupConfigMutationInput(
+      {
+        id: "write-config",
+        kind: "write-config",
+        tier: "required",
+        selected: true,
+        change: "update",
+        defaultHarnessId: "pi",
+        harnessIds: ["pi"],
+        trackingHarnessIds: [],
+        installWorktrunkTracking: false,
+      },
+      {
+        homeDir: "/home/test",
+        config: {
+          status: "valid",
+          path: "/home/test/.config/station/config.toml",
+          source: "existing config",
+          configuredHarnessCommands: { pi: configuredCommand },
+        },
+        worktrunk: { status: "ok", command: "wt", resolvedPath: "/opt/tools/wt" },
+        tmux: { status: "ok", command: "tmux", resolvedPath: "/opt/tools/tmux" },
+        harnesses: [
+          {
+            id: "pi",
+            label: "Pi",
+            status: "ok",
+            command: configuredCommand,
+            ...(resolvedPath === undefined ? {} : { resolvedPath }),
+          },
+        ],
+      } as SetupFacts,
+    );
+
+    expect(input.desired.harnesses[0]?.replaceExistingCommand).toBe(expectedReplacement);
+  });
+
+  it("does not request command replacement for a non-selected harness", () => {
+    const input = setupConfigMutationInput(
+      {
+        id: "write-config",
+        kind: "write-config",
+        tier: "required",
+        selected: true,
+        change: "update",
+        defaultHarnessId: "codex",
+        harnessIds: ["codex"],
+        trackingHarnessIds: [],
+        installWorktrunkTracking: false,
+      },
+      {
+        homeDir: "/home/test",
+        config: {
+          status: "valid",
+          path: "/home/test/.config/station/config.toml",
+          source: "existing config",
+          configuredHarnessCommands: { pi: "pi" },
+        },
+        worktrunk: { status: "ok", command: "wt" },
+        tmux: { status: "ok", command: "tmux" },
+        harnesses: [
+          { id: "codex", label: "Codex", status: "ok", command: "codex" },
+          {
+            id: "pi",
+            label: "Pi",
+            status: "ok",
+            command: "pi",
+            resolvedPath: "/opt/tools/pi",
+          },
+        ],
+      } as SetupFacts,
+    );
+
+    expect(input.desired.harnesses).toEqual([
+      { id: "codex", command: "codex", installHooks: false },
+    ]);
+  });
+
   it("streams genuine external installers through inherited stdio", async () => {
     const calls: ExternalCommandInput[] = [];
     const runner = async (input: ExternalCommandInput): Promise<ExternalCommandResult> => {

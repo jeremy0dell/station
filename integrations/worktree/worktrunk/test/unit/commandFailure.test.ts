@@ -35,7 +35,12 @@ describe("Worktrunk command failure mapping", () => {
           stdout: "progress",
           stderr: "fatal: branch feature already exists OPENAI_TOKEN=secret-value",
         },
-        { command: "wt", args: ["switch", "--create", "feature"], cwd: "/tmp/project" },
+        {
+          command: "wt",
+          args: ["switch", "--create", "feature"],
+          cwd: "/tmp/project",
+          env: { PATH: "/observer/bin:/usr/bin" },
+        },
       ),
       {
         tag: "WorktreeProviderError",
@@ -68,6 +73,32 @@ describe("Worktrunk command failure mapping", () => {
     });
     expect(mapped.cause).toBe(normalized);
     expect(JSON.stringify(mapped)).not.toContain("secret-value");
+  });
+
+  it("retains missing-command PATH evidence while enriching the failure", () => {
+    const normalized = safeErrorFromUnknown(
+      externalCommandErrorFromUnknown(Object.assign(new Error("not found"), { code: "ENOENT" }), {
+        command: "wt",
+        args: ["list"],
+        cwd: "/tmp/project",
+        env: { PATH: "/observer/bin:/usr/bin" },
+      }),
+      {
+        tag: "WorktreeProviderError",
+        code: fallback.code,
+        message: fallback.message,
+        provider: "worktrunk",
+      },
+    );
+
+    expect(mapFailure(normalized).diagnosticDetails).toEqual([
+      expect.objectContaining({
+        type: "external_command",
+        provider: "worktrunk",
+        operation: "provider.worktrunk.switch",
+        pathEnv: "/observer/bin:/usr/bin",
+      }),
+    ]);
   });
 
   it("distinguishes a missing binary from a missing working directory", () => {

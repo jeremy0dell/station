@@ -1,3 +1,4 @@
+import { isAbsolute } from "node:path";
 import {
   type PersistSetupConfigMutationOptions,
   persistSetupConfigMutation,
@@ -139,11 +140,21 @@ export function setupConfigMutationInput(
       if (harness === undefined) {
         throw new Error(`Setup facts do not include selected harness ${harnessId}.`);
       }
-      return {
+      const desiredHarness: {
+        id: CliSetupHarnessId;
+        command: string;
+        installHooks: boolean;
+        replaceExistingCommand?: string;
+      } = {
         id: harnessId,
         command: detectedHarnessCommand(harness),
         installHooks: operation.trackingHarnessIds.includes(harnessId),
       };
+      const replaceExistingCommand = existingHarnessCommandReplacement(facts, harness);
+      if (replaceExistingCommand !== undefined) {
+        desiredHarness.replaceExistingCommand = replaceExistingCommand;
+      }
+      return desiredHarness;
     }),
     worktrunkCommand: detectedCommand(facts.worktrunk, SETUP_TOOL_DEFINITIONS.worktrunk.command),
     installWorktrunkHooks: operation.installWorktrunkTracking,
@@ -205,6 +216,20 @@ function detectedHarnessCommand(fact: SetupFacts["harnesses"][number]): string {
   if (!fact.command.includes("/") && fact.resolvedPath !== undefined) return fact.resolvedPath;
   const defaultCommand = SETUP_HARNESS_DEFINITIONS[fact.id].commandFallback;
   return detectedCommand(fact, defaultCommand);
+}
+
+function existingHarnessCommandReplacement(
+  facts: SetupFacts,
+  fact: SetupFacts["harnesses"][number],
+): string | undefined {
+  if (facts.config.status !== "valid") return undefined;
+  const fallback = SETUP_HARNESS_DEFINITIONS[fact.id].commandFallback;
+  const configured = facts.config.configuredHarnessCommands?.[fact.id];
+  if (configured !== fallback) return undefined;
+  const resolved = fact.resolvedPath;
+  return resolved !== undefined && resolved !== configured && isAbsolute(resolved)
+    ? resolved
+    : undefined;
 }
 
 function detectedCommand(

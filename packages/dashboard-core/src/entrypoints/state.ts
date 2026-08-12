@@ -66,7 +66,7 @@ export {
 } from "../state/screens/projectSettings.js";
 export type { RemoveWorktreeActionId } from "../state/screens/removeWorktree.js";
 export {
-  isExternalAgentRemovalUnavailable,
+  isAgentRemovalUnavailable,
   openRemoveWorktreeConfirmForRow,
 } from "../state/screens/removeWorktree.js";
 export type { ProjectMenuInputActionId } from "../state/screens/sessionGroups.js";

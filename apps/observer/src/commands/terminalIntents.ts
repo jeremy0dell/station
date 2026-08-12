@@ -153,20 +153,7 @@ export function hasCloseableTerminalAttachment(input: {
 function terminalAttachmentIsCloseable(
   terminal: SessionView["terminal"] | WorktreeRow["terminal"] | undefined,
 ): boolean {
-  if (terminal === undefined) {
-    return false;
-  }
-  if (terminal.closeable === true) {
-    return true;
-  }
-  // This controls whether to show/submit the product close action. The terminal
-  // intent runner still validates the provider target and may report stale state.
-  return (
-    terminal.state === "open" ||
-    terminal.state === "detached" ||
-    terminal.state === "unknown" ||
-    terminal.state === "stale"
-  );
+  return terminal?.closeable === true;
 }
 
 /**

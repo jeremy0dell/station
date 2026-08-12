@@ -52,6 +52,7 @@ export const ExternalCommandDiagnosticDetailSchema = z
     operation: nonEmptyStringSchema,
     command: nonEmptyStringSchema,
     cwd: nonEmptyStringSchema.optional(),
+    pathEnv: z.string().optional(),
     exitCode: z.number().int().optional(),
     signal: nonEmptyStringSchema.optional(),
     stdoutSnippet: nonEmptyStringSchema.optional(),

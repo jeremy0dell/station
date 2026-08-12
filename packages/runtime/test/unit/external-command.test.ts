@@ -11,7 +11,7 @@ import {
   runExternalCommand,
   safeErrorFromUnknown,
 } from "@station/runtime";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 describe("runtime external command boundary", () => {
   it("supports fakeable command execution", async () => {
@@ -56,16 +56,62 @@ describe("runtime external command boundary", () => {
 
   it("distinguishes a missing working directory from a missing executable", async () => {
     const missingCwd = join(tmpdir(), `station-missing-cwd-${Date.now()}`);
-    await expect(
-      runExternalCommand({ command: process.execPath, cwd: missingCwd }),
-    ).rejects.toMatchObject({
+    const missingCwdError = await runExternalCommand({ command: process.execPath, cwd: missingCwd })
+      .then(() => undefined)
+      .catch((error: unknown) => error);
+    expect(missingCwdError).toMatchObject({
       code: "EXTERNAL_COMMAND_CWD_NOT_FOUND",
       cwd: missingCwd,
       command: process.execPath,
     });
+    expect(
+      externalCommandDiagnosticFromSafeError(
+        safeErrorFromUnknown(missingCwdError, {
+          tag: "RuntimeError",
+          code: "RUNTIME_FAILED",
+          message: "Runtime failed.",
+        }),
+      ),
+    ).not.toHaveProperty("pathEnv");
     await expect(
       runExternalCommand({ command: `station-missing-command-${Date.now()}`, cwd: tmpdir() }),
     ).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("records the exact effective PATH for missing executables", async () => {
+    vi.stubEnv("PATH", "/inherited/bin");
+    const error = await runExternalCommand(
+      {
+        command: "missing-command",
+        env: { PATH: "/explicit/bin:/fallback/bin" },
+        unsetEnv: ["PATH"],
+      },
+      createFakeExternalCommandRunner(async () => {
+        throw Object.assign(new Error("not found"), { code: "ENOENT" });
+      }),
+    )
+      .then(() => undefined)
+      .catch((failure: unknown) => failure);
+    const normalized = safeErrorFromUnknown(error, {
+      tag: "RuntimeError",
+      code: "RUNTIME_FAILED",
+      message: "Runtime failed.",
+    });
+
+    expect(externalCommandDiagnosticFromSafeError(normalized)).toMatchObject({
+      type: "external_command",
+      command: "missing-command",
+      pathEnv: "/explicit/bin:/fallback/bin",
+    });
+  });
+
+  it("retains an explicitly empty PATH for missing executables", () => {
+    const error = externalCommandErrorFromUnknown(
+      Object.assign(new Error("not found"), { code: "ENOENT" }),
+      { command: "missing-command", env: { PATH: "" } },
+    );
+
+    expect(externalCommandDiagnosticFromSafeError(error)).toMatchObject({ pathEnv: "" });
   });
 
   it("redacts command output in typed failures", () => {
@@ -86,6 +132,7 @@ describe("runtime external command boundary", () => {
     });
     expect(JSON.stringify(error)).not.toContain("sk-secret");
     expect(JSON.stringify(error)).not.toContain("abcdefghijklmnop");
+    expect(externalCommandDiagnosticFromSafeError(error)).not.toHaveProperty("pathEnv");
   });
 
   it("preserves process exit codes through runtime boundary normalization", async () => {

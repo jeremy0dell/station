@@ -145,6 +145,85 @@ describe("setup config mutations", () => {
     });
   });
 
+  it("source-preservingly replaces a selected canonical harness command", async () => {
+    const source = renderSetupConfig({
+      ...createDesired,
+      defaultHarness: "pi",
+      harnesses: [{ id: "pi", command: "pi", installHooks: false }],
+    })
+      .replace("[harness.pi]", "[harness.pi] # selected provider")
+      .replace('command = "pi"', 'command = "pi" # keep this comment')
+      .replaceAll("\n", "\r\n");
+    const desired: SetupConfigDesiredState = {
+      ...createDesired,
+      defaultHarness: "pi",
+      harnesses: [
+        {
+          id: "pi",
+          command: "/opt/tools/pi",
+          installHooks: false,
+          replaceExistingCommand: "/opt/tools/pi",
+        },
+      ],
+    };
+
+    const plan = await planSetupConfigMutation({
+      configPath: "/tmp/station-config.toml",
+      homeDir: "/tmp",
+      current: { state: "valid", source },
+      desired,
+    });
+
+    expect(plan.operation).toBe("update");
+    if (plan.operation !== "update") throw new Error("expected update plan");
+    expect(plan.content).toBe(
+      source.replace(
+        'command = "pi" # keep this comment',
+        'command = "/opt/tools/pi" # keep this comment',
+      ),
+    );
+    expect(plan.content.replaceAll("\r\n", "")).not.toContain("\n");
+    await expect(
+      planSetupConfigMutation({
+        configPath: "/tmp/station-config.toml",
+        homeDir: "/tmp",
+        current: { state: "valid", source: plan.content },
+        desired,
+      }),
+    ).resolves.toEqual({
+      operation: "none",
+      reason: "Config already includes the selected harness and core defaults.",
+    });
+  });
+
+  it.each([
+    ["custom bare alias", "pi-wrapper", "/opt/tools/pi-wrapper"],
+    ["authored path", "./bin/pi", "./bin/pi"],
+  ])("preserves an existing %s", async (_label, configuredCommand, desiredCommand) => {
+    const source = renderSetupConfig({
+      ...createDesired,
+      defaultHarness: "pi",
+      harnesses: [{ id: "pi", command: configuredCommand, installHooks: false }],
+    });
+    const desired: SetupConfigDesiredState = {
+      ...createDesired,
+      defaultHarness: "pi",
+      harnesses: [{ id: "pi", command: desiredCommand, installHooks: false }],
+    };
+
+    await expect(
+      planSetupConfigMutation({
+        configPath: "/tmp/station-config.toml",
+        homeDir: "/tmp",
+        current: { state: "valid", source },
+        desired,
+      }),
+    ).resolves.toEqual({
+      operation: "none",
+      reason: "Config already includes the selected harness and core defaults.",
+    });
+  });
+
   it.each([
     ["codex", "codex"],
     ["cursor", "agent"],
