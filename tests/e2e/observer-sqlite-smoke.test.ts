@@ -130,7 +130,7 @@ describe("production Observer SQLite smoke", () => {
         path: databasePath,
         open: true,
         status: "healthy",
-        schemaVersion: 17,
+        schemaVersion: 18,
       });
       expect((await stat(databasePath)).size).toBeGreaterThan(0);
 
@@ -172,7 +172,7 @@ describe("production Observer SQLite smoke", () => {
         path: databasePath,
         open: true,
         status: "healthy",
-        schemaVersion: 17,
+        schemaVersion: 18,
       });
     } finally {
       await client.stop().catch(() => undefined);
