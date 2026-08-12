@@ -26,12 +26,14 @@ import {
 } from "@station/runtime";
 import type {
   EventJournal,
+  ObservationStore,
   SessionSeedGroupPlacement,
   SessionSeedGroupProvenance,
   SessionSeedResult,
   SessionStore,
 } from "../../persistence/index.js";
 import type { ProviderRegistry } from "../../providers/registry.js";
+import type { ObserverCore } from "../../reconcile/core.js";
 import type { ObserverEventBus } from "../../runtime/eventBus.js";
 import type { StationLogger } from "../../stationLogger.js";
 import { linkAbortSignals, throwIfAborted } from "../cancellation.js";
@@ -47,6 +49,7 @@ import {
   worktreeMissingError,
 } from "../errors.js";
 import type { CommandHandlerContext } from "../queue.js";
+import { reconcileAndPublish } from "../reconcile.js";
 
 export { resolveHarnessProviderOrThrow, resolveTerminalProviderOrThrow } from "../providers.js";
 
@@ -192,17 +195,46 @@ export function validateSnapshotRow(row: WorktreeRow | undefined, projectId: str
 
 export async function lookupWorktree(input: {
   providers: ProviderRegistry;
-  projectId: string;
+  persistence: ObservationStore;
+  project: ProviderProjectConfig;
   worktreeId: string;
   runtime: SessionCommandLookupRuntime;
 }): Promise<WorktreeObservation> {
   if (input.providers.worktree.getWorktree === undefined) {
     throw worktreeMissingError({
-      projectId: input.projectId,
+      projectId: input.project.id,
       worktreeId: input.worktreeId,
       message: "The requested worktree is not visible to the worktree provider.",
     });
   }
+
+  const hint = (
+    await input.persistence.listProviderObservations({
+      entityKind: "worktree",
+      includeExpired: true,
+      latestOnly: true,
+    })
+  ).find(
+    (observation) =>
+      observation.entityKind === "worktree" &&
+      observation.provider === input.providers.worktree.id &&
+      observation.entityKey === input.worktreeId &&
+      observation.payload.id === input.worktreeId &&
+      observation.payload.projectId === input.project.id &&
+      observation.payload.registrationIdentity !== undefined,
+  );
+  const worktreeHint = hint?.entityKind === "worktree" ? hint.payload : undefined;
+  const request = {
+    projectId: input.project.id,
+    worktreeId: input.worktreeId,
+    ...(worktreeHint?.registrationIdentity === undefined
+      ? {}
+      : {
+          path: worktreeHint.path,
+          project: input.project,
+          expectedRegistrationIdentity: worktreeHint.registrationIdentity,
+        }),
+  };
 
   const worktree = await runProviderMutation(
     {
@@ -215,30 +247,33 @@ export async function lookupWorktree(input: {
         provider: input.providers.worktree.id,
       },
     },
-    () =>
-      input.providers.worktree.getWorktree?.({
-        projectId: input.projectId,
-        worktreeId: input.worktreeId,
-      }) as Promise<WorktreeObservation | null>,
+    () => input.providers.worktree.getWorktree?.(request) as Promise<WorktreeObservation | null>,
   );
   if (worktree === null) {
     throw worktreeMissingError({
-      projectId: input.projectId,
+      projectId: input.project.id,
       worktreeId: input.worktreeId,
       message: "The requested worktree is not visible to the worktree provider.",
     });
   }
-  if (worktree.projectId !== input.projectId) {
+  if (worktree.id !== input.worktreeId) {
+    throw worktreeMissingError({
+      projectId: input.project.id,
+      worktreeId: input.worktreeId,
+      message: "The worktree provider returned a different worktree than requested.",
+    });
+  }
+  if (worktree.projectId !== input.project.id) {
     throw commandValidationError({
       code: "WORKTREE_PROJECT_MISMATCH",
       message: "The requested worktree belongs to a different configured project.",
-      projectId: input.projectId,
+      projectId: input.project.id,
       worktreeId: input.worktreeId,
     });
   }
   if (worktree.state !== "exists") {
     throw worktreeMissingError({
-      projectId: input.projectId,
+      projectId: input.project.id,
       worktreeId: input.worktreeId,
       message: "The requested worktree no longer has a working directory.",
     });
@@ -566,6 +601,32 @@ export async function publishSessionCreated(input: {
   });
   input.eventBus?.publish(event);
   return session;
+}
+
+export async function reconcileAndPublishSessionCreated(input: {
+  core: ObserverCore;
+  eventBus?: ObserverEventBus | undefined;
+  persistence: EventJournal;
+  context: CommandHandlerContext;
+  sessionId: SessionId;
+  reason: string;
+  clock?: RuntimeClock | undefined;
+}): Promise<void> {
+  const snapshot = await reconcileAndPublish({
+    core: input.core,
+    eventBus: input.eventBus,
+    clock: input.clock,
+    reason: input.reason,
+    trace: input.context.trace,
+  });
+  await publishSessionCreated({
+    snapshot,
+    sessionId: input.sessionId,
+    persistence: input.persistence,
+    eventBus: input.eventBus,
+    context: input.context,
+    clock: input.clock,
+  });
 }
 
 function safeError(input: SafeError): SafeError {

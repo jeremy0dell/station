@@ -537,7 +537,7 @@
           "name": "assertHarnessLaunchPreconditionsOrThrow",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Freshly verifies the selected harness health and hook delivery immediately before launch mutation."
+          "purpose": "Freshly verifies selected-harness health and hook delivery immediately before launch mutation. Health gating awaits fresh cache evidence without waiting for serialized snapshot publication."
         },
         {
           "name": "HarnessLaunchPreflight",
@@ -1096,7 +1096,7 @@
           "specifier": "../persistence/index.js",
           "resolvedPath": "apps/observer/src/persistence/index.ts",
           "edgeKind": "type-only",
-          "bindings": ["EventJournal", "SessionGroupStore", "SessionStore"]
+          "bindings": ["EventJournal", "ObservationStore", "SessionGroupStore", "SessionStore"]
         },
         {
           "specifier": "../providers/registry.js",
@@ -1769,12 +1769,6 @@
           "bindings": ["CommandHandler"]
         },
         {
-          "specifier": "../reconcile.js",
-          "resolvedPath": "apps/observer/src/commands/reconcile.ts",
-          "edgeKind": "runtime",
-          "bindings": ["reconcileAndPublish"]
-        },
-        {
           "specifier": "./shared.js",
           "resolvedPath": "apps/observer/src/commands/session/shared.ts",
           "edgeKind": "runtime",
@@ -1785,7 +1779,7 @@
             "discardSessionSeedBestEffort",
             "findProjectOrThrow",
             "lookupWorktree",
-            "publishSessionCreated",
+            "reconcileAndPublishSessionCreated",
             "resolveTerminalProviderOrThrow",
             "seedSession",
             "throwIfAborted",
@@ -1815,7 +1809,7 @@
           "specifier": "../../persistence/index.js",
           "resolvedPath": "apps/observer/src/persistence/index.ts",
           "edgeKind": "type-only",
-          "bindings": ["EventJournal", "SessionStore"]
+          "bindings": ["EventJournal", "ObservationStore", "SessionStore"]
         },
         {
           "specifier": "../../providers/registry.js",
@@ -1926,6 +1920,12 @@
         },
         {
           "name": "publishSessionCreated",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "reconcileAndPublishSessionCreated",
           "kind": "function",
           "role": null,
           "purpose": null
@@ -2048,11 +2048,18 @@
           "bindings": ["CommandHandlerContext"]
         },
         {
+          "specifier": "../reconcile.js",
+          "resolvedPath": "apps/observer/src/commands/reconcile.ts",
+          "edgeKind": "runtime",
+          "bindings": ["reconcileAndPublish"]
+        },
+        {
           "specifier": "../../persistence/index.js",
           "resolvedPath": "apps/observer/src/persistence/index.ts",
           "edgeKind": "type-only",
           "bindings": [
             "EventJournal",
+            "ObservationStore",
             "SessionSeedGroupPlacement",
             "SessionSeedGroupProvenance",
             "SessionSeedResult",
@@ -2064,6 +2071,12 @@
           "resolvedPath": "apps/observer/src/providers/registry.ts",
           "edgeKind": "type-only",
           "bindings": ["ProviderRegistry"]
+        },
+        {
+          "specifier": "../../reconcile/core.js",
+          "resolvedPath": "apps/observer/src/reconcile/core.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ObserverCore"]
         },
         {
           "specifier": "../../runtime/eventBus.js",
@@ -2161,12 +2174,6 @@
           "bindings": ["CommandHandler"]
         },
         {
-          "specifier": "../reconcile.js",
-          "resolvedPath": "apps/observer/src/commands/reconcile.ts",
-          "edgeKind": "runtime",
-          "bindings": ["reconcileAndPublish"]
-        },
-        {
           "specifier": "./shared.js",
           "resolvedPath": "apps/observer/src/commands/session/shared.ts",
           "edgeKind": "runtime",
@@ -2177,7 +2184,7 @@
             "discardSessionSeedBestEffort",
             "findProjectOrThrow",
             "lookupWorktree",
-            "publishSessionCreated",
+            "reconcileAndPublishSessionCreated",
             "rememberedHarnessProviderForWorktree",
             "resolveHarnessProviderOrThrow",
             "resolveTerminalProviderOrThrow",
@@ -2203,7 +2210,7 @@
           "specifier": "../../persistence/index.js",
           "resolvedPath": "apps/observer/src/persistence/index.ts",
           "edgeKind": "type-only",
-          "bindings": ["EventJournal", "SessionStore"]
+          "bindings": ["EventJournal", "ObservationStore", "SessionStore"]
         },
         {
           "specifier": "../../providers/registry.js",
@@ -10449,7 +10456,7 @@
           "specifier": "./reconcileScheduler.js",
           "resolvedPath": "apps/observer/src/runtime/reconcileScheduler.ts",
           "edgeKind": "type-only",
-          "bindings": ["CreateReconcileSchedulerOptions"]
+          "bindings": ["CreateReconcileSchedulerOptions", "ReconcileScheduler"]
         },
         {
           "specifier": "./spoolDrain.js",
@@ -13557,7 +13564,7 @@
       "declaration": "assertHarnessLaunchPreconditionsOrThrow",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Freshly verifies the selected harness health and hook delivery immediately before launch mutation.",
+      "purpose": "Freshly verifies selected-harness health and hook delivery immediately before launch mutation. Health gating awaits fresh cache evidence without waiting for serialized snapshot publication.",
       "dependencies": []
     },
     {
@@ -14415,13 +14422,6 @@
           "kind": "function",
           "role": "USE CASE",
           "edgeKind": "runtime"
-        },
-        {
-          "path": "apps/observer/src/stationLogger.ts",
-          "declaration": "StationLogger",
-          "kind": "interface",
-          "role": "DRIVEN PORT",
-          "edgeKind": "type-only"
         },
         {
           "path": "packages/contracts/src/observer.ts",

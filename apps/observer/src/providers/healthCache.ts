@@ -26,11 +26,16 @@ type CacheEntry = {
   refreshedAtMs: number;
 };
 
+type InFlightProbe = {
+  cacheReady: Promise<void>;
+  complete: Promise<void>;
+};
+
 /**
  * Out-of-band provider health cache: reconcile reads synchronously and never
- * awaits a health probe during reconcile. Explicit launch preflights await the
- * selected provider's refresh while retaining the same single-flight operation.
- * Each unique probe notifies completion listeners before its in-flight slot clears,
+ * awaits a health probe during reconcile. Explicit launch preflights await fresh
+ * cached evidence without waiting for its serialized snapshot publication. Each
+ * unique probe still notifies completion listeners before its in-flight slot clears,
  * including boot, stale, eager, and launch refreshes.
  * `stn doctor` keeps probing providers live, bypassing this cache.
  */
@@ -40,7 +45,7 @@ export class ProviderHealthCache {
   readonly #timeoutMs: number;
   readonly #clock: RuntimeClock;
   readonly #entries = new Map<string, CacheEntry>();
-  readonly #inFlight = new Map<string, Promise<void>>();
+  readonly #inFlight = new Map<string, InFlightProbe>();
   readonly #probeCompletedListeners = new Set<ProviderHealthProbeCompletedListener>();
 
   constructor(options: ProviderHealthCacheOptions) {
@@ -61,17 +66,35 @@ export class ProviderHealthCache {
 
   /** Probe one provider now, ignoring TTL. Never rejects; joins an in-flight probe. */
   refresh(providerId: string): Promise<void> {
+    return this.#getOrStartProbe(providerId)?.complete ?? Promise.resolve();
+  }
+
+  /**
+   * Probe one provider and resolve when fresh evidence is readable from the cache.
+   * Completion publication remains part of the same in-flight probe.
+   */
+  refreshUntilCached(providerId: string): Promise<void> {
+    return this.#getOrStartProbe(providerId)?.cacheReady ?? Promise.resolve();
+  }
+
+  #getOrStartProbe(providerId: string): InFlightProbe | undefined {
     const inFlight = this.#inFlight.get(providerId);
     if (inFlight !== undefined) {
       return inFlight;
     }
     const target = this.#targets.get(providerId);
     if (target === undefined) {
-      return Promise.resolve();
+      return undefined;
     }
-    const probe = this.#probe(target).finally(() => {
+    let markCacheReady: () => void = () => undefined;
+    const cacheReady = new Promise<void>((resolve) => {
+      markCacheReady = resolve;
+    });
+    const complete = this.#probe(target, markCacheReady).finally(() => {
+      markCacheReady();
       this.#inFlight.delete(providerId);
     });
+    const probe = { cacheReady, complete };
     this.#inFlight.set(providerId, probe);
     return probe;
   }
@@ -87,7 +110,7 @@ export class ProviderHealthCache {
     await Promise.all(Array.from(this.#targets.keys(), (providerId) => this.refresh(providerId)));
   }
 
-  async #probe(target: ProviderHealthProbeTarget): Promise<void> {
+  async #probe(target: ProviderHealthProbeTarget, markCacheReady: () => void): Promise<void> {
     const result = await runRuntimeBoundaryWithTimeout(
       {
         operation: `provider.${target.providerId}.health`,
@@ -124,6 +147,7 @@ export class ProviderHealthCache {
           capabilities: target.capabilities(),
         };
     this.#entries.set(target.providerId, { health, refreshedAtMs: this.#nowMs() });
+    markCacheReady();
     const notifications = Array.from(this.#probeCompletedListeners, (listener) =>
       Promise.resolve().then(() => listener(health)),
     );

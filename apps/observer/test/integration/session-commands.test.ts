@@ -1,15 +1,18 @@
 import { DEFAULT_WORKSPACE_CONFIG, type StationConfig } from "@station/config";
 import type {
   BuildHarnessLaunchRequest,
+  GetWorktreeRequest,
   HarnessLaunchPlan,
   HarnessProvider,
   ManagedTerminalLaunchProcessResult,
   ManagedTerminalLifecycle,
   ProviderHealth,
+  ProviderProjectConfig,
   SafeError,
   TerminalIntent,
   TerminalIntentReceipt,
   TerminalLaunchProcessRequest,
+  WorktreeObservation,
 } from "@station/contracts";
 import { createCursorHarnessProvider } from "@station/cursor";
 import { createPiHarnessProvider } from "@station/pi";
@@ -1310,6 +1313,108 @@ describe("session command vertical slice", () => {
     fixture.sqlite.close();
   });
 
+  it("uses a durable worktree observation only as a validated restart lookup hint", async () => {
+    const worktree = createFakeWorktree({
+      id: "wt_web_restart_hint",
+      projectId: "web",
+      branch: "restart-hint",
+      now,
+    });
+    const requests: GetWorktreeRequest[] = [];
+    class RestartHintProvider extends FakeWorktreeProvider {
+      readonly listStarted: Promise<void>;
+      #markListStarted: (() => void) | undefined;
+      #releaseList: (() => void) | undefined;
+      readonly #listRelease: Promise<void>;
+
+      constructor() {
+        super({ now, worktrees: [worktree] });
+        this.listStarted = new Promise((resolve) => {
+          this.#markListStarted = resolve;
+        });
+        this.#listRelease = new Promise((resolve) => {
+          this.#releaseList = resolve;
+        });
+      }
+
+      releaseList(): void {
+        this.#releaseList?.();
+      }
+
+      override async listWorktrees(project: ProviderProjectConfig): Promise<WorktreeObservation[]> {
+        this.#markListStarted?.();
+        await this.#listRelease;
+        return super.listWorktrees(project);
+      }
+
+      override async getWorktree(request: GetWorktreeRequest): Promise<WorktreeObservation | null> {
+        requests.push(request);
+        return request.path === worktree.path &&
+          request.expectedRegistrationIdentity === worktree.registrationIdentity
+          ? worktree
+          : null;
+      }
+    }
+    const terminalIntentRunner = new CapturingTerminalIntentRunner();
+    const worktreeProvider = new RestartHintProvider();
+    const fixture = createFixture({
+      worktree: worktreeProvider,
+      terminalIntentRunner,
+      sessionIds: ["ses_restart_hint"],
+    });
+    await fixture.persistence.recordProviderObservation({
+      provider: "fake-worktree",
+      providerType: "worktree",
+      entityKind: "worktree",
+      entityKey: worktree.id,
+      payload: worktree,
+      observedAt: now,
+    });
+    expect(fixture.core.getSnapshot().rows).toEqual([]);
+    const startupReconcile = fixture.core.reconcile("observer.startup");
+    await worktreeProvider.listStarted;
+
+    const receipt = await fixture.queue.dispatch({
+      type: "session.startAgent",
+      payload: { projectId: "web", worktreeId: worktree.id },
+    });
+    const commandCompletion = fixture.queue.drain().then(() => true);
+    let timeout: NodeJS.Timeout | undefined;
+    const completedWhileDiscoveryBlocked = await Promise.race([
+      commandCompletion,
+      new Promise<false>((resolve) => {
+        timeout = setTimeout(resolve, 250, false);
+      }),
+    ]);
+    if (timeout !== undefined) clearTimeout(timeout);
+    expect(completedWhileDiscoveryBlocked).toBe(true);
+
+    await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
+      status: "succeeded",
+    });
+    expect(requests).toEqual([
+      expect.objectContaining({
+        worktreeId: worktree.id,
+        projectId: "web",
+        path: worktree.path,
+        expectedRegistrationIdentity: worktree.registrationIdentity,
+      }),
+    ]);
+    expect(terminalIntentRunner.intents).toHaveLength(1);
+    await expect(fixture.persistence.listSessions()).resolves.toEqual([
+      expect.objectContaining({ id: "ses_restart_hint", worktreeId: worktree.id }),
+    ]);
+    const reconciledEvents = fixture.eventBus
+      .subscribe({ type: "observer.reconciled" })
+      [Symbol.asyncIterator]();
+    worktreeProvider.releaseList();
+    await startupReconcile;
+    await commandCompletion;
+    await reconciledEvents.next();
+    await reconciledEvents.return?.();
+    fixture.sqlite.close();
+  });
+
   it("submits session.startAgent launch work through the terminal intent runner seam", async () => {
     const terminalIntentRunner = new CapturingTerminalIntentRunner();
     const terminal = new FakeTerminalProvider({
@@ -2392,6 +2497,7 @@ function createFixture(
     sessionIds?: string[];
     sessionGroupIds?: string[];
     featureFlags?: { sessionResumeAgent?: boolean };
+    commandTimeoutMs?: number;
   } = {},
 ) {
   const clock = { now: () => new Date(now) };
@@ -2439,6 +2545,7 @@ function createFixture(
       sessionId: () => sessionIds.shift() ?? "ses_fallback",
       sessionGroupId: () => sessionGroupIds.shift() ?? "grp_fallback",
     },
+    commandTimeoutMs: options.commandTimeoutMs,
   });
   return { sqlite, persistence, eventBus, queue, providers, core };
 }

@@ -18,7 +18,8 @@ export type HarnessLaunchPreflightOptions = {
 /**
  * USE CASE
  *
- * Freshly verifies the selected harness health and hook delivery immediately before launch mutation.
+ * Freshly verifies selected-harness health and hook delivery immediately before launch mutation.
+ * Health gating awaits fresh cache evidence without waiting for serialized snapshot publication.
  */
 export async function assertHarnessLaunchPreconditionsOrThrow(
   options: HarnessLaunchPreflightOptions,
@@ -31,7 +32,7 @@ export async function assertHarnessLaunchPreconditionsOrThrow(
     throw harnessUnavailableError(provider.id);
   }
 
-  await options.providers.healthCache.refresh(provider.id);
+  await options.providers.healthCache.refreshUntilCached(provider.id);
   if (options.signal !== undefined) {
     throwIfAborted(options.signal);
   }

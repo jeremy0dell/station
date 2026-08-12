@@ -2,6 +2,8 @@ import { Effect } from "@station/runtime";
 
 export type ReconcileScheduler = {
   request(reason: string): void;
+  /** Refuses queued work and waits for an active reconcile before shutdown continues. */
+  shutdown(): Promise<void>;
 };
 
 export type CreateReconcileSchedulerOptions = {
@@ -30,12 +32,17 @@ export function createReconcileScheduler(
   const debounceMs = options.debounceMs ?? defaultDebounceMs;
   const backlogDebounceMs = options.backlogDebounceMs ?? defaultBacklogDebounceMs;
   let running = false;
+  let stopped = false;
   let timerScheduled = false;
+  let activeFlush: Promise<void> | undefined;
   let firstQueuedAt: number | undefined;
   const queuedReasons: string[] = [];
 
   return {
     request: (reason) => {
+      if (stopped) {
+        return;
+      }
       if (queuedReasons.length === 0) {
         firstQueuedAt = Date.now();
       }
@@ -45,19 +52,33 @@ export function createReconcileScheduler(
       }
       scheduleFlush(debounceMs);
     },
+    shutdown: async () => {
+      stopped = true;
+      queuedReasons.length = 0;
+      firstQueuedAt = undefined;
+      timerScheduled = false;
+      await activeFlush;
+    },
   };
 
   function scheduleFlush(delayMs: number): void {
     timerScheduled = true;
-    void sleep(delayMs).then(
-      () => {
-        timerScheduled = false;
-        void flush().catch((error: unknown) => reportError(error));
-      },
-      () => {
-        timerScheduled = false;
-      },
-    );
+    const start = () => {
+      timerScheduled = false;
+      if (stopped) {
+        return;
+      }
+      const flight = flush().catch((error: unknown) => reportError(error));
+      activeFlush = flight;
+      void flight.finally(() => {
+        if (activeFlush === flight) {
+          activeFlush = undefined;
+        }
+      });
+    };
+    void sleep(delayMs).then(start, () => {
+      timerScheduled = false;
+    });
   }
 
   async function flush(): Promise<void> {
@@ -87,7 +108,7 @@ export function createReconcileScheduler(
         durationMs: Math.max(0, Date.now() - startedAt),
         queuedAfter,
       });
-      if (queuedReasons.length > 0 && !timerScheduled) {
+      if (!stopped && queuedReasons.length > 0 && !timerScheduled) {
         scheduleFlush(backlogDebounceMs);
       }
     }

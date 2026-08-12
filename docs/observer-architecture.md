@@ -343,8 +343,8 @@ defined startup failure path and shutdown owner.
 ### Shutdown
 
 The API stop path first aborts and awaits duplicate inspection, then stops
-provider-health publication, drains harness ingress, marks metadata refresh
-terminal, aborts active local and repository reads, shuts down ref invalidation,
+provider-health publication, refuses queued reconciles and awaits an active scheduler flush,
+drains harness ingress, marks metadata refresh terminal, aborts active local and repository reads, shuts down ref invalidation,
 and waits for the refresh flight before process shutdown. Ref-watcher shutdown
 invalidates callbacks first, clears debounce timers, attempts every close despite
 individual failures, and makes later replacement and callbacks no-ops. During
@@ -389,6 +389,11 @@ reconcile repair.
 Changed Group events derive from the mutation result and are persisted and published in
 canonical order before command success; validated no-ops emit no Group event. This path
 does not read providers or publish `observer.reconciled`.
+
+`session.startAgent` and `session.resumeAgent` use current targeted provider evidence when
+the selected worktree is absent from the snapshot. A persisted path and registration
+identity may seed that lookup, but only the provider's fresh validation authorizes launch;
+full-inventory convergence runs afterward without holding foreground completion.
 
 `worktree.remove` carries the selected worktree ID, canonical path, branch, and
 opaque Git registration identity. Its use case refreshes provider evidence and
@@ -598,7 +603,7 @@ focus returns before any health or hook probe.
 `prepareExternalLaunch` and `reportExternalExit` are latency-sensitive
 handshakes rather than recorded commands. Their use cases depend on the
 composition-supplied `ManagedTerminalLifecycle`, carry provider-owned target IDs
-opaquely, and request reconcile after relevant lifecycle changes. Returning an
+opaquely, and request coalesced background reconcile after relevant lifecycle changes. Returning an
 attachable managed target or an existing live session precedes launch preflight.
 Target discovery includes Station Host reconstruction, so negotiated handoff and
 orphan-bridge adoption retain their existing PTY instead of entering provider
@@ -694,7 +699,7 @@ expires.
 | Spool drain | One configured drain runs at a time and processes stable filename order through direct durable ingress. Stable spool IDs survive legacy records without hook IDs; completion is idempotent after primary dedupe, and failed records remain on disk with attempt/error evidence. |
 | Hook auto-start throttle | `hook-autostart.lock` limits provider-hook spawn attempts only. It is never Observer ownership; each child still enters the socket-relative SQLite boot claim. |
 | Event delivery | Each subscriber currently has an unbounded in-memory queue. There is no replay or publisher backpressure; slow-subscriber growth is therefore a known operating characteristic. |
-| Background refresh | Each unique provider probe publishes its completed result through the serialized snapshot writer before its in-flight slot clears. Joined refresh callers do not duplicate publication; shutdown unsubscribes first and drains commits already in progress. Probe and metadata-refresh failures remain best-effort and do not block the primary reconcile result. Duplicate cleanup is one-shot after startup reconcile, single-flight, claim-authorized, and shutdown-cancellable rather than periodic. |
+| Background refresh | Each unique provider probe publishes its completed result through the serialized snapshot writer before its in-flight slot clears. Joined refresh callers do not duplicate publication; launch preflight may proceed once fresh evidence reaches the cache without waiting behind that serialized publication. Shutdown unsubscribes first and drains commits already in progress. Probe and metadata-refresh failures remain best-effort and do not block the primary reconcile result. Duplicate cleanup is one-shot after startup reconcile, single-flight, claim-authorized, and shutdown-cancellable rather than periodic. |
 
 Retry belongs at an adapter or runtime boundary whose owner can state why the
 operation is safe to repeat. Do not retry a mutation without an idempotency key,
