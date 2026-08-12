@@ -281,6 +281,20 @@ The supported channel IDs are:
 - `mise`: recognizes the active tool installation whose `bin/stn` owns the
   running CLI.
 
+Each native fullscreen TUI launch starts one process-local read-only owner and
+availability check after invoking its renderer; there is no persistent cache.
+The check never applies an update and is aborted without being awaited when the
+renderer finishes. If a version-changing plan has already completed when the
+renderer exits normally, Station restores the terminal and then prints exactly:
+
+```text
+Station <version> is available — run `stn update`
+```
+
+Immediate or abnormal exits, current or same-version development revisions,
+unknown or ambiguous ownership, failed discovery, popup sessions, and the fake
+dashboard print no notice.
+
 Homebrew, npm-global, and mise print their exact native upgrade command and
 return `deferred` by default. `stn update --drive-package-manager` explicitly
 allows Station to execute that command. This does not make those managers

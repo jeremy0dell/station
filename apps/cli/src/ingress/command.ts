@@ -49,6 +49,28 @@ type ParsedOptions = {
   rateLimitMs?: number;
 };
 
+type HarnessIngressDispatchInput = ProviderHookSenderOptions & {
+  eventType: string;
+  payload: unknown;
+  env?: NodeJS.ProcessEnv;
+};
+
+type HarnessIngressDefinition = {
+  event: "ignored" | "optional" | "required";
+  dispatch: (
+    input: HarnessIngressDispatchInput,
+    deps: ProviderHookSenderDeps,
+  ) => Promise<ProviderHookReceipt>;
+};
+
+const HARNESS_INGRESS_DEFINITIONS = {
+  claude: { event: "ignored", dispatch: sendClaudeHookPayload },
+  codex: { event: "ignored", dispatch: sendCodexHookPayload },
+  cursor: { event: "optional", dispatch: sendCursorHookPayload },
+  pi: { event: "required", dispatch: sendPiHookPayload },
+  opencode: { event: "required", dispatch: sendOpenCodeHookPayload },
+} as const satisfies Record<string, HarnessIngressDefinition>;
+
 /**
  * ADAPTER
  *
@@ -68,89 +90,35 @@ export async function runProviderIngressCommand(
   const senderOptions = senderOptionsFromParsed(parsed, options);
   const stdin = options.stdin ?? (await readStdinIfAvailable());
 
-  if (provider === "claude") {
-    const payload = parseJsonPayload(stdin, "claude", "unknown", deps);
+  const harnessDefinition = Object.hasOwn(HARNESS_INGRESS_DEFINITIONS, provider)
+    ? HARNESS_INGRESS_DEFINITIONS[provider as keyof typeof HARNESS_INGRESS_DEFINITIONS]
+    : undefined;
+  if (harnessDefinition !== undefined) {
+    let eventType = "unknown";
+    if (harnessDefinition.event === "optional") {
+      eventType = event ?? "unknown";
+    } else if (harnessDefinition.event === "required") {
+      if (event === undefined) {
+        throw new Error(`Usage: stn-ingress [options] ${provider} <event>`);
+      }
+      eventType = event;
+    }
+    const payload = parseJsonPayload(stdin, provider, eventType, deps);
     if (!payload.ok) {
       return payload.receipt;
     }
-    const hookInput: Parameters<typeof sendClaudeHookPayload>[0] = {
+    const hookInput: HarnessIngressDispatchInput = {
       ...senderOptions,
+      eventType,
       payload: payload.value,
     };
     if (options.env !== undefined) {
       hookInput.env = options.env;
     }
-    return sendClaudeHookPayload(hookInput, deps);
+    return harnessDefinition.dispatch(hookInput, deps);
   }
 
-  if (provider === "codex") {
-    const payload = parseJsonPayload(stdin, "codex", "unknown", deps);
-    if (!payload.ok) {
-      return payload.receipt;
-    }
-    const hookInput: Parameters<typeof sendCodexHookPayload>[0] = {
-      ...senderOptions,
-      payload: payload.value,
-    };
-    if (options.env !== undefined) {
-      hookInput.env = options.env;
-    }
-    return sendCodexHookPayload(hookInput, deps);
-  }
-
-  if (provider === "cursor") {
-    const payload = parseJsonPayload(stdin, "cursor", event ?? "unknown", deps);
-    if (!payload.ok) {
-      return payload.receipt;
-    }
-    const hookInput: Parameters<typeof sendCursorHookPayload>[0] = {
-      ...senderOptions,
-      payload: payload.value,
-    };
-    if (options.env !== undefined) {
-      hookInput.env = options.env;
-    }
-    return sendCursorHookPayload(hookInput, deps);
-  }
-
-  if (provider === "pi") {
-    if (event === undefined) {
-      throw new Error("Usage: stn-ingress [options] pi <event>");
-    }
-    const payload = parseJsonPayload(stdin, "pi", event, deps);
-    if (!payload.ok) {
-      return payload.receipt;
-    }
-    const hookInput: Parameters<typeof sendPiHookPayload>[0] = {
-      ...senderOptions,
-      eventType: event,
-      payload: payload.value,
-    };
-    if (options.env !== undefined) {
-      hookInput.env = options.env;
-    }
-    return sendPiHookPayload(hookInput, deps);
-  }
-
-  if (provider === "opencode") {
-    if (event === undefined) {
-      throw new Error("Usage: stn-ingress [options] opencode <event>");
-    }
-    const payload = parseJsonPayload(stdin, "opencode", event, deps);
-    if (!payload.ok) {
-      return payload.receipt;
-    }
-    const hookInput: Parameters<typeof sendOpenCodeHookPayload>[0] = {
-      ...senderOptions,
-      eventType: event,
-      payload: payload.value,
-    };
-    if (options.env !== undefined) {
-      hookInput.env = options.env;
-    }
-    return sendOpenCodeHookPayload(hookInput, deps);
-  }
-
+  // Worktrunk requires an event but accepts an absent JSON payload.
   if (provider === "worktrunk") {
     if (event === undefined) {
       throw new Error("Usage: stn-ingress [options] worktrunk <event>");

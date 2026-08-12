@@ -32,6 +32,7 @@ import {
   resolveStationWorkspaceDir,
   stationUiInstallHint,
 } from "../stationWorkspace.js";
+import { selectUpdateChannel, type UpdateChannelProbe } from "../update/channelDetection.js";
 import { requireMatchingStationUiObserverBuild } from "./stationUiBuildAdmission.js";
 import { attachTuiRendererControl, type TuiRendererControlAdapters } from "./tuiRendererControl.js";
 import { createTuiRendererLifecycleWitness } from "./tuiRendererLifecycle.js";
@@ -65,6 +66,8 @@ export type TuiCommandDeps = {
   stationUiInstalled?: () => Promise<boolean>;
   selfExecRuntime?: SelfExecRuntime;
   popupControl?: TuiRendererControlAdapters;
+  updateProbes?: readonly UpdateChannelProbe[];
+  writeUpdateNotice?: (notice: string) => void;
   env?: CliEnv;
 };
 
@@ -95,7 +98,9 @@ const nestedTuiDisabledError = {
  *
  * Owns one launcher-minted UI run identity per renderer child, Observer startup and
  * exact-selector admission before renderer and reconcile effects, resolved-config
- * propagation, exact child outcome evidence, renderer selection, and popup control wiring.
+ * propagation, exact child outcome evidence, renderer selection, popup control wiring,
+ * background read-only update planning, and post-cleanup normal-exit notices. Unfinished
+ * discovery is aborted without joining renderer shutdown.
  */
 export async function runTuiCommand(
   args: string[],
@@ -183,7 +188,7 @@ export async function runTuiCommand(
   scheduleReconcileBeforeTui(startupReconcile);
   // Bare terminal launches native Station with its own panes; a tmux popup uses the
   // observer-backed command-capable dashboard without native Station panes.
-  return runRenderer(
+  const renderer = runRenderer(
     deps,
     buildRendererEnv(
       parsed,
@@ -199,6 +204,29 @@ export async function runTuiCommand(
     options.config?.terminal?.tmux,
     paths.stateDir,
   );
+  if (parsed.popupMode || deps.updateProbes === undefined) {
+    return renderer;
+  }
+
+  let targetVersion: string | undefined;
+  const discoveryAbort = new AbortController();
+  void selectUpdateChannel({
+    probes: deps.updateProbes,
+    options: { signal: discoveryAbort.signal },
+  })
+    .then(({ plan }) => {
+      if (plan.status === "update-available" && plan.targetVersion !== plan.currentVersion) {
+        targetVersion = plan.targetVersion;
+      }
+    })
+    .catch(() => undefined);
+
+  const result = await renderer;
+  discoveryAbort.abort();
+  if (result.code === 0 && result.signal == null && targetVersion !== undefined) {
+    deps.writeUpdateNotice?.(`Station ${targetVersion} is available — run \`stn update\`\n`);
+  }
+  return result;
 }
 
 // Transient popups inherit their startup focus origin; persistent popups resolve

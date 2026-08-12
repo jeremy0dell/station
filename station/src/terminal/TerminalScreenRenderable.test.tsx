@@ -4,6 +4,7 @@ import { testRender } from "@opentui/react/test-utils";
 import { act, useState, type Dispatch, type SetStateAction } from "react";
 import { nativeStationTheme, stationColorSnapshotValue } from "../theme/index.js";
 import { spanAtFrameCell } from "./testing/frameProbe.js";
+import { waitFor } from "./testing/waitFor.js";
 import { createStationVtScreen, type StationVtScreen } from "./vt/screen.js";
 import "./TerminalScreenRenderable.js";
 
@@ -129,6 +130,23 @@ describe("TerminalScreenRenderable paint props", () => {
       expect(rowBuilds).toBe(buildsBeforeUpdate);
       expect(screen.getVersion()).toBe(version);
       expect(screen.unsafeEngine).toBe(engine);
+    } finally {
+      await teardown(setup, screen);
+    }
+  });
+});
+
+describe("TerminalScreenRenderable output rendering", () => {
+  it("paints VT output when an on-demand render request is dropped", async () => {
+    const { setup, screen } = await renderPane("before");
+    try {
+      const version = screen.getVersion();
+      setup.renderer.requestRender = () => {};
+
+      screen.feed("\rupdated");
+      await waitFor(() => screen.getVersion() > version);
+      await waitFor(() => setup.captureCharFrame().includes("updated"));
+      await waitFor(() => setup.renderer.liveRequestCount === 0);
     } finally {
       await teardown(setup, screen);
     }

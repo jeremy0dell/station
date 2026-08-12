@@ -39,13 +39,9 @@ When a module’s name cannot clearly describe what it owns, identify its indepe
 
 ## Code Comments
 
-Prefer self-documenting code. Add a comment when it protects non-obvious intent that future edits could plausibly break: ordering constraints, fallbacks, invariants, cancellation or concurrency behavior, external tool quirks, boundary translations, or other concerns in that realm.
+Prefer self-documenting code. Add a concise comment next to the code only when it protects non-obvious intent future edits could break—especially ordering, invariants, concurrency, fallbacks, external quirks, or boundary translations.
 
-Prefer one precise comment near the protected code over leaving the rationale in a planning doc or review thread. Do not add comments that restate the branch condition, variable name, or TypeScript type. If a comment would need to narrate several steps of ordinary code, simplify or extract the code first.
-
-Keep load-bearing comments; do not strip them chasing a zero-comment ideal. The target is the necessary minimum, which is almost always SOME, not NONE — a file with real ordering, concurrency, or boundary subtlety should carry the comments that protect it.
-
-Voice: one sentence by default (needing two usually means the code wants renaming or extracting). State the mechanism or invariant, not a narrative. Cut storytelling and anthropomorphizing ("brings the user there", "yanked into the pane", "lands the user in the pane") and anything that restates a named flag or type. At most one parenthetical per comment.
+Keep load-bearing comments, but do not restate the code or its types. If a comment must narrate ordinary steps, simplify the code first. State the mechanism or invariant, usually in one sentence; avoid storytelling and anthropomorphism.
 
 ## Optional Object Construction
 
@@ -55,7 +51,7 @@ For complex mappers, persistence row conversion, diagnostics construction, error
 
 Do not use `...(await somePromise)` in production array or object construction. Await into a named local first.
 
-Provider-specific diagnostics and behavior must stay behind provider or integration boundaries. Observer/core code should aggregate provider diagnostics through contracts or injected capabilities, not import concrete providers directly.
+Keep provider-specific behavior, diagnostics, and raw-payload parsing inside `integrations/...`. Observer/core may consume only provider-neutral contracts or injected capabilities; normalize shared facts at the integration boundary instead of reading provider-specific `providerData` keys.
 
 Use strict schemas for untrusted input and shared payload formats. Avoid maintaining parallel hand-written validators for the same shape.
 
@@ -67,28 +63,17 @@ Do not add local JavaScript-style type helper clusters such as `isRecord`, `asRe
 
 Inside already-typed code, prefer discriminated unions, exhaustive `switch` handling, typed builders, and inferred schema types over runtime property probing. Runtime shape probing is acceptable only for truly generic traversal/error-normalization code or the first step before schema parsing.
 
-Observer/core code should not scrape provider-specific keys out of generic `providerData`. Normalize those fields at the provider boundary into contract fields, correlation fields, or a provider-owned schema.
-
 ## Runtime Debugging
 
-For runtime trace IDs, command IDs, and diagnostic IDs, do not start by grepping checked-in source. Runtime evidence lives under the configured observer state directory, defaulting to `~/.local/state/station`.
+Runtime evidence lives under the configured Observer state directory (default `~/.local/state/station`). Use the CLI before searching source:
 
-Start with the narrowest matching tool:
+- known trace, command, or diagnostic ID: `stn debug trace <id>`; command lifecycle: `stn command get <commandId>`
+- history or latest failure: `stn debug logs [query]` or `stn debug trace --latest-failure`
+- process, health, or graph: `stn observer status`, `stn doctor`, or `stn snapshot --json`
+- live events: `stn observe --include-snapshot --duration 3s` (add `--json` for agent-readable output)
+- hook/setup diagnosis: `stn hooks doctor <provider>`, `stn event-hooks doctor`, or `stn setup check --json`
+- redacted evidence: `stn debug bundle --trace <id>`, `--command <id>`, or `--latest-failure`
 
-- trace, command, or diagnostic id: `stn debug trace <id>`
-- no id yet, historical/local symptom: `stn debug logs [query]`
-- latest known failure: `stn debug trace --latest-failure`
-- process status only: `stn observer status`
-- current runtime health: `stn doctor`
-- current graph truth: `stn snapshot --json`
-- live event stream: `stn observe --include-snapshot --duration 3s`, with `--json` for agent-readable output
-- command lifecycle record: `stn command get <commandId>`
-- redacted shareable evidence: `stn debug bundle --trace <traceId>`, `stn debug bundle --command <commandId>`, or `stn debug bundle --latest-failure`
-- provider hook setup: `stn hooks doctor worktrunk|claude|codex|cursor|opencode` or `stn event-hooks doctor`
-- setup/tool readiness: `stn setup check --json`, `stn setup system --check`, or `pnpm setup:system:check`
+If the user says "no action," use only existing logs, records, bundles, and `stn debug trace` / `stn debug logs`. Do not start, restart, or auto-start Observer; retry commands; kill processes; change setup, hooks, or config; or create a bundle.
 
-If the user says "no action", treat debugging as read-only: inspect only existing logs, existing bundles, existing command/error records, and `stn debug trace` / `stn debug logs` output. Do not start/restart observer, run commands that call or auto-start the observer, retry commands, kill processes, mutate setup/hooks/config, or write a new bundle unless explicitly asked.
-
-Provider hooks are delivery hints, not runtime truth. Use hook logs and hook doctors to diagnose delivery/setup, then use observer health, reconcile output, and snapshots for current truth.
-
-Key runtime files are `logs/observer.jsonl`, `logs/hooks.jsonl`, `logs/cli.jsonl`, `logs/tui.jsonl`, latest `diagnostics/*/diagnostic-index.json`, `diagnostics/*/commands.jsonl`, `diagnostics/*/errors.jsonl`, and `spool/hooks/`.
+Hooks prove delivery, not current runtime state; confirm current truth through Observer health, reconcile output, and snapshots.

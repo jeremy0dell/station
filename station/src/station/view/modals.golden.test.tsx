@@ -32,6 +32,8 @@ import {
   handleTuiKey,
   openRemoveWorktreeConfirmForRow,
   openProjectDefaultAgentPicker,
+  openCreateGroup,
+  openProjectMenu,
   openProjectSettings,
  } from "@station/dashboard-core/state";
 
@@ -98,9 +100,42 @@ const CASES: ModalCase[] = [
       "split pane right",
       "1-9/a-z",
       "open visible session",
+      "G",
+      "quick group",
       "edit/apply/cancel-clear/retain-close filter",
       "╭",
       "╰",
+    ],
+  },
+  {
+    name: "project menu",
+    keys: [],
+    prepare: (state) => openProjectMenu(state, "station"),
+    expect: ["Quick Group", "New Group…", "Set default agent", "Project settings…"],
+  },
+  {
+    name: "project menu above a short viewport",
+    keys: [],
+    size: { width: 30, height: 8 },
+    prepare: (state) => openProjectMenu(state, "station"),
+    expect: ["Quick Group", "New Group…", "Set default agent", "Project settings…"],
+  },
+  {
+    name: "create group sheet",
+    keys: [],
+    prepare: (state) => {
+      let opened = openCreateGroup(state, "station", "projectMenu");
+      opened = handleTuiKey(opened, { input: "Release work" }).state;
+      opened = handleTuiKey(opened, { input: "", downArrow: true }).state;
+      return handleTuiKey(opened, { input: "Q" }).state;
+    },
+    expect: [
+      "Create Group",
+      "Name (N)",
+      "Release work",
+      "▸ Quick session (Q) On",
+      "Create Group (C)",
+      "Cancel (Esc)",
     ],
   },
   {

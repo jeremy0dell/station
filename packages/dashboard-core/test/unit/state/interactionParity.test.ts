@@ -251,7 +251,7 @@ describe("primary workflow interaction parity", () => {
     ["identity", 0],
     ["shell", 1],
     ["quickSession", 2],
-    ["defaultAgent", 3],
+    ["menu", 3],
   ] as const)("converges project-header %s pointer semantics with focused Enter", (actionId, rights) => {
     const base = createInitialTuiState({ initialSnapshot: createDashboardSnapshot() });
     const semantic = handleTuiAction(
@@ -340,6 +340,39 @@ describe("primary workflow interaction parity", () => {
       expect(semantic.state.dashboardFocus).toEqual(keyboard.state.dashboardFocus);
       expect(semantic.state.collapsedGroupIds).toEqual(keyboard.state.collapsedGroupIds);
       expect(semantic.operations).toEqual(keyboard.operations);
+    }
+  });
+
+  it("converges direct, pointer, and focused Project paths on one Quick Group operation", () => {
+    const rowId = dashboardRowIds.project("web");
+    const base = createInitialTuiState({
+      initialSnapshot: createGroupedDashboardSnapshot(),
+      dashboardFocus: { rowId, cellId: "menu" },
+    });
+    const semanticMenu = handleTuiAction(
+      base,
+      { type: "dashboard.cell.activate", rowId, cellId: "menu" },
+      context,
+    ).state;
+    const focusedMenu = handleTuiKey(base, { input: "\r", return: true }, context).state;
+    const semanticQuick = handleTuiAction(
+      semanticMenu,
+      { type: "projectMenu.activate", actionId: "quickGroup" },
+      context,
+    );
+    const focusedQuick = handleTuiKey(focusedMenu, { input: "\r", return: true }, context);
+    const directQuick = handleTuiKey(base, { input: "G" }, context);
+
+    expect(semanticMenu.screen).toEqual(focusedMenu.screen);
+    for (const transition of [semanticQuick, focusedQuick, directQuick]) {
+      expect(transition.operations).toEqual([
+        expect.objectContaining({
+          type: "createSessionGroup",
+          projectId: "web",
+          name: expect.stringMatching(/^Quick Group [0-9a-f]{6}$/),
+          quickSession: true,
+        }),
+      ]);
     }
   });
 

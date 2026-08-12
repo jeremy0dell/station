@@ -2,7 +2,7 @@
  * Role entrypoint: dashboard state views, keys, screens, and flows.
  *
  * Read-only state projections, key/action handling, screen transitions,
- * toasts, and the new-session/add-project flow machines. Mutable internal
+ * toasts, Project-menu/Create-Group actions, and the new-session/add-project flow machines. Mutable internal
  * state models are not exported here; they remain private to the runtime
  * implementation and its focused tests.
  */
@@ -57,7 +57,6 @@ export {
 export type { ForkSessionActionId } from "../state/screens/fork.js";
 
 export { openProjectDefaultAgentPicker } from "../state/screens/projectDefaultAgent.js";
-
 export {
   isRemoveProjectArmed,
   openProjectSettings,
@@ -70,6 +69,13 @@ export {
   isAgentRemovalUnavailable,
   openRemoveWorktreeConfirmForRow,
 } from "../state/screens/removeWorktree.js";
+export type { ProjectMenuInputActionId } from "../state/screens/sessionGroups.js";
+export {
+  openCreateGroup,
+  openProjectMenu,
+  submitCreateSessionGroup,
+  submitQuickGroup,
+} from "../state/screens/sessionGroups.js";
 
 export {
   ADD_PROJECT_CHOOSE_LIST_ID,
@@ -90,11 +96,16 @@ export {
 export { handleTuiKey } from "../state/transition.js";
 
 export type {
+  CreateGroupFocus,
+  CreateGroupReturnTarget,
+  CreateGroupScreenView,
   DashboardFilterConditionField,
   DashboardScreenView,
   DashboardSnapshotView,
   DashboardStateView,
   DashboardViewState,
+  ProjectMenuActionId,
+  ProjectMenuScreenView,
   ProjectSettingsItemId,
   TuiToastEntry,
   WidgetSettingsFocus,

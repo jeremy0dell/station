@@ -55,6 +55,7 @@ export type TerminalScreenOptions = RenderableOptions<TerminalScreenRenderable> 
 export class TerminalScreenRenderable extends Renderable {
   #screen: StationVtScreen | null = null;
   #unsubscribe: (() => void) | null = null;
+  #renderRetryTimer: ReturnType<typeof setTimeout> | undefined;
   #onViewportResize: ((size: StationTerminalSize) => void) | undefined;
   #onCopySelection: ((text: string) => void) | undefined;
   #onForwardInput: ((bytes: string) => void) | undefined;
@@ -116,10 +117,28 @@ export class TerminalScreenRenderable extends Renderable {
         if (invalidation === "content" && this.#anchor === null) {
           this.#resetSelection();
         }
-        this.requestRender();
+        this.#requestScreenRender();
       });
     }
     this.requestRender();
+  }
+
+  #requestScreenRender(): void {
+    this.requestRender();
+    if (this.#renderRetryTimer !== undefined) {
+      return;
+    }
+    // OpenTUI can drop an on-demand wake after a frame; retry only when
+    // renderSelf has not consumed the external screen's new version.
+    this.#renderRetryTimer = setTimeout(() => {
+      this.#renderRetryTimer = undefined;
+      const screen = this.#screen;
+      if (screen === null || this.#rowsVersion === screen.getVersion()) {
+        return;
+      }
+      this._ctx.requestLive();
+      process.nextTick(() => this._ctx.dropLive());
+    }, 0);
   }
 
   set onViewportResize(handler: ((size: StationTerminalSize) => void) | undefined) {
@@ -537,6 +556,10 @@ export class TerminalScreenRenderable extends Renderable {
   protected override destroySelf(): void {
     this.#unsubscribe?.();
     this.#unsubscribe = null;
+    if (this.#renderRetryTimer !== undefined) {
+      clearTimeout(this.#renderRetryTimer);
+      this.#renderRetryTimer = undefined;
+    }
     this.#screen = null;
     super.destroySelf();
   }

@@ -5,6 +5,7 @@ describe("kittySequenceToLegacy", () => {
   it("translates ctrl chords to control bytes", () => {
     expect(kittySequenceToLegacy("\x1b[99;5u")).toBe("\x03"); // Ctrl-C
     expect(kittySequenceToLegacy("\x1b[100;5u")).toBe("\x04"); // Ctrl-D
+    expect(kittySequenceToLegacy("\x1b[113;5u")).toBe("\x11"); // Ghostty 1.3.1 Ctrl-Q
     expect(kittySequenceToLegacy("\x1b[122;5u")).toBe("\x1a"); // Ctrl-Z
   });
 
@@ -38,6 +39,7 @@ describe("kittySequenceToLegacy", () => {
 
   it("drops key release events", () => {
     expect(kittySequenceToLegacy("\x1b[99;5:3u")).toBe("");
+    expect(kittySequenceToLegacy("\x1b[113;5:3u")).toBe(""); // Ghostty Ctrl-Q release
   });
 
   it("passes non-csi-u sequences through unchanged", () => {
@@ -49,6 +51,7 @@ describe("kittySequenceToLegacy", () => {
 
   it("drops unknown functional keys instead of leaking csi-u bytes", () => {
     expect(kittySequenceToLegacy("\x1b[57441;1u")).toBe(""); // left shift press
+    expect(kittySequenceToLegacy("\x1b[57442;5u")).toBe(""); // Ghostty 1.3.1 left Ctrl press
   });
 
   it("translates keypad keys to their legacy equivalents", () => {

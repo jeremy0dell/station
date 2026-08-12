@@ -423,14 +423,26 @@ describe("buildContextMenuItems", () => {
       stationState,
     );
 
-    expect(items.map((item) => item.label)).toEqual(["Set Default Agent", "Project Settings…"]);
-    // Project is healthy in the fixture, so Set Default Agent is actionable.
+    expect(items.map((item) => item.label)).toEqual([
+      "Quick Group",
+      "New Group…",
+      "Set Default Agent",
+      "Project Settings…",
+    ]);
     expect(items[0]?.disabled).toBeUndefined();
     expect(resolveContextMenuAction(items[0])).toEqual({
-      kind: "setProjectDefaultAgent",
+      kind: "quickGroup",
       projectId: "station",
     });
     expect(resolveContextMenuAction(items[1])).toEqual({
+      kind: "newGroup",
+      projectId: "station",
+    });
+    expect(resolveContextMenuAction(items[2])).toEqual({
+      kind: "setProjectDefaultAgent",
+      projectId: "station",
+    });
+    expect(resolveContextMenuAction(items[3])).toEqual({
       kind: "openProjectSettings",
       projectId: "station",
     });

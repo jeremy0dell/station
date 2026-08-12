@@ -602,8 +602,9 @@ describe("FullscreenDashboard mouse composition", () => {
     });
 
     expect(fixture.runtime.state.getState().screen).toMatchObject({
-      name: "projectDefaultAgent",
+      name: "projectMenu",
       projectId: "station",
+      focus: "quickGroup",
     });
   });
 
