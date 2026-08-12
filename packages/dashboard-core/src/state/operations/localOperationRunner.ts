@@ -14,6 +14,7 @@ import { createDashboardCapabilityOperationRunner } from "./capabilityOperation.
 import { projectCommandOperations } from "./projectCommands.js";
 import { runRemoveWorktreeOperation } from "./removeWorktree.js";
 import { runRenameSessionOperation } from "./renameSession.js";
+import { runCreateSessionGroupOperation } from "./sessionGroups.js";
 import type { DashboardCapabilityOperation, TuiOperation } from "./types.js";
 
 type OperationHandlers = {
@@ -48,7 +49,9 @@ export function createTuiLocalOperationRunner(input: {
   });
 
   const runCapabilityOperation = (operation: DashboardCapabilityOperation): void => {
-    input.scope.run(() => capabilityOperations.run(operation));
+    input.scope.run(async () => {
+      await capabilityOperations.run(operation);
+    });
   };
   const handlers: OperationHandlers = {
     activateSession: runCapabilityOperation,
@@ -141,6 +144,18 @@ export function createTuiLocalOperationRunner(input: {
           store: store(),
           service: input.service,
           command: operation.command,
+          clientLabel: input.clientLabel,
+          scope: input.scope,
+        }),
+      );
+    },
+    createSessionGroup: (operation) => {
+      input.scope.run(() =>
+        runCreateSessionGroupOperation({
+          store: store(),
+          service: input.service,
+          capabilities: capabilityOperations,
+          operation,
           clientLabel: input.clientLabel,
           scope: input.scope,
         }),

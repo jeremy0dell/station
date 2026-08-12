@@ -21,6 +21,7 @@ import {
   openDashboardPersistentFilter,
 } from "./persistentFilter.js";
 import { openProjectSlotPicker } from "./projectSlotPicker.js";
+import { submitQuickGroup } from "./sessionGroups.js";
 import { openWidgetSettings } from "./widgetSettings.js";
 
 export const dashboardScreenBehavior = { dashboardHoverEnabled: true };
@@ -123,6 +124,8 @@ function handleDashboardAction(
       };
     case "tui.newSession.open":
       return openNewSession(state);
+    case "tui.quickGroup.create":
+      return submitQuickGroup(state);
     case "tui.addProject.open":
       return handleDashboardAddProjectAction(state, context);
     case "tui.collapse.open":

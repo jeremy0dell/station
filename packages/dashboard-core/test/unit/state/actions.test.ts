@@ -386,6 +386,50 @@ describe("dashboard state actions", () => {
     }
   });
 
+  it("routes Project-menu and Create Group actions through the shared semantic surface", () => {
+    const state = createInitialTuiState({ initialSnapshot: createGroupedDashboardSnapshot() });
+    const menu = handleTuiAction(
+      state,
+      {
+        type: "dashboard.cell.activate",
+        rowId: dashboardRowIds.project("web"),
+        cellId: "menu",
+      },
+      context,
+    ).state;
+    const quick = handleTuiAction(
+      menu,
+      { type: "projectMenu.activate", actionId: "quickGroup" },
+      context,
+    );
+    const sheet = handleTuiAction(
+      menu,
+      { type: "createGroup.open", projectId: "web", returnTo: "projectHeader" },
+      context,
+    ).state;
+    const toggled = handleTuiAction(
+      sheet,
+      { type: "createGroup.activate", actionId: "quickSession" },
+      context,
+    ).state;
+
+    expect(menu.screen).toEqual({ name: "projectMenu", projectId: "web", focus: "quickGroup" });
+    expect(quick.operations).toEqual([
+      expect.objectContaining({ type: "createSessionGroup", projectId: "web", quickSession: true }),
+    ]);
+    expect(sheet.screen).toMatchObject({
+      name: "createGroup",
+      projectId: "web",
+      returnTo: "projectHeader",
+      quickSession: false,
+    });
+    expect(toggled.screen).toMatchObject({
+      name: "createGroup",
+      focus: "quickSession",
+      quickSession: true,
+    });
+  });
+
   it("keeps stale, hidden, filtered, and wrong-cell dashboard targets inert", () => {
     const state = dashboardState();
     const stale = {

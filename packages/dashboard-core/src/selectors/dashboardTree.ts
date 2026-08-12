@@ -46,13 +46,7 @@ export const dashboardRowIds = {
   gap: (projectId: ProjectId): DashboardRowId => `gap:${projectId}` as DashboardRowId,
 } as const;
 
-export type DashboardCellId =
-  | "identity"
-  | "shell"
-  | "quickSession"
-  | "defaultAgent"
-  | "addSession"
-  | "menu";
+export type DashboardCellId = "identity" | "shell" | "quickSession" | "addSession" | "menu";
 
 /** Determines whether Group blocks precede or interleave with project-root session rows. */
 export type GroupOrderingMode = "groups-first" | "alphabetical-interleaved";
@@ -172,15 +166,18 @@ type ProjectRows = {
 type ProjectGroupRows = {
   readonly group: DashboardGroupView;
   readonly collapsed: boolean;
-  readonly rows: readonly DashboardSessionPayload[];
+  readonly rows: readonly (DashboardSessionPayload | DashboardCreateLocalRowPayload)[];
 };
 
-const PROJECT_CELLS = ["identity", "shell", "quickSession", "defaultAgent"] as const;
+const PROJECT_CELLS = ["identity", "shell", "quickSession", "menu"] as const;
 const GROUP_CELLS = ["identity", "quickSession", "menu"] as const;
 const SESSION_CELLS = ["identity"] as const;
 const EMPTY_PROJECT_CELLS = ["addSession"] as const;
 
-/** Projects canonical snapshot and local dashboard state through one normalized tree-grid path. */
+/**
+ * Projects canonical hierarchy while targeted pending rows may bridge one ungrouped session into
+ * its intended Group; `snapshot.sessionGroups` remains the sole membership authority.
+ */
 export function selectDashboardTree(
   snapshot: DashboardSnapshotView,
   state: DashboardViewState,
@@ -208,6 +205,7 @@ function projectRowsForSnapshot(
 ): ProjectRows[] {
   const sessionRows = selectDashboardSessionRows(snapshot);
   const localRows = visibleCreateSessionLocalRows(snapshot, state);
+  const suppressedSessionIds = targetedPendingCanonicalSessionIds(snapshot, localRows);
   const groupBySessionId = new Map<SessionId, DashboardGroupView>();
   for (const group of snapshot.sessionGroups) {
     for (const sessionId of group.sessionIds) {
@@ -216,7 +214,9 @@ function projectRowsForSnapshot(
   }
   const projects = snapshot.projects.map((project): ProjectRows => {
     const rows = mergeDashboardRows(
-      sessionRows.filter((row) => row.worktree.projectId === project.id),
+      sessionRows.filter(
+        (row) => row.worktree.projectId === project.id && !suppressedSessionIds.has(row.id),
+      ),
       localRows.filter((row) => row.projectId === project.id),
       state,
     ).map((row) =>
@@ -227,17 +227,20 @@ function projectRowsForSnapshot(
       .map((group) => ({
         group,
         collapsed: state.collapsedGroupIds.has(group.id),
-        rows: rows.filter(
-          (row): row is DashboardSessionPayload =>
-            row.type === "session" && groupBySessionId.get(row.row.id)?.id === group.id,
+        rows: rows.filter((row) =>
+          row.type === "session"
+            ? groupBySessionId.get(row.row.id)?.id === group.id
+            : row.row.status === "pending" && row.row.targetGroupId === group.id,
         ),
       }));
     return {
       project,
       collapsed: state.collapsedProjectIds.has(project.id),
       rows,
-      rootRows: rows.filter(
-        (row) => row.type === "createLocalRow" || groupBySessionId.get(row.row.id) === undefined,
+      rootRows: rows.filter((row) =>
+        row.type === "createLocalRow"
+          ? row.row.status === "failed" || row.row.targetGroupId === undefined
+          : groupBySessionId.get(row.row.id) === undefined,
       ),
       groups,
     };
@@ -258,10 +261,39 @@ function visibleCreateSessionLocalRows(
   );
   return [
     ...state.localRows.pendingCreate
-      .filter((row) => !canonicalProjectBranches.has(`${row.projectId}\u0000${row.branch}`))
+      .filter(
+        (row) =>
+          row.targetGroupId !== undefined ||
+          !canonicalProjectBranches.has(`${row.projectId}\u0000${row.branch}`),
+      )
       .map((row) => ({ ...row, status: "pending" as const })),
     ...state.localRows.failedCreate.map((row) => ({ ...row, status: "failed" as const })),
   ];
+}
+
+function targetedPendingCanonicalSessionIds(
+  snapshot: DashboardSnapshotView,
+  localRows: readonly DashboardCreateSessionLocalRow[],
+): ReadonlySet<SessionId> {
+  const targetedBranches = new Set(
+    localRows.flatMap((row) =>
+      row.status === "pending" && row.targetGroupId !== undefined
+        ? [`${row.projectId}\u0000${row.branch}`]
+        : [],
+    ),
+  );
+  const groupedSessionIds = new Set(snapshot.sessionGroups.flatMap((group) => group.sessionIds));
+  const rowsById = new Map(snapshot.rows.map((row) => [row.id, row]));
+  return new Set(
+    snapshot.sessions.flatMap((session) => {
+      const row = rowsById.get(session.worktreeId);
+      return row !== undefined &&
+        !groupedSessionIds.has(session.id) &&
+        targetedBranches.has(`${session.projectId}\u0000${row.branch}`)
+        ? [session.id]
+        : [];
+    }),
+  );
 }
 
 function mergeDashboardRows(
@@ -496,7 +528,7 @@ function groupNode(
     group: groupRows.group,
     collapsed: groupRows.collapsed,
     sessionCount: groupRows.group.sessionIds.length,
-    visibleSessionCount: visibleRows.length,
+    visibleSessionCount: visibleRows.filter((row) => row.type === "session").length,
     ...(match === undefined ? {} : { persistentFilterMatch: match }),
   };
   const children = [

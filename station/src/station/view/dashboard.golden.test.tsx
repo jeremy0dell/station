@@ -221,6 +221,39 @@ describe("dashboard golden frames", () => {
     expect(interleaved.captureCharFrame()).toMatchSnapshot();
   });
 
+  it("frames a targeted pending Quick Session inside its Group", async () => {
+    const setup = await renderDashboard({
+      width: 80,
+      height: 40,
+      snapshot: groupedManyProjectsSnapshot(),
+      initialState: {
+        localRows: {
+          pendingCreate: [
+            {
+              localId: "create:station:quick-group",
+              projectId: "station",
+              title: "station-quick-group",
+              branch: "station-quick-group",
+              harnessProvider: "codex",
+              targetGroupId: "group_post_launch",
+              createdAt: "2026-08-11T00:00:00.000Z",
+            },
+          ],
+          failedCreate: [],
+          pendingRemove: [],
+          pendingStart: [],
+        },
+      },
+    });
+    const pendingLine = setup
+      .captureCharFrame()
+      .split("\n")
+      .find((line) => line.includes("station-quick-group"));
+
+    expect(pendingLine?.startsWith("│")).toBe(true);
+    expect(pendingLine?.trimEnd().endsWith("│")).toBe(true);
+  });
+
   it("renders filtered Group counts and clips framed blocks as ordinary rows", async () => {
     const snapshot = groupedManyProjectsSnapshot();
     const filtered = await renderDashboard({
@@ -967,7 +1000,7 @@ describe("dashboard golden frames", () => {
       });
       const shellLabel = width < 90 ? "[sh]" : "[shell]";
       const quickLabel = width < 90 ? "[qs]" : "[quick session]";
-      const controls = ["primary", "shell", "quickSession", "defaultAgent"] as const;
+      const controls = ["primary", "shell", "quickSession", "menu"] as const;
 
       setup.store.actions.handleKey({ input: "", downArrow: true });
       for (let index = 0; index < controls.length; index += 1) {
@@ -991,7 +1024,7 @@ describe("dashboard golden frames", () => {
           primary: 0,
           shell: shellStart,
           quickSession: quickStart,
-          defaultAgent: defaultStart,
+          menu: defaultStart,
         } as const;
         for (const [control, column] of Object.entries(samples)) {
           const background = spanBgHex(spanAtFrameCell(spans, row, column));
@@ -1065,7 +1098,7 @@ describe("dashboard golden frames", () => {
       {
         kind: "dashboardCell",
         rowId: dashboardRowIds.project("station"),
-        cellId: "defaultAgent",
+        cellId: "menu",
       },
     ]);
   });
