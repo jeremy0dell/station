@@ -25,6 +25,8 @@ function verifyReadonlyStateSource(
   state.localRows.pendingCreate.push(pendingCreateRow);
   // @ts-expect-error Readonly sets do not expose mutation methods.
   state.collapsedProjectIds.add("project");
+  // @ts-expect-error Group collapse is renderer-local but remains readonly across the public source.
+  state.collapsedGroupIds.add("group");
   // @ts-expect-error Readonly maps do not expose mutation methods.
   readonlyMap.set("project", { values: [] });
   // @ts-expect-error Values nested inside readonly maps remain readonly.

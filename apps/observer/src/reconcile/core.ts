@@ -31,20 +31,17 @@ import type { PersistedSessionTurnReadiness } from "../persistence/types.js";
 import type { ProviderRegistry } from "../providers/registry.js";
 import type { StationLogger } from "../stationLogger.js";
 import { projectProviderHealthOntoSnapshot } from "./graph.js";
-import {
-  buildInitialSnapshot,
-  harnessesFromRegistry,
-  type ProviderReadOptions,
-  type ReconcileTiming,
-  runReconcileOnce,
-} from "./run.js";
+import type { ProviderReadOptions } from "./providerObservations.js";
+import type { ReconcileTiming } from "./reconcileResult.js";
+import { runReconcileOnce } from "./run.js";
 import { projectSessionGroups } from "./sessionGroups.js";
+import { buildInitialSnapshot, harnessesFromRegistry } from "./snapshotSeed.js";
 import {
   projectHarnessEventReportOntoSnapshot,
   type StatusProjectionResult,
 } from "./statusProjection.js";
 
-export type { ReconcileTiming } from "./run.js";
+export type { ReconcileTiming } from "./reconcileResult.js";
 
 export type ObserverCoreHealth = {
   status: "healthy" | "degraded";

@@ -13,7 +13,9 @@ import type {
   UpdatePlanBase,
 } from "../../src/update/updateChannel.js";
 
-const config = {} as StationConfig;
+const config = {
+  observer: { socketPath: `/tmp/station-update-command-${process.pid}/observer.sock` },
+} as StationConfig;
 const testBuildInfo = () => ({
   compiled: false,
   version: "1.0.0",
@@ -104,14 +106,14 @@ describe("stn update command", () => {
     expect(commandRunner).not.toHaveBeenCalled();
   });
 
-  it("describes package-manager deferral in previews without preflighting Host handoff", async () => {
+  it("describes package-manager deferral in previews without default Host preflight", async () => {
     const fixture = probeFixture("npm-global", {
       managerCommand: ["/opt/npm", "install", "--global", "station@1.1.0"],
     });
     const liveHost = await createLiveHostFixture();
     try {
       const result = await runUpdateCommand(
-        ["--dry-run", "--handoff", "--json"],
+        ["--dry-run", "--json"],
         {
           config: liveHost.state.config,
           configPath: "/tmp/config.toml",
@@ -338,18 +340,14 @@ describe("stn update command", () => {
     }
   });
 
-  it("restarts the Observer before an opted-in live Host handoff", async () => {
+  it("restarts the Observer before the default processes Host handoff", async () => {
     const liveHost = await createLiveHostFixture();
     const fixture = probeFixture("installer-binary");
     const commands: ExternalCommandInput[] = [];
     try {
       const result = await runUpdateCommand(
-        ["--handoff=screen", "--json"],
-        {
-          config: liveHost.state.config,
-          configPath: "/tmp/config.toml",
-          cliEntryPath: "/repo/apps/cli/dist/main.js",
-        },
+        ["--json"],
+        liveHostCommandOptions(liveHost.state.config),
         {
           probes: [fixture.probe],
           buildInfo: testBuildInfo,
@@ -364,8 +362,43 @@ describe("stn update command", () => {
       expect(result.output).toMatchObject({ status: "updated" });
       expect(commands.map(({ args }) => args)).toEqual([
         ["--config", "/tmp/config.toml", "observer", "restart"],
-        ["--config", "/tmp/config.toml", "host", "handoff", "--fidelity", "screen"],
+        ["--config", "/tmp/config.toml", "host", "handoff", "--fidelity", "processes"],
       ]);
+    } finally {
+      await liveHost.close();
+    }
+  });
+
+  it("fails closed by default while --no-handoff skips Host preflight with a warning", async () => {
+    const liveHost = await createLiveHostFixture({
+      listError: new Error("inventory unavailable"),
+    });
+    const fixture = probeFixture("installer-binary");
+    try {
+      await expect(
+        runUpdateCommand(["--json"], liveHostCommandOptions(liveHost.state.config), {
+          probes: [fixture.probe],
+          buildInfo: testBuildInfo,
+          hostDeps: liveHost.hostDeps,
+        }),
+      ).rejects.toMatchObject({ code: "UPDATE_HOST_HANDOFF_PREFLIGHT_FAILED" });
+      expect(fixture.apply).not.toHaveBeenCalled();
+      liveHost.clientFactory.mockClear();
+
+      const result = await runUpdateCommand(
+        ["--no-handoff"],
+        liveHostCommandOptions(liveHost.state.config),
+        {
+          probes: [fixture.probe],
+          buildInfo: testBuildInfo,
+          hostDeps: liveHost.hostDeps,
+          commandRunner: async (input) => commandResult(input),
+        },
+      );
+      expect(result.output).toContain(
+        "warning: Host handoff was disabled; the next TUI may refuse the incumbent Host.",
+      );
+      expect(liveHost.clientFactory).not.toHaveBeenCalled();
     } finally {
       await liveHost.close();
     }
@@ -377,7 +410,7 @@ describe("stn update command", () => {
     let commandCount = 0;
     try {
       const result = await runUpdateCommand(
-        ["--handoff=processes", "--json"],
+        ["--handoff=screen", "--json"],
         {
           config: liveHost.state.config,
           configPath: "/tmp/config.toml",
@@ -400,15 +433,7 @@ describe("stn update command", () => {
         output: {
           status: "failed",
           recoveryCommands: [
-            [
-              "/opt/stn",
-              "--config",
-              "/tmp/config.toml",
-              "host",
-              "handoff",
-              "--fidelity",
-              "processes",
-            ],
+            ["/opt/stn", "--config", "/tmp/config.toml", "host", "handoff", "--fidelity", "screen"],
           ],
           steps: [
             { id: "detect", status: "completed" },
@@ -438,9 +463,15 @@ describe("stn update command", () => {
     await expect(runUpdateCommand(["--channel", "other"], commandOptions())).rejects.toThrow(
       "Usage: stn update",
     );
-    await expect(runUpdateCommand(["--handoff", "--handoff"], commandOptions())).rejects.toThrow(
-      "--handoff may be provided only once",
-    );
+    for (const args of [
+      ["--handoff", "--handoff"],
+      ["--no-handoff", "--no-handoff"],
+      ["--handoff", "--no-handoff"],
+    ]) {
+      await expect(runUpdateCommand(args, commandOptions())).rejects.toThrow(
+        "Host handoff may be configured only once",
+      );
+    }
   });
 });
 
@@ -466,6 +497,10 @@ function commandOptions() {
     configPath: "/tmp/config.toml",
     cliEntryPath: "/repo/apps/cli/dist/main.js",
   };
+}
+
+function liveHostCommandOptions(config: StationConfig) {
+  return { config, configPath: "/tmp/config.toml", cliEntryPath: "/repo/apps/cli/dist/main.js" };
 }
 
 function probeFixture(
@@ -524,7 +559,7 @@ function commandResult(input: ExternalCommandInput): ExternalCommandResult {
   };
 }
 
-async function createLiveHostFixture() {
+async function createLiveHostFixture(options: { listError?: Error } = {}) {
   const state = await createTempState();
   const socketPath = stationHostSocketPath(state.config);
   const server = await listenUnixSocket({ socketPath, onConnection: () => undefined });
@@ -536,7 +571,10 @@ async function createLiveHostFixture() {
           protocolVersion: HOST_PROTOCOL_VERSION,
           buildVersion: "1.0.0",
         }),
-        list: async () => [{ ptyId: "pty-1", pid: 42, alive: true }],
+        list: async () => {
+          if (options.listError !== undefined) throw options.listError;
+          return [{ ptyId: "pty-1", pid: 42, alive: true }];
+        },
         dispose: () => undefined,
       }) as never,
   );

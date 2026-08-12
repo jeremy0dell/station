@@ -109,6 +109,8 @@ function buildStationItems(
   switch (row.payload.type) {
     case "projectHeader":
       return buildProjectItems(row.payload.project.id, state);
+    case "groupHeader":
+      return [noActionsItem()];
     case "session": {
       const sessionRow = row.payload.row;
       return viewport.rowChoices.some((choice) => choice.value.id === sessionRow.id)
@@ -117,6 +119,7 @@ function buildStationItems(
     }
     case "createLocalRow":
     case "emptyProject":
+    case "groupFrameEnd":
     case "projectGap":
       return [noActionsItem()];
   }
@@ -178,6 +181,16 @@ function buildProjectItems(
     setDefaultAgent.disabled = true;
   }
   return [
+    {
+      id: "project.quickGroup",
+      label: "Quick Group",
+      action: { kind: "quickGroup", projectId: project.id },
+    },
+    {
+      id: "project.newGroup",
+      label: "New Group…",
+      action: { kind: "newGroup", projectId: project.id },
+    },
     setDefaultAgent,
     {
       id: "project.openSettings",

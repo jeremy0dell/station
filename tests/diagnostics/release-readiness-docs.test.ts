@@ -201,7 +201,8 @@ describe("release readiness docs", () => {
     expect(install).toContain("Automatic-update ownership");
     expect(install).toContain("stn update --dry-run --json");
     expect(install).toContain("stn update --drive-package-manager");
-    expect(install).toContain("--handoff=processes|screen");
+    expect(install).toContain("defaults to preserving");
+    expect(install).toContain("--no-handoff");
     expect(install).toContain("existing installations continue to work but are not enrolled");
     expect(development).toMatch(/workflow never\s+publishes\s+the draft automatically/);
     expect(development).toContain("accepted-release-candidate-0.0.0-pre-alpha.5.1");

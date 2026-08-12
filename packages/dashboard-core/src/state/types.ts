@@ -3,6 +3,7 @@ import type {
   ProjectId,
   ProviderId,
   SafeError,
+  SessionGroupId,
   SessionId,
   StationSnapshot,
   TuiWidgetConfig,
@@ -11,7 +12,7 @@ import type {
 import type { EditableTextInputState } from "../components/EditableTextInput/editing.js";
 import type { AddProjectFlowState } from "../flows/addProject/types.js";
 import type { NewSessionFlowState } from "../flows/newSession.js";
-import type { DashboardFocus } from "../selectors/dashboardTree.js";
+import type { DashboardFocus, GroupOrderingMode } from "../selectors/dashboardTree.js";
 import type { ClientNotice } from "../services/types.js";
 import type { TuiLocalRows } from "./localRows.js";
 import type { ReadonlyDeep } from "./readonly.js";
@@ -71,6 +72,8 @@ export type TuiViewState = {
   /** Dashboard-local applied filter; absence means no persistent filter is applied. */
   persistentFilter?: DashboardPersistentFilter;
   collapsedProjectIds: ReadonlySet<string>;
+  collapsedGroupIds: ReadonlySet<SessionGroupId>;
+  groupOrderingMode: GroupOrderingMode;
   scrollOffset: number;
   terminalRows: number;
   localRows: TuiLocalRows;
@@ -130,6 +133,16 @@ export type TuiObserverConnectionStatus =
 export type TuiScreen =
   | { name: "dashboard" }
   | { name: "help" }
+  | { name: "projectMenu"; projectId: ProjectId; focus: ProjectMenuActionId }
+  | {
+      name: "createGroup";
+      projectId: ProjectId;
+      draftName: EditableTextInputState;
+      quickSession: boolean;
+      focus: CreateGroupFocus;
+      submitting: boolean;
+      returnTo: CreateGroupReturnTarget;
+    }
   | {
       name: "persistentFilter";
       draft: EditableTextInputState;
@@ -196,10 +209,27 @@ export type ProjectSettingsFocus = "list" | "detail";
 /** Left-list item ids; extend alongside the registry in screens/projectSettings.ts. */
 export type ProjectSettingsItemId = "agent" | "remove";
 
+/** Actionable Project-menu rows in their rendered traversal order. */
+export type ProjectMenuActionId = "quickGroup" | "newGroup" | "defaultAgent" | "settings";
+
+/** Create Group control focus in rendered traversal order. */
+export type CreateGroupFocus = "name" | "quickSession" | "create" | "cancel";
+
+/** Surface restored when Create Group is cancelled before submission. */
+export type CreateGroupReturnTarget = "projectMenu" | "projectHeader";
+
+/** Readonly Project-menu state consumed by shared presentation. */
+export type ProjectMenuScreenView = Extract<DashboardScreenView, { name: "projectMenu" }>;
+
+/** Readonly Create-Group state consumed by shared presentation and content selectors. */
+export type CreateGroupScreenView = Extract<DashboardScreenView, { name: "createGroup" }>;
+
 export type CreateInitialTuiStateOptions = {
   initialSnapshot?: StationSnapshot;
   persistentFilter?: DashboardPersistentFilter;
   collapsedProjectIds?: Iterable<string>;
+  collapsedGroupIds?: Iterable<SessionGroupId>;
+  groupOrderingMode?: GroupOrderingMode;
   scrollOffset?: number;
   terminalRows?: number;
   localRows?: TuiLocalRows;

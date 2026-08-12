@@ -12,6 +12,7 @@ import { handleProjectSettingsKey } from "./screens/projectSettings.js";
 import { handleProjectSettingsPickerKey } from "./screens/projectSettingsPicker.js";
 import { handleRemoveWorktreeKey } from "./screens/removeWorktree.js";
 import { handleRenameSessionKey } from "./screens/renameSession.js";
+import { handleCreateGroupKey, handleProjectMenuKey } from "./screens/sessionGroups.js";
 import { handleWidgetSettingsKey } from "./screens/widgetSettings.js";
 import { selectionMiddleware } from "./selection/middleware.js";
 import { activeTuiToast, isTuiToastHiddenByScreen } from "./toasts.js";
@@ -66,6 +67,10 @@ export function handleTuiKey(
       return handleDashboardKey(state, key, context);
     case "help":
       return handleHelpKey(state, key);
+    case "projectMenu":
+      return handleProjectMenuKey(state, key);
+    case "createGroup":
+      return handleCreateGroupKey(state, key);
     case "persistentFilter":
       return handleDashboardPersistentFilterKey(state, key);
     case "projectCollapse":

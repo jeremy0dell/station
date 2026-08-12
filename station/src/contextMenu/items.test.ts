@@ -423,17 +423,84 @@ describe("buildContextMenuItems", () => {
       stationState,
     );
 
-    expect(items.map((item) => item.label)).toEqual(["Set Default Agent", "Project Settings…"]);
-    // Project is healthy in the fixture, so Set Default Agent is actionable.
+    expect(items.map((item) => item.label)).toEqual([
+      "Quick Group",
+      "New Group…",
+      "Set Default Agent",
+      "Project Settings…",
+    ]);
     expect(items[0]?.disabled).toBeUndefined();
     expect(resolveContextMenuAction(items[0])).toEqual({
-      kind: "setProjectDefaultAgent",
+      kind: "quickGroup",
       projectId: "station",
     });
     expect(resolveContextMenuAction(items[1])).toEqual({
+      kind: "newGroup",
+      projectId: "station",
+    });
+    expect(resolveContextMenuAction(items[2])).toEqual({
+      kind: "setProjectDefaultAgent",
+      projectId: "station",
+    });
+    expect(resolveContextMenuAction(items[3])).toEqual({
       kind: "openProjectSettings",
       projectId: "station",
     });
+  });
+
+  it("keeps every Group-header target inert", () => {
+    const store = createStationStore();
+    const snapshot = manyProjectsSnapshot();
+    const session = snapshot.sessions.find(({ id }) => id === STATION_IDLE_SESSION_ID);
+    if (session === undefined) throw new Error("fixture is missing the Station session");
+    const stationState = createInitialTuiState({
+      initialSnapshot: {
+        ...snapshot,
+        sessionGroups: [
+          {
+            id: "grp_station_active",
+            projectId: session.projectId,
+            name: "Active work",
+            sessionIds: [session.id],
+            version: 1,
+            createdAt: snapshot.generatedAt,
+            updatedAt: snapshot.generatedAt,
+          },
+        ],
+      },
+    });
+
+    for (const cellId of ["identity", "quickSession", "menu"] as const) {
+      const items = buildContextMenuItems(
+        {
+          kind: "station",
+          target: {
+            kind: "dashboardCell",
+            rowId: dashboardRowIds.group("grp_station_active"),
+            cellId,
+          },
+        },
+        store.getState(),
+        stationState,
+      );
+
+      expect(items.map(({ id }) => id)).toEqual(["station.noActions"]);
+      expect(resolveContextMenuAction(items[0])).toBeUndefined();
+    }
+
+    const frameItems = buildContextMenuItems(
+      {
+        kind: "station",
+        target: {
+          kind: "dashboardCell",
+          rowId: dashboardRowIds.groupFrameEnd("grp_station_active"),
+          cellId: "identity",
+        },
+      },
+      store.getState(),
+      stationState,
+    );
+    expect(frameItems.map(({ id }) => id)).toEqual(["station.noActions"]);
   });
 
   it("keeps STATION row actions inert off the dashboard screen", () => {

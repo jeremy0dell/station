@@ -33,7 +33,7 @@ station/scripts/run-container.sh --mock
 | **Mock data source** | `--mock` or `STATION_SOURCE=mock` |
 | **Live observer source** | unset / `STATION_SOURCE=observer` (Unix socket via `@station/client`) |
 | **Hot reload (HMR)** | `--hot` — edit code, panes/PTYs survive the reload |
-| **Mock scenario picker** | `STATION_SCENARIO=baseline\|many-projects\|attention-and-failures\|disconnected` |
+| **Mock scenario picker** | `STATION_SCENARIO=baseline\|many-projects\|grouped-many-projects\|attention-and-failures\|disconnected` |
 | **Doctor pre-flight** | `scripts/doctor.sh` (clear failure messages, never auto-installs) |
 | **node-pty repair** | auto-runs before spawn (re-asserts `spawn-helper` +x bit that Bun strips) |
 | **STATION package symlink** | `scripts/link-station-packages.sh` (auto-run before `station`/`dev`/`test`) |
@@ -161,7 +161,8 @@ shell can't receive them) until `Ctrl-O` closes it.
 **Dashboard surface features:**
 
 - **Header line** — `stn` label + connection status + top-row widgets (e.g. clock from `[tui.widgets]`).
-- **Project headers (collapsible)** — bold, with worktree/agent counts; click to fold/expand.
+- **Project headers (collapsible)** — bold, with session/Group/agent counts; click to fold/expand.
+- **Group hierarchy** — expanded Groups draw one continuous ring around direct members; collapsed and empty Groups keep compact truthful headers, and root sessions stay unframed.
 - **Worktree rows** — branch name, git status badge, diff `±` counts, PR number + state, CI checks, agent-state label, terminal/session info — each segment color-coded.
 - **Agent-state throbber** — animated spinner for working/starting; pulsing `!` for attention (shared 120ms clock).
 - **Status labels** — idle / working / starting / needs-attention / stuck / unknown / exited / no-agent, sorted by priority within a project.
@@ -240,7 +241,7 @@ Best shown with `STATION_SCENARIO=disconnected`, or by stopping the observer mid
 - **Snapshot alerts** — e.g. the "Static many-projects fixture" banner that self-identifies mock data.
 - **Resilience** — broken `[workspace]` config boots with defaults; missing host falls back to cold shells; failed clipboard tool doesn't block copy.
 
-**Mock scenarios to flip through:** `baseline` (1 project), `many-projects` (3 projects / 11 worktrees / every state), `attention-and-failures` (red throbbers, stuck agents, failed CI, degraded providers), `disconnected` (display-only over a retained snapshot).
+**Mock scenarios to flip through:** `baseline` (1 project), `many-projects` (3 projects / 11 worktrees / every state), `grouped-many-projects` (12 sessions / 6 Groups / roots, empty and long-name cases), `attention-and-failures` (red throbbers, stuck agents, failed CI, degraded providers), `disconnected` (display-only over a retained snapshot).
 
 ---
 

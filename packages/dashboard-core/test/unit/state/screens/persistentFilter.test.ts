@@ -71,7 +71,7 @@ describe("persistent-filter screen", () => {
 
     expect(applied.screen).toEqual({ name: "dashboard" });
     expect(applied.persistentFilter).toEqual({ query: "NaV" });
-    expect(applied.scrollOffset).toBe(0);
+    expect(applied.scrollOffset).toBe(1);
     expect(applied.dashboardFocus).toEqual(base.dashboardFocus);
   });
 

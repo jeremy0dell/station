@@ -33,6 +33,7 @@ export type {
   DashboardFooterModel,
 } from "../components/Dashboard/footer.js";
 export { dashboardFooterModel } from "../components/Dashboard/footer.js";
+export { dashboardBodyTop } from "../components/Dashboard/layout.js";
 export { dashboardRowGridInput } from "../components/Dashboard/rowGridInput.js";
 export type {
   DashboardFilterHeaderModel,
@@ -48,6 +49,12 @@ export {
   clampEditableTextCursor,
   createEditableTextInputState,
 } from "../components/EditableTextInput/editing.js";
+export type {
+  CreateGroupActionId,
+  CreateGroupControlContent,
+  CreateGroupSheetContent,
+} from "../components/GroupCreateSheet/content.js";
+export { createGroupSheetContent } from "../components/GroupCreateSheet/content.js";
 
 export {
   helpPanelLayout,
@@ -99,6 +106,7 @@ export {
 } from "../selectors/dashboardFilterConditions.js";
 
 export type {
+  DashboardPersistentFilterGroupMatch,
   DashboardPersistentFilterProjection,
   DashboardPersistentFilterProjectMatch,
 } from "../selectors/dashboardPersistentFilter.js";
@@ -109,8 +117,11 @@ export {
 } from "../selectors/dashboardSessionRows.js";
 export type {
   DashboardCellId,
+  DashboardGroupFrameEndPayload,
+  DashboardGroupHeaderPayload,
   DashboardRowId,
   DashboardTreeRow,
+  GroupOrderingMode,
 } from "../selectors/dashboardTree.js";
 export { dashboardRowIds } from "../selectors/dashboardTree.js";
 export type {

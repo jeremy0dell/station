@@ -31,6 +31,7 @@ function projection(
     zeroMatches: false,
     rows: new Map(),
     projects: new Map(),
+    groups: new Map(),
     ...overrides,
   };
 }

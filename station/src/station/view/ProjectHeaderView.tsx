@@ -17,7 +17,7 @@ import {
 
 const SHELL_AFFORDANCE_LABEL = "[shell]";
 const SHELL_AFFORDANCE_LABEL_COMPACT = "[sh]";
-const DEFAULT_AGENT_AFFORDANCE_LABEL = "[▾]";
+const MENU_AFFORDANCE_LABEL = "[▾]";
 const QUICK_SESSION_AFFORDANCE_LABEL = "[quick session]";
 const QUICK_SESSION_AFFORDANCE_LABEL_COMPACT = "[qs]";
 const PROJECT_HEADER_SEPARATOR_COUNT = 3;
@@ -28,6 +28,7 @@ export function ProjectHeaderView({
   rowId,
   project,
   collapsed,
+  groupCount,
   focusedCellId,
   persistentFilterMatch,
 }: {
@@ -35,6 +36,7 @@ export function ProjectHeaderView({
   rowId: DashboardRowId;
   project: DashboardProjectView;
   collapsed: boolean;
+  groupCount: number;
   focusedCellId?: DashboardCellId | undefined;
   persistentFilterMatch?: DashboardPersistentFilterProjectMatch | undefined;
 }) {
@@ -46,7 +48,7 @@ export function ProjectHeaderView({
   const controlsWidth =
     shellLabel.length +
     quickSessionLabel.length +
-    DEFAULT_AGENT_AFFORDANCE_LABEL.length +
+    MENU_AFFORDANCE_LABEL.length +
     PROJECT_HEADER_SEPARATOR_COUNT;
   const dimmed = persistentFilterMatch?.matched === false;
   return (
@@ -55,6 +57,7 @@ export function ProjectHeaderView({
         rowId={rowId}
         project={project}
         collapsed={collapsed}
+        groupCount={groupCount}
         width={Math.max(1, columns - controlsWidth)}
         focused={focusedCellId === "identity"}
         dimmed={dimmed}
@@ -79,10 +82,10 @@ export function ProjectHeaderView({
       />
       <ProjectHeaderSeparator dimmed={dimmed} />
       <ProjectHeaderAction
-        label={DEFAULT_AGENT_AFFORDANCE_LABEL}
+        label={MENU_AFFORDANCE_LABEL}
         rowId={rowId}
-        cellId="defaultAgent"
-        focused={focusedCellId === "defaultAgent"}
+        cellId="menu"
+        focused={focusedCellId === "menu"}
         dimmed={dimmed}
       />
     </box>
@@ -93,6 +96,7 @@ function ProjectHeaderPrimary({
   rowId,
   project,
   collapsed,
+  groupCount,
   width,
   focused,
   dimmed,
@@ -101,6 +105,7 @@ function ProjectHeaderPrimary({
   rowId: DashboardRowId;
   project: DashboardProjectView;
   collapsed: boolean;
+  groupCount: number;
   width: number;
   focused: boolean;
   dimmed: boolean;
@@ -122,6 +127,7 @@ function ProjectHeaderPrimary({
       <ProjectHeaderLabel
         project={project}
         collapsed={collapsed}
+        groupCount={groupCount}
         width={width}
         dimmed={dimmed}
         persistentFilterMatch={persistentFilterMatch}
@@ -178,18 +184,20 @@ function ProjectHeaderSeparator({ dimmed }: { dimmed: boolean }) {
 function ProjectHeaderLabel({
   project,
   collapsed,
+  groupCount,
   width,
   dimmed,
   persistentFilterMatch,
 }: {
   project: DashboardProjectView;
   collapsed: boolean;
+  groupCount: number;
   width: number;
   dimmed: boolean;
   persistentFilterMatch?: DashboardPersistentFilterProjectMatch | undefined;
 }) {
   const theme = useStationTheme();
-  const parts = projectHeaderLabelParts(project, collapsed);
+  const parts = projectHeaderLabelParts(project, collapsed, groupCount);
   const combined = truncateCells(`${parts.title}${parts.counts}`, width);
   const title = combined.slice(0, parts.title.length);
   const prefixLength = Math.min(title.length, parts.title.length - project.label.length);

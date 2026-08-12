@@ -8,7 +8,7 @@ export const updateCliCommand: CliCommandNode = {
   requiresConfig: true,
   run: runUpdateCliCommand,
   usage: [
-    "stn update [--channel <id>] [--dry-run] [--json] [--drive-package-manager] [--handoff[=processes|screen]]",
+    "stn update [--channel <id>] [--dry-run] [--json] [--drive-package-manager] [--handoff[=processes|screen] | --no-handoff]",
   ],
   options: [
     {
@@ -23,7 +23,11 @@ export const updateCliCommand: CliCommandNode = {
     },
     {
       name: "--handoff[=processes|screen]",
-      description: "Opt into live Host handoff; bare --handoff uses processes fidelity.",
+      description: "Explicitly preserve live Host state; bare --handoff uses processes fidelity.",
+    },
+    {
+      name: "--no-handoff",
+      description: "Update without preserving a busy Host; the next TUI may refuse it.",
     },
   ],
   examples: [
@@ -34,7 +38,7 @@ export const updateCliCommand: CliCommandNode = {
   ],
   notes: [
     "Package-managed installations defer by default and print the exact manager command.",
-    "A committed update restarts the Observer before any requested Host handoff.",
+    "A committed update restarts the Observer before the default processes Host handoff.",
   ],
   verification: ["stn update --dry-run --json"],
 };

@@ -1,13 +1,14 @@
+import type { SessionGroupId } from "@station/contracts";
 import {
   type DashboardCellId,
   type DashboardRowId,
   selectDashboardTree,
 } from "../selectors/dashboardTree.js";
-import { focusResolvedDashboardCursor } from "./dashboardFocus.js";
+import { focusResolvedDashboardCursor, reconcileDashboardFocus } from "./dashboardFocus.js";
 import { activateDashboardRow } from "./rowActivation.js";
 import { toggleDashboardProjectCollapsed } from "./screens/projectCollapse.js";
-import { openProjectDefaultAgentPicker } from "./screens/projectDefaultAgent.js";
 import { submitQuickSession } from "./screens/quickSession.js";
+import { openProjectMenu } from "./screens/sessionGroups.js";
 import type { TuiTransition } from "./transition.js";
 import type { DashboardState } from "./types.js";
 
@@ -28,6 +29,10 @@ export function activateDashboardCell(
   switch (row.payload.type) {
     case "projectHeader":
       return activateProjectCell(focused, row.payload.project.id, cellId);
+    case "groupHeader":
+      return cellId === "identity"
+        ? { state: toggleDashboardGroupCollapsed(focused, row.payload.group.id) }
+        : { state: focused };
     case "session":
       return cellId === "identity" &&
         row.payload.pendingRemove === undefined &&
@@ -39,6 +44,7 @@ export function activateDashboardCell(
         ? submitQuickSession(focused, row.payload.project.id)
         : { state: focused };
     case "createLocalRow":
+    case "groupFrameEnd":
     case "projectGap":
       return { state: focused };
   }
@@ -64,9 +70,22 @@ function activateProjectCell(
       };
     case "quickSession":
       return submitQuickSession(state, projectId);
-    case "defaultAgent":
-      return { state: openProjectDefaultAgentPicker(state, projectId) };
+    case "menu":
+      return { state: openProjectMenu(state, projectId) };
     case "addSession":
       return { state };
   }
+}
+
+function toggleDashboardGroupCollapsed(
+  state: DashboardState,
+  groupId: SessionGroupId,
+): DashboardState {
+  const collapsedGroupIds = new Set(state.collapsedGroupIds);
+  if (collapsedGroupIds.has(groupId)) {
+    collapsedGroupIds.delete(groupId);
+  } else {
+    collapsedGroupIds.add(groupId);
+  }
+  return reconcileDashboardFocus(state, { ...state, collapsedGroupIds });
 }

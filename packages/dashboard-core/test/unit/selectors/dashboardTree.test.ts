@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 import { createEditableTextInputState } from "../../../src/components/EditableTextInput/editing.js";
 import { dashboardRowIds, selectDashboardTree } from "../../../src/selectors/dashboardTree.js";
 import { createInitialTuiState } from "../../../src/state/screen.js";
-import { createDashboardSnapshot } from "../../fixtures/snapshots.js";
+import {
+  createDashboardSnapshot,
+  createGroupedDashboardSnapshot,
+  fixtureNow,
+} from "../../fixtures/snapshots.js";
 
 describe("dashboard tree", () => {
   it("projects the current Project to Session hierarchy with stable ids, gaps, and cells", () => {
@@ -24,7 +28,7 @@ describe("dashboard tree", () => {
     ]);
     expect(tree.rowById.get(dashboardRowIds.project("web"))).toMatchObject({
       depth: 0,
-      cells: ["identity", "shell", "quickSession", "defaultAgent"],
+      cells: ["identity", "shell", "quickSession", "menu"],
       defaultCell: "identity",
       payload: { type: "projectHeader", collapsed: false },
     });
@@ -174,6 +178,283 @@ describe("dashboard tree", () => {
     expect(tree.collapsedAncestorById.get(sessionId)).toBe(dashboardRowIds.project("web"));
   });
 
+  it("projects flat Group blocks with direct canonical counts and groups-first ordering", () => {
+    const snapshot = createGroupedDashboardSnapshot();
+    const state = createInitialTuiState({ initialSnapshot: snapshot });
+    const tree = selectDashboardTree(snapshot, state, state.screen);
+
+    expect(tree.visibleRows.map((row) => row.id)).toEqual([
+      "project:web",
+      "group:group_active",
+      "session:ses_wt_web_attention",
+      "session:ses_wt_web_idle",
+      "group-frame-end:group_active",
+      "group:group_build",
+      "session:ses_wt_web_working",
+      "group-frame-end:group_build",
+      "group:group_empty",
+      "group-frame-end:group_empty",
+      "session:ses_wt_web_exited",
+      "session:ses_wt_web_unknown",
+      "session:ses_wt_web_stuck",
+      "gap:api",
+      "project:api",
+      "group:group_api",
+      "session:ses_wt_api_working",
+      "group-frame-end:group_api",
+    ]);
+    expect(tree.rowById.get(dashboardRowIds.project("web"))?.payload).toMatchObject({
+      type: "projectHeader",
+      groupCount: 3,
+    });
+    expect(tree.rowById.get(dashboardRowIds.group("group_build"))).toMatchObject({
+      depth: 1,
+      parentId: "project:web",
+      cells: ["identity", "quickSession", "menu"],
+      defaultCell: "identity",
+      payload: {
+        type: "groupHeader",
+        collapsed: false,
+        sessionCount: 1,
+        visibleSessionCount: 1,
+        group: { id: "group_build", parentGroupId: "group_active" },
+      },
+    });
+    expect(tree.rowById.get(dashboardRowIds.session("ses_wt_web_working"))).toMatchObject({
+      depth: 2,
+      parentId: "group:group_build",
+    });
+    expect(tree.rowById.get(dashboardRowIds.group("group_empty"))?.payload).toMatchObject({
+      type: "groupHeader",
+      sessionCount: 0,
+      visibleSessionCount: 0,
+    });
+    expect(tree.rowById.get(dashboardRowIds.groupFrameEnd("group_empty"))).toMatchObject({
+      depth: 2,
+      parentId: "group:group_empty",
+      cells: [],
+      payload: { type: "groupFrameEnd", groupId: "group_empty" },
+    });
+  });
+
+  it("interleaves whole Group blocks with root rows and keeps optimistic rows ungrouped", () => {
+    const snapshot = createGroupedDashboardSnapshot();
+    const state = createInitialTuiState({
+      initialSnapshot: snapshot,
+      groupOrderingMode: "alphabetical-interleaved",
+      localRows: {
+        pendingCreate: [
+          {
+            localId: "pending",
+            projectId: "web",
+            title: "Draft",
+            branch: "draft",
+            createdAt: fixtureNow,
+          },
+        ],
+        failedCreate: [],
+        pendingRemove: [],
+        pendingStart: [],
+      },
+    });
+    const tree = selectDashboardTree(snapshot, state, state.screen);
+    const webChildren = tree.visibleRows
+      .filter((row) => row.parentId === dashboardRowIds.project("web"))
+      .map((row) => row.id);
+
+    expect(webChildren).toEqual([
+      "group:group_active",
+      "group:group_build",
+      "session:ses_wt_web_exited",
+      "create:pending",
+      "group:group_empty",
+      "session:ses_wt_web_unknown",
+      "session:ses_wt_web_stuck",
+    ]);
+  });
+
+  it("shows one targeted pending row under its Group while suppressing its ungrouped canonical row", () => {
+    const base = createGroupedDashboardSnapshot();
+    const snapshot = {
+      ...base,
+      sessionGroups: base.sessionGroups.map((group) =>
+        group.id === "group_active"
+          ? { ...group, sessionIds: group.sessionIds.filter((id) => id !== "ses_wt_web_idle") }
+          : group,
+      ),
+    };
+    const state = createInitialTuiState({
+      initialSnapshot: snapshot,
+      localRows: {
+        pendingCreate: [
+          {
+            localId: "targeted",
+            projectId: "web",
+            title: "Quick Group session",
+            branch: "fix-nav-mobile",
+            targetGroupId: "group_empty",
+            createdAt: fixtureNow,
+          },
+        ],
+        failedCreate: [],
+        pendingRemove: [],
+        pendingStart: [],
+      },
+    });
+
+    const tree = selectDashboardTree(snapshot, state, state.screen);
+    const visibleMatches = tree.visibleRows.filter(
+      (row) =>
+        row.id === dashboardRowIds.create("targeted") ||
+        row.id === dashboardRowIds.session("ses_wt_web_idle"),
+    );
+    expect(visibleMatches).toHaveLength(1);
+    expect(visibleMatches[0]).toMatchObject({
+      id: dashboardRowIds.create("targeted"),
+      parentId: dashboardRowIds.group("group_empty"),
+    });
+    expect(tree.rowById.get(dashboardRowIds.group("group_empty"))?.payload).toMatchObject({
+      sessionCount: 0,
+      visibleSessionCount: 0,
+    });
+  });
+
+  it("orders equal labels by Group precedence and stable Group identity", () => {
+    const base = createGroupedDashboardSnapshot();
+    const snapshot = {
+      ...base,
+      sessionGroups: base.sessionGroups.map((group) =>
+        group.id === "group_empty"
+          ? { ...group, name: "done-run" }
+          : group.id === "group_active" || group.id === "group_build"
+            ? { ...group, name: "same" }
+            : group,
+      ),
+    };
+    const originalGroups = snapshot.sessionGroups.map((group) => group.id);
+    const originalSessions = snapshot.sessions.map((session) => session.id);
+    const state = createInitialTuiState({
+      initialSnapshot: snapshot,
+      groupOrderingMode: "alphabetical-interleaved",
+    });
+    const tree = selectDashboardTree(snapshot, state, state.screen);
+    const webChildren = tree.visibleRows
+      .filter((row) => row.parentId === dashboardRowIds.project("web"))
+      .map((row) => row.id);
+
+    expect(webChildren.indexOf("group:group_empty")).toBeLessThan(
+      webChildren.indexOf("session:ses_wt_web_exited"),
+    );
+    expect(webChildren.indexOf("group:group_active")).toBeLessThan(
+      webChildren.indexOf("group:group_build"),
+    );
+    expect(snapshot.sessionGroups.map((group) => group.id)).toEqual(originalGroups);
+    expect(snapshot.sessions.map((session) => session.id)).toEqual(originalSessions);
+  });
+
+  it("uses Group and Project collapse as nested visible-ancestor recovery", () => {
+    const snapshot = createGroupedDashboardSnapshot();
+    const memberId = dashboardRowIds.session("ses_wt_web_idle");
+    const groupState = createInitialTuiState({
+      initialSnapshot: snapshot,
+      collapsedGroupIds: ["group_active"],
+    });
+    const groupTree = selectDashboardTree(snapshot, groupState, groupState.screen);
+
+    expect(groupTree.visibleIndexById.has(memberId)).toBe(false);
+    expect(groupTree.visibleIndexById.has(dashboardRowIds.groupFrameEnd("group_active"))).toBe(
+      false,
+    );
+    expect(groupTree.rowById.has(dashboardRowIds.groupFrameEnd("group_active"))).toBe(true);
+    expect(groupTree.collapsedAncestorById.get(memberId)).toBe(
+      dashboardRowIds.group("group_active"),
+    );
+    expect(groupTree.collapsedAncestorById.get(dashboardRowIds.groupFrameEnd("group_active"))).toBe(
+      dashboardRowIds.group("group_active"),
+    );
+
+    const projectState = { ...groupState, collapsedProjectIds: new Set(["web"]) };
+    const projectTree = selectDashboardTree(snapshot, projectState, projectState.screen);
+    expect(projectTree.collapsedAncestorById.get(memberId)).toBe(dashboardRowIds.project("web"));
+  });
+
+  it("marks a Group whose direct visible member owns focus", () => {
+    const snapshot = createGroupedDashboardSnapshot();
+    const state = createInitialTuiState({
+      initialSnapshot: snapshot,
+      dashboardFocus: {
+        rowId: dashboardRowIds.session("ses_wt_web_idle"),
+        cellId: "identity",
+      },
+    });
+    const tree = selectDashboardTree(snapshot, state, state.screen);
+
+    expect(tree.rowById.get(dashboardRowIds.group("group_active"))?.containsFocusedRow).toBe(true);
+    expect(
+      tree.rowById.get(dashboardRowIds.group("group_build"))?.containsFocusedRow,
+    ).toBeUndefined();
+  });
+
+  it("does not decorate containment for an invalid focused cell", () => {
+    const snapshot = createGroupedDashboardSnapshot();
+    const memberId = dashboardRowIds.session("ses_wt_web_idle");
+    const state = {
+      ...createInitialTuiState({ initialSnapshot: snapshot }),
+      dashboardFocus: { rowId: memberId, cellId: "menu" } as const,
+    };
+    const tree = selectDashboardTree(snapshot, state, state.screen);
+
+    expect(tree.rowById.get(memberId)?.focusedCellId).toBeUndefined();
+    expect(
+      tree.rowById.get(dashboardRowIds.group("group_active"))?.containsFocusedRow,
+    ).toBeUndefined();
+  });
+
+  it("retains Group containers and reports admitted direct members under an applied filter", () => {
+    const snapshot = createGroupedDashboardSnapshot();
+    const state = createInitialTuiState({
+      initialSnapshot: snapshot,
+      persistentFilter: { query: "active work" },
+      collapsedGroupIds: ["group_build"],
+    });
+    const tree = selectDashboardTree(snapshot, state, state.screen);
+
+    expect(tree.rowById.get(dashboardRowIds.group("group_active"))?.payload).toMatchObject({
+      type: "groupHeader",
+      sessionCount: 2,
+      visibleSessionCount: 2,
+      persistentFilterMatch: { matched: true },
+    });
+    expect(tree.rowById.get(dashboardRowIds.group("group_build"))?.payload).toMatchObject({
+      type: "groupHeader",
+      collapsed: true,
+      sessionCount: 1,
+      visibleSessionCount: 0,
+      persistentFilterMatch: { matched: false },
+    });
+    expect(tree.visibleRows.map((row) => row.id)).toContain("group:group_empty");
+    expect(tree.visibleRows.map((row) => row.id)).toContain("group-frame-end:group_empty");
+    expect(tree.visibleRows.map((row) => row.id)).not.toContain("group-frame-end:group_build");
+    expect(state.collapsedGroupIds.has("group_build")).toBe(true);
+  });
+
+  it("keeps canonical Group counts when a direct member lacks renderable metadata", () => {
+    const base = createGroupedDashboardSnapshot();
+    const snapshot = {
+      ...base,
+      rows: base.rows.filter((row) => row.id !== "wt_web_idle"),
+    };
+    const state = createInitialTuiState({ initialSnapshot: snapshot });
+    const tree = selectDashboardTree(snapshot, state, state.screen);
+
+    expect(tree.rowById.get(dashboardRowIds.group("group_active"))?.payload).toMatchObject({
+      type: "groupHeader",
+      sessionCount: 2,
+      visibleSessionCount: 1,
+    });
+    expect(tree.rowById.has(dashboardRowIds.session("ses_wt_web_idle"))).toBe(false);
+  });
+
   it("keeps draft filtering soft and decorates row and project matches", () => {
     const snapshot = createDashboardSnapshot();
     const state = {
@@ -198,7 +479,7 @@ describe("dashboard tree", () => {
     });
   });
 
-  it("hard-projects applied matches and rebuilds gaps between retained projects", () => {
+  it("hard-projects applied rows while retaining durable Project context", () => {
     const snapshot = createDashboardSnapshot();
     const state = createInitialTuiState({
       initialSnapshot: snapshot,
@@ -207,10 +488,11 @@ describe("dashboard tree", () => {
     const tree = selectDashboardTree(snapshot, state, state.screen);
 
     expect(tree.visibleRows.map((row) => row.id)).toEqual([
+      "project:web",
+      "gap:api",
       "project:api",
       "session:ses_wt_api_working",
     ]);
-    expect(tree.visibleRows.some(({ payload }) => payload.type === "projectGap")).toBe(false);
   });
 
   it("does not fabricate an empty action when an applied filter removes a nonempty project's rows", () => {

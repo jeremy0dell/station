@@ -39,7 +39,7 @@ function artifact(version: string, revision: string | undefined) {
 
 function hostHandoffDetail(hostHandoff: HostHandoffScenario): string {
   return hostHandoff.kind === "not-requested"
-    ? "Host handoff was not requested."
+    ? "Host handoff was explicitly disabled."
     : "No live Host handoff is needed.";
 }
 

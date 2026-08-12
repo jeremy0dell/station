@@ -26,7 +26,10 @@ import {
 } from "../../../src/state/screens/widgetSettings.js";
 import { handleTuiKey } from "../../../src/state/transition.js";
 import type { DashboardState } from "../../../src/state/types.js";
-import { createDashboardSnapshot } from "../../fixtures/snapshots.js";
+import {
+  createDashboardSnapshot,
+  createGroupedDashboardSnapshot,
+} from "../../fixtures/snapshots.js";
 
 const context = {
   cwd: "/workspace",
@@ -359,6 +362,74 @@ describe("dashboard state actions", () => {
     ).toEqual({ state });
   });
 
+  it("toggles Group identity while keeping Group quick and menu cells inert", () => {
+    const state = createInitialTuiState({ initialSnapshot: createGroupedDashboardSnapshot() });
+    const rowId = dashboardRowIds.group("group_active");
+    const collapsed = handleTuiAction(
+      state,
+      { type: "dashboard.cell.activate", rowId, cellId: "identity" },
+      context,
+    );
+
+    expect(collapsed.state.collapsedGroupIds.has("group_active")).toBe(true);
+    expect(collapsed.state.dashboardFocus).toEqual({ rowId, cellId: "identity" });
+
+    for (const cellId of ["quickSession", "menu"] as const) {
+      const inert = handleTuiAction(
+        state,
+        { type: "dashboard.cell.activate", rowId, cellId },
+        context,
+      );
+      expect(inert.operations).toBeUndefined();
+      expect(inert.state.dashboardFocus).toEqual({ rowId, cellId });
+      expect(inert.state.collapsedGroupIds.size).toBe(0);
+    }
+  });
+
+  it("routes Project-menu and Create Group actions through the shared semantic surface", () => {
+    const state = createInitialTuiState({ initialSnapshot: createGroupedDashboardSnapshot() });
+    const menu = handleTuiAction(
+      state,
+      {
+        type: "dashboard.cell.activate",
+        rowId: dashboardRowIds.project("web"),
+        cellId: "menu",
+      },
+      context,
+    ).state;
+    const quick = handleTuiAction(
+      menu,
+      { type: "projectMenu.activate", actionId: "quickGroup" },
+      context,
+    );
+    const sheet = handleTuiAction(
+      menu,
+      { type: "createGroup.open", projectId: "web", returnTo: "projectHeader" },
+      context,
+    ).state;
+    const toggled = handleTuiAction(
+      sheet,
+      { type: "createGroup.activate", actionId: "quickSession" },
+      context,
+    ).state;
+
+    expect(menu.screen).toEqual({ name: "projectMenu", projectId: "web", focus: "quickGroup" });
+    expect(quick.operations).toEqual([
+      expect.objectContaining({ type: "createSessionGroup", projectId: "web", quickSession: true }),
+    ]);
+    expect(sheet.screen).toMatchObject({
+      name: "createGroup",
+      projectId: "web",
+      returnTo: "projectHeader",
+      quickSession: false,
+    });
+    expect(toggled.screen).toMatchObject({
+      name: "createGroup",
+      focus: "quickSession",
+      quickSession: true,
+    });
+  });
+
   it("keeps stale, hidden, filtered, and wrong-cell dashboard targets inert", () => {
     const state = dashboardState();
     const stale = {
@@ -394,6 +465,22 @@ describe("dashboard state actions", () => {
         context,
       ),
     ).toEqual({ state: hidden });
+
+    const hiddenGroup = createInitialTuiState({
+      initialSnapshot: createGroupedDashboardSnapshot(),
+      collapsedProjectIds: ["web"],
+    });
+    expect(
+      handleTuiAction(
+        hiddenGroup,
+        {
+          type: "dashboard.cell.activate",
+          rowId: dashboardRowIds.group("group_active"),
+          cellId: "menu",
+        },
+        context,
+      ),
+    ).toEqual({ state: hiddenGroup });
 
     const filtered = { ...state, persistentFilter: { query: "api" } };
     expect(

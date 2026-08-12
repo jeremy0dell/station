@@ -5,6 +5,7 @@ import { testRender } from "@opentui/react/test-utils";
 import { dashboardRowIds } from "@station/dashboard-core/selectors";
 import type { TuiWidgetConfig } from "@station/dashboard-core/widgets";
 import { act } from "react";
+import { groupedManyProjectsSnapshot } from "../station/fixtures/scenarios.js";
 import { makeStationTestRuntime } from "../station/test/support/makeStationTestRuntime.js";
 import {
   stationColorSnapshotValue,
@@ -324,6 +325,75 @@ describe("FullscreenDashboard mouse composition", () => {
     expect([...fixture.runtime.state.getState().collapsedProjectIds]).toEqual(["station"]);
   });
 
+  it("renders and routes exact Group targets without standalone behavior drift", async () => {
+    const size = { width: 120, height: 40 };
+    const fixture = makeStationTestRuntime({
+      snapshot: groupedManyProjectsSnapshot(),
+      terminalRows: size.height,
+    });
+    const setup = await render(fixture.runtime, size);
+    const groupId = dashboardRowIds.group("group_design_refresh");
+    const groupLine = (): { row: number; line: string } => {
+      const lines = setup.captureCharFrame().split("\n");
+      const row = lines.findIndex((line) => line.includes("Design refresh"));
+      return { row, line: lines[row] ?? "" };
+    };
+
+    expect(setup.captureCharFrame()).toContain("╭▼ Design refresh 2 sessions");
+    expect(setup.captureCharFrame()).toContain("│ [1]");
+    const member = cellFor(setup.captureCharFrame(), "group-contracts");
+    await actOn(async () => {
+      await setup.mockMouse.click(member.col, member.row, MouseButtons.LEFT);
+      await waitFor(() =>
+        fixture.service.dispatched.some(
+          (command) =>
+            command.type === "terminal.focus" &&
+            command.payload.sessionId === "ses_wt_group_contracts",
+        ),
+      );
+    });
+    expect(
+      fixture.service.dispatched.filter(
+        (command) =>
+          command.type === "terminal.focus" &&
+          command.payload.sessionId === "ses_wt_group_contracts",
+      ),
+    ).toHaveLength(1);
+    let group = groupLine();
+    await actOn(() =>
+      setup.mockMouse.click(group.line.indexOf("[qs]"), group.row, MouseButtons.LEFT),
+    );
+    expect(fixture.runtime.state.getState().dashboardFocus).toEqual({
+      rowId: groupId,
+      cellId: "quickSession",
+    });
+    expect([...fixture.runtime.state.getState().collapsedGroupIds]).toEqual([]);
+
+    group = groupLine();
+    await actOn(() =>
+      setup.mockMouse.click(group.line.indexOf("[▾]"), group.row, MouseButtons.LEFT),
+    );
+    expect(fixture.runtime.state.getState().dashboardFocus).toEqual({
+      rowId: groupId,
+      cellId: "menu",
+    });
+    expect([...fixture.runtime.state.getState().collapsedGroupIds]).toEqual([]);
+
+    group = groupLine();
+    await actOn(() =>
+      setup.mockMouse.click(group.line.indexOf("Design refresh"), group.row, MouseButtons.LEFT),
+    );
+    expect([...fixture.runtime.state.getState().collapsedGroupIds]).toEqual([
+      "group_design_refresh",
+    ]);
+    expect(fixture.runtime.state.getState().dashboardFocus).toEqual({
+      rowId: groupId,
+      cellId: "identity",
+    });
+    expect(setup.captureCharFrame()).toContain("▶ Design refresh 2 sessions");
+    expect(setup.captureCharFrame()).not.toContain("group-contracts");
+  });
+
   it("does not activate a dashboard row when the same click dismisses a bounded screen", async () => {
     const fixture = makeStationTestRuntime({ terminalRows: SURFACE.height });
     const setup = await render(fixture.runtime);
@@ -532,8 +602,9 @@ describe("FullscreenDashboard mouse composition", () => {
     });
 
     expect(fixture.runtime.state.getState().screen).toMatchObject({
-      name: "projectDefaultAgent",
+      name: "projectMenu",
       projectId: "station",
+      focus: "quickGroup",
     });
   });
 

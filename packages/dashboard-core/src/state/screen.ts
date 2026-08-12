@@ -10,6 +10,8 @@ export function createInitialTuiState(options: CreateInitialTuiStateOptions = {}
     toasts: [],
     observerConnectionStatus: { state: "connected" },
     collapsedProjectIds: new Set(options.collapsedProjectIds ?? []),
+    collapsedGroupIds: new Set(options.collapsedGroupIds ?? []),
+    groupOrderingMode: options.groupOrderingMode ?? "groups-first",
     scrollOffset: options.scrollOffset ?? 0,
     terminalRows: options.terminalRows ?? 24,
     localRows: options.localRows ?? createEmptyTuiLocalRows(),
@@ -30,11 +32,24 @@ export function createInitialTuiState(options: CreateInitialTuiStateOptions = {}
 }
 
 export function replaceSnapshot(state: DashboardState, snapshot: StationSnapshot): DashboardState {
+  const screen = reconcileProjectSurface(state, snapshot);
   const next: DashboardState = {
     ...state,
+    screen,
     snapshot,
     loading: false,
     localRows: pruneLocalRowsForSnapshot(state.localRows, snapshot),
   };
   return reconcileDashboardFocus(state, next);
+}
+
+function reconcileProjectSurface(
+  state: DashboardState,
+  snapshot: StationSnapshot,
+): DashboardState["screen"] {
+  const screen = state.screen;
+  if (screen.name !== "projectMenu" && screen.name !== "createGroup") return screen;
+  return snapshot.projects.some((project) => project.id === screen.projectId)
+    ? screen
+    : { name: "dashboard" };
 }

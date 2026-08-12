@@ -27,6 +27,10 @@ const STATE_VALUES = [
   "createNewSessionFlow",
   "createAddProjectFlow",
   "handleTuiKey",
+  "openCreateGroup",
+  "openProjectMenu",
+  "submitCreateSessionGroup",
+  "submitQuickGroup",
   "tuiScreenBehavior",
 ];
 
@@ -37,6 +41,8 @@ const SELECTORS_VALUES = [
   "dashboardRowGridInput",
   "dashboardRowIds",
   "dashboardTableHeaderModel",
+  "dashboardBodyTop",
+  "createGroupSheetContent",
   "layoutWorktreeRowGrid",
 ];
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { dashboardRowIds } from "../../../src/selectors/dashboardTree.js";
+import { activateDashboardCell } from "../../../src/state/dashboardCells.js";
 import {
   clearDashboardFocus,
   focusDashboardSession,
@@ -12,7 +13,10 @@ import {
 } from "../../../src/state/dashboardFocus.js";
 import { createInitialTuiState, replaceSnapshot } from "../../../src/state/screen.js";
 import { toggleDashboardProjectCollapsed } from "../../../src/state/screens/projectCollapse.js";
-import { createDashboardSnapshot } from "../../fixtures/snapshots.js";
+import {
+  createDashboardSnapshot,
+  createGroupedDashboardSnapshot,
+} from "../../fixtures/snapshots.js";
 
 describe("dashboard cursor", () => {
   it("bridges a canonical session id to its branded identity cell", () => {
@@ -79,7 +83,7 @@ describe("dashboard cursor", () => {
     state = moveDashboardCursorHorizontal(state, 1);
     expect(state.dashboardFocus?.cellId).toBe("quickSession");
     state = moveDashboardCursorHorizontal(state, 1);
-    expect(state.dashboardFocus?.cellId).toBe("defaultAgent");
+    expect(state.dashboardFocus?.cellId).toBe("menu");
     expect(moveDashboardCursorHorizontal(state, 1)).toBe(state);
   });
 
@@ -93,6 +97,37 @@ describe("dashboard cursor", () => {
       },
     });
     expect(moveDashboardCursorHorizontal(state, 1)).toBe(state);
+  });
+
+  it("clamps horizontal movement across the three ordered Group cells", () => {
+    const snapshot = createGroupedDashboardSnapshot();
+    let state = createInitialTuiState({
+      initialSnapshot: snapshot,
+      dashboardFocus: { rowId: dashboardRowIds.group("group_active"), cellId: "identity" },
+    });
+
+    state = moveDashboardCursorHorizontal(state, 1);
+    expect(state.dashboardFocus?.cellId).toBe("quickSession");
+    state = moveDashboardCursorHorizontal(state, 1);
+    expect(state.dashboardFocus?.cellId).toBe("menu");
+    expect(moveDashboardCursorHorizontal(state, 1)).toBe(state);
+    expect(moveDashboardCursorHorizontal(state, -1).dashboardFocus?.cellId).toBe("quickSession");
+  });
+
+  it("skips inert Group frame rows during vertical traversal", () => {
+    const snapshot = createGroupedDashboardSnapshot();
+    const state = createInitialTuiState({
+      initialSnapshot: snapshot,
+      dashboardFocus: {
+        rowId: dashboardRowIds.session("ses_wt_web_idle"),
+        cellId: "identity",
+      },
+    });
+
+    expect(moveDashboardCursor(state, 1).dashboardFocus).toEqual({
+      rowId: dashboardRowIds.group("group_build"),
+      cellId: "identity",
+    });
   });
 
   it("uses a chooser policy that skips headers, gaps, local rows, and pending sessions", () => {
@@ -192,6 +227,90 @@ describe("dashboard cursor", () => {
       rowId: dashboardRowIds.project("web"),
       cellId: "identity",
     });
+  });
+
+  it("keeps Group identity focused on collapse and recovers a hidden member to it", () => {
+    const snapshot = createGroupedDashboardSnapshot();
+    const groupId = dashboardRowIds.group("group_active");
+    const focusedGroup = createInitialTuiState({
+      initialSnapshot: snapshot,
+      dashboardFocus: { rowId: groupId, cellId: "identity" },
+    });
+    const collapsed = activateDashboardCell(focusedGroup, groupId, "identity").state;
+
+    expect(collapsed.collapsedGroupIds.has("group_active")).toBe(true);
+    expect(collapsed.dashboardFocus).toEqual({ rowId: groupId, cellId: "identity" });
+
+    const focusedMember = createInitialTuiState({
+      initialSnapshot: snapshot,
+      dashboardFocus: {
+        rowId: dashboardRowIds.session("ses_wt_web_idle"),
+        cellId: "identity",
+      },
+    });
+    const hidden = reconcileDashboardFocus(focusedMember, {
+      ...focusedMember,
+      collapsedGroupIds: new Set(["group_active"]),
+    });
+    expect(hidden.dashboardFocus).toEqual({ rowId: groupId, cellId: "identity" });
+  });
+
+  it("follows a focused session across canonical Group membership replacement", () => {
+    const snapshot = createGroupedDashboardSnapshot();
+    const sessionId = dashboardRowIds.session("ses_wt_web_idle");
+    const previous = createInitialTuiState({
+      initialSnapshot: snapshot,
+      dashboardFocus: { rowId: sessionId, cellId: "identity" },
+      collapsedGroupIds: ["group_build"],
+    });
+    const moved = {
+      ...snapshot,
+      sessionGroups: snapshot.sessionGroups.map((group) => {
+        if (group.id === "group_active") {
+          return {
+            ...group,
+            sessionIds: group.sessionIds.filter((id) => id !== "ses_wt_web_idle"),
+          };
+        }
+        return group.id === "group_build"
+          ? { ...group, sessionIds: [...group.sessionIds, "ses_wt_web_idle"] }
+          : group;
+      }),
+    };
+
+    expect(replaceSnapshot(previous, moved).dashboardFocus).toEqual({
+      rowId: dashboardRowIds.group("group_build"),
+      cellId: "identity",
+    });
+  });
+
+  it("uses positional fallback when a focused Group disappears without pruning collapse state", () => {
+    const snapshot = createGroupedDashboardSnapshot();
+    const previous = createInitialTuiState({
+      initialSnapshot: snapshot,
+      dashboardFocus: {
+        rowId: dashboardRowIds.group("group_active"),
+        cellId: "menu",
+      },
+      collapsedGroupIds: ["group_active", "missing_group"],
+    });
+    const removed = {
+      ...snapshot,
+      sessionGroups: snapshot.sessionGroups
+        .filter((group) => group.id !== "group_active")
+        .map((group) => {
+          if (group.id !== "group_build") return group;
+          const { parentGroupId: _removedParent, ...rootGroup } = group;
+          return rootGroup;
+        }),
+    };
+    const next = replaceSnapshot(previous, removed);
+
+    expect(next.dashboardFocus).toEqual({
+      rowId: dashboardRowIds.group("group_build"),
+      cellId: "identity",
+    });
+    expect(next.collapsedGroupIds).toEqual(previous.collapsedGroupIds);
   });
 
   it("preserves exact identity through resize and follows it into view", () => {

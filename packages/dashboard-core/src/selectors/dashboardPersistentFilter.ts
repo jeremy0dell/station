@@ -1,4 +1,4 @@
-import type { AgentState, ProjectId, ProviderId } from "@station/contracts";
+import type { AgentState, ProjectId, ProviderId, SessionGroupId } from "@station/contracts";
 import type {
   DashboardFilterCondition,
   DashboardScreenView,
@@ -30,10 +30,17 @@ export type DashboardPersistentFilterProjectCandidate = {
   projectLabel: string;
 };
 
+export type DashboardPersistentFilterGroupCandidate = {
+  groupId: SessionGroupId;
+  projectId: ProjectId;
+  groupLabel: string;
+};
+
 export type DashboardPersistentFilterCandidate = {
   kind: "session" | "optimistic";
   id: string;
   projectId: ProjectId;
+  groupId?: SessionGroupId;
   visibleFields: DashboardPersistentFilterVisibleFields;
   conditionValues: {
     status?: AgentState;
@@ -49,6 +56,7 @@ export type DashboardPersistentFilterRowMatch = {
     agent: readonly DashboardPersistentFilterMatchRange[];
     activity: readonly DashboardPersistentFilterMatchRange[];
     projectLabel: readonly DashboardPersistentFilterMatchRange[];
+    groupLabel: readonly DashboardPersistentFilterMatchRange[];
   };
 };
 
@@ -57,9 +65,14 @@ export type DashboardPersistentFilterProjectMatch = {
   labelRanges: readonly DashboardPersistentFilterMatchRange[];
 };
 
+export type DashboardPersistentFilterGroupMatch = {
+  matched: boolean;
+  labelRanges: readonly DashboardPersistentFilterMatchRange[];
+};
+
 /**
  * Draft state previews all rows softly; applied free text and conditions hard-project rows while
- * text highlighting stays visible-only and project headers remain as context for matching rows.
+ * text highlighting stays visible-only and durable Project and Group headers remain as context.
  */
 export type DashboardPersistentFilterProjection = {
   source: "draft" | "applied";
@@ -73,16 +86,19 @@ export type DashboardPersistentFilterProjection = {
   zeroMatches: boolean;
   rows: ReadonlyMap<string, DashboardPersistentFilterRowMatch>;
   projects: ReadonlyMap<ProjectId, DashboardPersistentFilterProjectMatch>;
+  groups: ReadonlyMap<SessionGroupId, DashboardPersistentFilterGroupMatch>;
 };
 
 export function selectDashboardPersistentFilter({
   candidates,
   projects,
+  groups,
   screen,
   applied,
 }: {
   candidates: readonly DashboardPersistentFilterCandidate[];
   projects: readonly DashboardPersistentFilterProjectCandidate[];
+  groups: readonly DashboardPersistentFilterGroupCandidate[];
   screen: DashboardScreenView;
   applied?: DashboardPersistentFilterView;
 }): DashboardPersistentFilterProjection | undefined {
@@ -102,9 +118,14 @@ export function selectDashboardPersistentFilter({
   for (const project of projects) {
     projectLabelRanges.set(project.projectId, matchRanges(project.projectLabel, foldedQuery));
   }
+  const groupLabelRanges = new Map<SessionGroupId, DashboardPersistentFilterMatchRange[]>();
+  for (const group of groups) {
+    groupLabelRanges.set(group.groupId, matchRanges(group.groupLabel, foldedQuery));
+  }
 
   const rows = new Map<string, DashboardPersistentFilterRowMatch>();
   const projectsWithMatchedRows = new Set<ProjectId>();
+  const groupsWithMatchedRows = new Set<SessionGroupId>();
   let matchCount = 0;
   for (const candidate of candidates) {
     const ranges = {
@@ -112,13 +133,16 @@ export function selectDashboardPersistentFilter({
       agent: matchRanges(candidate.visibleFields.agent ?? "", foldedQuery),
       activity: matchRanges(candidate.visibleFields.activity ?? "", foldedQuery),
       projectLabel: projectLabelRanges.get(candidate.projectId) ?? [],
+      groupLabel:
+        candidate.groupId === undefined ? [] : (groupLabelRanges.get(candidate.groupId) ?? []),
     };
     const textMatched =
       foldedQuery.length === 0 ||
       ranges.title.length > 0 ||
       ranges.agent.length > 0 ||
       ranges.activity.length > 0 ||
-      ranges.projectLabel.length > 0;
+      ranges.projectLabel.length > 0 ||
+      ranges.groupLabel.length > 0;
     const statusMatched =
       selectedStatuses.size === 0 ||
       (candidate.conditionValues.status !== undefined &&
@@ -132,8 +156,27 @@ export function selectDashboardPersistentFilter({
     if (matched) {
       matchCount += 1;
       projectsWithMatchedRows.add(candidate.projectId);
+      if (candidate.groupId !== undefined) {
+        groupsWithMatchedRows.add(candidate.groupId);
+      }
     }
     rows.set(candidate.id, { matched, dimmed: !matched, ranges });
+  }
+
+  const groupMatches = new Map<SessionGroupId, DashboardPersistentFilterGroupMatch>();
+  const projectsWithMatchedGroups = new Set<ProjectId>();
+  for (const group of groups) {
+    const labelRanges = groupLabelRanges.get(group.groupId) ?? [];
+    const projectAllowed = selectedProjects.size === 0 || selectedProjects.has(group.projectId);
+    const textAllowsGroup = foldedQuery.length === 0 || labelRanges.length > 0;
+    const rowConditionRequiresEvidence = selectedStatuses.size > 0 || selectedAgents.size > 0;
+    const matched =
+      groupsWithMatchedRows.has(group.groupId) ||
+      (!rowConditionRequiresEvidence && projectAllowed && textAllowsGroup);
+    if (matched) {
+      projectsWithMatchedGroups.add(group.projectId);
+    }
+    groupMatches.set(group.groupId, { matched, labelRanges });
   }
 
   const projectMatches = new Map<ProjectId, DashboardPersistentFilterProjectMatch>();
@@ -143,6 +186,7 @@ export function selectDashboardPersistentFilter({
     const rowConditionRequiresEvidence = selectedStatuses.size > 0 || selectedAgents.size > 0;
     const matched =
       projectsWithMatchedRows.has(projectId) ||
+      projectsWithMatchedGroups.has(projectId) ||
       (!rowConditionRequiresEvidence && projectAllowed && textAllowsProject);
     projectMatches.set(projectId, { matched, labelRanges });
   }
@@ -158,6 +202,7 @@ export function selectDashboardPersistentFilter({
     zeroMatches: active && matchCount === 0,
     rows,
     projects: projectMatches,
+    groups: groupMatches,
   };
   if (screen.name === "persistentFilter") {
     projection.draft = screen.draft;

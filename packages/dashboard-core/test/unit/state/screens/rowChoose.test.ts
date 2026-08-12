@@ -2,7 +2,10 @@ import { describe, expect, it, vi } from "vitest";
 import { dashboardRowIds } from "../../../../src/selectors/dashboardTree.js";
 import { createInitialTuiState } from "../../../../src/state/screen.js";
 import { handleDashboardRowChoiceKey } from "../../../../src/state/screens/rowChoose.js";
-import { createDashboardSnapshot } from "../../../fixtures/snapshots.js";
+import {
+  createDashboardSnapshot,
+  createGroupedDashboardSnapshot,
+} from "../../../fixtures/snapshots.js";
 
 describe("dashboard row chooser", () => {
   it.each([
@@ -116,5 +119,39 @@ describe("dashboard row chooser", () => {
     ).state;
     expect(moved.scrollOffset).toBe(1);
     expect(moved.dashboardFocus).toEqual(state.dashboardFocus);
+  });
+
+  it("skips Group headers while preserving grouped session slots", () => {
+    const snapshot = createGroupedDashboardSnapshot();
+    const state = {
+      ...createInitialTuiState({
+        initialSnapshot: snapshot,
+        terminalRows: 30,
+        dashboardFocus: {
+          rowId: dashboardRowIds.group("group_active"),
+          cellId: "identity" as const,
+        },
+      }),
+      screen: { name: "renameSession" as const, step: "chooseSlot" as const },
+    };
+    const committed: string[] = [];
+    const moved = handleDashboardRowChoiceKey(
+      state,
+      { input: "", downArrow: true },
+      (current, rowId) => {
+        committed.push(rowId);
+        return { state: current };
+      },
+    ).state;
+
+    expect(moved.dashboardFocus).toEqual({
+      rowId: dashboardRowIds.session("ses_wt_web_attention"),
+      cellId: "identity",
+    });
+    handleDashboardRowChoiceKey(moved, { input: "1" }, (current, rowId) => {
+      committed.push(rowId);
+      return { state: current };
+    });
+    expect(committed).toEqual(["ses_wt_web_attention"]);
   });
 });

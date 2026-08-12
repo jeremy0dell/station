@@ -7,13 +7,18 @@ import { MouseButtons } from "@opentui/core/testing";
 import { testRender } from "@opentui/react/test-utils";
 import type { StationClientConnectionState } from "@station/client";
 import type { StationSnapshot } from "@station/contracts";
-import type { ClientNotice, DashboardCapabilities } from "@station/dashboard-core/runtime";
+import type {
+  ClientNotice,
+  DashboardCapabilities,
+  DashboardRuntimeOptions,
+} from "@station/dashboard-core/runtime";
 import { dashboardRowIds } from "@station/dashboard-core/selectors";
 import { act } from "react";
 import { spanAtFrameCell } from "../../terminal/testing/frameProbe.js";
 import {
   attentionAndFailuresSnapshot,
   externalAgentSnapshot,
+  groupedManyProjectsSnapshot,
   manyProjectsSnapshot,
   noProjectsSnapshot,
 } from "../fixtures/scenarios.js";
@@ -54,6 +59,7 @@ const SIZES = [
 
 const SNAPSHOT_SCENARIOS: ReadonlyArray<{ name: string; snapshot: () => StationSnapshot }> = [
   { name: "many-projects", snapshot: manyProjectsSnapshot },
+  { name: "grouped-many-projects", snapshot: groupedManyProjectsSnapshot },
   { name: "attention-and-failures", snapshot: attentionAndFailuresSnapshot },
   { name: "no-projects", snapshot: noProjectsSnapshot },
 ];
@@ -113,12 +119,14 @@ describe("dashboard golden frames", () => {
     toast?: ClientNotice;
     theme?: StationTheme;
     capabilities?: DashboardCapabilities;
+    initialState?: DashboardRuntimeOptions["initialState"];
   }): Promise<RenderedDashboard> {
     const { runtime: store } = makeStationTestRuntime({
       snapshot: input.snapshot ?? null,
       connection: input.connection,
       seedInitialSnapshot: false,
       ...(input.capabilities === undefined ? {} : { capabilities: input.capabilities }),
+      ...(input.initialState === undefined ? {} : { initialState: input.initialState }),
     });
     store.start();
     const dashboard = (
@@ -169,6 +177,244 @@ describe("dashboard golden frames", () => {
       });
     }
   }
+
+  it("renders Group frames, counts, empty Groups, continuous slots, collapse, and both ordering modes", async () => {
+    const snapshot = groupedManyProjectsSnapshot();
+    const groupsFirst = await renderDashboard({ width: 120, height: 40, snapshot });
+    const groupsFirstFrame = groupsFirst.captureCharFrame();
+    const groupsFirstLines = groupsFirstFrame.split("\n");
+
+    expect(groupsFirstFrame).toContain("▼ station  12 sessions · 6 Groups · 11 agents");
+    expect(groupsFirstFrame).toContain("▼ Design refresh 2 sessions");
+    expect(groupsFirstFrame).toContain("▼ Post-launch 0 sessions");
+    expect(groupsFirstFrame).toContain("[9]");
+    expect(groupsFirstFrame).toContain("[a]");
+    expect(groupsFirstFrame).toContain("[b]");
+    expect(groupsFirstFrame).toContain("[c]");
+    const emptyHeader = groupsFirstLines.findIndex((line) => line.includes("▼ Post-launch"));
+    expect(groupsFirstLines[emptyHeader + 1]?.trim()).toMatch(/^╰─+╯$/u);
+
+    const collapsed = await renderDashboard({
+      width: 120,
+      height: 40,
+      snapshot,
+      initialState: { collapsedGroupIds: ["group_runtime_cleanup"] },
+    });
+    expect(collapsed.captureCharFrame()).toContain("▶ Runtime cleanup 1 session");
+    expect(collapsed.captureCharFrame()).not.toContain("runtime-cleanup");
+    expect(collapsed.captureCharFrame()).toContain("[b]");
+    expect(collapsed.captureCharFrame()).not.toContain("[c]");
+    expect(collapsed.captureCharFrame()).toMatchSnapshot();
+
+    const interleaved = await renderDashboard({
+      width: 120,
+      height: 40,
+      snapshot,
+      initialState: { groupOrderingMode: "alphabetical-interleaved" },
+    });
+    const interleavedLines = interleaved.captureCharFrame().split("\n");
+    const design = interleavedLines.findIndex((line) => line.includes("▼ Design refresh"));
+    const docs = interleavedLines.findIndex((line) => line.includes("docs-refresh"));
+    const input = interleavedLines.findIndex((line) => line.includes("▼ Input parity"));
+    expect(design).toBeLessThan(docs);
+    expect(docs).toBeLessThan(input);
+    expect(interleaved.captureCharFrame()).toMatchSnapshot();
+  });
+
+  it("frames a targeted pending Quick Session inside its Group", async () => {
+    const setup = await renderDashboard({
+      width: 80,
+      height: 40,
+      snapshot: groupedManyProjectsSnapshot(),
+      initialState: {
+        localRows: {
+          pendingCreate: [
+            {
+              localId: "create:station:quick-group",
+              projectId: "station",
+              title: "station-quick-group",
+              branch: "station-quick-group",
+              harnessProvider: "codex",
+              targetGroupId: "group_post_launch",
+              createdAt: "2026-08-11T00:00:00.000Z",
+            },
+          ],
+          failedCreate: [],
+          pendingRemove: [],
+          pendingStart: [],
+        },
+      },
+    });
+    const pendingLine = setup
+      .captureCharFrame()
+      .split("\n")
+      .find((line) => line.includes("station-quick-group"));
+
+    expect(pendingLine?.startsWith("│")).toBe(true);
+    expect(pendingLine?.trimEnd().endsWith("│")).toBe(true);
+  });
+
+  it("renders filtered Group counts and clips framed blocks as ordinary rows", async () => {
+    const snapshot = groupedManyProjectsSnapshot();
+    const filtered = await renderDashboard({
+      width: 80,
+      height: 40,
+      snapshot,
+      initialState: { persistentFilter: { query: "no-such-session" } },
+    });
+    const filteredFrame = filtered.captureCharFrame();
+
+    expect(filteredFrame).toContain("▼ Design refresh 0 visible");
+    expect(filteredFrame).toContain("▼ Post-launch 0 sessions");
+    expect(filteredFrame).not.toContain("group-contracts");
+    expect(filteredFrame).toMatchSnapshot();
+
+    const scrolled = await renderDashboard({
+      width: 80,
+      height: 16,
+      snapshot,
+      initialState: { scrollOffset: 8 },
+    });
+    const scrolledFrame = scrolled.captureCharFrame();
+    expect(scrolledFrame).toContain("▲");
+    expect(scrolledFrame).toContain("│");
+    expect(scrolledFrame).toMatchSnapshot();
+  });
+
+  it("paints exact Group focus targets and focused-member containment", async () => {
+    const snapshot = groupedManyProjectsSnapshot();
+    for (const [targetIndex, cellId] of ["identity", "quickSession", "menu"].entries()) {
+      const setup = await renderDashboard({
+        width: 80,
+        height: 24,
+        snapshot,
+      });
+      await act(async () => {
+        setup.store.actions.handleKey({ input: "", downArrow: true });
+        setup.store.actions.handleKey({ input: "", downArrow: true });
+        for (let index = 0; index < targetIndex; index += 1) {
+          setup.store.actions.handleKey({ input: "", rightArrow: true });
+        }
+        await Promise.resolve();
+      });
+      await setup.flush();
+      const lines = setup.captureCharFrame().split("\n");
+      const row = lines.findIndex((line) => line.includes("▼ Design refresh"));
+      const line = lines[row] ?? "";
+      const samples = {
+        identity: line.indexOf("Design refresh"),
+        quickSession: line.indexOf("[qs]"),
+        menu: line.indexOf("[▾]"),
+      } as const;
+      const spans = setup.captureSpans();
+
+      expect(spanHex(spanAtFrameCell(spans, row, 0))).toBe(
+        stationColorSnapshotValue(nativeStationTheme.status.working),
+      );
+      expect((spanAtFrameCell(spans, row, 0)?.attributes ?? 0) & TextAttributes.DIM).toBe(0);
+      for (const [target, column] of Object.entries(samples)) {
+        expect(column).toBeGreaterThan(0);
+        const background = spanBgHex(spanAtFrameCell(spans, row, column));
+        if (target === cellId) {
+          expect(background).toBe(
+            stationColorSnapshotValue(nativeStationTheme.interaction.compactFocus),
+          );
+        } else {
+          expect(background).not.toBe(
+            stationColorSnapshotValue(nativeStationTheme.interaction.compactFocus),
+          );
+        }
+      }
+    }
+
+    const member = await renderDashboard({
+      width: 80,
+      height: 24,
+      snapshot,
+    });
+    await act(async () => {
+      for (let index = 0; index < 3; index += 1) {
+        member.store.actions.handleKey({ input: "", downArrow: true });
+      }
+      await Promise.resolve();
+    });
+    await member.flush();
+    const memberLines = member.captureCharFrame().split("\n");
+    const headerRow = memberLines.findIndex((line) => line.includes("▼ Design refresh"));
+    const memberRow = memberLines.findIndex((line) => line.includes("group-contracts"));
+    const memberColumn = memberLines[memberRow]?.indexOf("group-contracts") ?? -1;
+    const spans = member.captureSpans();
+    const ring = spanAtFrameCell(spans, headerRow, 0);
+
+    expect(spanHex(ring)).toBe(stationColorSnapshotValue(nativeStationTheme.status.working));
+    expect(((ring?.attributes ?? 0) & TextAttributes.DIM) !== 0).toBe(true);
+    expect(spanBgHex(spanAtFrameCell(spans, memberRow, memberColumn))).toBe(
+      stationColorSnapshotValue(nativeStationTheme.interaction.keyboardFocus),
+    );
+  });
+
+  it("keeps Group frame cells inert and restores target focus after hover", async () => {
+    const targets: StationMouseTarget[] = [];
+    const groupId = dashboardRowIds.group("group_design_refresh");
+    const setup = await renderDashboard({
+      width: 80,
+      height: 24,
+      snapshot: groupedManyProjectsSnapshot(),
+      dispatchMouse: (target) => targets.push(target),
+    });
+    await act(async () => {
+      setup.store.actions.handleKey({ input: "", downArrow: true });
+      setup.store.actions.handleKey({ input: "", downArrow: true });
+      setup.store.actions.handleKey({ input: "", rightArrow: true });
+      await Promise.resolve();
+    });
+    await setup.flush();
+    const lines = setup.captureCharFrame().split("\n");
+    const headerRow = lines.findIndex((line) => line.includes("▼ Design refresh"));
+    const memberRow = lines.findIndex((line) => line.includes("group-contracts"));
+    const frameEndRow = memberRow + 2;
+    const line = lines[headerRow] ?? "";
+    const identity = line.indexOf("Design refresh");
+    const quick = line.indexOf("[qs]");
+    const menu = line.indexOf("[▾]");
+    const rightEdge = line.lastIndexOf("╮");
+
+    await setup.mockMouse.click(0, headerRow, MouseButtons.LEFT);
+    await setup.mockMouse.click(quick - 2, headerRow, MouseButtons.LEFT);
+    await setup.mockMouse.click(quick + "[qs]".length, headerRow, MouseButtons.LEFT);
+    await setup.mockMouse.click(rightEdge, headerRow, MouseButtons.LEFT);
+    await setup.mockMouse.click(0, memberRow, MouseButtons.LEFT);
+    await setup.mockMouse.click(rightEdge, memberRow, MouseButtons.LEFT);
+    await setup.mockMouse.click(0, frameEndRow, MouseButtons.LEFT);
+    await setup.mockMouse.click(Math.floor(rightEdge / 2), frameEndRow, MouseButtons.LEFT);
+    await setup.mockMouse.click(identity, headerRow, MouseButtons.LEFT);
+    await setup.mockMouse.click(quick, headerRow, MouseButtons.LEFT);
+    await setup.mockMouse.click(menu, headerRow, MouseButtons.LEFT);
+
+    expect(targets).toEqual([
+      { kind: "dashboardCell", rowId: groupId, cellId: "identity" },
+      { kind: "dashboardCell", rowId: groupId, cellId: "quickSession" },
+      { kind: "dashboardCell", rowId: groupId, cellId: "menu" },
+    ]);
+
+    await act(async () => {
+      await setup.mockMouse.moveTo(quick, headerRow);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    await setup.flush();
+    expect(spanBgHex(spanAtFrameCell(setup.captureSpans(), headerRow, quick))).toBe(
+      stationColorSnapshotValue(nativeStationTheme.interaction.hover),
+    );
+
+    await act(async () => {
+      await setup.mockMouse.moveTo(0, 0);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    await setup.flush();
+    expect(spanBgHex(spanAtFrameCell(setup.captureSpans(), headerRow, quick))).toBe(
+      stationColorSnapshotValue(nativeStationTheme.interaction.compactFocus),
+    );
+  });
 
   it("renders the persistent filter soft-preview editor at wide width", async () => {
     const setup = await renderDashboard({
@@ -253,6 +499,8 @@ describe("dashboard golden frames", () => {
     const frame = setup.captureCharFrame();
     expect(frame).toMatchSnapshot();
     expect(frame).toContain("FILTER working · Status=Working");
+    expect(frame).toContain("▼ scripts");
+    expect(frame).toContain("▼ empty-project");
     expect(frame).toContain("/ edit");
     expect(frame).toContain("Esc clear");
   });
@@ -752,7 +1000,7 @@ describe("dashboard golden frames", () => {
       });
       const shellLabel = width < 90 ? "[sh]" : "[shell]";
       const quickLabel = width < 90 ? "[qs]" : "[quick session]";
-      const controls = ["primary", "shell", "quickSession", "defaultAgent"] as const;
+      const controls = ["primary", "shell", "quickSession", "menu"] as const;
 
       setup.store.actions.handleKey({ input: "", downArrow: true });
       for (let index = 0; index < controls.length; index += 1) {
@@ -776,7 +1024,7 @@ describe("dashboard golden frames", () => {
           primary: 0,
           shell: shellStart,
           quickSession: quickStart,
-          defaultAgent: defaultStart,
+          menu: defaultStart,
         } as const;
         for (const [control, column] of Object.entries(samples)) {
           const background = spanBgHex(spanAtFrameCell(spans, row, column));
@@ -850,7 +1098,7 @@ describe("dashboard golden frames", () => {
       {
         kind: "dashboardCell",
         rowId: dashboardRowIds.project("station"),
-        cellId: "defaultAgent",
+        cellId: "menu",
       },
     ]);
   });

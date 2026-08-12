@@ -87,6 +87,20 @@ const screenBehaviorCases: readonly [
     "present",
   ],
   ["help", { name: "help" }, "present"],
+  ["project menu", { name: "projectMenu", projectId: "web", focus: "quickGroup" }, "present"],
+  [
+    "create group",
+    {
+      name: "createGroup",
+      projectId: "web",
+      draftName: createEditableTextInputState("Launches"),
+      quickSession: false,
+      focus: "name",
+      submitting: false,
+      returnTo: "projectMenu",
+    },
+    "present",
+  ],
   ["project collapse picker", { name: "projectCollapse" }, "present"],
   ["project settings picker", { name: "projectSettingsPicker" }, "present"],
   ["project default-agent picker", { name: "projectDefaultAgent", projectId: "web" }, "present"],
@@ -194,6 +208,35 @@ describe("TUI screen behavior", () => {
       draft: createEditableTextInputState("api"),
       draftConditions: [{ field: "status", values: [{ id: "working", label: "Working" }] }],
     });
+  });
+
+  it("returns Project surfaces to their invocation focus and keeps a pending sheet inert", () => {
+    const menu = withScreen({ name: "projectMenu", projectId: "web", focus: "settings" });
+    const createGroup = withScreen({
+      name: "createGroup",
+      projectId: "web",
+      draftName: createEditableTextInputState("Launches"),
+      quickSession: true,
+      focus: "create",
+      submitting: false,
+      returnTo: "projectMenu",
+    });
+
+    expect(clickAway(menu)).toMatchObject({
+      screen: { name: "dashboard" },
+      dashboardFocus: { rowId: "project:web", cellId: "menu" },
+    });
+    expect(clickAway(createGroup).screen).toEqual({
+      name: "projectMenu",
+      projectId: "web",
+      focus: "newGroup",
+    });
+    if (createGroup.screen.name !== "createGroup") throw new Error("Create Group screen missing.");
+    const pending = {
+      ...createGroup,
+      screen: { ...createGroup.screen, submitting: true },
+    };
+    expect(clickAway(pending)).toBe(pending);
   });
 
   it("backs nested New Session steps to review and discards the nested draft", () => {
