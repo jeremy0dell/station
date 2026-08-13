@@ -28,10 +28,6 @@ export type SessionGroupMutation<TResult = SessionGroupStoreResult> = {
 
 type VersionedInput = { id: SessionGroupId; expectedVersion: number };
 
-export function emptySessionGroupState(): SessionGroupPersistenceState {
-  return { groups: new Map(), assignments: new Map() };
-}
-
 export function cloneSessionGroupState(
   state: SessionGroupPersistenceState,
 ): SessionGroupPersistenceState {

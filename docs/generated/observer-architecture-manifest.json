@@ -8107,12 +8107,6 @@
           "purpose": null
         },
         {
-          "name": "emptySessionGroupState",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
           "name": "listSessionGroups",
           "kind": "function",
           "role": null,

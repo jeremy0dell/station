@@ -764,7 +764,7 @@ function emptyState(): InMemoryObserverPersistenceState {
     terminalTargets: new Map(),
     harnessRuns: new Map(),
     sessions: new Map(),
-    sessionGroups: sessionGroupStore.emptySessionGroupState(),
+    sessionGroups: { groups: new Map(), assignments: new Map() },
     worktreeDisplayTitles: new Map(),
     sessionHarnessExecutions: new Map(),
     recoveryHandles: new Map(),
