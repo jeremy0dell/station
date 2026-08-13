@@ -1,10 +1,7 @@
 import type { AgentState, WorktreeRow } from "@station/contracts";
 import { describe, expect, it } from "vitest";
 import type { RowColor, RowMarker } from "../../../../src/components/WorktreeRow/layout.js";
-import {
-  statusMarker,
-  worktreeRowGridInput,
-} from "../../../../src/components/WorktreeRow/rowInput.js";
+import { worktreeRowGridInput } from "../../../../src/components/WorktreeRow/rowInput.js";
 import { fixtureNow, row } from "../../../fixtures/snapshots.js";
 
 const EXPECTED_VISUALS: Record<AgentState, { marker: RowMarker; tone: RowColor }> = {
@@ -26,7 +23,12 @@ describe("worktree row agent visuals", () => {
     ][]) {
       const candidate = fixtureRow(state);
       const input = worktreeRowGridInput({ row: candidate, slot: "1" });
-      expect(statusMarker(candidate)).toEqual(expected.marker);
+      const markerColor = expected.tone === "gray" ? {} : { color: expected.tone };
+      expect(input.cells.identity?.segments[2]).toEqual(
+        expected.marker.kind === "throbber"
+          ? { ...expected.marker, ...markerColor }
+          : { kind: "text", text: expected.marker.text, ...markerColor },
+      );
       expect(input.cells.activity?.segments[0]?.color).toBe(expected.tone);
     }
   });
@@ -34,12 +36,20 @@ describe("worktree row agent visuals", () => {
   it("uses the ready visual only for an idle agent", () => {
     const idle = readyRow("idle");
     const working = readyRow("working");
+    const idleInput = worktreeRowGridInput({ row: idle, slot: "1" });
+    const workingInput = worktreeRowGridInput({ row: working, slot: "1" });
 
-    expect(statusMarker(idle)).toEqual({ kind: "text", text: "●" });
-    expect(worktreeRowGridInput({ row: idle, slot: "1" }).cells.activity?.segments[0]?.color).toBe(
-      "green",
-    );
-    expect(statusMarker(working)).toEqual({ kind: "throbber", variant: "braille" });
+    expect(idleInput.cells.identity?.segments[2]).toEqual({
+      kind: "text",
+      text: "●",
+      color: "green",
+    });
+    expect(idleInput.cells.activity?.segments[0]?.color).toBe("green");
+    expect(workingInput.cells.identity?.segments[2]).toEqual({
+      kind: "throbber",
+      variant: "braille",
+      color: "blue",
+    });
   });
 });
 
