@@ -1,4 +1,9 @@
-import type { SafeError, StationSnapshot, TerminalClosePayload } from "@station/contracts";
+import type {
+  SafeError,
+  StationSnapshot,
+  TerminalClosePayload,
+  TerminalFocusPayload,
+} from "@station/contracts";
 import type { RuntimeClock } from "@station/runtime";
 import type { EventJournal, SessionStore } from "../persistence/index.js";
 import type { ProviderRegistry } from "../providers/registry.js";
@@ -14,25 +19,26 @@ import {
   resolveSessionOrThrow,
   resolveWorktreeRowOrThrow,
 } from "./cleanup/index.js";
+import { resolveTerminalProviderOrThrow } from "./providers.js";
 import type { CommandHandler } from "./queue.js";
 import { reconcileAndPublish } from "./reconcile.js";
-import type { TerminalIntentRunner } from "./terminalIntentRunner.js";
 import {
-  submitTerminalIntentOrThrow,
-  terminalCloseIntentFromPayload,
-  terminalFocusIntentFromPayload,
-} from "./terminalIntents.js";
+  closeTerminal,
+  focusTerminal,
+  type TerminalTargetSubject,
+  terminalTargetSubjectForSession,
+  terminalTargetSubjectForWorktree,
+} from "./terminalOperations.js";
 
 export type CreateTerminalFocusHandlerOptions = {
   core: ObserverCore;
   providers: ProviderRegistry;
-  terminalIntentRunner: TerminalIntentRunner;
+  clock?: RuntimeClock | undefined;
 };
 
 export type CreateTerminalCloseHandlerOptions = {
   core: ObserverCore;
   providers: ProviderRegistry;
-  terminalIntentRunner: TerminalIntentRunner;
   persistence?: (EventJournal & SessionStore) | undefined;
   eventBus?: ObserverEventBus | undefined;
   clock?: RuntimeClock | undefined;
@@ -44,15 +50,17 @@ export function createTerminalFocusHandler(
   return async (context) => {
     assertCommandType(context, "terminal.focus");
     throwIfAborted(context.signal);
-    await submitTerminalIntentOrThrow({
-      terminalIntentRunner: options.terminalIntentRunner,
-      intent: terminalFocusIntentFromPayload({
-        defaultTerminalId: options.providers.defaultTerminalId,
-        commandId: context.commandId,
-        payload: context.command.payload,
-        snapshot: options.core.getSnapshot(),
-      }),
+    const resolved = resolveTerminalFocusSubject(
+      options.core.getSnapshot(),
+      context.command.payload,
+      options.providers.defaultTerminalId,
+    );
+    await focusTerminal({
+      terminal: resolveTerminalProviderOrThrow(options.providers, resolved.terminalProvider),
+      subject: resolved.subject,
+      origin: context.command.payload.origin,
       context,
+      clock: options.clock,
     });
     throwIfAborted(context.signal);
   };
@@ -72,15 +80,22 @@ export function createTerminalCloseHandler(
       context.command.payload.force === true,
     );
     throwIfAborted(context.signal);
-    await submitTerminalIntentOrThrow({
-      terminalIntentRunner: options.terminalIntentRunner,
-      intent: terminalCloseIntentFromPayload({
-        defaultTerminalId: options.providers.defaultTerminalId,
-        commandId: context.commandId,
-        payload: context.command.payload,
-        snapshot,
-      }),
+    const terminalProvider =
+      resolved.session?.terminal?.provider ??
+      resolved.row?.terminal?.provider ??
+      options.providers.defaultTerminalId;
+    let subject: TerminalTargetSubject;
+    if (resolved.session !== undefined) {
+      subject = terminalTargetSubjectForSession(resolved.session, resolved.row);
+    } else {
+      if (resolved.row === undefined) throw terminalCloseSubjectMissingError();
+      subject = terminalTargetSubjectForWorktree(resolved.row);
+    }
+    await closeTerminal({
+      terminal: resolveTerminalProviderOrThrow(options.providers, terminalProvider),
+      subject,
       context,
+      clock: options.clock,
     });
     throwIfAborted(context.signal);
     if (resolved.session?.origin === "station" && options.persistence !== undefined) {
@@ -108,6 +123,42 @@ export function createTerminalCloseHandler(
       });
     }
   };
+}
+
+function resolveTerminalFocusSubject(
+  snapshot: StationSnapshot,
+  payload: TerminalFocusPayload,
+  fallbackProvider: string,
+): { terminalProvider: string; subject: TerminalTargetSubject } {
+  if (payload.sessionId !== undefined) {
+    const session = snapshot.sessions.find((candidate) => candidate.id === payload.sessionId);
+    if (session !== undefined) {
+      const row = resolveRowForSession(snapshot, session);
+      return {
+        terminalProvider: session.terminal?.provider ?? row?.terminal?.provider ?? fallbackProvider,
+        subject: terminalTargetSubjectForSession(session, row),
+      };
+    }
+    const row = snapshot.rows.find((candidate) => candidate.id === payload.worktreeId);
+    return {
+      terminalProvider: row?.terminal?.provider ?? fallbackProvider,
+      subject: {
+        sessionId: payload.sessionId,
+        ...(payload.worktreeId === undefined ? {} : { worktreeId: payload.worktreeId }),
+      },
+    };
+  }
+  if (payload.worktreeId !== undefined) {
+    const row = snapshot.rows.find((candidate) => candidate.id === payload.worktreeId);
+    return {
+      terminalProvider: row?.terminal?.provider ?? fallbackProvider,
+      subject:
+        row === undefined
+          ? { worktreeId: payload.worktreeId }
+          : terminalTargetSubjectForWorktree(row),
+    };
+  }
+  throw terminalFocusSubjectMissingError();
 }
 
 function resolveTerminalClosePolicySubject(
@@ -144,5 +195,13 @@ function terminalCloseSubjectMissingError(): SafeError {
     tag: "CommandValidationError",
     code: "TERMINAL_CLOSE_SUBJECT_MISSING",
     message: "terminal.close requires a session or worktree reference.",
+  };
+}
+
+function terminalFocusSubjectMissingError(): SafeError {
+  return {
+    tag: "CommandValidationError",
+    code: "TERMINAL_INTENT_SUBJECT_MISSING",
+    message: "Terminal commands require a session or worktree reference.",
   };
 }

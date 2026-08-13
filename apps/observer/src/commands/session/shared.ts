@@ -1,7 +1,5 @@
 import { randomUUID } from "node:crypto";
 import {
-  type EnsureAgentWorkspaceIntent,
-  type HarnessResumeOptions,
   type ProviderId,
   type ProviderProjectConfig,
   type SafeError,
@@ -241,59 +239,6 @@ export async function lookupWorktree(input: {
     });
   }
   return worktree;
-}
-
-/**
- * One workspace-intent envelope for session.create, startAgent, and resumeAgent.
- * Each caller supplies only the harness fields and resume target it knows about;
- * absent optional fields stay absent to satisfy exactOptionalPropertyTypes.
- */
-export function buildEnsureAgentWorkspaceIntent(input: {
-  commandId: string;
-  project: ProviderProjectConfig;
-  worktree: WorktreeObservation;
-  sessionId: string;
-  terminalProvider: string;
-  harnessProvider: string;
-  harness?:
-    | {
-        mode?: "interactive" | "exec" | undefined;
-        profile?: string | undefined;
-        approvalPolicy?: string | undefined;
-        sandboxMode?: string | undefined;
-      }
-    | undefined;
-  layout: string;
-  focus?: boolean | undefined;
-  origin?: EnsureAgentWorkspaceIntent["origin"] | undefined;
-  initialPrompt?: string | undefined;
-  resume?: HarnessResumeOptions | undefined;
-}): EnsureAgentWorkspaceIntent {
-  const intent: EnsureAgentWorkspaceIntent = {
-    type: "session.ensureAgentWorkspace",
-    commandId: input.commandId,
-    terminalProvider: input.terminalProvider,
-    project: input.project,
-    worktree: input.worktree,
-    sessionId: input.sessionId,
-    harness: {
-      provider: input.harnessProvider,
-    },
-    layout: input.layout,
-  };
-  if (input.harness?.mode !== undefined) intent.harness.mode = input.harness.mode;
-  if (input.harness?.profile !== undefined) intent.harness.profile = input.harness.profile;
-  if (input.harness?.approvalPolicy !== undefined) {
-    intent.harness.approvalPolicy = input.harness.approvalPolicy;
-  }
-  if (input.harness?.sandboxMode !== undefined) {
-    intent.harness.sandboxMode = input.harness.sandboxMode;
-  }
-  if (input.resume !== undefined) intent.resume = input.resume;
-  if (input.focus !== undefined) intent.focus = input.focus;
-  if (input.origin !== undefined) intent.origin = input.origin;
-  if (input.initialPrompt !== undefined) intent.initialPrompt = input.initialPrompt;
-  return intent;
 }
 
 /**

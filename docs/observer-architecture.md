@@ -216,7 +216,7 @@ areas contain the following responsibilities:
 
 | Area | Current responsibility | Adopted ownership |
 | --- | --- | --- |
-| `commands/` | command queue, routing, scopes, cancellation, launch preflight, terminal-intent execution, Group mutation, and command use cases | Driving application behavior; launch preflight, terminal-intent execution, and Group mutation coordinate their narrow ports as use cases. |
+| `commands/` | command queue, routing, scopes, cancellation, launch preflight, direct terminal operations, Group mutation, and command use cases | Driving application behavior; command handlers coordinate launch preflight and provider-neutral terminal operations directly through their narrow ports, while Group mutation remains a dedicated use case. |
 | `reconcile/` | provider reads, correlation, graph construction, Group projection, and core state | Reconcile-owned Group repair, command-local Group projection, and deterministic policies; provider I/O remains at its driven edges. `reconcileResult.ts` owns the `ReconcileTiming` result record returned by `runReconcileOnce`, while `core.ts` re-exports it for compatibility. |
 | `hooks/` | hook/report ingestion, dedupe, readiness, spool I/O, and ingress queue | Ingress use cases and queue orchestration separated from filesystem spool adapters. |
 | `runtime/` | API assembly, process lifecycle, scheduling, event delivery, server bridge, and external launch | Observer composition plus application operations; transport and infrastructure stay at the edge. |

@@ -4,7 +4,7 @@ export * from "./commands/queue.js";
 export * from "./commands/reconcile.js";
 export * from "./commands/router.js";
 export * from "./commands/terminal.js";
-export * from "./commands/terminalIntentRunner.js";
+export * from "./commands/terminalOperations.js";
 export * from "./diagnostics/collector.js";
 export * from "./diagnostics/errors.js";
 export * from "./diagnostics/evidenceSource.js";

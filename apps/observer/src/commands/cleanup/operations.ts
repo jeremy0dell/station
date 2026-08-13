@@ -8,16 +8,15 @@ import type {
 import { isRunningAgentState, SafeErrorSchema } from "@station/contracts";
 import type { RuntimeClock } from "@station/runtime";
 import type { ProviderRegistry } from "../../providers/registry.js";
-import { resolveHarnessProviderOrThrow } from "../providers.js";
+import { resolveHarnessProviderOrThrow, resolveTerminalProviderOrThrow } from "../providers.js";
 import type { CommandHandlerContext } from "../queue.js";
 import { runProviderMutation, throwIfAborted } from "../session/shared.js";
-import type { TerminalIntentRunner } from "../terminalIntentRunner.js";
 import {
+  closeTerminal,
   hasCloseableTerminalAttachment,
-  submitTerminalIntentOrThrow,
-  terminalCloseIntentForSession,
-  terminalCloseIntentForWorktree,
-} from "../terminalIntents.js";
+  terminalTargetSubjectForSession,
+  terminalTargetSubjectForWorktree,
+} from "../terminalOperations.js";
 import type { VerifiedWorktreeRemovalTarget } from "./guards.js";
 
 export type CleanupRuntime = {
@@ -27,7 +26,6 @@ export type CleanupRuntime = {
 export async function closeSessionResources(
   input: {
     providers: ProviderRegistry;
-    terminalIntentRunner: TerminalIntentRunner;
     session: SessionView;
     row?: WorktreeRow | undefined;
     mode: "harness" | "terminal" | "all";
@@ -68,16 +66,15 @@ export async function closeSessionResources(
       };
       throw error;
     }
-    await submitTerminalIntentOrThrow({
-      terminalIntentRunner: input.terminalIntentRunner,
-      intent: terminalCloseIntentForSession({
-        defaultTerminalId: input.providers.defaultTerminalId,
-        commandId: input.context.commandId,
-        session: input.session,
-        row: input.row,
-        force: input.force,
-      }),
+    const terminalProvider =
+      input.session.terminal?.provider ??
+      input.row?.terminal?.provider ??
+      input.providers.defaultTerminalId;
+    await closeTerminal({
+      terminal: resolveTerminalProviderOrThrow(input.providers, terminalProvider),
+      subject: terminalTargetSubjectForSession(input.session, input.row),
       context: input.context,
+      clock: input.clock,
     });
   }
 }
@@ -110,7 +107,6 @@ export async function stopHarnessForWorktree(
 export async function closeTerminalForWorktree(
   input: {
     providers: ProviderRegistry;
-    terminalIntentRunner: TerminalIntentRunner;
     row: WorktreeRow;
     force: boolean;
     context: CommandHandlerContext;
@@ -120,15 +116,14 @@ export async function closeTerminalForWorktree(
     return;
   }
   try {
-    await submitTerminalIntentOrThrow({
-      terminalIntentRunner: input.terminalIntentRunner,
-      intent: terminalCloseIntentForWorktree({
-        defaultTerminalId: input.providers.defaultTerminalId,
-        commandId: input.context.commandId,
-        row: input.row,
-        force: input.force,
-      }),
+    await closeTerminal({
+      terminal: resolveTerminalProviderOrThrow(
+        input.providers,
+        input.row.terminal?.provider ?? input.providers.defaultTerminalId,
+      ),
+      subject: terminalTargetSubjectForWorktree(input.row),
       context: input.context,
+      clock: input.clock,
     });
   } catch (error) {
     // A missing target already satisfies cleanup; force only governs destructive worktree guards.

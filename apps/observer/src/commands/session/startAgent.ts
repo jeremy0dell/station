@@ -8,20 +8,18 @@ import type { StationLogger } from "../../stationLogger.js";
 import { nowIso } from "../../utils/time.js";
 import { assertCommandType } from "../assertCommand.js";
 import type { HarnessLaunchPreflight } from "../harnessLaunchPreflight.js";
+import { resolveHarnessProviderOrThrow, resolveTerminalProviderOrThrow } from "../providers.js";
 import type { CommandHandler } from "../queue.js";
 import { reconcileAndPublish } from "../reconcile.js";
-import type { TerminalIntentRunner } from "../terminalIntentRunner.js";
+import { ensureAgentWorkspace } from "../terminalOperations.js";
 import {
   assertNoCurrentAgent,
-  buildEnsureAgentWorkspaceIntent,
   defaultSessionCommandIdFactory,
   discardSessionSeedBestEffort,
   findProjectOrThrow,
   lookupWorktree,
   publishSessionCreated,
   rememberedHarnessProviderForWorktree,
-  resolveHarnessProviderOrThrow,
-  resolveTerminalProviderOrThrow,
   type SessionCommandIdFactory,
   seedSession,
   throwIfAborted,
@@ -32,7 +30,6 @@ import {
 export type CreateSessionStartAgentHandlerOptions = {
   getProjects: () => readonly ProviderProjectConfig[];
   providers: ProviderRegistry;
-  terminalIntentRunner: TerminalIntentRunner;
   launchPreflight: HarnessLaunchPreflight;
   core: ObserverCore;
   persistence: SessionStore & EventJournal;
@@ -63,7 +60,7 @@ export function createSessionStartAgentHandler(
     const payload = context.command.payload;
     const project = findProjectOrThrow(options.getProjects(), payload.projectId);
     const terminalProviderId = payload.terminal?.provider ?? project.defaults.terminal;
-    resolveTerminalProviderOrThrow(options.providers, terminalProviderId);
+    const terminal = resolveTerminalProviderOrThrow(options.providers, terminalProviderId);
     const snapshot = options.core.getSnapshot();
     const row = snapshot.rows.find((candidate) => candidate.id === payload.worktreeId);
     validateSnapshotRow(row, payload.projectId);
@@ -93,7 +90,7 @@ export function createSessionStartAgentHandler(
         worktreePath: worktree.path,
       })) ??
       project.defaults.harness;
-    resolveHarnessProviderOrThrow(options.providers, harnessProviderId);
+    const harness = resolveHarnessProviderOrThrow(options.providers, harnessProviderId);
     await options.launchPreflight(harnessProviderId, context.signal);
 
     let sessionSeeded = false;
@@ -110,28 +107,22 @@ export function createSessionStartAgentHandler(
       sessionSeeded = true;
       throwIfAborted(context.signal);
 
-      const receipt = await options.terminalIntentRunner.submitIntent(
-        buildEnsureAgentWorkspaceIntent({
-          commandId: context.commandId,
-          project,
-          worktree,
-          sessionId,
-          terminalProvider: terminalProviderId,
-          harnessProvider: harnessProviderId,
-          harness: payload.harness,
-          layout: payload.terminal?.layout ?? project.defaults.layout,
-          focus: payload.terminal?.focus,
-          origin: payload.terminal?.origin,
-          initialPrompt: payload.initialPrompt,
-        }),
-        {
-          trace: context.trace,
-          signal: context.signal,
-        },
-      );
-      if (receipt.status === "rejected") {
-        throw receipt.error;
-      }
+      await ensureAgentWorkspace({
+        terminal,
+        harness,
+        launchPreflight: options.launchPreflight,
+        project,
+        worktree,
+        sessionId,
+        harnessOptions: payload.harness,
+        layout: payload.terminal?.layout ?? project.defaults.layout,
+        focus: payload.terminal?.focus,
+        origin: payload.terminal?.origin,
+        initialPrompt: payload.initialPrompt,
+        context,
+        clock: options.clock,
+        logger: options.logger,
+      });
       throwIfAborted(context.signal);
     } catch (error) {
       if (sessionSeeded) {

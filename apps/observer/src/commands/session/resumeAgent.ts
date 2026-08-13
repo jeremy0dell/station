@@ -11,18 +11,17 @@ import type { StationLogger } from "../../stationLogger.js";
 import { nowIso } from "../../utils/time.js";
 import { assertCommandType } from "../assertCommand.js";
 import type { HarnessLaunchPreflight } from "../harnessLaunchPreflight.js";
+import { resolveTerminalProviderOrThrow } from "../providers.js";
 import type { CommandHandler } from "../queue.js";
 import { reconcileAndPublish } from "../reconcile.js";
-import type { TerminalIntentRunner } from "../terminalIntentRunner.js";
+import { ensureAgentWorkspace } from "../terminalOperations.js";
 import {
-  buildEnsureAgentWorkspaceIntent,
   commandValidationError,
   defaultSessionCommandIdFactory,
   discardSessionSeedBestEffort,
   findProjectOrThrow,
   lookupWorktree,
   publishSessionCreated,
-  resolveTerminalProviderOrThrow,
   type SessionCommandIdFactory,
   seedSession,
   throwIfAborted,
@@ -33,7 +32,6 @@ import {
 export type CreateSessionResumeAgentHandlerOptions = {
   getProjects: () => readonly ProviderProjectConfig[];
   providers: ProviderRegistry;
-  terminalIntentRunner: TerminalIntentRunner;
   launchPreflight: HarnessLaunchPreflight;
   core: ObserverCore;
   persistence: SessionStore & EventJournal;
@@ -76,7 +74,7 @@ export function createSessionResumeAgentHandler(
     const payload = context.command.payload;
     const project = findProjectOrThrow(options.getProjects(), payload.projectId);
     const terminalProviderId = payload.terminal?.provider ?? project.defaults.terminal;
-    resolveTerminalProviderOrThrow(options.providers, terminalProviderId);
+    const terminal = resolveTerminalProviderOrThrow(options.providers, terminalProviderId);
     const snapshot = options.core.getSnapshot();
     const row = snapshot.rows.find((candidate) => candidate.id === payload.worktreeId);
     validateSnapshotRow(row, payload.projectId);
@@ -125,31 +123,24 @@ export function createSessionResumeAgentHandler(
       sessionSeeded = true;
       throwIfAborted(context.signal);
 
-      // The terminal runner stays provider-neutral: it opens/focuses the pane, and
-      // the harness adapter alone translates this resume target into CLI args.
-      const receipt = await options.terminalIntentRunner.submitIntent(
-        buildEnsureAgentWorkspaceIntent({
-          commandId: context.commandId,
-          project,
-          worktree,
-          sessionId,
-          terminalProvider: terminalProviderId,
-          harnessProvider: recovery.harness.id,
-          harness: { mode: "interactive" },
-          layout: payload.terminal?.layout ?? project.defaults.layout,
-          focus: payload.terminal?.focus,
-          origin: payload.terminal?.origin,
-          initialPrompt: payload.initialPrompt,
-          resume: recovery.resume,
-        }),
-        {
-          trace: context.trace,
-          signal: context.signal,
-        },
-      );
-      if (receipt.status === "rejected") {
-        throw receipt.error;
-      }
+      // The harness adapter alone translates this provider-native resume target into CLI args.
+      await ensureAgentWorkspace({
+        terminal,
+        harness: recovery.harness,
+        launchPreflight: options.launchPreflight,
+        project,
+        worktree,
+        sessionId,
+        harnessOptions: { mode: "interactive" },
+        layout: payload.terminal?.layout ?? project.defaults.layout,
+        focus: payload.terminal?.focus,
+        origin: payload.terminal?.origin,
+        initialPrompt: payload.initialPrompt,
+        resume: recovery.resume,
+        context,
+        clock: options.clock,
+        logger: options.logger,
+      });
       throwIfAborted(context.signal);
       await options.persistence.reopenSession(sessionId);
     } catch (error) {

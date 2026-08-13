@@ -36,7 +36,6 @@ import {
   type SessionGroupCommandIdFactory,
 } from "./sessionGroups.js";
 import { createTerminalCloseHandler, createTerminalFocusHandler } from "./terminal.js";
-import { createTerminalIntentRunner, type TerminalIntentRunner } from "./terminalIntentRunner.js";
 import { createWorktreeCreateHandler } from "./worktree/create.js";
 import { createWorktreeForkHandler } from "./worktree/fork.js";
 import { createWorktreeRemoveHandler } from "./worktree/remove.js";
@@ -54,7 +53,6 @@ export type RegisterObserverCommandHandlersOptions = {
   logger?: StationLogger | undefined;
   idFactory?: Partial<SessionCommandIdFactory & SessionGroupCommandIdFactory> | undefined;
   launchPreflight?: HarnessLaunchPreflight | undefined;
-  terminalIntentRunner?: TerminalIntentRunner | undefined;
   projectConfigWriter: ProjectConfigWriter;
   worktreeMutations?: WorktreeMutationCoordinator | undefined;
 };
@@ -65,8 +63,8 @@ export type RegisterObserverCommandHandlersOptions = {
  * Constructs process-lifetime Observer command use cases and registers their
  * handlers with the command queue.
  *
- * Terminal intent orchestration, runtime-prebound config-aware launch preflight, and
- * ProjectConfigWriter are composed here; handlers never receive configuration or home paths.
+ * Runtime-prebound config-aware launch preflight and ProjectConfigWriter are composed here;
+ * handlers coordinate provider-neutral operations without receiving configuration or home paths.
  */
 export function registerObserverCommandHandlers(
   options: RegisterObserverCommandHandlersOptions,
@@ -82,17 +80,6 @@ export function registerObserverCommandHandlers(
         providerId,
         ...(signal === undefined ? {} : { signal }),
       }));
-  const terminalIntentRunner =
-    options.terminalIntentRunner ??
-    createTerminalIntentRunner({
-      providers: {
-        terminals: options.providers.terminals,
-        harnesses: options.providers.harnesses,
-      },
-      launchPreflight,
-      clock: options.clock,
-      logger: options.logger,
-    });
   const sessionGroupHandlers = createSessionGroupCommandHandlers({
     core: options.core,
     persistence: options.persistence,
@@ -122,7 +109,6 @@ export function registerObserverCommandHandlers(
     "worktree.remove": createWorktreeRemoveHandler({
       getProjects,
       providers: options.providers,
-      terminalIntentRunner,
       core: options.core,
       persistence: options.persistence,
       eventBus: options.eventBus,
@@ -132,7 +118,6 @@ export function registerObserverCommandHandlers(
     "session.create": createSessionCreateHandler({
       getProjects,
       providers: options.providers,
-      terminalIntentRunner,
       launchPreflight,
       core: options.core,
       persistence: options.persistence,
@@ -144,7 +129,6 @@ export function registerObserverCommandHandlers(
     "session.startAgent": createSessionStartAgentHandler({
       getProjects,
       providers: options.providers,
-      terminalIntentRunner,
       launchPreflight,
       core: options.core,
       persistence: options.persistence,
@@ -156,7 +140,6 @@ export function registerObserverCommandHandlers(
     "session.resumeAgent": createSessionResumeAgentHandler({
       getProjects,
       providers: options.providers,
-      terminalIntentRunner,
       launchPreflight,
       core: options.core,
       persistence: options.persistence,
@@ -164,6 +147,7 @@ export function registerObserverCommandHandlers(
       eventBus: options.eventBus,
       clock: options.clock,
       idFactory: options.idFactory,
+      logger: options.logger,
     }),
     "session.importRecoveryHandle": createSessionImportRecoveryHandleHandler({
       getProjects,
@@ -177,7 +161,6 @@ export function registerObserverCommandHandlers(
     "session.fork": createSessionForkHandler({
       getProjects,
       providers: options.providers,
-      terminalIntentRunner,
       launchPreflight,
       core: options.core,
       persistence: options.persistence,
@@ -189,11 +172,10 @@ export function registerObserverCommandHandlers(
     "terminal.focus": createTerminalFocusHandler({
       core: options.core,
       providers: options.providers,
-      terminalIntentRunner,
+      clock: options.clock,
     }),
     "terminal.close": createTerminalCloseHandler({
       providers: options.providers,
-      terminalIntentRunner,
       core: options.core,
       persistence: options.persistence,
       eventBus: options.eventBus,
@@ -201,7 +183,6 @@ export function registerObserverCommandHandlers(
     }),
     "session.close": createSessionCloseHandler({
       providers: options.providers,
-      terminalIntentRunner,
       core: options.core,
       persistence: options.persistence,
       eventBus: options.eventBus,

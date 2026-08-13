@@ -106,7 +106,7 @@ describe("observer providers", () => {
     ).toEqual([managedTerminal]);
     expect(registry.defaultTerminalId).toBe(config.defaults.terminal);
     expect(registry.terminal).not.toBe(managedTerminal);
-    expect("terminalIntentRunner" in registry).toBe(false);
+    expect("terminalOperations" in registry).toBe(false);
   });
 
   it("registers OpenCode hook normalization at the CLI composition root", () => {
@@ -255,9 +255,10 @@ describe("observer providers", () => {
     expect([...registry.harnesses.keys()]).toEqual(["codex", "opencode", "pi", "scripted"]);
   });
 
-  it("keeps the observer terminal intent runner out of contracts exports", () => {
-    expect("TerminalIntentRunner" in contracts).toBe(false);
-    expect("DefaultTerminalIntentRunner" in contracts).toBe(false);
+  it("keeps observer terminal operations out of contracts exports", () => {
+    expect("ensureAgentWorkspace" in contracts).toBe(false);
+    expect("focusTerminal" in contracts).toBe(false);
+    expect("closeTerminal" in contracts).toBe(false);
   });
 
   it("omits unconfigured built-in harnesses and shows configured Codex, Cursor, Pi, and OpenCode", () => {

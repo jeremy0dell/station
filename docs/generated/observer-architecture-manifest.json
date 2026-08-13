@@ -369,7 +369,7 @@
           "specifier": "../providers.js",
           "resolvedPath": "apps/observer/src/commands/providers.ts",
           "edgeKind": "runtime",
-          "bindings": ["resolveHarnessProviderOrThrow"]
+          "bindings": ["resolveHarnessProviderOrThrow", "resolveTerminalProviderOrThrow"]
         },
         {
           "specifier": "../queue.js",
@@ -384,20 +384,14 @@
           "bindings": ["runProviderMutation", "throwIfAborted"]
         },
         {
-          "specifier": "../terminalIntentRunner.js",
-          "resolvedPath": "apps/observer/src/commands/terminalIntentRunner.ts",
-          "edgeKind": "type-only",
-          "bindings": ["TerminalIntentRunner"]
-        },
-        {
-          "specifier": "../terminalIntents.js",
-          "resolvedPath": "apps/observer/src/commands/terminalIntents.ts",
+          "specifier": "../terminalOperations.js",
+          "resolvedPath": "apps/observer/src/commands/terminalOperations.ts",
           "edgeKind": "runtime",
           "bindings": [
+            "closeTerminal",
             "hasCloseableTerminalAttachment",
-            "submitTerminalIntentOrThrow",
-            "terminalCloseIntentForSession",
-            "terminalCloseIntentForWorktree"
+            "terminalTargetSubjectForSession",
+            "terminalTargetSubjectForWorktree"
           ]
         },
         {
@@ -1051,18 +1045,6 @@
           "bindings": ["createTerminalCloseHandler", "createTerminalFocusHandler"]
         },
         {
-          "specifier": "./terminalIntentRunner.js",
-          "resolvedPath": "apps/observer/src/commands/terminalIntentRunner.ts",
-          "edgeKind": "runtime",
-          "bindings": ["createTerminalIntentRunner"]
-        },
-        {
-          "specifier": "./terminalIntentRunner.js",
-          "resolvedPath": "apps/observer/src/commands/terminalIntentRunner.ts",
-          "edgeKind": "type-only",
-          "bindings": ["TerminalIntentRunner"]
-        },
-        {
           "specifier": "./worktree/create.js",
           "resolvedPath": "apps/observer/src/commands/worktree/create.ts",
           "edgeKind": "runtime",
@@ -1263,12 +1245,6 @@
           "bindings": ["throwIfAborted"]
         },
         {
-          "specifier": "../terminalIntentRunner.js",
-          "resolvedPath": "apps/observer/src/commands/terminalIntentRunner.ts",
-          "edgeKind": "type-only",
-          "bindings": ["TerminalIntentRunner"]
-        },
-        {
           "specifier": "../../persistence/index.js",
           "resolvedPath": "apps/observer/src/persistence/index.ts",
           "edgeKind": "type-only",
@@ -1348,6 +1324,12 @@
           "bindings": ["HarnessLaunchPreflight"]
         },
         {
+          "specifier": "../providers.js",
+          "resolvedPath": "apps/observer/src/commands/providers.ts",
+          "edgeKind": "runtime",
+          "bindings": ["resolveHarnessProviderOrThrow", "resolveTerminalProviderOrThrow"]
+        },
+        {
           "specifier": "../queue.js",
           "resolvedPath": "apps/observer/src/commands/queue.ts",
           "edgeKind": "type-only",
@@ -1364,14 +1346,11 @@
           "resolvedPath": "apps/observer/src/commands/session/shared.ts",
           "edgeKind": "runtime",
           "bindings": [
-            "buildEnsureAgentWorkspaceIntent",
             "defaultSessionCommandIdFactory",
             "discardSessionSeedBestEffort",
             "findProjectOrThrow",
             "publishSessionCreated",
             "removeWorktreeBestEffort",
-            "resolveHarnessProviderOrThrow",
-            "resolveTerminalProviderOrThrow",
             "runProviderMutation",
             "seedSession",
             "sessionSeedGroupPlacement",
@@ -1385,10 +1364,10 @@
           "bindings": ["SessionCommandIdFactory"]
         },
         {
-          "specifier": "../terminalIntentRunner.js",
-          "resolvedPath": "apps/observer/src/commands/terminalIntentRunner.ts",
-          "edgeKind": "type-only",
-          "bindings": ["TerminalIntentRunner"]
+          "specifier": "../terminalOperations.js",
+          "resolvedPath": "apps/observer/src/commands/terminalOperations.ts",
+          "edgeKind": "runtime",
+          "bindings": ["ensureAgentWorkspace"]
         },
         {
           "specifier": "../../persistence/index.js",
@@ -1464,6 +1443,12 @@
           "bindings": ["HarnessLaunchPreflight"]
         },
         {
+          "specifier": "../providers.js",
+          "resolvedPath": "apps/observer/src/commands/providers.ts",
+          "edgeKind": "runtime",
+          "bindings": ["resolveHarnessProviderOrThrow", "resolveTerminalProviderOrThrow"]
+        },
+        {
           "specifier": "../queue.js",
           "resolvedPath": "apps/observer/src/commands/queue.ts",
           "edgeKind": "type-only",
@@ -1480,7 +1465,6 @@
           "resolvedPath": "apps/observer/src/commands/session/shared.ts",
           "edgeKind": "runtime",
           "bindings": [
-            "buildEnsureAgentWorkspaceIntent",
             "commandValidationError",
             "defaultSessionCommandIdFactory",
             "discardSessionSeedBestEffort",
@@ -1488,8 +1472,6 @@
             "publishSessionCreated",
             "rememberedHarnessProviderForWorktree",
             "removeWorktreeBestEffort",
-            "resolveHarnessProviderOrThrow",
-            "resolveTerminalProviderOrThrow",
             "runProviderMutation",
             "seedSession",
             "throwIfAborted",
@@ -1503,10 +1485,10 @@
           "bindings": ["SessionCommandIdFactory"]
         },
         {
-          "specifier": "../terminalIntentRunner.js",
-          "resolvedPath": "apps/observer/src/commands/terminalIntentRunner.ts",
-          "edgeKind": "type-only",
-          "bindings": ["TerminalIntentRunner"]
+          "specifier": "../terminalOperations.js",
+          "resolvedPath": "apps/observer/src/commands/terminalOperations.ts",
+          "edgeKind": "runtime",
+          "bindings": ["ensureAgentWorkspace"]
         },
         {
           "specifier": "../../persistence/index.js",
@@ -1763,6 +1745,12 @@
           "bindings": ["HarnessLaunchPreflight"]
         },
         {
+          "specifier": "../providers.js",
+          "resolvedPath": "apps/observer/src/commands/providers.ts",
+          "edgeKind": "runtime",
+          "bindings": ["resolveTerminalProviderOrThrow"]
+        },
+        {
           "specifier": "../queue.js",
           "resolvedPath": "apps/observer/src/commands/queue.ts",
           "edgeKind": "type-only",
@@ -1779,14 +1767,12 @@
           "resolvedPath": "apps/observer/src/commands/session/shared.ts",
           "edgeKind": "runtime",
           "bindings": [
-            "buildEnsureAgentWorkspaceIntent",
             "commandValidationError",
             "defaultSessionCommandIdFactory",
             "discardSessionSeedBestEffort",
             "findProjectOrThrow",
             "lookupWorktree",
             "publishSessionCreated",
-            "resolveTerminalProviderOrThrow",
             "seedSession",
             "throwIfAborted",
             "validateSnapshotRow",
@@ -1800,10 +1786,10 @@
           "bindings": ["SessionCommandIdFactory"]
         },
         {
-          "specifier": "../terminalIntentRunner.js",
-          "resolvedPath": "apps/observer/src/commands/terminalIntentRunner.ts",
-          "edgeKind": "type-only",
-          "bindings": ["TerminalIntentRunner"]
+          "specifier": "../terminalOperations.js",
+          "resolvedPath": "apps/observer/src/commands/terminalOperations.ts",
+          "edgeKind": "runtime",
+          "bindings": ["ensureAgentWorkspace"]
         },
         {
           "specifier": "../../features/evaluator.js",
@@ -1878,12 +1864,6 @@
       "exports": [
         {
           "name": "assertNoCurrentAgent",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "buildEnsureAgentWorkspaceIntent",
           "kind": "function",
           "role": null,
           "purpose": null
@@ -2094,8 +2074,6 @@
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "type-only",
           "bindings": [
-            "EnsureAgentWorkspaceIntent",
-            "HarnessResumeOptions",
             "ProviderId",
             "ProviderProjectConfig",
             "SafeError",
@@ -2155,6 +2133,12 @@
           "bindings": ["HarnessLaunchPreflight"]
         },
         {
+          "specifier": "../providers.js",
+          "resolvedPath": "apps/observer/src/commands/providers.ts",
+          "edgeKind": "runtime",
+          "bindings": ["resolveHarnessProviderOrThrow", "resolveTerminalProviderOrThrow"]
+        },
+        {
           "specifier": "../queue.js",
           "resolvedPath": "apps/observer/src/commands/queue.ts",
           "edgeKind": "type-only",
@@ -2172,15 +2156,12 @@
           "edgeKind": "runtime",
           "bindings": [
             "assertNoCurrentAgent",
-            "buildEnsureAgentWorkspaceIntent",
             "defaultSessionCommandIdFactory",
             "discardSessionSeedBestEffort",
             "findProjectOrThrow",
             "lookupWorktree",
             "publishSessionCreated",
             "rememberedHarnessProviderForWorktree",
-            "resolveHarnessProviderOrThrow",
-            "resolveTerminalProviderOrThrow",
             "seedSession",
             "throwIfAborted",
             "validateSnapshotRow",
@@ -2194,10 +2175,10 @@
           "bindings": ["SessionCommandIdFactory"]
         },
         {
-          "specifier": "../terminalIntentRunner.js",
-          "resolvedPath": "apps/observer/src/commands/terminalIntentRunner.ts",
-          "edgeKind": "type-only",
-          "bindings": ["TerminalIntentRunner"]
+          "specifier": "../terminalOperations.js",
+          "resolvedPath": "apps/observer/src/commands/terminalOperations.ts",
+          "edgeKind": "runtime",
+          "bindings": ["ensureAgentWorkspace"]
         },
         {
           "specifier": "../../persistence/index.js",
@@ -2404,6 +2385,12 @@
           ]
         },
         {
+          "specifier": "./providers.js",
+          "resolvedPath": "apps/observer/src/commands/providers.ts",
+          "edgeKind": "runtime",
+          "bindings": ["resolveTerminalProviderOrThrow"]
+        },
+        {
           "specifier": "./queue.js",
           "resolvedPath": "apps/observer/src/commands/queue.ts",
           "edgeKind": "type-only",
@@ -2416,20 +2403,21 @@
           "bindings": ["reconcileAndPublish"]
         },
         {
-          "specifier": "./terminalIntentRunner.js",
-          "resolvedPath": "apps/observer/src/commands/terminalIntentRunner.ts",
-          "edgeKind": "type-only",
-          "bindings": ["TerminalIntentRunner"]
-        },
-        {
-          "specifier": "./terminalIntents.js",
-          "resolvedPath": "apps/observer/src/commands/terminalIntents.ts",
+          "specifier": "./terminalOperations.js",
+          "resolvedPath": "apps/observer/src/commands/terminalOperations.ts",
           "edgeKind": "runtime",
           "bindings": [
-            "submitTerminalIntentOrThrow",
-            "terminalCloseIntentFromPayload",
-            "terminalFocusIntentFromPayload"
+            "closeTerminal",
+            "focusTerminal",
+            "terminalTargetSubjectForSession",
+            "terminalTargetSubjectForWorktree"
           ]
+        },
+        {
+          "specifier": "./terminalOperations.js",
+          "resolvedPath": "apps/observer/src/commands/terminalOperations.ts",
+          "edgeKind": "type-only",
+          "bindings": ["TerminalTargetSubject"]
         },
         {
           "specifier": "../persistence/index.js",
@@ -2465,7 +2453,12 @@
           "specifier": "@station/contracts",
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "type-only",
-          "bindings": ["SafeError", "StationSnapshot", "TerminalClosePayload"]
+          "bindings": [
+            "SafeError",
+            "StationSnapshot",
+            "TerminalClosePayload",
+            "TerminalFocusPayload"
+          ]
         },
         {
           "specifier": "@station/runtime",
@@ -2476,35 +2469,47 @@
       ]
     },
     {
-      "path": "apps/observer/src/commands/terminalIntentRunner.ts",
+      "path": "apps/observer/src/commands/terminalOperations.ts",
       "exports": [
         {
-          "name": "createTerminalIntentRunner",
+          "name": "closeTerminal",
           "kind": "function",
           "role": null,
           "purpose": null
         },
         {
-          "name": "DefaultTerminalIntentRunnerOptions",
+          "name": "ensureAgentWorkspace",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "focusTerminal",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "hasCloseableTerminalAttachment",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "TerminalTargetSubject",
           "kind": "type",
           "role": null,
           "purpose": null
         },
         {
-          "name": "TerminalIntentProviderAccess",
-          "kind": "type",
+          "name": "terminalTargetSubjectForSession",
+          "kind": "function",
           "role": null,
           "purpose": null
         },
         {
-          "name": "TerminalIntentRunner",
-          "kind": "type",
-          "role": "USE CASE",
-          "purpose": "Executes terminal workspace, focus, and close intents by coordinating terminal and harness ports, repeating the selected-harness preflight immediately before workspace mutation."
-        },
-        {
-          "name": "TerminalIntentSubmitContext",
-          "kind": "type",
+          "name": "terminalTargetSubjectForWorktree",
+          "kind": "function",
           "role": null,
           "purpose": null
         }
@@ -2521,6 +2526,12 @@
           "resolvedPath": "apps/observer/src/commands/harnessLaunchPreflight.ts",
           "edgeKind": "type-only",
           "bindings": ["HarnessLaunchPreflight"]
+        },
+        {
+          "specifier": "./queue.js",
+          "resolvedPath": "apps/observer/src/commands/queue.ts",
+          "edgeKind": "type-only",
+          "bindings": ["CommandHandlerContext"]
         },
         {
           "specifier": "./session/shared.js",
@@ -2544,11 +2555,7 @@
           "specifier": "@station/contracts",
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "runtime",
-          "bindings": [
-            "TerminalIntentReceiptSchema",
-            "TerminalIntentSchema",
-            "terminalTargetObservationFromBinding"
-          ]
+          "bindings": ["terminalTargetObservationFromBinding"]
         },
         {
           "specifier": "@station/contracts",
@@ -2556,19 +2563,17 @@
           "edgeKind": "type-only",
           "bindings": [
             "BuildHarnessLaunchRequest",
-            "EnsureAgentWorkspaceIntent",
             "HarnessProvider",
+            "HarnessResumeOptions",
+            "ProviderProjectConfig",
             "SafeError",
-            "TerminalCloseIntent",
-            "TerminalFocusIntent",
+            "SessionView",
             "TerminalFocusOrigin",
-            "TerminalIntent",
-            "TerminalIntentReceipt",
-            "TerminalIntentSubject",
             "TerminalProvider",
             "TerminalState",
             "TerminalTargetObservation",
-            "TraceContext"
+            "WorktreeObservation",
+            "WorktreeRow"
           ]
         },
         {
@@ -2582,98 +2587,6 @@
           "resolvedPath": "packages/runtime/src/index.ts",
           "edgeKind": "type-only",
           "bindings": ["RuntimeClock"]
-        }
-      ]
-    },
-    {
-      "path": "apps/observer/src/commands/terminalIntents.ts",
-      "exports": [
-        {
-          "name": "hasCloseableTerminalAttachment",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "submitTerminalIntentOrThrow",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "terminalCloseIntentForSession",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "terminalCloseIntentForWorktree",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "terminalCloseIntentFromPayload",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "terminalFocusIntentFromPayload",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "terminalIntentSubjectForSession",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "terminalIntentSubjectForWorktree",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        }
-      ],
-      "imports": [
-        {
-          "specifier": "./cleanup/resolve.js",
-          "resolvedPath": "apps/observer/src/commands/cleanup/resolve.ts",
-          "edgeKind": "runtime",
-          "bindings": ["resolveRowForSession"]
-        },
-        {
-          "specifier": "./queue.js",
-          "resolvedPath": "apps/observer/src/commands/queue.ts",
-          "edgeKind": "type-only",
-          "bindings": ["CommandHandlerContext"]
-        },
-        {
-          "specifier": "./terminalIntentRunner.js",
-          "resolvedPath": "apps/observer/src/commands/terminalIntentRunner.ts",
-          "edgeKind": "type-only",
-          "bindings": ["TerminalIntentRunner"]
-        },
-        {
-          "specifier": "@station/contracts",
-          "resolvedPath": "packages/contracts/src/index.ts",
-          "edgeKind": "type-only",
-          "bindings": [
-            "ProviderId",
-            "SafeError",
-            "SessionView",
-            "StationSnapshot",
-            "TerminalCloseIntent",
-            "TerminalClosePayload",
-            "TerminalFocusIntent",
-            "TerminalFocusPayload",
-            "TerminalIntent",
-            "TerminalIntentReceipt",
-            "TerminalIntentSubject",
-            "WorktreeRow"
-          ]
         }
       ]
     },
@@ -2909,12 +2822,6 @@
           "resolvedPath": "apps/observer/src/commands/session/shared.ts",
           "edgeKind": "runtime",
           "bindings": ["findProjectOrThrow", "runProviderMutation", "throwIfAborted"]
-        },
-        {
-          "specifier": "../terminalIntentRunner.js",
-          "resolvedPath": "apps/observer/src/commands/terminalIntentRunner.ts",
-          "edgeKind": "type-only",
-          "bindings": ["TerminalIntentRunner"]
         },
         {
           "specifier": "../../persistence/index.js",
@@ -4093,6 +4000,12 @@
           "purpose": null
         },
         {
+          "name": "closeTerminal",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "closeTerminalForWorktree",
           "kind": "function",
           "role": null,
@@ -4387,12 +4300,6 @@
           "purpose": null
         },
         {
-          "name": "createTerminalIntentRunner",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
           "name": "createWorktreeMetadataRefreshService",
           "kind": "function",
           "role": "USE CASE",
@@ -4406,12 +4313,6 @@
         },
         {
           "name": "CurrentProviderObservationKind",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "DefaultTerminalIntentRunnerOptions",
           "kind": "type",
           "role": null,
           "purpose": null
@@ -4453,6 +4354,18 @@
           "purpose": null
         },
         {
+          "name": "ensureAgentWorkspace",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ErrorEnvelopeInput",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "EventAndObservationIngressDedupeResult",
           "kind": "type",
           "role": null,
@@ -4473,6 +4386,12 @@
         {
           "name": "EventRecordOptions",
           "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "focusTerminal",
+          "kind": "function",
           "role": null,
           "purpose": null
         },
@@ -4503,6 +4422,12 @@
         {
           "name": "HarnessIngressQueue",
           "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "hasCloseableTerminalAttachment",
+          "kind": "function",
           "role": null,
           "purpose": null
         },
@@ -5437,20 +5362,20 @@
           "purpose": null
         },
         {
-          "name": "TerminalIntentProviderAccess",
+          "name": "TerminalTargetSubject",
           "kind": "type",
           "role": null,
           "purpose": null
         },
         {
-          "name": "TerminalIntentRunner",
-          "kind": "type",
-          "role": "USE CASE",
-          "purpose": "Executes terminal workspace, focus, and close intents by coordinating terminal and harness ports, repeating the selected-harness preflight immediately before workspace mutation."
+          "name": "terminalTargetSubjectForSession",
+          "kind": "function",
+          "role": null,
+          "purpose": null
         },
         {
-          "name": "TerminalIntentSubmitContext",
-          "kind": "type",
+          "name": "terminalTargetSubjectForWorktree",
+          "kind": "function",
           "role": null,
           "purpose": null
         },
@@ -5547,8 +5472,8 @@
           "bindings": ["*"]
         },
         {
-          "specifier": "./commands/terminalIntentRunner.js",
-          "resolvedPath": "apps/observer/src/commands/terminalIntentRunner.ts",
+          "specifier": "./commands/terminalOperations.js",
+          "resolvedPath": "apps/observer/src/commands/terminalOperations.ts",
           "edgeKind": "runtime",
           "bindings": ["*"]
         },
@@ -13741,14 +13666,6 @@
           "edgeKind": "type-only"
         }
       ]
-    },
-    {
-      "path": "apps/observer/src/commands/terminalIntentRunner.ts",
-      "declaration": "TerminalIntentRunner",
-      "kind": "type",
-      "role": "USE CASE",
-      "purpose": "Executes terminal workspace, focus, and close intents by coordinating terminal and harness ports, repeating the selected-harness preflight immediately before workspace mutation.",
-      "dependencies": []
     },
     {
       "path": "apps/observer/src/commands/worktree/create.ts",
