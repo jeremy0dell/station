@@ -130,8 +130,8 @@ export interface ObservationStore {
 /**
  * DRIVEN PORT
  *
- * Persists the Observer's correlated reconcile projection as one atomic capability.
- * Missing canonical worktree titles initialize insert-only before session projections synchronize.
+ * Atomically records current durable sessions and canonical worktree titles.
+ * First title initialization and explicit title mutations synchronize historical projections.
  */
 export interface ReconcileStore {
   persistReconcileResult(input: PersistReconcileResultInput): Promise<void>;

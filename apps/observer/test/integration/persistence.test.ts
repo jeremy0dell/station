@@ -1,7 +1,7 @@
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ProviderProjectConfig, StationCommand } from "@station/contracts";
+import type { StationCommand } from "@station/contracts";
 import {
   createFakeHarnessRun,
   createFakeTerminalTarget,
@@ -20,20 +20,6 @@ const command: StationCommand = {
   type: "observer.reconcile",
   payload: {
     reason: "persistence-test",
-  },
-};
-
-const project: ProviderProjectConfig = {
-  id: "web",
-  label: "web",
-  root: "/tmp/station/web",
-  defaults: {
-    harness: "fake-harness",
-    terminal: "fake-terminal",
-    layout: "agent-shell",
-  },
-  worktrunk: {
-    enabled: true,
   },
 };
 
@@ -685,7 +671,6 @@ describe("observer persistence", () => {
     });
 
     await persistence.persistReconcileResult({
-      projects: [project],
       worktrees: [initialWorktree],
       terminalTargets: [terminalTarget],
       harnessRuns: [harnessRun],
@@ -705,7 +690,6 @@ describe("observer persistence", () => {
       renamedAt: now,
     });
     await persistence.persistReconcileResult({
-      projects: [project],
       worktrees: [
         {
           ...initialWorktree,
@@ -782,7 +766,6 @@ describe("observer persistence", () => {
     ]);
 
     await persistence.persistReconcileResult({
-      projects: [project],
       worktrees: [worktree],
       terminalTargets: [terminalTarget],
       harnessRuns: [harnessRun],
@@ -875,7 +858,6 @@ describe("observer persistence", () => {
     });
 
     await persistence.persistReconcileResult({
-      projects: [project],
       worktrees: [worktree],
       terminalTargets: [terminal],
       harnessRuns: [run],

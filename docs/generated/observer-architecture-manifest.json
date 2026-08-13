@@ -4968,7 +4968,7 @@
           "name": "ReconcileStore",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Persists the Observer's correlated reconcile projection as one atomic capability. Missing canonical worktree titles initialize insert-only before session projections synchronize."
+          "purpose": "Atomically records current durable sessions and canonical worktree titles. First title initialization and explicit title mutations synchronize historical projections."
         },
         {
           "name": "ReconcileTiming",
@@ -6745,7 +6745,7 @@
           "specifier": "./json.js",
           "resolvedPath": "apps/observer/src/persistence/json.ts",
           "edgeKind": "runtime",
-          "bindings": ["maxIso", "optionalJson"]
+          "bindings": ["maxIso"]
         },
         {
           "specifier": "./observations.js",
@@ -6770,12 +6770,6 @@
           "resolvedPath": "apps/observer/src/persistence/rows.ts",
           "edgeKind": "type-only",
           "bindings": ["SqliteSessionRow"]
-        },
-        {
-          "specifier": "./terminalObservations.js",
-          "resolvedPath": "apps/observer/src/persistence/terminalObservations.ts",
-          "edgeKind": "runtime",
-          "bindings": ["stripTerminalProviderData"]
         },
         {
           "specifier": "./types.js",
@@ -6823,19 +6817,15 @@
           "specifier": "@station/contracts",
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "runtime",
-          "bindings": [
-            "TerminalTargetObservationSchema",
-            "WorktreeObservationSchema",
-            "sameObservedPath"
-          ]
+          "bindings": ["WorktreeObservationSchema", "sameObservedPath"]
         },
         {
           "specifier": "@station/contracts",
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "type-only",
           "bindings": [
+            "HarnessRunObservation",
             "ProviderId",
-            "ProviderProjectConfig",
             "TerminalTargetObservation",
             "WorktreeObservation"
           ]
@@ -7145,7 +7135,7 @@
           "name": "ReconcileStore",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Persists the Observer's correlated reconcile projection as one atomic capability. Missing canonical worktree titles initialize insert-only before session projections synchronize."
+          "purpose": "Atomically records current durable sessions and canonical worktree titles. First title initialization and explicit title mutations synchronize historical projections."
         },
         {
           "name": "RecordProviderObservationInput",
@@ -7514,7 +7504,7 @@
           "name": "ReconcileStore",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Persists the Observer's correlated reconcile projection as one atomic capability. Missing canonical worktree titles initialize insert-only before session projections synchronize."
+          "purpose": "Atomically records current durable sessions and canonical worktree titles. First title initialization and explicit title mutations synchronize historical projections."
         },
         {
           "name": "SessionGroupStore",
@@ -8574,7 +8564,6 @@
             "ObservedStatus",
             "ProviderHealth",
             "ProviderId",
-            "ProviderProjectConfig",
             "SafeError",
             "SessionGroupId",
             "SessionGroupView",
@@ -9412,7 +9401,7 @@
           "name": "runReconcileOnce",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Orchestrates provider reads, relationship correlation, durable harness-event repair and overlays, cached metadata hydration, Group projection, snapshot assembly, and atomic persistence in order. The same resolved title records feed snapshot composition and atomic reconcile persistence."
+          "purpose": "Orchestrates provider reads, relationship correlation, durable harness-event repair and overlays, cached metadata hydration, Group projection, snapshot assembly, and atomic session persistence. The same resolved title records feed snapshot composition and atomic reconcile persistence."
         }
       ],
       "imports": [
@@ -13671,7 +13660,7 @@
       "declaration": "ReconcileStore",
       "kind": "interface",
       "role": "DRIVEN PORT",
-      "purpose": "Persists the Observer's correlated reconcile projection as one atomic capability. Missing canonical worktree titles initialize insert-only before session projections synchronize.",
+      "purpose": "Atomically records current durable sessions and canonical worktree titles. First title initialization and explicit title mutations synchronize historical projections.",
       "dependencies": []
     },
     {
@@ -13750,7 +13739,7 @@
       "declaration": "runReconcileOnce",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Orchestrates provider reads, relationship correlation, durable harness-event repair and overlays, cached metadata hydration, Group projection, snapshot assembly, and atomic persistence in order. The same resolved title records feed snapshot composition and atomic reconcile persistence.",
+      "purpose": "Orchestrates provider reads, relationship correlation, durable harness-event repair and overlays, cached metadata hydration, Group projection, snapshot assembly, and atomic session persistence. The same resolved title records feed snapshot composition and atomic reconcile persistence.",
       "dependencies": [
         {
           "path": "apps/observer/src/persistence/ports.ts",

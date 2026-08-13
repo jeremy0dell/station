@@ -8,7 +8,6 @@ import type {
   ObservedStatus,
   ProviderHealth,
   ProviderId,
-  ProviderProjectConfig,
   SafeError,
   SessionGroupId,
   SessionGroupView,
@@ -306,7 +305,6 @@ export type ListSessionRecoveryHandlesOptions = {
 };
 
 export type PersistReconcileResultInput = {
-  projects: ProviderProjectConfig[];
   worktrees: WorktreeObservation[];
   terminalTargets: TerminalTargetObservation[];
   harnessRuns: HarnessRunObservation[];

@@ -1542,7 +1542,6 @@ describe("session command vertical slice", () => {
       }),
     });
     await fixture.persistence.persistReconcileResult({
-      projects: config.projects,
       worktrees: [
         createFakeWorktree({
           id: "wt_web_resume",
@@ -1944,7 +1943,6 @@ describe("session command vertical slice", () => {
       sessionIds: ["ses_remembered_next"],
     });
     await fixture.persistence.persistReconcileResult({
-      projects: config.projects,
       worktrees: [existingWorktree],
       terminalTargets: [],
       harnessRuns: [
@@ -2041,7 +2039,6 @@ describe("session command vertical slice", () => {
       sessionIds: ["ses_remembered_current"],
     });
     await fixture.persistence.persistReconcileResult({
-      projects: config.projects,
       worktrees: [previousWorktree],
       terminalTargets: [],
       harnessRuns: [

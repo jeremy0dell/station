@@ -150,7 +150,6 @@ describe("cleanup command handlers", () => {
   it("ends a retained Station session when terminal.close targets its worktree", async () => {
     const fixture = createFixture({ state: "terminal" });
     await fixture.persistence.persistReconcileResult({
-      projects: config.projects,
       worktrees: [fixture.worktreeObservation],
       terminalTargets: [],
       harnessRuns: [

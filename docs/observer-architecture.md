@@ -740,8 +740,13 @@ when it changes several tables:
   across diagnostic observation/native binding/recovery/readiness, and atomic
   hook-processing completion across observations/native bindings/readiness.
 - `ObservationStore` owns typed provider-observation history, queries, and expiry.
-- `ReconcileStore` owns the complete atomic `persistReconcileResult` operation, including
-  insert-only initialization of missing canonical worktree titles before session projection sync.
+- `ReconcileStore` atomically records durable session projections and insert-only initialization of
+  missing canonical worktree titles. Configured projects and current
+  terminal/run identities remain source-owned instead of being copied into unread relational state;
+  only first canonical-title initialization or an explicit title mutation synchronizes historical
+  session title projections. The legacy worktrees relation retains only insert-once
+  ID/project/path/provider recovery identity; mutable worktree facts remain
+  provider/observation-owned.
 - `SessionStore` owns explicit session lifecycle, canonical worktree-scoped title authority,
   synchronized per-session title projections, durable provider-native execution bindings,
   recovery handles, turn readiness, and purpose-specific remembered-harness lookup. A fresh-session

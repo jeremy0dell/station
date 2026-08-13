@@ -1,22 +1,17 @@
 import type {
+  HarnessRunObservation,
   ProviderId,
-  ProviderProjectConfig,
   TerminalTargetObservation,
   WorktreeObservation,
 } from "@station/contracts";
-import {
-  sameObservedPath,
-  TerminalTargetObservationSchema,
-  WorktreeObservationSchema,
-} from "@station/contracts";
+import { sameObservedPath, WorktreeObservationSchema } from "@station/contracts";
 import { harnessRunCanActivateSession, terminalCanActivateSession } from "../sessionActivation.js";
 import type { SqlDatabase } from "../sqlite/driver.js";
 import { resolveWorktreeDisplayTitle } from "../worktreeDisplayTitle.js";
-import { maxIso, optionalJson } from "./json.js";
+import { maxIso } from "./json.js";
 import { insertProviderObservation } from "./observations.js";
 import { providerObservationExpiresAt } from "./retention.js";
 import { type SqliteSessionRow, sessionFromRow } from "./rows.js";
-import { stripTerminalProviderData } from "./terminalObservations.js";
 import type {
   ObserverIdFactory,
   PersistedSession,
@@ -32,28 +27,13 @@ import {
   upsertWorktreeDisplayTitle,
 } from "./worktreeDisplayTitles.js";
 
-type ProjectPersistenceInput = {
-  id: string;
-  label: string;
-  root: string;
-  repo?: string;
-};
-
 export function persistReconcileResult(
   database: SqlDatabase,
   input: PersistReconcileResultInput,
   options: { observedAt: string; idFactory: ObserverIdFactory },
 ): void {
-  for (const project of input.projects) {
-    upsertProject(database, projectPersistenceInput(project), options.observedAt);
-  }
   for (const worktree of input.worktrees.map((value) => WorktreeObservationSchema.parse(value))) {
-    upsertWorktree(database, worktree);
-  }
-  for (const target of input.terminalTargets.map((value) =>
-    stripTerminalProviderData(TerminalTargetObservationSchema.parse(value)),
-  )) {
-    upsertTerminalTarget(database, target);
+    rememberWorktreeIdentity(database, worktree);
   }
   if (input.providerHealth !== undefined) {
     for (const health of Object.values(input.providerHealth)) {
@@ -71,13 +51,13 @@ export function persistReconcileResult(
     }
   }
   const resolvedTitles = resolveReconcileWorktreeDisplayTitles(database, input, options.observedAt);
-  insertMissingWorktreeDisplayTitles(database, resolvedTitles);
+  const insertedTitles = insertMissingWorktreeDisplayTitles(database, resolvedTitles);
   const persistedTitles = resolvedTitles.map((title) => {
     const persisted = readWorktreeDisplayTitle(database, title);
     if (persisted === undefined) {
       throw new Error(`Failed to initialize worktree display title for ${title.worktreeId}.`);
     }
-    synchronizeSessionTitleProjections(database, persisted);
+    if (insertedTitles > 0) synchronizeSessionTitleProjections(database, persisted);
     return persisted;
   });
   upsertSessions(database, input.terminalTargets, input.harnessRuns, persistedTitles);
@@ -346,96 +326,17 @@ function listCanonicalTitle(
   return title === undefined ? [] : [title];
 }
 
-function upsertProject(
-  database: SqlDatabase,
-  project: ProjectPersistenceInput,
-  lastSeenAt: string,
-): void {
-  database
-    .prepare(
-      `
-        INSERT INTO projects (id, label, root, repo, last_seen_at)
-        VALUES (?, ?, ?, ?, ?)
-        ON CONFLICT(id) DO UPDATE SET
-          label = excluded.label,
-          root = excluded.root,
-          repo = excluded.repo,
-          last_seen_at = excluded.last_seen_at
-      `,
-    )
-    .run(project.id, project.label, project.root, project.repo ?? null, lastSeenAt);
-}
-
-function projectPersistenceInput(project: ProviderProjectConfig): ProjectPersistenceInput {
-  return {
-    id: project.id,
-    label: project.label,
-    root: project.root,
-  };
-}
-
-function upsertWorktree(database: SqlDatabase, worktree: WorktreeObservation): void {
+function rememberWorktreeIdentity(database: SqlDatabase, worktree: WorktreeObservation): void {
   database
     .prepare(
       `
         INSERT INTO worktrees
-          (id, project_id, path, branch, source, state, dirty, provider, provider_data_json, last_seen_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(id) DO UPDATE SET
-          project_id = excluded.project_id,
-          path = excluded.path,
-          branch = excluded.branch,
-          source = excluded.source,
-          state = excluded.state,
-          dirty = excluded.dirty,
-          provider = excluded.provider,
-          provider_data_json = excluded.provider_data_json,
-          last_seen_at = excluded.last_seen_at
+          (id, project_id, path, provider, last_seen_at)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO NOTHING
       `,
     )
-    .run(
-      worktree.id,
-      worktree.projectId,
-      worktree.path,
-      worktree.branch,
-      worktree.source,
-      worktree.state,
-      worktree.dirty === undefined ? null : Number(worktree.dirty),
-      worktree.provider,
-      optionalJson(worktree.providerData),
-      worktree.observedAt,
-    );
-}
-
-function upsertTerminalTarget(database: SqlDatabase, target: TerminalTargetObservation): void {
-  database
-    .prepare(
-      `
-        INSERT INTO terminal_targets
-          (id, session_id, project_id, worktree_id, provider, state, provider_key, provider_data_json, last_seen_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(id) DO UPDATE SET
-          session_id = excluded.session_id,
-          project_id = excluded.project_id,
-          worktree_id = excluded.worktree_id,
-          provider = excluded.provider,
-          state = excluded.state,
-          provider_key = excluded.provider_key,
-          provider_data_json = excluded.provider_data_json,
-          last_seen_at = excluded.last_seen_at
-      `,
-    )
-    .run(
-      target.id,
-      target.sessionId ?? null,
-      target.projectId ?? null,
-      target.worktreeId ?? null,
-      target.provider,
-      target.state,
-      target.id,
-      null,
-      target.observedAt,
-    );
+    .run(worktree.id, worktree.projectId, worktree.path, worktree.provider, worktree.observedAt);
 }
 
 function upsertSessions(

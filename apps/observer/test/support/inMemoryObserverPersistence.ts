@@ -86,23 +86,13 @@ type CreateInMemoryObserverPersistenceOptions = {
   idFactory?: Partial<ObserverIdFactory>;
 };
 
-type ProjectState = {
-  id: string;
-  label: string;
-  root: string;
-  lastSeenAt: string;
-};
-
 type InMemoryObserverPersistenceState = {
   commands: Map<string, PersistedCommand>;
   commandErrors: Map<string, PersistedCommandError>;
   events: Map<string, PersistedEvent>;
   ingressDedupe: Set<string>;
   observations: Map<string, PersistedProviderObservation>;
-  projects: Map<string, ProjectState>;
   worktrees: Map<string, WorktreeObservation>;
-  terminalTargets: Map<string, TerminalTargetObservation>;
-  harnessRuns: Map<string, HarnessRunObservation>;
   sessions: Map<string, PersistedSession>;
   sessionGroups: sessionGroupStore.SessionGroupPersistenceState;
   worktreeDisplayTitles: Map<string, PersistedWorktreeDisplayTitle>;
@@ -750,10 +740,7 @@ function emptyState(): InMemoryObserverPersistenceState {
     events: new Map(),
     ingressDedupe: new Set(),
     observations: new Map(),
-    projects: new Map(),
     worktrees: new Map(),
-    terminalTargets: new Map(),
-    harnessRuns: new Map(),
     sessions: new Map(),
     sessionGroups: { groups: new Map(), assignments: new Map() },
     worktreeDisplayTitles: new Map(),
@@ -1055,31 +1042,16 @@ function persistReconcileResult(
   input: PersistReconcileResultInput,
   options: { observedAt: string; idFactory: ObserverIdFactory },
 ): void {
-  for (const project of input.projects) {
-    state.projects.set(project.id, {
-      id: project.id,
-      label: project.label,
-      root: project.root,
-      lastSeenAt: options.observedAt,
-    });
-  }
-
   const worktrees = input.worktrees.map((value) => WorktreeObservationSchema.parse(value));
   for (const worktree of worktrees) {
-    state.worktrees.set(worktree.id, worktree);
+    if (!state.worktrees.has(worktree.id)) state.worktrees.set(worktree.id, worktree);
   }
 
   const terminalTargets = input.terminalTargets.map((value) =>
     stripTerminalProviderData(TerminalTargetObservationSchema.parse(value)),
   );
-  for (const target of terminalTargets) {
-    state.terminalTargets.set(target.id, target);
-  }
 
   const harnessRuns = input.harnessRuns.map((value) => HarnessRunObservationSchema.parse(value));
-  for (const run of harnessRuns) {
-    state.harnessRuns.set(run.id, run);
-  }
 
   if (input.providerHealth !== undefined) {
     for (const health of Object.values(input.providerHealth)) {
@@ -1120,10 +1092,12 @@ function persistReconcileResult(
           updatedAt: options.observedAt,
         };
       });
+  let insertedTitle = false;
   for (const title of worktreeDisplayTitles) {
     const key = worktreeDisplayTitleKey(title.projectId, title.worktreeId);
     if (!state.worktreeDisplayTitles.has(key)) {
       state.worktreeDisplayTitles.set(key, title);
+      insertedTitle = true;
     }
   }
   const persistedTitles = worktreeDisplayTitles.map((title) => {
@@ -1133,7 +1107,7 @@ function persistReconcileResult(
     if (persisted === undefined) {
       throw new Error(`Failed to initialize worktree display title for ${title.worktreeId}.`);
     }
-    synchronizeInMemorySessionTitleProjections(state, persisted);
+    if (insertedTitle) synchronizeInMemorySessionTitleProjections(state, persisted);
     return persisted;
   });
   upsertSessions(state, terminalTargets, harnessRuns, persistedTitles);

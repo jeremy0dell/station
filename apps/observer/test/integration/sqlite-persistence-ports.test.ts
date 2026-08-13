@@ -242,19 +242,6 @@ describe("SQLite-only Observer persistence behavior", () => {
         now,
       });
       await persistence.persistReconcileResult({
-        projects: [
-          {
-            id: "web",
-            label: "web",
-            root: "/tmp/station/web",
-            defaults: {
-              harness: "codex",
-              terminal: "tmux",
-              layout: "agent-shell",
-            },
-            worktrunk: { enabled: true },
-          },
-        ],
         worktrees: [worktree],
         terminalTargets: [
           createFakeTerminalTarget({
@@ -316,7 +303,6 @@ describe("SQLite-only Observer persistence behavior", () => {
         ]),
       );
       await persistence.persistReconcileResult({
-        projects: [],
         worktrees: [worktree],
         terminalTargets: [],
         harnessRuns: [
@@ -378,15 +364,6 @@ describe("SQLite-only Observer persistence behavior", () => {
       });
       await expect(persistence.listWorktreeDisplayTitles()).resolves.toEqual([]);
       await persistence.persistReconcileResult({
-        projects: [
-          {
-            id: "web",
-            label: "web",
-            root: "/tmp/station/web",
-            defaults: { harness: "codex", terminal: "tmux", layout: "agent-shell" },
-            worktrunk: { enabled: true },
-          },
-        ],
         worktrees: [
           createFakeWorktree({
             id: "wt_title_migration",

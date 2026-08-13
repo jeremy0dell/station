@@ -856,7 +856,6 @@ export function observerPersistenceContract(
             now,
           });
           await persistence.persistReconcileResult({
-            projects: [project],
             worktrees: [worktree],
             terminalTargets: [terminal],
             harnessRuns: [],
@@ -890,6 +889,35 @@ export function observerPersistenceContract(
             entityKey: historyOnly.id,
             payload: historyOnly,
             observedAt: latest,
+          });
+          const hookOnlyTerminal = createFakeTerminalTarget({
+            id: "term_hook_only",
+            projectId: "web",
+            worktreeId: worktree.id,
+            now: later,
+          });
+          await persistence.recordProviderObservation({
+            provider: hookOnlyTerminal.provider,
+            providerType: "terminal",
+            entityKind: "terminal_target",
+            entityKey: hookOnlyTerminal.id,
+            payload: hookOnlyTerminal,
+            observedAt: later,
+          });
+          const expiredHookOnlyTerminal = createFakeTerminalTarget({
+            id: "term_hook_expired",
+            projectId: "web",
+            worktreeId: worktree.id,
+            now: later,
+          });
+          await persistence.recordProviderObservation({
+            provider: expiredHookOnlyTerminal.provider,
+            providerType: "terminal",
+            entityKind: "terminal_target",
+            entityKey: expiredHookOnlyTerminal.id,
+            payload: expiredHookOnlyTerminal,
+            observedAt: later,
+            expiresAt: latest,
           });
 
           const observations = await persistence.listProviderObservations({
@@ -1196,7 +1224,6 @@ export function observerPersistenceContract(
             now: later,
           });
           await persistence.persistReconcileResult({
-            projects: [project],
             worktrees: [worktree],
             terminalTargets: [terminal],
             harnessRuns: [run],
@@ -1257,7 +1284,6 @@ export function observerPersistenceContract(
             now,
           });
           await persistence.persistReconcileResult({
-            projects: [project],
             worktrees: [worktree],
             terminalTargets: [terminal],
             harnessRuns: [run],
@@ -1304,7 +1330,6 @@ export function observerPersistenceContract(
 
           await expectPersistenceFailure(
             persistence.persistReconcileResult({
-              projects: [project],
               worktrees: [worktree],
               terminalTargets: [invalidTerminal],
               harnessRuns: [],
@@ -1318,7 +1343,6 @@ export function observerPersistenceContract(
           await expect(persistence.listWorktreeDisplayTitles()).resolves.toEqual([]);
 
           await persistence.persistReconcileResult({
-            projects: [project],
             worktrees: [worktree],
             terminalTargets: [],
             harnessRuns: [],
@@ -1340,7 +1364,6 @@ export function observerPersistenceContract(
             now,
           });
           await persistence.persistReconcileResult({
-            projects: [project],
             worktrees: [worktree],
             terminalTargets: [
               createFakeTerminalTarget({
@@ -1441,7 +1464,6 @@ export function observerPersistenceContract(
           ).resolves.toBe("fake-harness");
 
           await persistence.persistReconcileResult({
-            projects: [project],
             worktrees: [worktree],
             terminalTargets: [
               createFakeTerminalTarget({
@@ -1503,7 +1525,6 @@ export function observerPersistenceContract(
           );
 
           await persistence.persistReconcileResult({
-            projects: [project],
             worktrees: [worktree],
             terminalTargets: [],
             harnessRuns: [
@@ -1714,7 +1735,6 @@ export function observerPersistenceContract(
             now: later,
           });
           await persistence.persistReconcileResult({
-            projects: [project],
             worktrees: [worktree],
             terminalTargets: [
               createFakeTerminalTarget({
@@ -1740,7 +1760,6 @@ export function observerPersistenceContract(
             }),
           ).resolves.toMatchObject({ title: "user title" });
           await persistence.persistReconcileResult({
-            projects: [project],
             worktrees: [{ ...worktree, branch: "renamed provider branch", observedAt: latest }],
             terminalTargets: [
               createFakeTerminalTarget({
@@ -3297,7 +3316,6 @@ export function observerPersistenceContract(
             now,
           });
           await persistence.persistReconcileResult({
-            projects: [project],
             worktrees: [reconcileWorktree],
             terminalTargets: [],
             harnessRuns: [],
@@ -3555,7 +3573,6 @@ async function persistHarnessSession(
     now: input.observedAt,
   });
   await persistence.persistReconcileResult({
-    projects: [input.project],
     worktrees: [worktree],
     terminalTargets: [],
     harnessRuns: [
