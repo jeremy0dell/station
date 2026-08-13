@@ -221,7 +221,7 @@ export function updateCommandResult(
   };
 }
 
-export function renderUpdateReport(report: UpdateCommandReport): string {
+function renderUpdateReport(report: UpdateCommandReport): string {
   const lines = [
     `channel: ${report.channel}`,
     `status: ${report.status}`,
