@@ -17,6 +17,9 @@ export type TuiInputMode =
   | "removeUnavailable"
   | "renameChooseSlot"
   | "renameEdit"
+  | "moveToGroupChooseSlot"
+  | "moveToGroupDestination"
+  | "moveToGroupCreate"
   | "forkChooseSlot"
   | "forkDetails"
   | "newSessionReview"
@@ -60,6 +63,9 @@ export function deriveTuiInputMode(state: DashboardStateView): TuiInputMode {
       return screen.step === "unavailable" ? "removeUnavailable" : "removeConfirm";
     case "renameSession":
       return screen.step === "chooseSlot" ? "renameChooseSlot" : "renameEdit";
+    case "moveToGroup":
+      if (screen.step === "chooseSlot") return "moveToGroupChooseSlot";
+      return screen.step === "chooseDestination" ? "moveToGroupDestination" : "moveToGroupCreate";
     case "fork":
       return screen.step === "chooseSlot" ? "forkChooseSlot" : "forkDetails";
     case "newSession":
@@ -230,6 +236,13 @@ export const TUI_DASHBOARD_BINDINGS = [
     action: "tui.rename.open",
     outcome: "handled",
     help: { keys: "R", label: "rename" },
+  },
+  {
+    id: "tui.dashboard.moveToGroup",
+    pattern: { kind: "char", char: "M" },
+    action: "tui.moveToGroup.open",
+    outcome: "handled",
+    help: { keys: "M", label: "move to group", footerOrder: 25 },
   },
   {
     id: "tui.dashboard.fork",

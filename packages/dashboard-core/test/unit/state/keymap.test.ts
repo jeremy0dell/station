@@ -23,6 +23,7 @@ describe("dashboard key bindings", () => {
     expect(matchDashboardBinding({ input: "\r", return: true })?.action).toBe("tui.focus.activate");
     expect(matchDashboardBinding({ input: "N" })?.action).toBe("tui.newSession.open");
     expect(matchDashboardBinding({ input: "G" })?.action).toBe("tui.quickGroup.create");
+    expect(matchDashboardBinding({ input: "M" })?.action).toBe("tui.moveToGroup.open");
     expect(matchDashboardBinding({ input: "?" })?.action).toBe("tui.help.open");
   });
 
@@ -61,6 +62,11 @@ describe("dashboard key bindings", () => {
     expect(isSlotKey({ input: "g" })).toBe(true);
     expect(matchDashboardBinding({ input: "g" })?.action).toBe("tui.row.activateSlot");
   });
+
+  it("keeps lowercase m as a session slot", () => {
+    expect(isSlotKey({ input: "m" })).toBe(true);
+    expect(matchDashboardBinding({ input: "m" })?.action).toBe("tui.row.activateSlot");
+  });
 });
 
 describe("dashboard lifecycle keys", () => {
@@ -84,7 +90,7 @@ describe("dashboard footer binding metadata", () => {
 
   it("derives full and compact shortcut membership from binding metadata", () => {
     expect(footerText("full")).toBe(
-      "↵ activate  N new  A add  ⇥ next-needs-me  / filter  X delete  ? help",
+      "↵ activate  N new  M move to group  A add  ⇥ next-needs-me  / filter  X delete  ? help",
     );
     expect(footerText("compact")).toBe(
       "↵ activate  N new  ⇥ next-needs-me  / filter  X delete  ? help",
@@ -107,6 +113,11 @@ describe("dashboard footer binding metadata", () => {
     expect(dashboardBindingHelp("tui.dashboard.quickGroup")).toEqual({
       keys: "G",
       label: "quick group",
+    });
+    expect(dashboardBindingHelp("tui.dashboard.moveToGroup")).toEqual({
+      keys: "M",
+      label: "move to group",
+      footerOrder: 25,
     });
     expect(dashboardBindingHelp("tui.dashboard.nextNeedsMe")).toMatchObject({
       keys: "⇥",

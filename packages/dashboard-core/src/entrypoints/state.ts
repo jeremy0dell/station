@@ -45,6 +45,7 @@ export {
 } from "../state/keymap.js";
 export type { TuiKey } from "../state/keys.js";
 export { addPendingProjectDefaultHarness } from "../state/localRows.js";
+export { resolveMoveSessionToGroupOperation } from "../state/operations/sessionGroups.js";
 export { createInitialTuiState } from "../state/screen.js";
 export { tuiScreenBehavior } from "../state/screenBehavior.js";
 export {
@@ -54,8 +55,17 @@ export {
   applyAddProjectSubmitted,
 } from "../state/screens/addProjectScreen.js";
 export { openNewSession } from "../state/screens/dashboard.js";
-
 export type { ForkSessionActionId } from "../state/screens/fork.js";
+export {
+  MOVE_TO_GROUP_CREATE_CHOICE_ID,
+  MOVE_TO_GROUP_LIST_ID,
+  MOVE_TO_GROUP_UNGROUPED_CHOICE_ID,
+  moveToGroupExistingChoiceId,
+  openMoveToGroupCreate,
+  openMoveToGroupForRow,
+  selectMoveToGroupDestination,
+  submitMoveToGroupCreate,
+} from "../state/screens/moveToGroup.js";
 
 export { openProjectDefaultAgentPicker } from "../state/screens/projectDefaultAgent.js";
 export {
@@ -91,7 +101,6 @@ export {
   NEW_SESSION_UNGROUPED_CHOICE_ID,
   newSessionExistingGroupChoiceId,
 } from "../state/selection/specs/newSession.js";
-
 export type { TuiSelectionState } from "../state/selection/types.js";
 
 export {

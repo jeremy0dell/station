@@ -1,4 +1,10 @@
-import type { ProjectId, ProviderHealth, ProviderId, SessionGroupId } from "@station/contracts";
+import type {
+  ProjectId,
+  ProviderHealth,
+  ProviderId,
+  SessionGroupId,
+  SessionId,
+} from "@station/contracts";
 import { pendingProjectDefaultHarnesses } from "../state/localRows.js";
 import type { DashboardSnapshotView, DashboardViewState } from "../state/types.js";
 
@@ -63,6 +69,11 @@ export type NewSessionHarnessOption = {
 };
 
 export type NewSessionGroupOption = DashboardSnapshotView["sessionGroups"][number];
+export type MoveToGroupSessionContext = {
+  session: DashboardSnapshotView["sessions"][number];
+  project: DashboardSnapshotView["projects"][number];
+  currentGroup?: NewSessionGroupOption;
+};
 
 export function keyChoices<T>(values: readonly T[]): Array<KeyedChoice<T>> {
   return values.slice(0, SELECTION_KEYS.length).map((value, index) => {
@@ -131,6 +142,29 @@ export function selectNewSessionRootGroup(
     (group) =>
       group.id === groupId && group.projectId === projectId && group.parentGroupId === undefined,
   );
+}
+
+/** Resolves the latest canonical session, Project, and exclusive Group membership. */
+export function selectMoveToGroupSessionContext(
+  snapshot: DashboardSnapshotView,
+  sessionId: SessionId,
+): MoveToGroupSessionContext | undefined {
+  const session = snapshot.sessions.find((candidate) => candidate.id === sessionId);
+  if (session === undefined) return undefined;
+  const project = snapshot.projects.find((candidate) => candidate.id === session.projectId);
+  if (project === undefined) return undefined;
+  const currentGroup = snapshot.sessionGroups.find((group) => group.sessionIds.includes(sessionId));
+  const context: MoveToGroupSessionContext = { session, project };
+  if (currentGroup !== undefined) context.currentGroup = currentGroup;
+  return context;
+}
+
+export function selectMoveToGroupChoices(
+  snapshot: DashboardSnapshotView,
+  sessionId: SessionId,
+): Array<KeyedChoice<NewSessionGroupOption>> {
+  const context = selectMoveToGroupSessionContext(snapshot, sessionId);
+  return context === undefined ? [] : selectNewSessionGroupChoices(snapshot, context.project.id);
 }
 
 export function selectNewSessionHarnessOptions(

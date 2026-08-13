@@ -160,6 +160,11 @@ describe("buildContextMenuItems", () => {
         action: { kind: "renameSession", rowId: STATION_IDLE_SESSION_ID },
       },
       {
+        id: "station.moveToGroup",
+        label: "Move to Group…",
+        action: { kind: "moveToGroup", rowId: STATION_IDLE_SESSION_ID },
+      },
+      {
         id: "station.forkSession",
         label: "Fork Session",
         action: { kind: "forkSession", rowId: STATION_IDLE_SESSION_ID },
@@ -274,6 +279,11 @@ describe("buildContextMenuItems", () => {
         action: { kind: "renameSession", rowId: "ses_wt_station_none" },
       },
       {
+        id: "station.moveToGroup",
+        label: "Move to Group…",
+        action: { kind: "moveToGroup", rowId: "ses_wt_station_none" },
+      },
+      {
         id: "station.forkSession",
         label: "Fork Session",
         action: { kind: "forkSession", rowId: "ses_wt_station_none" },
@@ -319,6 +329,11 @@ describe("buildContextMenuItems", () => {
 
     expect(items).toEqual([
       {
+        id: "station.moveToGroup",
+        label: "Move to Group…",
+        action: { kind: "moveToGroup", rowId: "run_wt_station_idle" },
+      },
+      {
         id: "station.forkSession",
         label: "Fork Session",
         action: { kind: "forkSession", rowId: "run_wt_station_idle" },
@@ -356,10 +371,12 @@ describe("buildContextMenuItems", () => {
 
     expect(stationItems.map((item) => item.label)).toEqual([
       "Rename Session",
+      "Move to Group…",
       "Fork Session",
       "Delete Worktree…",
     ]);
     expect(externalItems.map((item) => item.label)).toEqual([
+      "Move to Group…",
       "Fork Session",
       "Delete Worktree…",
     ]);
@@ -390,6 +407,11 @@ describe("buildContextMenuItems", () => {
         id: "station.renameSession",
         label: "Rename Session",
         action: { kind: "renameSession", rowId: STATION_IDLE_SESSION_ID },
+      },
+      {
+        id: "station.moveToGroup",
+        label: "Move to Group…",
+        action: { kind: "moveToGroup", rowId: STATION_IDLE_SESSION_ID },
       },
       {
         id: "station.forkSession",

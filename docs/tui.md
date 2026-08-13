@@ -505,12 +505,24 @@ and `identity` → `quickSession` → `menu` for Groups, skipping optional Group
 runtime composition. Omitted actions have no rendered target and are invalid semantic cells. Group
 identity toggles collapse; Group quick session launches through the same pointer/focused activation
 contract and the Group menu remains a focus-preserving no-op until its workflow slice lands. Up/Down leaves any header segment immediately, and Left/Right on a
-session row or empty-project action is inert. Remove, rename, and fork row choosers retain a separate
+session row or empty-project action is inert. Remove, rename, move-to-Group, and fork row choosers retain a separate
 visible, selectable canonical-session traversal; slots and Enter resolve through that same chooser
 policy. Next-needs-me uses its own canonical-session policy. `N` continues to open the session flow
 without changing dashboard focus, while uppercase `G` creates a Quick Group for the focused row's
 owning Project (or the first canonical Project when nothing valid is focused). Lowercase `g` remains
 a visible-session slot. Gaps and optimistic create rows remain non-focusable.
+
+Uppercase `M` opens the shared session chooser, then a Move to Group sheet. Native right-click on a
+session opens the same destination step directly. The sheet shows canonical current membership as
+context while its independent cursor selects Ungrouped, same-Project root Groups, or Create new
+Group; externally nested membership is read-only. Slots, arrows plus Enter, pointer rows, `U`, and
+`N` converge on one dashboard-core reassignment operation. Moving to a Group submits one
+`sessionGroup.updateMembership` command with the current membership expectation and destination
+version; ungrouping removes through that same contract, and selecting the current destination is a
+no-op. The sheet stays visible and inert during submission. Success follows the session to its
+canonical destination; ordinary failure retains the picker, while membership/version conflicts
+close and focus canonical truth. Create new Group persists the Group first and never rolls it back
+if the subsequent move fails. Wide footers advertise `M — move to group`; compact footers may omit it.
 
 Focused compact controls use the canonical theme's stronger bounded
 `interaction.compactFocus` fill. A project header's primary segment covers the rendered

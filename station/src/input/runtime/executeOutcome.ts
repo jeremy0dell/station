@@ -132,6 +132,13 @@ function selectContextMenuItem(effects: StationInputEffects, itemIndex: number |
         effects.store.actions.openOverlay(STATION_OVERLAY_ID);
       }
       return;
+    case "moveToGroup":
+      if (dashboardRuntime !== undefined) {
+        dashboardRuntime.actions.dispatch({ type: "moveToGroup.open", rowId: action.rowId });
+        dismissCurrentAttention(effects);
+        effects.store.actions.openOverlay(STATION_OVERLAY_ID);
+      }
+      return;
     case "removeWorktree":
       if (dashboardRuntime !== undefined) {
         dashboardRuntime.actions.dispatch({ type: "removeWorktree.openConfirm", rowId: action.rowId });

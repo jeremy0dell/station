@@ -46,7 +46,7 @@ const STATION_HELP_CONTENT = [
   { key: navigation.key, description: `${navigation.description} · wheel scroll` },
   dashboardHelp("tui.dashboard.focusActivate"),
   dashboardHelp("tui.dashboard.nextNeedsMe"),
-  dashboardHelp("tui.dashboard.quickGroup"),
+  dashboardHelpGroup(["tui.dashboard.quickGroup", "tui.dashboard.moveToGroup"]),
   {
     key: dashboardKeys([
       "tui.dashboard.filter",
