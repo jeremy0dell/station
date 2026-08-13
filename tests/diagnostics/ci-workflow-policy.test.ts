@@ -220,7 +220,6 @@ describe("hosted CI policy", () => {
   it("fans ready pull requests and release calls into independently reported validation lanes", () => {
     const standardCi = read(".github/workflows/standard-ci.yml");
     const release = read(".github/workflows/release.yml");
-    const development = read("docs/development.md");
 
     expect(standardCi).toContain("types: [opened, synchronize, reopened, ready_for_review]");
     expect(standardCi).toContain("github.ref_type == 'tag'");
@@ -260,11 +259,6 @@ describe("hosted CI policy", () => {
     expect(releaseStandardCi).toContain("uses: ./.github/workflows/standard-ci.yml");
     const nativeBuilds = between(release, "  build-native:", "  create-draft:");
     expect(nativeBuilds).toMatch(/needs:\s+- validate\s+- standard-ci\s+- release-smoke/);
-
-    expect(development).toContain("Ready, non-draft pull requests fan out");
-    expect(development).toContain("before any native release build starts");
-    expect(development).toMatch(/Draft pull request activity\s+allocates no runner/);
-    expect(development).toMatch(/Pushes to `main`\s+run only build, typecheck, and lint/);
   });
 
   it("fails closed when a required or selected lane is unexpectedly skipped", () => {
@@ -375,14 +369,14 @@ describe("hosted CI policy", () => {
 
   it("keeps exhaustive claim stress scheduled without extending every pull request", () => {
     const nightly = read(".github/workflows/nightly-observer-claim.yml");
-    const development = read("docs/development.md");
+    const testing = read("tests/README.md");
 
     expect(nightly).toContain('cron: "17 7 * * *"');
     expect(nightly).toContain("workflow_dispatch:");
     expect(nightly).toContain('bun: "true"');
     expect(nightly).toContain("pnpm test:observer-claim:cross-runtime");
     expect(nightly).not.toContain("test:observer-claim:cross-runtime:pr");
-    expect(development).toContain("nightly-observer-claim");
+    expect(testing).toContain("nightly-observer-claim");
   });
 
   it("keeps pre-push local and fast while preserving explicit comprehensive commands", () => {
@@ -390,7 +384,7 @@ describe("hosted CI policy", () => {
       scripts: Record<string, string>;
     };
     const lefthook = read("lefthook.yml");
-    const development = read("docs/development.md");
+    const testing = read("tests/README.md");
 
     expect(packageJson.scripts["test:pre-push"]).toBe("pnpm lint");
     expect(packageJson.scripts["test:all"]).toContain("pnpm smoke:install");
@@ -403,7 +397,7 @@ describe("hosted CI policy", () => {
     expect(packageJson.scripts["test:ci:binary"]).toContain("pnpm smoke:binary");
     expect(packageJson.scripts["test:ci:station"]).toContain("test:pty:bun");
     expect(lefthook).toContain("run: node scripts/run-without-git-locals.mjs pnpm test:pre-push");
-    expect(development).toContain("The pre-push hook is intentionally lint-only");
+    expect(testing).toContain("The pre-push hook is intentionally lint-only");
   });
 
   it("scopes the shared Turbo cache to pull requests, runners, and dependency state", () => {

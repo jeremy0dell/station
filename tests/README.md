@@ -1,23 +1,96 @@
-# Test Layout
+# Testing
 
-Tests live in predictable locations, and standard CI includes only deterministic
-lanes that do not require real providers, local terminal state, credentials, or
-network beyond dependency installation.
+This guide owns Station's test layout, gate selection, and isolation policy.
+`package.json`, `config/vitest/`, and the GitHub workflows remain the executable
+sources of truth.
 
-- Workspace-local unit and integration tests live under `apps/*/test`, `packages/*/test`, or `integrations/*/*/test`.
+## Choose a gate
+
+Run the narrowest relevant test while iterating. Build first when a test launches
+compiled files from `dist`.
+
+For documentation-only changes:
+
+```sh
+pnpm lint
+pnpm test:diagnostics:policy
+```
+
+For an implementation change, finish with:
+
+```sh
+pnpm test:all
+```
+
+`test:all` is the deterministic repository gate. It builds, typechecks, lints,
+runs unit, contract, integration, diagnostics, scripted-agent, setup E2E, and
+Observer E2E coverage, then runs the installer smoke. Use the focused scripts in
+`package.json` when only one responsibility needs to be repeated.
+
+The pre-push hook is intentionally lint-only. It does not replace `test:all` or
+the focused gate required by the change.
+
+## Test layout
+
+- Workspace unit and integration tests live under `apps/*/test`,
+  `packages/*/test`, or `integrations/*/*/test`.
 - Cross-system tests live under top-level `tests/`.
-- `tests/support/` is reserved for fake providers, fake external tools, temp projects, assertions, databases, and sockets.
-- `tests/diagnostics/injected-failures/` contains deterministic diagnostic bundle and evidence-index coverage for common local failures.
-- `tests/agent/scripted/` contains deterministic scripted-agent tests that can run in standard CI.
-- `tests/agent/scenarios/diagnosis/` contains deterministic diagnostic-oracle fixtures for agent-style bundle classification.
-- Real-agent tests are reserved for `tests/agent/real/` and are opt-in only.
-- `tests/e2e/release-hardening-smoke.test.ts` covers the deterministic `pnpm smoke:release` path with fake Worktrunk state and scripted smoke disabled for focused e2e speed.
-- `tests/support/fake-agent/` contains helpers for launching deterministic scripted harness plans in CI.
-- `tests/e2e/worktrunk-real.test.ts` is an opt-in real Worktrunk lane. Run it only with `STATION_REAL_WORKTRUNK=1` and an installed `wt` binary, optionally setting `STATION_WORKTRUNK_BIN=/path/to/wt`. It is intentionally not part of `test:all`.
-- `integrations/terminal/tmux/test/integration/popup-real.test.ts` is an opt-in real tmux lane. Run it only with `STATION_REAL_TMUX=1` and an installed `tmux`, optionally setting `STATION_TMUX_BIN=/path/to/tmux`. It uses an isolated tmux server label and does not touch the normal station workbench.
-- `tests/agent/real/claude/` is an opt-in real Claude lane. Run it only with `STATION_REAL_CLAUDE=1`, a logged-in `claude`, and installed `tmux`, optionally setting `STATION_CLAUDE_BIN=/path/to/claude` and `STATION_TMUX_BIN=/path/to/tmux`. It is intentionally not part of `test:all`.
-- `tests/agent/real/codex/` is an opt-in real Codex lane. Run it only with `STATION_REAL_CODEX=1`, `codex login status` passing, and installed `tmux`, optionally setting `STATION_CODEX_BIN=/path/to/codex` and `STATION_TMUX_BIN=/path/to/tmux`. It is intentionally not part of `test:all`.
-- `tests/agent/real/cursor/` is an opt-in real Cursor lane. Run it only with `STATION_REAL_CURSOR=1`, `agent --version` passing, and installed `tmux`, optionally setting `STATION_CURSOR_AGENT_BIN=/path/to/agent` and `STATION_TMUX_BIN=/path/to/tmux`. It is intentionally not part of `test:all`.
-- `tests/e2e/real/` is the product real E2E lane. Run it only with `STATION_REAL_E2E=1`, `STATION_REAL_WORKTRUNK=1`, `STATION_REAL_CODEX=1`, real `wt`, real `tmux`, real `codex`, and a built `bin/stn`. Use `pnpm test:e2e:real`, `pnpm test:e2e:real:local`, or focused scripts such as `pnpm test:e2e:real:codex-hooks`. It creates real Worktrunk/tmux/Codex sessions, opens the TUI in a real tmux popup for popup-navigation coverage, and includes a temp project-local Codex hook that calls `stn-ingress codex`. It is intentionally excluded from `test:e2e` and `test:all`.
+- `tests/support/` owns fake providers, fake tools, temporary projects,
+  assertions, databases, and sockets.
+- `tests/diagnostics/injected-failures/` owns deterministic evidence fixtures.
+- `tests/agent/scripted/` and `tests/agent/scenarios/` are deterministic and
+  eligible for standard CI.
+- Real-agent tests live under `tests/agent/real/` and are always opt-in.
+- `tests/e2e/real/` owns product-level real E2E coverage and is always opt-in.
 
-No random floating tests should be added outside these directories.
+Do not add floating tests outside the established workspace or top-level test
+directories.
+
+## Machine isolation
+
+Vitest lanes that can touch machine state use the shared test-machine sandbox.
+The sandbox gives each run private HOME, XDG, Station state, sockets, provider
+homes, and fake tool paths. Keep these rules when adding a lane:
+
+- Add central Vitest configurations to a package script and apply the shared
+  sandbox unless the lane owns equivalent isolation or is explicitly real.
+- Keep `GIT_*` environment values local to the test that needs them.
+- Do not mutate `process.env` concurrently within one test process.
+- Use `STATION_TEST_MACHINE_KEEP_ROOT=1` only to preserve a failed sandbox for
+  inspection.
+- Treat machine-isolation exceptions as deliberate policy with a reason in the
+  policy test, not as undocumented omissions.
+
+`config/vitest/` defines the current lane membership. The diagnostics policy
+test proves that every central configuration is reachable from `package.json`
+and is either automatically isolated or an explicit exception.
+
+## Hosted CI
+
+Ready, non-draft pull requests fan into independently reported lanes and finish
+at the required `standard-ci` aggregate. Documentation-only changes run the
+static and diagnostics policy path. Selected installer, binary, shell-matrix,
+and stress lanes run only when classification requires them.
+
+Draft pull requests allocate no runner. Pushes to `main` run only the inexpensive
+post-merge build, typecheck, and lint checks. Exhaustive Observer claim stress is
+scheduled in `nightly-observer-claim.yml`. Release tags run standard CI before
+native release builds begin.
+
+## Opt-in real lanes
+
+Real lanes use installed tools, credentials, or terminal state and are excluded
+from `test:all`:
+
+- `pnpm test:e2e:worktrunk:real` uses a real Worktrunk installation.
+- `STATION_REAL_TMUX=1 pnpm test:tmux-popup:real` uses an isolated tmux server.
+- `pnpm test:e2e:claude:real`, `test:e2e:codex:real`, and
+  `test:e2e:cursor:real` use authenticated agent CLIs.
+- `pnpm test:e2e:pi:real` and `test:e2e:opencode:real` exercise those real
+  harnesses.
+- `pnpm test:e2e:real` runs the product real E2E lane with Worktrunk, tmux,
+  Codex, a built `bin/stn`, and isolated provider homes.
+
+Use [Local development](../docs/local-development.md) for checkout-isolated
+runtime setup and [TUI development](../docs/tui.md) for native renderer and PTY
+verification.

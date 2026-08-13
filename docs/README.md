@@ -69,7 +69,9 @@ Start with the workflow for your change, then follow the deeper architecture lin
 only when that boundary is involved.
 
 - [Contributing](../CONTRIBUTING.md) — report bugs, prepare changes, and open a pull request.
-- [Development](development.md) — set up the toolchain and choose the correct test gate.
+- [Development](development.md) — set up the toolchain and find the owning contributor guide.
+- [Testing](../tests/README.md) — choose a test gate and understand machine isolation.
+- [Releasing](releasing.md) — prepare, accept, and promote a native release.
 - [Local development](local-development.md) — run isolated observer, TUI, and tmux development lanes.
 - [Architecture](architecture.md) — understand repository-wide boundaries and sources of truth.
 - [Observer architecture](observer-architecture.md) — work with Observer ports, adapters, flows, persistence, and dependency direction.

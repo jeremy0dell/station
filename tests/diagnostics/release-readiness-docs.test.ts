@@ -6,8 +6,8 @@ const removedPersistenceOption = ["--persist", "path"].join("-");
 
 describe("release readiness docs", () => {
   it("documents the native TUI update-notice lifecycle", async () => {
-    const [architecture, install, development, tui] = await Promise.all(
-      ["docs/architecture.md", "docs/install.md", "docs/development.md", "docs/tui.md"].map(read),
+    const [architecture, install, tui] = await Promise.all(
+      ["docs/architecture.md", "docs/install.md", "docs/tui.md"].map(read),
     );
     const notice = "Station <version> is available — run `stn update`";
 
@@ -18,9 +18,6 @@ describe("release readiness docs", () => {
       expect(document).toContain("no persistent cache");
       expect(document).toContain("version-changing");
     }
-    expect(development).toContain("apps/cli/test/integration/tui-command.test.ts");
-    expect(development).toContain("tests/diagnostics/release-readiness-docs.test.ts");
-    expect(development).toContain("older published native binary");
   });
 
   it("separates release guidance from contributor and test references", async () => {
@@ -51,6 +48,8 @@ describe("release readiness docs", () => {
     expect(docsReadme).toContain("install.md#let-your-agent-install-and-validate-station");
     expect(docsReadme).toContain("## Use Station");
     expect(docsReadme).toContain("## Develop Station");
+    expect(docsReadme).toContain("../tests/README.md");
+    expect(docsReadme).toContain("releasing.md");
     expect(docsReadme).not.toContain("single-binary.md");
     expect(docsReadme).not.toContain("observer-singleton.md");
     expect(docsReadme).not.toContain("homebrew.md");
@@ -63,16 +62,15 @@ describe("release readiness docs", () => {
     expect(limitations).not.toMatch(/TODO|Test Coverage Gaps|Remaining work/i);
     expect(systemDependencies).toContain("tmux");
     expect(systemDependencies).toContain("pnpm setup:system:check");
-    expect(testsReadme).toContain("release-hardening-smoke");
+    expect(testsReadme).toContain("## Choose a gate");
+    expect(testsReadme).toContain("## Machine isolation");
     expect(localRealConfig).toContain('managed_root = "~/.worktrees"');
     expect(localRealConfig).toContain("include_external = false");
     expect(localRealConfig).not.toContain('profile = "default"');
   });
 
   it("provides an agent-led binary install and setup validation prompt", async () => {
-    const [readme, install, development] = await Promise.all(
-      ["README.md", "docs/install.md", "docs/development.md"].map(read),
-    );
+    const [readme, install] = await Promise.all(["README.md", "docs/install.md"].map(read));
 
     for (const document of [readme, install]) {
       const prompt = agentInstallPrompt(document);
@@ -104,14 +102,6 @@ describe("release readiness docs", () => {
       expect(normalizedPrompt).toContain("do not claim success");
     }
     expect(agentInstallPrompt(readme)).toBe(agentInstallPrompt(install));
-
-    const normalizedDevelopment = virtualBuddyCleanMacSection(development)
-      .replace(/\s+/g, " ")
-      .toLowerCase();
-    expect(normalizedDevelopment).toContain("sandbox-only auth failure");
-    expect(normalizedDevelopment).toContain("scoped host/keychain access");
-    expect(normalizedDevelopment).toContain("absolute installed `stn` path");
-    expect(normalizedDevelopment).toContain("future-shell path as unverified");
   });
 
   it("keeps the Node.js 24.2+ development requirement consistent", async () => {
@@ -121,7 +111,6 @@ describe("release readiness docs", () => {
         "docs/development.md",
         "docs/install.md",
         "docs/system-dependencies.md",
-        "docs/local-development.md",
         "docs/homebrew.md",
       ].map(read),
     );
@@ -133,14 +122,93 @@ describe("release readiness docs", () => {
     expect(packageManifest.engines.node).toBe(">=24.2 <25");
   });
 
+  it("keeps the single-binary reference focused on the current contract", async () => {
+    const singleBinary = await read("docs/single-binary.md");
+
+    for (const heading of [
+      "## Supported artifacts",
+      "## Build and dispatch",
+      "## Runtime boundaries",
+      "## Compiled-mode trust boundary",
+      "## First-run readiness",
+      "## Verification",
+      "## Sources of truth",
+    ]) {
+      expect(singleBinary).toContain(heading);
+    }
+    for (const target of ["darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64"]) {
+      expect(singleBinary).toContain(target);
+    }
+    expect(singleBinary).toContain("--no-compile-autoload-dotenv");
+    expect(singleBinary).toContain("--no-compile-autoload-bunfig");
+    expect(singleBinary).toContain("station-installer-binary-v1");
+    expect(singleBinary).toContain("launchReady");
+    expect(singleBinary).toContain("workflowReady");
+    expect(singleBinary).not.toMatch(
+      /Status: implemented|## Phases|## Audit findings|## Evidence appendix|### A\d|### B-/,
+    );
+  });
+
+  it("keeps the development guide focused on contributor routing", async () => {
+    const development = await read("docs/development.md");
+    const lines = development.split("\n");
+
+    expect(lines.length).toBeLessThanOrEqual(200);
+    for (const [index, line] of lines.entries()) {
+      expect(
+        line.length,
+        `docs/development.md:${index + 1} exceeds 120 characters`,
+      ).toBeLessThanOrEqual(120);
+    }
+    for (const link of [
+      "local-development.md",
+      "../tests/README.md",
+      "setup-testing.md",
+      "tui.md",
+      "releasing.md",
+    ]) {
+      expect(development).toContain(link);
+    }
+    expect(development).not.toMatch(
+      /## Deterministic Gates|## Experimental Pre-Alpha Release|VirtualBuddy clean-mac|## Phases|## Audit findings|## Evidence appendix/,
+    );
+  });
+
+  it("keeps the local development guide focused on safe checkout workflows", async () => {
+    const localDevelopment = await read("docs/local-development.md");
+    const lines = localDevelopment.split("\n");
+
+    expect(lines.length).toBeLessThanOrEqual(200);
+    for (const [index, line] of lines.entries()) {
+      expect(
+        line.length,
+        `docs/local-development.md:${index + 1} exceeds 120 characters`,
+      ).toBeLessThanOrEqual(120);
+    }
+    for (const command of [
+      "pnpm station:devbox dev",
+      "pnpm station:devbox restart",
+      "pnpm station:devbox reset -- --yes",
+      "pnpm station:devbox tmux dev",
+      "pnpm station:ui-dev",
+    ]) {
+      expect(localDevelopment).toContain(command);
+    }
+    for (const link of ["development.md", "../tests/README.md", "debugging.md", "tui.md"]) {
+      expect(localDevelopment).toContain(link);
+    }
+    expect(localDevelopment).not.toMatch(
+      /## \d+\.|Dogfooding|Test gates|OSC 8|Manual popup acceptance|Headless persistence|future multiplexer lanes/,
+    );
+  });
+
   it("documents and enforces the public exact-tag binary release contract", async () => {
     const [
       readme,
       install,
       docsReadme,
       limitations,
-      development,
-      singleBinary,
+      releasing,
       homebrew,
       release,
       promote,
@@ -153,8 +221,7 @@ describe("release readiness docs", () => {
         "docs/install.md",
         "docs/README.md",
         "docs/limitations.md",
-        "docs/development.md",
-        "docs/single-binary.md",
+        "docs/releasing.md",
         "docs/homebrew.md",
         ".github/workflows/release.yml",
         ".github/workflows/promote-release.yml",
@@ -210,21 +277,15 @@ describe("release readiness docs", () => {
     expect(install.replace(/\s+/g, " ")).toContain(
       "The old `v0.7.1-rc.*` releases were internal previews",
     );
-    expect(singleBinary).toContain("release **draft**");
-    expect(singleBinary).toContain("six assets");
-    expect(singleBinary).toContain("workflow cannot enforce the precondition itself");
-    expect(singleBinary).toContain("station-installer-binary-v1");
-    expect(singleBinary).toContain("`stn update` composes it with");
-    expect(singleBinary).toContain("Manager-owned channels");
     expect(install).toContain("Automatic-update ownership");
     expect(install).toContain("stn update --dry-run --json");
     expect(install).toContain("stn update --drive-package-manager");
     expect(install).toContain("defaults to preserving");
     expect(install).toContain("--no-handoff");
     expect(install).toContain("existing installations continue to work but are not enrolled");
-    expect(development).toMatch(/workflow never\s+publishes\s+the draft automatically/);
-    expect(development).toContain("accepted-release-candidate-0.0.0-pre-alpha.5.2");
-    expect(development).toContain("v0.7.1-rc.8");
+    expect(releasing).toMatch(/never publishes the draft automatically/);
+    expect(releasing).toContain("accepted-release-candidate-*");
+    expect(releasing).not.toContain(exactVersion);
     expect(homebrew).toContain("Homebrew installation is not currently supported");
     expect(homebrew).toContain("This distribution policy is separate from first-run dependencies");
     expect(homebrew).not.toMatch(/^\s*brew install[^\n]*station/im);
@@ -299,7 +360,6 @@ describe("release readiness docs", () => {
     for (const target of ["darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64"]) {
       expect(release).toContain(target);
       expect(promote).toContain(target);
-      expect(singleBinary).toContain(target);
     }
 
     expect(packageJson.version).toBe("0.0.0-pre-alpha.5.2");
@@ -311,9 +371,7 @@ describe("release readiness docs", () => {
 
   it("keeps installer continuity and interrupted-upgrade recovery documented", async () => {
     const documents = await Promise.all(
-      ["docs/install.md", "docs/development.md", "docs/single-binary.md"].map(
-        async (path) => [path, await read(path)] as const,
-      ),
+      ["docs/install.md"].map(async (path) => [path, await read(path)] as const),
     );
 
     for (const [path, document] of documents) {
@@ -340,22 +398,16 @@ describe("release readiness docs", () => {
       expect(document, path).toContain("alive");
     }
 
-    const development = await read("docs/development.md");
-    const normalizedDevelopment = development.replace(/\s+/g, " ");
+    const releasing = await read("docs/releasing.md");
     for (const acceptance of [
-      "terminal A",
-      "terminal B",
       "accepted-release-candidate",
-      "command-not-found",
       "Ctrl-C",
       "Ctrl-Z",
-      "stn-tmux-popup",
       "stn-ingress",
-      "HOST_UPGRADE_BLOCKED",
-      "same Observer socket",
-      "internal preview",
+      "Upgrade safety",
+      "Recovery",
     ]) {
-      expect(normalizedDevelopment).toContain(acceptance);
+      expect(releasing).toContain(acceptance);
     }
   });
 
@@ -402,23 +454,6 @@ describe("release readiness docs", () => {
     for (const path of ["docs/development.md", "docs/single-binary.md"]) {
       expect(await read(path), path).not.toContain(removedPersistenceOption);
     }
-  });
-
-  it("keeps the VirtualBuddy lane aligned with zero-project onboarding", async () => {
-    const development = await read("docs/development.md");
-    const virtualBuddy = virtualBuddyCleanMacSection(development);
-    const normalizedVirtualBuddy = virtualBuddy.replace(/\s+/g, " ");
-
-    expect(normalizedVirtualBuddy).toContain("zero-project config");
-    expect(virtualBuddy).toContain("**Add your first project**");
-    expect(virtualBuddy.indexOf("**Add your first project**")).toBeLessThan(
-      virtualBuddy.indexOf("press `N`"),
-    );
-    expect(normalizedVirtualBuddy).toContain("one future-shell export");
-    expect(normalizedVirtualBuddy).toContain("shell configuration you choose");
-    expect(normalizedVirtualBuddy).toContain("`tmux prefix + Space`");
-    expect(normalizedVirtualBuddy).toContain("cold open");
-    expect(normalizedVirtualBuddy).toContain("warm reopen");
   });
 
   it("keeps assistant-only operating guidance out of documentation", async () => {
@@ -474,13 +509,6 @@ function agentInstallPrompt(document: string): string {
   const match = document.slice(heading).match(/```text\r?\n([\s\S]*?)```/);
   if (match?.[1] === undefined) throw new Error("agent install prompt is missing");
   return match[1];
-}
-
-function virtualBuddyCleanMacSection(document: string): string {
-  const start = document.indexOf("### VirtualBuddy clean-mac preparation");
-  const end = document.indexOf("\nFor each target", start);
-  if (start < 0 || end <= start) throw new Error("VirtualBuddy clean-mac section is missing");
-  return document.slice(start, end);
 }
 
 async function markdownFiles(root: string): Promise<string[]> {

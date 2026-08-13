@@ -996,7 +996,8 @@ active register.
 - [Architecture documentation](architecture-documentation.md): exact JSDoc role
   vocabulary and source-comment rules.
 - [Configuration](configuration.md): config authority, paths, and overrides.
-- [Development](development.md): deterministic gates and documentation workflow.
+- [Development](development.md): contributor and documentation workflow.
+- [Testing](../tests/README.md): deterministic gates and isolation policy.
 - [Harness signals](harness-signals.md): status, attention, and event semantics.
 - [Harness authoring](harness-authoring.md): provider integration requirements.
 - [Debugging](debugging.md): runtime evidence and diagnostic workflow.
