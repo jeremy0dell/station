@@ -24,7 +24,7 @@ import type { NativeBinaryRelease } from "../../src/update/githubRelease.js";
 import { createInstallerBinaryUpdateChannel } from "../../src/update/installerBinaryUpdate.js";
 
 const CURRENT_TAG = "v0.7.1-rc.8";
-const TARGET_TAG = "v0.0.0-pre-alpha.5.6";
+const TARGET_TAG = "v0.0.0-pre-alpha.5.7";
 const RECEIPT = "station-installer-binary-v1\n";
 const tempRoots: string[] = [];
 
