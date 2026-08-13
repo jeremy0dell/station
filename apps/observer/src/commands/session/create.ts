@@ -133,7 +133,7 @@ export function createSessionCreateHandler(
           ? false
           : await removeWorktreeBestEffort({
               providers: options.providers,
-              projectId: project.id,
+              project,
               worktreeId: createdWorktree.id,
               expectedPath: createdWorktree.path,
               expectedBranch: createdWorktree.branch,

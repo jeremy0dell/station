@@ -410,7 +410,14 @@
           "specifier": "@station/contracts",
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "type-only",
-          "bindings": ["HarnessProvider", "HarnessRunId", "SafeError", "SessionView", "WorktreeRow"]
+          "bindings": [
+            "HarnessProvider",
+            "HarnessRunId",
+            "ProviderProjectConfig",
+            "SafeError",
+            "SessionView",
+            "WorktreeRow"
+          ]
         },
         {
           "specifier": "@station/runtime",
@@ -1722,7 +1729,7 @@
           "name": "createSessionResumeAgentHandler",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Explicitly validates and preflights provider-native recovery into a selected worktree, reusing a handle's Station identity or minting one when absent. Automatic native activation recovery is owned separately by external launch. Failed cleanup discards only a newly minted projection."
+          "purpose": "Requires the selected worktree in the current Observer snapshot, then validates and preflights provider-native recovery, reusing a handle's Station identity or minting one when absent. Automatic native activation recovery is owned separately by external launch. Failed cleanup discards only a newly minted projection."
         },
         {
           "name": "CreateSessionResumeAgentHandlerOptions",
@@ -1737,6 +1744,12 @@
           "resolvedPath": "apps/observer/src/commands/assertCommand.ts",
           "edgeKind": "runtime",
           "bindings": ["assertCommandType"]
+        },
+        {
+          "specifier": "../errors.js",
+          "resolvedPath": "apps/observer/src/commands/errors.ts",
+          "edgeKind": "runtime",
+          "bindings": ["worktreeMissingError"]
         },
         {
           "specifier": "../harnessLaunchPreflight.js",
@@ -1771,7 +1784,6 @@
             "defaultSessionCommandIdFactory",
             "discardSessionSeedBestEffort",
             "findProjectOrThrow",
-            "lookupWorktree",
             "publishSessionCreated",
             "seedSession",
             "throwIfAborted",
@@ -1899,12 +1911,6 @@
           "purpose": null
         },
         {
-          "name": "lookupWorktree",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
           "name": "publishSessionCreated",
           "kind": "function",
           "role": null,
@@ -1948,12 +1954,6 @@
         },
         {
           "name": "SessionCommandIdFactory",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "SessionCommandLookupRuntime",
           "kind": "type",
           "role": null,
           "purpose": null
@@ -2011,8 +2011,7 @@
             "sessionGroupMissingError",
             "sessionGroupNotRootError",
             "sessionGroupPlacementAssignmentConflictError",
-            "sessionGroupProjectMismatchError",
-            "worktreeMissingError"
+            "sessionGroupProjectMismatchError"
           ]
         },
         {
@@ -2110,7 +2109,7 @@
           "name": "createSessionStartAgentHandler",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Validates and preflights a fresh agent lifecycle before inheriting the worktree's canonical display title. Failed launches discard only the fresh session projection."
+          "purpose": "Requires the selected worktree in the current Observer snapshot, then validates and preflights a fresh agent lifecycle before inheriting its canonical display title. Failed launches discard only the fresh session projection."
         },
         {
           "name": "CreateSessionStartAgentHandlerOptions",
@@ -2125,6 +2124,12 @@
           "resolvedPath": "apps/observer/src/commands/assertCommand.ts",
           "edgeKind": "runtime",
           "bindings": ["assertCommandType"]
+        },
+        {
+          "specifier": "../errors.js",
+          "resolvedPath": "apps/observer/src/commands/errors.ts",
+          "edgeKind": "runtime",
+          "bindings": ["worktreeMissingError"]
         },
         {
           "specifier": "../harnessLaunchPreflight.js",
@@ -2159,7 +2164,6 @@
             "defaultSessionCommandIdFactory",
             "discardSessionSeedBestEffort",
             "findProjectOrThrow",
-            "lookupWorktree",
             "publishSessionCreated",
             "rememberedHarnessProviderForWorktree",
             "seedSession",
@@ -13390,7 +13394,7 @@
       "declaration": "createSessionResumeAgentHandler",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Explicitly validates and preflights provider-native recovery into a selected worktree, reusing a handle's Station identity or minting one when absent. Automatic native activation recovery is owned separately by external launch. Failed cleanup discards only a newly minted projection.",
+      "purpose": "Requires the selected worktree in the current Observer snapshot, then validates and preflights provider-native recovery, reusing a handle's Station identity or minting one when absent. Automatic native activation recovery is owned separately by external launch. Failed cleanup discards only a newly minted projection.",
       "dependencies": [
         {
           "path": "apps/observer/src/sessionRecovery.ts",
@@ -13406,7 +13410,7 @@
       "declaration": "createSessionStartAgentHandler",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Validates and preflights a fresh agent lifecycle before inheriting the worktree's canonical display title. Failed launches discard only the fresh session projection.",
+      "purpose": "Requires the selected worktree in the current Observer snapshot, then validates and preflights a fresh agent lifecycle before inheriting its canonical display title. Failed launches discard only the fresh session projection.",
       "dependencies": []
     },
     {
@@ -14835,7 +14839,7 @@
       "declaration": "WorktrunkProvider",
       "kind": "class",
       "role": "ADAPTER",
-      "purpose": "Translates Worktrunk lifecycle output and commands into Station worktree contracts. Hook diagnostics use an atomic requester runtime when supplied and retain the whole Observer composition expectation as a fallback. Checkout roots are validated before Worktrunk runs, managed roots override Worktrunk's project-specific path templates, and removal revalidates native Git identity, path, and branch before mutation.",
+      "purpose": "Translates Worktrunk lifecycle output and commands into Station worktree contracts. Hook diagnostics use an atomic requester runtime when supplied and retain the whole Observer composition expectation as a fallback. List results are returned without retaining inventory; only the Worktrunk project identifier needed to preserve managed-path precedence is memoized. Checkout roots are validated before Worktrunk runs, and removal freshly revalidates native Git identity, path, and branch before mutation.",
       "dependencies": [
         {
           "path": "packages/contracts/src/providers.ts",
@@ -14946,7 +14950,7 @@
       "declaration": "WorktreeProvider",
       "kind": "interface",
       "role": "DRIVEN PORT",
-      "purpose": "Supplies worktree lifecycle evidence and mutations without exposing provider mechanics. Removal adapters must revalidate opaque registration identity, path, and branch immediately before mutation.",
+      "purpose": "Supplies fresh worktree lifecycle evidence and mutations without exposing provider mechanics. Callers provide project context for mutations; removal adapters must revalidate opaque registration identity, path, and branch immediately before mutation.",
       "dependencies": []
     },
     {

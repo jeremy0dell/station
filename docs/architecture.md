@@ -51,7 +51,8 @@ The repo is organized around these boundaries:
 No single layer owns all truth.
 
 - Config is authoritative for the projects station manages, project defaults, provider choices, and safe local policy.
-- Worktree providers are authoritative for external worktree existence and worktree metadata they can prove.
+- Fresh worktree-provider reads are authoritative for external worktree existence and metadata they can prove;
+  adapters do not retain list results as a second inventory.
 - Terminal providers are authoritative for terminal topology and provider-owned target identity.
 - Harness providers are authoritative for agent launch, discovery, run classification, persisted-event compatibility, and provider-native recovery artifacts they can prove. Provider hook adapters own raw-event admission, compaction, and normalization into harness reports.
 - A sealed session-rescue archive becomes temporary cutover authority only after the exact source sessions have stopped and every recovery-critical asset has been captured and hashed; a live-source archive remains evidence, not launch authority.
@@ -63,6 +64,9 @@ No single layer owns all truth.
   deterministic parent-before-child order. `WorktreeRow.title` is the
   display authority, while `SessionView.title` is its lifecycle projection. Session and activity
   counts derive from `sessions`, while worktree counts derive from `rows`.
+- Session start and resume resolve only from current snapshot `rows`; absence is not repaired from
+  provider-process memory. Mutating providers receive configured project context explicitly and may
+  perform a final fresh read when the operation requires race-safe identity revalidation.
 - JSONL logs and debug bundles are diagnostic evidence, not runtime truth.
 
 When these disagree, reconcile from config, providers, and current observer state first. Treat stale logs, old bundles, and historical plans as evidence to inspect, not as authority.

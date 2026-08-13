@@ -2,7 +2,6 @@ import type {
   BuildHarnessLaunchRequest,
   Confidence,
   CreateWorktreeRequest,
-  GetWorktreeRequest,
   HarnessCapabilities,
   HarnessClassificationContext,
   HarnessDiscoveryContext,
@@ -39,12 +38,11 @@ import type {
 
 export type FakeProviderClock = string | (() => Date | string);
 
-type FakeWorktreeProviderMethod =
-  | "health"
-  | "listWorktrees"
-  | "createWorktree"
-  | "removeWorktree"
-  | "getWorktree";
+type FakeWorktreeProviderMethod = "health" | "listWorktrees" | "createWorktree" | "removeWorktree";
+
+type RecordedRemoveWorktreeRequest = Omit<RemoveWorktreeRequest, "project"> & {
+  projectId: string;
+};
 
 type FakeTerminalProviderMethod =
   | "health"
@@ -294,7 +292,7 @@ export class FakeWorktreeProvider implements WorktreeProvider {
 
   readonly #now: FakeProviderClock | undefined;
   readonly #worktrees: WorktreeObservation[];
-  readonly #removed: RemoveWorktreeRequest[] = [];
+  readonly #removed: RecordedRemoveWorktreeRequest[] = [];
   readonly #created: CreateWorktreeRequest[] = [];
   readonly #createPath: ((request: CreateWorktreeRequest) => string) | undefined;
   readonly #health: Partial<ProviderHealth> | undefined;
@@ -354,13 +352,13 @@ export class FakeWorktreeProvider implements WorktreeProvider {
 
   async removeWorktree(request: RemoveWorktreeRequest): Promise<RemoveWorktreeResult> {
     maybeThrow(this.#failures, "removeWorktree");
-    const recorded: RemoveWorktreeRequest = {
+    const recorded: RecordedRemoveWorktreeRequest = {
+      projectId: request.project.id,
       worktreeId: request.worktreeId,
       expectedPath: request.expectedPath,
       expectedBranch: request.expectedBranch,
       expectedRegistrationIdentity: request.expectedRegistrationIdentity,
     };
-    if (request.projectId !== undefined) recorded.projectId = request.projectId;
     if (request.force !== undefined) recorded.force = request.force;
     const index = this.#worktrees.findIndex((worktree) => worktree.id === request.worktreeId);
     const selected = this.#worktrees[index];
@@ -389,24 +387,9 @@ export class FakeWorktreeProvider implements WorktreeProvider {
     };
   }
 
-  async getWorktree(request: GetWorktreeRequest): Promise<WorktreeObservation | null> {
-    maybeThrow(this.#failures, "getWorktree");
-    return (
-      this.#worktrees.find((worktree) => {
-        if (request.worktreeId !== undefined) {
-          return worktree.id === request.worktreeId;
-        }
-        if (request.path !== undefined) {
-          return worktree.path === request.path;
-        }
-        return false;
-      }) ?? null
-    );
-  }
-
   snapshot(): {
     worktrees: WorktreeObservation[];
-    removed: RemoveWorktreeRequest[];
+    removed: RecordedRemoveWorktreeRequest[];
     created: CreateWorktreeRequest[];
   } {
     return {

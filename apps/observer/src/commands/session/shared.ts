@@ -42,7 +42,6 @@ import {
   sessionGroupNotRootError,
   sessionGroupPlacementAssignmentConflictError,
   sessionGroupProjectMismatchError,
-  worktreeMissingError,
 } from "../errors.js";
 import type { CommandHandlerContext } from "../queue.js";
 
@@ -147,12 +146,6 @@ export function worktreeObservationFromRow(
   return observation;
 }
 
-export type SessionCommandLookupRuntime = {
-  clock?: RuntimeClock | undefined;
-  signal?: AbortSignal | undefined;
-  trace?: ProviderMutationTrace | undefined;
-};
-
 export function commandValidationError(input: {
   code: string;
   message: string;
@@ -183,62 +176,6 @@ export function validateSnapshotRow(row: WorktreeRow | undefined, projectId: str
     projectId,
     worktreeId: row.id,
   });
-}
-
-export async function lookupWorktree(input: {
-  providers: ProviderRegistry;
-  projectId: string;
-  worktreeId: string;
-  runtime: SessionCommandLookupRuntime;
-}): Promise<WorktreeObservation> {
-  if (input.providers.worktree.getWorktree === undefined) {
-    throw worktreeMissingError({
-      projectId: input.projectId,
-      worktreeId: input.worktreeId,
-      message: "The requested worktree is not visible to the worktree provider.",
-    });
-  }
-
-  const worktree = await runProviderMutation(
-    {
-      ...input.runtime,
-      operation: `provider.${input.providers.worktree.id}.getWorktree`,
-      fallback: {
-        tag: "WorktreeProviderError",
-        code: "WORKTREE_LOOKUP_FAILED",
-        message: "The worktree provider failed to look up the worktree.",
-        provider: input.providers.worktree.id,
-      },
-    },
-    () =>
-      input.providers.worktree.getWorktree?.({
-        projectId: input.projectId,
-        worktreeId: input.worktreeId,
-      }) as Promise<WorktreeObservation | null>,
-  );
-  if (worktree === null) {
-    throw worktreeMissingError({
-      projectId: input.projectId,
-      worktreeId: input.worktreeId,
-      message: "The requested worktree is not visible to the worktree provider.",
-    });
-  }
-  if (worktree.projectId !== input.projectId) {
-    throw commandValidationError({
-      code: "WORKTREE_PROJECT_MISMATCH",
-      message: "The requested worktree belongs to a different configured project.",
-      projectId: input.projectId,
-      worktreeId: input.worktreeId,
-    });
-  }
-  if (worktree.state !== "exists") {
-    throw worktreeMissingError({
-      projectId: input.projectId,
-      worktreeId: input.worktreeId,
-      message: "The requested worktree no longer has a working directory.",
-    });
-  }
-  return worktree;
 }
 
 /**
@@ -414,7 +351,7 @@ export async function launchHarnessInTerminal(
 
 export async function removeWorktreeBestEffort(input: {
   providers: ProviderRegistry;
-  projectId: string;
+  project: ProviderProjectConfig;
   worktreeId: string;
   expectedPath: string;
   expectedBranch: string;
@@ -429,7 +366,7 @@ export async function removeWorktreeBestEffort(input: {
       traceId: input.context.trace.traceId,
       provider: input.providers.worktree.id,
       operation: "removeWorktree",
-      projectId: input.projectId,
+      projectId: input.project.id,
       worktreeId: input.worktreeId,
       refusalReason: "registration_unverified",
     });
@@ -451,7 +388,7 @@ export async function removeWorktreeBestEffort(input: {
       },
       () =>
         input.providers.worktree.removeWorktree({
-          projectId: input.projectId,
+          project: input.project,
           worktreeId: input.worktreeId,
           expectedPath: input.expectedPath,
           expectedBranch: input.expectedBranch,
@@ -466,7 +403,7 @@ export async function removeWorktreeBestEffort(input: {
       traceId: input.context.trace.traceId,
       provider: input.providers.worktree.id,
       operation: "removeWorktree",
-      projectId: input.projectId,
+      projectId: input.project.id,
       worktreeId: input.worktreeId,
       error,
     });

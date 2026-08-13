@@ -215,7 +215,7 @@ describe("fake providers", () => {
     await expect(terminal.closeTarget("term_web_cleanup")).resolves.toBeUndefined();
     await expect(
       worktree.removeWorktree({
-        projectId: "web",
+        project,
         worktreeId: "wt_web_cleanup",
         expectedPath: "/tmp/station/web/cleanup",
         expectedBranch: "cleanup",

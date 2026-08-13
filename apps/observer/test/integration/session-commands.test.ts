@@ -1236,7 +1236,7 @@ describe("session command vertical slice", () => {
     fixture.sqlite.close();
   });
 
-  it("rejects session.startAgent when provider lookup crosses project ownership", async () => {
+  it("rejects session.startAgent when a foreign worktree is absent from the current snapshot", async () => {
     const foreign = createFakeWorktree({
       id: "wt_api_foreign",
       projectId: "api",
@@ -1264,7 +1264,7 @@ describe("session command vertical slice", () => {
       status: "failed",
       error: {
         tag: "CommandValidationError",
-        code: "WORKTREE_PROJECT_MISMATCH",
+        code: "WORKTREE_NOT_FOUND",
         projectId: "web",
         worktreeId: foreign.id,
       },

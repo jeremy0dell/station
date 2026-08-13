@@ -10,6 +10,7 @@ import { resolveSessionRecovery } from "../../sessionRecovery.js";
 import type { StationLogger } from "../../stationLogger.js";
 import { nowIso } from "../../utils/time.js";
 import { assertCommandType } from "../assertCommand.js";
+import { worktreeMissingError } from "../errors.js";
 import type { HarnessLaunchPreflight } from "../harnessLaunchPreflight.js";
 import { resolveTerminalProviderOrThrow } from "../providers.js";
 import type { CommandHandler } from "../queue.js";
@@ -20,7 +21,6 @@ import {
   defaultSessionCommandIdFactory,
   discardSessionSeedBestEffort,
   findProjectOrThrow,
-  lookupWorktree,
   publishSessionCreated,
   type SessionCommandIdFactory,
   seedSession,
@@ -45,9 +45,9 @@ export type CreateSessionResumeAgentHandlerOptions = {
 /**
  * USE CASE
  *
- * Explicitly validates and preflights provider-native recovery into a selected worktree, reusing
- * a handle's Station identity or minting one when absent. Automatic native activation recovery is
- * owned separately by external launch. Failed cleanup discards only a newly minted projection.
+ * Requires the selected worktree in the current Observer snapshot, then validates and preflights
+ * provider-native recovery, reusing a handle's Station identity or minting one when absent. Automatic
+ * native activation recovery is owned separately by external launch. Failed cleanup discards only a newly minted projection.
  */
 export function createSessionResumeAgentHandler(
   options: CreateSessionResumeAgentHandlerOptions,
@@ -82,20 +82,18 @@ export function createSessionResumeAgentHandler(
     // another provider process next to a healthy row.
     assertResumeAllowed(row);
 
-    const runtime = {
-      clock: options.clock,
-      signal: context.signal,
-      trace: context.trace,
-    };
-    const worktree =
-      row === undefined
-        ? await lookupWorktree({
-            providers: options.providers,
-            projectId: payload.projectId,
-            worktreeId: payload.worktreeId,
-            runtime,
-          })
-        : worktreeObservationFromRow(row, options.providers.worktree.id, nowIso(options.clock));
+    if (row === undefined) {
+      throw worktreeMissingError({
+        projectId: payload.projectId,
+        worktreeId: payload.worktreeId,
+        message: "The requested worktree is not visible in the current snapshot.",
+      });
+    }
+    const worktree = worktreeObservationFromRow(
+      row,
+      options.providers.worktree.id,
+      nowIso(options.clock),
+    );
     throwIfAborted(context.signal);
 
     const recovery = await resolveSessionRecovery({

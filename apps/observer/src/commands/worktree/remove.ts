@@ -115,6 +115,7 @@ export function createWorktreeRemoveHandler(
     try {
       await removeWorktreeThroughProvider({
         providers: options.providers,
+        project,
         row,
         target: resolution.target,
         force,

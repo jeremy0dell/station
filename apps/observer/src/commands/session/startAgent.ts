@@ -7,6 +7,7 @@ import type { ObserverEventBus } from "../../runtime/eventBus.js";
 import type { StationLogger } from "../../stationLogger.js";
 import { nowIso } from "../../utils/time.js";
 import { assertCommandType } from "../assertCommand.js";
+import { worktreeMissingError } from "../errors.js";
 import type { HarnessLaunchPreflight } from "../harnessLaunchPreflight.js";
 import { resolveHarnessProviderOrThrow, resolveTerminalProviderOrThrow } from "../providers.js";
 import type { CommandHandler } from "../queue.js";
@@ -17,7 +18,6 @@ import {
   defaultSessionCommandIdFactory,
   discardSessionSeedBestEffort,
   findProjectOrThrow,
-  lookupWorktree,
   publishSessionCreated,
   rememberedHarnessProviderForWorktree,
   type SessionCommandIdFactory,
@@ -42,8 +42,8 @@ export type CreateSessionStartAgentHandlerOptions = {
 /**
  * USE CASE
  *
- * Validates and preflights a fresh agent lifecycle before inheriting the worktree's canonical
- * display title. Failed launches discard only the fresh session projection.
+ * Requires the selected worktree in the current Observer snapshot, then validates and preflights a fresh
+ * agent lifecycle before inheriting its canonical display title. Failed launches discard only the fresh session projection.
  */
 export function createSessionStartAgentHandler(
   options: CreateSessionStartAgentHandlerOptions,
@@ -66,20 +66,18 @@ export function createSessionStartAgentHandler(
     validateSnapshotRow(row, payload.projectId);
     assertNoCurrentAgent(row);
     const sessionId = idFactory.sessionId();
-    const runtime = {
-      clock: options.clock,
-      signal: context.signal,
-      trace: context.trace,
-    };
-    const worktree =
-      row === undefined
-        ? await lookupWorktree({
-            providers: options.providers,
-            projectId: payload.projectId,
-            worktreeId: payload.worktreeId,
-            runtime,
-          })
-        : worktreeObservationFromRow(row, options.providers.worktree.id, nowIso(options.clock));
+    if (row === undefined) {
+      throw worktreeMissingError({
+        projectId: payload.projectId,
+        worktreeId: payload.worktreeId,
+        message: "The requested worktree is not visible in the current snapshot.",
+      });
+    }
+    const worktree = worktreeObservationFromRow(
+      row,
+      options.providers.worktree.id,
+      nowIso(options.clock),
+    );
     throwIfAborted(context.signal);
     const harnessProviderId =
       payload.harness?.provider ??

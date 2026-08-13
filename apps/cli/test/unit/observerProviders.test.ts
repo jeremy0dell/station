@@ -614,6 +614,7 @@ describe("observer providers", () => {
       }
       await mkdir(createdWorktreePath, { recursive: true });
       await registry.worktree.removeWorktree({
+        project,
         worktreeId: created.id,
         expectedPath: created.path,
         expectedBranch: created.branch,

@@ -1,6 +1,7 @@
 import type {
   HarnessProvider,
   HarnessRunId,
+  ProviderProjectConfig,
   SafeError,
   SessionView,
   WorktreeRow,
@@ -137,6 +138,7 @@ export async function closeTerminalForWorktree(
 export async function removeWorktreeThroughProvider(
   input: {
     providers: ProviderRegistry;
+    project: ProviderProjectConfig;
     row: WorktreeRow;
     target: VerifiedWorktreeRemovalTarget;
     force: boolean;
@@ -144,8 +146,8 @@ export async function removeWorktreeThroughProvider(
   } & CleanupRuntime,
 ): Promise<void> {
   const request = {
+    project: input.project,
     worktreeId: input.row.id,
-    projectId: input.row.projectId,
     expectedPath: input.target.path,
     expectedBranch: input.target.branch,
     expectedRegistrationIdentity: input.target.registrationIdentity,

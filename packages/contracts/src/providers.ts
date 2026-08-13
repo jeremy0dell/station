@@ -3,14 +3,7 @@ import { z } from "zod";
 import type { TerminalFocusOrigin } from "./commands.js";
 import type { SafeError } from "./errors.js";
 import { SafeErrorSchema } from "./errors.js";
-import type {
-  HarnessRunId,
-  ProjectId,
-  ProviderId,
-  SessionId,
-  TerminalTargetId,
-  WorktreeId,
-} from "./ids.js";
+import type { HarnessRunId, ProviderId, SessionId, TerminalTargetId, WorktreeId } from "./ids.js";
 import {
   ProjectIdSchema,
   ProviderIdSchema,
@@ -162,11 +155,11 @@ export type CreateWorktreeRequest = {
 };
 
 export type RemoveWorktreeRequest = {
+  project: ProviderProjectConfig;
   worktreeId: WorktreeId;
   expectedPath: string;
   expectedBranch: string;
   expectedRegistrationIdentity: string;
-  projectId?: ProjectId;
   force?: boolean;
 };
 
@@ -174,12 +167,6 @@ export type RemoveWorktreeResult = {
   worktreeId: WorktreeId;
   removed: boolean;
   reason?: string;
-};
-
-export type GetWorktreeRequest = {
-  worktreeId?: WorktreeId;
-  projectId?: ProjectId;
-  path?: string;
 };
 
 export type ProviderDoctorCheck = {
@@ -421,8 +408,9 @@ export type RepositoryChecksRequest = z.infer<typeof RepositoryChecksRequestSche
 /**
  * DRIVEN PORT
  *
- * Supplies worktree lifecycle evidence and mutations without exposing provider mechanics.
- * Removal adapters must revalidate opaque registration identity, path, and branch immediately before mutation.
+ * Supplies fresh worktree lifecycle evidence and mutations without exposing provider mechanics.
+ * Callers provide project context for mutations; removal adapters must revalidate opaque registration identity,
+ * path, and branch immediately before mutation.
  */
 export interface WorktreeProvider {
   id: ProviderId;
@@ -432,7 +420,6 @@ export interface WorktreeProvider {
   listWorktrees(project: ProviderProjectConfig): Promise<WorktreeObservation[]>;
   createWorktree(request: CreateWorktreeRequest): Promise<WorktreeObservation>;
   removeWorktree(request: RemoveWorktreeRequest): Promise<RemoveWorktreeResult>;
-  getWorktree?(request: GetWorktreeRequest): Promise<WorktreeObservation | null>;
 }
 
 /**

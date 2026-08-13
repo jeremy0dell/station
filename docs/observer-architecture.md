@@ -187,7 +187,7 @@ ownership even where current ownership is still a deviation.
 | Recorded mutations | Driving | `StationCommand`, `dispatch`, command handlers | CLI, Station client, protocol client | Commands persist acceptance and completion; the production handler map is compile-time exhaustive over the command union. |
 | Provider hook delivery | Driving | provider hook ingress | `stn-ingress`, protocol method, offline spool, provider hook adapters | Raw input is validated and persisted once. Adapter-backed harness hooks normalize into reports; other hooks schedule reconcile without invoking provider operations. |
 | Harness status delivery | Driving | harness event report ingress | harness hooks, provider hook adapters, protocol clients | Reports are deduplicated, queued, projected, persisted, and followed by reconcile. |
-| Worktree operations | Driven | `WorktreeProvider` | Worktrunk and test adapters | Strong purpose-owned port. |
+| Worktree operations | Driven | `WorktreeProvider` | Worktrunk and test adapters | Fresh list evidence and mutations only; Observer snapshots own current session selection, callers supply project context for mutation, and adapters retain no second worktree inventory. |
 | Terminal operations | Driven | `TerminalProvider` | tmux, Station terminal, and test adapters | General topology and operations are provider-owned. |
 | Managed terminal lifecycle | Driven | `ManagedTerminalLifecycle` | Station terminal adapter, optionally backed by Station Host | Explicit injected role returning only an opaque target identity and declaring whether launched processes persist beyond the caller; Host backing may add spawn/list/close/attachment lifecycle, while Station retains native presentation and host-backed targets remain externally non-focusable. |
 | Harness operations | Driven | `HarnessProvider`, `SessionRecoveryArtifactLocator` | Claude, Codex, Cursor, OpenCode, Pi, scripted, and test adapters | Strong purpose-owned ports for launch, discovery, run classification, compatibility admission, and exact recovery-artifact location; raw hook normalization remains a separate driving adapter boundary, and unsupported artifact providers make migration ineligible. |
@@ -392,10 +392,10 @@ canonical order before command success; validated no-ops emit no Group event. Th
 does not read providers or publish `observer.reconciled`.
 
 `worktree.remove` carries the selected worktree ID, canonical path, branch, and
-opaque Git registration identity. Its use case refreshes provider evidence and
+opaque Git registration identity plus the configured project context. Its use case refreshes provider evidence and
 uniquely re-resolves that identity before terminal or worktree cleanup, refusing
 primary, default-branch, stale, missing, or ambiguous targets. The worktree
-adapter rechecks the expected registration identity, path, and branch immediately
+adapter retains no earlier list as authority and freshly rechecks the expected registration identity, path, and branch immediately
 before mutation so an external checkout replacement cannot reuse the selected
 path and branch as removal identity. Adapter race refusals retain provider-neutral,
 trace-correlated diagnostic evidence.
