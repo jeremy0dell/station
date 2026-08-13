@@ -219,9 +219,9 @@ describe("negotiateObserverIncumbent", () => {
 
     await expect(runNegotiation(fixture)).resolves.toMatchObject({ action: "replaced" });
     expect(healthTimeouts).toEqual([40, 35]);
-    expect(stopTimeouts).toEqual([30]);
+    expect(stopTimeouts).toEqual([10]);
     expect(fixture.stop).toHaveBeenCalledWith(socketPath, {
-      timeoutMs: 30,
+      timeoutMs: 10,
       expectedObserver: {
         pid: fixture.incumbentHealth.pid,
         startedAt: fixture.incumbentHealth.startedAt,
@@ -315,6 +315,21 @@ describe("negotiateObserverIncumbent", () => {
     expect(sleeps).toBe(2);
     expect(fixture.signal).toHaveBeenCalledWith(100, 0);
     expect(fixture.signal).not.toHaveBeenCalledWith(100, "SIGTERM");
+  });
+
+  it("recovers from a timed-out stop acknowledgement through verified SIGTERM", async () => {
+    const fixture = handoffFixture();
+    fixture.stop.mockRejectedValue(new Error("stop acknowledgement timed out"));
+    fixture.signal.mockImplementation((_pid, signal) => {
+      if (signal === "SIGTERM") {
+        fixture.listening = false;
+        fixture.startToken = undefined;
+      }
+      return signal === 0 && fixture.startToken === undefined ? "absent" : "sent";
+    });
+
+    await expect(runNegotiation(fixture)).resolves.toMatchObject({ action: "replaced" });
+    expect(fixture.signal).toHaveBeenCalledWith(100, "SIGTERM");
   });
 
   it("revalidates complete ownership before one SIGTERM and never sends SIGKILL", async () => {

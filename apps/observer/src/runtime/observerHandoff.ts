@@ -302,10 +302,15 @@ export async function negotiateObserverIncumbent(
     if (!observerProcessIdentitiesMatch(incumbent, revalidatedIncumbent.processIdentity)) {
       throw handoffRefused("The incumbent Observer process changed during handoff.");
     }
-    await deps.lifecycle.stop(input.socketPath, {
-      timeoutMs: remainingHandoffMs(deadline, now),
-      expectedObserver: revalidatedIncumbent.health,
-    });
+    try {
+      await deps.lifecycle.stop(input.socketPath, {
+        timeoutMs: remainingHandoffMs(gracefulDeadline, now),
+        expectedObserver: revalidatedIncumbent.health,
+      });
+    } catch {
+      // A timed-out acknowledgement may still have initiated shutdown; exact
+      // process evidence below decides whether fallback signaling is safe.
+    }
 
     if (await waitForExactExit(input.socketPath, incumbent, gracefulDeadline, deps, now, sleep)) {
       return { action: "replaced", health };
