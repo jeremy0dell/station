@@ -1,4 +1,4 @@
-import type { HarnessEventObservation } from "@station/contracts";
+import type { HarnessEventObservation, HarnessRunObservation } from "@station/contracts";
 import {
   bindHarnessRunsToSessionExecutions,
   decideSessionHarnessExecution,
@@ -16,7 +16,6 @@ import type {
 import type { ProviderRegistry } from "../providers/registry.js";
 import {
   applyHarnessEventStatusOverlays,
-  type ObserverHarnessRun,
   synthesizeExternalHarnessRuns,
 } from "./harnessEventStatus.js";
 
@@ -28,9 +27,9 @@ type ReconcileHarnessPersistence = ObservationStore & SessionStore;
 export async function harnessRunsWithPersistedEventStatus(input: {
   persistence?: ReconcileHarnessPersistence;
   providers: ProviderRegistry;
-  harnessRuns: ObserverHarnessRun[];
+  harnessRuns: HarnessRunObservation[];
   now: string;
-}): Promise<ObserverHarnessRun[]> {
+}): Promise<HarnessRunObservation[]> {
   if (input.persistence === undefined) {
     return input.harnessRuns;
   }
@@ -41,14 +40,10 @@ export async function harnessRunsWithPersistedEventStatus(input: {
   });
   const { observations } = admitPersistedHarnessEvents(input.providers, persisted);
   const bindings = await input.persistence.listSessionHarnessExecutions();
-  const boundRuns = bindHarnessRunsToSessionExecutions({
-    runs: input.harnessRuns.map((run) => run.run),
+  const runsWithBindings = bindHarnessRunsToSessionExecutions({
+    runs: input.harnessRuns,
     bindings,
   });
-  const runsWithBindings = input.harnessRuns.map((run, index) => ({
-    ...run,
-    run: boundRuns[index] ?? run.run,
-  }));
   return applyHarnessEventStatusOverlays({
     runs: synthesizeExternalHarnessRuns({ runs: runsWithBindings, observations }),
     observations,

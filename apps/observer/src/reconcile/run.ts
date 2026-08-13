@@ -23,7 +23,6 @@ import { providerObservationRetentionDays } from "../persistence/retention.js";
 import type { ProviderRegistry } from "../providers/registry.js";
 import { buildStationSnapshot } from "./graph.js";
 import { repairPersistedHarnessEventCompatibility } from "./harnessEventRepair.js";
-import type { ObserverHarnessRun } from "./harnessEventStatus.js";
 import type { ProviderReadOptions } from "./providerObservations.js";
 import type { ReconcileTiming } from "./reconcileResult.js";
 import {
@@ -141,7 +140,7 @@ export async function runReconcileOnce(input: ReconcileOnceInput): Promise<Recon
     projects: input.projects,
     worktrees: observations.worktrees,
     terminalTargets: observations.terminalTargets,
-    harnessRuns: observations.harnessRuns.map((harnessRun) => harnessRun.run),
+    harnessRuns: observations.harnessRuns,
     worktreeDisplayTitles: snapshotInputs.worktreeDisplayTitles,
     providerHealth,
     observedAt: finishedAt,
@@ -178,7 +177,7 @@ async function buildReconcileSnapshot(input: {
   harnessCapabilities: CurrentReconcileObservations["harnessCapabilities"];
   worktrees: WorktreeObservation[];
   terminalTargets: TerminalTargetObservation[];
-  harnessRuns: ObserverHarnessRun[];
+  harnessRuns: HarnessRunObservation[];
   snapshotInputs: ReconcileSnapshotInputs;
   featureFlags?: ClientFeatureFlags;
   persistence?: SessionGroupStore;

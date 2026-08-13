@@ -1212,7 +1212,7 @@ function upsertSessions(
       worktreeId: run.worktreeId,
       lifecycle: activates || existing?.lifecycle === "open" ? "open" : "legacy",
       harness: run.provider,
-      state: run.state,
+      state: run.status.value,
       createdAt: existing?.createdAt ?? run.observedAt,
       lastSeenAt: maxIso(existing?.lastSeenAt, run.observedAt),
     };

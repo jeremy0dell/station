@@ -9056,12 +9056,6 @@
       ],
       "imports": [
         {
-          "specifier": "./harnessEventStatus.js",
-          "resolvedPath": "apps/observer/src/reconcile/harnessEventStatus.ts",
-          "edgeKind": "type-only",
-          "bindings": ["ObserverHarnessRun"]
-        },
-        {
           "specifier": "./snapshotCounts.js",
           "resolvedPath": "apps/observer/src/reconcile/snapshotCounts.ts",
           "edgeKind": "runtime",
@@ -9200,16 +9194,10 @@
           "bindings": ["applyHarnessEventStatusOverlays", "synthesizeExternalHarnessRuns"]
         },
         {
-          "specifier": "./harnessEventStatus.js",
-          "resolvedPath": "apps/observer/src/reconcile/harnessEventStatus.ts",
-          "edgeKind": "type-only",
-          "bindings": ["ObserverHarnessRun"]
-        },
-        {
           "specifier": "@station/contracts",
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "type-only",
-          "bindings": ["HarnessEventObservation"]
+          "bindings": ["HarnessEventObservation", "HarnessRunObservation"]
         }
       ]
     },
@@ -9231,12 +9219,6 @@
         {
           "name": "externalHarnessRunId",
           "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "ObserverHarnessRun",
-          "kind": "type",
           "role": null,
           "purpose": null
         },
@@ -9304,12 +9286,6 @@
           "bindings": ["PersistedSession"]
         },
         {
-          "specifier": "./harnessEventStatus.js",
-          "resolvedPath": "apps/observer/src/reconcile/harnessEventStatus.ts",
-          "edgeKind": "type-only",
-          "bindings": ["ObserverHarnessRun"]
-        },
-        {
           "specifier": "@station/contracts",
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "type-only",
@@ -9371,12 +9347,6 @@
           "bindings": ["safeErrorToProviderHealth"]
         },
         {
-          "specifier": "./harnessEventStatus.js",
-          "resolvedPath": "apps/observer/src/reconcile/harnessEventStatus.ts",
-          "edgeKind": "type-only",
-          "bindings": ["ObserverHarnessRun"]
-        },
-        {
           "specifier": "../stationLogger.js",
           "resolvedPath": "apps/observer/src/stationLogger.ts",
           "edgeKind": "type-only",
@@ -9388,9 +9358,7 @@
           "edgeKind": "type-only",
           "bindings": [
             "HarnessCapabilities",
-            "HarnessProvider",
             "HarnessRunObservation",
-            "HarnessStatusObservation",
             "ProviderHealth",
             "ProviderId",
             "ProviderProjectConfig",
@@ -9485,12 +9453,6 @@
           "resolvedPath": "apps/observer/src/reconcile/harnessEventRepair.ts",
           "edgeKind": "runtime",
           "bindings": ["repairPersistedHarnessEventCompatibility"]
-        },
-        {
-          "specifier": "./harnessEventStatus.js",
-          "resolvedPath": "apps/observer/src/reconcile/harnessEventStatus.ts",
-          "edgeKind": "type-only",
-          "bindings": ["ObserverHarnessRun"]
         },
         {
           "specifier": "./providerObservations.js",
@@ -9606,12 +9568,6 @@
           "bindings": ["decayStaleBusyStatuses"]
         },
         {
-          "specifier": "../harnessEventStatus.js",
-          "resolvedPath": "apps/observer/src/reconcile/harnessEventStatus.ts",
-          "edgeKind": "type-only",
-          "bindings": ["ObserverHarnessRun"]
-        },
-        {
           "specifier": "../observationCorrelation.js",
           "resolvedPath": "apps/observer/src/reconcile/observationCorrelation.ts",
           "edgeKind": "runtime",
@@ -9649,6 +9605,7 @@
           "edgeKind": "type-only",
           "bindings": [
             "HarnessCapabilities",
+            "HarnessRunObservation",
             "ProviderHealth",
             "ProviderProjectConfig",
             "SafeError",
@@ -9693,12 +9650,6 @@
           ]
         },
         {
-          "specifier": "../harnessEventStatus.js",
-          "resolvedPath": "apps/observer/src/reconcile/harnessEventStatus.ts",
-          "edgeKind": "type-only",
-          "bindings": ["ObserverHarnessRun"]
-        },
-        {
           "specifier": "../observationCorrelation.js",
           "resolvedPath": "apps/observer/src/reconcile/observationCorrelation.ts",
           "edgeKind": "runtime",
@@ -9715,6 +9666,7 @@
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "type-only",
           "bindings": [
+            "HarnessRunObservation",
             "ProviderProjectConfig",
             "SessionRecoveryHandle",
             "TerminalTargetObservation",
@@ -14910,7 +14862,7 @@
       "declaration": "HarnessProvider",
       "kind": "interface",
       "role": "DRIVEN PORT",
-      "purpose": "Supplies harness launch, discovery, status, and persisted-event compatibility policy without exposing provider-native payloads to Observer application code.",
+      "purpose": "Supplies harness launch, discovery with present-tense status, and persisted-event compatibility policy without exposing provider-native payloads to Observer application code.",
       "dependencies": []
     },
     {

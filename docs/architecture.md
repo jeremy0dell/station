@@ -54,7 +54,11 @@ No single layer owns all truth.
 - Fresh worktree-provider reads are authoritative for external worktree existence and metadata they can prove;
   adapters do not retain list results as a second inventory.
 - Terminal providers are authoritative for terminal topology and provider-owned target identity.
-- Harness providers are authoritative for agent launch, discovery, run classification, persisted-event compatibility, and provider-native recovery artifacts they can prove. Provider hook adapters own raw-event admission, compaction, and normalization into harness reports.
+- Harness providers are authoritative for agent launch, present-tense run discovery observations,
+  persisted-event compatibility, status signals, and provider-native recovery artifacts they can prove. Each
+  discovered run carries its normalized current status; Observer overlays newer admitted event
+  evidence without a second provider classification call. Provider hook adapters own raw-event
+  admission, compaction, and normalization into harness reports.
 - A sealed session-rescue archive becomes temporary cutover authority only after the exact source sessions have stopped and every recovery-critical asset has been captured and hashed; a live-source archive remains evidence, not launch authority.
 - Repository providers are authoritative only for code-host metadata they fetch or cache through their integration boundary.
 - Observer SQLite is durable observer memory for commands, events, correlations, explicit Station-session lifecycle, project-local Session Group definitions and exclusive membership, canonical worktree display titles keyed by project and worktree, provider observations, and current metadata cache rows.

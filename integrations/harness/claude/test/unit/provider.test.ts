@@ -17,7 +17,6 @@ describe("ClaudeHarnessProvider", () => {
       canLaunch: true,
       canDiscoverRuns: true,
       canEmitEvents: true,
-      canClassifyStatus: true,
       canReceivePrompt: false,
       canResume: false,
       canStop: false,
@@ -273,31 +272,14 @@ describe("ClaudeHarnessProvider", () => {
       {
         id: "claude:tmux:station:@1:%2",
         provider: "claude",
-        state: "unknown",
-        confidence: "low",
+        status: expect.objectContaining({ value: "unknown", confidence: "low" }),
       },
     ]);
   });
 
-  it("classifies discovered runs conservatively", async () => {
+  it("returns conservative status as part of discovery", async () => {
     const provider = createClaudeHarnessProvider({ now: () => new Date(now) });
-
-    const status = await provider.classifyRun(
-      {
-        id: "claude:tmux:station:@1:%2",
-        provider: "claude",
-        state: "unknown",
-        confidence: "low",
-        reason: "terminal target is bound to Claude Code.",
-        observedAt: now,
-      },
-      { projects: [], worktrees: [], terminalTargets: [] },
-    );
-
-    expect(status.status).toMatchObject({
-      value: "unknown",
-      confidence: "low",
-    });
+    expect("classifyRun" in provider).toBe(false);
   });
 
   it("keeps raw hook normalization out of provider operations", () => {

@@ -1,5 +1,6 @@
 import type {
   HarnessCapabilities,
+  HarnessRunObservation,
   ProviderHealth,
   ProviderProjectConfig,
   SafeError,
@@ -14,7 +15,7 @@ import type {
 } from "../../persistence/index.js";
 import type { ProviderRegistry } from "../../providers/registry.js";
 import { harnessRunsWithPersistedEventStatus } from "../harnessEventRepair.js";
-import { decayStaleBusyStatuses, type ObserverHarnessRun } from "../harnessEventStatus.js";
+import { decayStaleBusyStatuses } from "../harnessEventStatus.js";
 import {
   normalizeHarnessRunsForCurrentWorktrees,
   normalizeTerminalTargetsForCurrentWorktrees,
@@ -36,7 +37,7 @@ export type CurrentReconcileObservations = {
   projectsScanned: number;
   terminalTargets: TerminalTargetObservation[];
   terminalTargetsRead: number;
-  harnessRuns: ObserverHarnessRun[];
+  harnessRuns: HarnessRunObservation[];
   harnessCapabilities: Record<string, HarnessCapabilities>;
   worktreesForSnapshot: WorktreeObservation[];
 };
@@ -91,7 +92,7 @@ export async function readCurrentReconcileObservations(input: {
   const harnessStatusInput: {
     persistence?: ObservationStore & SessionStore;
     providers: ProviderRegistry;
-    harnessRuns: ObserverHarnessRun[];
+    harnessRuns: HarnessRunObservation[];
     now: string;
   } = {
     providers: input.providers,

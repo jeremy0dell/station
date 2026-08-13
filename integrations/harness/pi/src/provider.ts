@@ -11,7 +11,6 @@ import {
   type TerminalBoundHarnessCommandDefinition,
   type TerminalBoundHarnessProviderSpec,
 } from "@station/harness-shared";
-import { classifyPiRunStatus } from "./classify.js";
 import { PiHarnessProviderError, piProviderErrorFromUnknown } from "./errors.js";
 import { buildPiLaunchPlan } from "./launch.js";
 
@@ -28,7 +27,6 @@ const baseCapabilities: HarnessCapabilities = {
   canLaunch: true,
   canDiscoverRuns: true,
   canEmitEvents: true,
-  canClassifyStatus: true,
   canReceivePrompt: false,
   canResume: false,
   canStop: false,
@@ -64,7 +62,7 @@ const piSpec: TerminalBoundHarnessProviderSpec<PiHarnessProviderOptions> = {
       }),
   },
   buildLaunch,
-  classifyRun: (run) => classifyPiRunStatus(run),
+  unknownStatusReason: "Pi run has no reliable Pi status signal yet.",
 };
 
 function piHealthDiagnostics(output: string): Record<string, string> {

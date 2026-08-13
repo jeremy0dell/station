@@ -1,11 +1,7 @@
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type {
-  BuildHarnessLaunchRequest,
-  HarnessRunObservation,
-  ProviderHookRuntime,
-} from "@station/contracts";
+import type { BuildHarnessLaunchRequest, ProviderHookRuntime } from "@station/contracts";
 import type { ExternalCommandInput, ExternalCommandResult } from "@station/runtime";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { assertPathInsideTestMachineRoot } from "../../../../../packages/testing/src/index.js";
@@ -28,7 +24,6 @@ describe("CursorHarnessProvider", () => {
       canLaunch: true,
       canDiscoverRuns: true,
       canEmitEvents: true,
-      canClassifyStatus: true,
       canReceivePrompt: false,
       canResume: false,
       canStop: false,
@@ -307,8 +302,7 @@ describe("CursorHarnessProvider", () => {
         id: "cursor:tmux:station:@1:%2",
         provider: "cursor",
         worktreeId: "wt_web_task",
-        state: "unknown",
-        confidence: "low",
+        status: expect.objectContaining({ value: "unknown", confidence: "low" }),
       }),
     ]);
   });
@@ -316,37 +310,9 @@ describe("CursorHarnessProvider", () => {
   it("classifies Cursor observations without owning raw hook ingestion", async () => {
     const provider = createCursorHarnessProvider({ now: () => new Date(now) });
 
-    await expect(
-      provider.classifyRun(run(), {
-        projects: [],
-        worktrees: [],
-        terminalTargets: [],
-      }),
-    ).resolves.toMatchObject({
-      status: {
-        value: "unknown",
-        confidence: "low",
-      },
-    });
+    expect("classifyRun" in provider).toBe(false);
 
     expect("ingestEvent" in provider).toBe(false);
-  });
-
-  it("reports a high-confidence exit as a harness_event (Cursor source override)", async () => {
-    const provider = createCursorHarnessProvider({ now: () => new Date(now) });
-
-    await expect(
-      provider.classifyRun(
-        { ...run(), state: "exited", confidence: "high", reason: "agent exited" },
-        { projects: [], worktrees: [], terminalTargets: [] },
-      ),
-    ).resolves.toMatchObject({
-      status: {
-        value: "exited",
-        confidence: "high",
-        source: "harness_event",
-      },
-    });
   });
 });
 
@@ -399,20 +365,6 @@ function request(): BuildHarnessLaunchRequest {
     terminalTarget: target,
     mode: "interactive",
     sessionId: "ses_web_task",
-  };
-}
-
-function run(): HarnessRunObservation {
-  return {
-    id: "cursor:tmux:station:@1:%2",
-    provider: "cursor",
-    projectId: "web",
-    worktreeId: "wt_web_task",
-    sessionId: "ses_web_task",
-    state: "unknown",
-    confidence: "low",
-    reason: "terminal target is bound to Cursor; no reliable lifecycle signal yet.",
-    observedAt: now,
   };
 }
 

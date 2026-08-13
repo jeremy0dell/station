@@ -2,7 +2,7 @@ import type { HarnessRunObservation, TerminalTargetObservation } from "@station/
 
 type ActivationTerminal = Pick<TerminalTargetObservation, "harnessRunId" | "sessionId" | "state">;
 
-type ActivationRun = Pick<HarnessRunObservation, "id" | "sessionId" | "state">;
+type ActivationRun = Pick<HarnessRunObservation, "id" | "sessionId" | "status">;
 
 /** Returns whether a reachable terminal's resolved run binding agrees with its Station session. */
 export function terminalCanActivateSession(input: {
@@ -28,11 +28,11 @@ export function harnessRunCanActivateSession(input: {
     terminalIsCorrelatedToRun(target, input.run),
   );
   if (
-    input.run.state === "starting" ||
-    input.run.state === "idle" ||
-    input.run.state === "working" ||
-    input.run.state === "needs_attention" ||
-    input.run.state === "stuck"
+    input.run.status.value === "starting" ||
+    input.run.status.value === "idle" ||
+    input.run.status.value === "working" ||
+    input.run.status.value === "needs_attention" ||
+    input.run.status.value === "stuck"
   ) {
     if (correlatedTerminals.length === 0) return true;
     return correlatedTerminals.some((target) => terminalCanCorroborateRun(target, input.run));

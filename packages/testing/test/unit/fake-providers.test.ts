@@ -88,7 +88,7 @@ describe("fake providers", () => {
       expect.objectContaining({
         id: "run_web_main",
         provider: "fake-harness",
-        state: "working",
+        status: expect.objectContaining({ value: "working" }),
         observedAt: now,
       }),
     ]);
@@ -230,7 +230,7 @@ describe("fake providers", () => {
     expect(harness.snapshot().runs).toEqual([
       expect.objectContaining({
         id: "run_web_cleanup",
-        state: "exited",
+        status: expect.objectContaining({ value: "exited" }),
       }),
     ]);
     expect(terminal.snapshot().closed).toEqual(["term_web_cleanup"]);

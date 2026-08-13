@@ -19,7 +19,6 @@ import {
   type TerminalBoundHarnessProviderSpec,
 } from "@station/harness-shared";
 import { safeErrorFromUnknown } from "@station/runtime";
-import { classifyCodexRunStatus } from "./classify.js";
 import { codexProviderErrorFromUnknown } from "./errors.js";
 import { acceptsCodexPersistedEvent } from "./events.js";
 import { doctorCodexHooks } from "./hooks.js";
@@ -45,7 +44,6 @@ const baseCapabilities: HarnessCapabilities = {
   canLaunch: true,
   canDiscoverRuns: true,
   canEmitEvents: true,
-  canClassifyStatus: true,
   canReceivePrompt: false,
   canResume: false,
   canStop: false,
@@ -78,7 +76,7 @@ const codexSpec: TerminalBoundHarnessProviderSpec<CodexHarnessProviderOptions> =
       }),
   },
   buildLaunch,
-  classifyRun: (run) => classifyCodexRunStatus(run),
+  unknownStatusReason: "Codex run has no reliable Codex status signal yet.",
   acceptsPersistedEvent: acceptsCodexPersistedEvent,
   doctorChecks,
   hooksStatus,

@@ -1,18 +1,15 @@
 import type {
   BuildHarnessLaunchRequest,
   HarnessCapabilities,
-  HarnessClassificationContext,
   HarnessDiscoveryContext,
   HarnessLaunchPlan,
   HarnessProvider,
   HarnessRunObservation,
-  HarnessStatusObservation,
   ProviderHealth,
 } from "@station/contracts";
 import { type RuntimeClock, toIsoTimestamp } from "@station/runtime";
 import { buildScriptedAgentLaunchPlan } from "./launch.js";
 import { discoverScriptedRuns } from "./stateStore.js";
-import { classifyScriptedRunStatus } from "./statusPolicy.js";
 
 export type ScriptedAgentHarnessProviderOptions = {
   stateDir: string;
@@ -29,7 +26,6 @@ const capabilities: HarnessCapabilities = {
   canLaunch: true,
   canDiscoverRuns: true,
   canEmitEvents: true,
-  canClassifyStatus: true,
   canReceivePrompt: false,
   canResume: false,
   canStop: false,
@@ -88,15 +84,6 @@ export class ScriptedAgentHarnessProvider implements HarnessProvider {
       stateDir: this.#options.stateDir,
       clock: this.#clock,
       ...(this.#options.timeoutMs === undefined ? {} : { timeoutMs: this.#options.timeoutMs }),
-    });
-  }
-
-  async classifyRun(
-    run: HarnessRunObservation,
-    _context: HarnessClassificationContext,
-  ): Promise<HarnessStatusObservation> {
-    return classifyScriptedRunStatus(run, {
-      now: toIsoTimestamp(this.#clock.now()),
     });
   }
 }

@@ -14,7 +14,6 @@ import {
 import type {
   HarnessEventObservation,
   HarnessRunObservation,
-  HarnessStatusObservation,
   RepositoryRemote,
   TerminalIdentityBinding,
   TerminalTargetObservation,
@@ -77,7 +76,6 @@ export const HarnessCapabilitiesSchema = z
     canLaunch: z.boolean(),
     canDiscoverRuns: z.boolean(),
     canEmitEvents: z.boolean(),
-    canClassifyStatus: z.boolean(),
     canReceivePrompt: z.boolean(),
     canResume: z.boolean(),
     canStop: z.boolean(),
@@ -352,12 +350,6 @@ export type HarnessDiscoveryContext = {
   terminalTargets: TerminalTargetObservation[];
 };
 
-export type HarnessClassificationContext = {
-  projects: ProviderProjectConfig[];
-  worktrees: WorktreeObservation[];
-  terminalTargets: TerminalTargetObservation[];
-};
-
 export type HarnessStopRequest = {
   runId: HarnessRunId;
   sessionId?: SessionId;
@@ -501,7 +493,7 @@ export type HarnessVersionInfo = {
 /**
  * DRIVEN PORT
  *
- * Supplies harness launch, discovery, status, and persisted-event compatibility policy
+ * Supplies harness launch, discovery with present-tense status, and persisted-event compatibility policy
  * without exposing provider-native payloads to Observer application code.
  */
 export interface HarnessProvider {
@@ -524,10 +516,6 @@ export interface HarnessProvider {
   hooksStatus?(context?: ProviderDoctorContext): Promise<HarnessHooksStatus>;
   buildLaunch(request: BuildHarnessLaunchRequest): Promise<HarnessLaunchPlan>;
   discoverRuns(context: HarnessDiscoveryContext): Promise<HarnessRunObservation[]>;
-  classifyRun(
-    run: HarnessRunObservation,
-    context: HarnessClassificationContext,
-  ): Promise<HarnessStatusObservation>;
   /**
    * Pure compatibility policy for durable event observations written by earlier builds.
    * Omit when every previously accepted observation remains valid.

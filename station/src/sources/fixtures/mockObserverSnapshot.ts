@@ -6,7 +6,6 @@ const harnessCapabilities = {
   canLaunch: true,
   canDiscoverRuns: true,
   canEmitEvents: true,
-  canClassifyStatus: true,
   canReceivePrompt: false,
   canResume: true,
   canStop: true,
@@ -16,7 +15,7 @@ const harnessCapabilities = {
 };
 
 export const mockObserverSnapshot = {
-  schemaVersion: "0.10.0",
+  schemaVersion: "0.11.0",
   generatedAt: fixtureNow,
   observer: {
     pid: 4242,

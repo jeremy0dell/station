@@ -31,7 +31,16 @@ Drive each scenario in the harness TUI while watching
 `stn debug logs "Harness event report"` and the harness's own native session
 log. Save raw payloads — they become fixtures.
 
-## 3. Write the normalizer
+## 3. Return current run status from discovery
+
+`discoverRuns()` returns complete `HarnessRunObservation` values, including a
+provider-normalized present-tense `status`. Do not retain a second per-run
+classification callback or ask Observer/core to reinterpret provider data.
+Terminal-bound providers that lack stronger status evidence return typed
+`unknown` status; event reports may overlay newer working, attention, idle, or
+exited evidence during live projection and reconcile.
+
+## 4. Write the normalizer
 
 In `integrations/harness/<name>/src`:
 
@@ -50,14 +59,14 @@ In `integrations/harness/<name>/src`:
 - Never leak provider vocabulary past the boundary: core reads contract
   fields only.
 
-## 4. Fixtures are the tests and the docs
+## 5. Fixtures are the tests and the docs
 
 Turn each census capture into a unit test: feed the captured payload sequence
 through the normalizer and assert status/attention per event. The status
 mappers are pure — no timing, no live processes. The fixture matrix is the
 integration's documentation of record; prose goes stale, fixtures fail loudly.
 
-## 5. Doctor and setup
+## 6. Doctor and setup
 
 - Hook transports: wire `stn hooks doctor <name>` so installation is
   verifiable, and remember doctor verifies *installation*, not build identity —
@@ -65,7 +74,7 @@ integration's documentation of record; prose goes stale, fixtures fail loudly.
 - Add the harness to setup checks if it needs system dependencies.
 - Setup tracking preparation must call the same typed provider installer in-process through the setup adapter. Return only installed/changed and backup-path commit evidence; provider plans, commands, before/after source, and other native result fields must not cross the setup port or print in guided output.
 
-## 6. Support launch preflight
+## 7. Support launch preflight
 
 - Report `canLaunch: false` only when the adapter cannot construct or execute a launch.
 - Make `health()` freshly prove CLI/runtime availability without conflating unknown authentication or trust with unavailability. Preserve actionable provider errors in `lastError`.
@@ -73,7 +82,7 @@ integration's documentation of record; prose goes stale, fixtures fail loudly.
 - Omit `hooksStatus()` when the provider has no equivalent requirement. The shared launch policy intentionally permits such providers; do not invent a hook gate for them.
 - Keep setup and doctor richer than launch policy. Launch preflight consumes capability, health, and hook facts transiently and must not introduce provider-specific readiness state into Observer/core.
 
-## 7. Verify live
+## 8. Verify live
 
 One end-to-end pass per attention scenario: trigger it in the real harness,
 confirm the row flips and holds until resolved, and confirm the census log

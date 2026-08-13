@@ -190,7 +190,7 @@ ownership even where current ownership is still a deviation.
 | Worktree operations | Driven | `WorktreeProvider` | Worktrunk and test adapters | Fresh list evidence and mutations only; Observer snapshots own current session selection, callers supply project context for mutation, and adapters retain no second worktree inventory. |
 | Terminal operations | Driven | `TerminalProvider` | tmux, Station terminal, and test adapters | General topology and operations are provider-owned. |
 | Managed terminal lifecycle | Driven | `ManagedTerminalLifecycle` | Station terminal adapter, optionally backed by Station Host | Explicit injected role returning only an opaque target identity and declaring whether launched processes persist beyond the caller; Host backing may add spawn/list/close/attachment lifecycle, while Station retains native presentation and host-backed targets remain externally non-focusable. |
-| Harness operations | Driven | `HarnessProvider`, `SessionRecoveryArtifactLocator` | Claude, Codex, Cursor, OpenCode, Pi, scripted, and test adapters | Strong purpose-owned ports for launch, discovery, run classification, compatibility admission, and exact recovery-artifact location; raw hook normalization remains a separate driving adapter boundary, and unsupported artifact providers make migration ineligible. |
+| Harness operations | Driven | `HarnessProvider`, `SessionRecoveryArtifactLocator` | Claude, Codex, Cursor, OpenCode, Pi, scripted, and test adapters | Strong purpose-owned ports: discovery returns provider-normalized current run status, while separate hook adapters own event parsing and harness providers retain compatibility admission and exact recovery-artifact location; unsupported artifact providers make migration ineligible. |
 | Repository metadata | Driven | `RepositoryProvider` | GitHub and test repository adapters | Adapters declare deterministic remote support; provider-neutral metadata policy selects zero or one match and rejects overlaps. |
 | Durable observer memory | Driven | `CommandJournal`, `EventJournal`, `IngressJournal`, `ObservationStore`, `ReconcileStore`, `SessionStore`, `SessionGroupStore`, `WorktreeMetadataStore` | Production SQLite adapter and test-only in-memory adapter | Observer-private, application-purpose ports separate current conversations from storage representation. Consumers receive only the named ports they use; the unmarked `ObserverPersistenceBundle` intersection exists only at adapter and composition seams. |
 | Persistence health | Driven | `PersistenceHealthSource` | SQLite adapter created by `createSqliteObserverPersistence` | Runtime health and diagnostics read the public SQLite health projection without receiving the concrete database handle. |
@@ -311,9 +311,11 @@ Application composition proceeds around that boundary in this order:
    move cannot be missed.
 6. Startup reconcile establishes the first provider-backed snapshot while
    application operations remain behind the readiness gate. Singleton readiness
-   commits only after the snapshot is available. Provider-health probes commit
-   into the current snapshot as they land, while harness-version probes fill
-   their cache in the background.
+   commits only after the snapshot is available. Harness discovery returns run
+   identity and current status in one observation; Observer overlays newer event
+   evidence without a second per-run provider callback. Provider-health probes
+   commit into the current snapshot as they land, while harness-version probes
+   fill their cache in the background.
 7. Runtime composition starts the same force-false duplicate inspection used by
    explicit reap and caches its promise for logging and Doctor. The inspection
    has no timer, claim, cancellation protocol, or signal authority.

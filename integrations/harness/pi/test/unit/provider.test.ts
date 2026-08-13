@@ -1,4 +1,4 @@
-import type { BuildHarnessLaunchRequest, HarnessRunObservation } from "@station/contracts";
+import type { BuildHarnessLaunchRequest } from "@station/contracts";
 import {
   type ExternalCommandInput,
   type ExternalCommandResult,
@@ -17,7 +17,6 @@ describe("PiHarnessProvider", () => {
       canLaunch: true,
       canDiscoverRuns: true,
       canEmitEvents: true,
-      canClassifyStatus: true,
       canReceivePrompt: false,
       canResume: false,
       canStop: false,
@@ -180,8 +179,7 @@ describe("PiHarnessProvider", () => {
         id: "pi:tmux:station:@1:%2",
         provider: "pi",
         worktreeId: "wt_web_task",
-        state: "unknown",
-        confidence: "low",
+        status: expect.objectContaining({ value: "unknown", confidence: "low" }),
       }),
     ]);
   });
@@ -189,18 +187,7 @@ describe("PiHarnessProvider", () => {
   it("classifies Pi observations without owning raw hook ingestion", async () => {
     const provider = createPiHarnessProvider({ now: () => new Date(now) });
 
-    await expect(
-      provider.classifyRun(run(), {
-        projects: [],
-        worktrees: [],
-        terminalTargets: [],
-      }),
-    ).resolves.toMatchObject({
-      status: {
-        value: "unknown",
-        confidence: "low",
-      },
-    });
+    expect("classifyRun" in provider).toBe(false);
 
     expect("ingestEvent" in provider).toBe(false);
   });
@@ -248,20 +235,6 @@ function request(): BuildHarnessLaunchRequest {
     terminalTarget: target,
     mode: "interactive",
     sessionId: "ses_web_task",
-  };
-}
-
-function run(): HarnessRunObservation {
-  return {
-    id: "pi:tmux:station:@1:%2",
-    provider: "pi",
-    projectId: "web",
-    worktreeId: "wt_web_task",
-    sessionId: "ses_web_task",
-    state: "unknown",
-    confidence: "low",
-    reason: "terminal target is bound to Pi; no reliable lifecycle signal yet.",
-    observedAt: now,
   };
 }
 

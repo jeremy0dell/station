@@ -147,12 +147,15 @@ fold over signals shared by live projection and reconcile.
 
 ## Status Interpretation Today
 
+- Run discovery returns a `HarnessRunObservation` whose `status` is already
+  normalized at the provider boundary. `observedAt` timestamps the inventory
+  observation; `status.updatedAt` timestamps the status evidence it carries.
 - Live path: `projectHarnessEventReportOntoSnapshot`
   (`apps/observer/src/reconcile/statusProjection.ts`) applies a report to the
   current snapshot.
 - Reconcile path: `applyHarnessEventStatusOverlays`
   (`apps/observer/src/reconcile/harnessEventStatus.ts`) rebuilds from persisted
-  observations; the latest correlated overlay wins over the classified run
+  observations; the latest correlated overlay wins over the discovered run
   status unless the run is confidently exited.
 - These are two implementations of one policy; collapsing them into a single
   fold is planned (see invariant 6's spirit: status must be a deterministic

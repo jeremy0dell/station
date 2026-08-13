@@ -1,91 +1,64 @@
-import type { HarnessRunObservation } from "@station/contracts";
+import { HarnessRunObservationSchema } from "@station/contracts";
 import { describe, expect, it } from "vitest";
-import { classifyCodexRunStatus } from "../../src/classify";
+import { createCodexHarnessProvider } from "../../src/provider";
 
 const now = "2026-05-21T12:00:00.000Z";
 
-describe("classifyCodexRunStatus", () => {
-  it("keeps terminal-only Codex evidence unknown with low confidence", () => {
-    const status = classifyCodexRunStatus(run());
-
-    expect(status).toMatchObject({
+describe("Codex discovered run status", () => {
+  it("keeps terminal-only Codex evidence unknown with low confidence", async () => {
+    const [run] = await discovered();
+    expect(run).toMatchObject({
       provider: "codex",
-      runId: "codex:tmux:station:@1:%2",
+      status: { value: "unknown", confidence: "low", source: "harness_process" },
+    });
+    expect(run?.status.reason).toContain("no reliable Codex status signal");
+  });
+
+  it("preserves reliable needs_attention hook observations in the run contract", () => {
+    const run = HarnessRunObservationSchema.parse({
+      id: "codex:tmux:station:@1:%2",
+      provider: "codex",
+      observedAt: now,
       status: {
-        value: "unknown",
-        confidence: "low",
-        source: "harness_process",
+        value: "needs_attention",
+        confidence: "high",
+        reason: "Codex requested permission for Bash.",
+        source: "harness_event",
+        updatedAt: now,
       },
     });
-    expect(status.status.reason).toContain("no reliable Codex status signal");
+    expect(run.status).toMatchObject({ value: "needs_attention", source: "harness_event" });
   });
 
-  it("preserves reliable needs_attention hook observations", () => {
-    const status = classifyCodexRunStatus({
-      ...run(),
-      state: "needs_attention",
-      confidence: "high",
-      reason: "Codex requested permission for Bash.",
-      providerData: {
-        latestEvent: {
-          hookEventName: "PermissionRequest",
-        },
-      },
-    });
-
-    expect(status.status).toMatchObject({
-      value: "needs_attention",
-      confidence: "high",
-      source: "harness_event",
-      reason: "Codex requested permission for Bash.",
-    });
-  });
-
-  it("preserves exited process observations", () => {
-    const base = run();
-    const exited: HarnessRunObservation = {
-      id: base.id,
-      provider: base.provider,
+  it("normalizes persisted exited process observations", () => {
+    const run = HarnessRunObservationSchema.parse({
+      id: "codex:tmux:station:@1:%2",
+      provider: "codex",
       state: "exited",
       confidence: "high",
       reason: "Codex process exited.",
-      observedAt: base.observedAt,
-    };
-    if (base.projectId !== undefined) exited.projectId = base.projectId;
-    if (base.worktreeId !== undefined) exited.worktreeId = base.worktreeId;
-    if (base.sessionId !== undefined) exited.sessionId = base.sessionId;
-    if (base.cwd !== undefined) exited.cwd = base.cwd;
-    if (base.providerData !== undefined) exited.providerData = base.providerData;
-
-    const status = classifyCodexRunStatus(exited);
-
-    expect(status.status).toMatchObject({
-      value: "exited",
-      confidence: "high",
-      source: "harness_process",
+      observedAt: now,
     });
+    expect(run.status).toMatchObject({ value: "exited", confidence: "high", source: "unknown" });
   });
 });
 
-function run(): HarnessRunObservation {
-  return {
-    id: "codex:tmux:station:@1:%2",
-    provider: "codex",
-    projectId: "web",
-    worktreeId: "wt_web_task",
-    sessionId: "ses_web_task",
-    pid: 1234,
-    cwd: "/tmp/station/web/task",
-    state: "unknown",
-    confidence: "low",
-    reason: "terminal target is bound to Codex; no reliable lifecycle signal yet.",
-    observedAt: now,
-    providerData: {
-      terminalTargetId: "tmux:station:@1:%2",
-      terminalProvider: "tmux",
-      process: {
-        command: "codex",
+function discovered() {
+  return createCodexHarnessProvider().discoverRuns({
+    projects: [],
+    worktrees: [],
+    terminalTargets: [
+      {
+        id: "tmux:station:@1:%2",
+        provider: "tmux",
+        state: "open",
+        observedAt: now,
+        harnessBinding: {
+          role: "main-agent",
+          harnessProvider: "codex",
+          currentCommand: "codex",
+        },
       },
-    },
-  };
+    ],
+  });
 }

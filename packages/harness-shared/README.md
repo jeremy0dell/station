@@ -14,7 +14,6 @@ package supplies the uniform machinery so the adapters stay short and read top-t
 | `launch.ts`     | shared launch env + provider-data builders                                |
 | `compaction.ts` | shrink large provider payloads to byte-bounded summaries                  |
 | `errors.ts`     | `HarnessProviderError` + typed wrappers                                    |
-| `classify.ts`   | map a harness run observation to a status                                 |
 
 ## Provider assembly
 
@@ -26,14 +25,15 @@ to the factory, which assembles the uniform interface methods.
                                                        │ spec (data + callbacks)
                                                        ▼
                        createTerminalBoundHarnessProvider(spec, options)
-                       └─ capabilities · health · discoverRuns · classifyRun
+                       └─ capabilities · health · discoverRuns
                           · buildLaunch    (uniform, from this package)
 ```
 
 The spec carries only what differs between harnesses: the command (env var + fallback),
-`baseCapabilities`, the health probe args + diagnostics, `buildLaunch`/`classifyRun`,
-and optional `doctorChecks`/`hooksStatus`/`acceptsPersistedEvent` callbacks. Optional interface
-methods are attached only when the spec supplies them, so callers can feature-detect them.
+`baseCapabilities`, the health probe args + diagnostics, `buildLaunch`, the provider-specific
+unknown-status reason used during terminal-bound discovery, and optional
+`doctorChecks`/`hooksStatus`/`acceptsPersistedEvent` callbacks. Optional interface methods
+are attached only when the spec supplies them, so callers can feature-detect them.
 
 ## Runtime event flow
 

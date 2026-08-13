@@ -1,13 +1,7 @@
 import { DEFAULT_WORKSPACE_CONFIG, type StationConfig } from "@station/config";
 import type { HarnessEventReportReceipt, ProviderHookAdapter } from "@station/contracts";
 import { STATION_SCHEMA_VERSION } from "@station/contracts";
-import {
-  createFakeTerminalTarget,
-  createFakeWorktree,
-  FakeHarnessProvider,
-  FakeTerminalProvider,
-  FakeWorktreeProvider,
-} from "@station/testing";
+import { FakeHarnessProvider, FakeTerminalProvider, FakeWorktreeProvider } from "@station/testing";
 import { describe, expect, it } from "vitest";
 import {
   createCommandQueue,

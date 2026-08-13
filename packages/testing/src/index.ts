@@ -3,12 +3,10 @@ import type {
   Confidence,
   CreateWorktreeRequest,
   HarnessCapabilities,
-  HarnessClassificationContext,
   HarnessDiscoveryContext,
   HarnessLaunchPlan,
   HarnessProvider,
   HarnessRunObservation,
-  HarnessStatusObservation,
   HarnessStopRequest,
   HarnessStopResult,
   OpenWorkspaceRequest,
@@ -54,7 +52,7 @@ type FakeTerminalProviderMethod =
   | "captureTarget"
   | "sendInput";
 
-type FakeHarnessProviderMethod = "health" | "buildLaunch" | "discoverRuns" | "classifyRun" | "stop";
+type FakeHarnessProviderMethod = "health" | "buildLaunch" | "discoverRuns" | "stop";
 
 export type FakeProviderFailures<TMethod extends string> = Partial<Record<TMethod, SafeError>>;
 
@@ -100,7 +98,7 @@ export type CreateFakeHarnessRunInput = {
   worktreeId?: WorktreeId;
   sessionId?: string;
   cwd?: string;
-  state?: HarnessRunObservation["state"];
+  state?: HarnessRunObservation["status"]["value"];
   confidence?: Confidence;
   reason?: string;
   pid?: number;
@@ -161,7 +159,6 @@ const defaultHarnessCapabilities: HarnessCapabilities = {
   canLaunch: true,
   canDiscoverRuns: true,
   canEmitEvents: true,
-  canClassifyStatus: true,
   canReceivePrompt: false,
   canResume: true,
   canStop: true,
@@ -279,9 +276,13 @@ export function createFakeHarnessRun(input: CreateFakeHarnessRunInput = {}): Har
     ...(input.sessionId === undefined ? {} : { sessionId: input.sessionId }),
     ...(input.cwd === undefined ? {} : { cwd: input.cwd }),
     ...(pid === undefined ? {} : { pid }),
-    state,
-    confidence: input.confidence ?? (state === "unknown" ? "low" : "high"),
-    reason: input.reason ?? `Fake harness run is ${state}.`,
+    status: {
+      value: state,
+      confidence: input.confidence ?? (state === "unknown" ? "low" : "high"),
+      reason: input.reason ?? `Fake harness run is ${state}.`,
+      source: "harness_process",
+      updatedAt: resolveNow(input.now),
+    },
     observedAt: resolveNow(input.now),
     ...compactProviderData(input.providerData),
   };
@@ -616,28 +617,6 @@ export class FakeHarnessProvider implements HarnessProvider {
     return [...this.#runs];
   }
 
-  async classifyRun(
-    run: HarnessRunObservation,
-    _context: HarnessClassificationContext,
-  ): Promise<HarnessStatusObservation> {
-    maybeThrow(this.#failures, "classifyRun");
-    return {
-      provider: this.id,
-      runId: run.id,
-      ...(run.projectId === undefined ? {} : { projectId: run.projectId }),
-      ...(run.worktreeId === undefined ? {} : { worktreeId: run.worktreeId }),
-      ...(run.sessionId === undefined ? {} : { sessionId: run.sessionId }),
-      status: {
-        value: run.state,
-        confidence: run.confidence,
-        reason: run.reason,
-        source: "harness_process",
-        updatedAt: run.observedAt,
-      },
-      observedAt: resolveNow(this.#now),
-    };
-  }
-
   async stop(request: HarnessStopRequest): Promise<HarnessStopResult> {
     maybeThrow(this.#failures, "stop");
     const recorded: HarnessStopRequest = {
@@ -652,9 +631,13 @@ export class FakeHarnessProvider implements HarnessProvider {
       const exited: HarnessRunObservation = {
         id: run.id,
         provider: run.provider,
-        state: "exited",
-        confidence: "high",
-        reason: "Fake harness run was stopped.",
+        status: {
+          value: "exited",
+          confidence: "high",
+          reason: "Fake harness run was stopped.",
+          source: "harness_process",
+          updatedAt: resolveNow(this.#now),
+        },
         observedAt: resolveNow(this.#now),
       };
       if (run.projectId !== undefined) exited.projectId = run.projectId;

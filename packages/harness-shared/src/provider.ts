@@ -6,8 +6,6 @@ import type {
   HarnessHooksStatus,
   HarnessLaunchPlan,
   HarnessProvider,
-  HarnessRunObservation,
-  HarnessStatusObservation,
   HarnessVersionInfo,
   ProviderDoctorCheck,
   ProviderDoctorContext,
@@ -67,7 +65,7 @@ export type TerminalBoundHarnessProviderSpec<TOpts extends CommonHarnessProvider
       options: TOpts,
       request: BuildHarnessLaunchRequest,
     ) => HarnessLaunchPlan | Promise<HarnessLaunchPlan>;
-    classifyRun: (run: HarnessRunObservation) => HarnessStatusObservation;
+    unknownStatusReason: string;
     acceptsPersistedEvent?: (observation: HarnessEventObservation) => boolean;
     doctorChecks?: (
       options: TOpts,
@@ -91,9 +89,9 @@ export function createTerminalBoundHarnessProvider<TOpts extends CommonHarnessPr
           harnessProvider: spec.id,
           displayName: spec.displayName,
           role: "main-agent",
+          reason: spec.unknownStatusReason,
         }),
       ),
-    classifyRun: (run) => Promise.resolve(spec.classifyRun(run)),
     buildLaunch: (request) => Promise.resolve(spec.buildLaunch(options, request)),
   };
   // Optional interface methods stay absent (never `= undefined`) so `'x' in provider`

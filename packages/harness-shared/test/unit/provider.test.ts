@@ -1,8 +1,4 @@
-import type {
-  HarnessLaunchPlan,
-  HarnessStatusObservation,
-  ProviderDoctorContext,
-} from "@station/contracts";
+import type { HarnessLaunchPlan, ProviderDoctorContext } from "@station/contracts";
 import { describe, expect, it } from "vitest";
 import {
   type CommonHarnessProviderOptions,
@@ -28,7 +24,6 @@ function baseSpec(
       canLaunch: true,
       canDiscoverRuns: true,
       canEmitEvents: true,
-      canClassifyStatus: true,
       canReceivePrompt: false,
       canResume: false,
       canStop: false,
@@ -53,18 +48,7 @@ function baseSpec(
       args: [],
       mode: "interactive",
     }),
-    classifyRun: (run): HarnessStatusObservation => ({
-      provider: "test",
-      runId: run.id,
-      status: {
-        value: "unknown",
-        confidence: "low",
-        reason: "n/a",
-        source: "harness_process",
-        updatedAt: run.observedAt,
-      },
-      observedAt: run.observedAt,
-    }),
+    unknownStatusReason: "Test run has no reliable status signal.",
     ...overrides,
   };
 }

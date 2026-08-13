@@ -4,7 +4,6 @@ import { join } from "node:path";
 import type {
   BuildHarnessLaunchRequest,
   HarnessEventObservation,
-  HarnessRunObservation,
   ProviderHookArtifactOwner,
 } from "@station/contracts";
 import type { ExternalCommandInput, ExternalCommandResult } from "@station/runtime";
@@ -22,7 +21,6 @@ describe("CodexHarnessProvider", () => {
       canLaunch: true,
       canDiscoverRuns: true,
       canEmitEvents: true,
-      canClassifyStatus: true,
       canReceivePrompt: false,
       canResume: false,
       canStop: false,
@@ -166,8 +164,7 @@ describe("CodexHarnessProvider", () => {
       expect.objectContaining({
         provider: "codex",
         worktreeId: "wt_web_task",
-        state: "unknown",
-        confidence: "low",
+        status: expect.objectContaining({ value: "unknown", confidence: "low" }),
       }),
     ]);
   });
@@ -250,18 +247,7 @@ describe("CodexHarnessProvider", () => {
   it("classifies Codex observations without owning raw hook ingestion", async () => {
     const provider = createCodexHarnessProvider({ now: () => new Date(now) });
 
-    await expect(
-      provider.classifyRun(run(), {
-        projects: [],
-        worktrees: [],
-        terminalTargets: [],
-      }),
-    ).resolves.toMatchObject({
-      status: {
-        value: "unknown",
-        confidence: "low",
-      },
-    });
+    expect("classifyRun" in provider).toBe(false);
 
     expect("ingestEvent" in provider).toBe(false);
   });
@@ -309,20 +295,6 @@ function request(): BuildHarnessLaunchRequest {
     terminalTarget: target,
     mode: "interactive",
     sessionId: "ses_web_task",
-  };
-}
-
-function run(): HarnessRunObservation {
-  return {
-    id: "codex:tmux:station:@1:%2",
-    provider: "codex",
-    projectId: "web",
-    worktreeId: "wt_web_task",
-    sessionId: "ses_web_task",
-    state: "unknown",
-    confidence: "low",
-    reason: "terminal target is bound to Codex; no reliable lifecycle signal yet.",
-    observedAt: now,
   };
 }
 

@@ -26,7 +26,6 @@ import {
 } from "@station/contracts";
 import { pathIsSameOrInside } from "@station/runtime";
 import { harnessRunCanActivateSession, terminalCanActivateSession } from "../sessionActivation.js";
-import type { ObserverHarnessRun } from "./harnessEventStatus.js";
 import { countsForSnapshot } from "./snapshotCounts.js";
 
 export type ObserverGraphInput = {
@@ -44,7 +43,7 @@ export type ObserverGraphInput = {
   harnessCapabilities?: Record<string, HarnessCapabilities>;
   worktrees: WorktreeObservation[];
   terminalTargets: TerminalTargetObservation[];
-  harnessRuns: ObserverHarnessRun[];
+  harnessRuns: HarnessRunObservation[];
   sessionMetadata?: readonly ObserverSessionMetadata[];
   worktreeDisplayTitles?: readonly ObserverWorktreeDisplayTitle[];
   recoveryHandles?: readonly SessionRecoveryHandle[];
@@ -85,7 +84,6 @@ const emptyHarnessCapabilities: HarnessCapabilities = {
   canLaunch: false,
   canDiscoverRuns: false,
   canEmitEvents: false,
-  canClassifyStatus: false,
   canReceivePrompt: false,
   canResume: false,
   canStop: false,
@@ -113,7 +111,7 @@ export function buildStationSnapshot(input: ObserverGraphInput): StationSnapshot
   );
   const worktreesById = new Map(configuredWorktrees.map((worktree) => [worktree.id, worktree]));
   const harnessRuns = input.harnessRuns;
-  const harnessRunsById = new Map(harnessRuns.map((run) => [run.run.id, run.run]));
+  const harnessRunsById = new Map(harnessRuns.map((run) => [run.id, run]));
   const sessionMetadataById = new Map(
     input.sessionMetadata?.map((session) => [session.id, session]),
   );
@@ -283,7 +281,7 @@ type BuildWorktreeRowInput = {
   worktree: WorktreeObservation;
   title: string;
   terminal?: TerminalTargetObservation;
-  harnessRun?: ObserverHarnessRun;
+  harnessRun?: HarnessRunObservation;
   terminalCapabilities?: Record<string, boolean>;
 };
 
@@ -390,7 +388,7 @@ function recoveryActionForRow(input: {
 
 function terminalAttachment(
   terminal: TerminalTargetObservation,
-  harnessRun: ObserverHarnessRun | undefined,
+  harnessRun: HarnessRunObservation | undefined,
   capabilities?: Record<string, boolean> | undefined,
 ): TerminalAttachment {
   const attachment: TerminalAttachment = {
@@ -423,9 +421,8 @@ function terminalAttachment(
   return attachment;
 }
 
-function rowAgent(harnessRun: ObserverHarnessRun): WorktreeRow["agent"] {
-  const run = harnessRun.run;
-  const status = harnessRun.status;
+function rowAgent(run: HarnessRunObservation): WorktreeRow["agent"] {
+  const status = run.status;
   const agent: NonNullable<WorktreeRow["agent"]> = {
     harness: run.provider,
     state: status.value,
@@ -445,7 +442,7 @@ type BuildSessionInput = {
   worktree: WorktreeObservation;
   title: string;
   terminal?: TerminalTargetObservation;
-  harnessRun?: ObserverHarnessRun;
+  harnessRun?: HarnessRunObservation;
   harnessCapabilities: Record<string, HarnessCapabilities>;
   sessionMetadataById: ReadonlyMap<string, ObserverSessionMetadata>;
   retainedSession?: ObserverSessionMetadata;
@@ -464,14 +461,14 @@ function buildSessions(input: BuildSessionInput): SessionView[] {
 function buildStationSession(input: BuildSessionInput): SessionView | undefined {
   const identity = stationSessionIdentity(input);
   if (identity === undefined) return undefined;
-  const run = identity.harnessRun?.run;
+  const run = identity.harnessRun;
   const harnessProvider = run?.provider ?? identity.metadata?.harness;
   if (harnessProvider === undefined) return undefined;
   const terminal = terminalForStationSession({
     terminal: input.terminal,
     sessionId: identity.id,
-    sessionRunId: identity.harnessRun?.run.id,
-    observedOtherRunId: identity.harnessRun === undefined ? input.harnessRun?.run.id : undefined,
+    sessionRunId: identity.harnessRun?.id,
+    observedOtherRunId: identity.harnessRun === undefined ? input.harnessRun?.id : undefined,
   });
   const status =
     identity.harnessRun?.status ??
@@ -494,7 +491,7 @@ function buildStationSession(input: BuildSessionInput): SessionView | undefined 
 
 function buildExternalSession(input: BuildSessionInput): SessionView | undefined {
   const harnessRun = input.harnessRun;
-  const run = harnessRun?.run;
+  const run = harnessRun;
   if (
     harnessRun === undefined ||
     run === undefined ||
@@ -520,21 +517,21 @@ function buildExternalSession(input: BuildSessionInput): SessionView | undefined
 type StationSessionIdentity = {
   id: string;
   metadata?: ObserverSessionMetadata;
-  harnessRun?: ObserverHarnessRun;
+  harnessRun?: HarnessRunObservation;
 };
 
 function stationSessionIdentity(input: BuildSessionInput): StationSessionIdentity | undefined {
   const harnessRun = input.harnessRun;
-  if (harnessRun?.run.sessionId !== undefined) {
-    const runSessionId = harnessRun.run.sessionId;
+  if (harnessRun?.sessionId !== undefined) {
+    const runSessionId = harnessRun.sessionId;
     const metadata = input.sessionMetadataById.get(runSessionId);
     if (
       !sessionMetadataIsEnded(metadata) &&
       (metadata?.lifecycle === "open" ||
         harnessRunCanActivateSession({
-          run: harnessRun.run,
+          run: harnessRun,
           terminals: input.terminal === undefined ? [] : [input.terminal],
-          runs: [harnessRun.run],
+          runs: [harnessRun],
         }))
     ) {
       return {
@@ -551,7 +548,7 @@ function stationSessionIdentity(input: BuildSessionInput): StationSessionIdentit
     input.terminal !== undefined &&
     terminalCanActivateSession({
       target: input.terminal,
-      runs: input.harnessRun === undefined ? [] : [input.harnessRun.run],
+      runs: input.harnessRun === undefined ? [] : [input.harnessRun],
     })
   ) {
     const metadata = input.sessionMetadataById.get(terminalSessionId);
@@ -602,13 +599,13 @@ function sessionView(input: {
   origin: SessionView["origin"];
   input: BuildSessionInput;
   harnessProvider: string;
-  harnessRun?: ObserverHarnessRun;
+  harnessRun?: HarnessRunObservation;
   terminal?: TerminalTargetObservation;
   status: SessionView["status"];
   createdAt: string;
   title: string;
 }): SessionView {
-  const run = input.harnessRun?.run;
+  const run = input.harnessRun;
   const harness: SessionView["harness"] = {
     provider: input.harnessProvider,
     mode: "unknown",
@@ -647,7 +644,7 @@ function sessionView(input: {
   return session;
 }
 
-function externalRunRepresentsSession(run: ObserverHarnessRun): boolean {
+function externalRunRepresentsSession(run: HarnessRunObservation): boolean {
   return (
     run.status.value !== "none" && run.status.value !== "unknown" && run.status.value !== "exited"
   );
@@ -713,7 +710,7 @@ function isCloseableTerminalState(state: TerminalTargetObservation["state"]): bo
 
 function hasPrimaryAgentEndpoint(
   terminal: TerminalTargetObservation,
-  harnessRun: ObserverHarnessRun | undefined,
+  harnessRun: HarnessRunObservation | undefined,
 ): boolean {
   return (
     terminal.harnessBinding?.role === "main-agent" ||
@@ -748,17 +745,17 @@ function terminalTargetMatchesWorktree(
 function chooseHarnessRun(
   worktree: WorktreeObservation,
   terminal: TerminalTargetObservation | undefined,
-  runs: ObserverHarnessRun[],
-): ObserverHarnessRun | undefined {
+  runs: HarnessRunObservation[],
+): HarnessRunObservation | undefined {
   // Prefer an explicit terminal-to-run binding, then fall back to the best run for the worktree.
   if (terminal?.harnessRunId !== undefined) {
-    const boundRun = runs.find((run) => run.run.id === terminal.harnessRunId);
+    const boundRun = runs.find((run) => run.id === terminal.harnessRunId);
     if (boundRun !== undefined) {
       return boundRun;
     }
   }
 
-  return runs.filter((run) => run.run.worktreeId === worktree.id).sort(compareHarnessRuns)[0];
+  return runs.filter((run) => run.worktreeId === worktree.id).sort(compareHarnessRuns)[0];
 }
 
 function compareRows(left: WorktreeRow, right: WorktreeRow): number {
@@ -780,17 +777,17 @@ function compareObservations(
   );
 }
 
-function compareHarnessRuns(left: ObserverHarnessRun, right: ObserverHarnessRun): number {
+function compareHarnessRuns(left: HarnessRunObservation, right: HarnessRunObservation): number {
   return (
     AGENT_STATUS[left.status.value].priority - AGENT_STATUS[right.status.value].priority ||
     confidenceRank[right.status.confidence] - confidenceRank[left.status.confidence] ||
     Date.parse(right.status.updatedAt) - Date.parse(left.status.updatedAt) ||
-    left.run.id.localeCompare(right.run.id)
+    left.id.localeCompare(right.id)
   );
 }
 
 function displayReason(
-  harnessRun: ObserverHarnessRun | undefined,
+  harnessRun: HarnessRunObservation | undefined,
   includeReason: boolean,
 ): string | undefined {
   if (harnessRun === undefined) {
@@ -803,7 +800,7 @@ function displayReason(
 }
 
 function warningFor(
-  harnessRun: ObserverHarnessRun | undefined,
+  harnessRun: HarnessRunObservation | undefined,
   terminal: TerminalTargetObservation | undefined,
   defaultWarning: boolean,
 ): boolean {
@@ -861,7 +858,7 @@ function providerHealthAlertId(providerId: string, status: ProviderHealth["statu
 
 function orphans(
   input: ObserverGraphInput,
-  harnessRuns: ObserverHarnessRun[],
+  harnessRuns: HarnessRunObservation[],
   worktreesById: Map<string, WorktreeObservation>,
   projectsById: Map<string, ProviderProjectConfig>,
   harnessRunsById: Map<string, HarnessRunObservation>,
@@ -898,7 +895,7 @@ function orphans(
   }
 
   for (const harnessRun of harnessRuns) {
-    const run = harnessRun.run;
+    const run = harnessRun;
     const hasProject = run.projectId === undefined || projectsById.has(run.projectId);
     const hasWorktree = run.worktreeId !== undefined && worktreesById.has(run.worktreeId);
 

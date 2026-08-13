@@ -1,4 +1,3 @@
-export { classifyHarnessRunStatus } from "./classify.js";
 export {
   compactPayloadByFieldNames,
   jsonByteCount,

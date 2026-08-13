@@ -18,7 +18,6 @@ import {
   type TerminalBoundHarnessProviderSpec,
 } from "@station/harness-shared";
 import { runExternalCommand, safeErrorFromUnknown } from "@station/runtime";
-import { classifyClaudeRunStatus } from "./classify.js";
 import { claudeProviderErrorFromUnknown } from "./errors.js";
 import { doctorClaudeHooks, resolveClaudeSettingsArtifactPath } from "./hooks.js";
 import {
@@ -46,7 +45,6 @@ const baseCapabilities: HarnessCapabilities = {
   canLaunch: true,
   canDiscoverRuns: true,
   canEmitEvents: true,
-  canClassifyStatus: true,
   canReceivePrompt: false,
   canResume: false,
   canStop: false,
@@ -79,7 +77,7 @@ const claudeSpec: TerminalBoundHarnessProviderSpec<ClaudeHarnessProviderOptions>
       }),
   },
   buildLaunch,
-  classifyRun: (run) => classifyClaudeRunStatus(run),
+  unknownStatusReason: "Claude Code run has no reliable Claude status signal yet.",
   doctorChecks,
   hooksStatus,
   version: { latestPackage: "@anthropic-ai/claude-code" },
