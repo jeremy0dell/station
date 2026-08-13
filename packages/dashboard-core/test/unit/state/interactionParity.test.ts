@@ -339,7 +339,19 @@ describe("primary workflow interaction parity", () => {
 
       expect(semantic.state.dashboardFocus).toEqual(keyboard.state.dashboardFocus);
       expect(semantic.state.collapsedGroupIds).toEqual(keyboard.state.collapsedGroupIds);
-      expect(semantic.operations).toEqual(keyboard.operations);
+      if (cellId === "quickSession") {
+        for (const transition of [semantic, keyboard]) {
+          expect(transition.operations).toEqual([
+            expect.objectContaining({
+              type: "quickCreateSessionInGroup",
+              groupId: "group_active",
+              fallbackCell: "quickSession",
+            }),
+          ]);
+        }
+      } else {
+        expect(semantic.operations).toEqual(keyboard.operations);
+      }
     }
   });
 

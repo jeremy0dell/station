@@ -68,12 +68,19 @@ export type DashboardPersistentFilter = {
   conditions?: readonly DashboardFilterCondition[];
 };
 
+/** Normalized visibility of the optional actions rendered in each Group header. */
+export type DashboardGroupHeaderActionVisibility = {
+  quickSession: boolean;
+  menu: boolean;
+};
+
 export type TuiViewState = {
   /** Dashboard-local applied filter; absence means no persistent filter is applied. */
   persistentFilter?: DashboardPersistentFilter;
   collapsedProjectIds: ReadonlySet<string>;
   collapsedGroupIds: ReadonlySet<SessionGroupId>;
   groupOrderingMode: GroupOrderingMode;
+  groupHeaderActionVisibility: DashboardGroupHeaderActionVisibility;
   scrollOffset: number;
   terminalRows: number;
   localRows: TuiLocalRows;
@@ -230,6 +237,8 @@ export type CreateInitialTuiStateOptions = {
   collapsedProjectIds?: Iterable<string>;
   collapsedGroupIds?: Iterable<SessionGroupId>;
   groupOrderingMode?: GroupOrderingMode;
+  /** Optional overrides; omitted Group header actions remain visible. */
+  groupHeaderActionVisibility?: Partial<DashboardGroupHeaderActionVisibility>;
   scrollOffset?: number;
   terminalRows?: number;
   localRows?: TuiLocalRows;

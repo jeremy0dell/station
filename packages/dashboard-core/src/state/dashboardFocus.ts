@@ -1,4 +1,4 @@
-import type { SessionId } from "@station/contracts";
+import type { SessionGroupId, SessionId } from "@station/contracts";
 import { clampDashboardScrollOffset, dashboardBodyRows } from "../components/Dashboard/layout.js";
 import type { DashboardSessionRow } from "../selectors/dashboardSessionRows.js";
 import {
@@ -57,6 +57,36 @@ export function focusDashboardSession(state: DashboardState, sessionId: SessionI
   return cursor === undefined
     ? clearDashboardFocus(state)
     : focusResolvedDashboardCursor(state, tree, cursor);
+}
+
+/** Reveals and focuses one canonical Group header cell. */
+export function focusDashboardGroup(
+  state: DashboardState,
+  groupId: SessionGroupId,
+  cellId: Extract<DashboardCellId, "identity" | "quickSession"> = "identity",
+): DashboardState {
+  const group = state.snapshot?.sessionGroups.find((candidate) => candidate.id === groupId);
+  if (group === undefined) return clearDashboardFocus(state);
+  const collapsedProjectIds = new Set(state.collapsedProjectIds);
+  const collapsedGroupIds = new Set(state.collapsedGroupIds);
+  collapsedProjectIds.delete(group.projectId);
+  collapsedGroupIds.delete(groupId);
+  const dashboard = {
+    ...state,
+    screen: { name: "dashboard" as const },
+    collapsedProjectIds,
+    collapsedGroupIds,
+  };
+  const tree = dashboardTree(dashboard);
+  const cursor = treeGridCursorForRow({
+    projection: tree,
+    rowId: dashboardRowIds.group(groupId),
+    preferredCell: cellId,
+    policy: dashboardPolicy,
+  });
+  return cursor === undefined
+    ? clearDashboardFocus(dashboard)
+    : focusResolvedDashboardCursor(dashboard, tree, cursor);
 }
 
 /** Removes transient dashboard focus without disturbing other view state. */

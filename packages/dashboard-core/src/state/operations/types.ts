@@ -102,6 +102,17 @@ export type CreateSessionGroupOperation = {
   command: Extract<StationCommand, { type: "sessionGroup.create" }>;
 };
 
+export type CreateQuickSessionInGroupOperation = {
+  type: "quickCreateSessionInGroup";
+  localId: string;
+  project: ProjectView;
+  groupId: SessionGroupId;
+  title: string;
+  hiddenBranch: string;
+  harness: ProviderId;
+  fallbackCell: "identity" | "quickSession";
+};
+
 export type DashboardCapabilityOperation =
   | ActivateSessionOperation
   | CreateManagedSessionOperation
@@ -120,4 +131,5 @@ export type TuiOperation =
   | AddProjectOperation
   | SetProjectDefaultHarnessOperation
   | RemoveProjectOperation
-  | CreateSessionGroupOperation;
+  | CreateSessionGroupOperation
+  | CreateQuickSessionInGroupOperation;

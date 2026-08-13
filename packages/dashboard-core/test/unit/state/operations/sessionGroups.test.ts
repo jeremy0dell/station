@@ -5,8 +5,12 @@ import { dashboardRowIds, selectDashboardTree } from "../../../../src/selectors/
 import { dashboardExecution } from "../../../../src/state/capabilities/execution.js";
 import { buildCreateSessionGroupCommand } from "../../../../src/state/commandBuilders.js";
 import { createDashboardCapabilityOperationRunner } from "../../../../src/state/operations/capabilityOperation.js";
+import { runQuickSessionInGroupOperation } from "../../../../src/state/operations/groupQuickSession.js";
 import { runCreateSessionGroupOperation } from "../../../../src/state/operations/sessionGroups.js";
-import type { CreateSessionGroupOperation } from "../../../../src/state/operations/types.js";
+import type {
+  CreateQuickSessionInGroupOperation,
+  CreateSessionGroupOperation,
+} from "../../../../src/state/operations/types.js";
 import { createDashboardRuntimeEffectScope } from "../../../../src/state/runtimeEffectScope.js";
 import { createInitialTuiState, replaceSnapshot } from "../../../../src/state/screen.js";
 import type { DashboardState } from "../../../../src/state/types.js";
@@ -364,6 +368,93 @@ describe("Create Session Group operation", () => {
   });
 });
 
+describe("Quick Session in existing Group operation", () => {
+  it("launches once, records latest expected membership, and focuses the canonical session", async () => {
+    const setup = createExistingGroupQuickSetup();
+
+    await setup.run();
+
+    expect(setup.capabilities.quickCreateRequests).toEqual([
+      expect.objectContaining({
+        project: expect.objectContaining({ id: "web" }),
+        title: setup.operation.title,
+        hiddenBranch: setup.operation.hiddenBranch,
+      }),
+    ]);
+    expect(setup.capabilities.quickCreateRequests[0]).not.toHaveProperty("group");
+    expect(setup.service.dispatched).toEqual([
+      {
+        type: "sessionGroup.updateMembership",
+        payload: {
+          projectId: "web",
+          groupId: "group_active",
+          expectedVersion: 1,
+          add: [{ sessionId: "ses_wt_web_quick_group", expectedGroupId: null }],
+        },
+      },
+    ]);
+    expect(setup.store.getState().localRows.pendingCreate).toEqual([]);
+    expect(setup.store.getState().dashboardFocus).toEqual({
+      rowId: "session:ses_wt_web_quick_group",
+      cellId: "identity",
+    });
+    await setup.scope.dispose();
+  });
+
+  it("does not launch after the target Group disappears", async () => {
+    const setup = createExistingGroupQuickSetup();
+    const current = setup.store.getState().snapshot;
+    if (current === undefined) throw new Error("snapshot missing");
+    setup.store.setState(
+      replaceSnapshot(setup.store.getState(), {
+        ...current,
+        sessionGroups: current.sessionGroups.filter(
+          (group) => group.id !== setup.operation.groupId,
+        ),
+      }),
+    );
+
+    await setup.run();
+
+    expect(setup.capabilities.quickCreateRequests).toEqual([]);
+    expect(setup.service.dispatched).toEqual([]);
+    expect(setup.store.getState().toasts.at(-1)?.toast).toMatchObject({
+      message: "The Group is no longer available.",
+    });
+    await setup.scope.dispose();
+  });
+
+  it("keeps the ordinary failed row and returns focus to the Group quick cell", async () => {
+    const setup = createExistingGroupQuickSetup();
+    setup.capabilities.quickCreateHandle = () =>
+      dashboardExecution(
+        {
+          kind: "failure",
+          disposition: "retain-failed",
+          error: {
+            tag: "StationLaunchError",
+            code: "QUICK_LAUNCH_FAILED",
+            message: "Quick Session failed.",
+          },
+        },
+        { optimistic: "pending-create" },
+      );
+
+    await setup.run();
+
+    expect(setup.capabilities.quickCreateRequests).toHaveLength(1);
+    expect(setup.service.dispatched).toEqual([]);
+    expect(setup.store.getState().localRows.failedCreate).toEqual([
+      expect.not.objectContaining({ targetGroupId: expect.anything() }),
+    ]);
+    expect(setup.store.getState().dashboardFocus).toEqual({
+      rowId: dashboardRowIds.group("group_active"),
+      cellId: "quickSession",
+    });
+    await setup.scope.dispose();
+  });
+});
+
 function createOperationSetup(
   quickSession: boolean,
   initial: StationSnapshot = createGroupedDashboardSnapshot(),
@@ -424,6 +515,80 @@ function createOperationSetup(
         service,
         capabilities: capabilityRunner,
         operation: groupOperation,
+        clientLabel: "test",
+        scope,
+      }),
+  };
+}
+
+function createExistingGroupQuickSetup() {
+  const initial = createGroupedDashboardSnapshot();
+  const project = initial.projects.find((candidate) => candidate.id === "web");
+  if (project === undefined) throw new Error("project fixture missing");
+  const operation: CreateQuickSessionInGroupOperation = {
+    type: "quickCreateSessionInGroup",
+    localId: "create:web:existing-group",
+    project,
+    groupId: "group_active",
+    title: "station/quick-existing-group",
+    hiddenBranch: "station/quick-existing-group",
+    harness: project.defaults.harness,
+    fallbackCell: "quickSession",
+  };
+  const store = createStore<DashboardState>(() =>
+    createInitialTuiState({
+      initialSnapshot: initial,
+      dashboardFocus: {
+        rowId: dashboardRowIds.group("group_active"),
+        cellId: "quickSession",
+      },
+    }),
+  );
+  const service = new FakeTuiObserverService(initial);
+  const capabilities = createFakeDashboardCapabilities();
+  const scope = createDashboardRuntimeEffectScope();
+  const capabilityRunner = createDashboardCapabilityOperationRunner({
+    getStore: () => store,
+    capabilities,
+    clientLabel: "test",
+    scope,
+  });
+  capabilities.quickCreateHandle = () => {
+    service.setSnapshot(withLaunchedSession(initial, operation.hiddenBranch));
+    return dashboardExecution({ kind: "success" }, { optimistic: "pending-create" });
+  };
+  service.waitForCommandCompletion = async (commandId) => {
+    const current = store.getState().snapshot;
+    if (current !== undefined) {
+      store.setState(
+        replaceSnapshot(store.getState(), {
+          ...current,
+          sessionGroups: current.sessionGroups.map((group) =>
+            group.id === operation.groupId
+              ? {
+                  ...group,
+                  version: group.version + 1,
+                  sessionIds: [...group.sessionIds, "ses_wt_web_quick_group"],
+                }
+              : group,
+          ),
+        }),
+      );
+    }
+    return { status: "succeeded", commandId };
+  };
+  return {
+    store,
+    service,
+    capabilities,
+    scope,
+    operation,
+    run: () =>
+      runQuickSessionInGroupOperation({
+        store,
+        service,
+        capabilities: capabilityRunner,
+        operation,
         clientLabel: "test",
         scope,
       }),

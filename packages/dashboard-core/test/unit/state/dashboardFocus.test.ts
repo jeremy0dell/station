@@ -114,6 +114,31 @@ describe("dashboard cursor", () => {
     expect(moveDashboardCursorHorizontal(state, -1).dashboardFocus?.cellId).toBe("quickSession");
   });
 
+  it("skips suppressed Group cells and reconciles stale action focus to identity", () => {
+    const snapshot = createGroupedDashboardSnapshot();
+    const rowId = dashboardRowIds.group("group_active");
+    let menuOnly = createInitialTuiState({
+      initialSnapshot: snapshot,
+      groupHeaderActionVisibility: { quickSession: false },
+      dashboardFocus: { rowId, cellId: "identity" },
+    });
+
+    menuOnly = moveDashboardCursorHorizontal(menuOnly, 1);
+    expect(menuOnly.dashboardFocus).toEqual({ rowId, cellId: "menu" });
+    expect(moveDashboardCursorHorizontal(menuOnly, -1).dashboardFocus).toEqual({
+      rowId,
+      cellId: "identity",
+    });
+
+    const identityOnly = createInitialTuiState({
+      initialSnapshot: snapshot,
+      groupHeaderActionVisibility: { quickSession: false, menu: false },
+      dashboardFocus: { rowId, cellId: "menu" },
+    });
+    expect(identityOnly.dashboardFocus).toEqual({ rowId, cellId: "identity" });
+    expect(moveDashboardCursorHorizontal(identityOnly, 1)).toBe(identityOnly);
+  });
+
   it("skips inert Group frame rows during vertical traversal", () => {
     const snapshot = createGroupedDashboardSnapshot();
     const state = createInitialTuiState({
