@@ -855,7 +855,7 @@ export class WorktrunkProvider implements WorktreeProvider {
             unsetEnv: gitLocalEnvironmentVariables,
             ...(cwd === undefined ? {} : { cwd }),
             ...(env === undefined ? {} : { env }),
-            signal: mergeAbortSignals(signal, policy.signal),
+            signal: policy.signal === undefined ? signal : AbortSignal.any([signal, policy.signal]),
             maxOutputChars: 512 * 1024,
           },
           this.#runner,
@@ -906,10 +906,6 @@ function dependencyDiagnostics(status: WorktrunkDependencyStatus): Record<string
 
 function doctorWorkBudgetMs(timeoutMs: number): number {
   return Math.max(1, Math.floor(timeoutMs * 0.8));
-}
-
-function mergeAbortSignals(primary: AbortSignal, secondary: AbortSignal | undefined): AbortSignal {
-  return secondary === undefined ? primary : AbortSignal.any([primary, secondary]);
 }
 
 function worktrunkSubcommand(args: readonly string[]): string {
