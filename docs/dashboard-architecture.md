@@ -143,10 +143,13 @@ exact row and cell when possible, moves a collapse-hidden child to its visible
 collapsed ancestor, and otherwise uses deterministic next/previous fallback.
 Project rows use `identity`, `shell`, `quickSession`, and `menu`; the Project
 menu owns Quick Group, New Group, default-agent, and settings transitions.
-Group rows use `identity`, `quickSession`, and `menu`; only identity toggles
-collapse, `[qs]` launches an ordinary Quick Session followed by one expected
-membership update, and `[▾]` remains a focusable no-op until the complete Group
-menu lands. Group Quick Session expands a collapsed Group for its optimistic row.
+Group rows always use `identity` and show `quickSession` and `menu` by default.
+Runtime composition may independently omit either optional action; omitted cells
+are not rendered, focusable, or activatable. This visibility seam has no public
+config key yet. Identity toggles collapse, `[qs]` launches an ordinary Quick
+Session followed by one expected membership update, and `[▾]` remains a
+focusable no-op until the complete Group menu lands. Group Quick Session expands
+a collapsed Group for its optimistic row.
 The row remains Group-framed only as a convergence bridge; canonical placement
 still comes exclusively from `snapshot.sessionGroups`. A focused direct visible member decorates its Group with
 `containsFocusedRow`, leaving color and ring presentation to the renderer.

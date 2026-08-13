@@ -9,6 +9,7 @@ import type {
   DashboardPersistentFilterGroupMatch,
   DashboardRowId,
 } from "@station/dashboard-core/selectors";
+import { Fragment } from "react";
 import stringWidth from "string-width";
 import {
   toOpenTuiColor,
@@ -24,23 +25,29 @@ import { GroupFrameText, type GroupFrameFocus } from "./GroupFrameView.js";
 
 const QUICK_SESSION_LABEL = "[qs]";
 const MENU_LABEL = "[▾]";
-const EXPANDED_FIXED_WIDTH = 1 + 1 + QUICK_SESSION_LABEL.length + 1 + MENU_LABEL.length + 1;
-const COLLAPSED_FIXED_WIDTH = 1 + 1 + QUICK_SESSION_LABEL.length + 1 + MENU_LABEL.length;
+
+type GroupHeaderAction = {
+  cellId: "quickSession" | "menu";
+  label: string;
+};
 
 export function GroupHeaderView({
   columns,
   rowId,
   payload,
+  cells,
   focusedCellId,
   containsFocusedRow,
 }: {
   columns: number;
   rowId: DashboardRowId;
   payload: DashboardGroupHeaderPayload;
+  cells: readonly DashboardCellId[];
   focusedCellId?: DashboardCellId | undefined;
   containsFocusedRow?: true | undefined;
 }) {
   const width = Math.max(1, Math.floor(columns));
+  const actions = groupHeaderActions(cells);
   const focus = {
     focusedHeader: focusedCellId !== undefined,
     containsFocusedRow: containsFocusedRow === true,
@@ -50,6 +57,7 @@ export function GroupHeaderView({
       columns={width}
       rowId={rowId}
       payload={payload}
+      actions={actions}
       focusedCellId={focusedCellId}
     />
   ) : (
@@ -57,6 +65,7 @@ export function GroupHeaderView({
       columns={width}
       rowId={rowId}
       payload={payload}
+      actions={actions}
       focusedCellId={focusedCellId}
       focus={focus}
     />
@@ -67,25 +76,26 @@ function ExpandedGroupHeader({
   columns,
   rowId,
   payload,
+  actions,
   focusedCellId,
   focus,
 }: {
   columns: number;
   rowId: DashboardRowId;
   payload: DashboardGroupHeaderPayload;
+  actions: readonly GroupHeaderAction[];
   focusedCellId?: DashboardCellId | undefined;
   focus: GroupFrameFocus;
 }) {
-  const identity = groupIdentityLayout(payload, Math.max(0, columns - EXPANDED_FIXED_WIDTH));
+  const actionsWidth =
+    groupHeaderActionLabelsWidth(actions) + Math.max(0, actions.length - 1);
+  const identity = groupIdentityLayout(
+    payload,
+    Math.max(0, columns - 1 - 1 - actionsWidth - 1),
+  );
   const fillWidth = Math.max(
     1,
-    columns -
-      1 -
-      identity.width -
-      QUICK_SESSION_LABEL.length -
-      1 -
-      MENU_LABEL.length -
-      1,
+    columns - 1 - identity.width - actionsWidth - 1,
   );
   return (
     <box flexDirection="row" width="100%" height={1} overflow="hidden">
@@ -98,21 +108,18 @@ function ExpandedGroupHeader({
         persistentFilterMatch={payload.persistentFilterMatch}
       />
       <GroupFrameText text={"─".repeat(fillWidth)} focus={focus} />
-      <GroupActionTarget
-        label={QUICK_SESSION_LABEL}
-        rowId={rowId}
-        cellId="quickSession"
-        focused={focusedCellId === "quickSession"}
-        dimmed={payload.persistentFilterMatch?.matched === false}
-      />
-      <GroupFrameText text=" " focus={focus} />
-      <GroupActionTarget
-        label={MENU_LABEL}
-        rowId={rowId}
-        cellId="menu"
-        focused={focusedCellId === "menu"}
-        dimmed={payload.persistentFilterMatch?.matched === false}
-      />
+      {actions.map((action, index) => (
+        <Fragment key={action.cellId}>
+          {index === 0 ? null : <GroupFrameText text=" " focus={focus} />}
+          <GroupActionTarget
+            label={action.label}
+            rowId={rowId}
+            cellId={action.cellId}
+            focused={focusedCellId === action.cellId}
+            dimmed={payload.persistentFilterMatch?.matched === false}
+          />
+        </Fragment>
+      ))}
       <GroupFrameText text="╮" focus={focus} />
     </box>
   );
@@ -122,14 +129,19 @@ function CollapsedGroupHeader({
   columns,
   rowId,
   payload,
+  actions,
   focusedCellId,
 }: {
   columns: number;
   rowId: DashboardRowId;
   payload: DashboardGroupHeaderPayload;
+  actions: readonly GroupHeaderAction[];
   focusedCellId?: DashboardCellId | undefined;
 }) {
-  const identity = groupIdentityLayout(payload, Math.max(0, columns - COLLAPSED_FIXED_WIDTH));
+  const identity = groupIdentityLayout(
+    payload,
+    Math.max(0, columns - 1 - groupHeaderActionLabelsWidth(actions) - actions.length),
+  );
   const dimmed = payload.persistentFilterMatch?.matched === false;
   return (
     <box flexDirection="row" width="100%" height={1} overflow="hidden">
@@ -142,24 +154,35 @@ function CollapsedGroupHeader({
         persistentFilterMatch={payload.persistentFilterMatch}
       />
       <box flexGrow={1} height={1} />
-      <text flexShrink={0}> </text>
-      <GroupActionTarget
-        label={QUICK_SESSION_LABEL}
-        rowId={rowId}
-        cellId="quickSession"
-        focused={focusedCellId === "quickSession"}
-        dimmed={dimmed}
-      />
-      <text flexShrink={0}> </text>
-      <GroupActionTarget
-        label={MENU_LABEL}
-        rowId={rowId}
-        cellId="menu"
-        focused={focusedCellId === "menu"}
-        dimmed={dimmed}
-      />
+      {actions.map((action) => (
+        <Fragment key={action.cellId}>
+          <text flexShrink={0}> </text>
+          <GroupActionTarget
+            label={action.label}
+            rowId={rowId}
+            cellId={action.cellId}
+            focused={focusedCellId === action.cellId}
+            dimmed={dimmed}
+          />
+        </Fragment>
+      ))}
     </box>
   );
+}
+
+function groupHeaderActions(cells: readonly DashboardCellId[]): GroupHeaderAction[] {
+  const actions: GroupHeaderAction[] = [];
+  if (cells.includes("quickSession")) {
+    actions.push({ cellId: "quickSession", label: QUICK_SESSION_LABEL });
+  }
+  if (cells.includes("menu")) {
+    actions.push({ cellId: "menu", label: MENU_LABEL });
+  }
+  return actions;
+}
+
+function groupHeaderActionLabelsWidth(actions: readonly GroupHeaderAction[]): number {
+  return actions.reduce((width, action) => width + stringWidth(action.label), 0);
 }
 
 function GroupIdentityTarget({

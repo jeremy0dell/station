@@ -388,7 +388,7 @@ reattach; pane borders and neighboring panes must remain unlinked.
 - Treat the active UI as the full terminal canvas. Layout code should account for the terminal viewport, not a decorative parent container.
 - Native Station owns its opaque Station canvas. The standalone dashboard uses opaque terminal-default background intent for its unaccented canvas, panels, prompts, Help surface, and toasts; this behavior is provider-neutral and does not use transparency.
 - Keep header, body, footer, overlays, prompts, and toasts from overlapping at narrow or short terminal sizes.
-- Render canonical Groups as contiguous blocks in the projected row order. An expanded Group uses its header as the top edge, inert side rails around direct members, and one inert closing-frame row; an empty expanded Group therefore has a header and closing edge only. A collapsed Group keeps the bounded identity, `[qs]`, and `[▾]` targets but omits its members and closing edge. Identity toggles collapse, `[qs]` expands the Group and launches a Quick Session into it, and `[▾]` remains a focusable no-op until the complete Group menu lands.
+- Render canonical Groups as contiguous blocks in the projected row order. An expanded Group uses its header as the top edge, inert side rails around direct members, and one inert closing-frame row; an empty expanded Group therefore has a header and closing edge only. A collapsed Group keeps the bounded identity and any enabled optional actions but omits its members and closing edge. `[qs]` and `[▾]` are visible by default; runtime composition may independently suppress either action, with no user-facing config key yet. Identity toggles collapse, `[qs]` expands the Group and launches a Quick Session into it, and `[▾]` remains a focusable no-op until the complete Group menu lands.
 - Group rings use the quiet hairline role by default, bright working color while the header is focused, and dim working color while a direct member has focus. Exact target focus uses compact focus; member focus and hover keep the ordinary dashboard fills. Borders, separators, whitespace, and closing rows are inert, and viewport clipping may show any ordinary edge of the projected block without renderer-owned regrouping.
 - The tmux popup runs the same interactive observer-backed dashboard without
   native Station panes. Its close behavior and footer copy must match popup
@@ -501,9 +501,10 @@ Dashboard focus follows rendered order through each Project header, its direct G
 project-root sessions, or the stable Add Session action rendered when that Project is empty. The cursor is one branded
 `{ rowId, cellId }` identity. Entering a header vertically always selects `identity`; Left/Right then
 moves without wrapping through `identity` → `shell` → `quickSession` → `menu` for Projects
-and `identity` → `quickSession` → `menu` for Groups. Group identity toggles collapse; Group quick
-session launches through the same pointer/focused activation contract and the Group menu remains a
-focus-preserving no-op until its workflow slice lands. Up/Down leaves any header segment immediately, and Left/Right on a
+and `identity` → `quickSession` → `menu` for Groups, skipping optional Group actions omitted by
+runtime composition. Omitted actions have no rendered target and are invalid semantic cells. Group
+identity toggles collapse; Group quick session launches through the same pointer/focused activation
+contract and the Group menu remains a focus-preserving no-op until its workflow slice lands. Up/Down leaves any header segment immediately, and Left/Right on a
 session row or empty-project action is inert. Remove, rename, and fork row choosers retain a separate
 visible, selectable canonical-session traversal; slots and Enter resolve through that same chooser
 policy. Next-needs-me uses its own canonical-session policy. `N` continues to open the session flow

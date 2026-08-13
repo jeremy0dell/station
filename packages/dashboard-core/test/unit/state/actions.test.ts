@@ -496,6 +496,24 @@ describe("dashboard state actions", () => {
       ),
     ).toEqual({ state: hiddenGroup });
 
+    const suppressedGroupActions = createInitialTuiState({
+      initialSnapshot: createGroupedDashboardSnapshot(),
+      groupHeaderActionVisibility: { quickSession: false, menu: false },
+    });
+    for (const cellId of ["quickSession", "menu"] as const) {
+      expect(
+        handleTuiAction(
+          suppressedGroupActions,
+          {
+            type: "dashboard.cell.activate",
+            rowId: dashboardRowIds.group("group_active"),
+            cellId,
+          },
+          context,
+        ),
+      ).toEqual({ state: suppressedGroupActions });
+    }
+
     const filtered = { ...state, persistentFilter: { query: "api" } };
     expect(
       handleTuiAction(

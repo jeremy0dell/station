@@ -587,6 +587,24 @@ describe("routeStationMouse", () => {
     await store.dispose();
   });
 
+  it("keeps suppressed Group action targets inert", async () => {
+    const store = makeStore(groupedManyProjectsSnapshot(), {
+      groupHeaderActionVisibility: { quickSession: false, menu: false },
+    });
+    const before = store.state.getState();
+    const rowId = dashboardRowIds.group("group_design_refresh");
+
+    routeStationMouse(
+      { kind: "dashboardCell", rowId, cellId: "quickSession" },
+      LEFT_DOWN,
+      store,
+    );
+    routeStationMouse({ kind: "dashboardCell", rowId, cellId: "menu" }, LEFT_DOWN, store);
+
+    expect(store.state.getState()).toEqual(before);
+    await store.dispose();
+  });
+
   it("keeps project disclosure interactive while a persistent filter is applied", () => {
     const store = makeStore(undefined, { persistentFilter: { query: "station" } });
     const snapshot = store.state.getState().snapshot;
