@@ -211,7 +211,7 @@ describe("diagnostics schemas", () => {
         schemaVersion: 1,
         launcher: "/checkout/station/bin/stn-ingress",
         runtimeKind: "source",
-        version: "0.0.0-pre-alpha.5.7",
+        version: "0.0.0-pre-alpha.5.8",
         buildIdentity: "a".repeat(64),
       },
     };

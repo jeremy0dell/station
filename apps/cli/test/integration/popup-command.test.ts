@@ -15,7 +15,7 @@ import { createTempState, writeConfigToml } from "../../../../tests/support/temp
 const now = "2026-05-20T12:00:00.000Z";
 const buildIdentity = "a".repeat(64);
 const observerBuildVersion = `0.0.0-local+station.${buildIdentity}`;
-const higherObserverBuildVersion = `0.0.0-pre-alpha.5.7+station.${buildIdentity}`;
+const higherObserverBuildVersion = `0.0.0-pre-alpha.5.8+station.${buildIdentity}`;
 const tuiObserverBuildMismatchError = {
   tag: "TuiCommandError",
   code: "TUI_OBSERVER_BUILD_MISMATCH",
