@@ -7,11 +7,7 @@ import type {
 import { normalizeObservedPath, WorktreeObservationSchema } from "@station/contracts";
 import { stableName } from "@station/runtime";
 import { WorktrunkProviderError } from "./errors.js";
-import {
-  applyMetadataToObservation,
-  providerNativeMetadataFromWorktrunkItem,
-  type WorktrunkMetadata,
-} from "./metadata.js";
+import { applyMetadataToObservation, providerNativeMetadataFromWorktrunkItem } from "./metadata.js";
 
 export type ParseWorktrunkListOptions = {
   project: ProviderProjectConfig;
@@ -250,13 +246,9 @@ function safeProviderData(item: WorktrunkListItem): Record<string, unknown> {
   if (isMain !== undefined) providerData.isMain = isMain;
   if (isPrevious !== undefined) providerData.isPrevious = isPrevious;
   if (symbols !== undefined) providerData.symbols = symbols;
-  if (metadata !== undefined) providerData.metadata = safeMetadata(metadata);
+  if (metadata !== undefined) providerData.metadata = metadata;
   if (workingTreeDiff !== undefined) providerData.workingTreeDiff = workingTreeDiff;
   return providerData;
-}
-
-function safeMetadata(metadata: WorktrunkMetadata): WorktrunkMetadata {
-  return metadata;
 }
 
 function safeWorkingTreeDiff(item: WorktrunkListItem): Record<string, number> | undefined {
