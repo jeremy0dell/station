@@ -596,7 +596,7 @@ focus returns before any health or hook probe.
 `prepareExternalLaunch` and `reportExternalExit` are latency-sensitive
 handshakes rather than recorded commands. Their use cases depend on the
 composition-supplied `ManagedTerminalLifecycle`, carry provider-owned target IDs
-opaquely, and request reconcile after relevant lifecycle changes. Returning an
+opaquely, and request the shared coalesced reconcile scheduler after relevant lifecycle changes. Returning an
 attachable managed target or an existing live session precedes launch preflight.
 Target discovery includes Station Host reconstruction, so negotiated handoff and
 orphan-bridge adoption retain their existing PTY instead of entering provider

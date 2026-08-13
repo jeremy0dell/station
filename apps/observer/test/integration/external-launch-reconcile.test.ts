@@ -7,6 +7,8 @@ import type {
   HarnessHooksStatus,
   HarnessLaunchPlan,
   HarnessRunObservation,
+  ProviderProjectConfig,
+  WorktreeObservation,
 } from "@station/contracts";
 import { StationTerminalProvider } from "@station/terminal";
 import {
@@ -131,6 +133,38 @@ describe("observer external-launch reconcile", () => {
         worktreeId: "wt_web_feature",
       },
     });
+
+    fixture.sqlite.close();
+  });
+
+  it("coalesces successful prepare and exit lifecycle hints into one provider scan", async () => {
+    const stateDir = await mkdtemp(join(tmpdir(), "station-observer-ext-"));
+    const fixture = createFixture(providerIngressSpoolDir(stateDir), {
+      hookReconcileDebounceMs: 0,
+    });
+    await fixture.api.reconcile("seed");
+    const scansBeforeLifecycle = fixture.worktree.listCalls;
+
+    const prepared = await fixture.api.prepareExternalLaunch({
+      projectId: "web",
+      worktreeId: "wt_web_feature",
+    });
+    expect(prepared.kind).toBe("prepared");
+    if (prepared.kind !== "prepared") throw new Error("expected prepared launch");
+    await expect(
+      fixture.api.reportExternalExit({
+        terminalTargetId: prepared.terminalTargetId,
+        expectedSessionId: prepared.sessionId,
+        expectedBindingToken: prepared.terminalBindingToken,
+      }),
+    ).resolves.toEqual({
+      acknowledged: true,
+      terminalTargetId: prepared.terminalTargetId,
+    });
+
+    await waitFor(() => fixture.worktree.listCalls > scansBeforeLifecycle);
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    expect(fixture.worktree.listCalls - scansBeforeLifecycle).toBe(1);
 
     fixture.sqlite.close();
   });
@@ -274,6 +308,7 @@ function createFixture(
     harness?: FakeHarnessProvider;
     logger?: StationLogger;
     config?: StationConfig;
+    hookReconcileDebounceMs?: number;
   } = {},
 ) {
   const clock = { now: () => new Date(now) };
@@ -283,21 +318,22 @@ function createFixture(
   const eventBus = createObserverEventBus();
   const station = new StationTerminalProvider({ clock });
   const harness = options.harness ?? new FakeHarnessProvider({ now });
+  const worktree = new CountingWorktreeProvider({
+    now,
+    worktrees: [
+      createFakeWorktree({
+        id: "wt_web_feature",
+        projectId: "web",
+        branch: "feature",
+        path: "/tmp/station/web/feature",
+        remote: { host: "github.com", owner: "example", repo: "web" },
+        headSha: "2222222222222222222222222222222222222222",
+        now,
+      }),
+    ],
+  });
   const providers = new ProviderRegistry({
-    worktree: new FakeWorktreeProvider({
-      now,
-      worktrees: [
-        createFakeWorktree({
-          id: "wt_web_feature",
-          projectId: "web",
-          branch: "feature",
-          path: "/tmp/station/web/feature",
-          remote: { host: "github.com", owner: "example", repo: "web" },
-          headSha: "2222222222222222222222222222222222222222",
-          now,
-        }),
-      ],
-    }),
+    worktree,
     terminal: new FakeTerminalProvider({ now }),
     managedTerminal: station,
     harnesses: [harness],
@@ -315,9 +351,21 @@ function createFixture(
     hookSpoolDir: spoolDir,
     config: fixtureConfig,
     clock,
+    ...(options.hookReconcileDebounceMs === undefined
+      ? {}
+      : { hookReconcileDebounceMs: options.hookReconcileDebounceMs }),
     ...(options.logger === undefined ? {} : { logger: options.logger }),
   });
-  return { api, harness, persistence, sqlite };
+  return { api, harness, persistence, sqlite, worktree };
+}
+
+class CountingWorktreeProvider extends FakeWorktreeProvider {
+  listCalls = 0;
+
+  override async listWorktrees(project: ProviderProjectConfig): Promise<WorktreeObservation[]> {
+    this.listCalls += 1;
+    return super.listWorktrees(project);
+  }
 }
 
 class MissingHooksHarness extends FakeHarnessProvider {

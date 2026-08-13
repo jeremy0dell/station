@@ -14417,13 +14417,6 @@
           "edgeKind": "runtime"
         },
         {
-          "path": "apps/observer/src/stationLogger.ts",
-          "declaration": "StationLogger",
-          "kind": "interface",
-          "role": "DRIVEN PORT",
-          "edgeKind": "type-only"
-        },
-        {
           "path": "packages/contracts/src/observer.ts",
           "declaration": "ObserverApi",
           "kind": "type",
