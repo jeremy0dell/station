@@ -1,6 +1,5 @@
 import type { StationClientStateSource } from "@station/client";
 import type {
-  ProviderId,
   SessionGroupPlacementIntent,
   SessionView,
   StationSnapshot,
@@ -26,19 +25,6 @@ export function findWorktreeRowByBranch(
   return store
     .getState()
     .snapshot?.rows.find((row) => row.projectId === projectId && row.branch === branch);
-}
-
-// The harness a fork inherits: the source's live/recovery harness, else the
-// project default — shared by the optimistic row and the launch.
-export function inheritedForkHarness(
-  store: StationClientStateSource,
-  projectId: string,
-  sourceWorktreeId: string,
-): ProviderId | undefined {
-  const snapshot = store.getState().snapshot;
-  const source = snapshot?.rows.find((row) => row.id === sourceWorktreeId);
-  const project = snapshot?.projects.find((candidate) => candidate.id === projectId);
-  return source?.agent?.harness ?? source?.recovery?.provider ?? project?.defaults.harness;
 }
 
 /**
