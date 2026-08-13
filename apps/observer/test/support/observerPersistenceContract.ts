@@ -846,7 +846,7 @@ export function observerPersistenceContract(
         });
       });
 
-      it("returns only observations attached to current worktree and terminal entities", async () => {
+      it("keeps direct provider observations out of reconcile persistence", async () => {
         await withPersistence(createFixture, async ({ persistence }) => {
           const worktree = createFakeWorktree({ id: "wt_current", projectId: "web", now });
           const terminal = createFakeTerminalTarget({
@@ -892,24 +892,20 @@ export function observerPersistenceContract(
             observedAt: latest,
           });
 
-          const current = await persistence.listCurrentProviderEntityObservations({ now: latest });
-          expect(current.map((observation) => observation.id)).toEqual([
-            "contract_obs_3",
-            "contract_obs_4",
-          ]);
-          expect(current.map((observation) => observation.entityKey)).toEqual([
+          const observations = await persistence.listProviderObservations({
+            includeExpired: true,
+            now: latest,
+          });
+          expect(observations.map((observation) => observation.entityKey)).toEqual([
             "wt_current",
             "term_current",
+            "wt_history_only",
           ]);
-          await expect(
-            persistence.listCurrentProviderEntityObservations({
-              entityKind: "worktree",
-              now: latest,
-            }),
-          ).resolves.toEqual([expect.objectContaining({ id: "contract_obs_3" })]);
-          await expect(
-            persistence.listCurrentProviderEntityObservations({ entityKind: [], now: latest }),
-          ).resolves.toEqual([]);
+          expect(observations.map((observation) => observation.id)).toEqual([
+            "contract_obs_1",
+            "contract_obs_2",
+            "contract_obs_3",
+          ]);
         });
       });
 
@@ -1060,12 +1056,6 @@ export function observerPersistenceContract(
             worktreeId: firstWorktree.id,
             now,
           });
-          const firstRun = createFakeHarnessRun({
-            id: "run_coalesce",
-            projectId: "web",
-            worktreeId: firstWorktree.id,
-            now,
-          });
           const firstHealth = {
             providerId: "fake-harness",
             providerType: "harness" as const,
@@ -1073,25 +1063,65 @@ export function observerPersistenceContract(
             lastCheckedAt: now,
             latencyMs: 5,
           };
-          await persistence.persistReconcileResult({
-            projects: [project],
-            worktrees: [firstWorktree],
-            terminalTargets: [firstTerminal],
-            harnessRuns: [firstRun],
-            providerHealth: { "fake-harness": firstHealth },
+          await persistence.recordProviderObservation({
+            provider: firstWorktree.provider,
+            providerType: "worktree",
+            entityKind: "worktree",
+            entityKey: firstWorktree.id,
+            payload: firstWorktree,
             observedAt: now,
             expiresAt: later,
+            coalesceUnchanged: true,
           });
-          await persistence.persistReconcileResult({
-            projects: [project],
-            worktrees: [{ ...firstWorktree, observedAt: later }],
-            terminalTargets: [{ ...firstTerminal, observedAt: later }],
-            harnessRuns: [{ ...firstRun, observedAt: later }],
-            providerHealth: {
-              "fake-harness": { ...firstHealth, lastCheckedAt: later, latencyMs: 99 },
-            },
+          await persistence.recordProviderObservation({
+            provider: firstTerminal.provider,
+            providerType: "terminal",
+            entityKind: "terminal_target",
+            entityKey: firstTerminal.id,
+            payload: firstTerminal,
+            observedAt: now,
+            expiresAt: later,
+            coalesceUnchanged: true,
+          });
+          await persistence.recordProviderObservation({
+            provider: "fake-harness",
+            providerType: "harness",
+            entityKind: "provider_health",
+            entityKey: "fake-harness",
+            payload: firstHealth,
+            observedAt: now,
+            expiresAt: later,
+            coalesceUnchanged: true,
+          });
+          await persistence.recordProviderObservation({
+            provider: firstWorktree.provider,
+            providerType: "worktree",
+            entityKind: "worktree",
+            entityKey: firstWorktree.id,
+            payload: { ...firstWorktree, observedAt: later },
             observedAt: later,
             expiresAt: latest,
+            coalesceUnchanged: true,
+          });
+          await persistence.recordProviderObservation({
+            provider: firstTerminal.provider,
+            providerType: "terminal",
+            entityKind: "terminal_target",
+            entityKey: firstTerminal.id,
+            payload: { ...firstTerminal, observedAt: later },
+            observedAt: later,
+            expiresAt: latest,
+            coalesceUnchanged: true,
+          });
+          await persistence.recordProviderObservation({
+            provider: "fake-harness",
+            providerType: "harness",
+            entityKind: "provider_health",
+            entityKey: "fake-harness",
+            payload: { ...firstHealth, lastCheckedAt: later, latencyMs: 99 },
+            observedAt: later,
+            expiresAt: latest,
+            coalesceUnchanged: true,
           });
 
           let observations = await persistence.listProviderObservations({
@@ -1102,10 +1132,8 @@ export function observerPersistenceContract(
             "contract_obs_1",
             "contract_obs_2",
             "contract_obs_3",
-            "contract_obs_4",
           ]);
           expect(observations.map((observation) => observation.observedAt)).toEqual([
-            later,
             later,
             later,
             later,
@@ -1114,21 +1142,20 @@ export function observerPersistenceContract(
             latest,
             latest,
             latest,
-            latest,
           ]);
 
-          await persistence.persistReconcileResult({
-            projects: [project],
-            worktrees: [
-              {
-                ...firstWorktree,
-                observedAt: latest,
-                providerData: { nested: { observedAt: latest } },
-              },
-            ],
-            terminalTargets: [{ ...firstTerminal, observedAt: latest }],
-            harnessRuns: [{ ...firstRun, observedAt: latest }],
+          await persistence.recordProviderObservation({
+            provider: firstWorktree.provider,
+            providerType: "worktree",
+            entityKind: "worktree",
+            entityKey: firstWorktree.id,
+            payload: {
+              ...firstWorktree,
+              observedAt: latest,
+              providerData: { nested: { observedAt: latest } },
+            },
             observedAt: latest,
+            coalesceUnchanged: true,
           });
           observations = await persistence.listProviderObservations({
             entityKind: "worktree",
@@ -1137,7 +1164,7 @@ export function observerPersistenceContract(
           });
           expect(observations.map((observation) => observation.id)).toEqual([
             "contract_obs_1",
-            "contract_obs_9",
+            "contract_obs_7",
           ]);
         });
       });
@@ -1189,7 +1216,7 @@ export function observerPersistenceContract(
             (await persistence.listProviderObservations({ includeExpired: true, now })).map(
               (observation) => observation.entityKind,
             ),
-          ).toEqual(["worktree", "terminal_target", "provider_health", "harness_run"]);
+          ).toEqual(["provider_health"]);
           await expect(persistence.listSessions()).resolves.toEqual([
             {
               id: "ses_graph",
@@ -1251,12 +1278,9 @@ export function observerPersistenceContract(
             now,
           });
           expect(observations.map((observation) => observation.entityKind)).toEqual([
-            "worktree",
-            "terminal_target",
-            "harness_run",
             "provider_health",
           ]);
-          expect(observations).toHaveLength(4);
+          expect(observations).toHaveLength(1);
           expect(
             observations.every(
               (observation) => observation.expiresAt === "2026-05-22T12:00:00.000Z",
@@ -1291,6 +1315,7 @@ export function observerPersistenceContract(
             persistence.listProviderObservations({ includeExpired: true, now }),
           ).resolves.toEqual([]);
           await expect(persistence.listSessions()).resolves.toEqual([]);
+          await expect(persistence.listWorktreeDisplayTitles()).resolves.toEqual([]);
 
           await persistence.persistReconcileResult({
             projects: [project],
@@ -1299,9 +1324,9 @@ export function observerPersistenceContract(
             harnessRuns: [],
             observedAt: now,
           });
-          await expect(
-            persistence.listProviderObservations({ includeExpired: true, now }),
-          ).resolves.toEqual([expect.objectContaining({ id: "contract_obs_2" })]);
+          await expect(persistence.listWorktreeDisplayTitles()).resolves.toEqual([
+            expect.objectContaining({ worktreeId: "wt_rollback", title: "main" }),
+          ]);
         });
       });
     });
@@ -3279,13 +3304,12 @@ export function observerPersistenceContract(
             observedAt: now,
           });
           reconcileWorktree.branch = "mutated reconcile input";
-          const reconciledObservation = (
-            await persistence.listProviderObservations({ entityKind: "worktree", now })
-          ).find((observation) => observation.entityKey === reconcileWorktree.id);
-          expect(reconciledObservation?.entityKind).toBe("worktree");
-          if (reconciledObservation?.entityKind === "worktree") {
-            expect(reconciledObservation.payload.branch).toBe("reconcile original");
-          }
+          await expect(persistence.listWorktreeDisplayTitles()).resolves.toContainEqual(
+            expect.objectContaining({
+              worktreeId: "wt_reconcile_detached",
+              title: "reconcile original",
+            }),
+          );
 
           const metadataPayload = changeSummary(4);
           const persistedMetadata = await persistence.upsertWorktreeMetadataCurrent({

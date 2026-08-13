@@ -316,6 +316,9 @@ async function runClaimedObserverRuntime(input: {
   let observerApi: ObserverApi;
   let shutdownExitCode = 0;
   let displaced = false;
+  const stopFromSignal = () => {
+    void api.stop();
+  };
   const stopObserver = async (exitCode = 0) => {
     shutdownExitCode = Math.max(shutdownExitCode, exitCode);
     stopping ??= runShutdownWithBackstop(
@@ -479,6 +482,10 @@ async function runClaimedObserverRuntime(input: {
         void api.stop();
       },
     });
+    process.once("SIGINT", stopFromSignal);
+    process.once("SIGTERM", stopFromSignal);
+    // Current provider context is part of readiness; hook correlation must never see the empty seed.
+    await api.reconcile("observer.startup");
     const startupCommit = startupGate.settleReady(() => claim.release());
     shouldReconcile = startupCommit.status === "ready";
     if (startupCommit.status === "ready" && startupCommit.claimRelease.status === "failed") {
@@ -492,6 +499,8 @@ async function runClaimedObserverRuntime(input: {
         .catch(() => undefined);
     }
   } catch (error) {
+    process.off("SIGINT", stopFromSignal);
+    process.off("SIGTERM", stopFromSignal);
     startupGate.settleFailed();
     shutdownExitCode = 1;
     await logger.error("Observer startup failed; shutting down runtime services.", {
@@ -514,14 +523,6 @@ async function runClaimedObserverRuntime(input: {
     return 1;
   }
   if (shouldReconcile) {
-    const stopFromSignal = () => {
-      void api.stop();
-    };
-    process.once("SIGINT", stopFromSignal);
-    process.once("SIGTERM", stopFromSignal);
-
-    // Startup reconcile now that the ownership watch is live.
-    await api.reconcile("observer.startup");
     duplicateInspectionFlight = inspectObserverDuplicates(socketPath, {
       evidence: duplicateProcessEvidence,
       healthPid: async () => process.pid,

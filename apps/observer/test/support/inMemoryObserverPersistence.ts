@@ -52,7 +52,6 @@ import {
 } from "../../src/persistence/sessionHarnessDerivedState.js";
 import { stripTerminalProviderData } from "../../src/persistence/terminalObservations.js";
 import type {
-  CurrentProviderObservationKind,
   EventRecordOptions,
   HarnessExecutionIngress,
   IngressDedupeKey,
@@ -316,14 +315,6 @@ export function createInMemoryObserverPersistence(
     listProviderObservations: (listOptions = {}) =>
       transaction((draft) =>
         listProviderObservations(draft, {
-          ...listOptions,
-          referenceTime: listOptions.now ?? now(),
-        }),
-      ),
-
-    listCurrentProviderEntityObservations: (listOptions = {}) =>
-      transaction((draft) =>
-        listCurrentProviderEntityObservations(draft, {
           ...listOptions,
           referenceTime: listOptions.now ?? now(),
         }),
@@ -979,69 +970,6 @@ function listProviderObservations(
     .map((observation) => observationAtReferenceTime(observation, options.referenceTime));
 }
 
-function listCurrentProviderEntityObservations(
-  state: InMemoryObserverPersistenceState,
-  options: {
-    entityKind?: CurrentProviderObservationKind | readonly CurrentProviderObservationKind[];
-    includeExpired?: boolean;
-    referenceTime: string;
-  },
-): PersistedProviderObservation[] {
-  const kinds =
-    options.entityKind === undefined
-      ? (["worktree", "terminal_target"] satisfies CurrentProviderObservationKind[])
-      : normalizeKinds(options.entityKind);
-  if (kinds.length === 0) return [];
-
-  const entityKeys = new Map<
-    string,
-    {
-      provider: ProviderId;
-      providerType: ProviderObservationType;
-      entityKind: CurrentProviderObservationKind;
-      entityKey: string;
-    }
-  >();
-  if (kinds.includes("worktree")) {
-    for (const worktree of state.worktrees.values()) {
-      const key = observationEntityKey(worktree.provider, "worktree", "worktree", worktree.id);
-      entityKeys.set(key, {
-        provider: worktree.provider,
-        providerType: "worktree",
-        entityKind: "worktree",
-        entityKey: worktree.id,
-      });
-    }
-  }
-  if (kinds.includes("terminal_target")) {
-    for (const target of state.terminalTargets.values()) {
-      const key = observationEntityKey(target.provider, "terminal", "terminal_target", target.id);
-      entityKeys.set(key, {
-        provider: target.provider,
-        providerType: "terminal",
-        entityKind: "terminal_target",
-        entityKey: target.id,
-      });
-    }
-  }
-
-  const observations: PersistedProviderObservation[] = [];
-  for (const key of entityKeys.values()) {
-    const expiry: { includeExpired?: boolean; referenceTime: string } = {
-      referenceTime: options.referenceTime,
-    };
-    if (options.includeExpired !== undefined) expiry.includeExpired = options.includeExpired;
-    const latest = latestProviderObservation(state, key, expiry);
-    if (latest !== undefined) observations.push(latest);
-  }
-  return observations
-    .sort(
-      (left, right) =>
-        compareAsc(left.observedAt, right.observedAt) || compareAsc(left.id, right.id),
-    )
-    .map((observation) => observationAtReferenceTime(observation, options.referenceTime));
-}
-
 function latestObservationsByEntity(
   observations: readonly PersistedProviderObservation[],
 ): PersistedProviderObservation[] {
@@ -1139,17 +1067,6 @@ function persistReconcileResult(
   const worktrees = input.worktrees.map((value) => WorktreeObservationSchema.parse(value));
   for (const worktree of worktrees) {
     state.worktrees.set(worktree.id, worktree);
-    insertProviderObservation(state, {
-      id: options.idFactory.observationId(),
-      provider: worktree.provider,
-      providerType: "worktree",
-      entityKind: "worktree",
-      entityKey: worktree.id,
-      payload: worktree,
-      observedAt: worktree.observedAt,
-      expiresAt: reconcileObservationExpiresAt(input, worktree.observedAt),
-      coalesceUnchanged: true,
-    });
   }
 
   const terminalTargets = input.terminalTargets.map((value) =>
@@ -1157,33 +1074,11 @@ function persistReconcileResult(
   );
   for (const target of terminalTargets) {
     state.terminalTargets.set(target.id, target);
-    insertProviderObservation(state, {
-      id: options.idFactory.observationId(),
-      provider: target.provider,
-      providerType: "terminal",
-      entityKind: "terminal_target",
-      entityKey: target.id,
-      payload: target,
-      observedAt: target.observedAt,
-      expiresAt: reconcileObservationExpiresAt(input, target.observedAt),
-      coalesceUnchanged: true,
-    });
   }
 
   const harnessRuns = input.harnessRuns.map((value) => HarnessRunObservationSchema.parse(value));
   for (const run of harnessRuns) {
     state.harnessRuns.set(run.id, run);
-    insertProviderObservation(state, {
-      id: options.idFactory.observationId(),
-      provider: run.provider,
-      providerType: "harness",
-      entityKind: "harness_run",
-      entityKey: run.id,
-      payload: run,
-      observedAt: run.observedAt,
-      expiresAt: reconcileObservationExpiresAt(input, run.observedAt),
-      coalesceUnchanged: true,
-    });
   }
 
   if (input.providerHealth !== undefined) {

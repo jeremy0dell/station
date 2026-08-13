@@ -1,12 +1,10 @@
 import type {
-  HarnessRunObservation,
   ProviderId,
   ProviderProjectConfig,
   TerminalTargetObservation,
   WorktreeObservation,
 } from "@station/contracts";
 import {
-  HarnessRunObservationSchema,
   sameObservedPath,
   TerminalTargetObservationSchema,
   WorktreeObservationSchema,
@@ -51,46 +49,11 @@ export function persistReconcileResult(
   }
   for (const worktree of input.worktrees.map((value) => WorktreeObservationSchema.parse(value))) {
     upsertWorktree(database, worktree);
-    insertProviderObservation(database, {
-      id: options.idFactory.observationId(),
-      provider: worktree.provider,
-      providerType: "worktree",
-      entityKind: "worktree",
-      entityKey: worktree.id,
-      payload: worktree,
-      observedAt: worktree.observedAt,
-      expiresAt: expiresAtFor(input, worktree.observedAt),
-      coalesceUnchanged: true,
-    });
   }
   for (const target of input.terminalTargets.map((value) =>
     stripTerminalProviderData(TerminalTargetObservationSchema.parse(value)),
   )) {
     upsertTerminalTarget(database, target);
-    insertProviderObservation(database, {
-      id: options.idFactory.observationId(),
-      provider: target.provider,
-      providerType: "terminal",
-      entityKind: "terminal_target",
-      entityKey: target.id,
-      payload: target,
-      observedAt: target.observedAt,
-      expiresAt: expiresAtFor(input, target.observedAt),
-      coalesceUnchanged: true,
-    });
-  }
-  for (const run of input.harnessRuns.map((value) => HarnessRunObservationSchema.parse(value))) {
-    insertProviderObservation(database, {
-      id: options.idFactory.observationId(),
-      provider: run.provider,
-      providerType: "harness",
-      entityKind: "harness_run",
-      entityKey: run.id,
-      payload: run,
-      observedAt: run.observedAt,
-      expiresAt: expiresAtFor(input, run.observedAt),
-      coalesceUnchanged: true,
-    });
   }
   if (input.providerHealth !== undefined) {
     for (const health of Object.values(input.providerHealth)) {

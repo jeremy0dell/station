@@ -408,17 +408,11 @@ describe("observer reconcile persistence", () => {
     ]);
     const observations = await persistence.listProviderObservations();
     expect(observations.map((item) => item.entityKind)).toEqual([
-      "worktree",
-      "terminal_target",
-      "harness_run",
       "provider_health",
       "provider_health",
       "provider_health",
     ]);
     expect(observations.map((item) => item.expiresAt)).toEqual([
-      "2026-06-03T12:00:00.000Z",
-      "2026-06-03T12:00:00.000Z",
-      "2026-06-03T12:00:00.000Z",
       "2026-06-03T12:00:00.000Z",
       "2026-06-03T12:00:00.000Z",
       "2026-06-03T12:00:00.000Z",
@@ -711,6 +705,14 @@ describe("observer reconcile persistence", () => {
       sqlitePath: dbPath,
     });
     await firstCore.reconcile("initial");
+    await persistence.recordProviderObservation({
+      provider: "fake-worktree",
+      providerType: "worktree",
+      entityKind: "worktree",
+      entityKey: "wt_web_main",
+      payload: createFakeWorktree({ id: "wt_web_main", projectId: "web", now }),
+      observedAt: now,
+    });
 
     const secondCore = createObserverCore({
       config,
@@ -788,18 +790,14 @@ describe("observer reconcile persistence", () => {
       attention: 1,
       unknown: 0,
     });
-    const harnessRuns = await persistence.listProviderObservations({
-      entityKind: "harness_run",
+    const harnessEvents = await persistence.listProviderObservations({
+      entityKind: "harness_event",
       latestOnly: true,
     });
-    expect(harnessRuns).toHaveLength(1);
-    expect(
-      harnessRuns[0]?.entityKind === "harness_run" ? harnessRuns[0].payload : undefined,
-    ).toMatchObject({
-      id: "run_web_main",
-      state: "needs_attention",
-      confidence: "high",
-      observedAt: now,
+    expect(harnessEvents).toHaveLength(1);
+    expect(harnessEvents[0]?.payload).toMatchObject({
+      harnessRunId: "run_web_main",
+      status: { value: "needs_attention", confidence: "high" },
     });
     expect(await persistence.listSessions()).toEqual([
       expect.objectContaining({

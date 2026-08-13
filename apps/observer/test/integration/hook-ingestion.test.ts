@@ -24,7 +24,6 @@ import { FakeDiagnosticEvidenceSource } from "../support/diagnosticEvidenceSourc
 import { createTestObserver } from "../support/testObserver";
 
 const now = "2026-05-20T12:00:00.000Z";
-
 describe("observer provider hook ingress", () => {
   it("persists a provider hook event, publishes it, and schedules reconciliation", async () => {
     const clock = { now: () => new Date(now) };
@@ -265,7 +264,11 @@ describe("observer provider hook ingress", () => {
     });
     const sqlite = openObserverSqlite({ clock });
     const persistence = createSqliteObserverPersistence({ sqlite, clock, idFactory: ids() });
-    const ingress = createProviderHookIngress({ persistence, providers, clock });
+    const ingress = createProviderHookIngress({
+      persistence,
+      providers,
+      clock,
+    });
 
     await expect(
       ingress.ingest({
@@ -481,7 +484,11 @@ describe("observer provider hook ingress", () => {
     });
     const sqlite = openObserverSqlite({ clock });
     const persistence = createSqliteObserverPersistence({ sqlite, clock, idFactory: ids() });
-    const ingress = createProviderHookIngress({ persistence, providers, clock });
+    const ingress = createProviderHookIngress({
+      persistence,
+      providers,
+      clock,
+    });
     const event = {
       schemaVersion: STATION_SCHEMA_VERSION,
       hookId: "hook_context_retry",
@@ -657,32 +664,6 @@ describe("observer provider hook ingress", () => {
       clock,
     });
     const reconciled = nextObserverReconciled(eventBus);
-    const worktree = createFakeWorktree({
-      id: "wt_web_feature_auth",
-      projectId: "web",
-      branch: "feature/auth",
-      path: "/tmp/station/web/feature-auth",
-      now,
-    });
-    const terminal = createFakeTerminalTarget({
-      id: "term_web_feature_auth",
-      projectId: "web",
-      worktreeId: "wt_web_feature_auth",
-      sessionId: "ses_web_feature_auth",
-      harnessRunId: "run_hook_1",
-      now,
-      harnessBinding: {
-        role: "main-agent",
-        harnessProvider: "fake-harness",
-      },
-    });
-    await persistence.persistReconcileResult({
-      projects: providerProjects,
-      worktrees: [worktree],
-      terminalTargets: [terminal],
-      harnessRuns: [],
-      observedAt: now,
-    });
 
     await api.ingestProviderHookEvent({
       schemaVersion: STATION_SCHEMA_VERSION,

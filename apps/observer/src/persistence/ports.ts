@@ -11,7 +11,6 @@ import type {
   StationEvent,
 } from "@station/contracts";
 import type {
-  CurrentProviderObservationKind,
   EventAndObservationIngressDedupeResult,
   EventIngressDedupeResult,
   EventRecordOptions,
@@ -123,11 +122,6 @@ export interface ObservationStore {
     entityKind?: ProviderObservationKind | readonly ProviderObservationKind[];
     includeExpired?: boolean;
     latestOnly?: boolean;
-    now?: string;
-  }): Promise<PersistedProviderObservation[]>;
-  listCurrentProviderEntityObservations(options?: {
-    entityKind?: CurrentProviderObservationKind | readonly CurrentProviderObservationKind[];
-    includeExpired?: boolean;
     now?: string;
   }): Promise<PersistedProviderObservation[]>;
   pruneExpiredProviderObservations(now?: string): Promise<number>;

@@ -121,11 +121,6 @@ export type ProviderObservation = {
 }[keyof ProviderObservationPayloadByKind];
 
 export type ProviderObservationKind = ProviderObservation["entityKind"];
-export type CurrentProviderObservationKind = Extract<
-  ProviderObservationKind,
-  "worktree" | "terminal_target"
->;
-
 export type ProviderObservationType = "worktree" | "terminal" | "harness" | "observer";
 
 export type WorktreeMetadataCurrentKind = "change_summary" | "pull_request" | "checks";

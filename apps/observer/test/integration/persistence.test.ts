@@ -881,27 +881,23 @@ describe("observer persistence", () => {
       harnessRuns: [run],
       observedAt: now,
     });
-    expect(
-      (
-        await persistence.listCurrentProviderEntityObservations({
-          entityKind: ["worktree", "terminal_target"],
-          now,
-        })
-      ).map((item) => `${item.entityKind}:${item.entityKey}`),
-    ).toEqual(["worktree:wt_web_main", "terminal_target:term_web_main"]);
+    expect(sqlite.database.prepare("SELECT id FROM worktrees ORDER BY id").all()).toEqual([
+      { id: "wt_web_main" },
+    ]);
+    expect(sqlite.database.prepare("SELECT id FROM terminal_targets ORDER BY id").all()).toEqual([
+      { id: "term_web_main" },
+    ]);
     sqlite.close();
 
     const reopened = openObserverSqlite({ path: dbPath, clock: { now: () => new Date(later) } });
     const reloaded = createSqliteObserverPersistence({ sqlite: reopened, idFactory: ids() });
 
-    expect(
-      (
-        await reloaded.listCurrentProviderEntityObservations({
-          entityKind: ["worktree", "terminal_target"],
-          now: later,
-        })
-      ).map((item) => `${item.entityKind}:${item.entityKey}`),
-    ).toEqual(["worktree:wt_web_main", "terminal_target:term_web_main"]);
+    expect(reopened.database.prepare("SELECT id FROM worktrees ORDER BY id").all()).toEqual([
+      { id: "wt_web_main" },
+    ]);
+    expect(reopened.database.prepare("SELECT id FROM terminal_targets ORDER BY id").all()).toEqual([
+      { id: "term_web_main" },
+    ]);
     expect(await reloaded.listSessions()).toEqual([
       expect.objectContaining({
         id: "ses_web_main",

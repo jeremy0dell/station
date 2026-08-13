@@ -154,7 +154,6 @@ describe("SQLite-only Observer persistence behavior", () => {
         () => persistence.listCommandErrors("cmd_pure_read"),
         () => persistence.listEvents(),
         () => persistence.listProviderObservations(),
-        () => persistence.listCurrentProviderEntityObservations(),
         () => persistence.listWorktreeMetadataCurrent(),
         () => persistence.listSessions(),
         () => persistence.listSessionGroups(),

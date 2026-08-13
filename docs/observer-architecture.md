@@ -254,6 +254,7 @@ No single layer owns all truth.
 | Observer process identity | `<resolved socketPath>.pid` is the strict, socket-specific `{pid, osStartTime, processToken, version, socketPath}` identity published by the process that successfully bound the socket. The UUID v4 `processToken` identifies one launch and `version` is the Observer selector: display SemVer plus reserved `station.<sha256>` build metadata. They corroborate process and immutable-build identity for later handoff and diagnostics; `lsof` remains primary socket-ownership evidence, and the file alone is never liveness authority. |
 | In-memory persistence adapter | Process-local test state that preserves the eight persistence ports' observable transaction semantics. It is neither restart-durable nor selectable by production runtime composition. |
 | `StationSnapshot` | Current normalized graph held in memory. `rows` is configured worktree inventory; `sessions` is canonical session membership; and required `sessionGroups` carries normalized organizational state for configured projects. Reconcile replaces the base projection; recorded Group mutations refresh only their project through the same serialized writer, and accepted harness reports can project status and readiness between reconciles. It is derived and not a durable replay log. |
+| Current provider context | The exact correlated worktree and terminal arrays from the last committed reconcile generation, held only in Observer core for harness-hook normalization. It commits with the snapshot, is never reconstructed from durable observation history, and strips terminal-private provider data before crossing the provider boundary. |
 | Live event bus | Future-only, process-local delivery. Subscriber queues are currently unbounded, events have no sequence numbers, and reconnects cannot request replay. |
 | Persisted event rows | Historical and diagnostic observer memory. They are not currently the source for live subscription replay. |
 | Hook spool | Durable delivery fallback while ingress cannot reach the observer. A queued record is pending evidence, not current graph truth. Its stable spool identity drives replay completion after primary dedupe, and the filesystem record remains until all derived durable work finishes. |
@@ -308,10 +309,11 @@ Application composition proceeds around that boundary in this order:
    arm lazily on the first metadata refresh, and each refresh replaces the
    complete watched identity set before cache or metadata reads so a later ref
    move cannot be missed.
-6. After singleton readiness commits, startup reconcile establishes the first
-   provider-backed snapshot. Provider-health probes commit into the current
-   snapshot as they land, while harness-version probes fill their cache in the
-   background.
+6. Startup reconcile establishes the first provider-backed snapshot while
+   application operations remain behind the readiness gate. Singleton readiness
+   commits only after the snapshot is available. Provider-health probes commit
+   into the current snapshot as they land, while harness-version probes fill
+   their cache in the background.
 7. Runtime composition starts the same force-false duplicate inspection used by
    explicit reap and caches its promise for logging and Doctor. The inspection
    has no timer, claim, cancellation protocol, or signal authority.
@@ -464,7 +466,10 @@ projection on one non-poisoning writer chain. A Group mutation projects only its
 project, performs no reconcile repair, and never invokes providers. A health commit persists one observation, coherently updates the
 current health projection, and then publishes `provider.healthChanged` without a
 full provider scan. Readiness persistence and application happen after its base
-commit and revalidate the live snapshot.
+commit and revalidate the live snapshot. A successful reconcile commits its exact
+correlated worktree and terminal context in the same synchronous writer step as
+the snapshot; harness-hook normalization reads that generation directly rather
+than querying expiring observation history.
 The scheduler debounces and coalesces reasons while ensuring only one scheduled
 run is active. Startup-compatible requests may join the startup flight; other
 direct requests retain the rule that their scan starts at or after the request.
@@ -506,6 +511,10 @@ Pi and OpenCode transports invoke `stn-ingress`; hooks delivered as raw
 `ProviderHookEvent`s are normalized Observer-side through the selected injected
 provider adapter exactly once. Integrations that submit an already-normalized
 `HarnessEventReport` bypass provider normalization in the Observer.
+Harness adapters receive the exact worktree and terminal context from the last
+committed reconcile generation. The handoff is process-local, and terminal
+`providerData` is stripped before the adapter is called; reconcile does not copy
+those current entities into provider-observation history for routing.
 
 The harness queue acknowledges accepted online work before durable processing
 or reconcile. Queue acceptance is process-memory acceptance, not a durability
@@ -728,8 +737,7 @@ when it changes several tables:
 - `IngressJournal` owns atomic dedupe plus event, atomic report acceptance
   across diagnostic observation/native binding/recovery/readiness, and atomic
   hook-processing completion across observations/native bindings/readiness.
-- `ObservationStore` owns typed provider observations, current-observation
-  queries, and expiry.
+- `ObservationStore` owns typed provider-observation history, queries, and expiry.
 - `ReconcileStore` owns the complete atomic `persistReconcileResult` operation, including
   insert-only initialization of missing canonical worktree titles before session projection sync.
 - `SessionStore` owns explicit session lifecycle, canonical worktree-scoped title authority,
