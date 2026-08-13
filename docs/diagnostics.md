@@ -109,12 +109,9 @@ errors remain available in diagnostic snapshots and debug evidence.
 
 Doctor's `observer-singleton` check reads the cached result of the one-shot
 post-startup duplicate inspection; it does not rescan or mutate product state.
-It is `ok` when no duplicate requires action or a prior graceful cleanup
-succeeded with keeper ownership preserved. It is `warn` for a report-only
-`would-terminate` candidate, a SIGTERM survivor, pending/cancelled inspection,
-claim contention, or process/socket/pidfile/FD evidence refusal. The message
-points first to `stn observer reap`; a surviving verified duplicate also names
-`stn observer reap --force` as the explicit manual escalation.
+It is `ok` when no duplicate requires action. It is `warn` for an eligible
+candidate or process/socket/pidfile/FD evidence refusal. The message points to
+`stn observer reap`; startup inspection never signals or acquires the boot claim.
 
 `stn snapshot --json` asks the observer for the current normalized graph. Use
 `--include-debug` when row-level diagnostic fields are needed for support

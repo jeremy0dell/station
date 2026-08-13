@@ -76,7 +76,7 @@ import {
 } from "./externalLaunch.js";
 import type { HarnessReportProcessorDeps } from "./harnessReportProcessor.js";
 import { processHarnessIngressReport } from "./harnessReportProcessor.js";
-import type { ObserverDuplicateCleanupOutcome } from "./observerDuplicateCleanup.js";
+import type { ObserverReapPlan } from "./observerReap.js";
 import { type ReconcileExecutorDeps, runReconcile } from "./reconcileExecutor.js";
 import { logReconcileSchedulerProfile } from "./reconcileProfiling.js";
 import {
@@ -113,7 +113,7 @@ export type CreateObserverApiOptions = {
   onShutdownStarted?: () => Promise<void> | void;
   onStop?: () => Promise<void> | void;
   hookReconcileDebounceMs?: number;
-  duplicateCleanupStatus?: () => ObserverDuplicateCleanupOutcome | undefined;
+  duplicateInspection?: () => Promise<ObserverReapPlan> | undefined;
 };
 
 /**
@@ -588,8 +588,8 @@ function buildDiagnosticDeps(
     deps.configDiagnostics = options.configDiagnostics;
   }
   if (options.providers !== undefined) deps.providers = options.providers;
-  if (options.duplicateCleanupStatus !== undefined) {
-    deps.duplicateCleanupStatus = options.duplicateCleanupStatus;
+  if (options.duplicateInspection !== undefined) {
+    deps.duplicateInspection = options.duplicateInspection;
   }
   return deps;
 }

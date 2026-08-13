@@ -10,7 +10,7 @@ Use [Naming](naming.md) for provider hook, provider hook ingress, harness event 
 Use [Observer Architecture](observer-architecture.md) for the Observer's application model,
 dependency direction, runtime flows, state lifetimes, and active deviations. Use
 [Observer singleton lifecycle](observer-singleton.md) for process ownership, handoff,
-displacement, duplicate cleanup, and explicit reap. Use
+displacement, duplicate inspection, and explicit reap. Use
 [Architecture Documentation](architecture-documentation.md) for the controlled JSDoc language
 applied to Observer architectural seams.
 

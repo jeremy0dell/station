@@ -34,7 +34,7 @@ import type {
 } from "../persistence/index.js";
 import type { ProviderRegistry } from "../providers/registry.js";
 import type { ObserverCore } from "../reconcile/core.js";
-import type { ObserverDuplicateCleanupOutcome } from "../runtime/observerDuplicateCleanup.js";
+import type { ObserverReapPlan } from "../runtime/observerReap.js";
 import { buildSessionEnvironmentCheck } from "./environmentCheck.js";
 import type { DiagnosticEvidenceSource } from "./evidenceSource.js";
 
@@ -50,7 +50,7 @@ export type ObserverDiagnosticsDeps = {
   providers?: ProviderRegistry;
   clock?: RuntimeClock;
   providerDoctorTimeoutMs?: number;
-  duplicateCleanupStatus?: () => ObserverDuplicateCleanupOutcome | undefined;
+  duplicateInspection?: () => Promise<ObserverReapPlan> | undefined;
 };
 
 type DiagnosticCollectionResult = {
@@ -189,6 +189,7 @@ export async function runDoctor(
     ...providerHealth,
   };
   const providerChecks = await collectProviderDoctorChecks(deps, options);
+  const duplicatePlan = await deps.duplicateInspection?.();
   const sqliteCheck: DoctorCheck = {
     name: "sqlite",
     status: doctorSnapshot.observerHealth.sqlite?.status === "healthy" ? "ok" : "warn",
@@ -210,7 +211,7 @@ export async function runDoctor(
       message: `${doctorSnapshot.configSummary.projectCount} project(s) configured.`,
     },
     sqliteCheck,
-    buildObserverSingletonCheck(deps.duplicateCleanupStatus?.()),
+    buildObserverSingletonCheck(duplicatePlan),
     {
       name: "providers",
       status: providerStatus(providers) === "healthy" ? "ok" : "warn",
@@ -262,48 +263,27 @@ export async function runDoctor(
   return DoctorReportSchema.parse(report);
 }
 
-function buildObserverSingletonCheck(
-  cleanup: ObserverDuplicateCleanupOutcome | undefined,
-): DoctorCheck {
-  if (cleanup === undefined || cleanup.status === "clear") {
+function buildObserverSingletonCheck(plan: ObserverReapPlan | undefined): DoctorCheck {
+  if (plan === undefined || (plan.duplicates === 0 && plan.refusals.length === 0)) {
     return {
       name: "observer-singleton",
       status: "ok",
       message: "No duplicate Observer process requires operator action.",
     };
   }
-  if (
-    cleanup.status === "terminated" &&
-    cleanup.keeperPreservation?.preserved === true &&
-    cleanup.claimReleased !== false
-  ) {
-    return {
-      name: "observer-singleton",
-      status: "ok",
-      message: `Gracefully cleaned up ${cleanup.terminatedPids.length} verified duplicate Observer process(es).`,
-    };
-  }
-  if (cleanup.status === "survived") {
+  if (plan.targets.some((target) => target.automaticEligibility.eligible)) {
     return {
       name: "observer-singleton",
       status: "warn",
       message:
-        "A verified duplicate survived SIGTERM; inspect it with `stn observer reap`, then use `stn observer reap --force` only after confirmation.",
-    };
-  }
-  if (cleanup.status === "would-terminate") {
-    return {
-      name: "observer-singleton",
-      status: "warn",
-      message:
-        "A verified duplicate Observer was reported but not signaled; inspect it with `stn observer reap`.",
+        "A duplicate Observer candidate was reported but not signaled; inspect it with `stn observer reap`.",
     };
   }
   return {
     name: "observer-singleton",
     status: "warn",
     message:
-      "Singleton cleanup could not prove a safe action; inspect refusal evidence with `stn observer reap`.",
+      "Singleton inspection could not prove a safe action; inspect refusal evidence with `stn observer reap`.",
   };
 }
 

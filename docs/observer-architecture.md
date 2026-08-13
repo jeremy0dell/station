@@ -200,7 +200,7 @@ ownership even where current ownership is still a deviation.
 | Observer incumbent lifecycle | Driven | `ObserverIncumbentLifecycle` | local protocol client adapter | Handoff may read health and request controlled stop without importing transport mechanics into policy or orchestration. |
 | Observer process evidence | Driven | `ObserverProcessEvidenceSource` | local `lsof`/`ps`/`/proc`/pidfile/signal adapter | `lsof` is primary socket ownership; health, strict pidfile, executable provenance, exact argv, per-launch token, build selector, and second-resolution OS start token must corroborate before replacement or signaling. |
 | Duplicate-process evidence | Driven | `ObserverDuplicateProcessEvidenceSource` | local process-evidence adapter | Extends handoff evidence with bound-socket identity and strict per-process Unix-socket-FD counts; unavailable evidence always refuses. |
-| Duplicate-cleanup exclusion | Driven | `ObserverDuplicateCleanupExclusion` | boot-claim cleanup exclusion adapter | Automatic final revalidation and explicit force both run under a fail-fast boot claim and release it after every callback outcome. |
+| Observer-reap exclusion | Driven | `ObserverReapExclusion` | boot-claim reap exclusion adapter | Explicit force runs under a fail-fast boot claim and releases it after every callback outcome; read-only inspection never acquires the claim. |
 
 `packages/contracts` owns shared Station schemas, application values, and
 provider port contracts. Observer-private ports remain in `apps/observer`.
@@ -312,10 +312,9 @@ Application composition proceeds around that boundary in this order:
    provider-backed snapshot. Provider-health probes commit into the current
    snapshot as they land, while harness-version probes fill their cache in the
    background.
-7. Runtime composition then starts one single-flight duplicate-cleanup use case,
-   records its cached result for logging and Doctor, and owns its cancellation
-   and join during shutdown. Production selects report-only mode; terminate mode
-   remains the same application use case and sends SIGTERM only.
+7. Runtime composition starts the same force-false duplicate inspection used by
+   explicit reap and caches its promise for logging and Doctor. The inspection
+   has no timer, claim, cancellation protocol, or signal authority.
 
 Station Host is outside the Observer singleton lifecycle and continues to own
 live PTYs independently.
@@ -1001,7 +1000,7 @@ active register.
 - [Harness authoring](harness-authoring.md): provider integration requirements.
 - [Debugging](debugging.md): runtime evidence and diagnostic workflow.
 - [Observer singleton lifecycle](observer-singleton.md): authoritative process
-  ownership, handoff, displacement, duplicate cleanup, and explicit reap rules.
+  ownership, handoff, displacement, duplicate inspection, and explicit reap rules.
 
 For ordinary work, current code, tests, runtime evidence, and these living docs
 supersede historical planning material. When they disagree, verify the live path

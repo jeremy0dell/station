@@ -2952,10 +2952,10 @@
           "bindings": ["ObserverCore"]
         },
         {
-          "specifier": "../runtime/observerDuplicateCleanup.js",
-          "resolvedPath": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
+          "specifier": "../runtime/observerReap.js",
+          "resolvedPath": "apps/observer/src/runtime/observerReap.ts",
           "edgeKind": "type-only",
-          "bindings": ["ObserverDuplicateCleanupOutcome"]
+          "bindings": ["ObserverReapPlan"]
         },
         {
           "specifier": "@station/config",
@@ -3906,7 +3906,7 @@
           "name": "runObserverMain",
           "kind": "function",
           "role": "COMPOSITION ROOT",
-          "purpose": "Claims boot ownership, branches on four-state socket evidence, selects Observer-private infrastructure from resolved runtime identity, and owns bind, pidfile, one-shot duplicate cleanup, ownership-aware shutdown, and exact build health publication."
+          "purpose": "Claims boot ownership, branches on four-state socket evidence, selects Observer-private infrastructure from resolved runtime identity, and owns bind, pidfile, read-only duplicate inspection, ownership-aware shutdown, and exact build health publication."
         },
         {
           "name": "RunObserverMainDeps",
@@ -3937,7 +3937,7 @@
           "name": "acquireObserverBootClaim",
           "kind": "function",
           "role": "ADAPTER",
-          "purpose": "Excludes cross-runtime startup and duplicate-cleanup mutation through a SQLite transaction whose ownership comes from the OS lock, never the persistent claim file."
+          "purpose": "Excludes cross-runtime startup and explicit reap mutation through a SQLite transaction whose ownership comes from the OS lock, never the persistent claim file."
         },
         {
           "name": "AppliedObserverSqliteMigration",
@@ -4144,12 +4144,6 @@
           "purpose": null
         },
         {
-          "name": "createObserverBootClaimCleanupExclusion",
-          "kind": "function",
-          "role": "ADAPTER",
-          "purpose": "Gives duplicate cleanup a fail-fast startup exclusion and releases the claim after every callback outcome, including failures."
-        },
-        {
           "name": "createObserverCore",
           "kind": "function",
           "role": null,
@@ -4160,12 +4154,6 @@
           "kind": "type",
           "role": null,
           "purpose": null
-        },
-        {
-          "name": "createObserverDuplicateCleanup",
-          "kind": "function",
-          "role": "USE CASE",
-          "purpose": "Performs one single-flight duplicate inspection, quarantine, claim-held final revalidation, and optional SIGTERM-only cleanup with shutdown cancellation."
         },
         {
           "name": "createObserverEventBus",
@@ -4202,6 +4190,12 @@
           "kind": "function",
           "role": "USE CASE",
           "purpose": "Creates explicit operator reap with centralized selection and revalidation; only this manual force path may escalate from SIGTERM to SIGKILL."
+        },
+        {
+          "name": "createObserverReapExclusion",
+          "kind": "function",
+          "role": "ADAPTER",
+          "purpose": "Gives explicit reap a fail-fast startup exclusion and releases the claim after every callback outcome, including failures."
         },
         {
           "name": "createObserverReconcileHandler",
@@ -4462,6 +4456,12 @@
           "purpose": "Atomically records ingress acceptance, observations, native execution binding, recovery, and readiness under dedupe keys."
         },
         {
+          "name": "inspectObserverDuplicates",
+          "kind": "function",
+          "role": "USE CASE",
+          "purpose": "Collects one read-only duplicate-process plan for startup diagnostics and explicit reap without creating signal authority."
+        },
+        {
           "name": "latestSchemaVersion",
           "kind": "const",
           "role": null,
@@ -4540,49 +4540,7 @@
           "purpose": null
         },
         {
-          "name": "ObserverDuplicateCleanup",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "ObserverDuplicateCleanupExclusion",
-          "kind": "interface",
-          "role": "DRIVEN PORT",
-          "purpose": "Authorizes final duplicate cleanup only while startup mutation is excluded, refusing immediately when another boot owns the claim."
-        },
-        {
-          "name": "ObserverDuplicateCleanupExclusionResult",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "ObserverDuplicateCleanupOutcome",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "ObserverDuplicateCleanupPlan",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "ObserverDuplicateCleanupPlanInput",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "ObserverDuplicateCleanupRefusal",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "ObserverDuplicateCleanupTarget",
+          "name": "ObserverDuplicateInspectionDeps",
           "kind": "type",
           "role": null,
           "purpose": null
@@ -4721,6 +4679,18 @@
         },
         {
           "name": "ObserverReapAutomaticEligibility",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ObserverReapExclusion",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "purpose": "Authorizes explicit reap only while startup mutation is excluded, refusing immediately when another boot owns the claim."
+        },
+        {
+          "name": "ObserverReapExclusionResult",
           "kind": "type",
           "role": null,
           "purpose": null
@@ -5215,7 +5185,7 @@
           "name": "runObserverMain",
           "kind": "function",
           "role": "COMPOSITION ROOT",
-          "purpose": "Claims boot ownership, branches on four-state socket evidence, selects Observer-private infrastructure from resolved runtime identity, and owns bind, pidfile, one-shot duplicate cleanup, ownership-aware shutdown, and exact build health publication."
+          "purpose": "Claims boot ownership, branches on four-state socket evidence, selects Observer-private infrastructure from resolved runtime identity, and owns bind, pidfile, read-only duplicate inspection, ownership-aware shutdown, and exact build health publication."
         },
         {
           "name": "RunObserverMainDeps",
@@ -5240,12 +5210,6 @@
           "kind": "function",
           "role": null,
           "purpose": null
-        },
-        {
-          "name": "selectObserverDuplicateCleanupPlan",
-          "kind": "function",
-          "role": "POLICY",
-          "purpose": "Selects duplicate Observers only when the keeper's corroborated identity is exact and each candidate has no Unix-domain socket descriptors."
         },
         {
           "name": "selectObserverReapPlan",
@@ -5634,12 +5598,6 @@
           "bindings": ["*"]
         },
         {
-          "specifier": "./runtime/observerDuplicateCleanup.js",
-          "resolvedPath": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
-          "edgeKind": "runtime",
-          "bindings": ["*"]
-        },
-        {
           "specifier": "./runtime/observerHandoff.js",
           "resolvedPath": "apps/observer/src/runtime/observerHandoff.ts",
           "edgeKind": "runtime",
@@ -5648,6 +5606,12 @@
         {
           "specifier": "./runtime/observerProcessEvidence.js",
           "resolvedPath": "apps/observer/src/runtime/observerProcessEvidence.ts",
+          "edgeKind": "runtime",
+          "bindings": ["*"]
+        },
+        {
+          "specifier": "./runtime/observerReap.js",
+          "resolvedPath": "apps/observer/src/runtime/observerReap.ts",
           "edgeKind": "runtime",
           "bindings": ["*"]
         },
@@ -10301,10 +10265,10 @@
           "bindings": ["HarnessReportProcessorDeps"]
         },
         {
-          "specifier": "./observerDuplicateCleanup.js",
-          "resolvedPath": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
+          "specifier": "./observerReap.js",
+          "resolvedPath": "apps/observer/src/runtime/observerReap.ts",
           "edgeKind": "type-only",
-          "bindings": ["ObserverDuplicateCleanupOutcome"]
+          "bindings": ["ObserverReapPlan"]
         },
         {
           "specifier": "./reconcileExecutor.js",
@@ -10751,7 +10715,7 @@
           "name": "runObserverMain",
           "kind": "function",
           "role": "COMPOSITION ROOT",
-          "purpose": "Claims boot ownership, branches on four-state socket evidence, selects Observer-private infrastructure from resolved runtime identity, and owns bind, pidfile, one-shot duplicate cleanup, ownership-aware shutdown, and exact build health publication."
+          "purpose": "Claims boot ownership, branches on four-state socket evidence, selects Observer-private infrastructure from resolved runtime identity, and owns bind, pidfile, read-only duplicate inspection, ownership-aware shutdown, and exact build health publication."
         },
         {
           "name": "RunObserverMainDeps",
@@ -10861,29 +10825,13 @@
           "specifier": "./observerBootClaim.js",
           "resolvedPath": "apps/observer/src/runtime/observerBootClaim.ts",
           "edgeKind": "runtime",
-          "bindings": ["acquireObserverBootClaim", "createObserverBootClaimCleanupExclusion"]
+          "bindings": ["acquireObserverBootClaim"]
         },
         {
           "specifier": "./observerBootClaim.js",
           "resolvedPath": "apps/observer/src/runtime/observerBootClaim.ts",
           "edgeKind": "type-only",
           "bindings": ["AcquiredObserverBootClaim", "ObserverBootClaimReleaseResult"]
-        },
-        {
-          "specifier": "./observerDuplicateCleanup.js",
-          "resolvedPath": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
-          "edgeKind": "runtime",
-          "bindings": ["createObserverDuplicateCleanup"]
-        },
-        {
-          "specifier": "./observerDuplicateCleanup.js",
-          "resolvedPath": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
-          "edgeKind": "type-only",
-          "bindings": [
-            "ObserverDuplicateCleanup",
-            "ObserverDuplicateCleanupOutcome",
-            "ObserverDuplicateProcessEvidenceSource"
-          ]
         },
         {
           "specifier": "./observerHandoff.js",
@@ -10912,6 +10860,18 @@
           "resolvedPath": "apps/observer/src/runtime/observerProcessEvidence.ts",
           "edgeKind": "runtime",
           "bindings": ["createLocalObserverProcessEvidence"]
+        },
+        {
+          "specifier": "./observerReap.js",
+          "resolvedPath": "apps/observer/src/runtime/observerReap.ts",
+          "edgeKind": "runtime",
+          "bindings": ["inspectObserverDuplicates"]
+        },
+        {
+          "specifier": "./observerReap.js",
+          "resolvedPath": "apps/observer/src/runtime/observerReap.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ObserverDuplicateProcessEvidenceSource", "ObserverReapPlan"]
         },
         {
           "specifier": "./projectConfigWriter.js",
@@ -11046,13 +11006,13 @@
           "name": "acquireObserverBootClaim",
           "kind": "function",
           "role": "ADAPTER",
-          "purpose": "Excludes cross-runtime startup and duplicate-cleanup mutation through a SQLite transaction whose ownership comes from the OS lock, never the persistent claim file."
+          "purpose": "Excludes cross-runtime startup and explicit reap mutation through a SQLite transaction whose ownership comes from the OS lock, never the persistent claim file."
         },
         {
-          "name": "createObserverBootClaimCleanupExclusion",
+          "name": "createObserverReapExclusion",
           "kind": "function",
           "role": "ADAPTER",
-          "purpose": "Gives duplicate cleanup a fail-fast startup exclusion and releases the claim after every callback outcome, including failures."
+          "purpose": "Gives explicit reap a fail-fast startup exclusion and releases the claim after every callback outcome, including failures."
         },
         {
           "name": "ObserverBootClaimError",
@@ -11081,10 +11041,10 @@
       ],
       "imports": [
         {
-          "specifier": "./observerDuplicateCleanup.js",
-          "resolvedPath": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
+          "specifier": "./observerReap.js",
+          "resolvedPath": "apps/observer/src/runtime/observerReap.ts",
           "edgeKind": "type-only",
-          "bindings": ["ObserverDuplicateCleanupExclusion"]
+          "bindings": ["ObserverReapExclusion"]
         },
         {
           "specifier": "../sqlite/driver.js",
@@ -11133,163 +11093,6 @@
           "resolvedPath": "packages/runtime/src/index.ts",
           "edgeKind": "runtime",
           "bindings": ["safeErrorFromUnknown"]
-        }
-      ]
-    },
-    {
-      "path": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
-      "exports": [
-        {
-          "name": "createObserverDuplicateCleanup",
-          "kind": "function",
-          "role": "USE CASE",
-          "purpose": "Performs one single-flight duplicate inspection, quarantine, claim-held final revalidation, and optional SIGTERM-only cleanup with shutdown cancellation."
-        },
-        {
-          "name": "createObserverReap",
-          "kind": "function",
-          "role": "USE CASE",
-          "purpose": "Creates explicit operator reap with centralized selection and revalidation; only this manual force path may escalate from SIGTERM to SIGKILL."
-        },
-        {
-          "name": "ObserverDuplicateCleanup",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "ObserverDuplicateCleanupExclusion",
-          "kind": "interface",
-          "role": "DRIVEN PORT",
-          "purpose": "Authorizes final duplicate cleanup only while startup mutation is excluded, refusing immediately when another boot owns the claim."
-        },
-        {
-          "name": "ObserverDuplicateCleanupExclusionResult",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "ObserverDuplicateCleanupOutcome",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "ObserverDuplicateCleanupPlan",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "ObserverDuplicateCleanupPlanInput",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "ObserverDuplicateCleanupRefusal",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "ObserverDuplicateCleanupTarget",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "ObserverDuplicateProcessEvidenceSource",
-          "kind": "interface",
-          "role": "DRIVEN PORT",
-          "purpose": "Supplies strict process, socket-identity, pidfile, signal, and per-process Unix-socket descriptor evidence for duplicate Observer decisions."
-        },
-        {
-          "name": "ObserverKeeperPreservation",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "ObserverReap",
-          "kind": "type",
-          "role": "DRIVING PORT",
-          "purpose": "Accepts a local operator's dry-run or explicit-force duplicate reap request."
-        },
-        {
-          "name": "ObserverReapAutomaticEligibility",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "ObserverReapOutcome",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "ObserverReapPlan",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "ObserverReapTarget",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "RunObserverReapDeps",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "selectObserverDuplicateCleanupPlan",
-          "kind": "function",
-          "role": "POLICY",
-          "purpose": "Selects duplicate Observers only when the keeper's corroborated identity is exact and each candidate has no Unix-domain socket descriptors."
-        },
-        {
-          "name": "selectObserverReapPlan",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        }
-      ],
-      "imports": [
-        {
-          "specifier": "./observerHandoff.js",
-          "resolvedPath": "apps/observer/src/runtime/observerHandoff.ts",
-          "edgeKind": "runtime",
-          "bindings": ["observerProcessEntriesMatch"]
-        },
-        {
-          "specifier": "./observerHandoff.js",
-          "resolvedPath": "apps/observer/src/runtime/observerHandoff.ts",
-          "edgeKind": "type-only",
-          "bindings": ["ObserverProcessEntry", "ObserverProcessEvidenceSource"]
-        },
-        {
-          "specifier": "./observerPidfile.js",
-          "resolvedPath": "apps/observer/src/runtime/observerPidfile.ts",
-          "edgeKind": "runtime",
-          "bindings": ["observerProcessIdentitiesMatch"]
-        },
-        {
-          "specifier": "./socketOwnership.js",
-          "resolvedPath": "apps/observer/src/runtime/socketOwnership.ts",
-          "edgeKind": "type-only",
-          "bindings": ["SocketIdentity"]
-        },
-        {
-          "specifier": "@station/contracts",
-          "resolvedPath": "packages/contracts/src/index.ts",
-          "edgeKind": "type-only",
-          "bindings": ["ObserverProcessIdentity"]
         }
       ]
     },
@@ -11544,12 +11347,6 @@
       ],
       "imports": [
         {
-          "specifier": "./observerDuplicateCleanup.js",
-          "resolvedPath": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
-          "edgeKind": "type-only",
-          "bindings": ["ObserverDuplicateProcessEvidenceSource"]
-        },
-        {
           "specifier": "./observerHandoff.js",
           "resolvedPath": "apps/observer/src/runtime/observerHandoff.ts",
           "edgeKind": "runtime",
@@ -11566,6 +11363,12 @@
           "resolvedPath": "apps/observer/src/runtime/observerPidfile.ts",
           "edgeKind": "runtime",
           "bindings": ["readObserverProcessIdentity"]
+        },
+        {
+          "specifier": "./observerReap.js",
+          "resolvedPath": "apps/observer/src/runtime/observerReap.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ObserverDuplicateProcessEvidenceSource"]
         },
         {
           "specifier": "./server.js",
@@ -11614,6 +11417,127 @@
           "resolvedPath": "zod",
           "edgeKind": "runtime",
           "bindings": ["z"]
+        }
+      ]
+    },
+    {
+      "path": "apps/observer/src/runtime/observerReap.ts",
+      "exports": [
+        {
+          "name": "createObserverReap",
+          "kind": "function",
+          "role": "USE CASE",
+          "purpose": "Creates explicit operator reap with centralized selection and revalidation; only this manual force path may escalate from SIGTERM to SIGKILL."
+        },
+        {
+          "name": "inspectObserverDuplicates",
+          "kind": "function",
+          "role": "USE CASE",
+          "purpose": "Collects one read-only duplicate-process plan for startup diagnostics and explicit reap without creating signal authority."
+        },
+        {
+          "name": "ObserverDuplicateInspectionDeps",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ObserverDuplicateProcessEvidenceSource",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "purpose": "Supplies strict process, socket-identity, pidfile, signal, and per-process Unix-socket descriptor evidence for duplicate Observer decisions."
+        },
+        {
+          "name": "ObserverKeeperPreservation",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ObserverReap",
+          "kind": "type",
+          "role": "DRIVING PORT",
+          "purpose": "Accepts a local operator's dry-run or explicit-force duplicate reap request."
+        },
+        {
+          "name": "ObserverReapAutomaticEligibility",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ObserverReapExclusion",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "purpose": "Authorizes explicit reap only while startup mutation is excluded, refusing immediately when another boot owns the claim."
+        },
+        {
+          "name": "ObserverReapExclusionResult",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ObserverReapOutcome",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ObserverReapPlan",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ObserverReapTarget",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "RunObserverReapDeps",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "selectObserverReapPlan",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "./observerHandoff.js",
+          "resolvedPath": "apps/observer/src/runtime/observerHandoff.ts",
+          "edgeKind": "runtime",
+          "bindings": ["observerProcessEntriesMatch"]
+        },
+        {
+          "specifier": "./observerHandoff.js",
+          "resolvedPath": "apps/observer/src/runtime/observerHandoff.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ObserverProcessEntry", "ObserverProcessEvidenceSource"]
+        },
+        {
+          "specifier": "./observerPidfile.js",
+          "resolvedPath": "apps/observer/src/runtime/observerPidfile.ts",
+          "edgeKind": "runtime",
+          "bindings": ["observerProcessIdentitiesMatch"]
+        },
+        {
+          "specifier": "./socketOwnership.js",
+          "resolvedPath": "apps/observer/src/runtime/socketOwnership.ts",
+          "edgeKind": "type-only",
+          "bindings": ["SocketIdentity"]
+        },
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ObserverProcessIdentity"]
         }
       ]
     },
@@ -13287,31 +13211,10 @@
       "dependencies": [
         {
           "path": "apps/observer/src/runtime/observerBootClaim.ts",
-          "declaration": "createObserverBootClaimCleanupExclusion",
+          "declaration": "createObserverReapExclusion",
           "kind": "function",
           "role": "ADAPTER",
           "edgeKind": "runtime"
-        },
-        {
-          "path": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
-          "declaration": "createObserverReap",
-          "kind": "function",
-          "role": "USE CASE",
-          "edgeKind": "runtime"
-        },
-        {
-          "path": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
-          "declaration": "ObserverDuplicateProcessEvidenceSource",
-          "kind": "interface",
-          "role": "DRIVEN PORT",
-          "edgeKind": "type-only"
-        },
-        {
-          "path": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
-          "declaration": "ObserverReap",
-          "kind": "type",
-          "role": "DRIVING PORT",
-          "edgeKind": "type-only"
         },
         {
           "path": "apps/observer/src/runtime/observerProcessEvidence.ts",
@@ -13319,6 +13222,27 @@
           "kind": "function",
           "role": "ADAPTER",
           "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/observer/src/runtime/observerReap.ts",
+          "declaration": "createObserverReap",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/observer/src/runtime/observerReap.ts",
+          "declaration": "ObserverDuplicateProcessEvidenceSource",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        },
+        {
+          "path": "apps/observer/src/runtime/observerReap.ts",
+          "declaration": "ObserverReap",
+          "kind": "type",
+          "role": "DRIVING PORT",
+          "edgeKind": "type-only"
         },
         {
           "path": "packages/protocol/src/client.ts",
@@ -13337,7 +13261,7 @@
       "purpose": "Translates a CLI reap request into the Observer-owned driving port.",
       "dependencies": [
         {
-          "path": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
+          "path": "apps/observer/src/runtime/observerReap.ts",
           "declaration": "ObserverReap",
           "kind": "type",
           "role": "DRIVING PORT",
@@ -14372,7 +14296,7 @@
       "declaration": "runObserverMain",
       "kind": "function",
       "role": "COMPOSITION ROOT",
-      "purpose": "Claims boot ownership, branches on four-state socket evidence, selects Observer-private infrastructure from resolved runtime identity, and owns bind, pidfile, one-shot duplicate cleanup, ownership-aware shutdown, and exact build health publication.",
+      "purpose": "Claims boot ownership, branches on four-state socket evidence, selects Observer-private infrastructure from resolved runtime identity, and owns bind, pidfile, read-only duplicate inspection, ownership-aware shutdown, and exact build health publication.",
       "dependencies": [
         {
           "path": "apps/observer/src/commands/harnessLaunchPreflight.ts",
@@ -14424,20 +14348,6 @@
           "edgeKind": "runtime"
         },
         {
-          "path": "apps/observer/src/runtime/observerBootClaim.ts",
-          "declaration": "createObserverBootClaimCleanupExclusion",
-          "kind": "function",
-          "role": "ADAPTER",
-          "edgeKind": "runtime"
-        },
-        {
-          "path": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
-          "declaration": "createObserverDuplicateCleanup",
-          "kind": "function",
-          "role": "USE CASE",
-          "edgeKind": "runtime"
-        },
-        {
           "path": "apps/observer/src/runtime/observerHandoff.ts",
           "declaration": "negotiateObserverIncumbent",
           "kind": "function",
@@ -14449,6 +14359,13 @@
           "declaration": "createLocalObserverProcessEvidence",
           "kind": "function",
           "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/observer/src/runtime/observerReap.ts",
+          "declaration": "inspectObserverDuplicates",
+          "kind": "function",
+          "role": "USE CASE",
           "edgeKind": "runtime"
         },
         {
@@ -14500,15 +14417,15 @@
       "declaration": "acquireObserverBootClaim",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Excludes cross-runtime startup and duplicate-cleanup mutation through a SQLite transaction whose ownership comes from the OS lock, never the persistent claim file.",
+      "purpose": "Excludes cross-runtime startup and explicit reap mutation through a SQLite transaction whose ownership comes from the OS lock, never the persistent claim file.",
       "dependencies": []
     },
     {
       "path": "apps/observer/src/runtime/observerBootClaim.ts",
-      "declaration": "createObserverBootClaimCleanupExclusion",
+      "declaration": "createObserverReapExclusion",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Gives duplicate cleanup a fail-fast startup exclusion and releases the claim after every callback outcome, including failures.",
+      "purpose": "Gives explicit reap a fail-fast startup exclusion and releases the claim after every callback outcome, including failures.",
       "dependencies": [
         {
           "path": "apps/observer/src/runtime/observerBootClaim.ts",
@@ -14518,106 +14435,13 @@
           "edgeKind": "runtime"
         },
         {
-          "path": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
-          "declaration": "ObserverDuplicateCleanupExclusion",
+          "path": "apps/observer/src/runtime/observerReap.ts",
+          "declaration": "ObserverReapExclusion",
           "kind": "interface",
           "role": "DRIVEN PORT",
           "edgeKind": "type-only"
         }
       ]
-    },
-    {
-      "path": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
-      "declaration": "createObserverDuplicateCleanup",
-      "kind": "function",
-      "role": "USE CASE",
-      "purpose": "Performs one single-flight duplicate inspection, quarantine, claim-held final revalidation, and optional SIGTERM-only cleanup with shutdown cancellation.",
-      "dependencies": [
-        {
-          "path": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
-          "declaration": "ObserverDuplicateCleanupExclusion",
-          "kind": "interface",
-          "role": "DRIVEN PORT",
-          "edgeKind": "type-only"
-        },
-        {
-          "path": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
-          "declaration": "ObserverDuplicateProcessEvidenceSource",
-          "kind": "interface",
-          "role": "DRIVEN PORT",
-          "edgeKind": "type-only"
-        },
-        {
-          "path": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
-          "declaration": "selectObserverDuplicateCleanupPlan",
-          "kind": "function",
-          "role": "POLICY",
-          "edgeKind": "runtime"
-        }
-      ]
-    },
-    {
-      "path": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
-      "declaration": "createObserverReap",
-      "kind": "function",
-      "role": "USE CASE",
-      "purpose": "Creates explicit operator reap with centralized selection and revalidation; only this manual force path may escalate from SIGTERM to SIGKILL.",
-      "dependencies": [
-        {
-          "path": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
-          "declaration": "ObserverDuplicateProcessEvidenceSource",
-          "kind": "interface",
-          "role": "DRIVEN PORT",
-          "edgeKind": "type-only"
-        },
-        {
-          "path": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
-          "declaration": "selectObserverDuplicateCleanupPlan",
-          "kind": "function",
-          "role": "POLICY",
-          "edgeKind": "runtime"
-        }
-      ]
-    },
-    {
-      "path": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
-      "declaration": "ObserverDuplicateCleanupExclusion",
-      "kind": "interface",
-      "role": "DRIVEN PORT",
-      "purpose": "Authorizes final duplicate cleanup only while startup mutation is excluded, refusing immediately when another boot owns the claim.",
-      "dependencies": []
-    },
-    {
-      "path": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
-      "declaration": "ObserverDuplicateProcessEvidenceSource",
-      "kind": "interface",
-      "role": "DRIVEN PORT",
-      "purpose": "Supplies strict process, socket-identity, pidfile, signal, and per-process Unix-socket descriptor evidence for duplicate Observer decisions.",
-      "dependencies": [
-        {
-          "path": "apps/observer/src/runtime/observerHandoff.ts",
-          "declaration": "ObserverProcessEvidenceSource",
-          "kind": "interface",
-          "role": "DRIVEN PORT",
-          "edgeKind": "type-only"
-        }
-      ]
-    },
-    {
-      "path": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
-      "declaration": "ObserverReap",
-      "kind": "type",
-      "role": "DRIVING PORT",
-      "purpose": "Accepts a local operator's dry-run or explicit-force duplicate reap request.",
-      "dependencies": []
-    },
-    {
-      "path": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
-      "declaration": "selectObserverDuplicateCleanupPlan",
-      "kind": "function",
-      "role": "POLICY",
-      "purpose": "Selects duplicate Observers only when the keeper's corroborated identity is exact and each candidate has no Unix-domain socket descriptors.",
-      "dependencies": []
     },
     {
       "path": "apps/observer/src/runtime/observerHandoff.ts",
@@ -14681,13 +14505,84 @@
       "purpose": "Translates exact argv, executable provenance, launch nonce, OS start time, strict socket-holder and complete file-descriptor evidence, pidfiles, socket identities, and signals into conservative ownership evidence.",
       "dependencies": [
         {
-          "path": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
+          "path": "apps/observer/src/runtime/observerReap.ts",
           "declaration": "ObserverDuplicateProcessEvidenceSource",
           "kind": "interface",
           "role": "DRIVEN PORT",
           "edgeKind": "type-only"
         }
       ]
+    },
+    {
+      "path": "apps/observer/src/runtime/observerReap.ts",
+      "declaration": "createObserverReap",
+      "kind": "function",
+      "role": "USE CASE",
+      "purpose": "Creates explicit operator reap with centralized selection and revalidation; only this manual force path may escalate from SIGTERM to SIGKILL.",
+      "dependencies": [
+        {
+          "path": "apps/observer/src/runtime/observerReap.ts",
+          "declaration": "inspectObserverDuplicates",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/observer/src/runtime/observerReap.ts",
+          "declaration": "ObserverDuplicateProcessEvidenceSource",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
+      "path": "apps/observer/src/runtime/observerReap.ts",
+      "declaration": "inspectObserverDuplicates",
+      "kind": "function",
+      "role": "USE CASE",
+      "purpose": "Collects one read-only duplicate-process plan for startup diagnostics and explicit reap without creating signal authority.",
+      "dependencies": [
+        {
+          "path": "apps/observer/src/runtime/observerReap.ts",
+          "declaration": "ObserverDuplicateProcessEvidenceSource",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
+      "path": "apps/observer/src/runtime/observerReap.ts",
+      "declaration": "ObserverDuplicateProcessEvidenceSource",
+      "kind": "interface",
+      "role": "DRIVEN PORT",
+      "purpose": "Supplies strict process, socket-identity, pidfile, signal, and per-process Unix-socket descriptor evidence for duplicate Observer decisions.",
+      "dependencies": [
+        {
+          "path": "apps/observer/src/runtime/observerHandoff.ts",
+          "declaration": "ObserverProcessEvidenceSource",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
+      "path": "apps/observer/src/runtime/observerReap.ts",
+      "declaration": "ObserverReap",
+      "kind": "type",
+      "role": "DRIVING PORT",
+      "purpose": "Accepts a local operator's dry-run or explicit-force duplicate reap request.",
+      "dependencies": []
+    },
+    {
+      "path": "apps/observer/src/runtime/observerReap.ts",
+      "declaration": "ObserverReapExclusion",
+      "kind": "interface",
+      "role": "DRIVEN PORT",
+      "purpose": "Authorizes explicit reap only while startup mutation is excluded, refusing immediately when another boot owns the claim.",
+      "dependencies": []
     },
     {
       "path": "apps/observer/src/runtime/projectConfigWriter.ts",

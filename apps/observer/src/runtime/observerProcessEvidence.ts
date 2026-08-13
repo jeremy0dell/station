@@ -4,7 +4,6 @@ import { basename, isAbsolute } from "node:path";
 import { resolveObserverSocketForProcessArgs } from "@station/config";
 import { ObserverProcessTokenSchema } from "@station/contracts";
 import { z } from "zod";
-import type { ObserverDuplicateProcessEvidenceSource } from "./observerDuplicateCleanup.js";
 import {
   type ObserverProcessEntry,
   type ObserverProcessSignalResult,
@@ -12,6 +11,7 @@ import {
   observerProcessEntriesMatch,
 } from "./observerHandoff.js";
 import { readObserverProcessIdentity } from "./observerPidfile.js";
+import type { ObserverDuplicateProcessEvidenceSource } from "./observerReap.js";
 import { readObserverSocketHolderPids } from "./server.js";
 import { readSocketIdentity } from "./socketOwnership.js";
 

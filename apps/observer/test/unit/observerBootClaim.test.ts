@@ -15,7 +15,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createObserverStartupGate, runObserverMain } from "../../src/runtime/main.js";
 import {
   acquireObserverBootClaim,
-  createObserverBootClaimCleanupExclusion,
+  createObserverReapExclusion,
   observerBootClaimPath,
 } from "../../src/runtime/observerBootClaim.js";
 import type { SqlDatabase } from "../../src/sqlite/driver.js";
@@ -281,7 +281,7 @@ describe("observer boot claim", () => {
   it("runs cleanup under a non-waiting claim and releases after callback success", async () => {
     const root = await tempRoot();
     const socketPath = join(root, "run", "observer.sock");
-    const exclusion = createObserverBootClaimCleanupExclusion({ socketPath });
+    const exclusion = createObserverReapExclusion({ socketPath });
     const callback = vi.fn(async () => "done");
 
     await expect(exclusion.runExclusive(callback)).resolves.toEqual({
@@ -303,7 +303,7 @@ describe("observer boot claim", () => {
     if (owner.status !== "acquired") return;
     const callback = vi.fn(async () => "must not run");
     try {
-      const exclusion = createObserverBootClaimCleanupExclusion({ socketPath });
+      const exclusion = createObserverReapExclusion({ socketPath });
       await expect(exclusion.runExclusive(callback)).resolves.toEqual({ status: "busy" });
       expect(callback).not.toHaveBeenCalled();
     } finally {
@@ -314,7 +314,7 @@ describe("observer boot claim", () => {
   it("releases cleanup exclusion after a callback failure", async () => {
     const root = await tempRoot();
     const socketPath = join(root, "run", "observer.sock");
-    const exclusion = createObserverBootClaimCleanupExclusion({ socketPath });
+    const exclusion = createObserverReapExclusion({ socketPath });
 
     await expect(
       exclusion.runExclusive(async () => {

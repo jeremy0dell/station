@@ -28,11 +28,11 @@ import {
   runObserverMain,
   startObserverServer,
 } from "../../src/internal";
-import type { ObserverDuplicateProcessEvidenceSource } from "../../src/runtime/observerDuplicateCleanup.js";
 import {
   createObserverProcessIdentity,
   readObserverProcessIdentity,
 } from "../../src/runtime/observerPidfile.js";
+import type { ObserverDuplicateProcessEvidenceSource } from "../../src/runtime/observerReap.js";
 import { readSocketIdentity } from "../../src/runtime/socketOwnership.js";
 import { FakeDiagnosticEvidenceSource } from "../support/diagnosticEvidenceSources.js";
 import { createUnexpectedProjectConfigWriter } from "../support/projectConfigWriter.js";
@@ -202,7 +202,7 @@ describe("observer protocol server", () => {
     }
   });
 
-  it("keeps production duplicate inspection report-only without blocking health", async () => {
+  it("reports startup duplicate evidence without signaling or blocking health", async () => {
     const { dir, socketPath } = await createTempSocketPath();
     const stateDir = join(dir, "report-only-state");
     const processToken = ["a47ac10b", "58cc", "4372", "a567", "0e02b2c3d479"].join("-");

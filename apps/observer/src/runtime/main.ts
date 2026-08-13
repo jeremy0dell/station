@@ -50,15 +50,8 @@ import { createObserverLogger } from "./logging.js";
 import {
   type AcquiredObserverBootClaim,
   acquireObserverBootClaim,
-  createObserverBootClaimCleanupExclusion,
   type ObserverBootClaimReleaseResult,
 } from "./observerBootClaim.js";
-import {
-  createObserverDuplicateCleanup,
-  type ObserverDuplicateCleanup,
-  type ObserverDuplicateCleanupOutcome,
-  type ObserverDuplicateProcessEvidenceSource,
-} from "./observerDuplicateCleanup.js";
 import {
   negotiateObserverIncumbent,
   type ObserverIncumbentLifecycle,
@@ -70,6 +63,11 @@ import {
   removeObserverProcessIdentity,
 } from "./observerPidfile.js";
 import { createLocalObserverProcessEvidence } from "./observerProcessEvidence.js";
+import {
+  inspectObserverDuplicates,
+  type ObserverDuplicateProcessEvidenceSource,
+  type ObserverReapPlan,
+} from "./observerReap.js";
 import { createProjectConfigWriter } from "./projectConfigWriter.js";
 import {
   createObserverLifecycleClient,
@@ -120,7 +118,7 @@ export type RunObserverMainDeps = {
  *
  * Claims boot ownership, branches on four-state socket evidence, selects
  * Observer-private infrastructure from resolved runtime identity, and owns bind,
- * pidfile, one-shot duplicate cleanup, ownership-aware shutdown, and exact build
+ * pidfile, read-only duplicate inspection, ownership-aware shutdown, and exact build
  * health publication.
  */
 export async function runObserverMain(
@@ -307,8 +305,7 @@ async function runClaimedObserverRuntime(input: {
   let ownsSocket = false;
   let boundSocketIdentity: SocketIdentity | undefined;
   let processIdentity: ObserverProcessIdentity | undefined;
-  let duplicateCleanup: ObserverDuplicateCleanup | undefined;
-  let duplicateCleanupFlight: Promise<ObserverDuplicateCleanupOutcome> | undefined;
+  let duplicateInspectionFlight: Promise<ObserverReapPlan> | undefined;
   const startupGate = createObserverStartupGate();
   let stopResolve: () => void = () => undefined;
   const stopped = new Promise<void>((resolve) => {
@@ -423,11 +420,7 @@ async function runClaimedObserverRuntime(input: {
     configDiagnostics: loadedConfig.diagnostics,
     clock: systemClock,
     logger,
-    duplicateCleanupStatus: () => duplicateCleanup?.status(),
-    onShutdownStarted: async () => {
-      duplicateCleanup?.abort();
-      await duplicateCleanupFlight?.catch(() => undefined);
-    },
+    duplicateInspection: () => duplicateInspectionFlight,
   });
   // Register health publication before boot probes so every completed result reaches the snapshot.
   void providers.healthCache.refreshAll();
@@ -469,18 +462,6 @@ async function runClaimedObserverRuntime(input: {
       socketPath,
     });
     await publishObserverProcessIdentity(processIdentity);
-    duplicateCleanup = createObserverDuplicateCleanup(
-      {
-        socketPath,
-        keeperIdentity: processIdentity,
-        boundSocketIdentity: boundIdentity,
-        mode: "report",
-      },
-      {
-        evidence: duplicateProcessEvidence,
-        exclusion: createObserverBootClaimCleanupExclusion({ socketPath }),
-      },
-    );
     // Seed the watcher with the just-bound socket identity so it never adopts a
     // rival's socket as its baseline (the failure that let displaced observers linger).
     ownership = watchSocketOwnership({
@@ -541,14 +522,24 @@ async function runClaimedObserverRuntime(input: {
 
     // Startup reconcile now that the ownership watch is live.
     await api.reconcile("observer.startup");
-    if (duplicateCleanup !== undefined) {
-      duplicateCleanupFlight = duplicateCleanup.run();
-      void duplicateCleanupFlight
-        .then((cleanupOutcome) => logDuplicateCleanupOutcome(logger, cleanupOutcome))
-        .catch((error) =>
-          logger.warn("Observer duplicate cleanup failed unexpectedly.", { socketPath, error }),
-        );
-    }
+    duplicateInspectionFlight = inspectObserverDuplicates(socketPath, {
+      evidence: duplicateProcessEvidence,
+      healthPid: async () => process.pid,
+    }).catch((error) => {
+      void logger.warn("Observer duplicate inspection failed unexpectedly.", {
+        socketPath,
+        error,
+      });
+      return {
+        socketPath,
+        duplicates: 0,
+        targets: [],
+        refusals: [{ pid: process.pid, reason: "Strict process evidence was unavailable." }],
+      };
+    });
+    void duplicateInspectionFlight
+      .then((plan) => logDuplicateInspection(logger, plan))
+      .catch(() => undefined);
   }
 
   await stopped;
@@ -562,32 +553,24 @@ async function runClaimedObserverRuntime(input: {
   return 0;
 }
 
-async function logDuplicateCleanupOutcome(
+async function logDuplicateInspection(
   logger: StationLogger,
-  cleanup: ObserverDuplicateCleanupOutcome,
+  plan: ObserverReapPlan,
 ): Promise<void> {
+  const eligiblePids = plan.targets
+    .filter((target) => target.automaticEligibility.eligible)
+    .map((target) => target.pid);
   const attributes: Record<string, unknown> = {
-    socketPath: cleanup.socketPath,
-    outcome: cleanup.status,
-    eligiblePids: cleanup.eligiblePids,
-    terminatedPids: cleanup.terminatedPids,
-    exitedPids: cleanup.exitedPids,
-    survivedPids: cleanup.survivedPids,
-    refusalCodes: cleanup.refusalCodes,
+    socketPath: plan.socketPath,
+    duplicates: plan.duplicates,
+    eligiblePids,
+    refusals: plan.refusals,
   };
-  if (cleanup.keeperPreservation !== undefined) {
-    attributes.keeperPreserved = cleanup.keeperPreservation.preserved;
-  }
-  if (cleanup.claimReleased !== undefined) attributes.claimReleased = cleanup.claimReleased;
-  if (
-    cleanup.status === "clear" ||
-    cleanup.status === "cancelled" ||
-    (cleanup.status === "terminated" && cleanup.claimReleased !== false)
-  ) {
-    await logger.info(`Observer duplicate cleanup ${cleanup.status}.`, attributes);
+  if (plan.duplicates === 0 && plan.refusals.length === 0) {
+    await logger.info("Observer duplicate inspection clear.", attributes);
     return;
   }
-  await logger.warn(`Observer duplicate cleanup ${cleanup.status}.`, attributes);
+  await logger.warn("Observer duplicate inspection requires operator review.", attributes);
 }
 
 function createConfiguredEventHooks(
