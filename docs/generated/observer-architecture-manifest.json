@@ -3017,11 +3017,7 @@
           "specifier": "./evidenceSource.js",
           "resolvedPath": "apps/observer/src/diagnostics/evidenceSource.ts",
           "edgeKind": "type-only",
-          "bindings": [
-            "DiagnosticEvidenceSource",
-            "DiagnosticLocalStateEvidence",
-            "DiagnosticRecentLogEvidence"
-          ]
+          "bindings": ["DiagnosticEvidenceSource"]
         },
         {
           "specifier": "../persistence/index.js",

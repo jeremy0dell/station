@@ -36,11 +36,7 @@ import type { ProviderRegistry } from "../providers/registry.js";
 import type { ObserverCore } from "../reconcile/core.js";
 import type { ObserverDuplicateCleanupOutcome } from "../runtime/observerDuplicateCleanup.js";
 import { buildSessionEnvironmentCheck } from "./environmentCheck.js";
-import type {
-  DiagnosticEvidenceSource,
-  DiagnosticLocalStateEvidence,
-  DiagnosticRecentLogEvidence,
-} from "./evidenceSource.js";
+import type { DiagnosticEvidenceSource } from "./evidenceSource.js";
 
 export type ObserverDiagnosticsDeps = {
   config: StationConfig;
@@ -59,8 +55,8 @@ export type ObserverDiagnosticsDeps = {
 
 type DiagnosticCollectionResult = {
   snapshot: DiagnosticSnapshot;
-  localStateEvidence: DiagnosticLocalStateEvidence;
-  recentLogEvidence?: DiagnosticRecentLogEvidence;
+  diagnosticsDir: string;
+  recentLogPaths?: string[];
 };
 
 /**
@@ -161,10 +157,10 @@ async function collectDiagnosticResult(
 
   const result: DiagnosticCollectionResult = {
     snapshot: DiagnosticSnapshotSchema.parse(diagnosticSnapshot),
-    localStateEvidence,
+    diagnosticsDir: localStateEvidence.diagnosticsDir,
   };
   if (recentLogEvidence !== undefined) {
-    result.recentLogEvidence = recentLogEvidence;
+    result.recentLogPaths = recentLogEvidence.paths;
   }
   return result;
 }
@@ -186,7 +182,7 @@ export async function runDoctor(
     maxLogRecords: 50,
   });
   const doctorSnapshot = requireDoctorSnapshotState(collection.snapshot);
-  const recentLogEvidence = requireDoctorRecentLogs(collection);
+  const recentLogPaths = requireDoctorRecentLogPaths(collection);
   const providerHealth = await collectProviderHealth(deps);
   const providers = {
     ...doctorSnapshot.providerHealth,
@@ -245,7 +241,7 @@ export async function runDoctor(
     providers,
     snapshot: doctorSnapshot.snapshot,
     logs: {
-      paths: recentLogEvidence.paths,
+      paths: recentLogPaths,
       recent: doctorSnapshot.logs,
     },
     localState: doctorSnapshot.localState,
@@ -253,7 +249,7 @@ export async function runDoctor(
     recentErrors,
     debugBundle: {
       available: true,
-      diagnosticsDir: collection.localStateEvidence.diagnosticsDir,
+      diagnosticsDir: collection.diagnosticsDir,
     },
   };
   if (doctorSnapshot.observerHealth.sqlite !== undefined) {
@@ -458,11 +454,11 @@ function requireDoctorSnapshotState(snapshot: DiagnosticSnapshot): DoctorDiagnos
   return snapshot as DoctorDiagnosticSnapshot;
 }
 
-function requireDoctorRecentLogs(result: DiagnosticCollectionResult): DiagnosticRecentLogEvidence {
-  if (result.recentLogEvidence === undefined) {
+function requireDoctorRecentLogPaths(result: DiagnosticCollectionResult): string[] {
+  if (result.recentLogPaths === undefined) {
     throw missingDoctorStateError("recentLogs");
   }
-  return result.recentLogEvidence;
+  return result.recentLogPaths;
 }
 
 function missingDoctorStateError(field: string): SafeError {
