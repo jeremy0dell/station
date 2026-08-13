@@ -328,11 +328,11 @@ again at the installer's locked commit boundary, it binds the physical `stn`
 hash, device, and inode plus the device and inode of both launchers and the
 receipt. A missing or changed path is refused before mutation.
 
-The current public `v0.0.0-pre-alpha.5.2` installer is immutable and predates
-this receipt, so existing installations continue to work but are not enrolled
-for automatic updates. After a later release includes this contract, run that
-exact-tag installer manually once to create the receipt. A malformed,
-nonregular, or symlinked receipt is never replaced automatically.
+The immutable public `v0.0.0-pre-alpha.5.2` installer already creates this
+receipt, and `.5.2` installations are enrolled in the `installer-binary`
+channel. It is the first incumbent capable of attempting the next self-update;
+no later manual receipt bootstrap is required. A malformed, nonregular, or
+symlinked receipt is never replaced automatically.
 
 ### Concurrent and interrupted installs
 

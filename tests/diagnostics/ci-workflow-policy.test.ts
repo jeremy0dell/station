@@ -316,6 +316,7 @@ describe("hosted CI policy", () => {
     const aggregate = workflowJob(standardCi, "standard-ci");
 
     expect(binary).toContain("id: binary_smoke_run");
+    expect(binary).toContain("timeout-minutes: 15");
     expect(binary).toContain(
       `STATION_BINARY_SMOKE_EVIDENCE_DIR: ${actionsExpression("runner.temp")}/station-binary-smoke-evidence`,
     );
@@ -338,6 +339,36 @@ describe("hosted CI policy", () => {
       binary.indexOf("uses: actions/upload-artifact@"),
     );
     expect(aggregate).toContain(`BINARY_SMOKE: ${actionsExpression("needs.binary_smoke.result")}`);
+  });
+
+  it("binds staged and public update acceptance to one exact predecessor", () => {
+    const release = read(".github/workflows/release.yml");
+    const promotion = read(".github/workflows/promote-release.yml");
+    const installDraft = workflowJob(release, "install-draft");
+    const promote = workflowJob(promotion, "promote");
+    const publicInstall = workflowJob(promotion, "verify-public-install");
+
+    expect(release).toContain(
+      `previous_tag: ${actionsExpression("steps.release.outputs.previous_tag")}`,
+    );
+    expect(release).toContain("gh api --paginate --slurp");
+    expect(release).toContain("release.immutable !== true");
+    expect(release).toContain("Date.parse(right.published_at)");
+    expect(release).toContain("previousTag: $previousTag");
+    expect(release).toContain(".previousTag == $previousTag");
+    expect(installDraft).toContain("Fetch staged update assets and exact predecessor");
+    expect(installDraft).toContain('--target-release-dir "$RUNNER_TEMP/update-release"');
+    expect(installDraft).toContain("--scenarios full");
+
+    expect(promote).toContain('previous_tag="$(jq -er .previousTag candidate/manifest.json)"');
+    expect(promote).toContain(".previousTag == $previousTag");
+    expect(promote).toContain(".immutable");
+    expect(publicInstall).toContain("Install exact public predecessor");
+    expect(publicInstall).toContain('--public-target-tag "$TAG"');
+    expect(publicInstall).toContain("--scenarios no-host");
+    expect(promotion).toContain(
+      "Confirm macOS update preserved output and bare native Station plus the tmux popup opened without mismatch",
+    );
   });
 
   it("keeps binary handoff stress manual, capped, and failure-artifact-only", () => {
@@ -395,6 +426,12 @@ describe("hosted CI policy", () => {
       "STATION_SETUP_E2E_ALL_SHELLS=true",
     );
     expect(packageJson.scripts["test:ci:binary"]).toContain("pnpm smoke:binary");
+    expect(packageJson.scripts["smoke:update"]).toBe(
+      "node scripts/test-runners/run-update-smoke.mjs",
+    );
+    expect(packageJson.scripts["test:ci:binary"]).toContain(
+      "pnpm smoke:update -- --incumbent-binary station/dist/bin/stn",
+    );
     expect(packageJson.scripts["test:ci:station"]).toContain("test:pty:bun");
     expect(lefthook).toContain("run: node scripts/run-without-git-locals.mjs pnpm test:pre-push");
     expect(testing).toContain("The pre-push hook is intentionally lint-only");

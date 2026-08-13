@@ -671,34 +671,43 @@ describe("CLI observer process lifecycle", () => {
     expect(stops).toBe(0);
   });
 
-  it("routes a higher-build restart through child handoff without a parent stop", async () => {
+  it("cooperatively stops an older build before spawning a higher-build restart", async () => {
     const fixture = await createTempState();
     let version = "1.0.0";
     let pid = 1234;
+    let running = true;
     let stops = 0;
     let spawns = 0;
+    const lifecycle: string[] = [];
     const result = await restartObserver(
       { config: fixture.config, timeoutMs: 500 },
       {
         buildVersion: exactTwoBuildVersion,
         spawnObserver: async () => {
           spawns += 1;
+          lifecycle.push("spawn");
+          running = true;
           version = exactTwoBuildVersion;
           pid = 5678;
           return { pid, unref: () => undefined };
         },
         clientFactory: () =>
           ({
-            health: async () => ({
-              schemaVersion: "0.11.0",
-              status: "healthy",
-              pid,
-              startedAt: now,
-              version,
-              socketPath: fixture.socketPath,
-            }),
+            health: async () => {
+              if (!running) throw new Error("stopped");
+              return {
+                schemaVersion: "0.11.0",
+                status: "healthy",
+                pid,
+                startedAt: now,
+                version,
+                socketPath: fixture.socketPath,
+              };
+            },
             stop: async () => {
               stops += 1;
+              lifecycle.push("stop");
+              running = false;
               return { schemaVersion: "0.11.0", stopped: true, at: now };
             },
           }) as never,
@@ -709,12 +718,14 @@ describe("CLI observer process lifecycle", () => {
       status: "running",
       health: { pid: 5678, version: exactTwoBuildVersion },
     });
-    expect(stops).toBe(0);
+    expect(stops).toBe(1);
     expect(spawns).toBe(1);
+    expect(lifecycle).toEqual(["stop", "spawn"]);
   });
 
   it("annotates a failed restart replacement with the incumbent build identity", async () => {
     const fixture = await createTempState();
+    let running = true;
     let stops = 0;
     let spawns = 0;
 
@@ -728,23 +739,27 @@ describe("CLI observer process lifecycle", () => {
         },
         clientFactory: () =>
           ({
-            health: async () => ({
-              schemaVersion: "0.11.0",
-              status: "healthy",
-              pid: 1234,
-              startedAt: now,
-              version: exactOneBuildVersion,
-              socketPath: fixture.socketPath,
-            }),
+            health: async () => {
+              if (!running) throw new Error("stopped");
+              return {
+                schemaVersion: "0.11.0",
+                status: "healthy",
+                pid: 1234,
+                startedAt: now,
+                version: exactOneBuildVersion,
+                socketPath: fixture.socketPath,
+              };
+            },
             stop: async () => {
               stops += 1;
+              running = false;
               return { schemaVersion: "0.11.0", stopped: true, at: now };
             },
           }) as never,
       },
     );
 
-    expect(stops).toBe(0);
+    expect(stops).toBe(1);
     expect(spawns).toBe(1);
     expect(result).toMatchObject({
       status: "unhealthy",

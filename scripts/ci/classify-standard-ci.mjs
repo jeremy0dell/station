@@ -83,7 +83,10 @@ function isBinaryValidationPath(path) {
   if (path.includes("/test/") || path.includes("/tests/")) return false;
   if (/\.(?:test|spec)\.[cm]?[jt]sx?$/u.test(path)) return false;
   if (path.startsWith("scripts/test-runners/")) {
-    return path === "scripts/test-runners/run-binary-smoke.mjs";
+    return (
+      path === "scripts/test-runners/run-binary-smoke.mjs" ||
+      path === "scripts/test-runners/run-update-smoke.mjs"
+    );
   }
   return true;
 }

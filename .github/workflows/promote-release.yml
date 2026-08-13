@@ -12,7 +12,7 @@ on:
         required: true
         type: string
       manual_acceptance:
-        description: Confirm the documented real-terminal acceptance gate passed
+        description: Confirm macOS update preserved output and bare native Station plus the tmux popup opened without mismatch
         required: true
         type: boolean
 
@@ -29,8 +29,11 @@ jobs:
     permissions:
       actions: read
       contents: write
+    outputs:
+      previous_tag: ${{ steps.candidate.outputs.previous_tag }}
     steps:
       - name: Verify accepted candidate and publish its draft
+        id: candidate
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_RUN_ID: ${{ inputs.release_run_id }}
@@ -64,6 +67,7 @@ jobs:
             --dir candidate
 
           commit="$(jq -er .commit candidate/manifest.json)"
+          previous_tag="$(jq -er .previousTag candidate/manifest.json)"
           release_id="$(jq -er .releaseId candidate/manifest.json)"
           [[ "$commit" =~ ^[0-9a-f]{40}$ ]]
           [[ "$release_id" =~ ^[0-9]+$ ]]
@@ -71,11 +75,13 @@ jobs:
             --arg repository "$GITHUB_REPOSITORY" \
             --arg tag "$TAG" \
             --arg commit "$commit" \
+            --arg previousTag "$previous_tag" \
             --argjson workflowRunId "$RELEASE_RUN_ID" \
             --argjson workflowRunAttempt "$run_attempt" \
             --argjson releaseId "$release_id" \
             '.repository == $repository and
              .tag == $tag and
+             .previousTag == $previousTag and
              .commit == $commit and
              .workflowRunId == $workflowRunId and
              .workflowRunAttempt == $workflowRunAttempt and
@@ -92,6 +98,28 @@ jobs:
           esac
           test "$(sha256sum candidate/SHA256SUMS | awk '{print $1}')" = \
             "$(jq -r .checksumFileSha256 candidate/manifest.json)"
+
+          node -e '
+            const tag = process.argv[1];
+            const semver = /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*))?$/;
+            if (!semver.test(tag)) throw new Error(`Invalid previous release tag: ${tag}`);
+          ' "$previous_tag"
+          previous_json="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$previous_tag")"
+          test "$(jq -r .draft <<<"$previous_json")" = false
+          test "$(jq -r .immutable <<<"$previous_json")" = true
+          test "$(jq -r .tag_name <<<"$previous_json")" = "$previous_tag"
+          previous_version="${previous_tag#v}"
+          expected_previous=(
+            SHA256SUMS
+            install.sh
+            "stn-v$previous_version-darwin-arm64.tar.gz"
+            "stn-v$previous_version-darwin-x64.tar.gz"
+            "stn-v$previous_version-linux-arm64.tar.gz"
+            "stn-v$previous_version-linux-x64.tar.gz"
+          )
+          mapfile -t previous_assets < <(jq -r '.assets[].name' <<<"$previous_json" | sort)
+          mapfile -t wanted_previous < <(printf '%s\n' "${expected_previous[@]}" | sort)
+          test "${previous_assets[*]}" = "${wanted_previous[*]}"
 
           remote_commit="$(gh api "repos/$GITHUB_REPOSITORY/commits/$TAG" --jq .sha)"
           test "$remote_commit" = "$commit"
@@ -135,6 +163,7 @@ jobs:
           test "$(jq -r .prerelease <<<"$final_release_json")" = "$expected_prerelease"
           test "$final_ids" = "$current_ids"
           test "$(gh api "repos/$GITHUB_REPOSITORY/commits/$TAG" --jq .sha)" = "$commit"
+          echo "previous_tag=$previous_tag" >> "$GITHUB_OUTPUT"
 
           gh api --method PATCH \
             "repos/$GITHUB_REPOSITORY/releases/$release_id" \
@@ -168,6 +197,37 @@ jobs:
             target: darwin-arm64
     runs-on: ${{ matrix.runner }}
     steps:
+      - if: runner.os == 'macOS'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ inputs.tag }}
+      - if: runner.os == 'macOS'
+        uses: ./.github/actions/setup-ci
+      - name: Build public update harness
+        if: runner.os == 'macOS'
+        run: |
+          command -v tmux >/dev/null 2>&1 || brew install tmux
+          pnpm build
+      - name: Install exact public predecessor
+        if: runner.os == 'macOS'
+        env:
+          PREVIOUS_TAG: ${{ needs.promote.outputs.previous_tag }}
+        run: |
+          predecessor_installer="$RUNNER_TEMP/previous-install.sh"
+          env -u GH_TOKEN -u GITHUB_TOKEN -u GH_ENTERPRISE_TOKEN -u GITHUB_ENTERPRISE_TOKEN \
+            curl --disable --fail --silent --show-error --location \
+              --proto '=https' --proto-redir '=https' --tlsv1.2 \
+              --output "$predecessor_installer" \
+              "https://github.com/$GITHUB_REPOSITORY/releases/download/$PREVIOUS_TAG/install.sh"
+          grep -Fx "embedded_version=\"$PREVIOUS_TAG\"" "$predecessor_installer"
+          previous_home="$RUNNER_TEMP/update-incumbent-home"
+          previous_bin="$RUNNER_TEMP/update-incumbent/bin"
+          mkdir -p "$previous_home"
+          HOME="$previous_home" \
+            XDG_DATA_HOME="$previous_home/.local/share" \
+            /bin/sh "$predecessor_installer" --install-dir "$previous_bin"
+          test "$("$previous_bin/stn" --version)" = "${PREVIOUS_TAG#v}"
       - name: Download exact-tag public installer
         env:
           TAG: ${{ inputs.tag }}
@@ -225,3 +285,14 @@ jobs:
             test "$(stat -f '%Lp' "$receipt_path")" = 600
           fi
           test -f "$data_home/station/LICENSE"
+      - name: Verify public update discovery and download
+        if: runner.os == 'macOS'
+        env:
+          PREVIOUS_TAG: ${{ needs.promote.outputs.previous_tag }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          pnpm smoke:update -- \
+            --incumbent-binary "$RUNNER_TEMP/update-incumbent/bin/stn" \
+            --incumbent-version "${PREVIOUS_TAG#v}" \
+            --public-target-tag "$TAG" \
+            --scenarios no-host

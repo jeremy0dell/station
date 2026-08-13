@@ -251,6 +251,7 @@ export async function captureBinarySmokeEvidence(input) {
     await captureBootLog(state, roundRoot);
     await captureLog(state, roundRoot, "observer.jsonl");
     await captureLog(state, roundRoot, "cli.jsonl");
+    await captureLog(state, roundRoot, "station-host.jsonl");
     await captureDiagnostics(state, roundRoot);
   }
 
@@ -307,10 +308,9 @@ export async function captureBinarySmokeEvidence(input) {
 
 function validateEvidenceSources(stateDir, socketPath, smokeRoot) {
   const root = resolve(smokeRoot);
-  if (resolve(stateDir) !== resolve(root, "state")) {
-    throw new Error(
-      "Binary smoke evidence state directory must be the smoke root's state directory.",
-    );
+  const state = resolve(stateDir);
+  if (state === root || !state.startsWith(`${root}${sep}`)) {
+    throw new Error("Binary smoke evidence state directory must be beneath the smoke root.");
   }
   const socket = resolve(socketPath);
   if (socket === root || !socket.startsWith(`${root}${sep}`)) {

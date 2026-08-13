@@ -77,12 +77,12 @@ async function preparePi(state: string, deps: PackagedAssetDeps = {}): Promise<s
 }
 
 describe("preparePackagedPtyRuntime", () => {
-  it("uses Bun by default and extracts an executable content-addressed helper", async () => {
+  it("uses the parkable bridge by default and extracts the executable helper", async () => {
     const state = await stateDir();
     const runtime = await preparePty(state);
     runtimes.push(runtime);
 
-    expect(runtime.implementation).toBe("bun");
+    expect(runtime.implementation).toBe("bridge");
     const helper = await onlyHelper(state);
     expect((await lstat(helper)).mode & 0o777).toBe(0o700);
     expect((await lstat(dirname(helper))).mode & 0o777).toBe(0o700);
@@ -131,11 +131,13 @@ describe("preparePackagedPtyRuntime", () => {
     expect(await pathExists(join(state, "run", "assets"))).toBe(false);
   });
 
-  it("rejects the source-only bridge instead of silently degrading", async () => {
-    process.env.STATION_PTY_IMPL = "bridge";
-    expect(await rejectionMessage(preparePty(await stateDir()))).toContain(
-      "bridge is unavailable in the compiled Station binary",
-    );
+  it("keeps the in-process Bun implementation explicit", async () => {
+    process.env.STATION_PTY_IMPL = "bun";
+    const state = await stateDir();
+    const runtime = await preparePty(state);
+    runtimes.push(runtime);
+
+    expect(runtime.implementation).toBe("bun");
   });
 
   it("retains helper versions leased by live processes and prunes dead leases", async () => {

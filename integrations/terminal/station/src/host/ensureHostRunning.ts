@@ -449,11 +449,14 @@ function defaultClientFactory(socketPath: string, expectedBuildVersion: string):
 }
 
 function defaultSpawnHost(input: SpawnStationHostInput): ChildProcessLike {
-  // The HOST daemon is spawned detached+ignore (it owns the socket, not a pipe).
+  // The Host normally detaches; disposable runtime owners keep it in their process group for cleanup.
   // NB: the host in turn spawns the node-pty BRIDGE with piped stdio — never copy
   // this detached/ignore shape onto the bridge or its PTYs die at spawn.
   const [command, ...args] = input.argv;
-  return spawn(command, args, input.spawnOptions);
+  return spawn(command, args, {
+    ...input.spawnOptions,
+    detached: process.env.STATION_RUNTIME_OWNER_FOREGROUND !== "1",
+  });
 }
 
 async function waitForSocketRelease(socketPath: string, timeoutMs: number): Promise<void> {
