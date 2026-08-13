@@ -185,7 +185,9 @@ Start at the [documentation home](docs/README.md), or go directly to:
 - [Limitations and workarounds](docs/limitations.md) — current user-visible
   constraints
 - [Contributing](CONTRIBUTING.md) — bug reports, development workflow, and pull requests
-- [Development](docs/development.md) — contributor environment and test gates
+- [Development](docs/development.md) — contributor setup and workflow routing
+- [Testing](tests/README.md) — test layout, isolation, and gate selection
+- [Releasing](docs/releasing.md) — maintainer release procedure
 - [Architecture](docs/architecture.md) — repository boundaries and sources of
   truth
 
@@ -201,7 +203,7 @@ cd station && bun install && cd ..
 pnpm test:all
 ```
 
-See [Development](docs/development.md) and
+See [Development](docs/development.md), [Testing](tests/README.md), and
 [Local development](docs/local-development.md) before running provider-backed
 or real-agent lanes.
 

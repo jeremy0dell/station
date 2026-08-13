@@ -6,7 +6,9 @@ read `docs/observer-architecture.md` and `docs/architecture-documentation.md`.
 
 For configuration — the runtime `config.toml` (all sections, including `[workspace]` and `[tui]`), the project-local `.station/config.toml`, and environment variables — read `docs/configuration.md`.
 
-For development, test, and documentation workflow, read `docs/development.md`.
+For contributor setup and documentation workflow, read `docs/development.md`. For test
+layout, isolation, and gate selection, read `tests/README.md`. For release operations,
+read `docs/releasing.md`.
 
 When creating plans, name the governing documents and other sources of truth, enumerate every file and test expected to change, and identify every JSDoc addition or update required for backend or connector changes.
 

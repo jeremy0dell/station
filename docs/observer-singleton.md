@@ -246,5 +246,5 @@ The permanent verification surface includes:
   handoff, displacement, and keeper preservation;
 - Node/Bun cross-runtime boot-claim races and compiled-binary lifecycle smoke.
 
-Run the focused and repository gates named in [Development](development.md) after singleton,
+Run the focused and repository gates named in [Testing](../tests/README.md) after singleton,
 claim, process-evidence, diagnostics, or binary-composition changes.
