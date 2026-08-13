@@ -1,10 +1,11 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  PtyBridgeParkStateSchema,
   type PtyHandoffEntry,
   PtyBridgeProtocolVersion,
 } from "@station/contracts";
@@ -15,7 +16,6 @@ import {
   bridgeControlSocketPath,
   bridgeParkStatePath,
   ptyBridgesDirectory,
-  readBridgeParkState,
 } from "../orphanBridges.js";
 import { createPtyTable } from "../ptyTable.js";
 
@@ -119,7 +119,9 @@ if (SMOKE) {
 
       // A fresh host generation adopts the parked bridge from durable evidence.
       const bridgesDir = ptyBridgesDirectory(stateDir);
-      const park = await readBridgeParkState(bridgeParkStatePath(bridgesDir, ptyId));
+      const park = PtyBridgeParkStateSchema.parse(
+        JSON.parse(await readFile(bridgeParkStatePath(bridgesDir, ptyId), "utf8")),
+      );
       expect(park).toBeDefined();
       expect(park?.pid).toEqual(originalPid);
       expect(park?.exited).toEqual(false);
