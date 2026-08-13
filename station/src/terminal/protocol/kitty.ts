@@ -105,11 +105,6 @@ export function reduceKittyKeyboardState(
   }
 }
 
-/** Complete Kitty keyboard sequences with no runtime parameters. */
-export const KittySequence = {
-  QueryFlags: `${VtPrefix.Csi}${CsiCommand.KittyQueryFlags.prefix}${CsiCommand.KittyQueryFlags.final}`,
-} as const;
-
 /** Recreate one buffer's stack from the default zero-flags state. */
 export function serializeKittyKeyboardState(state: KittyKeyboardState): string {
   const entries = [...state.stack, state.flags];

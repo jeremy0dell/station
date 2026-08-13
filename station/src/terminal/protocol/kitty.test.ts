@@ -2,7 +2,6 @@ import { describe, expect, it } from "bun:test";
 import {
   initialKittyKeyboardState,
   KittyFlagUpdateMode,
-  KittySequence,
   reduceKittyKeyboardState,
   serializeKittyKeyboardState,
 } from "./kitty.js";
@@ -59,7 +58,9 @@ describe("Kitty keyboard protocol", () => {
     expect(`${VtPrefix.Csi}${CsiCommand.KittyPushFlags.prefix}7${CsiCommand.KittyPushFlags.final}`).toBe("\x1b[>7u");
     expect(`${VtPrefix.Csi}${CsiCommand.KittyPopFlags.prefix}${CsiCommand.KittyPopFlags.final}`).toBe("\x1b[<u");
     expect(`${VtPrefix.Csi}${CsiCommand.KittyPopFlags.prefix}3${CsiCommand.KittyPopFlags.final}`).toBe("\x1b[<3u");
-    expect(KittySequence.QueryFlags).toBe("\x1b[?u");
+    expect(
+      `${VtPrefix.Csi}${CsiCommand.KittyQueryFlags.prefix}${CsiCommand.KittyQueryFlags.final}`,
+    ).toBe("\x1b[?u");
     expect(`${VtPrefix.Csi}${CsiCommand.KittyQueryFlags.prefix}5${CsiCommand.KittyQueryFlags.final}`).toBe("\x1b[?5u");
     expect(serializeKittyKeyboardState({ flags: 5, stack: [1, 3] })).toBe(
       "\x1b[=1u\x1b[>3u\x1b[>5u",
