@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   buildCreateSessionCommand,
   buildCreateSessionGroupCommand,
-  buildFocusCommand,
   buildForkSessionCommand,
   buildRenameSessionCommand,
   buildResumeAgentCommand,
@@ -13,40 +12,6 @@ import {
 import { createCommandSnapshot, createDashboardSnapshot } from "../../fixtures/snapshots.js";
 
 describe("TUI command builders", () => {
-  it("maps focusable rows to terminal.focus using the agent session", () => {
-    const snapshot = createCommandSnapshot("idle");
-    const row = snapshot.rows[0];
-
-    expect(row).toBeDefined();
-    expect(buildFocusCommand(row)).toEqual({
-      type: "terminal.focus",
-      payload: { sessionId: "ses_wt_web_idle" },
-    });
-  });
-
-  it("adds focus origin only when transient navigation provides one", () => {
-    const snapshot = createCommandSnapshot("idle");
-    const row = snapshot.rows[0];
-
-    expect(
-      buildFocusCommand(row, {
-        origin: {
-          provider: "tmux",
-          clientId: "client_1",
-        },
-      }),
-    ).toEqual({
-      type: "terminal.focus",
-      payload: {
-        sessionId: "ses_wt_web_idle",
-        origin: {
-          provider: "tmux",
-          clientId: "client_1",
-        },
-      },
-    });
-  });
-
   it("maps no-agent rows to session.startAgent without forcing a harness provider", () => {
     const snapshot = createCommandSnapshot("none");
     const row = snapshot.rows[0];
