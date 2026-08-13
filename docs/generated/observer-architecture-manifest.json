@@ -3377,7 +3377,7 @@
           "name": "createProviderHookIngress",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Accepts raw provider hook evidence once while allowing retries to finish durable downstream processing."
+          "purpose": "Persists raw provider hook evidence once, maps adapter-backed harness hooks to reports, and treats every other hook as a reconcile hint."
         },
         {
           "name": "CreateProviderHookIngressOptions",
@@ -3412,12 +3412,6 @@
           "bindings": ["sessionHarnessExecutionEvidenceFromReport"]
         },
         {
-          "specifier": "./providerHookIngress.js",
-          "resolvedPath": "apps/observer/src/hooks/providerHookIngress.ts",
-          "edgeKind": "runtime",
-          "bindings": ["ingestProviderHookEvent"]
-        },
-        {
           "specifier": "./turnReadiness.js",
           "resolvedPath": "apps/observer/src/hooks/turnReadiness.ts",
           "edgeKind": "runtime",
@@ -3427,7 +3421,7 @@
           "specifier": "../persistence/index.js",
           "resolvedPath": "apps/observer/src/persistence/index.ts",
           "edgeKind": "type-only",
-          "bindings": ["IngressJournal", "ObservationStore", "SessionStore"]
+          "bindings": ["IngressJournal"]
         },
         {
           "specifier": "../persistence/retention.js",
@@ -3483,7 +3477,6 @@
             "ProviderHookAdapter",
             "ProviderHookEvent",
             "ProviderHookReceipt",
-            "ProviderProjectConfig",
             "SessionRecoveryHandle",
             "StationEvent"
           ]
@@ -3580,97 +3573,6 @@
           "resolvedPath": "packages/runtime/src/index.ts",
           "edgeKind": "type-only",
           "bindings": ["ExternalCommandInput", "ExternalCommandRunner", "RuntimeClock"]
-        }
-      ]
-    },
-    {
-      "path": "apps/observer/src/hooks/providerHookIngress.ts",
-      "exports": [
-        {
-          "name": "ingestProviderHookEvent",
-          "kind": "function",
-          "role": "USE CASE",
-          "purpose": "Normalizes provider hook evidence and atomically records its observations and authorized native-execution effects before completing hook processing."
-        },
-        {
-          "name": "IngestProviderHookEventOptions",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "ProviderHookIngestResult",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        }
-      ],
-      "imports": [
-        {
-          "specifier": "../harnessExecutionIdentity.js",
-          "resolvedPath": "apps/observer/src/harnessExecutionIdentity.ts",
-          "edgeKind": "runtime",
-          "bindings": ["sessionHarnessExecutionEvidenceFromObservation"]
-        },
-        {
-          "specifier": "./turnReadiness.js",
-          "resolvedPath": "apps/observer/src/hooks/turnReadiness.ts",
-          "edgeKind": "runtime",
-          "bindings": ["sessionTurnReadinessMutationFromHarnessObservation"]
-        },
-        {
-          "specifier": "../persistence/index.js",
-          "resolvedPath": "apps/observer/src/persistence/index.ts",
-          "edgeKind": "type-only",
-          "bindings": [
-            "IngressJournal",
-            "ObservationStore",
-            "RecordProviderObservationInput",
-            "SessionStore"
-          ]
-        },
-        {
-          "specifier": "../persistence/retention.js",
-          "resolvedPath": "apps/observer/src/persistence/retention.ts",
-          "edgeKind": "runtime",
-          "bindings": ["providerObservationExpiresAt", "providerObservationRetentionDays"]
-        },
-        {
-          "specifier": "../providers/registry.js",
-          "resolvedPath": "apps/observer/src/providers/registry.ts",
-          "edgeKind": "type-only",
-          "bindings": ["ProviderRegistry"]
-        },
-        {
-          "specifier": "@station/config",
-          "resolvedPath": "packages/config/src/index.ts",
-          "edgeKind": "type-only",
-          "bindings": ["ObservabilityRetentionConfig"]
-        },
-        {
-          "specifier": "@station/contracts",
-          "resolvedPath": "packages/contracts/src/index.ts",
-          "edgeKind": "type-only",
-          "bindings": [
-            "HarnessEventObservation",
-            "ProviderHookEvent",
-            "ProviderProjectConfig",
-            "SafeError",
-            "TerminalTargetObservation",
-            "WorktreeObservation"
-          ]
-        },
-        {
-          "specifier": "@station/runtime",
-          "resolvedPath": "packages/runtime/src/index.ts",
-          "edgeKind": "runtime",
-          "bindings": ["runRuntimeBoundaryWithTimeout", "systemClock", "toIsoTimestamp"]
-        },
-        {
-          "specifier": "@station/runtime",
-          "resolvedPath": "packages/runtime/src/index.ts",
-          "edgeKind": "type-only",
-          "bindings": ["RuntimeClock"]
         }
       ]
     },
@@ -4237,7 +4139,7 @@
           "name": "createProviderHookIngress",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Accepts raw provider hook evidence once while allowing retries to finish durable downstream processing."
+          "purpose": "Persists raw provider hook evidence once, maps adapter-backed harness hooks to reports, and treats every other hook as a reconcile hint."
         },
         {
           "name": "CreateProviderHookIngressOptions",
@@ -4422,18 +4324,6 @@
         {
           "name": "hasCloseableTerminalAttachment",
           "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "ingestProviderHookEvent",
-          "kind": "function",
-          "role": "USE CASE",
-          "purpose": "Normalizes provider hook evidence and atomically records its observations and authorized native-execution effects before completing hook processing."
-        },
-        {
-          "name": "IngestProviderHookEventOptions",
-          "kind": "type",
           "role": null,
           "purpose": null
         },
@@ -4937,12 +4827,6 @@
         },
         {
           "name": "ProviderHealthProbeTarget",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "ProviderHookIngestResult",
           "kind": "type",
           "role": null,
           "purpose": null
@@ -5480,12 +5364,6 @@
         {
           "specifier": "./hooks/observerEventHooks.js",
           "resolvedPath": "apps/observer/src/hooks/observerEventHooks.ts",
-          "edgeKind": "runtime",
-          "bindings": ["*"]
-        },
-        {
-          "specifier": "./hooks/providerHookIngress.js",
-          "resolvedPath": "apps/observer/src/hooks/providerHookIngress.ts",
           "edgeKind": "runtime",
           "bindings": ["*"]
         },
@@ -13729,32 +13607,8 @@
       "declaration": "createProviderHookIngress",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Accepts raw provider hook evidence once while allowing retries to finish durable downstream processing.",
-      "dependencies": [
-        {
-          "path": "apps/observer/src/hooks/providerHookIngress.ts",
-          "declaration": "ingestProviderHookEvent",
-          "kind": "function",
-          "role": "USE CASE",
-          "edgeKind": "runtime"
-        }
-      ]
-    },
-    {
-      "path": "apps/observer/src/hooks/providerHookIngress.ts",
-      "declaration": "ingestProviderHookEvent",
-      "kind": "function",
-      "role": "USE CASE",
-      "purpose": "Normalizes provider hook evidence and atomically records its observations and authorized native-execution effects before completing hook processing.",
-      "dependencies": [
-        {
-          "path": "apps/observer/src/hooks/turnReadiness.ts",
-          "declaration": "sessionTurnReadinessMutationFromHarnessObservation",
-          "kind": "function",
-          "role": "POLICY",
-          "edgeKind": "runtime"
-        }
-      ]
+      "purpose": "Persists raw provider hook evidence once, maps adapter-backed harness hooks to reports, and treats every other hook as a reconcile hint.",
+      "dependencies": []
     },
     {
       "path": "apps/observer/src/hooks/spoolStore.ts",
@@ -15096,7 +14950,7 @@
       "declaration": "HarnessProvider",
       "kind": "interface",
       "role": "DRIVEN PORT",
-      "purpose": "Supplies harness launch, discovery, status, ingress, and persisted-event compatibility policy without exposing provider-native payloads to Observer application code.",
+      "purpose": "Supplies harness launch, discovery, status, and persisted-event compatibility policy without exposing provider-native payloads to Observer application code.",
       "dependencies": []
     },
     {

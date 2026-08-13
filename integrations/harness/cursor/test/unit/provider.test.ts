@@ -5,7 +5,6 @@ import type {
   BuildHarnessLaunchRequest,
   HarnessRunObservation,
   ProviderHookRuntime,
-  RawHarnessEvent,
 } from "@station/contracts";
 import type { ExternalCommandInput, ExternalCommandResult } from "@station/runtime";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -314,7 +313,7 @@ describe("CursorHarnessProvider", () => {
     ]);
   });
 
-  it("classifies and ingests Cursor observations through provider-local parsing", async () => {
+  it("classifies Cursor observations without owning raw hook ingestion", async () => {
     const provider = createCursorHarnessProvider({ now: () => new Date(now) });
 
     await expect(
@@ -330,16 +329,7 @@ describe("CursorHarnessProvider", () => {
       },
     });
 
-    await expect(provider.ingestEvent?.(event(), eventContext())).resolves.toEqual([
-      expect.objectContaining({
-        provider: "cursor",
-        worktreeId: "wt_web_task",
-        rawEventType: "sessionStart",
-        status: expect.objectContaining({
-          value: "starting",
-        }),
-      }),
-    ]);
+    expect("ingestEvent" in provider).toBe(false);
   });
 
   it("reports a high-confidence exit as a harness_event (Cursor source override)", async () => {
@@ -423,18 +413,6 @@ function run(): HarnessRunObservation {
     confidence: "low",
     reason: "terminal target is bound to Cursor; no reliable lifecycle signal yet.",
     observedAt: now,
-  };
-}
-
-function event(): RawHarnessEvent {
-  return {
-    provider: "cursor",
-    observedAt: now,
-    event: {
-      hook_event_name: "sessionStart",
-      session_id: "cursor_session_123",
-      workspace_roots: ["/tmp/station/web/task"],
-    },
   };
 }
 

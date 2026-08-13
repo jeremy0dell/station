@@ -66,7 +66,9 @@ Normalized events are `HarnessEventReport` / `HarnessEventObservation`
    bake stale semantics. An integration that submits an already-typed
    `HarnessEventReport` instead normalizes in its own adapter and is not
    normalized again by the observer. Shipped Pi and OpenCode hook transports
-   use the raw `stn-ingress` path.
+   use the raw `stn-ingress` path. `HarnessProvider` has no fallback raw-event
+   ingestion operation; cwd-only and other unresolved report evidence is
+   correlated against current graph truth only during Observer projection.
 2. **No provider vocabulary in core.** Observer core and the TUI must not
    match on provider prose (`reason` strings), provider event names, or
    provider keys in `providerData`. If core needs to branch on it, it becomes

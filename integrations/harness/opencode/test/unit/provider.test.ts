@@ -1,11 +1,7 @@
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type {
-  BuildHarnessLaunchRequest,
-  HarnessRunObservation,
-  RawHarnessEvent,
-} from "@station/contracts";
+import type { BuildHarnessLaunchRequest, HarnessRunObservation } from "@station/contracts";
 import type { ExternalCommandInput, ExternalCommandResult } from "@station/runtime";
 import { describe, expect, it } from "vitest";
 import { installOpenCodePlugin } from "../../src/pluginInstall";
@@ -369,7 +365,7 @@ describe("OpenCodeHarnessProvider", () => {
     });
   });
 
-  it("classifies and ingests OpenCode observations through provider-local parsing", async () => {
+  it("classifies OpenCode observations without owning raw hook ingestion", async () => {
     const provider = createOpenCodeHarnessProvider({ now: () => new Date(now) });
 
     await expect(
@@ -385,17 +381,7 @@ describe("OpenCodeHarnessProvider", () => {
       },
     });
 
-    await expect(provider.ingestEvent?.(event(), eventContext())).resolves.toEqual([
-      expect.objectContaining({
-        provider: "opencode",
-        worktreeId: "wt_web_task",
-        rawEventType: "session.status",
-        nativeSessionId: "opencode_session_123",
-        status: expect.objectContaining({
-          value: "working",
-        }),
-      }),
-    ]);
+    expect("ingestEvent" in provider).toBe(false);
   });
 });
 
@@ -456,24 +442,6 @@ function run(): HarnessRunObservation {
     confidence: "low",
     reason: "terminal target is bound to OpenCode; no reliable lifecycle signal yet.",
     observedAt: now,
-  };
-}
-
-function event(): RawHarnessEvent {
-  return {
-    provider: "opencode",
-    observedAt: now,
-    event: {
-      id: "evt_1",
-      type: "session.status",
-      properties: {
-        sessionID: "opencode_session_123",
-        status: {
-          type: "busy",
-        },
-      },
-      cwd: "/tmp/station/web/task",
-    },
   };
 }
 

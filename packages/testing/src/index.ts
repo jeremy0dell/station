@@ -6,8 +6,6 @@ import type {
   HarnessCapabilities,
   HarnessClassificationContext,
   HarnessDiscoveryContext,
-  HarnessEventContext,
-  HarnessEventObservation,
   HarnessLaunchPlan,
   HarnessProvider,
   HarnessRunObservation,
@@ -19,7 +17,6 @@ import type {
   ProviderHealth,
   ProviderId,
   ProviderProjectConfig,
-  RawHarnessEvent,
   RemoveWorktreeRequest,
   RemoveWorktreeResult,
   RepositoryRemote,
@@ -59,13 +56,7 @@ type FakeTerminalProviderMethod =
   | "captureTarget"
   | "sendInput";
 
-type FakeHarnessProviderMethod =
-  | "health"
-  | "buildLaunch"
-  | "discoverRuns"
-  | "classifyRun"
-  | "ingestEvent"
-  | "stop";
+type FakeHarnessProviderMethod = "health" | "buildLaunch" | "discoverRuns" | "classifyRun" | "stop";
 
 export type FakeProviderFailures<TMethod extends string> = Partial<Record<TMethod, SafeError>>;
 
@@ -662,28 +653,6 @@ export class FakeHarnessProvider implements HarnessProvider {
       },
       observedAt: resolveNow(this.#now),
     };
-  }
-
-  async ingestEvent(
-    event: RawHarnessEvent,
-    _context: HarnessEventContext,
-  ): Promise<HarnessEventObservation[]> {
-    maybeThrow(this.#failures, "ingestEvent");
-    const observedAt = event.observedAt ?? resolveNow(this.#now);
-    return this.#runs.map((run) => ({
-      provider: this.id,
-      runId: run.id,
-      ...(run.worktreeId === undefined ? {} : { worktreeId: run.worktreeId }),
-      ...(run.sessionId === undefined ? {} : { sessionId: run.sessionId }),
-      status: {
-        value: run.state,
-        confidence: run.confidence,
-        reason: run.reason,
-        source: "harness_event",
-        updatedAt: observedAt,
-      },
-      observedAt,
-    }));
   }
 
   async stop(request: HarnessStopRequest): Promise<HarnessStopResult> {

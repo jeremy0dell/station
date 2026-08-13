@@ -1,6 +1,6 @@
 import type { StationConfig } from "@station/config";
 import { STATION_SCHEMA_VERSION } from "@station/contracts";
-import { createOpenCodeHarnessProvider } from "@station/opencode";
+import { createOpenCodeHarnessProvider, openCodeHookAdapter } from "@station/opencode";
 import {
   createFakeTerminalTarget,
   createFakeWorktree,
@@ -212,6 +212,7 @@ function opencodeProviders(): ProviderRegistry {
         }),
       }),
     ],
+    hookAdapters: [openCodeHookAdapter],
   });
 }
 

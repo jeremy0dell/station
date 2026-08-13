@@ -19,7 +19,6 @@ import {
 import { safeErrorFromUnknown } from "@station/runtime";
 import { classifyOpenCodeRunStatus } from "./classify.js";
 import { openCodeProviderErrorFromUnknown } from "./errors.js";
-import { normalizeOpenCodeRawEvent } from "./events.js";
 import { buildOpenCodeLaunchPlan, type OpenCodeLaunchOptions } from "./launch.js";
 import { doctorOpenCodePlugin } from "./pluginInstall.js";
 
@@ -75,12 +74,6 @@ const openCodeSpec: TerminalBoundHarnessProviderSpec<OpenCodeHarnessProviderOpti
   },
   buildLaunch,
   classifyRun: (run) => classifyOpenCodeRunStatus(run),
-  ingestEvent: {
-    operation: "provider.opencode.ingestEvent",
-    errorCode: "HARNESS_OPENCODE_EVENT_INGEST_FAILED",
-    errorMessage: "The OpenCode harness provider failed to ingest an event.",
-    normalize: (event, context) => normalizeOpenCodeRawEvent(event, context),
-  },
   doctorChecks,
   hooksStatus,
 };

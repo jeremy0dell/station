@@ -21,7 +21,7 @@ import {
 import { safeErrorFromUnknown } from "@station/runtime";
 import { classifyCodexRunStatus } from "./classify.js";
 import { codexProviderErrorFromUnknown } from "./errors.js";
-import { acceptsCodexPersistedEvent, normalizeCodexRawEvent } from "./events.js";
+import { acceptsCodexPersistedEvent } from "./events.js";
 import { doctorCodexHooks } from "./hooks.js";
 import { buildCodexLaunchPlan, type CodexLaunchOptions } from "./launch.js";
 
@@ -79,12 +79,6 @@ const codexSpec: TerminalBoundHarnessProviderSpec<CodexHarnessProviderOptions> =
   },
   buildLaunch,
   classifyRun: (run) => classifyCodexRunStatus(run),
-  ingestEvent: {
-    operation: "provider.codex.ingestEvent",
-    errorCode: "HARNESS_CODEX_EVENT_INGEST_FAILED",
-    errorMessage: "The Codex harness provider failed to ingest an event.",
-    normalize: (event, context) => normalizeCodexRawEvent(event, context),
-  },
   acceptsPersistedEvent: acceptsCodexPersistedEvent,
   doctorChecks,
   hooksStatus,

@@ -19,7 +19,6 @@ import {
 import { safeErrorFromUnknown } from "@station/runtime";
 import { classifyCursorRunStatus } from "./classify.js";
 import { cursorProviderErrorFromUnknown } from "./errors.js";
-import { normalizeCursorRawEvent } from "./events.js";
 import { doctorCursorHooks } from "./hooks.js";
 import { buildCursorLaunchPlan, type CursorLaunchOptions } from "./launch.js";
 
@@ -71,12 +70,6 @@ const cursorSpec: TerminalBoundHarnessProviderSpec<CursorHarnessProviderOptions>
   },
   buildLaunch,
   classifyRun: (run) => classifyCursorRunStatus(run),
-  ingestEvent: {
-    operation: "provider.cursor.ingestEvent",
-    errorCode: "HARNESS_CURSOR_EVENT_INGEST_FAILED",
-    errorMessage: "The Cursor harness provider failed to ingest an event.",
-    normalize: (event, context) => normalizeCursorRawEvent(event, context),
-  },
   doctorChecks,
   hooksStatus,
 };

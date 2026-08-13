@@ -8,7 +8,7 @@ import { ScriptedAgentHarnessProvider } from "../../src/provider";
 const now = "2026-05-20T12:00:00.000Z";
 
 describe("ScriptedAgentHarnessProvider", () => {
-  it("reports capabilities, health, launch plans, discovery, classification, and event ingestion", async () => {
+  it("reports capabilities, health, launch plans, discovery, and classification", async () => {
     const root = await mkdtemp(join(tmpdir(), "station-scripted-provider-"));
     const stateDir = join(root, "scripted");
     const runsDir = join(stateDir, "runs");
@@ -93,29 +93,7 @@ describe("ScriptedAgentHarnessProvider", () => {
       },
     });
 
-    await expect(
-      provider.ingestEvent?.(
-        {
-          provider: "scripted",
-          observedAt: now,
-          event: {
-            type: "attention",
-            at: now,
-            runId: "run_web_task",
-            worktreeId: "wt_web_task",
-            message: "Approval requested.",
-          },
-        },
-        { projects: [], worktrees: [], terminalTargets: [] },
-      ),
-    ).resolves.toEqual([
-      expect.objectContaining({
-        status: expect.objectContaining({
-          value: "needs_attention",
-          confidence: "high",
-        }),
-      }),
-    ]);
+    expect("ingestEvent" in provider).toBe(false);
   });
 });
 

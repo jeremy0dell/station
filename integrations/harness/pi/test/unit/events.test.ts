@@ -1,16 +1,12 @@
 import { readFileSync } from "node:fs";
-import type { ProviderHookEvent, RawHarnessEvent } from "@station/contracts";
-import { HarnessEventObservationSchema, STATION_SCHEMA_VERSION } from "@station/contracts";
+import type { ProviderHookEvent } from "@station/contracts";
+import { HarnessEventReportSchema, STATION_SCHEMA_VERSION } from "@station/contracts";
 import { describe, expect, it } from "vitest";
 import { PiHarnessProviderError } from "../../src/errors";
 import { compactFieldNamesForPiEvent } from "../../src/event/catalog";
 import { PiCompactEventSchema, parsePiCompactEvent } from "../../src/event/compactEvent";
 import { compactPiHookPayload } from "../../src/event/compaction";
-import {
-  normalizePiRawEvent,
-  piHookPayloadToHarnessEventReport,
-  statusFromPiEvent,
-} from "../../src/event/mapping";
+import { piHookPayloadToHarnessEventReport, statusFromPiEvent } from "../../src/event/mapping";
 import { piSupportedEventNames } from "../../src/event/names";
 import { piHookAdapter } from "../../src/hookAdapter";
 
@@ -18,43 +14,45 @@ const now = "2026-05-27T12:00:00.000Z";
 
 describe("Pi compact event parsing", () => {
   it("strictly parses compact session_start events and normalizes them", () => {
-    const raw: RawHarnessEvent = {
-      provider: "pi",
-      observedAt: now,
-      event: {
-        event_type: "session_start",
-        cwd: "/tmp/station/web/task",
-        pi_session_id: "pi_session_123",
-        pi_session_file: "/tmp/pi/session.jsonl",
-        model: {
-          provider: "openai",
-          id: "gpt-5.4",
-        },
-        reason: "startup",
-        station_project_id: "web",
-        station_worktree_id: "wt_web_task",
-        station_worktree_path: "/tmp/station/web/task",
-        station_session_id: "ses_web_task",
-        station_terminal_provider: "tmux",
-        station_terminal_target_id: "tmux:station:@1:%2",
+    const payload = {
+      event_type: "session_start",
+      cwd: "/tmp/station/web/task",
+      pi_session_id: "pi_session_123",
+      pi_session_file: "/tmp/pi/session.jsonl",
+      model: {
+        provider: "openai",
+        id: "gpt-5.4",
       },
+      reason: "startup",
+      station_project_id: "web",
+      station_worktree_id: "wt_web_task",
+      station_worktree_path: "/tmp/station/web/task",
+      station_session_id: "ses_web_task",
+      station_terminal_provider: "tmux",
+      station_terminal_target_id: "tmux:station:@1:%2",
     };
 
-    expect(parsePiCompactEvent(raw.event)).toMatchObject({
+    expect(parsePiCompactEvent(payload)).toMatchObject({
       event_type: "session_start",
       reason: "startup",
     });
 
-    const observations = normalizePiRawEvent(raw, context());
+    const report = piHookPayloadToHarnessEventReport({
+      reportId: "report_pi_session_start",
+      eventType: "session_start",
+      observedAt: now,
+      payload,
+    });
 
-    expect(observations).toHaveLength(1);
-    expect(HarnessEventObservationSchema.parse(observations[0])).toEqual(observations[0]);
-    expect(observations[0]).toMatchObject({
+    expect(HarnessEventReportSchema.parse(report)).toEqual(report);
+    expect(report).toMatchObject({
       provider: "pi",
-      sessionId: "ses_web_task",
-      worktreeId: "wt_web_task",
-      harnessRunId: "pi:tmux:station:@1:%2",
-      rawEventType: "session_start",
+      eventType: "session_start",
+      correlation: {
+        sessionId: "ses_web_task",
+        worktreeId: "wt_web_task",
+        harnessRunId: "pi:tmux:station:@1:%2",
+      },
       status: {
         value: "starting",
         confidence: "high",
@@ -364,23 +362,21 @@ describe("Pi compact event parsing", () => {
     });
   });
 
-  it("correlates compact events from cwd and terminal context when STATION ids are absent", () => {
-    const observations = normalizePiRawEvent(
-      {
-        provider: "pi",
-        observedAt: now,
-        event: {
-          event_type: "agent_start",
-          cwd: "/tmp/station/web/task/src",
-        },
+  it("defers cwd-only compact event correlation to Observer projection", () => {
+    const report = piHookPayloadToHarnessEventReport({
+      reportId: "report_pi_cwd_only",
+      eventType: "agent_start",
+      observedAt: now,
+      payload: {
+        event_type: "agent_start",
+        cwd: "/tmp/station/web/task/src",
       },
-      context(),
-    );
+    });
 
-    expect(observations[0]).toMatchObject({
-      sessionId: "ses_web_task",
-      worktreeId: "wt_web_task",
-      harnessRunId: "pi:tmux:station:@1:%2",
+    expect(report).toMatchObject({
+      correlation: {
+        cwd: "/tmp/station/web/task/src",
+      },
       status: {
         value: "working",
         confidence: "high",
@@ -485,42 +481,6 @@ function eventSequenceFixture(name: string) {
     throw new Error(`Could not parse Pi event fixture ${name}.`, { cause: error });
   }
   return PiCompactEventSchema.array().parse(value);
-}
-
-function context() {
-  return {
-    projects: [],
-    worktrees: [
-      {
-        id: "wt_web_task",
-        provider: "worktrunk",
-        projectId: "web",
-        branch: "task",
-        path: "/tmp/station/web/task",
-        state: "exists" as const,
-        source: "worktrunk" as const,
-        observedAt: now,
-      },
-    ],
-    terminalTargets: [
-      {
-        id: "tmux:station:@1:%2",
-        provider: "tmux",
-        projectId: "web",
-        worktreeId: "wt_web_task",
-        sessionId: "ses_web_task",
-        state: "open" as const,
-        cwd: "/tmp/station/web/task",
-        confidence: "high" as const,
-        reason: "tmux pane has station identity binding.",
-        observedAt: now,
-        harnessBinding: {
-          role: "main-agent",
-          harnessProvider: "pi",
-        },
-      },
-    ],
-  };
 }
 
 function piPayloads() {

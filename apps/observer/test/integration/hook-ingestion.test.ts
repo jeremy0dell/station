@@ -2,7 +2,6 @@ import { DEFAULT_WORKSPACE_CONFIG, type StationConfig } from "@station/config";
 import type { HarnessEventReportReceipt, ProviderHookAdapter } from "@station/contracts";
 import { STATION_SCHEMA_VERSION } from "@station/contracts";
 import {
-  createFakeHarnessRun,
   createFakeTerminalTarget,
   createFakeWorktree,
   FakeHarnessProvider,
@@ -250,7 +249,7 @@ describe("observer provider hook ingress", () => {
 
   it("rejects adapter-backed harness hooks when the normalized report handoff is absent", async () => {
     const clock = { now: () => new Date(now) };
-    const harness = new RecordingHarnessProvider({ now });
+    const harness = new FakeHarnessProvider({ now });
     const adapter: ProviderHookAdapter = {
       provider: "fake-harness",
       kind: "harness",
@@ -282,8 +281,10 @@ describe("observer provider hook ingress", () => {
       status: "rejected",
       error: { code: "HARNESS_REPORT_INGRESS_UNAVAILABLE" },
     });
-    expect(harness.ingestCalls).toBe(0);
-    await expect(persistence.listProviderObservations()).resolves.toEqual([]);
+    expect("ingestEvent" in harness).toBe(false);
+    await expect(
+      persistence.listProviderObservations({ entityKind: "harness_event" }),
+    ).resolves.toEqual([]);
     await expect(persistence.listSessionTurnReadiness()).resolves.toEqual([]);
     sqlite.close();
   });
@@ -409,13 +410,12 @@ describe("observer provider hook ingress", () => {
     sqlite.close();
   });
 
-  it("deduplicates hook persistence without skipping retryable provider processing", async () => {
+  it("deduplicates non-report hook persistence and reconcile scheduling", async () => {
     const clock = { now: () => new Date(now) };
-    const harness = new RecordingHarnessProvider({ now });
     const providers = new ProviderRegistry({
       worktree: new FakeWorktreeProvider({ now }),
       terminal: new FakeTerminalProvider({ now }),
-      harnesses: [harness],
+      harnesses: [new FakeHarnessProvider({ now })],
     });
     const { sqlite, persistence, eventBus, api } = createTestObserver({ config, providers, clock });
     const reconciled = nextObserverReconciled(eventBus);
@@ -438,7 +438,6 @@ describe("observer provider hook ingress", () => {
       value: { type: "observer.reconciled" },
     });
     await reconciled.close();
-    expect(harness.ingestCalls).toBe(2);
     expect(
       (await persistence.listEvents({ type: "providerHook.ingested" })).map((event) => event.event),
     ).toHaveLength(1);
@@ -473,13 +472,12 @@ describe("observer provider hook ingress", () => {
     sqlite.close();
   });
 
-  it("keeps duplicate hook readiness aligned with the originally committed normalization", async () => {
+  it("does not fabricate readiness or observations from duplicate non-report hooks", async () => {
     const clock = { now: () => new Date(now) };
-    const harness = new ContextChangingReadinessHarnessProvider({ now });
     const providers = new ProviderRegistry({
       worktree: new FakeWorktreeProvider({ now }),
       terminal: new FakeTerminalProvider({ now }),
-      harnesses: [harness],
+      harnesses: [new FakeHarnessProvider({ now })],
     });
     const sqlite = openObserverSqlite({ clock });
     const persistence = createSqliteObserverPersistence({ sqlite, clock, idFactory: ids() });
@@ -496,56 +494,36 @@ describe("observer provider hook ingress", () => {
     await expect(ingress.ingest(event, { triggerReconcile: false })).resolves.toMatchObject({
       deduped: false,
     });
-    harness.sessionId = "ses_fresh_context";
-    harness.worktreeId = "wt_fresh_context";
     await expect(ingress.ingest(event, { triggerReconcile: false })).resolves.toMatchObject({
       deduped: true,
     });
 
-    await expect(persistence.listSessionTurnReadiness()).resolves.toEqual([
-      expect.objectContaining({
-        sessionId: "ses_original",
-        worktreeId: "wt_original",
-        token: "hook_context_retry",
-      }),
-    ]);
-    await expect(persistence.listProviderObservations()).resolves.toEqual([
-      expect.objectContaining({
-        payload: expect.objectContaining({
-          sessionId: "ses_original",
-          worktreeId: "wt_original",
-        }),
-      }),
-    ]);
+    await expect(persistence.listSessionTurnReadiness()).resolves.toEqual([]);
+    await expect(
+      persistence.listProviderObservations({ entityKind: "harness_event" }),
+    ).resolves.toEqual([]);
     sqlite.close();
   });
 
-  it("gates legacy harness readiness by the bound native execution", async () => {
+  it("gates report-path harness readiness by the bound native execution", async () => {
     const clock = { now: () => new Date(now) };
-    const harness = new NativeExecutionHarnessProvider({ now });
-    const providers = new ProviderRegistry({
-      worktree: new FakeWorktreeProvider({ now }),
-      terminal: new FakeTerminalProvider({ now }),
-      harnesses: [harness],
-    });
     const sqlite = openObserverSqlite({ clock });
     const persistence = createSqliteObserverPersistence({ sqlite, clock, idFactory: ids() });
-    const ingress = createProviderHookIngress({ persistence, providers, clock });
+    const ingress = createHarnessEventReportIngestion({ persistence, clock });
 
-    await ingress.ingest(harnessProviderHook("hook_native_a_working", now));
-    harness.nativeSessionId = "native_b";
-    harness.state = "idle";
-    harness.observedAt = "2026-05-20T12:00:01.000Z";
-    await ingress.ingest(harnessProviderHook("hook_native_b_stop", harness.observedAt));
+    await ingress.ingest(
+      nativeExecutionReport("hook_native_a_working", "native_a", "working", now),
+    );
+    const secondAt = "2026-05-20T12:00:01.000Z";
+    await ingress.ingest(nativeExecutionReport("hook_native_b_stop", "native_b", "idle", secondAt));
 
     await expect(persistence.listSessionHarnessExecutions()).resolves.toEqual([
       expect.objectContaining({ nativeSessionId: "native_a", state: "working" }),
     ]);
     await expect(persistence.listSessionTurnReadiness()).resolves.toEqual([]);
 
-    harness.nativeSessionId = "native_a";
-    harness.observedAt = "2026-05-20T12:00:02.000Z";
-    await ingress.ingest(harnessProviderHook("hook_native_a_stop", harness.observedAt));
+    const thirdAt = "2026-05-20T12:00:02.000Z";
+    await ingress.ingest(nativeExecutionReport("hook_native_a_stop", "native_a", "idle", thirdAt));
     await expect(persistence.listSessionTurnReadiness()).resolves.toEqual([
       expect.objectContaining({
         sessionId: "ses_native_execution",
@@ -633,13 +611,12 @@ describe("observer provider hook ingress", () => {
     sqlite.close();
   });
 
-  it("routes harness provider hook events through provider ingress and stores normalized observations", async () => {
+  it("treats harness hooks without adapters as reconcile hints, not observations", async () => {
     const clock = { now: () => new Date(now) };
-    const harness = new RecordingHarnessProvider({ now });
     const providers = new ProviderRegistry({
       worktree: new FakeWorktreeProvider({ now }),
       terminal: new FakeTerminalProvider({ now }),
-      harnesses: [harness],
+      harnesses: [new FakeHarnessProvider({ now })],
     });
     const { sqlite, persistence, eventBus, api } = createTestObserver({ config, providers, clock });
     const reconciled = nextObserverReconciled(eventBus);
@@ -661,36 +638,18 @@ describe("observer provider hook ingress", () => {
       value: { type: "observer.reconciled" },
     });
     await reconciled.close();
-    expect(harness.ingestCalls).toBe(1);
-    await expect(persistence.listProviderObservations()).resolves.toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          provider: "fake-harness",
-          providerType: "harness",
-          entityKind: "harness_event",
-          entityKey: "run_hook_1",
-          expiresAt: "2026-06-03T12:00:00.000Z",
-          payload: expect.objectContaining({
-            provider: "fake-harness",
-            harnessRunId: "run_hook_1",
-            status: expect.objectContaining({
-              source: "harness_event",
-              value: "idle",
-            }),
-          }),
-        }),
-      ]),
-    );
+    await expect(
+      persistence.listProviderObservations({ entityKind: "harness_event" }),
+    ).resolves.toEqual([]);
     sqlite.close();
   });
 
-  it("passes persisted worktree and terminal context to harness provider hook ingress", async () => {
+  it("does not reinterpret persisted graph context during non-report hook ingress", async () => {
     const clock = { now: () => new Date(now) };
-    const harness = new ContextRecordingHarnessProvider({ now });
     const providers = new ProviderRegistry({
       worktree: new FakeWorktreeProvider({ now }),
       terminal: new FakeTerminalProvider({ now }),
-      harnesses: [harness],
+      harnesses: [new FakeHarnessProvider({ now })],
     });
     const { sqlite, persistence, eventBus, api } = createTestObserver({
       config: projectConfig,
@@ -735,11 +694,10 @@ describe("observer provider hook ingress", () => {
       payload: { state: "needs_attention" },
     });
 
-    expect(harness.lastContext).toMatchObject({
-      projects: [{ id: "web" }],
-      worktrees: [{ id: "wt_web_feature_auth" }],
-      terminalTargets: [{ id: "term_web_feature_auth" }],
-    });
+    await expect(
+      persistence.listProviderObservations({ entityKind: "harness_event" }),
+    ).resolves.toEqual([]);
+    await expect(persistence.listSessionTurnReadiness()).resolves.toEqual([]);
     await expect(reconciled.next).resolves.toMatchObject({
       value: { type: "observer.reconciled" },
     });
@@ -829,14 +787,33 @@ function harnessReport(reportId: string) {
   };
 }
 
-function harnessProviderHook(hookId: string, receivedAt: string) {
+function nativeExecutionReport(
+  reportId: string,
+  nativeSessionId: string,
+  state: "working" | "idle",
+  observedAt: string,
+) {
   return {
     schemaVersion: STATION_SCHEMA_VERSION,
-    hookId,
+    reportId,
     provider: "fake-harness",
     kind: "harness" as const,
-    event: "run.updated",
-    receivedAt,
+    eventType: state === "idle" ? "Stop" : "PreToolUse",
+    observedAt,
+    correlation: {
+      projectId: "web",
+      worktreeId: "wt_native_execution",
+      sessionId: "ses_native_execution",
+      nativeSessionId,
+    },
+    ...(state === "idle" ? { turn: { kind: "turn_completed" as const } } : {}),
+    status: {
+      value: state,
+      confidence: "high" as const,
+      reason: `Native execution is ${state}.`,
+      source: "harness_event" as const,
+      updatedAt: observedAt,
+    },
   };
 }
 
@@ -875,109 +852,4 @@ async function waitFor(predicate: () => Promise<boolean>, timeoutMs = 1000): Pro
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
   throw new Error("Timed out waiting for condition.");
-}
-
-class RecordingHarnessProvider extends FakeHarnessProvider {
-  ingestCalls = 0;
-
-  constructor(options: ConstructorParameters<typeof FakeHarnessProvider>[0]) {
-    super({
-      ...options,
-      runs: [
-        createFakeHarnessRun({
-          id: "run_hook_1",
-          worktreeId: "wt_web_feature_auth",
-          sessionId: "ses_web_feature_auth",
-          state: "idle",
-          now,
-        }),
-      ],
-    });
-  }
-
-  override async ingestEvent() {
-    this.ingestCalls += 1;
-    return [
-      {
-        provider: this.id,
-        harnessRunId: "run_hook_1",
-        worktreeId: "wt_web_feature_auth",
-        sessionId: "ses_web_feature_auth",
-        rawEventType: "run.updated",
-        status: {
-          value: "idle" as const,
-          confidence: "high" as const,
-          reason: "Fake harness hook reported idle.",
-          source: "harness_event" as const,
-          updatedAt: now,
-        },
-        observedAt: now,
-      },
-    ];
-  }
-}
-
-class ContextRecordingHarnessProvider extends FakeHarnessProvider {
-  lastContext: Parameters<NonNullable<FakeHarnessProvider["ingestEvent"]>>[1] | undefined;
-
-  override async ingestEvent(
-    event: Parameters<NonNullable<FakeHarnessProvider["ingestEvent"]>>[0],
-    context: Parameters<NonNullable<FakeHarnessProvider["ingestEvent"]>>[1],
-  ) {
-    this.lastContext = context;
-    return super.ingestEvent(event, context);
-  }
-}
-
-class ContextChangingReadinessHarnessProvider extends FakeHarnessProvider {
-  sessionId = "ses_original";
-  worktreeId = "wt_original";
-
-  override async ingestEvent() {
-    return [
-      {
-        provider: this.id,
-        projectId: "web",
-        worktreeId: this.worktreeId,
-        sessionId: this.sessionId,
-        turn: { kind: "turn_completed" as const },
-        status: {
-          value: "idle" as const,
-          confidence: "high" as const,
-          reason: "Fake harness hook completed its turn.",
-          source: "harness_event" as const,
-          updatedAt: now,
-        },
-        observedAt: now,
-      },
-    ];
-  }
-}
-
-class NativeExecutionHarnessProvider extends FakeHarnessProvider {
-  nativeSessionId = "native_a";
-  state: "working" | "idle" = "working";
-  observedAt = now;
-
-  override async ingestEvent() {
-    return [
-      {
-        provider: this.id,
-        projectId: "web",
-        worktreeId: "wt_native_execution",
-        sessionId: "ses_native_execution",
-        nativeSessionId: this.nativeSessionId,
-        rawEventType: this.state === "idle" ? "Stop" : "PreToolUse",
-        ...(this.state === "idle" ? { turn: { kind: "turn_completed" as const } } : {}),
-        status: {
-          value: this.state,
-          confidence: "high" as const,
-          reason: `Native execution is ${this.state}.`,
-          source: "harness_event" as const,
-          updatedAt: this.observedAt,
-        },
-        observedAt: this.observedAt,
-      },
-    ];
-  }
 }

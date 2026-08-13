@@ -10,12 +10,10 @@ import type {
   ProviderHealth,
   ProviderId,
   ProviderProjectConfig,
-  RawWorktreeEvent,
   RemoveWorktreeRequest,
   RemoveWorktreeResult,
   SafeError,
   WorktreeCapabilities,
-  WorktreeEventContext,
   WorktreeObservation,
   WorktreeProvider,
   WorktreeRemovalRefusalDiagnosticDetail,
@@ -245,13 +243,6 @@ export class WorktrunkProvider implements WorktreeProvider {
         error,
       };
     }
-  }
-
-  async ingestEvent(
-    _event: RawWorktreeEvent,
-    _context: WorktreeEventContext,
-  ): Promise<WorktreeObservation[]> {
-    return [];
   }
 
   async listWorktrees(project: ProviderProjectConfig): Promise<WorktreeObservation[]> {

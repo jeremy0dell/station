@@ -1,8 +1,4 @@
-import type {
-  BuildHarnessLaunchRequest,
-  HarnessRunObservation,
-  RawHarnessEvent,
-} from "@station/contracts";
+import type { BuildHarnessLaunchRequest, HarnessRunObservation } from "@station/contracts";
 import {
   type ExternalCommandInput,
   type ExternalCommandResult,
@@ -190,7 +186,7 @@ describe("PiHarnessProvider", () => {
     ]);
   });
 
-  it("classifies and ingests Pi observations through provider-local parsing", async () => {
+  it("classifies Pi observations without owning raw hook ingestion", async () => {
     const provider = createPiHarnessProvider({ now: () => new Date(now) });
 
     await expect(
@@ -206,17 +202,7 @@ describe("PiHarnessProvider", () => {
       },
     });
 
-    await expect(provider.ingestEvent?.(event(), eventContext())).resolves.toEqual([
-      expect.objectContaining({
-        provider: "pi",
-        worktreeId: "wt_web_task",
-        rawEventType: "agent_start",
-        status: expect.objectContaining({
-          value: "working",
-          source: "harness_event",
-        }),
-      }),
-    ]);
+    expect("ingestEvent" in provider).toBe(false);
   });
 });
 
@@ -276,22 +262,6 @@ function run(): HarnessRunObservation {
     confidence: "low",
     reason: "terminal target is bound to Pi; no reliable lifecycle signal yet.",
     observedAt: now,
-  };
-}
-
-function event(): RawHarnessEvent {
-  return {
-    provider: "pi",
-    observedAt: now,
-    event: {
-      event_type: "agent_start",
-      cwd: "/tmp/station/web/task",
-      pi_session_id: "pi_session_123",
-      station_project_id: "web",
-      station_worktree_id: "wt_web_task",
-      station_session_id: "ses_web_task",
-      station_terminal_target_id: "tmux:station:@1:%2",
-    },
   };
 }
 

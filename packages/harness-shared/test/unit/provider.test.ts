@@ -1,5 +1,4 @@
 import type {
-  HarnessEventObservation,
   HarnessLaunchPlan,
   HarnessStatusObservation,
   ProviderDoctorContext,
@@ -119,34 +118,22 @@ describe("createTerminalBoundHarnessProvider", () => {
     });
   });
 
-  it("ingests events through the runtime boundary when a spec supplies normalize", async () => {
-    const observation = { provider: "test", observedAt: now } as unknown as HarnessEventObservation;
-    const provider = createTerminalBoundHarnessProvider(
-      baseSpec({
-        ingestEvent: {
-          operation: "provider.test.ingestEvent",
-          errorCode: "HARNESS_TEST_EVENT_INGEST_FAILED",
-          errorMessage: "ingest failed",
-          normalize: () => [observation],
-        },
-      }),
-      {},
-    );
-
-    expect(provider.ingestEvent).toBeDefined();
-    await expect(
-      provider.ingestEvent?.(
-        { provider: "test", event: {} },
-        { projects: [], worktrees: [], terminalTargets: [] },
-      ),
-    ).resolves.toEqual([observation]);
+  it("keeps raw hook ingestion out of the provider operation surface", () => {
+    const provider = createTerminalBoundHarnessProvider(baseSpec(), {});
+    expect(Object.keys(provider)).toEqual([
+      "id",
+      "capabilities",
+      "health",
+      "discoverRuns",
+      "classifyRun",
+      "buildLaunch",
+    ]);
   });
 
   it("omits optional interface methods the spec does not supply", () => {
     const provider = createTerminalBoundHarnessProvider(baseSpec(), {});
     expect("doctorChecks" in provider).toBe(false);
     expect("hooksStatus" in provider).toBe(false);
-    expect("ingestEvent" in provider).toBe(false);
     expect("acceptsPersistedEvent" in provider).toBe(false);
   });
 

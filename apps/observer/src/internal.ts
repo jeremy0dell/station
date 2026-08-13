@@ -12,7 +12,6 @@ export * from "./diagnostics/localEvidenceSource.js";
 export * from "./hooks/harnessIngressQueue.js";
 export * from "./hooks/ingestion.js";
 export * from "./hooks/observerEventHooks.js";
-export * from "./hooks/providerHookIngress.js";
 export * from "./hooks/spool.js";
 export * from "./metadata/gitRefInvalidation.js";
 export * from "./metadata/localGitChangeSummary.js";

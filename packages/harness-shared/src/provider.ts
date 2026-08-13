@@ -2,7 +2,6 @@ import type {
   BuildHarnessLaunchRequest,
   HarnessCapabilities,
   HarnessDiscoveryContext,
-  HarnessEventContext,
   HarnessEventObservation,
   HarnessHooksStatus,
   HarnessLaunchPlan,
@@ -16,7 +15,6 @@ import type {
   ProviderHookArtifactOwner,
   ProviderHookArtifactOwnership,
   ProviderId,
-  RawHarnessEvent,
   SafeError,
 } from "@station/contracts";
 import { discoverTerminalBoundHarnessRuns } from "@station/contracts";
@@ -24,7 +22,6 @@ import {
   type ExternalCommandResult,
   type ExternalCommandRunner,
   runExternalCommand,
-  runRuntimeBoundary,
   systemClock,
   toIsoTimestamp,
 } from "@station/runtime";
@@ -54,16 +51,6 @@ export type HarnessVersionSpec = {
   latestPackage?: string;
 };
 
-export type HarnessIngestSpec = {
-  operation: string;
-  errorCode: string;
-  errorMessage: string;
-  normalize: (
-    event: RawHarnessEvent,
-    context: HarnessEventContext,
-  ) => HarnessEventObservation[] | Promise<HarnessEventObservation[]>;
-};
-
 export type TerminalBoundHarnessCommandDefinition = {
   id: ProviderId;
   displayName: string;
@@ -81,7 +68,6 @@ export type TerminalBoundHarnessProviderSpec<TOpts extends CommonHarnessProvider
       request: BuildHarnessLaunchRequest,
     ) => HarnessLaunchPlan | Promise<HarnessLaunchPlan>;
     classifyRun: (run: HarnessRunObservation) => HarnessStatusObservation;
-    ingestEvent?: HarnessIngestSpec;
     acceptsPersistedEvent?: (observation: HarnessEventObservation) => boolean;
     doctorChecks?: (
       options: TOpts,
@@ -112,10 +98,6 @@ export function createTerminalBoundHarnessProvider<TOpts extends CommonHarnessPr
   };
   // Optional interface methods stay absent (never `= undefined`) so `'x' in provider`
   // feature-detection holds and exactOptionalPropertyTypes is respected.
-  const ingest = spec.ingestEvent;
-  if (ingest) {
-    provider.ingestEvent = (event, context) => harnessIngest(ingest, spec.id, event, context);
-  }
   if (spec.acceptsPersistedEvent !== undefined) {
     provider.acceptsPersistedEvent = spec.acceptsPersistedEvent;
   }
@@ -332,28 +314,4 @@ function harnessCapabilities<TOpts extends CommonHarnessProviderOptions>(
 function harnessCheckedAt(options: { now?: () => Date | string }): string {
   const value = options.now?.() ?? systemClock.now();
   return toIsoTimestamp(value instanceof Date ? value : new Date(value));
-}
-
-async function harnessIngest(
-  spec: HarnessIngestSpec,
-  provider: ProviderId,
-  event: RawHarnessEvent,
-  context: HarnessEventContext,
-): Promise<HarnessEventObservation[]> {
-  const result = await runRuntimeBoundary(
-    {
-      operation: spec.operation,
-      error: {
-        tag: "HarnessProviderError",
-        code: spec.errorCode,
-        message: spec.errorMessage,
-        provider,
-      },
-    },
-    async () => spec.normalize(event, context),
-  );
-  if (!result.ok) {
-    throw result.error;
-  }
-  return result.value;
 }

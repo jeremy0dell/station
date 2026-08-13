@@ -7,7 +7,6 @@ import type {
   ProviderHookAdapter,
   ProviderHookEvent,
   ProviderHookReceipt,
-  ProviderProjectConfig,
   SessionRecoveryHandle,
   StationEvent,
 } from "@station/contracts";
@@ -27,14 +26,13 @@ import {
   toIsoTimestamp,
 } from "@station/runtime";
 import { sessionHarnessExecutionEvidenceFromReport } from "../harnessExecutionIdentity.js";
-import type { IngressJournal, ObservationStore, SessionStore } from "../persistence/index.js";
+import type { IngressJournal } from "../persistence/index.js";
 import {
   providerObservationExpiresAt,
   providerObservationRetentionDays,
 } from "../persistence/retention.js";
 import type { ProviderRegistry } from "../providers/registry.js";
 import type { ObserverEventBus } from "../runtime/eventBus.js";
-import { ingestProviderHookEvent } from "./providerHookIngress.js";
 import { sessionTurnReadinessMutationFromHarnessObservation } from "./turnReadiness.js";
 
 export type ProviderHookIngress = {
@@ -54,14 +52,12 @@ export type ProviderHookIngressOptions = {
 };
 
 export type CreateProviderHookIngressOptions = {
-  persistence: IngressJournal & ObservationStore & SessionStore;
+  persistence: IngressJournal;
   providers?: ProviderRegistry;
-  projects?: ProviderProjectConfig[];
   eventBus?: ObserverEventBus;
   clock?: RuntimeClock;
   hookId?: () => string;
   requestReconcile?: (reason: string) => void;
-  retention?: ObservabilityRetentionConfig;
   /**
    * Harness report handoff for adapter-normalized hook events. Raw payloads are
    * normalized here (observer-side) so exactly one code version computes status.
@@ -81,7 +77,8 @@ const defaultHookId = () => `hook_${randomUUID()}`;
 /**
  * USE CASE
  *
- * Accepts raw provider hook evidence once while allowing retries to finish durable downstream processing.
+ * Persists raw provider hook evidence once, maps adapter-backed harness hooks to reports,
+ * and treats every other hook as a reconcile hint.
  */
 export function createProviderHookIngress(
   options: CreateProviderHookIngressOptions,
@@ -173,21 +170,12 @@ export function createProviderHookIngress(
         });
       }
 
-      const providerIngestResult =
-        options.providers === undefined
-          ? undefined
-          : await ingestProviderHookEvent({
-              event,
-              providers: options.providers,
-              projects: options.projects ?? [],
-              persistence: options.persistence,
-              clock,
-              ...(options.retention === undefined ? {} : { retention: options.retention }),
-            });
-
       const shouldReconcile = ingestOptions.triggerReconcile ?? true;
-      const downstreamDeduped = providerIngestResult?.deduped ?? persistResult.value.deduped;
-      if (shouldReconcile && !downstreamDeduped && options.requestReconcile !== undefined) {
+      if (
+        shouldReconcile &&
+        !persistResult.value.deduped &&
+        options.requestReconcile !== undefined
+      ) {
         options.requestReconcile(`hook:${event.provider}:${event.event}`);
       }
 
@@ -202,9 +190,6 @@ export function createProviderHookIngress(
         reconciled: false,
         deduped: persistResult.value.deduped,
       };
-      if (providerIngestResult?.error !== undefined) {
-        receipt.error = providerIngestResult.error;
-      }
       return ProviderHookReceiptSchema.parse(receipt);
     },
   };

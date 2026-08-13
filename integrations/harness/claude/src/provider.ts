@@ -20,7 +20,6 @@ import {
 import { runExternalCommand, safeErrorFromUnknown } from "@station/runtime";
 import { classifyClaudeRunStatus } from "./classify.js";
 import { claudeProviderErrorFromUnknown } from "./errors.js";
-import { normalizeClaudeRawEvent } from "./events.js";
 import { doctorClaudeHooks, resolveClaudeSettingsArtifactPath } from "./hooks.js";
 import {
   buildClaudeLaunchPlan,
@@ -81,12 +80,6 @@ const claudeSpec: TerminalBoundHarnessProviderSpec<ClaudeHarnessProviderOptions>
   },
   buildLaunch,
   classifyRun: (run) => classifyClaudeRunStatus(run),
-  ingestEvent: {
-    operation: "provider.claude.ingestEvent",
-    errorCode: "HARNESS_CLAUDE_EVENT_INGEST_FAILED",
-    errorMessage: "The Claude Code harness provider failed to ingest an event.",
-    normalize: (event, context) => normalizeClaudeRawEvent(event, context),
-  },
   doctorChecks,
   hooksStatus,
   version: { latestPackage: "@anthropic-ai/claude-code" },

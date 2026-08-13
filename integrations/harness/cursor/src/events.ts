@@ -1,20 +1,9 @@
 // Cursor hook events -> STATION HarnessEventObservation, normalized at the provider boundary.
 // Upstream hook contract: https://cursor.com/docs/hooks
 // STATION ingress flow: docs/harness-ingress.md. Keep the parsed payload shape in sync with upstream.
-import type {
-  HarnessEventContext,
-  HarnessEventObservation,
-  HarnessEventReport,
-  ObservedStatus,
-  RawHarnessEvent,
-} from "@station/contracts";
+import type { HarnessEventReport, ObservedStatus } from "@station/contracts";
 import { HarnessEventReportSchema, STATION_SCHEMA_VERSION } from "@station/contracts";
-import {
-  applyCorrelation,
-  correlateTerminalBoundHarnessEvent,
-  harnessEventDiagnostics,
-  reportCorrelation,
-} from "@station/harness-shared";
+import { harnessEventDiagnostics, reportCorrelation } from "@station/harness-shared";
 import { z } from "zod";
 import { compactCursorProviderHookPayload } from "./compaction.js";
 import { cursorHarnessError } from "./errors.js";
@@ -197,37 +186,6 @@ export function parseCursorProviderHookPayload(input: unknown): CursorProviderHo
     );
   }
   return result.data;
-}
-
-export function normalizeCursorRawEvent(
-  raw: RawHarnessEvent,
-  context: HarnessEventContext,
-): HarnessEventObservation[] {
-  const event = parseCursorProviderHookPayload(raw.event);
-  const observedAt = raw.observedAt ?? new Date().toISOString();
-  const correlation = correlateTerminalBoundHarnessEvent({
-    provider: "cursor",
-    identity: event,
-    context,
-    cwd: cursorEventCwd(event),
-    nativeSessionId: cursorNativeSessionId(event),
-    includeProjectId: true,
-    includeTerminalTargetId: true,
-    includeCwd: true,
-  });
-  const observation: HarnessEventObservation = {
-    provider: "cursor",
-    rawEventType: event.hook_event_name,
-    status: statusFromCursorProviderHookPayload(event, observedAt),
-    observedAt,
-    providerData: providerDataFromCursorEvent(event),
-  };
-  const turn = turnFromCursorProviderHookPayload(event);
-  if (turn !== undefined) {
-    observation.turn = turn;
-  }
-  applyCorrelation(observation, correlation);
-  return [observation];
 }
 
 export function cursorProviderHookPayloadToHarnessEventReport(

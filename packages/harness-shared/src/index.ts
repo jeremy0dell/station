@@ -11,8 +11,6 @@ export {
   harnessProviderErrorFromUnknown,
 } from "./errors.js";
 export {
-  applyCorrelation,
-  correlateTerminalBoundHarnessEvent,
   harnessEventDiagnostics,
   reportCorrelation,
 } from "./events.js";

@@ -6,7 +6,6 @@ import type {
   HarnessEventObservation,
   HarnessRunObservation,
   ProviderHookArtifactOwner,
-  RawHarnessEvent,
 } from "@station/contracts";
 import type { ExternalCommandInput, ExternalCommandResult } from "@station/runtime";
 import { describe, expect, it } from "vitest";
@@ -248,7 +247,7 @@ describe("CodexHarnessProvider", () => {
     }
   });
 
-  it("classifies and ingests Codex observations through provider-local parsing", async () => {
+  it("classifies Codex observations without owning raw hook ingestion", async () => {
     const provider = createCodexHarnessProvider({ now: () => new Date(now) });
 
     await expect(
@@ -264,13 +263,7 @@ describe("CodexHarnessProvider", () => {
       },
     });
 
-    await expect(provider.ingestEvent?.(event(), eventContext())).resolves.toEqual([
-      expect.objectContaining({
-        provider: "codex",
-        worktreeId: "wt_web_task",
-        rawEventType: "SessionStart",
-      }),
-    ]);
+    expect("ingestEvent" in provider).toBe(false);
   });
 });
 
@@ -330,22 +323,6 @@ function run(): HarnessRunObservation {
     confidence: "low",
     reason: "terminal target is bound to Codex; no reliable lifecycle signal yet.",
     observedAt: now,
-  };
-}
-
-function event(): RawHarnessEvent {
-  return {
-    provider: "codex",
-    observedAt: now,
-    event: {
-      session_id: "codex_session_123",
-      transcript_path: null,
-      cwd: "/tmp/station/web/task",
-      hook_event_name: "SessionStart",
-      model: "gpt-5.4-codex",
-      permission_mode: "default",
-      source: "startup",
-    },
   };
 }
 

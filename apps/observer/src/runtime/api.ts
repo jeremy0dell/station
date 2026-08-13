@@ -470,12 +470,8 @@ function buildProviderHookIngress(
   return createProviderHookIngress({
     persistence: options.persistence,
     ...(options.providers === undefined ? {} : { providers: options.providers }),
-    projects: providerProjectsFromConfig(options.config ?? emptyConfig()),
     eventBus: options.eventBus,
     clock,
-    ...(options.config?.observability?.retention === undefined
-      ? {}
-      : { retention: options.config.observability.retention }),
     requestReconcile: scheduler.request,
     reportHarnessEvent,
   });

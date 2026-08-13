@@ -182,16 +182,6 @@ export type GetWorktreeRequest = {
   path?: string;
 };
 
-export type RawWorktreeEvent = {
-  provider: ProviderId;
-  event: unknown;
-  observedAt?: string;
-};
-
-export type WorktreeEventContext = {
-  projects: ProviderProjectConfig[];
-};
-
 export type ProviderDoctorCheck = {
   name: string;
   status: "ok" | "warn" | "error";
@@ -297,17 +287,6 @@ export type OpenWorkspaceResult = {
   agentEndpointId: string;
 };
 
-export type RawTerminalEvent = {
-  provider: ProviderId;
-  event: unknown;
-  observedAt?: string;
-};
-
-export type TerminalEventContext = {
-  projects: ProviderProjectConfig[];
-  worktrees: WorktreeObservation[];
-};
-
 export type TerminalCapture = {
   targetId: TerminalTargetId;
   capturedAt: string;
@@ -392,18 +371,6 @@ export type HarnessClassificationContext = {
   terminalTargets: TerminalTargetObservation[];
 };
 
-export type RawHarnessEvent = {
-  provider: ProviderId;
-  event: unknown;
-  observedAt?: string;
-};
-
-export type HarnessEventContext = {
-  projects: ProviderProjectConfig[];
-  worktrees: WorktreeObservation[];
-  terminalTargets: TerminalTargetObservation[];
-};
-
 export type HarnessStopRequest = {
   runId: HarnessRunId;
   sessionId?: SessionId;
@@ -462,10 +429,6 @@ export interface WorktreeProvider {
   capabilities(): WorktreeCapabilities;
   health(): Promise<ProviderHealth>;
   doctorChecks?(context?: ProviderDoctorContext): Promise<ProviderDoctorCheck[]>;
-  ingestEvent?(
-    event: RawWorktreeEvent,
-    context: WorktreeEventContext,
-  ): Promise<WorktreeObservation[]>;
   listWorktrees(project: ProviderProjectConfig): Promise<WorktreeObservation[]>;
   createWorktree(request: CreateWorktreeRequest): Promise<WorktreeObservation>;
   removeWorktree(request: RemoveWorktreeRequest): Promise<RemoveWorktreeResult>;
@@ -482,10 +445,6 @@ export interface TerminalProvider {
   capabilities(): TerminalCapabilities;
   health(): Promise<ProviderHealth>;
   doctorChecks?(context?: ProviderDoctorContext): Promise<ProviderDoctorCheck[]>;
-  ingestEvent?(
-    event: RawTerminalEvent,
-    context: TerminalEventContext,
-  ): Promise<TerminalTargetObservation[]>;
   listTargets(): Promise<TerminalTargetObservation[]>;
   openWorkspace(request: OpenWorkspaceRequest): Promise<OpenWorkspaceResult>;
   launchProcess?(request: TerminalLaunchProcessRequest): Promise<TerminalLaunchProcessResult>;
@@ -555,7 +514,7 @@ export type HarnessVersionInfo = {
 /**
  * DRIVEN PORT
  *
- * Supplies harness launch, discovery, status, ingress, and persisted-event compatibility policy
+ * Supplies harness launch, discovery, status, and persisted-event compatibility policy
  * without exposing provider-native payloads to Observer application code.
  */
 export interface HarnessProvider {
@@ -582,10 +541,6 @@ export interface HarnessProvider {
     run: HarnessRunObservation,
     context: HarnessClassificationContext,
   ): Promise<HarnessStatusObservation>;
-  ingestEvent?(
-    event: RawHarnessEvent,
-    context: HarnessEventContext,
-  ): Promise<HarnessEventObservation[]>;
   /**
    * Pure compatibility policy for durable event observations written by earlier builds.
    * Omit when every previously accepted observation remains valid.
