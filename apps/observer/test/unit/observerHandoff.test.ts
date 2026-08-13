@@ -368,6 +368,30 @@ describe("negotiateObserverIncumbent", () => {
     expect(fixture.signal).toHaveBeenCalledWith(100, "SIGTERM");
   });
 
+  it("waits passively when shutdown removes signal evidence before exact process exit", async () => {
+    const fixture = handoffFixture();
+    let identityReads = 0;
+    fixture.evidence.readProcessIdentity = async () => {
+      identityReads += 1;
+      return identityReads > 4 ? undefined : { ...fixture.identity };
+    };
+    fixture.stop.mockImplementation(async () => {
+      fixture.listening = false;
+      return {
+        schemaVersion: "0.11.0" as const,
+        stopped: true,
+        at: "2026-07-12T12:00:00.000Z",
+      };
+    });
+    fixture.sleep.mockImplementation(async (ms) => {
+      fixture.time += ms;
+      if (fixture.time >= 30) fixture.startToken = undefined;
+    });
+
+    await expect(runNegotiation(fixture)).resolves.toMatchObject({ action: "replaced" });
+    expect(fixture.signal).not.toHaveBeenCalledWith(100, "SIGTERM");
+  });
+
   it("does not treat exact process death as socket closure", async () => {
     const fixture = handoffFixture();
     fixture.stop.mockImplementation(async () => {

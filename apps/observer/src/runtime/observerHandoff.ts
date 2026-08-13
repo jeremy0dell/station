@@ -324,7 +324,16 @@ export async function negotiateObserverIncumbent(
     }
     // Health is gated once stop begins, so signal revalidation uses the
     // previously verified identity plus fresh lsof, pidfile, argv, and OS evidence.
-    await requireVerifiedProcessEvidence(input.socketPath, incumbent, deps);
+    try {
+      await requireVerifiedProcessEvidence(input.socketPath, incumbent, deps);
+    } catch (error) {
+      // Shutdown may remove signal evidence before the exact process exits.
+      // Passive identity checks remain safe for the rest of the handoff deadline.
+      if (await waitForExactExit(input.socketPath, incumbent, deadline, deps, now, sleep)) {
+        return { action: "replaced", health };
+      }
+      throw error;
+    }
     if (now() >= deadline) {
       throw handoffRefused("The incumbent Observer could not be revalidated within the deadline.");
     }
