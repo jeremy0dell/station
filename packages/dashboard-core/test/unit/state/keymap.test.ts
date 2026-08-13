@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { SELECTION_KEYS } from "../../../src/selectors/selectors.js";
 import {
+  type DashboardFooterWidth,
   dashboardBindingHelp,
+  dashboardFooterShortcuts,
   deriveTuiInputMode,
   isSlotKey,
   matchDashboardBinding,
@@ -75,8 +77,22 @@ describe("dashboard lifecycle keys", () => {
 });
 
 describe("dashboard footer binding metadata", () => {
-  it("exposes stable keys and labels without contextual layout policy", () => {
-    expect(dashboardBindingHelp("tui.dashboard.filter")).toEqual({
+  const footerText = (width: DashboardFooterWidth) =>
+    dashboardFooterShortcuts(width)
+      .map(({ keys, label }) => `${keys} ${label}`)
+      .join("  ");
+
+  it("derives full and compact shortcut membership from binding metadata", () => {
+    expect(footerText("full")).toBe(
+      "↵ activate  N new  A add  ⇥ next-needs-me  / filter  X delete  ? help",
+    );
+    expect(footerText("compact")).toBe(
+      "↵ activate  N new  ⇥ next-needs-me  / filter  X delete  ? help",
+    );
+  });
+
+  it("exposes stable and Help-panel keyboard language from the same binding", () => {
+    expect(dashboardBindingHelp("tui.dashboard.filter")).toMatchObject({
       keys: "/",
       label: "filter",
     });
@@ -91,6 +107,18 @@ describe("dashboard footer binding metadata", () => {
     expect(dashboardBindingHelp("tui.dashboard.quickGroup")).toEqual({
       keys: "G",
       label: "quick group",
+    });
+    expect(dashboardBindingHelp("tui.dashboard.nextNeedsMe")).toMatchObject({
+      keys: "⇥",
+      label: "next-needs-me",
+      panelKeys: "tab",
+      panelLabel: "next session needing you",
+    });
+    expect(dashboardBindingHelp("tui.dashboard.slotActivate")).toMatchObject({
+      keys: "1-9 a-z",
+      label: "open visible session",
+      panelKeys: "1-9/a-z",
+      panelLabel: "open visible session or toggle condition",
     });
   });
 });

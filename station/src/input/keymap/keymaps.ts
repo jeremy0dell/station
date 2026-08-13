@@ -40,6 +40,7 @@ export type KeyBinding<TOutcome> = {
    * Ctrl-Q/Ctrl-O still receive them.
    */
   reserved?: boolean;
+  help?: { order: number; key: string; description: string };
   action: (state: StationState) => TOutcome;
 };
 

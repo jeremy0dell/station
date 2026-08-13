@@ -94,18 +94,29 @@ type DashboardKeyPattern =
 
 type DashboardNamedKey = Extract<DashboardKeyPattern, { kind: "named" }>["named"];
 
+export type DashboardBindingHelp = {
+  keys: string;
+  label: string;
+  panelKeys?: string;
+  panelLabel?: string;
+  footerOrder?: number;
+  footerCompact?: true;
+};
+
 type DashboardBindingSpec = {
   id: string;
   pattern: DashboardKeyPattern;
   action: string;
   outcome: "handled" | "exit" | "dismiss-popup";
-  help?: {
-    keys: string;
-    label: string;
-  };
+  help?: DashboardBindingHelp;
 };
 
-const slotHelp = { keys: "1-9 a-z", label: "open visible session" };
+const slotHelp = {
+  keys: "1-9 a-z",
+  label: "open visible session",
+  panelKeys: "1-9/a-z",
+  panelLabel: "open visible session or toggle condition",
+};
 
 // Dashboard keyboard dispatch resolves through this table; every other screen
 // owns its key behavior directly in the transition machine.
@@ -115,12 +126,14 @@ export const TUI_DASHBOARD_BINDINGS = [
     pattern: { kind: "named", named: "up" },
     action: "tui.focus.up",
     outcome: "handled",
+    help: { keys: "↑", label: "move cursor" },
   },
   {
     id: "tui.dashboard.focusDown",
     pattern: { kind: "named", named: "down" },
     action: "tui.focus.down",
     outcome: "handled",
+    help: { keys: "↓", label: "move cursor" },
   },
   {
     id: "tui.dashboard.focusLeft",
@@ -141,7 +154,10 @@ export const TUI_DASHBOARD_BINDINGS = [
     outcome: "handled",
     help: {
       keys: "↵",
-      label: "activate focus",
+      label: "activate",
+      panelLabel: "open focused session",
+      footerOrder: 10,
+      footerCompact: true,
     },
   },
   {
@@ -153,7 +169,11 @@ export const TUI_DASHBOARD_BINDINGS = [
     outcome: "handled",
     help: {
       keys: "⇥",
-      label: "next session needing you",
+      label: "next-needs-me",
+      panelKeys: "tab",
+      panelLabel: "next session needing you",
+      footerOrder: 40,
+      footerCompact: true,
     },
   },
   {
@@ -171,6 +191,8 @@ export const TUI_DASHBOARD_BINDINGS = [
     help: {
       keys: "?",
       label: "help",
+      footerOrder: 70,
+      footerCompact: true,
     },
   },
   {
@@ -198,6 +220,8 @@ export const TUI_DASHBOARD_BINDINGS = [
     help: {
       keys: "/",
       label: "filter",
+      footerOrder: 50,
+      footerCompact: true,
     },
   },
   {
@@ -228,7 +252,10 @@ export const TUI_DASHBOARD_BINDINGS = [
     outcome: "handled",
     help: {
       keys: "X",
-      label: "delete session",
+      label: "delete",
+      panelLabel: "delete session",
+      footerOrder: 60,
+      footerCompact: true,
     },
   },
   {
@@ -239,6 +266,8 @@ export const TUI_DASHBOARD_BINDINGS = [
     help: {
       keys: "N",
       label: "new",
+      footerOrder: 20,
+      footerCompact: true,
     },
   },
   {
@@ -259,6 +288,7 @@ export const TUI_DASHBOARD_BINDINGS = [
     help: {
       keys: "A",
       label: "add",
+      footerOrder: 30,
     },
   },
   {
@@ -311,19 +341,50 @@ export type TuiHelpContentLine =
   | { text: string; align?: "center" }
   | { key: string; description: string };
 
-export const QUIT_HINT_CLOSE = "Q/esc:close";
-export const QUIT_HINT_FILTER_CLOSE = "Q:close";
-export const QUIT_HINT_DISMISS_ERROR = "Esc:dismiss  Q:close";
-
 export type TuiDashboardBindingId = (typeof TUI_DASHBOARD_BINDINGS)[number]["id"];
 
-/** Returns stable keyboard language without selecting a contextual footer layout. */
-export function dashboardBindingHelp(
-  id: TuiDashboardBindingId,
-): { keys: string; label: string } | undefined {
-  const binding = TUI_DASHBOARD_BINDINGS.find((candidate) => candidate.id === id);
-  return binding !== undefined && "help" in binding ? binding.help : undefined;
+export type DashboardFooterWidth = "full" | "compact";
+
+/** Returns the binding's stable keyboard language and action label. */
+export function dashboardBindingHelp(id: TuiDashboardBindingId): DashboardBindingHelp | undefined {
+  const bindings: readonly DashboardBindingSpec[] = TUI_DASHBOARD_BINDINGS;
+  return bindings.find((candidate) => candidate.id === id)?.help;
 }
+
+/** Projects footer-visible shortcuts from the binding registry in presentation order. */
+export function dashboardFooterShortcuts(width: DashboardFooterWidth) {
+  const shortcuts = TUI_DASHBOARD_BINDINGS.flatMap((binding) => {
+    if (!("help" in binding)) return [];
+    const help: DashboardBindingHelp = binding.help;
+    if (help.footerOrder === undefined || (width === "compact" && help.footerCompact !== true)) {
+      return [];
+    }
+    return [
+      {
+        id: binding.id,
+        keys: help.keys,
+        label: help.label,
+        order: help.footerOrder,
+      },
+    ];
+  });
+  return shortcuts
+    .sort((left, right) => left.order - right.order)
+    .map(({ id, keys, label }) => ({ id, keys, label }));
+}
+
+function requireDashboardBindingHelp(id: TuiDashboardBindingId): { keys: string; label: string } {
+  const help = dashboardBindingHelp(id);
+  if (help === undefined) throw new Error(`Dashboard binding ${id} has no help metadata.`);
+  return help;
+}
+
+const quitKey = requireDashboardBindingHelp("tui.dashboard.quit").keys;
+const dismissKey = requireDashboardBindingHelp("tui.dashboard.dismissEsc").keys;
+
+export const QUIT_HINT_CLOSE = `${quitKey}/${dismissKey.toLowerCase()}:close`;
+export const QUIT_HINT_FILTER_CLOSE = `${quitKey}:close`;
+export const QUIT_HINT_DISMISS_ERROR = `${dismissKey}:dismiss  ${quitKey}:close`;
 
 export function isSlotKey(key: TuiKey): boolean {
   // Ctrl-A remains a slot after the global Ctrl-C binding runs. Ctrl-I is the
