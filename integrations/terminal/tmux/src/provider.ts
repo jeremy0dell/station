@@ -279,14 +279,6 @@ export class TmuxProvider implements TerminalProvider {
         reason: "tmux workbench workspace is open and identity binding was written.",
       },
       agentEndpointId: primaryPane.paneId,
-      providerData: {
-        sessionName,
-        windowName,
-        windowTarget,
-        paneTarget,
-        windowId: primaryPane.windowId,
-        paneId: primaryPane.paneId,
-      },
     };
   }
 

@@ -295,7 +295,6 @@ export type OpenWorkspaceRequest = {
 export type OpenWorkspaceResult = {
   target: TerminalIdentityBinding;
   agentEndpointId: string;
-  providerData?: unknown;
 };
 
 export type RawTerminalEvent = {
