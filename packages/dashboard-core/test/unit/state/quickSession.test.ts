@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { dashboardRowIds } from "../../../src/selectors/dashboardTree.js";
-import { createCommandSnapshot, createZeroWorktreeSnapshot } from "../../fixtures/snapshots.js";
+import {
+  createCommandSnapshot,
+  createGroupedDashboardSnapshot,
+  createZeroWorktreeSnapshot,
+} from "../../fixtures/snapshots.js";
 import { createTestDashboardRuntime } from "../../support/fakeClientStateSource.js";
 import { createFakeDashboardCapabilities } from "../../support/fakeDashboardCapabilities.js";
 import { FakeTuiObserverService } from "../../support/fakeObserverService.js";
@@ -54,6 +58,35 @@ describe("quick session", () => {
       cellId: "addSession",
     });
     expect(capabilities.quickCreateRequests).toHaveLength(1);
+  });
+
+  it("launches from an existing Group and expands it for the pending row", async () => {
+    const snapshot = createGroupedDashboardSnapshot();
+    const service = new FakeTuiObserverService(snapshot);
+    const capabilities = createFakeDashboardCapabilities();
+    const store = createTestDashboardRuntime({
+      service,
+      initialSnapshot: snapshot,
+      capabilities,
+      initialState: { collapsedGroupIds: new Set(["group_active"]) },
+    });
+
+    store.actions.dispatch({
+      type: "dashboard.cell.activate",
+      rowId: dashboardRowIds.group("group_active"),
+      cellId: "quickSession",
+    });
+
+    expect(capabilities.quickCreateRequests).toHaveLength(1);
+    expect(store.state.getState().collapsedGroupIds.has("group_active")).toBe(false);
+    expect(store.state.getState().localRows.pendingCreate).toEqual([
+      expect.objectContaining({ targetGroupId: "group_active", projectId: "web" }),
+    ]);
+    expect(store.state.getState().dashboardFocus).toEqual({
+      rowId: dashboardRowIds.group("group_active"),
+      cellId: "quickSession",
+    });
+    await store.dispose();
   });
 
   it("shows the unavailable project's exact error without invoking capability", () => {

@@ -353,6 +353,61 @@ describe("dashboard golden frames", () => {
     );
   });
 
+  it("renders only enabled Group header actions in expanded and collapsed layouts", async () => {
+    const cases = [
+      {
+        visibility: { quickSession: true, menu: true },
+        quickSession: true,
+        menu: true,
+        expandedSuffix: "[qs] [▾]╮",
+      },
+      {
+        visibility: { quickSession: true, menu: false },
+        quickSession: true,
+        menu: false,
+        expandedSuffix: "[qs]╮",
+      },
+      {
+        visibility: { quickSession: false, menu: true },
+        quickSession: false,
+        menu: true,
+        expandedSuffix: "[▾]╮",
+      },
+      {
+        visibility: { quickSession: false, menu: false },
+        quickSession: false,
+        menu: false,
+        expandedSuffix: "─╮",
+      },
+    ] as const;
+
+    for (const collapsed of [false, true]) {
+      for (const testCase of cases) {
+        const setup = await renderDashboard({
+          width: 80,
+          height: 24,
+          snapshot: groupedManyProjectsSnapshot(),
+          initialState: {
+            groupHeaderActionVisibility: testCase.visibility,
+            ...(collapsed ? { collapsedGroupIds: ["group_design_refresh"] } : {}),
+          },
+        });
+        const line = setup
+          .captureCharFrame()
+          .split("\n")
+          .find((candidate) => candidate.includes("Design refresh"));
+
+        expect(line).toBeDefined();
+        expect(line?.includes("[qs]")).toBe(testCase.quickSession);
+        expect(line?.includes("[▾]")).toBe(testCase.menu);
+        if (!collapsed) {
+          expect(line?.trimEnd().endsWith(testCase.expandedSuffix)).toBe(true);
+          expect(line?.lastIndexOf("╮")).toBe(78);
+        }
+      }
+    }
+  });
+
   it("keeps Group frame cells inert and restores target focus after hover", async () => {
     const targets: StationMouseTarget[] = [];
     const groupId = dashboardRowIds.group("group_design_refresh");

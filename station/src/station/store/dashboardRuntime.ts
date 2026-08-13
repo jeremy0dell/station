@@ -5,6 +5,7 @@
 // so onDismiss records that capability without owning the effect.
 import { createDashboardRuntime } from "@station/dashboard-core/runtime";
 import type { DashboardCapabilities, DashboardRuntime, TuiFolderService } from "@station/dashboard-core/runtime";
+import type { DashboardGroupHeaderActionVisibility } from "@station/dashboard-core/state";
 import type { TuiWidgetConfig } from "@station/dashboard-core/widgets";
 import type { StationClient } from "../../sources/types.js";
 
@@ -20,6 +21,8 @@ export type CreateStationDashboardRuntimeOptions = {
   widgets?: readonly TuiWidgetConfig[];
   /** False when widget edits cannot be written back to config.toml. */
   widgetsPersisted?: boolean;
+  /** Optional Group header action visibility overrides. */
+  groupHeaderActionVisibility?: Partial<DashboardGroupHeaderActionVisibility>;
 };
 
 /**
@@ -47,6 +50,9 @@ export function createStationDashboardRuntime(
   }
   if (options.widgetsPersisted !== undefined) {
     initialState.widgetsPersisted = options.widgetsPersisted;
+  }
+  if (options.groupHeaderActionVisibility !== undefined) {
+    initialState.groupHeaderActionVisibility = options.groupHeaderActionVisibility;
   }
   runtimeOptions.initialState = initialState;
   const runtime = createDashboardRuntime(runtimeOptions);

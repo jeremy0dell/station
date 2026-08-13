@@ -58,15 +58,22 @@ describe("routeDashboardMouse", () => {
     );
     expect([...runtime.state.getState().collapsedGroupIds]).toEqual(["group_design_refresh"]);
 
-    for (const cellId of ["quickSession", "menu"] as const) {
-      routeDashboardMouse(
-        { kind: "dashboardCell", rowId, cellId },
-        LEFT_DOWN,
-        runtime,
-        () => {},
-      );
-      expect(runtime.state.getState().dashboardFocus).toEqual({ rowId, cellId });
-      expect([...runtime.state.getState().collapsedGroupIds]).toEqual(["group_design_refresh"]);
-    }
+    routeDashboardMouse(
+      { kind: "dashboardCell", rowId, cellId: "quickSession" },
+      LEFT_DOWN,
+      runtime,
+      () => {},
+    );
+    expect(runtime.state.getState().dashboardFocus).toEqual({ rowId, cellId: "quickSession" });
+    expect([...runtime.state.getState().collapsedGroupIds]).toEqual([]);
+
+    routeDashboardMouse(
+      { kind: "dashboardCell", rowId, cellId: "menu" },
+      LEFT_DOWN,
+      runtime,
+      () => {},
+    );
+    expect(runtime.state.getState().dashboardFocus).toEqual({ rowId, cellId: "menu" });
+    expect([...runtime.state.getState().collapsedGroupIds]).toEqual([]);
   });
 });

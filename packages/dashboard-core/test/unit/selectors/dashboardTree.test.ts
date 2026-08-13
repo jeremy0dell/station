@@ -237,6 +237,34 @@ describe("dashboard tree", () => {
     });
   });
 
+  it("projects only the enabled Group header action cells", () => {
+    const snapshot = createGroupedDashboardSnapshot();
+    const cases = [
+      {
+        visibility: { quickSession: true, menu: false },
+        cells: ["identity", "quickSession"],
+      },
+      {
+        visibility: { quickSession: false, menu: true },
+        cells: ["identity", "menu"],
+      },
+      {
+        visibility: { quickSession: false, menu: false },
+        cells: ["identity"],
+      },
+    ] as const;
+
+    for (const { visibility, cells } of cases) {
+      const state = createInitialTuiState({
+        initialSnapshot: snapshot,
+        groupHeaderActionVisibility: visibility,
+      });
+      const tree = selectDashboardTree(snapshot, state, state.screen);
+
+      expect(tree.rowById.get(dashboardRowIds.group("group_active"))?.cells).toEqual(cells);
+    }
+  });
+
   it("interleaves whole Group blocks with root rows and keeps optimistic rows ungrouped", () => {
     const snapshot = createGroupedDashboardSnapshot();
     const state = createInitialTuiState({
