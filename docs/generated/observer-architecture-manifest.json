@@ -3132,12 +3132,6 @@
           "purpose": null
         },
         {
-          "name": "ErrorEnvelopeInput",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
           "name": "toSafeError",
           "kind": "function",
           "role": null,
@@ -3156,12 +3150,6 @@
           "resolvedPath": "packages/observability/src/index.ts",
           "edgeKind": "runtime",
           "bindings": ["* as observability"]
-        },
-        {
-          "specifier": "@station/observability",
-          "resolvedPath": "packages/observability/src/index.ts",
-          "edgeKind": "type-only",
-          "bindings": ["ErrorEnvelopeInput"]
         }
       ]
     },
@@ -4460,12 +4448,6 @@
         },
         {
           "name": "DrainProviderIngressSpoolOptions",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "ErrorEnvelopeInput",
           "kind": "type",
           "role": null,
           "purpose": null
