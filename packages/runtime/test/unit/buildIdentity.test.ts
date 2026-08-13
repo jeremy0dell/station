@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   buildIdentityPath,
+  buildInputMode,
   buildWithIdentity,
   computeBuildIdentity,
   publishBuildIdentity,
@@ -65,6 +66,12 @@ describe("build identity", () => {
 
     git(root, ["commit", "--allow-empty", "-m", "identity-only commit"]);
     expect(await computeBuildIdentity(root)).not.toBe(clean);
+  });
+
+  it("uses Git's platform-neutral mode for symlink inputs", () => {
+    expect(buildInputMode({ mode: 0o755, isSymbolicLink: () => true })).toBe("777");
+    expect(buildInputMode({ mode: 0o777, isSymbolicLink: () => true })).toBe("777");
+    expect(buildInputMode({ mode: 0o755, isSymbolicLink: () => false })).toBe("755");
   });
 
   it("atomically publishes and validates the runtime sidecar", async () => {
