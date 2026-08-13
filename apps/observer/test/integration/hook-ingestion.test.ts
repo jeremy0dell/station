@@ -461,8 +461,8 @@ describe("observer provider hook ingress", () => {
     });
     const report = harnessReport("report_dedupe_1");
 
-    const first = await ingestion.ingest(report, { triggerReconcile: false });
-    const second = await ingestion.ingest(report, { triggerReconcile: false });
+    const first = await ingestion.ingest(report);
+    const second = await ingestion.ingest(report);
 
     expect(first).toMatchObject({ status: "accepted", deduped: false });
     expect(second).toMatchObject({ status: "accepted", deduped: true });
@@ -561,25 +561,22 @@ describe("observer provider hook ingress", () => {
     const persistence = createSqliteObserverPersistence({ sqlite, clock, idFactory: ids() });
     const bindingIngestion = createHarnessEventReportIngestion({ persistence, clock });
     await expect(
-      bindingIngestion.ingest(
-        {
-          ...harnessReport("report_binding_1"),
-          status: {
-            value: "working",
-            confidence: "medium",
-            reason: "Codex is active.",
-            source: "harness_event",
-            updatedAt: now,
-          },
-          correlation: {
-            projectId: "web",
-            worktreeId: "wt_web_task",
-            sessionId: "ses_web_task",
-            nativeSessionId: "native_codex_1",
-          },
+      bindingIngestion.ingest({
+        ...harnessReport("report_binding_1"),
+        status: {
+          value: "working",
+          confidence: "medium",
+          reason: "Codex is active.",
+          source: "harness_event",
+          updatedAt: now,
         },
-        { triggerReconcile: false },
-      ),
+        correlation: {
+          projectId: "web",
+          worktreeId: "wt_web_task",
+          sessionId: "ses_web_task",
+          nativeSessionId: "native_codex_1",
+        },
+      }),
     ).resolves.toMatchObject({ accepted: true });
     let rejectReportOnce = true;
     const retryingPersistence = {
@@ -616,11 +613,11 @@ describe("observer provider hook ingress", () => {
       },
     };
 
-    await expect(ingestion.ingest(report, { triggerReconcile: false })).resolves.toMatchObject({
+    await expect(ingestion.ingest(report)).resolves.toMatchObject({
       accepted: false,
       status: "rejected",
     });
-    await expect(ingestion.ingest(report, { triggerReconcile: false })).resolves.toMatchObject({
+    await expect(ingestion.ingest(report)).resolves.toMatchObject({
       accepted: true,
       deduped: false,
     });

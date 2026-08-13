@@ -3410,12 +3410,6 @@
           "purpose": null
         },
         {
-          "name": "HarnessIngressProcessResult",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
           "name": "HarnessIngressQueue",
           "kind": "type",
           "role": null,
@@ -4524,12 +4518,6 @@
         },
         {
           "name": "HarnessExecutionIngress",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "HarnessIngressProcessResult",
           "kind": "type",
           "role": null,
           "purpose": null
@@ -10747,16 +10735,10 @@
           "purpose": null
         },
         {
-          "name": "HarnessReportProcessResult",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
           "name": "processHarnessIngressReport",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Persists one normalized report, projects authorized live status, publishes derived events, revalidates contradictory provider health, and returns the required reconcile reason."
+          "purpose": "Persists one normalized report, projects authorized live status, publishes derived events, revalidates contradictory provider health, and requests canonical convergence."
         }
       ],
       "imports": [
@@ -12159,12 +12141,6 @@
           "resolvedPath": "apps/observer/src/runtime/harnessReportProcessor.ts",
           "edgeKind": "type-only",
           "bindings": ["HarnessReportProcessorDeps"]
-        },
-        {
-          "specifier": "./reconcileScheduler.js",
-          "resolvedPath": "apps/observer/src/runtime/reconcileScheduler.ts",
-          "edgeKind": "type-only",
-          "bindings": ["ReconcileScheduler"]
         },
         {
           "specifier": "@station/contracts",
@@ -14475,7 +14451,7 @@
       "declaration": "processHarnessIngressReport",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Persists one normalized report, projects authorized live status, publishes derived events, revalidates contradictory provider health, and returns the required reconcile reason.",
+      "purpose": "Persists one normalized report, projects authorized live status, publishes derived events, revalidates contradictory provider health, and requests canonical convergence.",
       "dependencies": [
         {
           "path": "apps/observer/src/reconcile/statusProjection.ts",

@@ -45,10 +45,7 @@ export type ProviderHookIngress = {
 };
 
 export type HarnessEventReportIngestion = {
-  ingest(
-    report: HarnessEventReport,
-    options?: ProviderHookIngressOptions,
-  ): Promise<HarnessEventReportReceipt>;
+  ingest(report: HarnessEventReport): Promise<HarnessEventReportReceipt>;
 };
 
 export type ProviderHookIngressOptions = {
@@ -76,7 +73,6 @@ export type CreateHarnessEventReportIngestionOptions = {
   persistence: IngressJournal;
   eventBus?: ObserverEventBus;
   clock?: RuntimeClock;
-  requestReconcile?: (reason: string) => void;
   retention?: ObservabilityRetentionConfig;
 };
 
@@ -323,7 +319,7 @@ export function createHarnessEventReportIngestion(
   const clock = options.clock ?? systemClock;
 
   return {
-    ingest: async (inputReport, ingestOptions = {}) => {
+    ingest: async (inputReport) => {
       const report = HarnessEventReportSchema.parse(inputReport);
       const receivedAt = toIsoTimestamp(clock.now());
       const observation = harnessEventObservationFromReport(report);
@@ -415,11 +411,6 @@ export function createHarnessEventReportIngestion(
         });
       }
 
-      const shouldReconcile = ingestOptions.triggerReconcile ?? true;
-      if (shouldReconcile && options.requestReconcile !== undefined) {
-        options.requestReconcile(`harness-report:${report.provider}:${report.eventType}`);
-      }
-
       return HarnessEventReportReceiptSchema.parse({
         schemaVersion: STATION_SCHEMA_VERSION,
         reportId: report.reportId,
@@ -429,7 +420,7 @@ export function createHarnessEventReportIngestion(
         status: "accepted",
         receivedAt,
         projected: false,
-        scheduledReconcile: shouldReconcile && options.requestReconcile !== undefined,
+        scheduledReconcile: false,
         deduped: false,
       });
     },

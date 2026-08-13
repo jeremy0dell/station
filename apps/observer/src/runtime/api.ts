@@ -197,17 +197,14 @@ export function createObserverApi(options: CreateObserverApiOptions): ObserverAp
       return harnessIngressQueueRef.enqueue(report);
     },
   );
-  const harnessEventReportIngestion = buildHarnessEventReportIngestion(
-    options,
-    clock,
-    reconcileScheduler,
-  );
+  const harnessEventReportIngestion = buildHarnessEventReportIngestion(options, clock);
 
   const harnessReportDeps: HarnessReportProcessorDeps = {
     harnessEventReportIngestion,
     core: options.core,
     eventBus: options.eventBus,
     clock,
+    requestReconcile: reconcileScheduler.request,
     ...(options.logger === undefined ? {} : { logger: options.logger }),
   };
   if (providerHealthCache !== undefined) {
@@ -215,12 +212,7 @@ export function createObserverApi(options: CreateObserverApiOptions): ObserverAp
       providerHealthCache.refresh(providerId);
   }
 
-  const harnessIngressQueue = buildHarnessIngressQueue(
-    options,
-    harnessReportDeps,
-    clock,
-    reconcileScheduler,
-  );
+  const harnessIngressQueue = buildHarnessIngressQueue(options, harnessReportDeps, clock);
   harnessIngressQueueRef = harnessIngressQueue;
 
   const spoolDrainDeps: SpoolDrainDeps = {
@@ -230,7 +222,6 @@ export function createObserverApi(options: CreateObserverApiOptions): ObserverAp
     providerHookIngress,
     harnessIngressQueue,
     harnessReportDeps,
-    reconcileScheduler,
     ...(options.hookSpoolDir === undefined
       ? {}
       : { spoolStore: createFilesystemProviderIngressSpoolStore(options.hookSpoolDir) }),
@@ -493,7 +484,6 @@ function buildProviderHookIngress(
 function buildHarnessEventReportIngestion(
   options: CreateObserverApiOptions,
   clock: RuntimeClock,
-  scheduler: ReturnType<typeof createReconcileScheduler>,
 ): HarnessEventReportIngestion {
   if (options.harnessEventReportIngestion !== undefined) return options.harnessEventReportIngestion;
   return createHarnessEventReportIngestion({
@@ -503,7 +493,6 @@ function buildHarnessEventReportIngestion(
     ...(options.config?.observability?.retention === undefined
       ? {}
       : { retention: options.config.observability.retention }),
-    requestReconcile: scheduler.request,
   });
 }
 
@@ -511,13 +500,11 @@ function buildHarnessIngressQueue(
   options: CreateObserverApiOptions,
   harnessReportDeps: HarnessReportProcessorDeps,
   clock: RuntimeClock,
-  scheduler: ReturnType<typeof createReconcileScheduler>,
 ): HarnessIngressQueue {
   if (options.harnessIngressQueue !== undefined) return options.harnessIngressQueue;
   return createHarnessIngressQueue({
     clock,
     ...(options.logger === undefined ? {} : { logger: options.logger }),
-    requestReconcile: scheduler.request,
     processReport: (report) => processHarnessIngressReport(harnessReportDeps, report),
   });
 }

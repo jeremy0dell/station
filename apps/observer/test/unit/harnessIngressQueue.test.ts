@@ -12,7 +12,7 @@ describe("harness ingress queue", () => {
       clock,
       processReport: async (report) => {
         processed.push(report.reportId);
-        return { receipt: acceptedReceipt(report) };
+        return acceptedReceipt(report);
       },
     });
 
@@ -32,7 +32,7 @@ describe("harness ingress queue", () => {
     const queue = createHarnessIngressQueue({
       clock,
       maxPendingReports: 1,
-      processReport: async (report) => ({ receipt: acceptedReceipt(report) }),
+      processReport: async (report) => acceptedReceipt(report),
     });
 
     const first = queue.enqueue(harnessReport("report_1", "session_1"));
@@ -65,7 +65,7 @@ describe("harness ingress queue", () => {
           throw new Error("projection failed");
         }
         processed.push(report.reportId);
-        return { receipt: acceptedReceipt(report) };
+        return acceptedReceipt(report);
       },
     });
 
@@ -96,7 +96,7 @@ describe("harness ingress queue", () => {
           await release.promise;
         }
         processed.push(report.reportId);
-        return { receipt: acceptedReceipt(report) };
+        return acceptedReceipt(report);
       },
     });
 
@@ -121,7 +121,7 @@ describe("harness ingress queue", () => {
         started.resolve();
         await release.promise;
         processed.push(report.reportId);
-        return { receipt: acceptedReceipt(report) };
+        return acceptedReceipt(report);
       },
     });
 

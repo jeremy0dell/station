@@ -77,6 +77,7 @@ describe("harness report processor logging", () => {
       core,
       eventBus,
       clock: { now: () => new Date(now) },
+      requestReconcile: () => undefined,
       logger,
     };
 
@@ -120,6 +121,24 @@ describe("harness report processor logging", () => {
 });
 
 describe("harness report provider health revalidation", () => {
+  it("requests canonical reconcile for an accepted non-deduplicated report", async () => {
+    const { deps, requestReconcile } = healthRevalidationDeps({
+      healthStatus: "healthy",
+    });
+
+    await processHarnessIngressReport(
+      deps,
+      report({
+        reportId: "report_reconcile",
+        nativeSessionId: "native_reconcile",
+        cwd: "/tmp/station/web",
+      }),
+    );
+
+    expect(requestReconcile).toHaveBeenCalledOnce();
+    expect(requestReconcile).toHaveBeenCalledWith("harness-report:codex:PreToolUse");
+  });
+
   it("re-probes unavailable health after an accepted starting report projects", async () => {
     const { deps, refreshProviderHealth } = healthRevalidationDeps({
       healthStatus: "unavailable",
@@ -185,6 +204,7 @@ function healthRevalidationDeps(input: {
   }
   const accepted = input.accepted ?? true;
   const refreshProviderHealth = vi.fn(async () => undefined);
+  const requestReconcile = vi.fn();
   const harnessEventReportIngestion: HarnessEventReportIngestion = {
     ingest: (ingestedReport): Promise<HarnessEventReportReceipt> =>
       Promise.resolve({
@@ -232,9 +252,10 @@ function healthRevalidationDeps(input: {
     core,
     eventBus,
     clock: { now: () => new Date(now) },
+    requestReconcile,
     refreshProviderHealth,
   };
-  return { deps, refreshProviderHealth };
+  return { deps, refreshProviderHealth, requestReconcile };
 }
 
 function report(input: {

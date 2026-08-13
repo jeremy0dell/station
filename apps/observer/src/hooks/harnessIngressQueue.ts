@@ -22,11 +22,6 @@ import {
 } from "@station/runtime";
 import type { StationLogger } from "../stationLogger.js";
 
-export type HarnessIngressProcessResult = {
-  receipt: HarnessEventReportReceipt;
-  reconcileReason?: string | undefined;
-};
-
 export type HarnessIngressQueue = {
   enqueue(report: HarnessEventReport): HarnessEventReportReceipt;
   drain(): Promise<void>;
@@ -36,8 +31,7 @@ export type HarnessIngressQueue = {
 };
 
 export type CreateHarnessIngressQueueOptions = {
-  processReport(report: HarnessEventReport): Promise<HarnessIngressProcessResult>;
-  requestReconcile?: (reason: string) => void;
+  processReport(report: HarnessEventReport): Promise<HarnessEventReportReceipt>;
   clock?: RuntimeClock;
   logger?: StationLogger;
   maxPendingReports?: number;
@@ -177,7 +171,7 @@ export function createHarnessIngressQueue(
         return;
       }
 
-      const reconcileReason = yield* Effect.tryPromise({
+      yield* Effect.tryPromise({
         try: () => options.processReport(queued.report),
         catch: (error) =>
           safeErrorFromUnknown(error, {
@@ -187,10 +181,8 @@ export function createHarnessIngressQueue(
             provider: queued.report.provider,
           }),
       }).pipe(
-        Effect.flatMap((result) =>
-          updateState(
-            (current) => [result.reconcileReason, recordProcessed(current, result, clock)] as const,
-          ),
+        Effect.flatMap((receipt) =>
+          updateState((current) => [undefined, recordProcessed(current, receipt, clock)] as const),
         ),
         Effect.catchAll((error) =>
           updateState((current) => [undefined, recordFailed(current, error, clock)] as const).pipe(
@@ -200,10 +192,6 @@ export function createHarnessIngressQueue(
         ),
         Effect.ensuring(updateState((current) => [undefined, decrementActive(current)] as const)),
       );
-
-      if (reconcileReason !== undefined) {
-        options.requestReconcile?.(reconcileReason);
-      }
     });
   }
 
@@ -359,7 +347,7 @@ function takeQueuedReport(
 
 function recordProcessed(
   current: HarnessIngressQueueState,
-  result: HarnessIngressProcessResult,
+  receipt: HarnessEventReportReceipt,
   clock: RuntimeClock,
 ): HarnessIngressQueueState {
   const metrics: QueueMetrics = {
@@ -367,10 +355,10 @@ function recordProcessed(
     processed: current.metrics.processed + 1,
     lastProcessedAt: toIsoTimestamp(clock.now()),
   };
-  if (result.receipt.status === "rejected") {
+  if (receipt.status === "rejected") {
     metrics.failed = current.metrics.failed + 1;
-    if (result.receipt.error !== undefined) {
-      metrics.lastError = result.receipt.error;
+    if (receipt.error !== undefined) {
+      metrics.lastError = receipt.error;
     }
   }
   return { ...current, metrics };
