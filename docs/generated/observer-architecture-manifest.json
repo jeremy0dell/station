@@ -12366,7 +12366,7 @@
       "declaration": "createSetupComposition",
       "kind": "function",
       "role": "COMPOSITION ROOT",
-      "purpose": "Wires one CLI invocation's semantic session, inspection and operation adapters, Clack input, and independent text and JSON presentation. The lazily created operation adapter routes Observer startup progress through the guided prompt adapter's logInfo.",
+      "purpose": "Wires one CLI invocation's semantic session, adapters, Clack input, and one schema-validated plan shared by text and JSON presentation. The lazily created operation adapter routes Observer startup progress through the guided prompt adapter's logInfo.",
       "dependencies": [
         {
           "path": "apps/cli/src/commands/setup/adapters/inspection.ts",
@@ -12433,7 +12433,7 @@
       "declaration": "createTextSetupPresenter",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Resolves typed setup views and message references into terminal prompts and output.",
+      "purpose": "Formats the canonical setup plan and semantic operation outcomes for terminal display.",
       "dependencies": []
     },
     {

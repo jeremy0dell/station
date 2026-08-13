@@ -8,15 +8,17 @@ import {
   resolveHarnessSelection,
   type SetupPlanningIntent,
 } from "@station/setup-core";
-import { resolveSetupMessage } from "@station/setup-messages";
 import { describe, expect, it } from "vitest";
 import { normalizeSetupPlanningFacts } from "../../src/commands/setup/adapters/inspection.js";
 import type {
   SetupFacts,
   SetupHarnessFact,
 } from "../../src/commands/setup/adapters/inspectionTypes.js";
-import { projectSetupView } from "../../src/commands/setup/presentation/projectSetupView.js";
 import { createJsonSetupPresenter } from "../../src/commands/setup/presenters/json.js";
+import {
+  createTextSetupPresenter,
+  type TextSetupProjection,
+} from "../../src/commands/setup/presenters/text.js";
 
 type BuildSetupPlanOptions = {
   readonly configWrite?: SetupConfigMutationPlan;
@@ -59,10 +61,16 @@ function buildSetupPlans(...arguments_: [SetupFacts, BuildSetupPlanOptions?]) {
     options.configWrite === undefined
       ? { plan: semanticPlan, facts: setupFacts }
       : { plan: semanticPlan, facts: setupFacts, configMutation: options.configWrite };
+  const jsonPlan = createJsonSetupPresenter().project(projectionInput);
   return {
     semanticPlan,
-    presentationView: projectSetupView(projectionInput),
-    jsonPlan: createJsonSetupPresenter().project(projectionInput),
+    textProjection: {
+      plan: jsonPlan,
+      semanticPlan,
+      facts: setupFacts,
+      operationOutcomes: [],
+    } satisfies TextSetupProjection,
+    jsonPlan,
   };
 }
 
@@ -147,15 +155,9 @@ describe("setup plan projection", () => {
         (operation) => operation.kind === "activate-observer-config",
       ),
     ).toBe(true);
-    expect(built.presentationView.checks.find((check) => check.id === "harness")).toMatchObject({
-      label: { id: "label.agent-cli" },
-      explanation: { id: "check.harness-inferred" },
-    });
-    expect(
-      built.presentationView.checks
-        .flatMap((check) => check.details)
-        .some((detail) => detail.label.id === "detail.default-agent"),
-    ).toBe(true);
+    const human = createTextSetupPresenter().renderPlan(built.textProjection);
+    expect(human).toContain("Agent CLI");
+    expect(human).toContain("Default agent:");
     expect(JSON.parse(JSON.stringify(built.jsonPlan))).toEqual(built.jsonPlan);
   });
   it("reports all core checks ready and no selected actions", () => {
@@ -436,12 +438,9 @@ describe("setup plan projection", () => {
       command: ["brew", "install", "bun"],
     });
     expect(plan.nextSteps).toEqual(["Install Bun (brew install bun), then run: stn setup check"]);
-    const recovery = built.presentationView.recovery.find(
-      (instruction) => instruction.kind === "instruction",
+    expect(createTextSetupPresenter().renderPlan(built.textProjection)).toContain(
+      "Install Bun (brew install bun).",
     );
-    expect(
-      recovery?.kind === "instruction" ? resolveSetupMessage(recovery.message) : undefined,
-    ).toBe("Install Bun (brew install bun).");
   });
 
   it("keeps compiled launch ready without source Bun or Station UI rows", () => {
@@ -515,12 +514,9 @@ describe("setup plan projection", () => {
       command: ["brew", "install", "hunk"],
     });
     expect(plan.nextSteps).toEqual(["Install Hunk (brew install hunk), then run: stn setup check"]);
-    const recovery = built.presentationView.recovery.find(
-      (instruction) => instruction.kind === "instruction",
+    expect(createTextSetupPresenter().renderPlan(built.textProjection)).toContain(
+      "Install Hunk (brew install hunk).",
     );
-    expect(
-      recovery?.kind === "instruction" ? resolveSetupMessage(recovery.message) : undefined,
-    ).toBe("Install Hunk (brew install hunk).");
   });
 
   it("blocks config writes when no harness is available", () => {
@@ -1309,12 +1305,10 @@ describe("setup plan projection", () => {
       }),
     );
     const machine = built.jsonPlan.checks.find((check) => check.id === "harness");
-    const human = built.presentationView.checks.find((check) => check.id === "harness");
+    const human = createTextSetupPresenter().renderPlan(built.textProjection);
 
     expect(machine?.message).toContain("supported harness CLI");
-    expect(
-      resolveSetupMessage(human?.explanation ?? { id: "check.harness-none-available" }),
-    ).toContain("supported agent CLI");
+    expect(human).toContain("supported agent CLI");
   });
 
   const base = facts();

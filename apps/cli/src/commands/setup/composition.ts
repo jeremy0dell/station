@@ -16,10 +16,9 @@ import type { SetupMode } from "./adapters/inspectionTypes.js";
 import { createSetupOperationAdapter } from "./adapters/operations.js";
 import { setupPresenter } from "./io.js";
 import { projectSessionView } from "./presentation/projectSessionView.js";
-import { type ProjectSetupView, projectSetupView } from "./presentation/projectSetupView.js";
 import { createClackSetupPresenter } from "./presenters/clack.js";
 import { createJsonSetupPresenter, type JsonSetupPresenter } from "./presenters/json.js";
-import type { TextSetupPresenter } from "./presenters/text.js";
+import type { TextSetupPresenter, TextSetupProjection } from "./presenters/text.js";
 import type { SetupCommandDeps, SetupCommandOptions, SetupPromptAdapter } from "./types.js";
 
 export type CliSetupSession = {
@@ -31,7 +30,7 @@ export type CliSetupSession = {
 export type ProjectedSetupSession = {
   readonly status: "projected";
   readonly plan: CliSetupPlan;
-  readonly view: ProjectSetupView;
+  readonly text: TextSetupProjection;
   readonly session: ReturnType<typeof projectSessionView>;
 };
 
@@ -65,7 +64,7 @@ export type CreateSetupCompositionOptions = {
 /**
  * COMPOSITION ROOT
  *
- * Wires one CLI invocation's semantic session, inspection and operation adapters, Clack input, and independent text and JSON presentation.
+ * Wires one CLI invocation's semantic session, adapters, Clack input, and one schema-validated plan shared by text and JSON presentation.
  * The lazily created operation adapter routes Observer startup progress through the guided prompt adapter's logInfo.
  */
 export function createSetupComposition(options: CreateSetupCompositionOptions): SetupComposition {
@@ -157,10 +156,16 @@ function projectCurrentSession(input: {
           facts: snapshot.facts,
           configMutation: snapshot.configMutation,
         };
+  const plan = json.project(projectionInput);
   return {
     status: "projected",
-    plan: json.project(projectionInput),
-    view: projectSetupView(projectionInput),
+    plan,
+    text: {
+      plan,
+      semanticPlan: sessionView.plan,
+      facts: snapshot.facts,
+      operationOutcomes: sessionView.operationOutcomes,
+    },
     session: sessionView,
   };
 }

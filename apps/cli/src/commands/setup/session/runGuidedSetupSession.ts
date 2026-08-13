@@ -16,7 +16,6 @@ import { setupMessageRef } from "@station/setup-messages";
 import type { SetupFacts } from "../adapters/inspectionTypes.js";
 import type { SetupComposition, SetupSessionProjection } from "../composition.js";
 import { SETUP_HARNESS_DEFINITIONS } from "../harnessDefinitions.js";
-import { overlaySetupOperationOutcomes } from "../presentation/projectSetupResult.js";
 import type { TextSetupPresenter } from "../presenters/text.js";
 import { formatSetupCommand } from "../presenters/text.js";
 import { SETUP_TOOL_DEFINITIONS, setupToolDefinitions } from "../toolDefinitions.js";
@@ -84,7 +83,7 @@ async function driveGuidedSession(
   if (projection === undefined) return finishIncomplete(composition);
   const initialPlan = projection.session.plan;
   if (initialPlan === undefined || !assessSetupPlan(initialPlan).canPrepare) {
-    await presenter.write(presenter.renderApplyResult(projection.view));
+    await presenter.write(presenter.renderApplyResult(projection.text));
     return finishIncomplete(composition);
   }
 
@@ -153,7 +152,7 @@ async function driveGuidedSession(
     (issue) => issue.code === "tool-missing" && issue.tier === "required",
   );
   if (selectedToolOperations.length > 0) {
-    renderRequiredToolsReview(composition, projection, selectedToolOperations);
+    renderRequiredToolsReview(composition, selectedToolOperations);
     const answer = await confirm(
       composition,
       presenter.prompt(setupMessageRef("guided.tools-prompt")),
@@ -171,11 +170,11 @@ async function driveGuidedSession(
         (issue) => issue.code === "tool-missing" && issue.tier === "required",
       )
     ) {
-      await presenter.write(presenter.renderApplyResult(projection.view));
+      await presenter.write(presenter.renderApplyResult(projection.text));
       return finishIncomplete(composition);
     }
   } else if (missingTools) {
-    await presenter.write(presenter.renderApplyResult(projection.view));
+    await presenter.write(presenter.renderApplyResult(projection.text));
     return finishIncomplete(composition);
   }
 
@@ -254,7 +253,7 @@ async function driveGuidedSession(
   projection = await currentProjection(composition);
   if (projection === undefined) return finishIncomplete(composition);
   if (configuredDefaultBlocksSelection(facts)) {
-    await presenter.write(presenter.renderApplyResult(projection.view));
+    await presenter.write(presenter.renderApplyResult(projection.text));
     return finishIncomplete(composition);
   }
   const harnessSelection = await selectHarnesses(facts, composition);
@@ -315,7 +314,7 @@ async function driveGuidedSession(
     projection.session.plan === undefined ||
     !assessSetupPlan(projection.session.plan).canContinueEditing
   ) {
-    await presenter.write(presenter.renderApplyResult(projection.view));
+    await presenter.write(presenter.renderApplyResult(projection.text));
     return finishIncomplete(composition);
   }
 
@@ -362,11 +361,11 @@ async function driveGuidedSession(
   const shellOperation = projection.session.plan.operations.find(
     (operation) => operation.kind === "configure-worktrunk-shell",
   );
-  const shellAction = projection.view.actions.find(
-    (action) => action.operationId === shellOperation?.id,
-  );
   let installWorktrunkShell = false;
-  if (shellAction !== undefined) {
+  if (
+    shellOperation !== undefined &&
+    requireFacts(composition).worktrunkShellIntegration.shell !== undefined
+  ) {
     const answer = await confirm(
       composition,
       worktrunkShellPrompt(requireFacts(composition), presenter),
@@ -397,7 +396,7 @@ async function driveGuidedSession(
   projection = await requireProjection(composition, state);
   if (projection === undefined) return finishIncomplete(composition);
   if (projection.session.plan === undefined || !assessSetupPlan(projection.session.plan).canApply) {
-    await presenter.write(presenter.renderApplyResult(projection.view));
+    await presenter.write(presenter.renderApplyResult(projection.text));
     return finishIncomplete(composition);
   }
 
@@ -409,10 +408,6 @@ async function driveGuidedSession(
   state = await composition.session.application.apply();
   projection = await requireProjection(composition, state);
   if (projection === undefined) return finishIncomplete(composition);
-  const finalView = overlaySetupOperationOutcomes({
-    view: projection.view,
-    outcomes: projection.session.operationOutcomes,
-  });
   if (
     projection.session.operationOutcomes.some(
       (outcome) =>
@@ -424,7 +419,7 @@ async function driveGuidedSession(
     prompt.logWarn(presenter.text(setupMessageRef("guided.hook-install-failed")));
   }
   renderTmuxFeedback(composition, configureTmuxPopup);
-  await presenter.write(presenter.renderApplyResult(finalView));
+  await presenter.write(presenter.renderApplyResult(projection.text));
   const successful = state.status === "completed" && state.result.readiness.workflowReady;
   if (successful) {
     prompt.outro(presenter.text(setupMessageRef("guided.complete-outro")));
@@ -531,15 +526,11 @@ function installerPromptChoices(
   const choices: (SetupPromptChoice & { readonly value: CliSetupHarnessId })[] =
     projection.session.plan?.operations.flatMap((operation) => {
       if (operation.kind !== "install-harness") return [];
-      const action = projection.view.actions.find(
-        (candidate) => candidate.operationId === operation.id,
-      );
-      if (action === undefined) return [];
       return [
         {
           value: operation.harnessId,
-          label: presenter.text(action.label),
-          hint: presenter.text(action.explanation),
+          label: presenter.operationLabel(projection.text, operation),
+          hint: presenter.operationHint(projection.text, operation),
         },
       ];
     }) ?? [];
@@ -727,11 +718,7 @@ function safeErrorText(error: SafeError): string {
 function operationLabel(composition: SetupComposition, operation: SetupOperation): string {
   const projection = composition.project(composition.session.application.getState());
   if (projection.status === "projected") {
-    const matching = projection.view.actions.filter(
-      (candidate) => candidate.operationId === operation.id,
-    );
-    const action = matching.find((candidate) => candidate.kind === operation.kind) ?? matching[0];
-    if (action !== undefined) return composition.text.text(action.label);
+    return composition.text.operationLabel(projection.text, operation);
   }
   if (operation.kind === "install-tool") {
     const definition = SETUP_TOOL_DEFINITIONS[operation.tool];
@@ -832,19 +819,11 @@ function homeDisplayPath(path: string, homeDir: string): string {
 
 function renderRequiredToolsReview(
   composition: SetupComposition,
-  projection: Extract<SetupSessionProjection, { status: "projected" }>,
   operations: readonly Extract<SetupOperation, { kind: "install-tool" }>[],
 ): void {
   const presenter = composition.text;
-  const actionsByOperationId = new Map(
-    projection.view.actions.flatMap((action) =>
-      action.operationId === undefined ? [] : [[action.operationId, action] as const],
-    ),
-  );
   const proposedChanges = operations.flatMap((operation) => {
-    const action = actionsByOperationId.get(operation.id);
-    const description =
-      action === undefined ? operationLabel(composition, operation) : presenter.text(action.label);
+    const description = operationLabel(composition, operation);
     const sourceLabel = presenter.text(setupMessageRef("guided.required-tool-source"));
     const source = presenter.detail(
       presenter.link({
@@ -874,25 +853,12 @@ function renderSelectedChangesReview(
   const completed = projection.session.operationOutcomes.flatMap((outcome) =>
     outcome.status === "completed" ? [operationLabel(composition, outcome.operation)] : [],
   );
-  const representedOperationIds = new Set(
-    projection.view.actions.flatMap((action) =>
-      action.operationId === undefined ? [] : [action.operationId],
-    ),
-  );
-  const pending = [
-    ...projection.view.actions.flatMap((action) =>
-      action.selected && (action.operationId === undefined || !completedIds.has(action.operationId))
-        ? [presenter.text(action.label)]
+  const pending =
+    projection.session.plan?.operations.flatMap((operation) =>
+      operation.selected && !completedIds.has(operation.id)
+        ? composition.text.operationReviewLabels(projection.text, operation)
         : [],
-    ),
-    ...(projection.session.plan?.operations.flatMap((operation) =>
-      operation.selected &&
-      !completedIds.has(operation.id) &&
-      !representedOperationIds.has(operation.id)
-        ? [operationLabel(composition, operation)]
-        : [],
-    ) ?? []),
-  ];
+    ) ?? [];
   const none = presenter.text(setupMessageRef("guided.review-none"));
   const body = [
     presenter.text(setupMessageRef("guided.review-completed")),
