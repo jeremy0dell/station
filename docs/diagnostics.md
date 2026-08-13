@@ -134,7 +134,7 @@ submits a command and can change runtime state.
 `stn setup check --json`, `stn setup system --check`, and
 `pnpm setup:system:check` report local tool readiness. They are read-only.
 
-Provider hooks are diagnosed as delivery hints, not runtime truth. `stn-ingress` assigns stable event ids, tries bounded delivery to the observer, attempts bounded observer auto-start when enabled, and writes a spool record only when startup or delivery fails. Harness reports are accepted into an observer-owned ingress queue before slower persistence, projection, and reconcile work. Queue depth, coalescing, drop/failure counts, and last spool-drain stats appear in observer health and diagnostic snapshots. Hook delivery decisions are written to `logs/hooks.jsonl`; hook payload attributes are redacted before they appear in logs or debug bundles.
+Provider hooks are diagnosed as delivery hints, not runtime truth. `stn-ingress` assigns stable event ids, tries bounded delivery to the observer, uses the standard CLI Observer lifecycle for bounded auto-start when enabled, and writes a spool record only when startup or delivery fails. Harness reports are accepted into an observer-owned ingress queue before slower persistence, projection, and reconcile work. Queue depth, coalescing, drop/failure counts, and last spool-drain stats appear in observer health and diagnostic snapshots. Hook delivery decisions are written to `logs/hooks.jsonl`; hook payload attributes are redacted before they appear in logs or debug bundles.
 
 An allow-listed provider hook that fails the sender's Station ownership or
 configured-root correlation gate writes one best-effort `info` record before

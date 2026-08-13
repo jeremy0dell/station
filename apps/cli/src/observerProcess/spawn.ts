@@ -58,7 +58,8 @@ export function observerSpawnArgv(input: DefaultSpawnObserverInput): [string, ..
   const observerEntry = import.meta.url.endsWith(".ts")
     ? new URL("../../dist/observerMain.js", import.meta.url)
     : new URL("../observerMain.js", import.meta.url);
-  const observerCommand = selfExecArgv("observer", [process.execPath, observerEntry.pathname]);
+  const observerCommand =
+    input.observerCommand ?? selfExecArgv("observer", [process.execPath, observerEntry.pathname]);
   return [
     ...observerCommand,
     "--socket",

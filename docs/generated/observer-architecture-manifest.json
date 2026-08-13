@@ -12579,24 +12579,23 @@
       "declaration": "deliverProviderHookWithSpooling",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Coordinates CLI ingress delivery across Observer startup, socket transport, and spool storage without competing ownership mutation.",
+      "purpose": "Coordinates hook-specific throttling, delivery, and spooling around the canonical CLI Observer lifecycle.",
       "dependencies": [
         {
-          "path": "apps/cli/src/ingress/observerStartup.ts",
-          "declaration": "startProviderHookObserver",
+          "path": "apps/cli/src/observerProcess.ts",
+          "declaration": "getObserverStatus",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/observerProcess.ts",
+          "declaration": "startObserver",
           "kind": "function",
           "role": "ADAPTER",
           "edgeKind": "runtime"
         }
       ]
-    },
-    {
-      "path": "apps/cli/src/ingress/observerStartup.ts",
-      "declaration": "startProviderHookObserver",
-      "kind": "function",
-      "role": "ADAPTER",
-      "purpose": "Translates provider-hook delivery into compatible Observer attachment or child startup; inaccessible and listening-unhealthy sockets never authorize mutation.",
-      "dependencies": []
     },
     {
       "path": "apps/cli/src/ingress/sender.ts",

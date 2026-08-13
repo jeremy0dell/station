@@ -30,8 +30,11 @@ import {
 } from "@station/runtime";
 import { normalizeWorktrunkLifecycleEvent } from "@station/worktrunk";
 import type { ExecutableArgv } from "../selfExec.js";
-import { deliverProviderHookWithSpooling, type ProviderDeliveryAttempt } from "./deliveryPolicy.js";
-import type { ProviderHookObserverStartupDeps } from "./observerStartup.js";
+import {
+  deliverProviderHookWithSpooling,
+  type ProviderDeliveryAttempt,
+  type ProviderHookDeliveryDeps,
+} from "./deliveryPolicy.js";
 import { writeProviderHookSpoolRecord } from "./spool.js";
 
 export type ProviderHookSenderOptions = {
@@ -50,17 +53,7 @@ export type ProviderHookSenderOptions = {
   projectRoots?: readonly string[];
 };
 
-type ProviderHookClientFactoryOptions = {
-  timeoutMs: number;
-  /** Exact Observer selector accepted by delivery readiness. */
-  expectedBuildVersion?: string;
-};
-
-export type ProviderHookSenderDeps = ProviderHookObserverStartupDeps & {
-  clientFactory?: (
-    socketPath: string,
-    options: ProviderHookClientFactoryOptions,
-  ) => ReturnType<typeof createObserverClient>;
+export type ProviderHookSenderDeps = ProviderHookDeliveryDeps & {
   clock?: RuntimeClock;
   writeSpool?: typeof writeProviderHookSpoolRecord;
   hookId?: () => string;

@@ -278,7 +278,8 @@ runtime.
 
 ### Startup
 
-Normal CLI and provider-hook startup is attach-or-spawn. Runtime composition
+Normal CLI and provider-hook startup is attach-or-spawn through one CLI lifecycle;
+provider-hook delivery adds only its cross-process spawn throttle and shared deadline. Runtime composition
 owns the singleton lifecycle through the process-evidence and incumbent-lifecycle
 ports plus local socket, pidfile, boot-claim, and ownership-watcher adapters. The
 complete ownership, four-state probe, handoff, bind, readiness, displacement,
@@ -700,7 +701,7 @@ expires.
 | Provider reads | Reads are timeboxed, retried at the runtime boundary, and concurrency-limited. Failures become provider health and reconcile errors. |
 | Harness ingress | First-party hook transports delegate delivery and spooling to `stn-ingress`. Known build/schema/handoff incompatibility rejects without spooling. One Observer worker processes a bounded pending map; new reports can replace pending work for the same key, and a full map rejects unrelated work with a backpressure error. |
 | Spool drain | One configured drain runs at a time and processes stable filename order through direct durable ingress. Stable spool IDs survive legacy records without hook IDs; completion is idempotent after primary dedupe, and failed records remain on disk with attempt/error evidence. |
-| Hook auto-start throttle | `hook-autostart.lock` limits provider-hook spawn attempts only. It is never Observer ownership; each child still enters the socket-relative SQLite boot claim. |
+| Hook auto-start throttle | `hook-autostart.lock` limits provider-hook spawn attempts only around the canonical CLI Observer lifecycle. It is never Observer ownership; each child still enters the socket-relative SQLite boot claim. |
 | Event delivery | Each subscriber currently has an unbounded in-memory queue. There is no replay or publisher backpressure; slow-subscriber growth is therefore a known operating characteristic. |
 | Background refresh | Each unique provider probe publishes its completed result through the serialized snapshot writer before its in-flight slot clears. Joined refresh callers do not duplicate publication; shutdown unsubscribes first and drains commits already in progress. Probe and metadata-refresh failures remain best-effort and do not block the primary reconcile result. Duplicate cleanup is one-shot after startup reconcile, single-flight, claim-authorized, and shutdown-cancellable rather than periodic. |
 
