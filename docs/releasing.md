@@ -18,8 +18,12 @@ asset. If a published release is faulty, roll forward with a new version.
 
 The tag starts `.github/workflows/release.yml`. That workflow runs standard CI,
 builds the four native targets, creates a six-asset draft, exercises the stamped
-draft installer, and records an immutable `accepted-release-candidate-*`
-artifact. It never publishes the draft automatically.
+draft installer, binds the exact numeric asset IDs and shared target build
+identity, and records an immutable `accepted-release-candidate-*` artifact. The
+macOS candidate lane selects the newest complete immutable predecessor and
+requires `full-handoff`; post-promotion public update checks use the no-Host
+scenario only to prove discovery, download, and installation. The tag workflow
+never publishes the draft automatically.
 
 Do not begin manual acceptance until the workflow succeeds. Treat the workflow,
 not this prose, as the source of truth for artifact names, checksums, and target
@@ -71,8 +75,12 @@ clean Linux machine. Preserve the first failing command and output.
   Station leaves no pane payload behind.
 - **Popup and ingress:** The optional tmux binding cold-opens and warm-reopens
   the popup, and `stn-ingress` delivers a provider event.
-- **Upgrade safety:** A busy incompatible Host is preserved until supported
-  handoff succeeds; concurrent probes observe a complete old or new binary.
+- **Upgrade safety:** A supported `full-handoff` preserves PTY identity and
+  output through Host replacement. If the incumbent cannot hand off, the
+  `preserved-refusal` path leaves its Host and PTYs usable while the target native
+  UI refuses visibly; the pane-free popup may still render, but Host-producing
+  work remains guarded. Do not describe that bounded partial crossover as
+  runtime continuity. Concurrent probes observe a complete old or new binary.
 - **Recovery:** An interrupted install leaves the previous TUI usable, releases
   owned locks and stages, and succeeds on retry. Never remove a lock whose owner
   may be alive.
@@ -88,8 +96,10 @@ After manual acceptance passes, dispatch `.github/workflows/promote-release.yml`
 with the successful release run ID, exact tag, and manual-acceptance confirmation.
 
 Promotion must select the accepted-candidate artifact, revalidate its commit,
-tag, release ID, asset IDs, and hashes, publish that exact draft without replacing
-assets, and pass the public exact-tag installer checks for all native targets.
+tag, release ID, target build identity, asset IDs, and hashes, and acquire the
+repository-wide publication lock. It then reselects the newest complete immutable
+predecessor, publishes that exact draft without replacing assets, and passes the
+public exact-tag installer checks for all native targets.
 
 After promotion:
 

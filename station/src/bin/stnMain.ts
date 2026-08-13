@@ -46,7 +46,6 @@ function compiledRunners(installedRoot: string): SelfExecRunners {
         preparePtyRuntime: prepareCompiledPtyRuntime,
       }),
     dashboard: async () => (await import("../dashboardRenderer/main.js")).runDashboardMain(),
-    ptyBridge: async () => void (await import("../terminal/pty/localPtyBridge.cjs")),
     stationHost: async (argv) =>
       (await import("../host/hostMain.js")).runStationHostMain(argv, {
         preparePtyRuntime: prepareCompiledPtyRuntime,

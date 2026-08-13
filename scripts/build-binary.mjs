@@ -135,16 +135,6 @@ async function main() {
         STATION_BUILD_COMPILED: "true",
         STATION_BUILD_IDENTITY: JSON.stringify(buildIdentity),
       },
-      plugins: [
-        {
-          name: "bun-node-pty-adapter",
-          setup(build) {
-            build.onResolve({ filter: /^node-pty$/ }, () => ({
-              path: join(stationRoot, "src", "terminal", "pty", "bunNodePty.ts"),
-            }));
-          },
-        },
-      ],
     },
     "Station binary compile",
   );

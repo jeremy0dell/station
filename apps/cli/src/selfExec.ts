@@ -7,7 +7,6 @@ export type SelfExecTarget =
   | "ingress"
   | "tui"
   | "dashboard"
-  | "pty-bridge"
   | "station-host"
   | "tmux-popup";
 
@@ -25,7 +24,6 @@ const COMPILED_PREFIX_ARGS = {
   ingress: ["__ingress"],
   tui: ["__tui"],
   dashboard: ["__dashboard"],
-  "pty-bridge": ["__pty-bridge"],
   "station-host": ["__station-host"],
   "tmux-popup": ["__tmux-popup"],
 } as const satisfies Record<SelfExecTarget, readonly string[]>;
@@ -58,7 +56,6 @@ export type SelfExecRunners = {
   ingress(argv: readonly string[]): void | Promise<void>;
   tui(argv: readonly string[]): void | Promise<void>;
   dashboard(argv: readonly string[]): void | Promise<void>;
-  ptyBridge(argv: readonly string[]): void | Promise<void>;
   stationHost(argv: readonly string[]): void | Promise<void>;
   tmuxPopup(argv: readonly string[]): void | Promise<void>;
 };
@@ -92,9 +89,6 @@ export async function dispatchSelfExec(
       return;
     case "__dashboard":
       await runners.dashboard(input.argv.slice(1));
-      return;
-    case "__pty-bridge":
-      await runners.ptyBridge(input.argv.slice(1));
       return;
     case "__station-host":
       await runners.stationHost(input.argv.slice(1));

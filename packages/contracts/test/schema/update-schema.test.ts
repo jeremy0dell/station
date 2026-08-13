@@ -1,0 +1,43 @@
+import {
+  UpdateChannelIdSchema,
+  UpdateCommandArgvSchema,
+  UpdateCommandReportSchema,
+  UpdateCommandStepSchema,
+} from "@station/contracts";
+import { describe, expect, it } from "vitest";
+
+const report = {
+  schemaVersion: 1,
+  channel: "installer-binary",
+  status: "updated",
+  current: { version: "0.0.0-local" },
+  target: { version: "0.0.1-local", revision: "abc123" },
+  steps: [
+    { id: "detect", status: "completed", detail: "Detected installer ownership." },
+    { id: "plan", status: "completed", detail: "Resolved builds." },
+    { id: "apply", status: "completed", detail: "Installed target." },
+    { id: "observer-restart", status: "completed", detail: "Restarted Observer." },
+    { id: "host-handoff", status: "completed", detail: "Handed off Host." },
+  ],
+  warnings: [],
+  recoveryCommands: [],
+} as const;
+
+describe("update command schemas", () => {
+  it("parses the strict schema-version-1 report contract", () => {
+    expect(UpdateCommandReportSchema.parse(report)).toEqual(report);
+  });
+
+  it("rejects unknown report and step fields", () => {
+    expect(UpdateCommandReportSchema.safeParse({ ...report, extra: true }).success).toBe(false);
+    expect(UpdateCommandStepSchema.safeParse({ ...report.steps[0], extra: true }).success).toBe(
+      false,
+    );
+  });
+
+  it("rejects unknown channels and empty commands", () => {
+    expect(UpdateChannelIdSchema.safeParse("unknown").success).toBe(false);
+    expect(UpdateCommandArgvSchema.safeParse([""]).success).toBe(false);
+    expect(UpdateCommandArgvSchema.parse(["stn", "update"])).toEqual(["stn", "update"]);
+  });
+});

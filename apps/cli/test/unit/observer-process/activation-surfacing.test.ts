@@ -131,6 +131,7 @@ describe("a failed cross-build restart retains the incumbent build context", () 
   it("reports a failed higher-build handoff with the incumbent build it tried to replace", async () => {
     const fixture = await createTempState();
     let spawns = 0;
+    let running = true;
 
     const result = await restartObserver(
       { config: fixture.config, timeoutMs: 200 },
@@ -142,15 +143,21 @@ describe("a failed cross-build restart retains the incumbent build context", () 
         },
         clientFactory: () =>
           ({
-            health: async () => ({
-              schemaVersion: "0.11.0",
-              status: "healthy",
-              pid: 4321,
-              startedAt: now,
-              version: sourceBuildVersion,
-              socketPath: fixture.socketPath,
-            }),
-            stop: async () => ({ schemaVersion: "0.11.0", stopped: true, at: now }),
+            health: async () => {
+              if (!running) throw new Error("stopped");
+              return {
+                schemaVersion: "0.11.0",
+                status: "healthy",
+                pid: 4321,
+                startedAt: now,
+                version: sourceBuildVersion,
+                socketPath: fixture.socketPath,
+              };
+            },
+            stop: async () => {
+              running = false;
+              return { schemaVersion: "0.11.0", stopped: true, at: now };
+            },
           }) as never,
       },
     );

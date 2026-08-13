@@ -322,6 +322,14 @@ handoff. Failures report completed phases, sanitized evidence, and exact
 recovery commands; a verified install or Git fast-forward is not rolled back
 after a later preparation or runtime-crossover failure.
 
+Current compiled binaries, including immutable `.5.2`, use in-process Bun PTYs
+and cannot preserve a live PTY across Host replacement. If handoff fails after
+installation and Observer crossover, Station leaves the old Host and PTY alive;
+the target native UI visibly refuses that old Host. The pane-free tmux dashboard
+may still render against the target Observer, while Host-producing work remains
+guarded. This bounded partial crossover is not transparent runtime continuity.
+Source mode alone has the parkable Node/node-pty bridge.
+
 The `installer-binary` channel may own only compiled installations carrying the
 receipt. Detection is local and network-free. Before release discovery and
 again at the installer's locked commit boundary, it binds the physical `stn`

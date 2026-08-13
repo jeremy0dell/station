@@ -13,7 +13,6 @@ const COMPILED_TARGETS = [
   { target: "ingress", expected: ["/opt/stn", "__ingress"] },
   { target: "tui", expected: ["/opt/stn", "__tui"] },
   { target: "dashboard", expected: ["/opt/stn", "__dashboard"] },
-  { target: "pty-bridge", expected: ["/opt/stn", "__pty-bridge"] },
   { target: "station-host", expected: ["/opt/stn", "__station-host"] },
   { target: "tmux-popup", expected: ["/opt/stn", "__tmux-popup"] },
 ] as const satisfies readonly {
@@ -26,7 +25,6 @@ const INTERNAL_ROUTES = [
   { token: "__ingress", runner: "ingress" },
   { token: "__tui", runner: "tui" },
   { token: "__dashboard", runner: "dashboard" },
-  { token: "__pty-bridge", runner: "ptyBridge" },
   { token: "__station-host", runner: "stationHost" },
   { token: "__tmux-popup", runner: "tmuxPopup" },
 ] as const satisfies readonly {
@@ -58,7 +56,6 @@ function createRecordingRunners(): {
       ingress: record("ingress"),
       tui: record("tui"),
       dashboard: record("dashboard"),
-      ptyBridge: record("ptyBridge"),
       stationHost: record("stationHost"),
       tmuxPopup: record("tmuxPopup"),
     },

@@ -67,7 +67,12 @@ export async function preparePackagedPtyRuntime(
   cttyHelperAssetPath: string,
   deps: PackagedAssetDeps = {},
 ): Promise<PreparedPtyRuntime> {
-  const implementation = resolvePtyImplementation(process.env.STATION_PTY_IMPL, "bridge");
+  const implementation = resolvePtyImplementation(process.env.STATION_PTY_IMPL, "bun");
+  if (implementation === "bridge") {
+    throw new Error(
+      "STATION_PTY_IMPL=bridge is unavailable in the compiled Station binary because the Node/node-pty bridge is source-only. Unset STATION_PTY_IMPL or set it to bun.",
+    );
+  }
 
   if (implementation === "bun-nocctty") {
     return {
@@ -95,15 +100,13 @@ export async function preparePackagedPtyRuntime(
     await probeCttyHelper(helperPath, deps.helperExitCode ?? spawnExitCode);
     const lease = await createHelperLease(helperPath);
     await pruneStaleHelpers(cttyDir, dirname(helperPath), deps.removeStalePath ?? rm);
+
     return {
       implementation,
       createTerminal: (options) =>
         createLocalPtyTerminal(options, {
           implementation,
           cttyHelperPath: helperPath,
-          ...(implementation === "bridge"
-            ? { bridgeCommand: [process.execPath, "__pty-bridge"] }
-            : {}),
         }),
       dispose: lease.dispose,
     };

@@ -132,18 +132,13 @@ export function createLocalPtyTerminal(
     name,
     rows: size.rows,
   };
-  if (runtime.cttyHelperPath !== undefined) {
-    bridgeOptions.cttyHelperPath = runtime.cttyHelperPath;
-  }
   if (options.orphan !== undefined) {
     bridgeOptions.orphan = options.orphan;
   }
 
   try {
-    const bridgeCommand = runtime.bridgeCommand ?? [resolveNodeCommand(), BRIDGE_PATH];
-    const [bridgeExecutable, ...bridgePrefix] = bridgeCommand;
-    const bridge = spawn(bridgeExecutable, [
-      ...bridgePrefix,
+    const bridge = spawn(resolveNodeCommand(), [
+      BRIDGE_PATH,
       Buffer.from(JSON.stringify(bridgeOptions), "utf8").toString("base64url"),
     ]);
 
@@ -335,7 +330,6 @@ export type LocalPtyTerminalRuntime = {
   /** A prepared runtime fixes the selector once at process startup. */
   implementation?: PtyImplementation;
   cttyHelperPath?: string;
-  bridgeCommand?: readonly [string, ...string[]];
 };
 
 export function resolvePtyImplementation(

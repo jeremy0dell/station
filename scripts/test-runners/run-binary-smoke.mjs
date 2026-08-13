@@ -972,7 +972,7 @@ async function runBinarySmoke() {
     assertEqual(terminalResult.exitCode, 7, "compiled host PTY exit code");
 
     const hostLog = await readFile(join(stateDir, "logs", "station-host.jsonl"), "utf8");
-    assertIncludes(hostLog, '"ptyImplementation":"bridge"', "compiled host PTY implementation");
+    assertIncludes(hostLog, '"ptyImplementation":"bun"', "compiled host PTY implementation");
     await findFile(
       join(stateDir, "run", "assets", "ctty"),
       (name) => name === "station-ctty-helper",

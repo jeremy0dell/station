@@ -27,7 +27,7 @@ const SOCKET_PROBE_TIMEOUT_MS = 1000;
 // current owners always send it, keeping this file free of a hardcoded twin.
 const BRIDGE_CONTROL_PROTOCOL = 2;
 
-const encodedOptions = process.argv[2] === "__pty-bridge" ? process.argv[3] : process.argv[2];
+const [, , encodedOptions] = process.argv;
 
 if (!encodedOptions) {
   process.stderr.write("Missing node-pty bridge options.\n");
@@ -103,7 +103,6 @@ let parkedBytes = 0;
 let parkedEvicted = false;
 
 const pty = nodePty.spawn(options.command, options.args, {
-  cttyHelperPath: options.cttyHelperPath,
   cols: clampDimension(options.cols, MIN_COLS),
   cwd: options.cwd,
   env: options.env,
