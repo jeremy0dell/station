@@ -261,6 +261,7 @@ function DashboardRow({
           columns={columns}
           rowId={row.id}
           payload={row.payload}
+          cells={row.cells}
           focusedCellId={row.focusedCellId}
           containsFocusedRow={row.containsFocusedRow}
         />

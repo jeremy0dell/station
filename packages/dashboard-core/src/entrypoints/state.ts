@@ -107,6 +107,7 @@ export type {
   CreateGroupReturnTarget,
   CreateGroupScreenView,
   DashboardFilterConditionField,
+  DashboardGroupHeaderActionVisibility,
   DashboardScreenView,
   DashboardSnapshotView,
   DashboardStateView,

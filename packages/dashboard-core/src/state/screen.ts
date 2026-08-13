@@ -14,6 +14,10 @@ export function createInitialTuiState(options: CreateInitialTuiStateOptions = {}
     collapsedProjectIds: new Set(options.collapsedProjectIds ?? []),
     collapsedGroupIds: new Set(options.collapsedGroupIds ?? []),
     groupOrderingMode: options.groupOrderingMode ?? "groups-first",
+    groupHeaderActionVisibility: {
+      quickSession: options.groupHeaderActionVisibility?.quickSession ?? true,
+      menu: options.groupHeaderActionVisibility?.menu ?? true,
+    },
     scrollOffset: options.scrollOffset ?? 0,
     terminalRows: options.terminalRows ?? 24,
     localRows: options.localRows ?? createEmptyTuiLocalRows(),

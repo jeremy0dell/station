@@ -1,6 +1,7 @@
 import type { ProjectId, SessionGroupId, SessionId } from "@station/contracts";
 import { worktreeRowVisibleFields } from "../components/WorktreeRow/rowInput.js";
 import type {
+  DashboardGroupHeaderActionVisibility,
   DashboardScreenView,
   DashboardSnapshotView,
   DashboardViewState,
@@ -170,7 +171,6 @@ type ProjectGroupRows = {
 };
 
 const PROJECT_CELLS = ["identity", "shell", "quickSession", "menu"] as const;
-const GROUP_CELLS = ["identity", "quickSession", "menu"] as const;
 const SESSION_CELLS = ["identity"] as const;
 const EMPTY_PROJECT_CELLS = ["addSession"] as const;
 
@@ -193,7 +193,12 @@ export function selectDashboardTree(
     state.persistentFilter,
   );
   const projection = projectTreeGrid(
-    dashboardRoots(projects, persistentFilter, state.groupOrderingMode),
+    dashboardRoots(
+      projects,
+      persistentFilter,
+      state.groupOrderingMode,
+      state.groupHeaderActionVisibility,
+    ),
   );
   // Focus decorates the finished projection and never becomes structural authority.
   return decorateDashboardProjection(projection, state.dashboardFocus, persistentFilter);
@@ -473,11 +478,12 @@ function dashboardRoots(
   projects: readonly ProjectRows[],
   projection: DashboardPersistentFilterProjection | undefined,
   orderingMode: GroupOrderingMode,
+  groupHeaderActionVisibility: DashboardGroupHeaderActionVisibility,
 ): DashboardTreeNode[] {
   const applied = projection?.source === "applied" && projection.active;
   return projects.flatMap((projectRows, index) => [
     ...(index === 0 ? [] : [projectGapNode(projectRows.project.id)]),
-    projectNode(projectRows, projection, applied, orderingMode),
+    projectNode(projectRows, projection, applied, orderingMode, groupHeaderActionVisibility),
   ]);
 }
 
@@ -486,11 +492,12 @@ function projectNode(
   projection: DashboardPersistentFilterProjection | undefined,
   applied: boolean,
   orderingMode: GroupOrderingMode,
+  groupHeaderActionVisibility: DashboardGroupHeaderActionVisibility,
 ): DashboardTreeNode {
   const visibleRootRows = admittedRows(projectRows.rootRows, projection, applied);
   const groupNodes = [...projectRows.groups]
     .sort(compareProjectGroups)
-    .map((group) => groupNode(group, projection, applied));
+    .map((group) => groupNode(group, projection, applied, groupHeaderActionVisibility));
   const rootNodes = visibleRootRows.map((row) => rowNode(row, projection));
   const children =
     orderingMode === "groups-first"
@@ -520,6 +527,7 @@ function groupNode(
   groupRows: ProjectGroupRows,
   projection: DashboardPersistentFilterProjection | undefined,
   applied: boolean,
+  actionVisibility: DashboardGroupHeaderActionVisibility,
 ): DashboardTreeNode {
   const visibleRows = admittedRows(groupRows.rows, projection, applied);
   const match = projection?.groups.get(groupRows.group.id);
@@ -538,11 +546,20 @@ function groupNode(
   return {
     id: dashboardRowIds.group(groupRows.group.id),
     payload,
-    cells: GROUP_CELLS,
+    cells: groupHeaderCells(actionVisibility),
     defaultCell: "identity",
     children,
     expanded: !groupRows.collapsed,
   };
+}
+
+function groupHeaderCells(
+  visibility: DashboardGroupHeaderActionVisibility,
+): readonly DashboardCellId[] {
+  const cells: DashboardCellId[] = ["identity"];
+  if (visibility.quickSession) cells.push("quickSession");
+  if (visibility.menu) cells.push("menu");
+  return cells;
 }
 
 function groupFrameEndNode(groupId: SessionGroupId): DashboardTreeNode {

@@ -11,6 +11,7 @@ import {
   runSearchProjectDirectoriesOperation,
 } from "./addProject.js";
 import { createDashboardCapabilityOperationRunner } from "./capabilityOperation.js";
+import { runQuickSessionInGroupOperation } from "./groupQuickSession.js";
 import { projectCommandOperations } from "./projectCommands.js";
 import { runRemoveWorktreeOperation } from "./removeWorktree.js";
 import { runRenameSessionOperation } from "./renameSession.js";
@@ -152,6 +153,18 @@ export function createTuiLocalOperationRunner(input: {
     createSessionGroup: (operation) => {
       input.scope.run(() =>
         runCreateSessionGroupOperation({
+          store: store(),
+          service: input.service,
+          capabilities: capabilityOperations,
+          operation,
+          clientLabel: input.clientLabel,
+          scope: input.scope,
+        }),
+      );
+    },
+    quickCreateSessionInGroup: (operation) => {
+      input.scope.run(() =>
+        runQuickSessionInGroupOperation({
           store: store(),
           service: input.service,
           capabilities: capabilityOperations,

@@ -24,7 +24,7 @@ describe("standard CI path classification", () => {
   it.each([
     {
       name: "documentation only",
-      paths: ["README.md", "docs/development.md"],
+      paths: ["README.md", "docs/development.md", "docs/releasing.md", "tests/README.md"],
       expected: {
         docs_only: true,
         installer: false,

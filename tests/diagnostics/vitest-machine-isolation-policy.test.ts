@@ -96,21 +96,18 @@ describe("Vitest machine-isolation policy", () => {
     assertMachineIsolated(await loadConfig(fixtureConfig));
   });
 
-  it("keeps central configs reachable from package scripts and documented", () => {
+  it("keeps central configs reachable from package scripts and documents their policy", () => {
     const packageDocument = readFileSync(new URL("package.json", repositoryRoot), "utf8");
-    const developmentDocument = readFileSync(
-      new URL("docs/development.md", repositoryRoot),
-      "utf8",
-    );
+    const testingDocument = readFileSync(new URL("tests/README.md", repositoryRoot), "utf8");
 
     for (const file of centralConfigs) {
       expect(packageDocument, `${file} is not referenced by a package script`).toContain(
         `config/vitest/${file}`,
       );
-      expect(developmentDocument, `${file} is missing from the test isolation matrix`).toContain(
-        `\`${file}\``,
-      );
     }
+    expect(testingDocument).toContain("config/vitest/");
+    expect(testingDocument).toContain("shared test-machine sandbox");
+    expect(testingDocument).toContain("explicit exception");
   });
 });
 

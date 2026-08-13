@@ -66,5 +66,6 @@ principles have direct architectural consequences:
 - [Philosophy](philosophy.md) — the product principles behind Station
 - [Architecture](architecture.md) — the authoritative boundary and ownership map
 - [Naming](naming.md) — provider hooks, harness reports, STATION events, and observer event hooks
-- [Development](development.md) — environment, test gates, and conventions
+- [Development](development.md) — contributor setup and workflow routing
+- [Testing](../tests/README.md) — test layout, isolation, and gate selection
 - [Debugging](debugging.md) — trace IDs, command lifecycle, and runtime evidence lookup

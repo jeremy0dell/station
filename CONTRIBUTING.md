@@ -57,7 +57,8 @@ pnpm build
 cd station && bun install && cd ..
 ```
 
-Read [Development](docs/development.md) before choosing a test command. Use
+Read [Development](docs/development.md) for contributor orientation and
+[Testing](tests/README.md) before choosing a test command. Use
 [Local development](docs/local-development.md) for isolated Observer, TUI, and
 tmux workflows; provider-backed and real-agent lanes require additional care.
 
@@ -94,8 +95,8 @@ pnpm test:all
 
 Real-provider and broader end-to-end lanes are opt-in. Do not run them against
 personal provider state when an isolated development lane can prove the behavior.
-The [Development guide](docs/development.md) is the source of truth for current
-test gates.
+The [Testing guide](tests/README.md) owns test layout, gate selection, and
+isolation policy.
 
 ## Open a Pull Request
 
