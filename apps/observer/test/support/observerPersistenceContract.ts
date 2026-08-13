@@ -927,11 +927,15 @@ export function observerPersistenceContract(
           expect(observations.map((observation) => observation.entityKey)).toEqual([
             "wt_current",
             "term_current",
+            "term_hook_only",
+            "term_hook_expired",
             "wt_history_only",
           ]);
           expect(observations.map((observation) => observation.id)).toEqual([
             "contract_obs_1",
             "contract_obs_2",
+            "contract_obs_4",
+            "contract_obs_5",
             "contract_obs_3",
           ]);
         });

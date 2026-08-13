@@ -4,7 +4,12 @@ import type {
   TerminalTargetObservation,
   WorktreeObservation,
 } from "@station/contracts";
-import { sameObservedPath, WorktreeObservationSchema } from "@station/contracts";
+import {
+  HarnessRunObservationSchema,
+  sameObservedPath,
+  TerminalTargetObservationSchema,
+  WorktreeObservationSchema,
+} from "@station/contracts";
 import { harnessRunCanActivateSession, terminalCanActivateSession } from "../sessionActivation.js";
 import type { SqlDatabase } from "../sqlite/driver.js";
 import { resolveWorktreeDisplayTitle } from "../worktreeDisplayTitle.js";
@@ -12,6 +17,7 @@ import { maxIso } from "./json.js";
 import { insertProviderObservation } from "./observations.js";
 import { providerObservationExpiresAt } from "./retention.js";
 import { type SqliteSessionRow, sessionFromRow } from "./rows.js";
+import { stripTerminalProviderData } from "./terminalObservations.js";
 import type {
   ObserverIdFactory,
   PersistedSession,
@@ -32,7 +38,13 @@ export function persistReconcileResult(
   input: PersistReconcileResultInput,
   options: { observedAt: string; idFactory: ObserverIdFactory },
 ): void {
-  for (const worktree of input.worktrees.map((value) => WorktreeObservationSchema.parse(value))) {
+  const worktrees = input.worktrees.map((value) => WorktreeObservationSchema.parse(value));
+  const terminalTargets = input.terminalTargets.map((value) =>
+    stripTerminalProviderData(TerminalTargetObservationSchema.parse(value)),
+  );
+  const harnessRuns = input.harnessRuns.map((value) => HarnessRunObservationSchema.parse(value));
+
+  for (const worktree of worktrees) {
     rememberWorktreeIdentity(database, worktree);
   }
   if (input.providerHealth !== undefined) {
@@ -60,7 +72,7 @@ export function persistReconcileResult(
     if (insertedTitles > 0) synchronizeSessionTitleProjections(database, persisted);
     return persisted;
   });
-  upsertSessions(database, input.terminalTargets, input.harnessRuns, persistedTitles);
+  upsertSessions(database, terminalTargets, harnessRuns, persistedTitles);
 }
 
 function expiresAtFor(input: PersistReconcileResultInput, observedAt: string): string | undefined {

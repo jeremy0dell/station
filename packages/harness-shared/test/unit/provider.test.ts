@@ -109,7 +109,6 @@ describe("createTerminalBoundHarnessProvider", () => {
       "capabilities",
       "health",
       "discoverRuns",
-      "classifyRun",
       "buildLaunch",
     ]);
   });

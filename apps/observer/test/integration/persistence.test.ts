@@ -832,7 +832,7 @@ describe("observer persistence", () => {
     sqlite.close();
   });
 
-  it("persists correlation records across observer restart", async () => {
+  it("persists recovery identity and sessions across observer restart", async () => {
     const dbPath = await tempDbPath();
     const sqlite = openObserverSqlite({ path: dbPath, clock: { now: () => new Date(now) } });
     const persistence = createSqliteObserverPersistence({
@@ -866,9 +866,10 @@ describe("observer persistence", () => {
     expect(sqlite.database.prepare("SELECT id FROM worktrees ORDER BY id").all()).toEqual([
       { id: "wt_web_main" },
     ]);
-    expect(sqlite.database.prepare("SELECT id FROM terminal_targets ORDER BY id").all()).toEqual([
-      { id: "term_web_main" },
-    ]);
+    expect(sqlite.database.prepare("SELECT id FROM terminal_targets ORDER BY id").all()).toEqual(
+      [],
+    );
+    expect(sqlite.database.prepare("SELECT id FROM harness_runs ORDER BY id").all()).toEqual([]);
     sqlite.close();
 
     const reopened = openObserverSqlite({ path: dbPath, clock: { now: () => new Date(later) } });
@@ -877,9 +878,10 @@ describe("observer persistence", () => {
     expect(reopened.database.prepare("SELECT id FROM worktrees ORDER BY id").all()).toEqual([
       { id: "wt_web_main" },
     ]);
-    expect(reopened.database.prepare("SELECT id FROM terminal_targets ORDER BY id").all()).toEqual([
-      { id: "term_web_main" },
-    ]);
+    expect(reopened.database.prepare("SELECT id FROM terminal_targets ORDER BY id").all()).toEqual(
+      [],
+    );
+    expect(reopened.database.prepare("SELECT id FROM harness_runs ORDER BY id").all()).toEqual([]);
     expect(await reloaded.listSessions()).toEqual([
       expect.objectContaining({
         id: "ses_web_main",

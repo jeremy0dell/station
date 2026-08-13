@@ -6772,6 +6772,12 @@
           "bindings": ["SqliteSessionRow"]
         },
         {
+          "specifier": "./terminalObservations.js",
+          "resolvedPath": "apps/observer/src/persistence/terminalObservations.ts",
+          "edgeKind": "runtime",
+          "bindings": ["stripTerminalProviderData"]
+        },
+        {
           "specifier": "./types.js",
           "resolvedPath": "apps/observer/src/persistence/types.ts",
           "edgeKind": "type-only",
@@ -6817,7 +6823,12 @@
           "specifier": "@station/contracts",
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "runtime",
-          "bindings": ["WorktreeObservationSchema", "sameObservedPath"]
+          "bindings": [
+            "HarnessRunObservationSchema",
+            "TerminalTargetObservationSchema",
+            "WorktreeObservationSchema",
+            "sameObservedPath"
+          ]
         },
         {
           "specifier": "@station/contracts",
