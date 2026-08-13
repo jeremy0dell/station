@@ -1,5 +1,5 @@
 import type { SafeError } from "@station/contracts";
-import type { SetupEditableIntent, SetupPlanningIntent } from "./intent.js";
+import type { SetupPlanningIntent } from "./intent.js";
 import type { SetupIssue } from "./issues.js";
 import type {
   SetupOperation,
@@ -30,7 +30,7 @@ export type SetupSessionInspectionPhase =
 
 export type SetupSessionActiveInspectionPhase = Exclude<SetupSessionInspectionPhase, "final">;
 
-/** Ordered mutation groups enforced by the setup transition policy. */
+/** Ordered mutation groups enforced by the setup application. */
 export type SetupSessionApplyPhase =
   | "preflight"
   | "config-write"
@@ -66,18 +66,10 @@ export type SetupSessionResult = SetupResult & {
   readonly operationOutcomes: readonly SetupSessionOperationOutcome[];
 };
 
-/** An invocation-local operation identity that prevents replay within the same run. */
-export type SetupOperationCheckpoint = {
-  readonly operationId: SetupOperation["id"];
-};
-
-export type SetupOperationCheckpoints = readonly SetupOperationCheckpoint[];
-
 type SetupSessionBase = {
-  /** Monotonically identifies the state revision that may accept an asynchronous result event. */
+  /** Monotonically identifies presentation and inspection progress within one serialized run. */
   readonly revision: number;
   readonly intent: SetupPlanningIntent;
-  readonly checkpoints: SetupOperationCheckpoints;
   readonly operationOutcomes: readonly SetupSessionOperationOutcome[];
 };
 
@@ -91,13 +83,8 @@ export type SetupSessionInspectingState = SetupSessionBase & {
   readonly plan?: SetupPlan;
 };
 
-export type SetupSessionEditingState = SetupSessionWithPlan & {
-  readonly status: "editing";
-};
-
-export type SetupSessionReviewingState = SetupSessionWithPlan & {
-  readonly status: "reviewing";
-};
+export type SetupSessionEditingState = SetupSessionWithPlan & { readonly status: "editing" };
+export type SetupSessionReviewingState = SetupSessionWithPlan & { readonly status: "reviewing" };
 
 export type SetupSessionApplyingState = SetupSessionWithPlan & {
   readonly status: "applying";
@@ -105,9 +92,7 @@ export type SetupSessionApplyingState = SetupSessionWithPlan & {
   readonly request: "prepare" | "apply";
 };
 
-export type SetupSessionVerifyingState = SetupSessionWithPlan & {
-  readonly status: "verifying";
-};
+export type SetupSessionVerifyingState = SetupSessionWithPlan & { readonly status: "verifying" };
 
 export type SetupSessionBlockedState = SetupSessionBase & {
   readonly status: "blocked";
@@ -137,95 +122,3 @@ export type SetupSessionState =
   | SetupSessionBlockedState
   | SetupSessionCompletedState
   | SetupSessionCancelledState;
-
-export type SetupSessionInspectionRequestedEvent = {
-  readonly type: "inspection-requested";
-  readonly revision: number;
-};
-
-export type SetupSessionInspectionCompletedEvent = {
-  readonly type: "inspection-completed";
-  readonly revision: number;
-  readonly facts: SetupPlan["evidence"];
-};
-
-export type SetupSessionInspectionFailedEvent = {
-  readonly type: "inspection-failed";
-  readonly revision: number;
-  readonly error: SafeError;
-};
-
-export type SetupSessionIntentReplacedEvent = {
-  readonly type: "intent-replaced";
-  readonly revision: number;
-  readonly intent: SetupEditableIntent;
-};
-
-export type SetupSessionPrepareRequestedEvent = {
-  readonly type: "prepare-requested";
-  readonly revision: number;
-};
-
-export type SetupSessionReviewRequestedEvent = {
-  readonly type: "review-requested";
-  readonly revision: number;
-};
-
-export type SetupSessionPreviewRequestedEvent = {
-  readonly type: "preview-requested";
-  readonly revision: number;
-};
-
-export type SetupSessionApplyRequestedEvent = {
-  readonly type: "apply-requested";
-  readonly revision: number;
-};
-
-export type SetupSessionOperationCompletedEvent = {
-  readonly type: "operation-completed";
-  readonly revision: number;
-  readonly outcome: SetupSessionCompletedOperationOutcome;
-};
-
-export type SetupSessionOperationFailedEvent = {
-  readonly type: "operation-failed";
-  readonly revision: number;
-  readonly outcome: SetupSessionFailedOperationOutcome;
-};
-
-export type SetupSessionCancelRequestedEvent = {
-  readonly type: "cancel-requested";
-};
-
-/** A typed input to the pure setup transition policy; asynchronous results are revision-scoped. */
-export type SetupSessionEvent =
-  | SetupSessionInspectionRequestedEvent
-  | SetupSessionInspectionCompletedEvent
-  | SetupSessionInspectionFailedEvent
-  | SetupSessionIntentReplacedEvent
-  | SetupSessionPrepareRequestedEvent
-  | SetupSessionReviewRequestedEvent
-  | SetupSessionPreviewRequestedEvent
-  | SetupSessionApplyRequestedEvent
-  | SetupSessionOperationCompletedEvent
-  | SetupSessionOperationFailedEvent
-  | SetupSessionCancelRequestedEvent;
-
-export type SetupSessionInspectionEffect = {
-  readonly kind: "inspect";
-  readonly phase: SetupSessionInspectionPhase;
-};
-
-export type SetupSessionOperationEffect = {
-  readonly kind: "perform-operation";
-  readonly operation: SetupOperation;
-};
-
-/** An outward request emitted by the transition policy and serialized by the session application. */
-export type SetupSessionEffect = SetupSessionInspectionEffect | SetupSessionOperationEffect;
-
-/** Pure transition output containing the next state and outward effects to serialize. */
-export type SetupSessionTransition = {
-  readonly state: SetupSessionState;
-  readonly effects: readonly SetupSessionEffect[];
-};

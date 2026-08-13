@@ -46,9 +46,3 @@ export {
   createSetupSessionApplication,
   type SetupSessionApplication,
 } from "./session/application.js";
-export {
-  emptySetupOperationCheckpoints,
-  hasCompletedSetupOperation,
-  recordCompletedSetupOperation,
-} from "./session/checkpoints.js";
-export { createSetupSessionState, transitionSetupSession } from "./session/transition.js";

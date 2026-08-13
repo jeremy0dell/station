@@ -15487,8 +15487,22 @@
       "declaration": "createSetupSessionApplication",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Coordinates one setup session's intent-bound inspections, staged prerequisite effects, and complete apply sequence without transport or restart recovery.",
+      "purpose": "Constructs one serialized setup application whose shared methods directly enforce phase order, replay prevention, and cancellation between operations.",
       "dependencies": [
+        {
+          "path": "packages/setup-core/src/policy/assessSetupPlan.ts",
+          "declaration": "assessSetupPlan",
+          "kind": "function",
+          "role": "POLICY",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "packages/setup-core/src/policy/planSetup.ts",
+          "declaration": "planSetup",
+          "kind": "function",
+          "role": "POLICY",
+          "edgeKind": "runtime"
+        },
         {
           "path": "packages/setup-core/src/ports.ts",
           "declaration": "SetupInspection",
@@ -15516,13 +15530,6 @@
           "kind": "type",
           "role": "DRIVING PORT",
           "edgeKind": "type-only"
-        },
-        {
-          "path": "packages/setup-core/src/session/transition.ts",
-          "declaration": "transitionSetupSession",
-          "kind": "function",
-          "role": "POLICY",
-          "edgeKind": "runtime"
         }
       ]
     },
@@ -15532,14 +15539,6 @@
       "kind": "type",
       "role": "DRIVING PORT",
       "purpose": "Accepts serialized setup intent editing, staged preparation, review, apply, and cancellation commands for one invocation-local session.",
-      "dependencies": []
-    },
-    {
-      "path": "packages/setup-core/src/session/transition.ts",
-      "declaration": "transitionSetupSession",
-      "kind": "function",
-      "role": "POLICY",
-      "purpose": "Advances intent editing, staged preparation, complete apply, and cancellation from normalized evidence and typed outcomes without I/O.",
       "dependencies": []
     },
     {
