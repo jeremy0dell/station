@@ -230,7 +230,17 @@ describe("stn update command", () => {
     expect(commands).toEqual([
       expect.objectContaining({
         command: "/opt/mise",
-        args: ["exec", "--", "stn", "--config", "/tmp/config.toml", "observer", "restart"],
+        args: [
+          "exec",
+          "--",
+          "stn",
+          "--config",
+          "/tmp/config.toml",
+          "observer",
+          "restart",
+          "--timeout-ms",
+          "20000",
+        ],
       }),
     ]);
   });
@@ -249,7 +259,17 @@ describe("stn update command", () => {
     expect(result.output).toMatchObject({
       status: "failed",
       error: { code: "UPDATE_RUNTIME_CROSSOVER_FAILED" },
-      recoveryCommands: [["/opt/stn", "--config", "/tmp/config.toml", "observer", "restart"]],
+      recoveryCommands: [
+        [
+          "/opt/stn",
+          "--config",
+          "/tmp/config.toml",
+          "observer",
+          "restart",
+          "--timeout-ms",
+          "20000",
+        ],
+      ],
     });
   });
 
@@ -361,7 +381,7 @@ describe("stn update command", () => {
 
       expect(result.output).toMatchObject({ status: "updated" });
       expect(commands.map(({ args }) => args)).toEqual([
-        ["--config", "/tmp/config.toml", "observer", "restart"],
+        ["--config", "/tmp/config.toml", "observer", "restart", "--timeout-ms", "20000"],
         ["--config", "/tmp/config.toml", "host", "handoff", "--fidelity", "processes"],
       ]);
     } finally {
