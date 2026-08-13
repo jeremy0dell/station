@@ -144,8 +144,11 @@ collapsed ancestor, and otherwise uses deterministic next/previous fallback.
 Project rows use `identity`, `shell`, `quickSession`, and `menu`; the Project
 menu owns Quick Group, New Group, default-agent, and settings transitions.
 Group rows use `identity`, `quickSession`, and `menu`; only identity toggles
-collapse, while the exact Group `[qs]` and `[▾]` targets remain focusable
-no-ops. A focused direct visible member decorates its Group with
+collapse, `[qs]` launches an ordinary Quick Session followed by one expected
+membership update, and `[▾]` remains a focusable no-op until the complete Group
+menu lands. Group Quick Session expands a collapsed Group for its optimistic row.
+The row remains Group-framed only as a convergence bridge; canonical placement
+still comes exclusively from `snapshot.sessionGroups`. A focused direct visible member decorates its Group with
 `containsFocusedRow`, leaving color and ring presentation to the renderer.
 
 The selectors entrypoint exposes branded dashboard row IDs, dashboard cell IDs,

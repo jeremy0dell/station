@@ -362,7 +362,7 @@ describe("dashboard state actions", () => {
     ).toEqual({ state });
   });
 
-  it("toggles Group identity while keeping Group quick and menu cells inert", () => {
+  it("toggles Group identity, submits Group Quick Session, and keeps the menu inert", () => {
     const state = createInitialTuiState({ initialSnapshot: createGroupedDashboardSnapshot() });
     const rowId = dashboardRowIds.group("group_active");
     const collapsed = handleTuiAction(
@@ -374,16 +374,30 @@ describe("dashboard state actions", () => {
     expect(collapsed.state.collapsedGroupIds.has("group_active")).toBe(true);
     expect(collapsed.state.dashboardFocus).toEqual({ rowId, cellId: "identity" });
 
-    for (const cellId of ["quickSession", "menu"] as const) {
-      const inert = handleTuiAction(
-        state,
-        { type: "dashboard.cell.activate", rowId, cellId },
-        context,
-      );
-      expect(inert.operations).toBeUndefined();
-      expect(inert.state.dashboardFocus).toEqual({ rowId, cellId });
-      expect(inert.state.collapsedGroupIds.size).toBe(0);
-    }
+    const quick = handleTuiAction(
+      state,
+      { type: "dashboard.cell.activate", rowId, cellId: "quickSession" },
+      context,
+    );
+    expect(quick.operations).toEqual([
+      expect.objectContaining({
+        type: "quickCreateSessionInGroup",
+        groupId: "group_active",
+        project: expect.objectContaining({ id: "web" }),
+        fallbackCell: "quickSession",
+      }),
+    ]);
+    expect(quick.state.dashboardFocus).toEqual({ rowId, cellId: "quickSession" });
+    expect(quick.state.collapsedGroupIds.size).toBe(0);
+
+    const menu = handleTuiAction(
+      state,
+      { type: "dashboard.cell.activate", rowId, cellId: "menu" },
+      context,
+    );
+    expect(menu.operations).toBeUndefined();
+    expect(menu.state.dashboardFocus).toEqual({ rowId, cellId: "menu" });
+    expect(menu.state.collapsedGroupIds.size).toBe(0);
   });
 
   it("routes Project-menu and Create Group actions through the shared semantic surface", () => {

@@ -538,7 +538,7 @@ describe("routeStationMouse", () => {
     expect([...store.state.getState().collapsedProjectIds]).toEqual([]);
   });
 
-  it("routes Group identity, quick-session, menu, and frame targets through one cell contract", () => {
+  it("routes Group identity, quick-session, menu, and frame targets through one cell contract", async () => {
     const store = makeStore(groupedManyProjectsSnapshot());
     const groupId = dashboardRowIds.group("group_design_refresh");
 
@@ -550,12 +550,21 @@ describe("routeStationMouse", () => {
     expect([...store.state.getState().collapsedGroupIds]).toEqual(["group_design_refresh"]);
     expect(store.state.getState().dashboardFocus).toEqual({ rowId: groupId, cellId: "identity" });
 
-    for (const cellId of ["quickSession", "menu"] as const) {
-      routeStationMouse({ kind: "dashboardCell", rowId: groupId, cellId }, LEFT_DOWN, store);
-      expect([...store.state.getState().collapsedGroupIds]).toEqual(["group_design_refresh"]);
-      expect(store.state.getState().dashboardFocus).toEqual({ rowId: groupId, cellId });
-      expect(store.state.getState().screen).toEqual({ name: "dashboard" });
-    }
+    routeStationMouse(
+      { kind: "dashboardCell", rowId: groupId, cellId: "quickSession" },
+      LEFT_DOWN,
+      store,
+    );
+    expect([...store.state.getState().collapsedGroupIds]).toEqual([]);
+    expect(store.state.getState().dashboardFocus).toEqual({
+      rowId: groupId,
+      cellId: "quickSession",
+    });
+
+    routeStationMouse({ kind: "dashboardCell", rowId: groupId, cellId: "menu" }, LEFT_DOWN, store);
+    expect([...store.state.getState().collapsedGroupIds]).toEqual([]);
+    expect(store.state.getState().dashboardFocus).toEqual({ rowId: groupId, cellId: "menu" });
+    expect(store.state.getState().screen).toEqual({ name: "dashboard" });
 
     const beforeFrame = store.state.getState();
     routeStationMouse(
@@ -574,7 +583,8 @@ describe("routeStationMouse", () => {
       LEFT_DOWN,
       store,
     );
-    expect([...store.state.getState().collapsedGroupIds]).toEqual([]);
+    expect([...store.state.getState().collapsedGroupIds]).toEqual(["group_design_refresh"]);
+    await store.dispose();
   });
 
   it("keeps project disclosure interactive while a persistent filter is applied", () => {

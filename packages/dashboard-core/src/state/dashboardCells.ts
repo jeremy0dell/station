@@ -7,7 +7,7 @@ import {
 import { focusResolvedDashboardCursor, reconcileDashboardFocus } from "./dashboardFocus.js";
 import { activateDashboardRow } from "./rowActivation.js";
 import { toggleDashboardProjectCollapsed } from "./screens/projectCollapse.js";
-import { submitQuickSession } from "./screens/quickSession.js";
+import { submitQuickSession, submitQuickSessionInGroup } from "./screens/quickSession.js";
 import { openProjectMenu } from "./screens/sessionGroups.js";
 import type { TuiTransition } from "./transition.js";
 import type { DashboardState } from "./types.js";
@@ -30,8 +30,11 @@ export function activateDashboardCell(
     case "projectHeader":
       return activateProjectCell(focused, row.payload.project.id, cellId);
     case "groupHeader":
-      return cellId === "identity"
-        ? { state: toggleDashboardGroupCollapsed(focused, row.payload.group.id) }
+      if (cellId === "identity") {
+        return { state: toggleDashboardGroupCollapsed(focused, row.payload.group.id) };
+      }
+      return cellId === "quickSession"
+        ? submitQuickSessionInGroup(focused, row.payload.group.id)
         : { state: focused };
     case "session":
       return cellId === "identity" &&
