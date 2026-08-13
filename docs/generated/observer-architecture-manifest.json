@@ -3339,16 +3339,7 @@
           "specifier": "@station/runtime",
           "resolvedPath": "packages/runtime/src/index.ts",
           "edgeKind": "runtime",
-          "bindings": [
-            "Deferred",
-            "Effect",
-            "Fiber",
-            "Queue",
-            "Ref",
-            "safeErrorFromUnknown",
-            "systemClock",
-            "toIsoTimestamp"
-          ]
+          "bindings": ["safeErrorFromUnknown", "systemClock", "toIsoTimestamp"]
         },
         {
           "specifier": "@station/runtime",
