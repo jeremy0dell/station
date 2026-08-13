@@ -41,7 +41,6 @@ export type CreateSessionCreateHandlerOptions = {
   clock?: RuntimeClock | undefined;
   idFactory?: Partial<SessionCommandIdFactory> | undefined;
   logger?: StationLogger | undefined;
-  commandTimeoutMs?: number | undefined;
 };
 
 /**
@@ -72,7 +71,6 @@ export function createSessionCreateHandler(
     const group = sessionSeedGroupPlacement(payload.group, idFactory.sessionGroupId);
     const runtime = {
       clock: options.clock,
-      commandTimeoutMs: options.commandTimeoutMs,
       signal: context.signal,
       trace: context.trace,
     };
@@ -132,7 +130,6 @@ export function createSessionCreateHandler(
         {
           trace: context.trace,
           signal: context.signal,
-          commandTimeoutMs: options.commandTimeoutMs,
         },
       );
       if (receipt.status === "rejected") {
@@ -153,7 +150,6 @@ export function createSessionCreateHandler(
               context,
               logger: options.logger,
               clock: options.clock,
-              commandTimeoutMs: options.commandTimeoutMs,
             });
       if (sessionSeeded) {
         await discardSessionSeedBestEffort({

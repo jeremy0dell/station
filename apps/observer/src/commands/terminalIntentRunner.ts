@@ -29,7 +29,6 @@ import { launchHarnessInTerminal, runProviderMutation } from "./session/shared.j
 export type TerminalIntentSubmitContext = {
   trace?: TraceContext | undefined;
   signal?: AbortSignal | undefined;
-  commandTimeoutMs?: number | undefined;
 };
 
 /**
@@ -58,7 +57,6 @@ export type DefaultTerminalIntentRunnerOptions = {
   launchPreflight: HarnessLaunchPreflight;
   clock?: RuntimeClock | undefined;
   logger?: StationLogger | undefined;
-  commandTimeoutMs?: number | undefined;
 };
 
 class DefaultTerminalIntentRunner implements TerminalIntentRunner {
@@ -66,7 +64,6 @@ class DefaultTerminalIntentRunner implements TerminalIntentRunner {
   readonly #launchPreflight: HarnessLaunchPreflight;
   readonly #clock: RuntimeClock;
   readonly #logger: StationLogger | undefined;
-  readonly #commandTimeoutMs: number | undefined;
   readonly #receipts = new Map<string, Promise<TerminalIntentReceipt>>();
 
   constructor(options: DefaultTerminalIntentRunnerOptions) {
@@ -74,7 +71,6 @@ class DefaultTerminalIntentRunner implements TerminalIntentRunner {
     this.#launchPreflight = options.launchPreflight;
     this.#clock = options.clock ?? systemClock;
     this.#logger = options.logger;
-    this.#commandTimeoutMs = options.commandTimeoutMs;
   }
 
   submitIntent(
@@ -167,7 +163,6 @@ class DefaultTerminalIntentRunner implements TerminalIntentRunner {
 
     const runtime = runtimeOptions({
       clock: this.#clock,
-      defaultCommandTimeoutMs: this.#commandTimeoutMs,
       context,
     });
     await this.#launchPreflight(harness.id, context.signal);
@@ -276,7 +271,6 @@ class DefaultTerminalIntentRunner implements TerminalIntentRunner {
         {
           ...runtimeOptions({
             clock: this.#clock,
-            defaultCommandTimeoutMs: this.#commandTimeoutMs,
             context,
           }),
           operation: `provider.${terminal.id}.focusTarget`,
@@ -284,12 +278,6 @@ class DefaultTerminalIntentRunner implements TerminalIntentRunner {
             tag: "TerminalProviderError",
             code: "TERMINAL_FOCUS_FAILED",
             message: "The terminal provider failed to focus the target.",
-            provider: terminal.id,
-          },
-          timeoutFallback: {
-            tag: "TimeoutError",
-            code: "TERMINAL_FOCUS_TIMEOUT",
-            message: "The terminal provider timed out while focusing the target.",
             provider: terminal.id,
           },
         },
@@ -321,7 +309,6 @@ class DefaultTerminalIntentRunner implements TerminalIntentRunner {
         {
           ...runtimeOptions({
             clock: this.#clock,
-            defaultCommandTimeoutMs: this.#commandTimeoutMs,
             context,
           }),
           operation: `provider.${terminal.id}.closeTarget`,
@@ -329,12 +316,6 @@ class DefaultTerminalIntentRunner implements TerminalIntentRunner {
             tag: "TerminalProviderError",
             code: "TERMINAL_CLOSE_FAILED",
             message: "The terminal provider failed to close the target.",
-            provider: terminal.id,
-          },
-          timeoutFallback: {
-            tag: "TimeoutError",
-            code: "TERMINAL_CLOSE_TIMEOUT",
-            message: "The terminal provider timed out while closing the target.",
             provider: terminal.id,
           },
         },
@@ -360,7 +341,6 @@ class DefaultTerminalIntentRunner implements TerminalIntentRunner {
       {
         ...runtimeOptions({
           clock: this.#clock,
-          defaultCommandTimeoutMs: this.#commandTimeoutMs,
           context: input.context,
         }),
         operation: `provider.${input.terminal.id}.listTargets`,
@@ -368,12 +348,6 @@ class DefaultTerminalIntentRunner implements TerminalIntentRunner {
           tag: "TerminalProviderError",
           code: "TERMINAL_LIST_FAILED",
           message: "The terminal provider failed to list targets.",
-          provider: input.terminal.id,
-        },
-        timeoutFallback: {
-          tag: "TimeoutError",
-          code: "TERMINAL_LIST_TIMEOUT",
-          message: "The terminal provider timed out while listing targets.",
           provider: input.terminal.id,
         },
       },
@@ -417,9 +391,6 @@ class DefaultTerminalIntentRunner implements TerminalIntentRunner {
         {
           operation: `provider.${input.terminal.id}.closeTarget.cleanup`,
           clock: this.#clock,
-          commandTimeoutMs: cleanupTimeoutMs(
-            input.context.commandTimeoutMs ?? this.#commandTimeoutMs,
-          ),
           signal: input.context.signal,
           trace: input.context.trace,
           fallback: {
@@ -452,7 +423,6 @@ class DefaultTerminalIntentRunner implements TerminalIntentRunner {
         {
           operation: `provider.${input.terminal.id}.focusTarget`,
           clock: this.#clock,
-          commandTimeoutMs: input.context.commandTimeoutMs ?? this.#commandTimeoutMs,
           signal: input.context.signal,
           trace: input.context.trace,
           fallback: {
@@ -567,21 +537,14 @@ function buildLaunchRequest(
   return request;
 }
 
-function runtimeOptions(input: {
-  clock: RuntimeClock;
-  defaultCommandTimeoutMs: number | undefined;
-  context: TerminalIntentSubmitContext;
-}) {
+function runtimeOptions(input: { clock: RuntimeClock; context: TerminalIntentSubmitContext }) {
   const runtime: {
     clock: RuntimeClock;
-    commandTimeoutMs?: number | undefined;
     signal?: AbortSignal | undefined;
     trace?: TraceContext | undefined;
   } = {
     clock: input.clock,
   };
-  const commandTimeoutMs = input.context.commandTimeoutMs ?? input.defaultCommandTimeoutMs;
-  if (commandTimeoutMs !== undefined) runtime.commandTimeoutMs = commandTimeoutMs;
   if (input.context.signal !== undefined) runtime.signal = input.context.signal;
   if (input.context.trace !== undefined) runtime.trace = input.context.trace;
   return runtime;
@@ -638,10 +601,6 @@ function intentLogAttributes(
 
 function timestamp(clock: RuntimeClock): string {
   return toIsoTimestamp(clock.now());
-}
-
-function cleanupTimeoutMs(commandTimeoutMs: number | undefined): number {
-  return Math.min(commandTimeoutMs ?? 30_000, 5_000);
 }
 
 function targetMatchesSubject(input: {

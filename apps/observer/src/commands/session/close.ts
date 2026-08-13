@@ -28,7 +28,6 @@ export type CreateSessionCloseHandlerOptions = {
   persistence: EventJournal & SessionStore;
   eventBus?: ObserverEventBus | undefined;
   clock?: RuntimeClock | undefined;
-  commandTimeoutMs?: number | undefined;
   worktreeMutations?: WorktreeMutationCoordinator | undefined;
 };
 
@@ -65,7 +64,6 @@ export function createSessionCloseHandler(
         context,
         requireTerminalClose: payload.mode === "terminal" || payload.mode === "all",
         clock: options.clock,
-        commandTimeoutMs: options.commandTimeoutMs,
       });
       throwIfAborted(context.signal);
       if (session.origin === "station" && payload.mode !== "harness") {

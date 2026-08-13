@@ -102,12 +102,10 @@ export async function submitTerminalIntentOrThrow(input: {
   terminalIntentRunner: TerminalIntentRunner;
   intent: TerminalIntent;
   context: CommandHandlerContext;
-  commandTimeoutMs?: number | undefined;
 }): Promise<TerminalIntentReceipt> {
   const receipt = await input.terminalIntentRunner.submitIntent(input.intent, {
     signal: input.context.signal,
     trace: input.context.trace,
-    commandTimeoutMs: input.commandTimeoutMs,
   });
   if (receipt.status === "rejected") {
     throw receipt.error;

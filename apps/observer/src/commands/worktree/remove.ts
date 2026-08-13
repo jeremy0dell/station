@@ -35,7 +35,6 @@ export type CreateWorktreeRemoveHandlerOptions = {
   persistence: EventJournal & SessionStore;
   eventBus?: ObserverEventBus | undefined;
   clock?: RuntimeClock | undefined;
-  commandTimeoutMs?: number | undefined;
   logger?: StationLogger | undefined;
 };
 
@@ -66,7 +65,6 @@ export function createWorktreeRemoveHandler(
       {
         operation: `provider.${options.providers.worktree.id}.listWorktrees.removeRevalidation`,
         clock: options.clock,
-        commandTimeoutMs: options.commandTimeoutMs,
         signal: context.signal,
         trace: context.trace,
         fallback: {
@@ -106,7 +104,6 @@ export function createWorktreeRemoveHandler(
       allowUnsupportedStop: canUseTerminalCloseFallbackForWorktree(row, force),
       context,
       clock: options.clock,
-      commandTimeoutMs: options.commandTimeoutMs,
     });
     throwIfAborted(context.signal);
     await closeTerminalForWorktree({
@@ -116,7 +113,6 @@ export function createWorktreeRemoveHandler(
       force,
       context,
       clock: options.clock,
-      commandTimeoutMs: options.commandTimeoutMs,
     });
     throwIfAborted(context.signal);
     try {
@@ -127,7 +123,6 @@ export function createWorktreeRemoveHandler(
         force,
         context,
         clock: options.clock,
-        commandTimeoutMs: options.commandTimeoutMs,
       });
     } catch (error) {
       const refusal = worktreeRemovalRefusalDiagnostic(error);

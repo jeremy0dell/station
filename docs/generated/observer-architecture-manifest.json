@@ -2115,7 +2115,7 @@
           "specifier": "@station/runtime",
           "resolvedPath": "packages/runtime/src/index.ts",
           "edgeKind": "runtime",
-          "bindings": ["runRuntimeBoundaryWithTimeout", "systemClock", "toIsoTimestamp"]
+          "bindings": ["runRuntimeBoundary", "systemClock", "toIsoTimestamp"]
         },
         {
           "specifier": "@station/runtime",

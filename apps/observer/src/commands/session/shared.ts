@@ -20,7 +20,7 @@ import {
 import {
   type RuntimeClock,
   type RuntimeSafeErrorFallback,
-  runRuntimeBoundaryWithTimeout,
+  runRuntimeBoundary,
   systemClock,
   toIsoTimestamp,
 } from "@station/runtime";
@@ -57,7 +57,6 @@ export type SessionCommandIdFactory = {
 
 export type SessionCommandRuntime = {
   clock?: RuntimeClock | undefined;
-  commandTimeoutMs?: number | undefined;
 };
 
 type ProviderMutationTrace = {
@@ -69,7 +68,6 @@ type ProviderMutationTrace = {
 type RunProviderMutationInput = {
   operation: string;
   fallback: RuntimeSafeErrorFallback;
-  timeoutFallback?: RuntimeSafeErrorFallback | undefined;
   trace?: ProviderMutationTrace | undefined;
   signal?: AbortSignal | undefined;
 } & SessionCommandRuntime;
@@ -153,7 +151,6 @@ export function worktreeObservationFromRow(
 
 export type SessionCommandLookupRuntime = {
   clock?: RuntimeClock | undefined;
-  commandTimeoutMs?: number | undefined;
   signal?: AbortSignal | undefined;
   trace?: ProviderMutationTrace | undefined;
 };
@@ -378,24 +375,21 @@ export async function discardSessionSeedBestEffort(input: {
   }
 }
 
+/** Normalizes one provider call while its concrete adapter owns bounded external settlement. */
 export async function runProviderMutation<T>(
   input: RunProviderMutationInput,
   task: (signal: AbortSignal) => Promise<T>,
 ): Promise<T> {
   const clock = input.clock ?? systemClock;
-  const boundaryInput: Parameters<typeof runRuntimeBoundaryWithTimeout<T>>[0] = {
+  const boundaryInput: Parameters<typeof runRuntimeBoundary<T>>[0] = {
     operation: input.operation,
     clock,
-    timeoutMs: input.commandTimeoutMs ?? 30_000,
     error: input.fallback,
   };
-  if (input.timeoutFallback !== undefined) {
-    boundaryInput.timeoutError = input.timeoutFallback;
-  }
   if (input.trace !== undefined) {
     boundaryInput.trace = input.trace;
   }
-  const result = await runRuntimeBoundaryWithTimeout(boundaryInput, async ({ signal }) => {
+  const result = await runRuntimeBoundary(boundaryInput, async ({ signal }) => {
     const linked = linkAbortSignals(signal, input.signal);
     try {
       throwIfAborted(linked.signal);
@@ -443,15 +437,8 @@ export async function launchHarnessInTerminal(
       message: "The terminal provider failed to launch the harness process.",
       provider: input.terminal.id,
     },
-    timeoutFallback: {
-      tag: "TimeoutError",
-      code: "TERMINAL_LAUNCH_TIMEOUT",
-      message: "The terminal provider timed out while launching the harness process.",
-      provider: input.terminal.id,
-    },
   };
   if (input.clock !== undefined) mutationInput.clock = input.clock;
-  if (input.commandTimeoutMs !== undefined) mutationInput.commandTimeoutMs = input.commandTimeoutMs;
   if (input.signal !== undefined) mutationInput.signal = input.signal;
   if (input.trace !== undefined) mutationInput.trace = input.trace;
 
@@ -490,7 +477,6 @@ export async function removeWorktreeBestEffort(input: {
   context: CommandHandlerContext;
   logger?: StationLogger | undefined;
   clock?: RuntimeClock | undefined;
-  commandTimeoutMs?: number | undefined;
 }): Promise<boolean> {
   if (input.expectedRegistrationIdentity === undefined) {
     await input.logger?.warn("Session cleanup skipped an unverified worktree removal.", {
@@ -510,7 +496,6 @@ export async function removeWorktreeBestEffort(input: {
       {
         operation: `provider.${input.providers.worktree.id}.removeWorktree.cleanup`,
         clock: input.clock,
-        commandTimeoutMs: cleanupTimeoutMs(input.commandTimeoutMs),
         trace: input.context.trace,
         fallback: {
           tag: "WorktreeProviderError",
@@ -570,8 +555,4 @@ export async function publishSessionCreated(input: {
 
 function safeError(input: SafeError): SafeError {
   return input;
-}
-
-function cleanupTimeoutMs(commandTimeoutMs: number | undefined): number {
-  return Math.min(commandTimeoutMs ?? 30_000, 5_000);
 }

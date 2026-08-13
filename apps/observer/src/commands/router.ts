@@ -53,7 +53,6 @@ export type RegisterObserverCommandHandlersOptions = {
   clock?: RuntimeClock | undefined;
   logger?: StationLogger | undefined;
   idFactory?: Partial<SessionCommandIdFactory & SessionGroupCommandIdFactory> | undefined;
-  commandTimeoutMs?: number | undefined;
   launchPreflight?: HarnessLaunchPreflight | undefined;
   terminalIntentRunner?: TerminalIntentRunner | undefined;
   projectConfigWriter: ProjectConfigWriter;
@@ -93,7 +92,6 @@ export function registerObserverCommandHandlers(
       launchPreflight,
       clock: options.clock,
       logger: options.logger,
-      commandTimeoutMs: options.commandTimeoutMs,
     });
   const sessionGroupHandlers = createSessionGroupCommandHandlers({
     core: options.core,
@@ -110,7 +108,6 @@ export function registerObserverCommandHandlers(
       core: options.core,
       eventBus: options.eventBus,
       clock: options.clock,
-      commandTimeoutMs: options.commandTimeoutMs,
       logger: options.logger,
     }),
     "worktree.fork": createWorktreeForkHandler({
@@ -120,7 +117,6 @@ export function registerObserverCommandHandlers(
       launchPreflight,
       eventBus: options.eventBus,
       clock: options.clock,
-      commandTimeoutMs: options.commandTimeoutMs,
       logger: options.logger,
     }),
     "worktree.remove": createWorktreeRemoveHandler({
@@ -131,7 +127,6 @@ export function registerObserverCommandHandlers(
       persistence: options.persistence,
       eventBus: options.eventBus,
       clock: options.clock,
-      commandTimeoutMs: options.commandTimeoutMs,
       logger: options.logger,
     }),
     "session.create": createSessionCreateHandler({
@@ -145,7 +140,6 @@ export function registerObserverCommandHandlers(
       clock: options.clock,
       idFactory: options.idFactory,
       logger: options.logger,
-      commandTimeoutMs: options.commandTimeoutMs,
     }),
     "session.startAgent": createSessionStartAgentHandler({
       getProjects,
@@ -158,7 +152,6 @@ export function registerObserverCommandHandlers(
       clock: options.clock,
       idFactory: options.idFactory,
       logger: options.logger,
-      commandTimeoutMs: options.commandTimeoutMs,
     }),
     "session.resumeAgent": createSessionResumeAgentHandler({
       getProjects,
@@ -171,7 +164,6 @@ export function registerObserverCommandHandlers(
       eventBus: options.eventBus,
       clock: options.clock,
       idFactory: options.idFactory,
-      commandTimeoutMs: options.commandTimeoutMs,
     }),
     "session.importRecoveryHandle": createSessionImportRecoveryHandleHandler({
       getProjects,
@@ -193,13 +185,11 @@ export function registerObserverCommandHandlers(
       clock: options.clock,
       idFactory: options.idFactory,
       logger: options.logger,
-      commandTimeoutMs: options.commandTimeoutMs,
     }),
     "terminal.focus": createTerminalFocusHandler({
       core: options.core,
       providers: options.providers,
       terminalIntentRunner,
-      commandTimeoutMs: options.commandTimeoutMs,
     }),
     "terminal.close": createTerminalCloseHandler({
       providers: options.providers,
@@ -208,7 +198,6 @@ export function registerObserverCommandHandlers(
       persistence: options.persistence,
       eventBus: options.eventBus,
       clock: options.clock,
-      commandTimeoutMs: options.commandTimeoutMs,
     }),
     "session.close": createSessionCloseHandler({
       providers: options.providers,
@@ -217,7 +206,6 @@ export function registerObserverCommandHandlers(
       persistence: options.persistence,
       eventBus: options.eventBus,
       clock: options.clock,
-      commandTimeoutMs: options.commandTimeoutMs,
       worktreeMutations,
     }),
     "session.rename": createSessionRenameHandler({

@@ -27,7 +27,6 @@ export type CreateTerminalFocusHandlerOptions = {
   core: ObserverCore;
   providers: ProviderRegistry;
   terminalIntentRunner: TerminalIntentRunner;
-  commandTimeoutMs?: number | undefined;
 };
 
 export type CreateTerminalCloseHandlerOptions = {
@@ -37,7 +36,6 @@ export type CreateTerminalCloseHandlerOptions = {
   persistence?: (EventJournal & SessionStore) | undefined;
   eventBus?: ObserverEventBus | undefined;
   clock?: RuntimeClock | undefined;
-  commandTimeoutMs?: number | undefined;
 };
 
 export function createTerminalFocusHandler(
@@ -55,7 +53,6 @@ export function createTerminalFocusHandler(
         snapshot: options.core.getSnapshot(),
       }),
       context,
-      commandTimeoutMs: options.commandTimeoutMs,
     });
     throwIfAborted(context.signal);
   };
@@ -84,7 +81,6 @@ export function createTerminalCloseHandler(
         snapshot,
       }),
       context,
-      commandTimeoutMs: options.commandTimeoutMs,
     });
     throwIfAborted(context.signal);
     if (resolved.session?.origin === "station" && options.persistence !== undefined) {

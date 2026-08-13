@@ -22,7 +22,6 @@ import type { VerifiedWorktreeRemovalTarget } from "./guards.js";
 
 export type CleanupRuntime = {
   clock?: RuntimeClock | undefined;
-  commandTimeoutMs?: number | undefined;
 };
 
 export async function closeSessionResources(
@@ -79,7 +78,6 @@ export async function closeSessionResources(
         force: input.force,
       }),
       context: input.context,
-      commandTimeoutMs: input.commandTimeoutMs,
     });
   }
 }
@@ -106,7 +104,6 @@ export async function stopHarnessForWorktree(
     allowUnsupportedStop: input.allowUnsupportedStop === true,
     context: input.context,
     clock: input.clock,
-    commandTimeoutMs: input.commandTimeoutMs,
   });
 }
 
@@ -132,7 +129,6 @@ export async function closeTerminalForWorktree(
         force: input.force,
       }),
       context: input.context,
-      commandTimeoutMs: input.commandTimeoutMs,
     });
   } catch (error) {
     // A missing target already satisfies cleanup; force only governs destructive worktree guards.
@@ -167,19 +163,12 @@ export async function removeWorktreeThroughProvider(
     {
       operation: `provider.${input.providers.worktree.id}.removeWorktree`,
       clock: input.clock,
-      commandTimeoutMs: input.commandTimeoutMs,
       signal: input.context.signal,
       trace: input.context.trace,
       fallback: {
         tag: "WorktreeProviderError",
         code: "WORKTREE_REMOVE_FAILED",
         message: "The worktree provider failed to remove the worktree.",
-        provider: input.providers.worktree.id,
-      },
-      timeoutFallback: {
-        tag: "TimeoutError",
-        code: "WORKTREE_REMOVE_TIMEOUT",
-        message: "The worktree provider timed out while removing the worktree.",
         provider: input.providers.worktree.id,
       },
     },
@@ -224,7 +213,6 @@ async function stopHarnessForSession(
     allowUnsupportedStop: input.allowUnsupportedStop === true,
     context: input.context,
     clock: input.clock,
-    commandTimeoutMs: input.commandTimeoutMs,
   });
 }
 
@@ -272,19 +260,12 @@ async function stopHarnessRun(
     {
       operation: `provider.${input.provider.id}.stop`,
       clock: input.clock,
-      commandTimeoutMs: input.commandTimeoutMs,
       signal: input.context.signal,
       trace: input.context.trace,
       fallback: {
         tag: "HarnessProviderError",
         code: "HARNESS_STOP_FAILED",
         message: "The harness provider failed to stop the run.",
-        provider: input.provider.id,
-      },
-      timeoutFallback: {
-        tag: "TimeoutError",
-        code: "HARNESS_STOP_TIMEOUT",
-        message: "The harness provider timed out while stopping the run.",
         provider: input.provider.id,
       },
     },

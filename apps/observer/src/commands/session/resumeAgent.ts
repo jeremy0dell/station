@@ -42,7 +42,6 @@ export type CreateSessionResumeAgentHandlerOptions = {
   clock?: RuntimeClock | undefined;
   idFactory?: Partial<SessionCommandIdFactory> | undefined;
   logger?: StationLogger | undefined;
-  commandTimeoutMs?: number | undefined;
 };
 
 /**
@@ -87,7 +86,6 @@ export function createSessionResumeAgentHandler(
 
     const runtime = {
       clock: options.clock,
-      commandTimeoutMs: options.commandTimeoutMs,
       signal: context.signal,
       trace: context.trace,
     };
@@ -147,7 +145,6 @@ export function createSessionResumeAgentHandler(
         {
           trace: context.trace,
           signal: context.signal,
-          commandTimeoutMs: options.commandTimeoutMs,
         },
       );
       if (receipt.status === "rejected") {

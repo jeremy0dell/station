@@ -39,7 +39,6 @@ export type CreateSessionForkHandlerOptions = {
   clock?: RuntimeClock | undefined;
   idFactory?: Partial<SessionCommandIdFactory> | undefined;
   logger?: StationLogger | undefined;
-  commandTimeoutMs?: number | undefined;
 };
 
 /**
@@ -91,7 +90,6 @@ export function createSessionForkHandler(options: CreateSessionForkHandlerOption
     const sessionId = idFactory.sessionId();
     const runtime = {
       clock: options.clock,
-      commandTimeoutMs: options.commandTimeoutMs,
       signal: context.signal,
       trace: context.trace,
     };
@@ -154,7 +152,6 @@ export function createSessionForkHandler(options: CreateSessionForkHandlerOption
         {
           trace: context.trace,
           signal: context.signal,
-          commandTimeoutMs: options.commandTimeoutMs,
         },
       );
       if (receipt.status === "rejected") {
@@ -175,7 +172,6 @@ export function createSessionForkHandler(options: CreateSessionForkHandlerOption
               context,
               logger: options.logger,
               clock: options.clock,
-              commandTimeoutMs: options.commandTimeoutMs,
             });
       if (sessionSeeded) {
         await discardSessionSeedBestEffort({
