@@ -68,6 +68,30 @@ describe("CursorHarnessProvider", () => {
     expect(calls.map((call) => call.args)).toEqual([["--version"]]);
   });
 
+  it("warns clearly when Cursor Agent is logged out", async () => {
+    const provider = createCursorHarnessProvider({
+      runner: async (input) =>
+        result(
+          input,
+          JSON.stringify({
+            status: "unauthenticated",
+            isAuthenticated: false,
+            hasAccessToken: false,
+            hasRefreshToken: false,
+            message: "Not logged in",
+          }),
+        ),
+    });
+
+    await expect(provider.doctorChecks?.()).resolves.toContainEqual(
+      expect.objectContaining({
+        name: "cursor.auth",
+        status: "warn",
+        message: expect.stringContaining("agent login"),
+      }),
+    );
+  });
+
   it("reports unrequested and missing hook preparation", async () => {
     const root = await mkdtemp(join(tmpdir(), "station-cursor-provider-missing-"));
     stubCursorTestHome(root);
@@ -113,6 +137,7 @@ describe("CursorHarnessProvider", () => {
       stateDir,
       hookSpoolDir,
       autoStartFromHooks: false,
+      runner: cursorAuthRunner,
     });
 
     const doctorChecks = provider.doctorChecks;
@@ -164,6 +189,7 @@ describe("CursorHarnessProvider", () => {
       stateDir: incumbentStateDir,
       hookSpoolDir: join(incumbentStateDir, "spool", "hooks"),
       autoStartFromHooks: true,
+      runner: cursorAuthRunner,
     });
 
     await expect(provider.doctorChecks?.({ providerHookRuntime })).resolves.toContainEqual(
@@ -365,6 +391,21 @@ function stubCursorTestHome(root: string): void {
   assertPathInsideTestMachineRoot(root, "Cursor test home");
   vi.stubEnv("STATION_CURSOR_HOME", root);
   vi.stubEnv("STATION_CURSOR_HOOKS_PATH", "");
+}
+
+function cursorAuthRunner(input: ExternalCommandInput): Promise<ExternalCommandResult> {
+  return Promise.resolve(
+    result(
+      input,
+      JSON.stringify({
+        status: "authenticated",
+        isAuthenticated: true,
+        hasAccessToken: true,
+        hasRefreshToken: true,
+        userInfo: {},
+      }),
+    ),
+  );
 }
 
 function result(input: ExternalCommandInput, stdout: string): ExternalCommandResult {

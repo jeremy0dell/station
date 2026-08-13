@@ -283,6 +283,7 @@ describe("createManagedLaunchAttempt", () => {
       title: "Release work",
       harness: "codex",
       group: { kind: "existing", groupId: "grp_release" },
+      freshStart: { expectedSessionId: "ses_interrupted" },
     });
 
     expect(harness.prepareCalls).toEqual([
@@ -292,6 +293,7 @@ describe("createManagedLaunchAttempt", () => {
         title: "Release work",
         harness: "codex",
         group: { kind: "existing", groupId: "grp_release" },
+        freshStart: { expectedSessionId: "ses_interrupted" },
       },
     ]);
   });

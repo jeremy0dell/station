@@ -26,7 +26,7 @@ export type SessionActivationRequest = {
   projectId: string;
   worktreeId: string;
   branch: string;
-  preferredObserverAction: "focus" | "start" | "resume";
+  preferredObserverAction: "focus" | "start" | "resume" | "fresh";
 };
 
 /** Renderer-selected authority for activating a canonical dashboard session. */
@@ -68,16 +68,23 @@ export function createObserverActivationCapabilities(
       }
       const action = worktreeHasLiveAgent(target.row)
         ? "focus"
-        : target.row.recovery === undefined
-          ? "start"
-          : "resume";
+        : request.preferredObserverAction === "fresh"
+          ? "fresh"
+          : target.row.recovery === undefined
+            ? "start"
+            : "resume";
       if (action === "focus") {
         return dashboardExecution(runFocus(options, request.sessionId));
       }
-      return dashboardExecution(runStartOrResume(options, request, action), {
-        optimistic: "pending-start",
-        successDisposition: "wait-for-canonical",
-      });
+      return dashboardExecution(
+        action === "fresh"
+          ? runFreshStart(options, request, target)
+          : runStartOrResume(options, request, action),
+        {
+          optimistic: "pending-start",
+          successDisposition: "wait-for-canonical",
+        },
+      );
     },
   };
 }
@@ -130,6 +137,34 @@ function resolveCanonicalTarget(
     };
   }
   return { kind: "target", snapshot, row, project };
+}
+
+async function runFreshStart(
+  options: ObserverActivationCapabilitiesOptions,
+  request: SessionActivationRequest,
+  target: Extract<CanonicalActivationTarget, { kind: "target" }>,
+): Promise<DashboardExecutionResult> {
+  const closed = await dispatchAndWait(options, {
+    type: "session.close",
+    payload: { sessionId: request.sessionId, mode: "all", force: false },
+  });
+  if (closed.kind !== "success") return closed;
+
+  let command = buildStartAgentCommand(target.row, target.project);
+  const focusTarget = await resolveConfiguredFocusTarget(options);
+  if (focusTarget !== undefined) {
+    command = withCommandFocusOrigin(command, focusTarget.origin);
+  }
+  const completed = await dispatchAndWait(options, command);
+  if (completed.kind !== "success") return completed;
+
+  let snapshot = options.source.getState().snapshot;
+  if (sessionIdForStartedWorktree(snapshot, request.worktreeId) === undefined) {
+    await options.service.loadSnapshot();
+    snapshot = options.source.getState().snapshot;
+  }
+  const sessionId = sessionIdForStartedWorktree(snapshot, request.worktreeId);
+  return sessionId === undefined ? { kind: "success" } : runFocus(options, sessionId);
 }
 
 async function runStartOrResume(

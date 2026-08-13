@@ -849,10 +849,15 @@ describe("dashboard runtime", () => {
     const store = createTestDashboardRuntime({ service, initialSnapshot: snapshot });
 
     store.actions.handleKey({ input: "1" });
+    expect(store.state.getState().screen).toMatchObject({ name: "freshStart" });
+    store.actions.handleKey({ input: "y" });
 
     await waitFor(() => service.loadCount === 1);
     expect(store.state.getState().localRows.pendingStart).toHaveLength(1);
-    expect(service.dispatched).toEqual([expect.objectContaining({ type: "session.startAgent" })]);
+    expect(service.dispatched.map((command) => command.type)).toEqual([
+      "session.close",
+      "session.startAgent",
+    ]);
   });
 
   it("syncs terminal rows into view state and clamps dashboard scroll", () => {

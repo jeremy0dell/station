@@ -140,6 +140,9 @@ export function createDashboardCapabilities(
               projectId: row.projectId,
               worktreeId: row.id,
               cwd: row.path,
+              ...(request.preferredObserverAction === "fresh"
+                ? { freshStart: { expectedSessionId: session.id } }
+                : {}),
             })
             .then((result) => settleNativeActivation(options.store, result)),
           {

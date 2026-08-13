@@ -4,6 +4,7 @@ import {
   selectDashboardSessionRow,
 } from "../selectors/dashboardSessionRows.js";
 import { safeErrorToToast } from "../services/errors/errors.js";
+import { openFreshStartConfirm } from "./screens/freshStart.js";
 import { addTuiToast, STALE_DASHBOARD_TARGET_NOTICE } from "./toasts.js";
 import type { TuiTransition } from "./transition.js";
 import type { DashboardState } from "./types.js";
@@ -52,6 +53,9 @@ export function activateDashboardRow(
         }),
       };
     }
+  }
+  if (session.origin === "station" && !worktreeHasLiveAgent(row) && row.recovery === undefined) {
+    return { state: openFreshStartConfirm(state, session.id) };
   }
   return activationOperation(state, session.id, worktree);
 }

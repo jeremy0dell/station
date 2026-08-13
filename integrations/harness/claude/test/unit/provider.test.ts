@@ -92,7 +92,10 @@ describe("ClaudeHarnessProvider", () => {
         if (input.args?.[0] === "--version") {
           return result(input, "2.1.173 (Claude Code)\n");
         }
-        return result(input, '{"loggedIn": true, "authMethod": "claude.ai"}\n');
+        return result(
+          input,
+          '{"loggedIn": true, "authMethod": "claude.ai", "apiProvider": "firstParty"}\n',
+        );
       },
     });
 
@@ -103,7 +106,7 @@ describe("ClaudeHarnessProvider", () => {
       expect.objectContaining({ name: "claude.auth", status: "ok" }),
       expect.objectContaining({ name: "claude-hooks", status: "ok" }),
     ]);
-    expect(calls.map((call) => call.args)).toEqual([["--version"], ["auth", "status"]]);
+    expect(calls.map((call) => call.args)).toEqual([["--version"], ["auth", "status", "--json"]]);
   });
 
   it("warns in doctor checks when claude is not logged in", async () => {
@@ -117,7 +120,10 @@ describe("ClaudeHarnessProvider", () => {
         if (input.args?.[0] === "--version") {
           return result(input, "2.1.173 (Claude Code)\n");
         }
-        return result(input, '{"loggedIn": false}\n');
+        return result(
+          input,
+          '{"loggedIn": false, "authMethod": "none", "apiProvider": "firstParty"}\n',
+        );
       },
     });
 

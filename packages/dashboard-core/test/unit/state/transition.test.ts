@@ -182,19 +182,29 @@ describe("TUI screen transitions", () => {
     ).toBe(0);
   });
 
-  it("starts an agent from a no-agent dashboard slot as a local operation", () => {
-    const transition = handleTuiKey(
+  it("confirms a fresh start for a retained no-agent dashboard slot", () => {
+    const opened = handleTuiKey(
       createInitialTuiState({ initialSnapshot: createCommandSnapshot("none") }),
       { input: "1" },
     );
 
-    expect(transition.state.localRows.pendingStart).toEqual([]);
-    expect(transition.operations).toEqual([
+    expect(opened.operations).toBeUndefined();
+    expect(opened.state.screen).toMatchObject({
+      name: "freshStart",
+      sessionId: "ses_wt_web_no_agent",
+      worktreeId: "wt_web_no_agent",
+      actionFocus: "cancel",
+    });
+
+    const selected = handleTuiKey(opened.state, { input: "", leftArrow: true });
+    const confirmed = handleTuiKey(selected.state, { input: "\r", return: true });
+    expect(confirmed.state.screen).toEqual({ name: "dashboard" });
+    expect(confirmed.operations).toEqual([
       {
         type: "activateSession",
         sessionId: "ses_wt_web_no_agent",
-        localId: "start:wt_web_no_agent",
-        preferredObserverAction: "start",
+        localId: "fresh:wt_web_no_agent",
+        preferredObserverAction: "fresh",
         projectId: "web",
         worktreeId: "wt_web_no_agent",
         branch: "feature-start",

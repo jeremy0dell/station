@@ -1633,6 +1633,57 @@ export function observerPersistenceContract(
         });
       });
 
+      it("atomically retires provider identity for an explicit fresh start", async () => {
+        await withPersistence(createFixture, async ({ persistence }) => {
+          await persistence.repairSessionHarnessDerivedState({
+            provider: "codex",
+            sessionId: "ses_fresh",
+            harnessExecution: {
+              provider: "codex",
+              sessionId: "ses_fresh",
+              nativeSessionId: "native_old",
+              state: "idle",
+              statusUpdatedAt: later,
+            },
+            turnReadiness: {
+              sessionId: "ses_fresh",
+              projectId: "web",
+              worktreeId: "wt_fresh",
+              token: "report_old_idle",
+              completedAt: later,
+              createdAt: later,
+              updatedAt: later,
+            },
+          });
+          await persistence.upsertSessionRecoveryHandle({
+            id: "report_old_idle",
+            provider: "codex",
+            projectId: "web",
+            worktreeId: "wt_fresh",
+            sessionId: "ses_fresh",
+            target: { kind: "native-session", id: "native_old" },
+            observedAt: now,
+            lastSeenAt: later,
+          });
+
+          await expect(
+            persistence.resetSessionForFreshStart({
+              provider: "codex",
+              sessionId: "ses_fresh",
+            }),
+          ).resolves.toEqual({ changed: true });
+          await expect(
+            persistence.resetSessionForFreshStart({
+              provider: "codex",
+              sessionId: "ses_fresh",
+            }),
+          ).resolves.toEqual({ changed: false });
+          await expect(persistence.listSessionHarnessExecutions()).resolves.toEqual([]);
+          await expect(persistence.listSessionTurnReadiness()).resolves.toEqual([]);
+          await expect(persistence.listSessionRecoveryHandles()).resolves.toEqual([]);
+        });
+      });
+
       it("orders sessions by ID and preserves seeded and renamed titles", async () => {
         await withPersistence(createFixture, async ({ persistence }) => {
           await persistence.seedSession({

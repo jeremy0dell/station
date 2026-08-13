@@ -222,6 +222,29 @@ describe("routeStationMouse", () => {
     expect(store.state.getState().localRows.pendingRemove).toEqual([]);
   });
 
+  it("cancels fresh-start confirmation through its semantic action", () => {
+    const store = makeStore();
+    routeStationMouse(
+      {
+        kind: "dashboardCell",
+        rowId: dashboardRowIds.session("ses_wt_station_none"),
+        cellId: "identity",
+      },
+      LEFT_DOWN,
+      store,
+    );
+    expect(store.state.getState().screen).toMatchObject({ name: "freshStart" });
+
+    const outcome = routeStationMouse(
+      { kind: "freshStartAction", actionId: "confirm.cancel" },
+      LEFT_DOWN,
+      store,
+    );
+
+    expect(outcome).toEqual({ kind: "handled" });
+    expect(store.state.getState().screen).toEqual({ name: "dashboard" });
+  });
+
   it("keeps stale Remove actions inert", () => {
     const store = makeStore();
     const before = store.state.getState().screen;

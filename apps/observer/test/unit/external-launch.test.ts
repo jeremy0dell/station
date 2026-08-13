@@ -876,6 +876,57 @@ describe("prepareExternalLaunch", () => {
     await expect(persistence.listSessionRecoveryHandles()).resolves.toEqual([persistedHandle]);
   });
 
+  it("starts fresh under explicit retained-session consent and retires old recovery identity", async () => {
+    const persistence = createInMemoryObserverPersistence({
+      clock: { now: () => new Date(now) },
+    });
+    const persistedHandle = await persistence.upsertSessionRecoveryHandle(recoveryHandle());
+    const harness = new CapturingHarness({ id: "fake-harness", now: () => new Date(now) });
+    const station = new FakeManagedTerminalLifecycle();
+
+    const result = await prepareExternalLaunch(
+      deps([row()], station, [harness], persistence, {
+        sessions: [retainedSession()],
+        sessionResumeAgentEnabled: true,
+      }),
+      {
+        ...prepareParams,
+        freshStart: { expectedSessionId: "ses_recoverable" },
+      },
+    );
+
+    expect(result.outcome).toMatchObject({
+      kind: "prepared",
+      sessionId: "ses_recoverable",
+    });
+    expect(harness.requests).toEqual([expect.not.objectContaining({ resume: expect.anything() })]);
+    await expect(persistence.listSessionRecoveryHandles()).resolves.toEqual([]);
+    expect(persistedHandle.sessionId).toBe("ses_recoverable");
+  });
+
+  it("rejects stale fresh-start consent before retiring recovery identity", async () => {
+    const persistence = createInMemoryObserverPersistence({
+      clock: { now: () => new Date(now) },
+    });
+    const persistedHandle = await persistence.upsertSessionRecoveryHandle(recoveryHandle());
+    const station = new FakeManagedTerminalLifecycle();
+
+    await expect(
+      prepareExternalLaunch(
+        deps([row()], station, undefined, persistence, {
+          sessions: [retainedSession()],
+          sessionResumeAgentEnabled: true,
+        }),
+        {
+          ...prepareParams,
+          freshStart: { expectedSessionId: "ses_replaced" },
+        },
+      ),
+    ).rejects.toMatchObject({ code: "SESSION_FRESH_START_STALE" });
+    await expect(persistence.listSessionRecoveryHandles()).resolves.toEqual([persistedHandle]);
+    expect(await station.listTargets()).toEqual([]);
+  });
+
   it("returns an adopted Host target before recovery or its feature gate", async () => {
     const attachment: ManagedTerminalAttachment = {
       kind: "managed-terminal",

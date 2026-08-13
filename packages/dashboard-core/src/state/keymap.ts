@@ -12,6 +12,7 @@ export type TuiInputMode =
   | "persistentFilterConditionValues"
   | "projectCollapse"
   | "projectSettingsPicker"
+  | "freshStart"
   | "removeChooseSlot"
   | "removeConfirm"
   | "removeUnavailable"
@@ -55,6 +56,8 @@ export function deriveTuiInputMode(state: DashboardStateView): TuiInputMode {
       return "projectCollapse";
     case "projectSettingsPicker":
       return "projectSettingsPicker";
+    case "freshStart":
+      return "freshStart";
     case "removeWorktree":
       if (screen.step === "chooseSlot") return "removeChooseSlot";
       return screen.step === "unavailable" ? "removeUnavailable" : "removeConfirm";

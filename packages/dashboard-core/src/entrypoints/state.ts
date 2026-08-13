@@ -51,6 +51,7 @@ export {
 export { openNewSession } from "../state/screens/dashboard.js";
 
 export type { ForkSessionActionId } from "../state/screens/fork.js";
+export type { FreshStartActionId } from "../state/screens/freshStart.js";
 
 export { openProjectDefaultAgentPicker } from "../state/screens/projectDefaultAgent.js";
 export {

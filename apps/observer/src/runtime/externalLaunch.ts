@@ -54,8 +54,8 @@ export type ExternalLaunchOutcome<T> = {
  * USE CASE
  *
  * Returns a live or attachable managed identity first, then exactly recovers the canonical open
- * Station session before permitting a fresh identity. Both launch paths preflight only the selected
- * provider and pass provider-neutral resume options to the harness. A fresh identity is atomically
+ * Station session unless explicit, identity-bound user consent requests a fresh provider execution.
+ * Both launch paths preflight only the selected provider. A fresh Station identity is atomically
  * seeded into its optional root Group before target publication, and confirmed failed launch cleanup
  * removes its membership and owned inline Group without touching retained recovery state.
  */
@@ -166,12 +166,24 @@ async function prepareExternalLaunchForWorktree(
 
   const worktree = worktreeObservationFromRow(row, deps.providers.worktree.id, nowIso(deps.clock));
 
+  const freshStart = params.freshStart;
+  if (
+    freshStart !== undefined &&
+    (retainedSession === undefined || retainedSession.id !== freshStart.expectedSessionId)
+  ) {
+    throw freshStartSessionMismatchError(
+      params.projectId,
+      worktree.id,
+      freshStart.expectedSessionId,
+    );
+  }
   const recovery =
-    retainedSession === undefined
+    retainedSession === undefined || freshStart !== undefined
       ? undefined
       : await resolveAutomaticRecovery(deps, retainedSession, worktree, params.projectId);
   const harnessProviderId =
     recovery?.harness.id ??
+    (freshStart === undefined ? undefined : retainedSession?.harness.provider) ??
     params.harness ??
     (await rememberedHarnessProviderForWorktree({
       persistence: deps.persistence,
@@ -191,6 +203,13 @@ async function prepareExternalLaunchForWorktree(
 
   if (managedTerminal === undefined) {
     throw managedTerminalUnavailableError();
+  }
+
+  if (freshStart !== undefined && retainedSession !== undefined) {
+    await deps.persistence.resetSessionForFreshStart({
+      provider: retainedSession.harness.provider,
+      sessionId: retainedSession.id,
+    });
   }
 
   // The worktree mutation coordinator serializes distinct clients through this
@@ -402,6 +421,22 @@ function worktreeProjectMismatchError(projectId: string, worktreeId: string): Sa
     message: "The requested worktree belongs to a different configured project.",
     projectId,
     worktreeId,
+  };
+}
+
+function freshStartSessionMismatchError(
+  projectId: string,
+  worktreeId: string,
+  sessionId: string,
+): SafeError {
+  return {
+    tag: "CommandValidationError",
+    code: "SESSION_FRESH_START_STALE",
+    message: "The interrupted session changed before fresh start could begin.",
+    hint: "Refresh the dashboard and review the current session before retrying.",
+    projectId,
+    worktreeId,
+    sessionId,
   };
 }
 

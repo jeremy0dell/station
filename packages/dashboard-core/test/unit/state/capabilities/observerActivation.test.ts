@@ -51,6 +51,30 @@ describe("observer activation capability", () => {
     expect(service.dispatched).toEqual([]);
   });
 
+  it("starts fresh only after the retained session closes successfully", async () => {
+    const snapshot = createCommandSnapshot("none");
+    const service = new FakeTuiObserverService(snapshot);
+    const capability = createObserverActivationCapabilities({
+      source: new FakeClientStateSource(snapshot),
+      service,
+    });
+
+    const handle = capability.activate({
+      sessionId: "ses_wt_web_no_agent",
+      projectId: "web",
+      worktreeId: "wt_web_no_agent",
+      branch: "feature-start",
+      preferredObserverAction: "fresh",
+    });
+
+    expect(handle.optimistic).toBe("pending-start");
+    expect(await handle.completion).toEqual({ kind: "success" });
+    expect(service.dispatched.map((command) => command.type)).toEqual([
+      "session.close",
+      "session.startAgent",
+    ]);
+  });
+
   it("exposes pending-start while building start intent from canonical values", async () => {
     const snapshot = createCommandSnapshot("none");
     const service = new FakeTuiObserverService(snapshot);

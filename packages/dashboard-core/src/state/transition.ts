@@ -3,6 +3,7 @@ import type { TuiOperation } from "./operations/types.js";
 import { handleAddProjectKey } from "./screens/addProjectScreen.js";
 import { handleDashboardKey } from "./screens/dashboard.js";
 import { handleForkKey } from "./screens/fork.js";
+import { handleFreshStartKey } from "./screens/freshStart.js";
 import { handleHelpKey } from "./screens/help.js";
 import { handleNewSessionKey } from "./screens/newSession.js";
 import { handleDashboardPersistentFilterKey } from "./screens/persistentFilter.js";
@@ -77,6 +78,8 @@ export function handleTuiKey(
       return handleProjectCollapseKey(state, key);
     case "projectSettingsPicker":
       return handleProjectSettingsPickerKey(state, key);
+    case "freshStart":
+      return handleFreshStartKey(state, key);
     case "removeWorktree":
       return handleRemoveWorktreeKey(state, key);
     case "renameSession":

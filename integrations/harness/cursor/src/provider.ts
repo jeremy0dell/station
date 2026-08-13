@@ -16,7 +16,8 @@ import {
   type TerminalBoundHarnessCommandDefinition,
   type TerminalBoundHarnessProviderSpec,
 } from "@station/harness-shared";
-import { safeErrorFromUnknown } from "@station/runtime";
+import { runExternalCommand, safeErrorFromUnknown } from "@station/runtime";
+import { z } from "zod";
 import { classifyCursorRunStatus } from "./classify.js";
 import { cursorProviderErrorFromUnknown } from "./errors.js";
 import { normalizeCursorRawEvent } from "./events.js";
@@ -52,6 +53,17 @@ export const cursorHarnessCommandDefinition = {
   commandEnvVar: "STATION_CURSOR_AGENT_BIN",
   commandFallback: "agent",
 } as const satisfies TerminalBoundHarnessCommandDefinition;
+
+const CursorAuthStatusSchema = z
+  .object({
+    status: z.enum(["authenticated", "unauthenticated"]),
+    isAuthenticated: z.boolean(),
+    hasAccessToken: z.boolean(),
+    hasRefreshToken: z.boolean(),
+    message: z.string().optional(),
+    userInfo: z.unknown().optional(),
+  })
+  .strict();
 
 const cursorSpec: TerminalBoundHarnessProviderSpec<CursorHarnessProviderOptions> = {
   ...cursorHarnessCommandDefinition,
@@ -107,30 +119,67 @@ async function doctorChecks(
   options: CursorHarnessProviderOptions,
   context?: ProviderDoctorContext,
 ): Promise<ProviderDoctorCheck[]> {
+  const checks: ProviderDoctorCheck[] = [];
+  try {
+    const result = await runExternalCommand(
+      {
+        command: command(options),
+        args: ["status", "--format", "json"],
+        timeoutMs: options.timeoutMs ?? 5000,
+        maxOutputChars: 4096,
+      },
+      options.runner,
+    );
+    const auth = CursorAuthStatusSchema.parse(JSON.parse(result.stdout));
+    checks.push(
+      auth.isAuthenticated
+        ? {
+            name: "cursor.auth",
+            status: "ok",
+            message: "Cursor Agent authentication is available.",
+          }
+        : {
+            name: "cursor.auth",
+            status: "warn",
+            message:
+              "Cursor Agent is not logged in. Run `agent login` in the configured Cursor home before launching.",
+          },
+    );
+  } catch (cause) {
+    checks.push({
+      name: "cursor.auth",
+      status: "warn",
+      message: "Cursor Agent authentication status could not be determined.",
+      error: safeErrorFromUnknown(cause, {
+        tag: "HarnessProviderError",
+        code: "HARNESS_CURSOR_UNAVAILABLE",
+        message: "Cursor Agent authentication diagnostics failed.",
+        provider: "cursor",
+      }),
+    });
+  }
+
   try {
     const hookResult = await doctorCursorHooks(cursorHookDoctorOptions(options, context));
-    return [
-      {
-        name: "cursor-hooks",
-        status: hookResult.status,
-        message: `${hookResult.message} Hooks: ${hookResult.hooksPath}. Script: ${hookResult.hookScriptPath}.`,
-      },
-    ];
+    checks.push({
+      name: "cursor-hooks",
+      status: hookResult.status,
+      message: `${hookResult.message} Hooks: ${hookResult.hooksPath}. Script: ${hookResult.hookScriptPath}.`,
+    });
   } catch (cause) {
-    return [
-      {
-        name: "cursor-hooks",
-        status: "error",
+    checks.push({
+      name: "cursor-hooks",
+      status: "error",
+      message: "Cursor hook diagnostics failed.",
+      error: safeErrorFromUnknown(cause, {
+        tag: "CursorHookSetupError",
+        code: "CURSOR_HOOK_DIAGNOSTIC_FAILED",
         message: "Cursor hook diagnostics failed.",
-        error: safeErrorFromUnknown(cause, {
-          tag: "CursorHookSetupError",
-          code: "CURSOR_HOOK_DIAGNOSTIC_FAILED",
-          message: "Cursor hook diagnostics failed.",
-          provider: "cursor",
-        }),
-      },
-    ];
+        provider: "cursor",
+      }),
+    });
   }
+  return checks;
 }
 
 function cursorHookDoctorOptions(

@@ -16,6 +16,7 @@ import { WidgetSettingsPanelView } from "./settings/WidgetSettingsPanelView.js";
 import { RenameSessionSheetView } from "./sheets/RenameSessionSheetView.js";
 import { RemoveSessionSheetView } from "./sheets/RemoveSessionSheetView.js";
 import { ForkSessionSheetView } from "./sheets/ForkSessionSheetView.js";
+import { FreshStartSheetView } from "./sheets/FreshStartSheetView.js";
 import { CreateGroupSheetView } from "./sheets/CreateGroupSheetView.js";
 import { stationMouseProps, useStationMouse } from "./stationMouseContext.js";
 
@@ -175,6 +176,8 @@ function renderActiveScreenOverlay({
       return assertNever(screen);
     case "removeWorktree":
       return <RemoveSessionSheetView columns={columns} rows={rows} screen={screen} />;
+    case "freshStart":
+      return <FreshStartSheetView columns={columns} rows={rows} screen={screen} />;
     case "projectSettings":
       return (
         <ProjectSettingsPanelView

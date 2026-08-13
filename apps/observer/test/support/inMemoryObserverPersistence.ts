@@ -383,6 +383,22 @@ export function createInMemoryObserverPersistence(
         ),
       ),
 
+    resetSessionForFreshStart: (input) =>
+      transaction((draft) => {
+        const executionDeleted = draft.sessionHarnessExecutions.delete(
+          sessionHarnessExecutionKey(input),
+        );
+        const readinessDeleted = draft.turnReadiness.delete(input.sessionId);
+        let deletedHandles = 0;
+        for (const [id, handle] of draft.recoveryHandles) {
+          if (handle.provider === input.provider && handle.sessionId === input.sessionId) {
+            draft.recoveryHandles.delete(id);
+            deletedHandles += 1;
+          }
+        }
+        return { changed: executionDeleted || readinessDeleted || deletedHandles > 0 };
+      }),
+
     repairSessionHarnessDerivedState: (input) =>
       transaction((draft) => {
         const key = sessionHarnessExecutionKey(input);

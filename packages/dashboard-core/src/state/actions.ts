@@ -16,6 +16,7 @@ import {
   handleForkSessionAction,
   openForkDetailsForRow,
 } from "./screens/fork.js";
+import { type FreshStartActionId, handleFreshStartAction } from "./screens/freshStart.js";
 import { handleNewSessionAction } from "./screens/newSession.js";
 import {
   applyDashboardPersistentFilter,
@@ -107,6 +108,7 @@ export type TuiSemanticAction =
   | { type: "addProject.activate"; actionId: AddProjectActionId }
   | { type: "newSession.activate"; actionId: NewSessionActionId }
   | { type: "removeWorktree.activate"; actionId: RemoveWorktreeActionId }
+  | { type: "freshStart.activate"; actionId: FreshStartActionId }
   | { type: "forkSession.activate"; actionId: ForkSessionActionId }
   | { type: "renameSession.submit" }
   | { type: "projectMenu.activate"; actionId: ProjectMenuInputActionId }
@@ -176,6 +178,8 @@ export function handleTuiAction(
       return handleNewSessionAction(state, action.actionId);
     case "removeWorktree.activate":
       return handleRemoveWorktreeAction(state, action.actionId);
+    case "freshStart.activate":
+      return handleFreshStartAction(state, action.actionId);
     case "forkSession.activate":
       return handleForkSessionAction(state, action.actionId);
     case "renameSession.submit":

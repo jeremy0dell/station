@@ -25,9 +25,13 @@ function harness() {
   };
   let activationResult: ManagedLaunchResult = { kind: "success", landed: true };
   let createResult: ManagedLaunchResult = { kind: "success", landed: false };
+  const activateRequests: Parameters<ManagedLaunch["activate"]>[] = [];
   const createRequests: Parameters<ManagedLaunch["create"]>[0][] = [];
   const managedLaunch: ManagedLaunch = {
-    activate: async () => activationResult,
+    activate: async (...request) => {
+      activateRequests.push(request);
+      return activationResult;
+    },
     create: async (request) => {
       createRequests.push(request);
       return createResult;
@@ -47,6 +51,7 @@ function harness() {
     service,
     store,
     opened,
+    activateRequests,
     createRequests,
     setActivationResult: (result: ManagedLaunchResult) => (activationResult = result),
     setCreateResult: (result: ManagedLaunchResult) => (createResult = result),
@@ -98,6 +103,19 @@ describe("native dashboard capabilities", () => {
     expect(handle.optimistic).toBe("pending-start");
     expect(handle.successDisposition).toBe("wait-for-canonical");
     expect(await handle.completion).toEqual({ kind: "success" });
+  });
+
+  it("binds confirmed fresh start to the selected retained session", async () => {
+    const fixture = harness();
+    const handle = fixture.capabilities.activation.activate({
+      ...ACTIVATION,
+      preferredObserverAction: "fresh",
+    });
+
+    expect(await handle.completion).toEqual({ kind: "success" });
+    expect(fixture.activateRequests[0]?.[1]).toMatchObject({
+      freshStart: { expectedSessionId: "ses_wt_station_idle" },
+    });
   });
 
   it("uses native overlay authority for dashboard dismissal and renderer exit", async () => {

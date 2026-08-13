@@ -298,6 +298,7 @@ describe("contract schemas", () => {
         harness: "codex",
         title: "  Hexagonal PT 12!  ",
         group: { kind: "create", name: "  Active work  " },
+        freshStart: { expectedSessionId: "ses_interrupted" },
       }),
     ).toEqual({
       projectId: "project_api",
@@ -305,6 +306,7 @@ describe("contract schemas", () => {
       harness: "codex",
       title: "Hexagonal PT 12!",
       group: { kind: "create", name: "Active work" },
+      freshStart: { expectedSessionId: "ses_interrupted" },
     });
     expectFails(
       AgentPrepareExternalLaunchParamsSchema,
