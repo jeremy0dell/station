@@ -116,6 +116,8 @@ export function createSessionResumeAgentHandler(
         projectId: project.id,
         worktreeId: worktree.id,
         initialTitle: row?.title ?? worktree.branch,
+        harness: recovery.harness.id,
+        terminalProvider: terminalProviderId,
         clock: options.clock,
       });
       sessionSeeded = true;

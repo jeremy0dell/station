@@ -642,7 +642,7 @@ describe("observer persistence", () => {
     sqlite.close();
   });
 
-  it("seeds session titles from branches and preserves custom titles across reconcile persistence", async () => {
+  it("does not admit sessions from reconcile and preserves explicitly seeded custom titles", async () => {
     const sqlite = openObserverSqlite({ clock: { now: () => new Date(now) } });
     const persistence = createSqliteObserverPersistence({
       sqlite,
@@ -677,12 +677,17 @@ describe("observer persistence", () => {
       observedAt: now,
     });
 
-    expect(await persistence.listSessions()).toEqual([
-      expect.objectContaining({
-        id: "ses_web_feature",
-        title: "feature/auth",
-      }),
-    ]);
+    await expect(persistence.listSessions()).resolves.toEqual([]);
+    await persistence.seedSession({
+      sessionId: "ses_web_feature",
+      projectId: "web",
+      worktreeId: "wt_web_feature",
+      initialTitle: "feature/auth",
+      harness: "fake-harness",
+      terminalProvider: "fake-terminal",
+      createdAt: now,
+      lastSeenAt: now,
+    });
 
     await persistence.renameSession({
       sessionId: "ses_web_feature",
@@ -744,6 +749,8 @@ describe("observer persistence", () => {
       projectId: "web",
       worktreeId: "wt_web_seeded",
       initialTitle: "original-session-title",
+      harness: "fake-harness",
+      terminalProvider: "fake-terminal",
       createdAt: now,
       lastSeenAt: now,
     });
@@ -752,6 +759,8 @@ describe("observer persistence", () => {
       projectId: "web",
       worktreeId: "wt_web_seeded",
       initialTitle: "agent-created-branch",
+      harness: "fake-harness",
+      terminalProvider: "fake-terminal",
       createdAt: later,
       lastSeenAt: later,
     });
@@ -789,6 +798,8 @@ describe("observer persistence", () => {
       projectId: "web",
       worktreeId: "wt_web_seeded",
       initialTitle: "ignored later seed",
+      harness: "fake-harness",
+      terminalProvider: "fake-terminal",
       createdAt: later,
       lastSeenAt: later,
     });
@@ -815,6 +826,8 @@ describe("observer persistence", () => {
       projectId: "web",
       worktreeId: "wt_web_cleanup_seed",
       initialTitle: "cleanup-seed",
+      harness: "fake-harness",
+      terminalProvider: "fake-terminal",
       createdAt: now,
       lastSeenAt: now,
     });
@@ -855,6 +868,17 @@ describe("observer persistence", () => {
       worktreeId: "wt_web_main",
       sessionId: "ses_web_main",
       now,
+    });
+
+    await persistence.seedSession({
+      sessionId: "ses_web_main",
+      projectId: "web",
+      worktreeId: "wt_web_main",
+      initialTitle: worktree.branch,
+      harness: "fake-harness",
+      terminalProvider: "fake-terminal",
+      createdAt: now,
+      lastSeenAt: now,
     });
 
     await persistence.persistReconcileResult({

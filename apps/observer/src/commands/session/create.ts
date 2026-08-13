@@ -103,6 +103,8 @@ export function createSessionCreateHandler(
         projectId: project.id,
         worktreeId: worktree.id,
         initialTitle: payload.title ?? payload.branch,
+        harness: payload.harness.provider,
+        terminalProvider: payload.terminal.provider,
         ...(group === undefined ? {} : { group }),
         clock: options.clock,
       });

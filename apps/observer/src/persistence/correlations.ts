@@ -1,23 +1,15 @@
-import type {
-  HarnessRunObservation,
-  ProviderId,
-  TerminalTargetObservation,
-  WorktreeObservation,
-} from "@station/contracts";
+import type { ProviderId, WorktreeObservation } from "@station/contracts";
 import {
   HarnessRunObservationSchema,
   sameObservedPath,
   TerminalTargetObservationSchema,
   WorktreeObservationSchema,
 } from "@station/contracts";
-import { harnessRunCanActivateSession, terminalCanActivateSession } from "../sessionActivation.js";
 import type { SqlDatabase } from "../sqlite/driver.js";
 import { resolveWorktreeDisplayTitle } from "../worktreeDisplayTitle.js";
-import { maxIso } from "./json.js";
 import { insertProviderObservation } from "./observations.js";
 import { providerObservationExpiresAt } from "./retention.js";
 import { type SqliteSessionRow, sessionFromRow } from "./rows.js";
-import { stripTerminalProviderData } from "./terminalObservations.js";
 import type {
   ObserverIdFactory,
   PersistedSession,
@@ -39,10 +31,8 @@ export function persistReconcileResult(
   options: { observedAt: string; idFactory: ObserverIdFactory },
 ): void {
   const worktrees = input.worktrees.map((value) => WorktreeObservationSchema.parse(value));
-  const terminalTargets = input.terminalTargets.map((value) =>
-    stripTerminalProviderData(TerminalTargetObservationSchema.parse(value)),
-  );
-  const harnessRuns = input.harnessRuns.map((value) => HarnessRunObservationSchema.parse(value));
+  for (const value of input.terminalTargets) TerminalTargetObservationSchema.parse(value);
+  for (const value of input.harnessRuns) HarnessRunObservationSchema.parse(value);
 
   for (const worktree of worktrees) {
     rememberWorktreeIdentity(database, worktree);
@@ -63,16 +53,7 @@ export function persistReconcileResult(
     }
   }
   const resolvedTitles = resolveReconcileWorktreeDisplayTitles(database, input, options.observedAt);
-  const insertedTitles = insertMissingWorktreeDisplayTitles(database, resolvedTitles);
-  const persistedTitles = resolvedTitles.map((title) => {
-    const persisted = readWorktreeDisplayTitle(database, title);
-    if (persisted === undefined) {
-      throw new Error(`Failed to initialize worktree display title for ${title.worktreeId}.`);
-    }
-    if (insertedTitles > 0) synchronizeSessionTitleProjections(database, persisted);
-    return persisted;
-  });
-  upsertSessions(database, terminalTargets, harnessRuns, persistedTitles);
+  insertMissingWorktreeDisplayTitles(database, resolvedTitles);
 }
 
 function expiresAtFor(input: PersistReconcileResultInput, observedAt: string): string | undefined {
@@ -207,6 +188,8 @@ export function seedSession(
     projectId: string;
     worktreeId: string;
     initialTitle: string;
+    harness: ProviderId;
+    terminalProvider: ProviderId;
     createdAt: string;
     lastSeenAt: string;
   },
@@ -237,12 +220,14 @@ export function seedSession(
     .prepare(
       `
         INSERT INTO sessions
-          (id, project_id, worktree_id, title, created_at, ended_at, last_seen_at, lifecycle)
-        VALUES (?, ?, ?, ?, ?, NULL, ?, 'open')
+          (id, project_id, worktree_id, title, harness, terminal_provider, created_at, ended_at, last_seen_at, lifecycle)
+        VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, 'open')
         ON CONFLICT(id) DO UPDATE SET
           project_id = excluded.project_id,
           worktree_id = excluded.worktree_id,
           title = excluded.title,
+          harness = excluded.harness,
+          terminal_provider = excluded.terminal_provider,
           last_seen_at = excluded.last_seen_at,
           lifecycle = CASE
             WHEN sessions.lifecycle = 'ended' THEN 'ended'
@@ -255,6 +240,8 @@ export function seedSession(
       input.projectId,
       input.worktreeId,
       canonical.title,
+      input.harness,
+      input.terminalProvider,
       input.createdAt,
       input.lastSeenAt,
     );
@@ -349,129 +336,4 @@ function rememberWorktreeIdentity(database: SqlDatabase, worktree: WorktreeObser
       `,
     )
     .run(worktree.id, worktree.projectId, worktree.path, worktree.provider, worktree.observedAt);
-}
-
-function upsertSessions(
-  database: SqlDatabase,
-  terminalTargets: TerminalTargetObservation[],
-  harnessRuns: HarnessRunObservation[],
-  worktreeDisplayTitles: readonly PersistedWorktreeDisplayTitle[],
-): void {
-  // Sessions are reconstructed from two partial truths: terminal bindings identify
-  // the workspace, while harness runs supply agent state.
-  const titlesByWorktree = new Map(
-    worktreeDisplayTitles.map((title) => [
-      worktreeTitleKey(title.projectId, title.worktreeId),
-      title,
-    ]),
-  );
-  const sessions = new Map<string, PersistedSession>();
-
-  for (const target of terminalTargets) {
-    if (
-      target.sessionId === undefined ||
-      target.projectId === undefined ||
-      target.worktreeId === undefined
-    ) {
-      continue;
-    }
-    const existing = sessions.get(target.sessionId);
-    const activates = terminalCanActivateSession({ target, runs: harnessRuns });
-    const session: PersistedSession = {
-      id: target.sessionId,
-      projectId: target.projectId,
-      worktreeId: target.worktreeId,
-      lifecycle: activates || existing?.lifecycle === "open" ? "open" : "legacy",
-      terminalProvider: target.provider,
-      state: target.state,
-      createdAt: existing?.createdAt ?? target.observedAt,
-      lastSeenAt: maxIso(existing?.lastSeenAt, target.observedAt),
-    };
-    const title = titlesByWorktree.get(worktreeTitleKey(target.projectId, target.worktreeId));
-    if (title !== undefined) {
-      session.title = title.title;
-    } else if (existing?.title !== undefined) {
-      session.title = existing.title;
-    }
-    if (existing?.harness !== undefined) {
-      session.harness = existing.harness;
-    }
-    sessions.set(target.sessionId, session);
-  }
-
-  for (const run of harnessRuns) {
-    if (
-      run.sessionId === undefined ||
-      run.projectId === undefined ||
-      run.worktreeId === undefined
-    ) {
-      continue;
-    }
-    const existing = sessions.get(run.sessionId);
-    const activates = harnessRunCanActivateSession({
-      run,
-      terminals: terminalTargets,
-      runs: harnessRuns,
-    });
-    const session: PersistedSession = {
-      id: run.sessionId,
-      projectId: run.projectId,
-      worktreeId: run.worktreeId,
-      lifecycle: activates || existing?.lifecycle === "open" ? "open" : "legacy",
-      harness: run.provider,
-      state: run.status.value,
-      createdAt: existing?.createdAt ?? run.observedAt,
-      lastSeenAt: maxIso(existing?.lastSeenAt, run.observedAt),
-    };
-    const title = titlesByWorktree.get(worktreeTitleKey(run.projectId, run.worktreeId));
-    if (title !== undefined) {
-      session.title = title.title;
-    } else if (existing?.title !== undefined) {
-      session.title = existing.title;
-    }
-    if (existing?.terminalProvider !== undefined) {
-      session.terminalProvider = existing.terminalProvider;
-    }
-    sessions.set(run.sessionId, session);
-  }
-
-  for (const session of sessions.values()) {
-    database
-      .prepare(
-        `
-          INSERT INTO sessions
-            (id, project_id, worktree_id, title, harness, terminal_provider, state, created_at, ended_at, last_seen_at, lifecycle)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
-          ON CONFLICT(id) DO UPDATE SET
-            project_id = excluded.project_id,
-            worktree_id = excluded.worktree_id,
-            title = COALESCE(excluded.title, sessions.title),
-            harness = COALESCE(excluded.harness, sessions.harness),
-            terminal_provider = COALESCE(excluded.terminal_provider, sessions.terminal_provider),
-            state = excluded.state,
-            last_seen_at = excluded.last_seen_at,
-            lifecycle = CASE
-              WHEN sessions.lifecycle = 'ended' THEN 'ended'
-              WHEN sessions.lifecycle = 'open' OR excluded.lifecycle = 'open' THEN 'open'
-              ELSE NULL
-            END
-        `,
-      )
-      .run(
-        session.id,
-        session.projectId,
-        session.worktreeId,
-        session.title ?? null,
-        session.harness ?? null,
-        session.terminalProvider ?? null,
-        session.state ?? null,
-        session.createdAt,
-        session.lastSeenAt,
-        session.lifecycle === "legacy" ? null : session.lifecycle,
-      );
-  }
-}
-
-function worktreeTitleKey(projectId: string, worktreeId: string): string {
-  return `${projectId}\u0000${worktreeId}`;
 }

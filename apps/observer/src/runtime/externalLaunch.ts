@@ -213,6 +213,8 @@ async function prepareExternalLaunchForWorktree(
         projectId: project.id,
         worktreeId: worktree.id,
         initialTitle: params.title ?? row.title,
+        harness: harnessProviderId,
+        terminalProvider: managedTerminal.id,
         ...(group === undefined ? {} : { group }),
         clock: deps.clock,
       });

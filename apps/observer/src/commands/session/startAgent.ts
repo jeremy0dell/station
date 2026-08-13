@@ -100,6 +100,8 @@ export function createSessionStartAgentHandler(
         projectId: project.id,
         worktreeId: worktree.id,
         initialTitle: row?.title ?? worktree.branch,
+        harness: harnessProviderId,
+        terminalProvider: terminalProviderId,
         clock: options.clock,
       });
       sessionSeeded = true;

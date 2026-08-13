@@ -831,6 +831,8 @@ describe("prepareExternalLaunch", () => {
       projectId: "web",
       worktreeId: "wt_web_feature",
       initialTitle: "Readable login task",
+      harness: "fake-harness",
+      terminalProvider: "fake-terminal",
       createdAt: now,
       lastSeenAt: now,
     });
@@ -951,6 +953,8 @@ describe("prepareExternalLaunch", () => {
       projectId: "web",
       worktreeId: "wt_web_feature",
       initialTitle: "Readable login task",
+      harness: "fake-harness",
+      terminalProvider: "fake-terminal",
       createdAt: now,
       lastSeenAt: now,
     });
@@ -1037,6 +1041,8 @@ describe("prepareExternalLaunch", () => {
       projectId: "web",
       worktreeId: "wt_web_feature",
       initialTitle: "Readable login task",
+      harness: "fake-harness",
+      terminalProvider: "fake-terminal",
       createdAt: now,
       lastSeenAt: now,
     });

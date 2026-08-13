@@ -1048,6 +1048,16 @@ describe("session command vertical slice", () => {
         ],
       }),
     });
+    await fixture.persistence.seedSession({
+      sessionId: "ses_web_feature",
+      projectId: "web",
+      worktreeId: "wt_web_feature",
+      initialTitle: "feature",
+      harness: "fake-harness",
+      terminalProvider: "fake-terminal",
+      createdAt: now,
+      lastSeenAt: now,
+    });
     await fixture.core.reconcile("pre-rename");
     expect(fixture.core.getSnapshot().sessions[0]).toMatchObject({
       id: "ses_web_feature",
@@ -1144,6 +1154,8 @@ describe("session command vertical slice", () => {
       projectId: "web",
       worktreeId: "wt_web_existing",
       initialTitle: "existing",
+      harness: "fake-harness",
+      terminalProvider: "fake-terminal",
       createdAt: now,
       lastSeenAt: now,
     });
@@ -1781,6 +1793,8 @@ describe("session command vertical slice", () => {
       projectId: "web",
       worktreeId: "wt_web_resume_fresh",
       initialTitle: "resume-fresh",
+      harness: "fake-harness",
+      terminalProvider: "fake-terminal",
       createdAt: now,
       lastSeenAt: now,
     });
@@ -1942,6 +1956,26 @@ describe("session command vertical slice", () => {
       }),
       sessionIds: ["ses_remembered_next"],
     });
+    await fixture.persistence.seedSession({
+      sessionId: "ses_default_previous",
+      projectId: "web",
+      worktreeId: existingWorktree.id,
+      initialTitle: existingWorktree.branch,
+      harness: "fake-harness",
+      terminalProvider: "fake-terminal",
+      createdAt: "2026-05-21T11:00:00.000Z",
+      lastSeenAt: "2026-05-21T11:00:00.000Z",
+    });
+    await fixture.persistence.seedSession({
+      sessionId: "ses_remembered_later",
+      projectId: "web",
+      worktreeId: existingWorktree.id,
+      initialTitle: existingWorktree.branch,
+      harness: "remembered-harness",
+      terminalProvider: "fake-terminal",
+      createdAt: "2026-05-21T11:30:00.000Z",
+      lastSeenAt: "2026-05-21T11:30:00.000Z",
+    });
     await fixture.persistence.persistReconcileResult({
       worktrees: [existingWorktree],
       terminalTargets: [],
@@ -2037,6 +2071,16 @@ describe("session command vertical slice", () => {
         worktrees: [currentWorktree],
       }),
       sessionIds: ["ses_remembered_current"],
+    });
+    await fixture.persistence.seedSession({
+      sessionId: "ses_remembered_old",
+      projectId: "web",
+      worktreeId: previousWorktree.id,
+      initialTitle: previousWorktree.branch,
+      harness: "remembered-harness",
+      terminalProvider: "fake-terminal",
+      createdAt: "2026-05-21T11:00:00.000Z",
+      lastSeenAt: "2026-05-21T11:00:00.000Z",
     });
     await fixture.persistence.persistReconcileResult({
       worktrees: [previousWorktree],

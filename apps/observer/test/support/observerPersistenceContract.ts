@@ -1203,7 +1203,7 @@ export function observerPersistenceContract(
     });
 
     describe("ReconcileStore", () => {
-      it("atomically persists the complete correlated graph", async () => {
+      it("atomically persists provider truth without admitting an unseeded session", async () => {
         await withPersistence(createFixture, async ({ persistence }) => {
           const worktree = createFakeWorktree({
             id: "wt_graph",
@@ -1248,27 +1248,14 @@ export function observerPersistenceContract(
               (observation) => observation.entityKind,
             ),
           ).toEqual(["provider_health"]);
-          await expect(persistence.listSessions()).resolves.toEqual([
-            {
-              id: "ses_graph",
-              projectId: "web",
-              worktreeId: "wt_graph",
-              lifecycle: "open",
-              title: "feature/graph",
-              harness: "fake-harness",
-              terminalProvider: "fake-terminal",
-              state: "working",
-              createdAt: now,
-              lastSeenAt: later,
-            },
-          ]);
+          await expect(persistence.listSessions()).resolves.toEqual([]);
           await expect(
             persistence.findRememberedHarnessProviderForWorktree({
               projectId: "web",
               worktreeId: worktree.id,
               worktreePath: worktree.path,
             }),
-          ).resolves.toBe("fake-harness");
+          ).resolves.toBeUndefined();
         });
       });
 
@@ -1360,7 +1347,7 @@ export function observerPersistenceContract(
     });
 
     describe("SessionStore", () => {
-      it("records weak session correlations without activating membership", async () => {
+      it("does not durably admit sessions from reconcile correlations", async () => {
         await withPersistence(createFixture, async ({ persistence }) => {
           const worktree = createFakeWorktree({
             id: "wt_activation_evidence",
@@ -1431,41 +1418,14 @@ export function observerPersistenceContract(
             ],
             observedAt: now,
           });
-          expect(await persistence.listSessions()).toEqual([
-            expect.objectContaining({
-              id: "ses_activation_exited",
-              lifecycle: "legacy",
-              harness: "fake-harness",
-            }),
-            expect.objectContaining({
-              id: "ses_activation_external_conflict",
-              lifecycle: "legacy",
-              terminalProvider: "fake-terminal",
-            }),
-            expect.objectContaining({
-              id: "ses_activation_none",
-              lifecycle: "legacy",
-              harness: "fake-harness",
-            }),
-            expect.objectContaining({
-              id: "ses_activation_terminal",
-              lifecycle: "legacy",
-              harness: "fake-harness",
-              terminalProvider: "fake-terminal",
-            }),
-            expect.objectContaining({
-              id: "ses_activation_unknown",
-              lifecycle: "legacy",
-              harness: "fake-harness",
-            }),
-          ]);
+          await expect(persistence.listSessions()).resolves.toEqual([]);
           await expect(
             persistence.findRememberedHarnessProviderForWorktree({
               projectId: project.id,
               worktreeId: worktree.id,
               worktreePath: worktree.path,
             }),
-          ).resolves.toBe("fake-harness");
+          ).resolves.toBeUndefined();
 
           await persistence.persistReconcileResult({
             worktrees: [worktree],
@@ -1508,25 +1468,7 @@ export function observerPersistenceContract(
             ],
             observedAt: later,
           });
-          expect(await persistence.listSessions()).toEqual(
-            expect.arrayContaining([
-              expect.objectContaining({ id: "ses_activation_none", lifecycle: "open" }),
-              expect.objectContaining({
-                id: "ses_activation_terminal",
-                lifecycle: "open",
-                harness: "fake-harness",
-              }),
-              expect.objectContaining({ id: "ses_activation_unknown", lifecycle: "open" }),
-              expect.objectContaining({
-                id: "ses_activation_exited",
-                lifecycle: "legacy",
-              }),
-              expect.objectContaining({
-                id: "ses_activation_external_conflict",
-                lifecycle: "legacy",
-              }),
-            ]),
-          );
+          await expect(persistence.listSessions()).resolves.toEqual([]);
 
           await persistence.persistReconcileResult({
             worktrees: [worktree],
@@ -1543,11 +1485,7 @@ export function observerPersistenceContract(
             ],
             observedAt: latest,
           });
-          expect(
-            (await persistence.listSessions()).find(
-              (session) => session.id === "ses_activation_none",
-            ),
-          ).toMatchObject({ lifecycle: "open", lastSeenAt: latest });
+          await expect(persistence.listSessions()).resolves.toEqual([]);
         });
       });
 
@@ -1690,6 +1628,8 @@ export function observerPersistenceContract(
             projectId: "web",
             worktreeId: "wt_z",
             initialTitle: "z title",
+            harness: project.defaults.harness,
+            terminalProvider: project.defaults.terminal,
             createdAt: now,
             lastSeenAt: now,
           });
@@ -1698,6 +1638,8 @@ export function observerPersistenceContract(
             projectId: "web",
             worktreeId: "wt_a",
             initialTitle: "a title",
+            harness: project.defaults.harness,
+            terminalProvider: project.defaults.terminal,
             createdAt: now,
             lastSeenAt: now,
           });
@@ -1711,6 +1653,8 @@ export function observerPersistenceContract(
             projectId: "web",
             worktreeId: "wt_seeded",
             initialTitle: "original title",
+            harness: project.defaults.harness,
+            terminalProvider: project.defaults.terminal,
             createdAt: earlier,
             lastSeenAt: earlier,
           });
@@ -1719,6 +1663,8 @@ export function observerPersistenceContract(
             projectId: "web",
             worktreeId: "wt_seeded",
             initialTitle: "ignored replacement",
+            harness: project.defaults.harness,
+            terminalProvider: project.defaults.terminal,
             createdAt: later,
             lastSeenAt: later,
           });
@@ -1804,6 +1750,8 @@ export function observerPersistenceContract(
             projectId: "web",
             worktreeId: "wt_delete",
             initialTitle: "delete me",
+            harness: project.defaults.harness,
+            terminalProvider: project.defaults.terminal,
             createdAt: now,
             lastSeenAt: now,
           });
@@ -1836,6 +1784,8 @@ export function observerPersistenceContract(
             projectId: "web",
             worktreeId: "wt_import_title",
             initialTitle: "branch-title",
+            harness: project.defaults.harness,
+            terminalProvider: project.defaults.terminal,
             createdAt: earlier,
             lastSeenAt: earlier,
           });
@@ -2254,6 +2204,8 @@ export function observerPersistenceContract(
         projectId: "web",
         worktreeId: `wt_${sessionId}`,
         initialTitle: sessionId,
+        harness: project.defaults.harness,
+        terminalProvider: project.defaults.terminal,
         createdAt: now,
         lastSeenAt: now,
       });
@@ -3197,12 +3149,16 @@ export function observerPersistenceContract(
             projectId: "web",
             worktreeId: "wt_optional",
             initialTitle: "optional",
+            harness: project.defaults.harness,
+            terminalProvider: project.defaults.terminal,
             createdAt: now,
             lastSeenAt: now,
           });
           if (!session.ok) throw new Error("Expected the optional session seed to succeed.");
-          expect(session.session).not.toHaveProperty("harness");
-          expect(session.session).not.toHaveProperty("terminalProvider");
+          expect(session.session).toMatchObject({
+            harness: project.defaults.harness,
+            terminalProvider: project.defaults.terminal,
+          });
           expect(session.session).not.toHaveProperty("state");
           expect(session.session).not.toHaveProperty("endedAt");
 
@@ -3570,6 +3526,17 @@ async function persistHarnessSession(
     observedAt: string;
   },
 ): Promise<void> {
+  const seeded = await persistence.seedSession({
+    sessionId: input.sessionId,
+    projectId: input.project.id,
+    worktreeId: input.worktreeId,
+    initialTitle: input.worktreeId,
+    harness: input.provider,
+    terminalProvider: input.project.defaults.terminal,
+    createdAt: input.observedAt,
+    lastSeenAt: input.observedAt,
+  });
+  if (!seeded.ok) throw new Error(`Failed to seed ${input.sessionId}: ${seeded.reason}`);
   const worktree = createFakeWorktree({
     id: input.worktreeId,
     projectId: input.project.id,

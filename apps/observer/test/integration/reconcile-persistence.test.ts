@@ -385,7 +385,7 @@ describe("observer reconcile persistence", () => {
     sqlite.close();
   });
 
-  it("persists provider observations, session correlations, and reconcile events", async () => {
+  it("persists provider observations and events without admitting raw sessions", async () => {
     const dbPath = await tempDbPath();
     const providers = providersWithOneSession();
     const { sqlite, persistence, core } = createTestObserverCore({
@@ -400,12 +400,13 @@ describe("observer reconcile persistence", () => {
     const snapshot = await core.reconcile("persistence-test");
 
     expect(snapshot.rows.map((row) => row.id)).toEqual(["wt_web_main"]);
-    expect(await persistence.listSessions()).toEqual([
+    expect(snapshot.sessions).toEqual([
       expect.objectContaining({
         id: "ses_web_main",
-        state: "working",
+        status: expect.objectContaining({ value: "working" }),
       }),
     ]);
+    await expect(persistence.listSessions()).resolves.toEqual([]);
     const observations = await persistence.listProviderObservations();
     expect(observations.map((item) => item.entityKind)).toEqual([
       "provider_health",
@@ -435,12 +436,10 @@ describe("observer reconcile persistence", () => {
 
     const reopened = openObserverSqlite({ path: dbPath, clock: { now: () => new Date(now) } });
     const reloaded = createSqliteObserverPersistence({ sqlite: reopened, idFactory: ids() });
-    expect(await reloaded.listSessions()).toEqual([
-      expect.objectContaining({
-        id: "ses_web_main",
-        worktreeId: "wt_web_main",
-      }),
-    ]);
+    await expect(reloaded.listSessions()).resolves.toEqual([]);
+    await expect(reloaded.listProviderObservations({ includeExpired: true })).resolves.toHaveLength(
+      observations.length,
+    );
     reopened.close();
   });
 
@@ -799,13 +798,7 @@ describe("observer reconcile persistence", () => {
       harnessRunId: "run_web_main",
       status: { value: "needs_attention", confidence: "high" },
     });
-    expect(await persistence.listSessions()).toEqual([
-      expect.objectContaining({
-        id: "ses_web_main",
-        state: "needs_attention",
-        lastSeenAt: now,
-      }),
-    ]);
+    await expect(persistence.listSessions()).resolves.toEqual([]);
     expect(await persistence.listProviderObservations({ includeExpired: true })).toEqual(
       expect.arrayContaining([
         expect.objectContaining({

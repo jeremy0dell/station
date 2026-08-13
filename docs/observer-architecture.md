@@ -248,7 +248,7 @@ No single layer owns all truth.
 | Provider observations | Each provider is authoritative only for external facts it can prove. Live reads and normalized ingress observations may be persisted with retention, but cached evidence does not outrank a newer provider read. |
 | Provider-owned identity | Worktree, target, harness-run, native execution, and external endpoint identity stays owned by the provider that minted it. Application code may carry opaque IDs but must not reconstruct their format. |
 | Observer-minted state | Command, event, error, report, session, Session Group, correlation, readiness, and recovery identities are legitimate internal facts minted by the observer. The observer does not invent external facts. |
-| Observer SQLite | Durable observer memory for commands, events, ingress dedupe, observations, correlations, sessions, project-local Session Groups, canonical worktree display titles, native-execution bindings, metadata caches, recovery handles, and readiness. Group membership is exclusive per session, while Group deletion changes only organizational rows. Display-title authority is keyed by `(projectId, worktreeId)` and survives transient provider observation gaps; it is not branch or provider identity. |
+| Observer SQLite | Durable observer memory for commands, events, ingress dedupe, observations, correlations, explicitly admitted Station sessions, project-local Session Groups, canonical worktree display titles, native-execution bindings, metadata caches, recovery handles, and readiness. Group membership is exclusive per session, while Group deletion changes only organizational rows. Display-title authority is keyed by `(projectId, worktreeId)` and survives transient provider observation gaps; it is not branch or provider identity. Raw provider observations remain live graph evidence and do not mint durable Station sessions. |
 | Local Git metadata evidence | Local Git is authoritative only for checkout-local `HEAD`, refs, merge-base, and numstat at read time. Command failures retain cached evidence through the TTL and mark it stale, while a matching checkout reported unavailable clears its local-change row; superseded identities cannot mutate either row. Ref-watch notifications are hints that request reconcile, never metadata or UI mutations themselves. |
 | Observer boot claim | `dirname(resolvedSocket)/observer.claim.sqlite` is a persistent private transport-lifecycle file. Only its active SQLite write transaction owns boot exclusion; file or sidecar existence is never authority. It has no Observer migrations or application persistence role. |
 | Observer process identity | `<resolved socketPath>.pid` is the strict, socket-specific `{pid, osStartTime, processToken, version, socketPath}` identity published by the process that successfully bound the socket. The UUID v4 `processToken` identifies one launch and `version` is the Observer selector: display SemVer plus reserved `station.<sha256>` build metadata. They corroborate process and immutable-build identity for later handoff and diagnostics; `lsof` remains primary socket-ownership evidence, and the file alone is never liveness authority. |
@@ -435,8 +435,8 @@ Reconcile reads worktree and terminal actors, derives the worktree context for
 harness reads, applies cached metadata and durable overlays, resolves one effective display title
 per current worktree, and correlates canonical sessions. It then atomically repairs durable Group
 membership and parent relationships, excludes but retains definitions for unconfigured projects,
-projects configured Groups as a flat deterministic parent-before-child array, persists the same
-title records with the result, and replaces the in-memory snapshot. Reason-specific relationship
+projects configured Groups as a flat deterministic parent-before-child array, insert-initializes
+missing canonical title records with the result, and replaces the in-memory snapshot. Reason-specific relationship
 repair and excluded definitions contribute provider-neutral errors to the reconcile timing record.
 Existing canonical titles win; missing authority initializes from
 the best non-ended custom session evidence before branch fallback, using insert-only reconcile
@@ -452,8 +452,9 @@ to the same Station session, activates them as open. A run correlated to a termi
 by run ID, or by session ID when no terminal run ID exists, also requires a reachable
 matching terminal; an uncorrelated active run may stand alone. When a terminal's
 run binding resolves, that run must claim the same session. Weak or conflicting
-evidence may refresh legacy correlation metadata, including the remembered harness,
-without activating membership.
+evidence remains current-only and cannot mint or refresh durable session memory.
+Fresh Station launch paths seed the selected harness and terminal identities before
+publishing a target or process, so remembered-harness lookup follows explicit Station intent.
 Cleanup records both `ended` lifecycle and `endedAt`, and generic terminal or run
 evidence cannot reopen that record. An explicit resume can reopen the same
 session. External sessions are derived independently and exist only from current,
@@ -741,16 +742,16 @@ when it changes several tables:
   across diagnostic observation/native binding/recovery/readiness, and atomic
   hook-processing completion across observations/native bindings/readiness.
 - `ObservationStore` owns typed provider-observation history, queries, and expiry.
-- `ReconcileStore` atomically records durable session projections and insert-only initialization of
-  missing canonical worktree titles. Configured projects and current
+- `ReconcileStore` atomically records reconcile-owned provider evidence and insert-only
+  initialization of missing canonical worktree titles. Configured projects and current
   terminal/run identities remain source-owned instead of being copied into unread relational state;
-  only first canonical-title initialization or an explicit title mutation synchronizes historical
-  session title projections. The legacy worktrees relation retains only insert-once
+  reconcile never admits or refreshes durable sessions. The legacy worktrees relation retains only insert-once
   ID/project/path/provider recovery identity; mutable worktree facts remain
   provider/observation-owned.
-- `SessionStore` owns explicit session lifecycle, canonical worktree-scoped title authority,
-  synchronized per-session title projections, durable provider-native execution bindings,
-  recovery handles, turn readiness, and purpose-specific remembered-harness lookup. A fresh-session
+- `SessionStore` owns explicit durable Station-session admission with selected harness and terminal
+  identity, lifecycle, canonical worktree-scoped title authority and projection, durable
+  provider-native execution bindings, recovery handles, turn readiness, and purpose-specific
+  remembered-harness lookup. A fresh-session
   seed may atomically validate and place the session in an existing root Group or create its first
   root Group. Discard consumes the seed result's placement provenance: existing placement removes
   only the still-matching membership, while inline placement deletes the Group only when its full

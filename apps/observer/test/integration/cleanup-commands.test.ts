@@ -24,7 +24,7 @@ const now = "2026-05-21T12:00:00.000Z";
 
 describe("cleanup command handlers", () => {
   it("closes an active harness only after force and leaves the terminal open", async () => {
-    const fixture = createFixture({ state: "working" });
+    const fixture = await createFixture({ state: "working" });
     await fixture.core.reconcile("pre-cleanup");
 
     const receipt = await fixture.queue.dispatch({
@@ -62,7 +62,7 @@ describe("cleanup command handlers", () => {
   });
 
   it("errors honestly on force close-harness when the provider cannot stop runs", async () => {
-    const fixture = createFixture({ state: "working", harnessStopSupported: false });
+    const fixture = await createFixture({ state: "working", harnessStopSupported: false });
     await fixture.core.reconcile("pre-cleanup");
 
     const receipt = await fixture.queue.dispatch({
@@ -88,7 +88,7 @@ describe("cleanup command handlers", () => {
   });
 
   it("rejects terminal close for an active agent without force", async () => {
-    const fixture = createFixture({ state: "working" });
+    const fixture = await createFixture({ state: "working" });
     await fixture.core.reconcile("pre-cleanup");
 
     const receipt = await fixture.queue.dispatch({
@@ -113,7 +113,7 @@ describe("cleanup command handlers", () => {
   });
 
   it("closes a forced terminal target and records session removal evidence", async () => {
-    const fixture = createFixture({ state: "working" });
+    const fixture = await createFixture({ state: "working" });
     await fixture.core.reconcile("pre-cleanup");
 
     const receipt = await fixture.queue.dispatch({
@@ -148,7 +148,7 @@ describe("cleanup command handlers", () => {
   });
 
   it("ends a retained Station session when terminal.close targets its worktree", async () => {
-    const fixture = createFixture({ state: "terminal" });
+    const fixture = await createFixture({ state: "terminal" });
     await fixture.persistence.persistReconcileResult({
       worktrees: [fixture.worktreeObservation],
       terminalTargets: [],
@@ -192,7 +192,7 @@ describe("cleanup command handlers", () => {
   });
 
   it("routes terminal focus and close directly through the registered provider", async () => {
-    const fixture = createFixture({ state: "working" });
+    const fixture = await createFixture({ state: "working" });
     await fixture.core.reconcile("pre-cleanup");
 
     const focusReceipt = await fixture.queue.dispatch({
@@ -219,7 +219,7 @@ describe("cleanup command handlers", () => {
   });
 
   it("ends Station membership after session.close all succeeds", async () => {
-    const fixture = createFixture({ state: "working" });
+    const fixture = await createFixture({ state: "working" });
     await fixture.core.reconcile("pre-session-close-all");
 
     const receipt = await fixture.queue.dispatch({
@@ -245,7 +245,7 @@ describe("cleanup command handlers", () => {
   });
 
   it("routes session terminal cleanup directly through the registered provider", async () => {
-    const fixture = createFixture({ state: "working" });
+    const fixture = await createFixture({ state: "working" });
     await fixture.core.reconcile("pre-cleanup");
 
     const receipt = await fixture.queue.dispatch({
@@ -262,7 +262,7 @@ describe("cleanup command handlers", () => {
   });
 
   it("rejects dirty worktree removal without force", async () => {
-    const fixture = createFixture({ dirty: true, state: "none" });
+    const fixture = await createFixture({ dirty: true, state: "none" });
     await fixture.core.reconcile("pre-cleanup");
 
     const receipt = await fixture.queue.dispatch({
@@ -290,7 +290,7 @@ describe("cleanup command handlers", () => {
   });
 
   it("rejects project root removal before calling the worktree provider", async () => {
-    const fixture = createFixture({ state: "none", projectRootPath: true });
+    const fixture = await createFixture({ state: "none", projectRootPath: true });
     await fixture.core.reconcile("pre-cleanup");
 
     const receipt = await fixture.queue.dispatch({
@@ -319,7 +319,7 @@ describe("cleanup command handlers", () => {
   });
 
   it("refuses a stale feature selection that now owns the default branch before cleanup", async () => {
-    const fixture = createFixture({ state: "working" });
+    const fixture = await createFixture({ state: "working" });
     await fixture.core.reconcile("pre-cleanup");
     fixture.worktreeObservation.branch = "main";
 
@@ -351,12 +351,14 @@ describe("cleanup command handlers", () => {
   });
 
   it("force-removes an active worktree after stopping harness and closing terminal", async () => {
-    const fixture = createFixture({ dirty: true, state: "working" });
+    const fixture = await createFixture({ dirty: true, state: "working" });
     await fixture.persistence.seedSession({
       sessionId: "ses_web_cleanup_older",
       projectId: "web",
       worktreeId: "wt_web_cleanup",
       initialTitle: "older cleanup session",
+      harness: "fake-harness",
+      terminalProvider: "fake-terminal",
       createdAt: "2026-05-21T11:00:00.000Z",
       lastSeenAt: "2026-05-21T11:00:00.000Z",
     });
@@ -419,7 +421,7 @@ describe("cleanup command handlers", () => {
   });
 
   it("routes worktree terminal cleanup directly through the registered provider", async () => {
-    const fixture = createFixture({ dirty: true, state: "working" });
+    const fixture = await createFixture({ dirty: true, state: "working" });
     await fixture.core.reconcile("pre-cleanup");
 
     const receipt = await fixture.queue.dispatch({
@@ -453,7 +455,7 @@ describe("cleanup command handlers", () => {
   });
 
   it("removes a clean exited worktree when terminal cleanup finds an already-missing target", async () => {
-    const fixture = createFixture({
+    const fixture = await createFixture({
       state: "exited",
       terminalCloseTargetMissing: true,
     });
@@ -501,7 +503,7 @@ describe("cleanup command handlers", () => {
   });
 
   it("force-removes a worktree when terminal cleanup finds an already-missing target", async () => {
-    const fixture = createFixture({
+    const fixture = await createFixture({
       dirty: true,
       state: "working",
       terminalCloseTargetMissing: true,
@@ -543,7 +545,7 @@ describe("cleanup command handlers", () => {
   });
 
   it("force-removes an active worktree when the terminal-owned harness cannot stop natively", async () => {
-    const fixture = createFixture({
+    const fixture = await createFixture({
       dirty: true,
       state: "working",
       harnessStopSupported: false,
@@ -583,7 +585,7 @@ describe("cleanup command handlers", () => {
   });
 
   it("refuses active worktree removal when neither harness nor terminal can stop it", async () => {
-    const fixture = createFixture({
+    const fixture = await createFixture({
       dirty: true,
       state: "working",
       harnessStopSupported: false,
@@ -615,7 +617,7 @@ describe("cleanup command handlers", () => {
   });
 });
 
-function createFixture(input: {
+async function createFixture(input: {
   dirty?: boolean;
   state: "none" | "terminal" | "working" | "exited";
   harnessStopSupported?: boolean;
@@ -627,6 +629,16 @@ function createFixture(input: {
   const sqlite = openObserverSqlite({ clock });
   const ids = observerIds();
   const persistence = createSqliteObserverPersistence({ sqlite, clock, idFactory: ids });
+  await persistence.seedSession({
+    sessionId: "ses_web_cleanup",
+    projectId: "web",
+    worktreeId: "wt_web_cleanup",
+    initialTitle: "cleanup",
+    harness: "fake-harness",
+    terminalProvider: "fake-terminal",
+    createdAt: now,
+    lastSeenAt: now,
+  });
   const eventBus = createObserverEventBus();
   const queue = createCommandQueue({ persistence, clock, idFactory: ids, eventBus });
   const worktreeObservation = createFakeWorktree({

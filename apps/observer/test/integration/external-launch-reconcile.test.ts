@@ -193,6 +193,8 @@ describe("observer external-launch reconcile", () => {
       projectId: "web",
       worktreeId: "wt_web_feature",
       initialTitle: "feature",
+      harness: "fake-harness",
+      terminalProvider: "fake-terminal",
       createdAt: now,
       lastSeenAt: now,
     });

@@ -127,6 +127,8 @@ export function createSessionForkHandler(options: CreateSessionForkHandlerOption
         projectId: project.id,
         worktreeId: worktree.id,
         initialTitle: payload.title ?? payload.branch,
+        harness: harnessProviderId,
+        terminalProvider: terminalProviderId,
         clock: options.clock,
       });
       sessionSeeded = true;

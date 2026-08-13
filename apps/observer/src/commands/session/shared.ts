@@ -201,6 +201,8 @@ export async function seedSession(input: {
   projectId: string;
   worktreeId: string;
   initialTitle: string;
+  harness: ProviderId;
+  terminalProvider: ProviderId;
   group?: SessionSeedGroupPlacement;
   clock?: RuntimeClock | undefined;
 }): Promise<Extract<SessionSeedResult, { ok: true }>> {
@@ -210,6 +212,8 @@ export async function seedSession(input: {
     projectId: input.projectId,
     worktreeId: input.worktreeId,
     initialTitle: input.initialTitle.trim(),
+    harness: input.harness,
+    terminalProvider: input.terminalProvider,
     createdAt: seededAt,
     lastSeenAt: seededAt,
     ...(input.group === undefined ? {} : { group: input.group }),

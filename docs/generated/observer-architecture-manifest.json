@@ -4968,7 +4968,7 @@
           "name": "ReconcileStore",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Atomically records current durable sessions and canonical worktree titles. First title initialization and explicit title mutations synchronize historical projections."
+          "purpose": "Persists reconcile-owned provider evidence and insert-initializes missing canonical worktree titles from one reconcile result as an atomic capability."
         },
         {
           "name": "ReconcileTiming",
@@ -5154,7 +5154,7 @@
           "name": "SessionStore",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Maintains Observer-owned session lifecycle, provider-native execution bindings, canonical worktree-scoped title authority, synchronized session projections, recovery, and readiness. Fresh-session seed, optional root Group placement, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles."
+          "purpose": "Admits Observer-owned sessions with selected provider identity and maintains their lifecycle, native execution bindings, canonical worktree-scoped titles, recovery, and readiness. Seed, optional root Group placement, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles."
         },
         {
           "name": "SessionTurnReadinessMutation",
@@ -6742,12 +6742,6 @@
       ],
       "imports": [
         {
-          "specifier": "./json.js",
-          "resolvedPath": "apps/observer/src/persistence/json.ts",
-          "edgeKind": "runtime",
-          "bindings": ["maxIso"]
-        },
-        {
           "specifier": "./observations.js",
           "resolvedPath": "apps/observer/src/persistence/observations.ts",
           "edgeKind": "runtime",
@@ -6772,12 +6766,6 @@
           "bindings": ["SqliteSessionRow"]
         },
         {
-          "specifier": "./terminalObservations.js",
-          "resolvedPath": "apps/observer/src/persistence/terminalObservations.ts",
-          "edgeKind": "runtime",
-          "bindings": ["stripTerminalProviderData"]
-        },
-        {
           "specifier": "./types.js",
           "resolvedPath": "apps/observer/src/persistence/types.ts",
           "edgeKind": "type-only",
@@ -6800,12 +6788,6 @@
             "synchronizeSessionTitleProjections",
             "upsertWorktreeDisplayTitle"
           ]
-        },
-        {
-          "specifier": "../sessionActivation.js",
-          "resolvedPath": "apps/observer/src/sessionActivation.ts",
-          "edgeKind": "runtime",
-          "bindings": ["harnessRunCanActivateSession", "terminalCanActivateSession"]
         },
         {
           "specifier": "../sqlite/driver.js",
@@ -6834,12 +6816,7 @@
           "specifier": "@station/contracts",
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "type-only",
-          "bindings": [
-            "HarnessRunObservation",
-            "ProviderId",
-            "TerminalTargetObservation",
-            "WorktreeObservation"
-          ]
+          "bindings": ["ProviderId", "WorktreeObservation"]
         }
       ]
     },
@@ -7146,7 +7123,7 @@
           "name": "ReconcileStore",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Atomically records current durable sessions and canonical worktree titles. First title initialization and explicit title mutations synchronize historical projections."
+          "purpose": "Persists reconcile-owned provider evidence and insert-initializes missing canonical worktree titles from one reconcile result as an atomic capability."
         },
         {
           "name": "RecordProviderObservationInput",
@@ -7224,7 +7201,7 @@
           "name": "SessionStore",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Maintains Observer-owned session lifecycle, provider-native execution bindings, canonical worktree-scoped title authority, synchronized session projections, recovery, and readiness. Fresh-session seed, optional root Group placement, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles."
+          "purpose": "Admits Observer-owned sessions with selected provider identity and maintains their lifecycle, native execution bindings, canonical worktree-scoped titles, recovery, and readiness. Seed, optional root Group placement, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles."
         },
         {
           "name": "SessionTurnReadinessMutation",
@@ -7515,7 +7492,7 @@
           "name": "ReconcileStore",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Atomically records current durable sessions and canonical worktree titles. First title initialization and explicit title mutations synchronize historical projections."
+          "purpose": "Persists reconcile-owned provider evidence and insert-initializes missing canonical worktree titles from one reconcile result as an atomic capability."
         },
         {
           "name": "SessionGroupStore",
@@ -7527,7 +7504,7 @@
           "name": "SessionStore",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Maintains Observer-owned session lifecycle, provider-native execution bindings, canonical worktree-scoped title authority, synchronized session projections, recovery, and readiness. Fresh-session seed, optional root Group placement, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles."
+          "purpose": "Admits Observer-owned sessions with selected provider identity and maintains their lifecycle, native execution bindings, canonical worktree-scoped titles, recovery, and readiness. Seed, optional root Group placement, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles."
         },
         {
           "name": "WorktreeMetadataStore",
@@ -13670,7 +13647,7 @@
       "declaration": "ReconcileStore",
       "kind": "interface",
       "role": "DRIVEN PORT",
-      "purpose": "Atomically records current durable sessions and canonical worktree titles. First title initialization and explicit title mutations synchronize historical projections.",
+      "purpose": "Persists reconcile-owned provider evidence and insert-initializes missing canonical worktree titles from one reconcile result as an atomic capability.",
       "dependencies": []
     },
     {
@@ -13686,7 +13663,7 @@
       "declaration": "SessionStore",
       "kind": "interface",
       "role": "DRIVEN PORT",
-      "purpose": "Maintains Observer-owned session lifecycle, provider-native execution bindings, canonical worktree-scoped title authority, synchronized session projections, recovery, and readiness. Fresh-session seed, optional root Group placement, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles.",
+      "purpose": "Admits Observer-owned sessions with selected provider identity and maintains their lifecycle, native execution bindings, canonical worktree-scoped titles, recovery, and readiness. Seed, optional root Group placement, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles.",
       "dependencies": []
     },
     {

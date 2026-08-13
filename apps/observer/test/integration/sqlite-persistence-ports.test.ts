@@ -320,7 +320,7 @@ describe("SQLite-only Observer persistence behavior", () => {
       });
       await expect(persistence.listSessions()).resolves.toEqual(
         expect.arrayContaining([
-          expect.objectContaining({ id: "ses_legacy_unknown", lifecycle: "open" }),
+          expect.objectContaining({ id: "ses_legacy_unknown", lifecycle: "legacy" }),
         ]),
       );
     } finally {
@@ -329,7 +329,7 @@ describe("SQLite-only Observer persistence behavior", () => {
     }
   });
 
-  it("backfills an earlier custom title ahead of a later branch-default seed", async () => {
+  it("backfills canonical title authority without rewriting historical session rows", async () => {
     const directory = await mkdtemp(join(tmpdir(), "station-worktree-title-migration-"));
     const path = join(directory, "observer.sqlite");
     const legacyDatabase = openSqlDatabase(path);
@@ -387,7 +387,7 @@ describe("SQLite-only Observer persistence behavior", () => {
         },
       ]);
       expect((await persistence.listSessions()).map((session) => session.title)).toEqual([
-        "Readable migration title",
+        "feature/current",
         "Readable migration title",
       ]);
     } finally {

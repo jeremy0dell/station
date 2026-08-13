@@ -2,11 +2,9 @@ import { createHash } from "node:crypto";
 import type {
   CommandId,
   DiagnosticDetail,
-  HarnessRunObservation,
   ProviderId,
   SessionRecoveryHandle,
   StationEvent,
-  TerminalTargetObservation,
   WorktreeObservation,
 } from "@station/contracts";
 import {
@@ -50,7 +48,6 @@ import {
   sessionTurnReadinessEqual,
   turnReadinessWasAcknowledged,
 } from "../../src/persistence/sessionHarnessDerivedState.js";
-import { stripTerminalProviderData } from "../../src/persistence/terminalObservations.js";
 import type {
   EventRecordOptions,
   HarnessExecutionIngress,
@@ -75,10 +72,6 @@ import type {
   WorktreeMetadataCurrentKind,
   WorktreeMetadataCurrentPayloadByKind,
 } from "../../src/persistence/types.js";
-import {
-  harnessRunCanActivateSession,
-  terminalCanActivateSession,
-} from "../../src/sessionActivation.js";
 import { resolveWorktreeDisplayTitle } from "../../src/worktreeDisplayTitle.js";
 
 type CreateInMemoryObserverPersistenceOptions = {
@@ -433,6 +426,8 @@ export function createInMemoryObserverPersistence(
             worktreeId: input.worktreeId,
             lifecycle: "open",
             title: canonical.title,
+            harness: input.harness,
+            terminalProvider: input.terminalProvider,
             createdAt: input.createdAt,
             lastSeenAt: input.lastSeenAt,
           };
@@ -449,6 +444,8 @@ export function createInMemoryObserverPersistence(
         existing.projectId = input.projectId;
         existing.worktreeId = input.worktreeId;
         existing.title = canonical.title;
+        existing.harness = input.harness;
+        existing.terminalProvider = input.terminalProvider;
         existing.lastSeenAt = input.lastSeenAt;
         if (existing.lifecycle !== "ended") existing.lifecycle = "open";
         draft.sessionGroups = placement.state;
@@ -1043,15 +1040,11 @@ function persistReconcileResult(
   options: { observedAt: string; idFactory: ObserverIdFactory },
 ): void {
   const worktrees = input.worktrees.map((value) => WorktreeObservationSchema.parse(value));
+  for (const value of input.terminalTargets) TerminalTargetObservationSchema.parse(value);
+  for (const value of input.harnessRuns) HarnessRunObservationSchema.parse(value);
   for (const worktree of worktrees) {
     if (!state.worktrees.has(worktree.id)) state.worktrees.set(worktree.id, worktree);
   }
-
-  const terminalTargets = input.terminalTargets.map((value) =>
-    stripTerminalProviderData(TerminalTargetObservationSchema.parse(value)),
-  );
-
-  const harnessRuns = input.harnessRuns.map((value) => HarnessRunObservationSchema.parse(value));
 
   if (input.providerHealth !== undefined) {
     for (const health of Object.values(input.providerHealth)) {
@@ -1092,25 +1085,12 @@ function persistReconcileResult(
           updatedAt: options.observedAt,
         };
       });
-  let insertedTitle = false;
   for (const title of worktreeDisplayTitles) {
     const key = worktreeDisplayTitleKey(title.projectId, title.worktreeId);
     if (!state.worktreeDisplayTitles.has(key)) {
       state.worktreeDisplayTitles.set(key, title);
-      insertedTitle = true;
     }
   }
-  const persistedTitles = worktreeDisplayTitles.map((title) => {
-    const persisted = state.worktreeDisplayTitles.get(
-      worktreeDisplayTitleKey(title.projectId, title.worktreeId),
-    );
-    if (persisted === undefined) {
-      throw new Error(`Failed to initialize worktree display title for ${title.worktreeId}.`);
-    }
-    if (insertedTitle) synchronizeInMemorySessionTitleProjections(state, persisted);
-    return persisted;
-  });
-  upsertSessions(state, terminalTargets, harnessRuns, persistedTitles);
 }
 
 function reconcileObservationExpiresAt(
@@ -1121,105 +1101,6 @@ function reconcileObservationExpiresAt(
     return providerObservationExpiresAt(observedAt, input.providerObservationRetentionDays);
   }
   return input.expiresAt;
-}
-
-function upsertSessions(
-  state: InMemoryObserverPersistenceState,
-  terminalTargets: readonly TerminalTargetObservation[],
-  harnessRuns: readonly HarnessRunObservation[],
-  worktreeDisplayTitles: readonly PersistedWorktreeDisplayTitle[],
-): void {
-  const titlesByWorktree = new Map(
-    worktreeDisplayTitles.map((title) => [
-      worktreeDisplayTitleKey(title.projectId, title.worktreeId),
-      title,
-    ]),
-  );
-  const sessions = new Map<string, PersistedSession>();
-
-  for (const target of terminalTargets) {
-    if (
-      target.sessionId === undefined ||
-      target.projectId === undefined ||
-      target.worktreeId === undefined
-    ) {
-      continue;
-    }
-    const existing = sessions.get(target.sessionId);
-    const activates = terminalCanActivateSession({ target, runs: harnessRuns });
-    const session: PersistedSession = {
-      id: target.sessionId,
-      projectId: target.projectId,
-      worktreeId: target.worktreeId,
-      lifecycle: activates || existing?.lifecycle === "open" ? "open" : "legacy",
-      terminalProvider: target.provider,
-      state: target.state,
-      createdAt: existing?.createdAt ?? target.observedAt,
-      lastSeenAt: maxIso(existing?.lastSeenAt, target.observedAt),
-    };
-    const title = titlesByWorktree.get(
-      worktreeDisplayTitleKey(target.projectId, target.worktreeId),
-    );
-    if (title !== undefined) session.title = title.title;
-    else if (existing?.title !== undefined) session.title = existing.title;
-    if (existing?.harness !== undefined) session.harness = existing.harness;
-    sessions.set(target.sessionId, session);
-  }
-
-  for (const run of harnessRuns) {
-    if (
-      run.sessionId === undefined ||
-      run.projectId === undefined ||
-      run.worktreeId === undefined
-    ) {
-      continue;
-    }
-    const existing = sessions.get(run.sessionId);
-    const activates = harnessRunCanActivateSession({
-      run,
-      terminals: terminalTargets,
-      runs: harnessRuns,
-    });
-    const session: PersistedSession = {
-      id: run.sessionId,
-      projectId: run.projectId,
-      worktreeId: run.worktreeId,
-      lifecycle: activates || existing?.lifecycle === "open" ? "open" : "legacy",
-      harness: run.provider,
-      state: run.status.value,
-      createdAt: existing?.createdAt ?? run.observedAt,
-      lastSeenAt: maxIso(existing?.lastSeenAt, run.observedAt),
-    };
-    const title = titlesByWorktree.get(worktreeDisplayTitleKey(run.projectId, run.worktreeId));
-    if (title !== undefined) session.title = title.title;
-    else if (existing?.title !== undefined) session.title = existing.title;
-    if (existing?.terminalProvider !== undefined) {
-      session.terminalProvider = existing.terminalProvider;
-    }
-    sessions.set(run.sessionId, session);
-  }
-
-  for (const session of sessions.values()) {
-    const existing = state.sessions.get(session.id);
-    if (existing === undefined) {
-      state.sessions.set(session.id, session);
-      continue;
-    }
-    existing.projectId = session.projectId;
-    existing.worktreeId = session.worktreeId;
-    if (session.title !== undefined) existing.title = session.title;
-    if (session.harness !== undefined) existing.harness = session.harness;
-    if (session.terminalProvider !== undefined) {
-      existing.terminalProvider = session.terminalProvider;
-    }
-    if (session.state === undefined) delete existing.state;
-    else existing.state = session.state;
-    existing.lastSeenAt = session.lastSeenAt;
-    if (existing.lifecycle !== "ended") {
-      existing.lifecycle =
-        existing.lifecycle === "open" || session.lifecycle === "open" ? "open" : "legacy";
-    }
-  }
 }
 
 function findRememberedHarnessProviderForWorktree(
@@ -1437,10 +1318,6 @@ function metadataPayloadSchema(kind: WorktreeMetadataCurrentKind) {
 
 function normalizeKinds<TKind extends string>(kind: TKind | readonly TKind[]): TKind[] {
   return Array.isArray(kind) ? [...kind] : [kind as TKind];
-}
-
-function maxIso(left: string | undefined, right: string): string {
-  return left === undefined || Date.parse(left) < Date.parse(right) ? right : left;
 }
 
 function compareAsc(left: string, right: string): number {
