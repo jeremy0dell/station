@@ -34,6 +34,7 @@ import {
   openRemoveWorktreeConfirmForRow,
   openProjectDefaultAgentPicker,
   openCreateGroup,
+  openMoveToGroupForRow,
   openProjectMenu,
   openProjectSettings,
  } from "@station/dashboard-core/state";
@@ -114,6 +115,8 @@ const CASES: ModalCase[] = [
       "open visible session",
       "G",
       "quick group",
+      "M",
+      "move to group",
       "edit/apply/cancel-clear/retain-close filter",
       "╭",
       "╰",
@@ -149,6 +152,31 @@ const CASES: ModalCase[] = [
       "Create Group (C)",
       "Cancel (Esc)",
     ],
+  },
+  {
+    name: "move to group destination sheet",
+    keys: [],
+    snapshot: groupedManyProjectsSnapshot,
+    prepare: (state) => openMoveToGroupForRow(state, "ses_wt_group_contracts"),
+    expect: [
+      "Move to Group",
+      "Session    group-contracts",
+      "Current    Design refresh",
+      "U Ungrouped",
+      "1 Design refresh",
+      "N Create new Group…",
+    ],
+  },
+  {
+    name: "move to group create sheet",
+    keys: [],
+    snapshot: groupedManyProjectsSnapshot,
+    prepare: (state) => {
+      const opened = openMoveToGroupForRow(state, "ses_wt_group_contracts");
+      const creating = handleTuiKey(opened, { input: "N" }).state;
+      return handleTuiKey(creating, { input: "Release" }).state;
+    },
+    expect: ["Create Group", "Session    group-contracts", "Group", "Release", "Create and Move"],
   },
   {
     name: "persistent filter header editor",

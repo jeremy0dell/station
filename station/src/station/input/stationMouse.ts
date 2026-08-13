@@ -63,6 +63,7 @@ export type StationMouseTarget =
   | { kind: "newSessionAction"; actionId: NewSessionActionId }
   | { kind: "projectMenuAction"; actionId: ProjectMenuInputActionId }
   | { kind: "createGroupAction"; actionId: CreateGroupActionId }
+  | { kind: "moveToGroupCreateSubmit" }
   | { kind: "renameSessionSubmit" }
   | { kind: "forkSessionAction"; actionId: ForkSessionActionId }
   | { kind: "screenBackdrop" }
@@ -217,6 +218,9 @@ export function routeStationMouse(
       return { kind: "handled" };
     case "createGroupAction":
       dispatchStationAction(runtime, { type: "createGroup.activate", actionId: target.actionId });
+      return { kind: "handled" };
+    case "moveToGroupCreateSubmit":
+      dispatchStationAction(runtime, { type: "moveToGroup.create.submit" });
       return { kind: "handled" };
     case "renameSessionSubmit":
       dispatchStationAction(runtime, { type: "renameSession.submit" });

@@ -759,6 +759,20 @@ describe("routeStationMouse", () => {
     expect(store.state.getState().screen).toMatchObject({ flow: { mode: "pickGroup" } });
   });
 
+  it("routes Move-to-Group destination rows through the registered picker", async () => {
+    const store = makeStore(groupedManyProjectsSnapshot());
+    store.actions.dispatch({ type: "moveToGroup.open", rowId: "ses_wt_group_contracts" });
+
+    routeStationMouse({ kind: "sheetChoice", choiceKey: "2" }, LEFT_DOWN, store);
+    expect(store.state.getState().screen).toMatchObject({
+      name: "moveToGroup",
+      step: "chooseDestination",
+      submitting: true,
+    });
+
+    await store.dispose();
+  });
+
   it("treats right-click as inert at the STATION router layer", () => {
     const store = makeStore();
     const before = store.state.getState().screen;

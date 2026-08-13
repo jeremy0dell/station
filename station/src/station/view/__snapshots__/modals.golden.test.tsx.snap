@@ -18,7 +18,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
  [8] ○ t│  ↑/↓        move cursor · wheel scroll                       │-1 #4 ✓ 
         │  ↵          open focused session                             │        
 ▼ script│  tab        next session needing you                         │qs] [▾] 
- [9] ○ a│  G          quick group                                      │6 #5 x1 
+ [9] ○ a│  G/M        quick group/move to group                        │6 #5 x1 
  [a] ? m│  / ↵ Esc Q  edit/apply/cancel-clear/retain-close filter      │ -1 #10 
         │  Tab S/P/A  build filter conditions · F applies builder      │        
 ▼ empty-│  1-9/a-z    open visible session or toggle condition         │qs] [▾] 
@@ -92,6 +92,62 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 │▸ Quick session (Q) On                                                        │
 │  Create Group (C)    Cancel (Esc)                                            │
 │ Enter/Q toggle · ↑↓ focus · Esc cancel                                       │
+└──────────────────────────────────────────────────────────────────────────────┘
+"
+`;
+
+exports[`modal flow golden frames renders the move to group destination sheet 1`] = `
+"                                                                                
+FLEET  ● 0 ready  ⠋ 3 working  ! 1 needs you  x 1 exited  ○ 6 idle  1 · 12 · 11 
+─────────────────────────────────────────────────────────────────────────────── 
+       SESSION                     AGENT     STATUS                 DIFF · PR   
+▼ station  12 sessions · 6 Groups · 11 agents                     [sh] [qs] [▾] 
+╭▼ Design refresh 2 sessions──────────────────────────────────────────[qs] [▾]╮ 
+│ [1] ⠋ group-contracts             codex     working           +84 -20 #481 …│ 
+│ [2] ○ group-keyboard              codex     idle               +16 -4 #482 ✓│ 
+╰─────────────────────────────────────────────────────────────────────────────╯ 
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ Move to Group                                                                │
+│ Session    group-contracts                                                   │
+│ Current    Design refresh                                                    │
+│ U Ungrouped                                                                  │
+│✓1 Design refresh                                                             │
+│ 2 Observer hardening                                                         │
+│ 3 Runtime cleanup                                                            │
+│ 4 Post-launch                                                                │
+│ 5 Release train                                                              │
+│ 6 Input parity and minimum-width interaction verification                    │
+│ N Create new Group…                                                          │
+│                                                                              │
+│ ↑↓ move   ↵ select   U ungrouped   N create   Esc cancel                     │
+└──────────────────────────────────────────────────────────────────────────────┘
+"
+`;
+
+exports[`modal flow golden frames renders the move to group create sheet 1`] = `
+"                                                                                
+FLEET  ● 0 ready  ⠋ 3 working  ! 1 needs you  x 1 exited  ○ 6 idle  1 · 12 · 11 
+─────────────────────────────────────────────────────────────────────────────── 
+       SESSION                     AGENT     STATUS                 DIFF · PR   
+▼ station  12 sessions · 6 Groups · 11 agents                     [sh] [qs] [▾] 
+╭▼ Design refresh 2 sessions──────────────────────────────────────────[qs] [▾]╮ 
+│ [1] ⠋ group-contracts             codex     working           +84 -20 #481 …│ 
+│ [2] ○ group-keyboard              codex     idle               +16 -4 #482 ✓│ 
+╰─────────────────────────────────────────────────────────────────────────────╯ 
+╭▼ Input parity and minimum-width interaction verification 1 session──[qs] [▾]╮ 
+│ [3] ○ input-routing               codex     idle                      +27 -6│ 
+╰─────────────────────────────────────────────────────────────────────────────╯ 
+╭▼ Observer hardening 3 sessions──────────────────────────────────────[qs] [▾]╮ 
+│ [4] ○ diagnostic-index            codex     idle                      +38 -7│ 
+│ [5] ! handoff-refusal             codex     Agent needs app… +53 -11 #476 x1│ 
+│ [6] ⠋ trace-readiness             codex     working           +91 -22 #478 …│ 
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ Create Group                                                                 │
+│ Session    group-contracts                                                   │
+│▸ Group       Release|                                                        │
+│  Create and Move (Enter)                                                     │
+│                                                                              │
+│ Enter create and move · Esc back                                             │
 └──────────────────────────────────────────────────────────────────────────────┘
 "
 `;

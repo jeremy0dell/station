@@ -66,6 +66,14 @@ export type UpdateSessionGroupMembershipCommandInput = {
   groupId: SessionGroupId;
   expectedVersion: number;
   sessionId: SessionId;
+  expectedGroupId?: SessionGroupId | null;
+};
+
+export type MoveSessionToGroupCommandInput = {
+  projectId: ProjectView["id"];
+  sessionId: SessionId;
+  currentGroup: { id: SessionGroupId; version: number } | undefined;
+  destinationGroup: { id: SessionGroupId; version: number } | undefined;
 };
 
 export function buildStartAgentCommand(
@@ -255,7 +263,33 @@ export function buildUpdateSessionGroupMembershipCommand(
       projectId: input.projectId,
       groupId: input.groupId,
       expectedVersion: input.expectedVersion,
-      add: [{ sessionId: input.sessionId, expectedGroupId: null }],
+      add: [{ sessionId: input.sessionId, expectedGroupId: input.expectedGroupId ?? null }],
+    },
+  };
+}
+
+/** Builds the single optimistic-concurrency command for Group reassignment or ungrouping. */
+export function buildMoveSessionToGroupCommand(
+  input: MoveSessionToGroupCommandInput,
+): Extract<StationCommand, { type: "sessionGroup.updateMembership" }> | undefined {
+  if (input.currentGroup?.id === input.destinationGroup?.id) return undefined;
+  if (input.destinationGroup !== undefined) {
+    return buildUpdateSessionGroupMembershipCommand({
+      projectId: input.projectId,
+      groupId: input.destinationGroup.id,
+      expectedVersion: input.destinationGroup.version,
+      sessionId: input.sessionId,
+      expectedGroupId: input.currentGroup?.id ?? null,
+    });
+  }
+  if (input.currentGroup === undefined) return undefined;
+  return {
+    type: "sessionGroup.updateMembership",
+    payload: {
+      projectId: input.projectId,
+      groupId: input.currentGroup.id,
+      expectedVersion: input.currentGroup.version,
+      remove: [{ sessionId: input.sessionId, expectedGroupId: input.currentGroup.id }],
     },
   };
 }

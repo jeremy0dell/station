@@ -104,6 +104,13 @@ function handleDashboardAction(
           screen: { name: "renameSession", step: "chooseSlot" },
         },
       };
+    case "tui.moveToGroup.open":
+      return {
+        state: {
+          ...state,
+          screen: { name: "moveToGroup", step: "chooseSlot" },
+        },
+      };
     case "tui.fork.open":
       return {
         state: {

@@ -134,10 +134,13 @@ export type { FleetSummary } from "../selectors/fleetSummary.js";
 export { selectFleetSummary } from "../selectors/fleetSummary.js";
 export type {
   KeyedChoice,
+  MoveToGroupSessionContext,
   NewSessionGroupOption,
   NewSessionHarnessOption,
 } from "../selectors/selectors.js";
 export {
+  selectMoveToGroupChoices,
+  selectMoveToGroupSessionContext,
   selectNewSessionGroupChoices,
   selectNewSessionHarnessChoices,
   selectNewSessionProjectChoices,

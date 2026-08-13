@@ -179,6 +179,22 @@ export type TuiScreen =
       returnTo?: "dashboard";
       validationError?: string;
     }
+  | { name: "moveToGroup"; step: "chooseSlot" }
+  | {
+      name: "moveToGroup";
+      step: "chooseDestination";
+      sessionId: SessionId;
+      sessionTitle: string;
+      submitting: boolean;
+    }
+  | {
+      name: "moveToGroup";
+      step: "createGroup";
+      sessionId: SessionId;
+      sessionTitle: string;
+      draftName: EditableTextInputState;
+      submitting: boolean;
+    }
   | { name: "fork"; step: "chooseSlot" }
   | {
       name: "fork";

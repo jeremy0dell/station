@@ -68,7 +68,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
                                                                                                                         
                                                                                                                         
 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 
-↵ activate  N new  A add  ⇥ next-needs-me  / filter  X delete  ? help  Q/esc:close                                      
+↵ activate  N new  M move to group  A add  ⇥ next-needs-me  / filter  X delete  ? help  Q/esc:close                     
 "
 `;
 
@@ -176,7 +176,7 @@ FLEET  ● 0 ready  ⠋ 3 working  ! 1 needs you  x 1 exited  ○ 6 idle        
                                                                                                                         
                                                                                                                         
 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 
-↵ activate  N new  A add  ⇥ next-needs-me  / filter  X delete  ? help  Q/esc:close                                      
+↵ activate  N new  M move to group  A add  ⇥ next-needs-me  / filter  X delete  ? help  Q/esc:close                     
 "
 `;
 
@@ -284,7 +284,7 @@ FLEET  ● 0 ready  ⠋ 1 working  ! 3 needs you  ? 1 unknown  x 1 exited  ○ 0
                                                                                                                         
                                                                                                                         
 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 
-↵ activate  N new  A add  ⇥ next-needs-me  / filter  X delete  ? help  Q/esc:close                                      
+↵ activate  N new  M move to group  A add  ⇥ next-needs-me  / filter  X delete  ? help  Q/esc:close                     
 "
 `;
 
@@ -472,7 +472,7 @@ FLEET  ● 0 ready  ⠋ 3 working  ! 1 needs you  x 1 exited  ○ 6 idle        
                                                                                                                         
                                                                                                                         
 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 
-↵ activate  N new  A add  ⇥ next-needs-me  / filter  X delete  ? help  Q/esc:close                                      
+↵ activate  N new  M move to group  A add  ⇥ next-needs-me  / filter  X delete  ? help  Q/esc:close                     
 "
 `;
 
@@ -516,7 +516,7 @@ FLEET  ● 0 ready  ⠋ 3 working  ! 1 needs you  x 1 exited  ○ 6 idle        
                                                                                                                         
                                                                                                                         
 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 
-↵ activate  N new  A add  ⇥ next-needs-me  / filter  X delete  ? help  Q/esc:close                                      
+↵ activate  N new  M move to group  A add  ⇥ next-needs-me  / filter  X delete  ? help  Q/esc:close                     
 "
 `;
 
@@ -717,7 +717,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
  no sessions yet · [ + ad└──────────────────────────────────────────────────────────────────────┘
 
 ──────────────────────────────────────────────────────────────────────────────────────────────────
-↵ activate  N new  A add  ⇥ next-needs-me  / filter  X delete  ? help  Esc:dismiss  Q:close
+↵ activate  N new  ⇥ next  / filter  X delete  ? help  Esc:dismiss  Q:close
 "
 `;
 

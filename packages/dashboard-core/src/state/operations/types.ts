@@ -113,6 +113,24 @@ export type CreateQuickSessionInGroupOperation = {
   fallbackCell: "identity" | "quickSession";
 };
 
+export type MoveSessionToGroupOperation = {
+  type: "moveSessionToGroup";
+  sessionId: SessionId;
+  projectId: ProjectView["id"];
+  expectedCurrentGroupId: SessionGroupId | null;
+  destinationGroupId: SessionGroupId | null;
+  command: Extract<StationCommand, { type: "sessionGroup.updateMembership" }>;
+};
+
+export type CreateSessionGroupForMoveOperation = {
+  type: "createSessionGroupForMove";
+  sessionId: SessionId;
+  projectId: ProjectView["id"];
+  name: string;
+  previousGroupIds: readonly SessionGroupId[];
+  command: Extract<StationCommand, { type: "sessionGroup.create" }>;
+};
+
 export type DashboardCapabilityOperation =
   | ActivateSessionOperation
   | CreateManagedSessionOperation
@@ -132,4 +150,6 @@ export type TuiOperation =
   | SetProjectDefaultHarnessOperation
   | RemoveProjectOperation
   | CreateSessionGroupOperation
-  | CreateQuickSessionInGroupOperation;
+  | CreateQuickSessionInGroupOperation
+  | MoveSessionToGroupOperation
+  | CreateSessionGroupForMoveOperation;

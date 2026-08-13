@@ -143,6 +143,11 @@ function buildSessionItems(
       action: { kind: "renameSession", rowId: row.id },
     });
   }
+  items.push({
+    id: "station.moveToGroup",
+    label: "Move to Group…",
+    action: { kind: "moveToGroup", rowId: row.id },
+  });
   // Any worktree can be forked (branch off its HEAD, copy its dirty tree).
   items.push({
     id: "station.forkSession",

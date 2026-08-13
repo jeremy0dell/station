@@ -4,6 +4,7 @@ import { handleAddProjectKey } from "./screens/addProjectScreen.js";
 import { handleDashboardKey } from "./screens/dashboard.js";
 import { handleForkKey } from "./screens/fork.js";
 import { handleHelpKey } from "./screens/help.js";
+import { handleMoveToGroupKey } from "./screens/moveToGroup.js";
 import { handleNewSessionKey } from "./screens/newSession.js";
 import { handleDashboardPersistentFilterKey } from "./screens/persistentFilter.js";
 import { handleProjectCollapseKey } from "./screens/projectCollapse.js";
@@ -81,6 +82,8 @@ export function handleTuiKey(
       return handleRemoveWorktreeKey(state, key);
     case "renameSession":
       return handleRenameSessionKey(state, key);
+    case "moveToGroup":
+      return handleMoveToGroupKey(state, key);
     case "fork":
       return handleForkKey(state, key);
     case "newSession":

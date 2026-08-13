@@ -22,6 +22,7 @@ export type ContextMenuItemId =
   | "pane.splitBelow"
   | "pane.close"
   | "station.renameSession"
+  | "station.moveToGroup"
   | "station.forkSession"
   | "station.removeWorktree"
   | "project.quickGroup"
@@ -37,6 +38,7 @@ export type ContextMenuItemAction =
   | { kind: "splitPane"; paneId: PaneId; direction: PaneSplitDirection }
   | { kind: "closePane"; paneId: PaneId }
   | { kind: "renameSession"; rowId: string }
+  | { kind: "moveToGroup"; rowId: string }
   | { kind: "forkSession"; rowId: string }
   | { kind: "removeWorktree"; rowId: string }
   | { kind: "quickGroup"; projectId: string }

@@ -56,7 +56,7 @@ describe("dashboard footer model", () => {
   it("preserves the ready dashboard footer", () => {
     expect(footer()).toEqual({
       kind: "dashboard",
-      text: "↵ activate  N new  A add  ⇥ next-needs-me  / filter  X delete  ? help  Q/esc:close",
+      text: "↵ activate  N new  M move to group  A add  ⇥ next-needs-me  / filter  X delete  ? help  Q/esc:close",
     });
   });
 

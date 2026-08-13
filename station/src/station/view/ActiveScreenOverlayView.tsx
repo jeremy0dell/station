@@ -17,6 +17,7 @@ import { RenameSessionSheetView } from "./sheets/RenameSessionSheetView.js";
 import { RemoveSessionSheetView } from "./sheets/RemoveSessionSheetView.js";
 import { ForkSessionSheetView } from "./sheets/ForkSessionSheetView.js";
 import { CreateGroupSheetView } from "./sheets/CreateGroupSheetView.js";
+import { MoveToGroupSheetView } from "./sheets/MoveToGroupSheetView.js";
 import { stationMouseProps, useStationMouse } from "./stationMouseContext.js";
 
 export type ActiveScreenOverlayViewProps = {
@@ -115,6 +116,16 @@ function renderActiveScreenOverlay({
       );
     case "createGroup":
       return <CreateGroupSheetView screen={screen} columns={columns} rows={rows} />;
+    case "moveToGroup":
+      return screen.step === "chooseSlot" ? null : (
+        <MoveToGroupSheetView
+          screen={screen}
+          snapshot={snapshot}
+          selection={selection}
+          columns={columns}
+          rows={rows}
+        />
+      );
     case "widgetSettings":
       return (
         <WidgetSettingsPanelView

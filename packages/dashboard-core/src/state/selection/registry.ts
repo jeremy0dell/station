@@ -9,6 +9,7 @@ import {
 import { projectCollapseListSpec, projectSettingsPickerListSpec } from "./specs/projectChoosers.js";
 import { projectDefaultAgentListSpec } from "./specs/projectDefaultAgent.js";
 import { projectSettingsAgentListSpec } from "./specs/projectSettingsAgent.js";
+import { moveToGroupDestinationListSpec } from "./specs/sessionGroups.js";
 import type { RegisteredListSpec } from "./types.js";
 
 /**
@@ -26,6 +27,7 @@ export const LIST_REGISTRY: Partial<Record<TuiInputMode, RegisteredListSpec>> = 
   projectCollapse: projectCollapseListSpec,
   projectSettingsPicker: projectSettingsPickerListSpec,
   projectSettings: projectSettingsAgentListSpec,
+  moveToGroupDestination: moveToGroupDestinationListSpec,
 };
 
 export function listSpecForState(state: DashboardState): RegisteredListSpec | undefined {

@@ -1031,11 +1031,28 @@ describe("createStationInputRuntime STATION context-menu actions", () => {
     });
   });
 
+  it("opens Move to Group directly for a row context-menu session", () => {
+    const { runtime, store, dashboardRuntime, rightClickRow } = contextMenuHarness();
+
+    rightClickRow();
+    runtime.handleSequence("\x1b[B");
+    runtime.handleSequence("\r");
+
+    expect(store.getState().input.contextMenu).toBeNull();
+    expect(dashboardRuntime.state.getState().screen).toMatchObject({
+      name: "moveToGroup",
+      step: "chooseDestination",
+      sessionId: "ses_wt_station_idle",
+      submitting: false,
+    });
+  });
+
   it("opens the fork details sheet from a row context menu", () => {
     const { runtime, store, dashboardRuntime, rightClickRow } = contextMenuHarness();
 
     rightClickRow();
-    // Menu order: Rename, Fork, Delete Session — one down reaches the fork.
+    // Menu order: Rename, Move, Fork, Delete Session — two downs reach the fork.
+    expect(runtime.handleSequence("\x1b[B")).toBe(true);
     expect(runtime.handleSequence("\x1b[B")).toBe(true);
     expect(runtime.handleSequence("\r")).toBe(true);
 
@@ -1052,7 +1069,8 @@ describe("createStationInputRuntime STATION context-menu actions", () => {
     const { runtime, store, dashboardRuntime, rightClickRow } = contextMenuHarness();
 
     rightClickRow();
-    // Menu order: Rename, Fork, Delete Session — two downs reach the delete.
+    // Menu order: Rename, Move, Fork, Delete Session — three downs reach delete.
+    expect(runtime.handleSequence("\x1b[B")).toBe(true);
     expect(runtime.handleSequence("\x1b[B")).toBe(true);
     expect(runtime.handleSequence("\x1b[B")).toBe(true);
     expect(runtime.handleSequence("\r")).toBe(true);
@@ -1074,7 +1092,8 @@ describe("createStationInputRuntime STATION context-menu actions", () => {
     );
 
     rightClickRow("run_wt_station_idle");
-    // Menu order: Fork, Delete Worktree… — one down reaches the informational action.
+    // Menu order: Move, Fork, Delete Worktree… — two downs reach the informational action.
+    runtime.handleSequence("\x1b[B");
     runtime.handleSequence("\x1b[B");
     runtime.handleSequence("\r");
 
@@ -1090,6 +1109,7 @@ describe("createStationInputRuntime STATION context-menu actions", () => {
     const { runtime, dashboardRuntime, rightClickRow } = contextMenuHarness();
 
     rightClickRow();
+    runtime.handleSequence("\x1b[B");
     runtime.handleSequence("\x1b[B");
     runtime.handleSequence("\x1b[B");
     runtime.handleSequence("\r");
@@ -1108,6 +1128,7 @@ describe("createStationInputRuntime STATION context-menu actions", () => {
     const { runtime, dashboardRuntime, rightClickRow } = contextMenuHarness();
 
     rightClickRow();
+    runtime.handleSequence("\x1b[B");
     runtime.handleSequence("\x1b[B");
     runtime.handleSequence("\x1b[B");
     runtime.handleSequence("\r");

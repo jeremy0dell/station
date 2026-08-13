@@ -47,7 +47,8 @@ export function focusDashboardSession(state: DashboardState, sessionId: SessionI
   if (state.snapshot === undefined) {
     return clearDashboardFocus(state);
   }
-  const tree = dashboardTree(state);
+  const revealed = revealSessionAncestry(state, sessionId);
+  const tree = dashboardTree(revealed);
   const cursor = treeGridCursorForRow({
     projection: tree,
     rowId: dashboardRowIds.session(sessionId),
@@ -55,8 +56,27 @@ export function focusDashboardSession(state: DashboardState, sessionId: SessionI
     policy: dashboardPolicy,
   });
   return cursor === undefined
-    ? clearDashboardFocus(state)
-    : focusResolvedDashboardCursor(state, tree, cursor);
+    ? clearDashboardFocus(revealed)
+    : focusResolvedDashboardCursor(revealed, tree, cursor);
+}
+
+function revealSessionAncestry(state: DashboardState, sessionId: SessionId): DashboardState {
+  const snapshot = state.snapshot;
+  const session = snapshot?.sessions.find((candidate) => candidate.id === sessionId);
+  if (snapshot === undefined || session === undefined) return state;
+  const collapsedProjectIds = new Set(state.collapsedProjectIds);
+  const collapsedGroupIds = new Set(state.collapsedGroupIds);
+  collapsedProjectIds.delete(session.projectId);
+  let group = snapshot.sessionGroups.find((candidate) => candidate.sessionIds.includes(sessionId));
+  while (group !== undefined) {
+    collapsedGroupIds.delete(group.id);
+    const parentId = group.parentGroupId;
+    group =
+      parentId === undefined
+        ? undefined
+        : snapshot.sessionGroups.find((candidate) => candidate.id === parentId);
+  }
+  return { ...state, screen: { name: "dashboard" }, collapsedProjectIds, collapsedGroupIds };
 }
 
 /** Reveals and focuses one canonical Group header cell. */
@@ -333,7 +353,8 @@ function navigationPolicy(state: DashboardState): DashboardPolicy {
   const screen = state.screen;
   return (screen.name === "removeWorktree" ||
     screen.name === "renameSession" ||
-    screen.name === "fork") &&
+    screen.name === "fork" ||
+    screen.name === "moveToGroup") &&
     screen.step === "chooseSlot"
     ? chooserPolicy
     : dashboardPolicy;
