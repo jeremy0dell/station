@@ -86,7 +86,9 @@ async function collectDiagnosticResult(
   const snapshot = deps.core.getSnapshot();
   const sqliteHealth = deps.persistenceHealth.health();
   const commands = await deps.commandJournal.listCommands();
-  const latestFailure = options.latestFailure === true ? latestFailedCommand(commands) : undefined;
+  const latestFailure = options.latestFailure
+    ? commands.findLast((command) => command.status === "failed")
+    : undefined;
   const commandIdFilter = options.commandId ?? latestFailure?.id;
   const traceIdFilter = options.traceId ?? latestFailure?.traceId;
   const hasCommandFilter = commandIdFilter !== undefined || traceIdFilter !== undefined;
@@ -307,10 +309,6 @@ function buildObserverSingletonCheck(
     message:
       "Singleton cleanup could not prove a safe action; inspect refusal evidence with `stn observer reap`.",
   };
-}
-
-function latestFailedCommand(commands: readonly PersistedCommand[]): PersistedCommand | undefined {
-  return [...commands].reverse().find((command) => command.status === "failed");
 }
 
 function filterCommands(
