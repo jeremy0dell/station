@@ -322,17 +322,25 @@ handoff. Failures report completed phases, sanitized evidence, and exact
 recovery commands; a verified install or Git fast-forward is not rolled back
 after a later preparation or runtime-crossover failure.
 
+Current compiled binaries, including immutable `.5.2`, use in-process Bun PTYs
+and cannot preserve a live PTY across Host replacement. If handoff fails after
+installation and Observer crossover, Station leaves the old Host and PTY alive;
+the target native UI visibly refuses that old Host. The pane-free tmux dashboard
+may still render against the target Observer, while Host-producing work remains
+guarded. This bounded partial crossover is not transparent runtime continuity.
+Source mode alone has the parkable Node/node-pty bridge.
+
 The `installer-binary` channel may own only compiled installations carrying the
 receipt. Detection is local and network-free. Before release discovery and
 again at the installer's locked commit boundary, it binds the physical `stn`
 hash, device, and inode plus the device and inode of both launchers and the
 receipt. A missing or changed path is refused before mutation.
 
-The current public `v0.0.0-pre-alpha.5.2` installer is immutable and predates
-this receipt, so existing installations continue to work but are not enrolled
-for automatic updates. After a later release includes this contract, run that
-exact-tag installer manually once to create the receipt. A malformed,
-nonregular, or symlinked receipt is never replaced automatically.
+The immutable public `v0.0.0-pre-alpha.5.2` installer already creates this
+receipt, and `.5.2` installations are enrolled in the `installer-binary`
+channel. It is the first incumbent capable of attempting the next self-update;
+no later manual receipt bootstrap is required. A malformed, nonregular, or
+symlinked receipt is never replaced automatically.
 
 ### Concurrent and interrupted installs
 

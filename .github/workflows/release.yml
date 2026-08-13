@@ -17,6 +17,7 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       commit: ${{ steps.release.outputs.commit }}
+      previous_tag: ${{ steps.release.outputs.previous_tag }}
       prerelease: ${{ steps.release.outputs.prerelease }}
       tag: ${{ steps.release.outputs.tag }}
       version: ${{ steps.release.outputs.version }}
@@ -63,12 +64,46 @@ jobs:
             *) echo "Release commit $GITHUB_SHA is not on main." >&2; exit 1 ;;
           esac
 
+          previous_tag="$(
+            gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/releases?per_page=100" |
+              node -e '
+                const pages = JSON.parse(require("node:fs").readFileSync(0, "utf8"));
+                const tagPattern = /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*))?$/;
+                const complete = pages.flat().filter((release) => {
+                  if (release.draft || release.immutable !== true || release.tag_name === process.argv[1]) return false;
+                  if (!tagPattern.test(release.tag_name) || !Number.isSafeInteger(release.id) || release.id <= 0) return false;
+                  if (typeof release.published_at !== "string" || !Number.isFinite(Date.parse(release.published_at))) return false;
+                  const version = release.tag_name.slice(1);
+                  const expected = [
+                    "SHA256SUMS",
+                    "install.sh",
+                    ...["darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64"].map(
+                      (target) => `stn-v${version}-${target}.tar.gz`,
+                    ),
+                  ].sort();
+                  const actual = release.assets?.map((asset) => asset.name).sort() ?? [];
+                  const assetIds = release.assets?.map((asset) => asset.id) ?? [];
+                  return new Set(actual).size === actual.length &&
+                    assetIds.every((id) => Number.isSafeInteger(id) && id > 0) &&
+                    new Set(assetIds).size === assetIds.length &&
+                    actual.length === expected.length &&
+                    actual.every((name, index) => name === expected[index]);
+                });
+                complete.sort((left, right) =>
+                  Date.parse(right.published_at) - Date.parse(left.published_at) || right.id - left.id,
+                );
+                if (complete[0] === undefined) throw new Error("No complete immutable published Station predecessor exists.");
+                process.stdout.write(complete[0].tag_name);
+              ' "$tag"
+          )"
+
           prerelease=false
           if [[ "$version" == *-* ]]; then
             prerelease=true
           fi
           echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
           echo "commit=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+          echo "previous_tag=$previous_tag" >> "$GITHUB_OUTPUT"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
@@ -167,6 +202,7 @@ jobs:
             echo "target=$TARGET"
             echo "runner=$RUNNER_LABEL"
             echo "floor=$floor"
+            echo "buildIdentity=$(cat station-build-id)"
           } > "platform-metadata-$TARGET.txt"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -237,6 +273,12 @@ jobs:
             echo "Expected four platform metadata records; found ${#metadata[@]}." >&2
             exit 1
           fi
+          mapfile -t build_identities < <(sed -n 's/^buildIdentity=//p' "${metadata[@]}" | sort -u)
+          if [[ "${#build_identities[@]}" -ne 1 || ! "${build_identities[0]}" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "Native builds did not report one common 64-hex build identity." >&2
+            exit 1
+          fi
+          printf '%s\n' "${build_identities[0]}" > target-build-identity.txt
       - name: Write release notes
         env:
           TAG: ${{ needs.validate.outputs.tag }}
@@ -265,6 +307,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           COMMIT: ${{ needs.validate.outputs.commit }}
+          PREVIOUS_TAG: ${{ needs.validate.outputs.previous_tag }}
           PRERELEASE: ${{ needs.validate.outputs.prerelease }}
           TAG: ${{ needs.validate.outputs.tag }}
           VERSION: ${{ needs.validate.outputs.version }}
@@ -317,12 +360,26 @@ jobs:
 
           mkdir candidate
           cp SHA256SUMS candidate/SHA256SUMS
+          target_build_identity="$(cat target-build-identity.txt)"
+          [[ "$target_build_identity" =~ ^[0-9a-f]{64}$ ]]
+          release_json="$(gh api "repos/$GITHUB_REPOSITORY/releases/$release_id")"
+          test "$(jq -r .draft <<<"$release_json")" = true
+          expected_names="$(printf '%s\n' "${assets[@]}" | sort)"
+          actual_names="$(jq -r '.assets[].name' <<<"$release_json" | sort)"
+          test "$actual_names" = "$expected_names"
+          jq -r '.assets | sort_by(.name) | .[] | "\(.name)=\(.id)"' \
+            <<<"$release_json" > candidate/asset-ids.txt
+          test "$(wc -l < candidate/asset-ids.txt | tr -d ' ')" = 6
+          test "$(cut -d= -f2 candidate/asset-ids.txt | grep -Ec '^[1-9][0-9]*$')" = 6
+          test "$(cut -d= -f2 candidate/asset-ids.txt | sort -u | wc -l | tr -d ' ')" = 6
           checksum_file_sha="$(sha256sum SHA256SUMS | awk '{print $1}')"
           jq -n \
             --arg repository "$GITHUB_REPOSITORY" \
             --arg tag "$TAG" \
             --arg commit "$COMMIT" \
+            --arg previousTag "$PREVIOUS_TAG" \
             --arg checksumFileSha256 "$checksum_file_sha" \
+            --arg targetBuildIdentity "$target_build_identity" \
             --argjson workflowRunId "$GITHUB_RUN_ID" \
             --argjson workflowRunAttempt "$GITHUB_RUN_ATTEMPT" \
             --argjson releaseId "$release_id" \
@@ -332,8 +389,10 @@ jobs:
               workflowRunAttempt: $workflowRunAttempt,
               commit: $commit,
               tag: $tag,
+              previousTag: $previousTag,
               releaseId: $releaseId,
-              checksumFileSha256: $checksumFileSha256
+              checksumFileSha256: $checksumFileSha256,
+              targetBuildIdentity: $targetBuildIdentity
             }' > candidate/manifest.json
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -368,6 +427,17 @@ jobs:
         with:
           persist-credentials: false
           ref: ${{ needs.validate.outputs.commit }}
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-candidate-input-${{ needs.validate.outputs.version }}-attempt-${{ github.run_attempt }}
+          path: candidate
+      - if: runner.os == 'macOS'
+        uses: ./.github/actions/setup-ci
+      - name: Build composed update harness
+        if: runner.os == 'macOS'
+        run: |
+          command -v tmux >/dev/null 2>&1 || brew install tmux
+          pnpm build
       - name: Fetch tagged installer
         env:
           GH_HOST: github.com
@@ -378,10 +448,9 @@ jobs:
           release_json="$(gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID")"
           test "$(jq -r .draft <<<"$release_json")" = true
           test "$(jq -r .tag_name <<<"$release_json")" = "$TAG"
-          installer_asset_id="$(
-            jq -r '[.assets[] | select(.name == "install.sh") | .id] |
-              if length == 1 then .[0] else empty end' <<<"$release_json"
-          )"
+          current_ids="$(jq -r '.assets | sort_by(.name) | .[] | "\(.name)=\(.id)"' <<<"$release_json")"
+          test "$current_ids" = "$(cat candidate/asset-ids.txt)"
+          installer_asset_id="$(awk -F= '$1 == "install.sh" { print $2 }' candidate/asset-ids.txt)"
           [[ "$installer_asset_id" =~ ^[0-9]+$ ]]
           installer="$RUNNER_TEMP/station-install.sh"
           gh api -H "Accept: application/octet-stream" \
@@ -390,6 +459,47 @@ jobs:
           /bin/sh -n "$installer"
           grep -Fx "embedded_version=\"$TAG\"" "$installer"
           chmod 0700 "$installer"
+      - name: Fetch staged update assets and exact predecessor
+        if: runner.os == 'macOS'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PREVIOUS_TAG: ${{ needs.validate.outputs.previous_tag }}
+          RELEASE_ID: ${{ needs['create-draft'].outputs.release_id }}
+          TAG: ${{ needs.validate.outputs.tag }}
+          TARGET: ${{ matrix.target }}
+        run: |
+          target_version="${TAG#v}"
+          release_dir="$RUNNER_TEMP/update-release"
+          mkdir -p "$release_dir"
+          for name in install.sh SHA256SUMS "stn-v$target_version-$TARGET.tar.gz"; do
+            asset_id="$(awk -F= -v name="$name" '$1 == name { print $2 }' candidate/asset-ids.txt)"
+            [[ "$asset_id" =~ ^[0-9]+$ ]]
+            gh api -H 'Accept: application/octet-stream' \
+              "repos/$GITHUB_REPOSITORY/releases/assets/$asset_id" > "$release_dir/$name"
+            test -s "$release_dir/$name"
+          done
+          grep -Fx "embedded_version=\"$TAG\"" "$release_dir/install.sh"
+          cmp candidate/SHA256SUMS "$release_dir/SHA256SUMS"
+          (
+            cd "$release_dir"
+            grep -E "  (install\\.sh|stn-v$target_version-$TARGET\\.tar\\.gz)$" SHA256SUMS |
+              sha256sum -c -
+          )
+
+          predecessor_installer="$RUNNER_TEMP/previous-install.sh"
+          env -u GH_TOKEN -u GITHUB_TOKEN -u GH_ENTERPRISE_TOKEN -u GITHUB_ENTERPRISE_TOKEN \
+            curl --disable --fail --silent --show-error --location \
+              --proto '=https' --proto-redir '=https' --tlsv1.2 \
+              --output "$predecessor_installer" \
+              "https://github.com/$GITHUB_REPOSITORY/releases/download/$PREVIOUS_TAG/install.sh"
+          grep -Fx "embedded_version=\"$PREVIOUS_TAG\"" "$predecessor_installer"
+          previous_home="$RUNNER_TEMP/update-incumbent-home"
+          previous_bin="$RUNNER_TEMP/update-incumbent/bin"
+          mkdir -p "$previous_home"
+          HOME="$previous_home" \
+            XDG_DATA_HOME="$previous_home/.local/share" \
+            /bin/sh "$predecessor_installer" --install-dir "$previous_bin"
+          test "$("$previous_bin/stn" --version)" = "${PREVIOUS_TAG#v}"
       - name: Seed existing installation
         run: |
           install_home="$RUNNER_TEMP/install-home"
@@ -465,6 +575,21 @@ jobs:
             PATH="$bin_dir:$runtime_path" \
             stn --version)"
           test "$actual" = "$EXPECTED_VERSION"
+      - name: Prove composed update from the exact predecessor
+        if: runner.os == 'macOS'
+        env:
+          PREVIOUS_TAG: ${{ needs.validate.outputs.previous_tag }}
+          TAG: ${{ needs.validate.outputs.tag }}
+        run: |
+          target_build_identity="$(jq -er .targetBuildIdentity candidate/manifest.json)"
+          pnpm smoke:update -- \
+            --incumbent-binary "$RUNNER_TEMP/update-incumbent/bin/stn" \
+            --incumbent-version "${PREVIOUS_TAG#v}" \
+            --target-release-dir "$RUNNER_TEMP/update-release" \
+            --target-tag "$TAG" \
+            --target-build-identity "$target_build_identity" \
+            --scenarios full \
+            --busy-host-outcome full-handoff
       - name: Verify lock refusal and same-version retry
         env:
           EXPECTED_VERSION: ${{ needs.validate.outputs.version }}
@@ -554,6 +679,7 @@ jobs:
         env:
           COMMIT: ${{ needs.validate.outputs.commit }}
           GH_TOKEN: ${{ github.token }}
+          PREVIOUS_TAG: ${{ needs.validate.outputs.previous_tag }}
           RELEASE_ID: ${{ needs['create-draft'].outputs.release_id }}
           TAG: ${{ needs.validate.outputs.tag }}
           VERSION: ${{ needs.validate.outputs.version }}
@@ -571,19 +697,40 @@ jobs:
             --arg repository "$GITHUB_REPOSITORY" \
             --arg tag "$TAG" \
             --arg commit "$COMMIT" \
+            --arg previousTag "$PREVIOUS_TAG" \
             --argjson workflowRunId "$GITHUB_RUN_ID" \
             --argjson workflowRunAttempt "$GITHUB_RUN_ATTEMPT" \
             --argjson releaseId "$RELEASE_ID" \
             '.repository == $repository and
              .tag == $tag and
+             .previousTag == $previousTag and
              .commit == $commit and
              .workflowRunId == $workflowRunId and
              .workflowRunAttempt == $workflowRunAttempt and
              .releaseId == $releaseId and
-             (.checksumFileSha256 | test("^[0-9a-f]{64}$"))' \
+             (.checksumFileSha256 | test("^[0-9a-f]{64}$")) and
+             (.targetBuildIdentity | test("^[0-9a-f]{64}$"))' \
             candidate/manifest.json >/dev/null
           test "$(sha256sum candidate/SHA256SUMS | awk '{print $1}')" = \
             "$(jq -r .checksumFileSha256 candidate/manifest.json)"
+
+          [[ "$PREVIOUS_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]
+          previous_json="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$PREVIOUS_TAG")"
+          test "$(jq -r .draft <<<"$previous_json")" = false
+          test "$(jq -r .immutable <<<"$previous_json")" = true
+          test "$(jq -r .tag_name <<<"$previous_json")" = "$PREVIOUS_TAG"
+          previous_version="${PREVIOUS_TAG#v}"
+          expected_previous=(
+            SHA256SUMS
+            install.sh
+            "stn-v$previous_version-darwin-arm64.tar.gz"
+            "stn-v$previous_version-darwin-x64.tar.gz"
+            "stn-v$previous_version-linux-arm64.tar.gz"
+            "stn-v$previous_version-linux-x64.tar.gz"
+          )
+          mapfile -t previous_assets < <(jq -r '.assets[].name' <<<"$previous_json" | sort)
+          mapfile -t wanted_previous < <(printf '%s\n' "${expected_previous[@]}" | sort)
+          test "${previous_assets[*]}" = "${wanted_previous[*]}"
 
           release_json="$(gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID")"
           test "$(jq -r .draft <<<"$release_json")" = true
@@ -598,13 +745,15 @@ jobs:
             printf 'Actual draft assets: %s\n' "${actual[*]}" >&2
             exit 1
           fi
+          current_ids="$(
+            jq -r '.assets | sort_by(.name) | .[] | "\(.name)=\(.id)"' <<<"$release_json"
+          )"
+          test "$current_ids" = "$(cat candidate/asset-ids.txt)"
 
           mkdir downloaded
-          : > candidate/asset-ids.txt
           for name in "${expected[@]}"; do
-            asset_id="$(jq -r --arg name "$name" '.assets[] | select(.name == $name) | .id' <<<"$release_json")"
+            asset_id="$(awk -F= -v name="$name" '$1 == name { print $2 }' candidate/asset-ids.txt)"
             [[ "$asset_id" =~ ^[0-9]+$ ]]
-            printf '%s=%s\n' "$name" "$asset_id" >> candidate/asset-ids.txt
             gh api -H 'Accept: application/octet-stream' \
               "repos/$GITHUB_REPOSITORY/releases/assets/$asset_id" > "downloaded/$name"
           done

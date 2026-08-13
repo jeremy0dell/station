@@ -12760,7 +12760,7 @@
       "declaration": "restartObserver",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Translates a CLI restart request while preserving a newer winning Observer build. A failed replacement annotates the error hint with the incumbent build identity it tried to replace.",
+      "purpose": "Translates a CLI restart request while preserving a newer winning Observer build. An explicit higher-build restart cooperatively stops the identity-pinned incumbent before spawn. A failed replacement annotates the error hint with the incumbent build identity it tried to replace.",
       "dependencies": [
         {
           "path": "apps/cli/src/observerProcess.ts",

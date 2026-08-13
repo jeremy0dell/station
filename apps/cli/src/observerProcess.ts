@@ -320,6 +320,7 @@ function hasLegacyObserverBuildIdentity(health: ObserverHealth): boolean {
  * ADAPTER
  *
  * Translates a CLI restart request while preserving a newer winning Observer build.
+ * An explicit higher-build restart cooperatively stops the identity-pinned incumbent before spawn.
  * A failed replacement annotates the error hint with the incumbent build identity it tried to replace.
  */
 export async function restartObserver(
@@ -355,7 +356,7 @@ export async function restartObserver(
         paths: status.paths,
         error: observerHandoffRefusedError(status.health, buildVersion, classification.reason),
       };
-    } else if (classification.reason === "exact-build") {
+    } else if (classification.action === "replace" || classification.reason === "exact-build") {
       await stopRunningObserver(status, options, deps);
     }
   }

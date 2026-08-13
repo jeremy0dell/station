@@ -499,12 +499,9 @@ function throwProtocolSchemaMismatchIfPresent(message: unknown): void {
 }
 
 async function closeSubscription(subscription: OpenSubscription): Promise<void> {
-  // Returning the iterator closes the socket and releases the observer-side subscription.
-  try {
-    await subscription.iterator.return?.();
-  } finally {
-    subscription.connection.close();
-  }
+  // Close first so an in-flight socket read cannot block iterator teardown.
+  subscription.connection.close();
+  await subscription.iterator.return?.();
 }
 
 async function waitForCommand(

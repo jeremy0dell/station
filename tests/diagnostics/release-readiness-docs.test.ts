@@ -144,6 +144,11 @@ describe("release readiness docs", () => {
     expect(singleBinary).toContain("station-installer-binary-v1");
     expect(singleBinary).toContain("launchReady");
     expect(singleBinary).toContain("workflowReady");
+    expect(singleBinary).toContain("in-process Bun");
+    expect(singleBinary).toContain("target build identity");
+    expect(singleBinary).toContain("repository-wide");
+    expect(singleBinary).toContain("`full-handoff`");
+    expect(singleBinary).toContain("`preserved-refusal`");
     expect(singleBinary).not.toMatch(
       /Status: implemented|## Phases|## Audit findings|## Evidence appendix|### A\d|### B-/,
     );
@@ -282,9 +287,14 @@ describe("release readiness docs", () => {
     expect(install).toContain("stn update --drive-package-manager");
     expect(install).toContain("defaults to preserving");
     expect(install).toContain("--no-handoff");
-    expect(install).toContain("existing installations continue to work but are not enrolled");
+    expect(install).toContain("first incumbent capable of attempting the next self-update");
     expect(releasing).toMatch(/never publishes the draft automatically/);
     expect(releasing).toContain("accepted-release-candidate-*");
+    expect(releasing).toContain("target build identity");
+    expect(releasing).toContain("repository-wide publication lock");
+    expect(releasing).toContain("`full-handoff`");
+    expect(releasing).toContain("`preserved-refusal`");
+    expect(releasing).toContain("only to prove discovery, download, and installation");
     expect(releasing).not.toContain(exactVersion);
     expect(homebrew).toContain("Homebrew installation is not currently supported");
     expect(homebrew).toContain("This distribution policy is separate from first-run dependencies");
