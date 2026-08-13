@@ -409,8 +409,14 @@ async function runBinarySmoke() {
       );
       assertEqual(codexFullHookCheck?.status, "ok", "compiled full Codex hook doctor");
       const codexObserverClient = createObserverClient({ socketPath, timeoutMs: 5000 });
+      const codexObserverPid = (await codexObserverClient.health()).pid;
       await codexObserverClient.stop();
       await waitForMissing(socketPath);
+      assertEqual(
+        await waitForProcessExit(codexObserverPid, 10_000),
+        true,
+        "Codex hook Observer exits before compiled observer start",
+      );
       await writeSmokeConfig(configPath, stateDir, socketPath);
 
       observerClient = createObserverClient({ socketPath, timeoutMs: 5000 });
