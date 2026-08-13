@@ -1,7 +1,7 @@
 # Install Station
 
 Station is experimental pre-alpha software. The current public version is
-`v0.0.0-pre-alpha.5.3`.
+`v0.0.0-pre-alpha.5.4`.
 
 ## Binary Requirements
 
@@ -33,11 +33,11 @@ If you prefer an agent-led install, paste this prompt into a coding agent on the
 target machine:
 
 ```text
-Install experimental Station v0.0.0-pre-alpha.5.3 and validate setup on this machine.
+Install experimental Station v0.0.0-pre-alpha.5.4 and validate setup on this machine.
 
 Safety and scope:
 - Do not clone the repository or build from source. Use only
-  `https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.5.3/install.sh`.
+  `https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.5.4/install.sh`.
 - Install to `~/.local/bin` unless I approve another location. Do not edit any
   shell startup file. If the installer reports a PATH mismatch, do not assume
   an export persists across agent tool calls or reaches my Terminal. Use the
@@ -71,10 +71,10 @@ choices.
 From any directory, run:
 
 ```bash
-curl --disable -fsSL https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.5.3/install.sh | sh
+curl --disable -fsSL https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.5.4/install.sh | sh
 ```
 
-The released `install.sh` is stamped with `v0.0.0-pre-alpha.5.3`. With no
+The released `install.sh` is stamped with `v0.0.0-pre-alpha.5.4`. With no
 arguments it downloads only that tag's matching native archive and
 `SHA256SUMS` over unauthenticated HTTPS. The old `v0.7.1-rc.*` releases were
 internal previews, not predecessors in the public version line.
@@ -138,7 +138,7 @@ it separately.
 Pass an absolute or home-relative path through the exact installer:
 
 ```bash
-curl --disable -fsSL https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.5.3/install.sh | \
+curl --disable -fsSL https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.5.4/install.sh | \
   sh -s -- --install-dir "$HOME/bin"
 ```
 

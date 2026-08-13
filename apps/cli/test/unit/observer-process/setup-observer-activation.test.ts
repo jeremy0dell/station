@@ -15,7 +15,7 @@ vi.mock("../../../src/observerProcess.js", async (importActual) => {
 });
 
 const now = "2026-05-20T12:00:00.000Z";
-const compiledBuildVersion = `0.0.0-pre-alpha.5.3+station.${"d".repeat(64)}`;
+const compiledBuildVersion = `0.0.0-pre-alpha.5.4+station.${"d".repeat(64)}`;
 
 restartObserverSpy.mockImplementation(async () => ({
   status: "running",
