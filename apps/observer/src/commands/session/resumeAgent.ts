@@ -10,19 +10,18 @@ import { resolveSessionRecovery } from "../../sessionRecovery.js";
 import type { StationLogger } from "../../stationLogger.js";
 import { nowIso } from "../../utils/time.js";
 import { assertCommandType } from "../assertCommand.js";
+import { worktreeMissingError } from "../errors.js";
 import type { HarnessLaunchPreflight } from "../harnessLaunchPreflight.js";
+import { resolveTerminalProviderOrThrow } from "../providers.js";
 import type { CommandHandler } from "../queue.js";
 import { reconcileAndPublish } from "../reconcile.js";
-import type { TerminalIntentRunner } from "../terminalIntentRunner.js";
+import { ensureAgentWorkspace } from "../terminalOperations.js";
 import {
-  buildEnsureAgentWorkspaceIntent,
   commandValidationError,
   defaultSessionCommandIdFactory,
   discardSessionSeedBestEffort,
   findProjectOrThrow,
-  lookupWorktree,
   publishSessionCreated,
-  resolveTerminalProviderOrThrow,
   type SessionCommandIdFactory,
   seedSession,
   throwIfAborted,
@@ -33,7 +32,6 @@ import {
 export type CreateSessionResumeAgentHandlerOptions = {
   getProjects: () => readonly ProviderProjectConfig[];
   providers: ProviderRegistry;
-  terminalIntentRunner: TerminalIntentRunner;
   launchPreflight: HarnessLaunchPreflight;
   core: ObserverCore;
   persistence: SessionStore & EventJournal;
@@ -42,15 +40,14 @@ export type CreateSessionResumeAgentHandlerOptions = {
   clock?: RuntimeClock | undefined;
   idFactory?: Partial<SessionCommandIdFactory> | undefined;
   logger?: StationLogger | undefined;
-  commandTimeoutMs?: number | undefined;
 };
 
 /**
  * USE CASE
  *
- * Explicitly validates and preflights provider-native recovery into a selected worktree, reusing
- * a handle's Station identity or minting one when absent. Automatic native activation recovery is
- * owned separately by external launch. Failed cleanup discards only a newly minted projection.
+ * Requires the selected worktree in the current Observer snapshot, then validates and preflights
+ * provider-native recovery, reusing a handle's Station identity or minting one when absent. Automatic
+ * native activation recovery is owned separately by external launch. Failed cleanup discards only a newly minted projection.
  */
 export function createSessionResumeAgentHandler(
   options: CreateSessionResumeAgentHandlerOptions,
@@ -77,7 +74,7 @@ export function createSessionResumeAgentHandler(
     const payload = context.command.payload;
     const project = findProjectOrThrow(options.getProjects(), payload.projectId);
     const terminalProviderId = payload.terminal?.provider ?? project.defaults.terminal;
-    resolveTerminalProviderOrThrow(options.providers, terminalProviderId);
+    const terminal = resolveTerminalProviderOrThrow(options.providers, terminalProviderId);
     const snapshot = options.core.getSnapshot();
     const row = snapshot.rows.find((candidate) => candidate.id === payload.worktreeId);
     validateSnapshotRow(row, payload.projectId);
@@ -85,21 +82,18 @@ export function createSessionResumeAgentHandler(
     // another provider process next to a healthy row.
     assertResumeAllowed(row);
 
-    const runtime = {
-      clock: options.clock,
-      commandTimeoutMs: options.commandTimeoutMs,
-      signal: context.signal,
-      trace: context.trace,
-    };
-    const worktree =
-      row === undefined
-        ? await lookupWorktree({
-            providers: options.providers,
-            projectId: payload.projectId,
-            worktreeId: payload.worktreeId,
-            runtime,
-          })
-        : worktreeObservationFromRow(row, options.providers.worktree.id, nowIso(options.clock));
+    if (row === undefined) {
+      throw worktreeMissingError({
+        projectId: payload.projectId,
+        worktreeId: payload.worktreeId,
+        message: "The requested worktree is not visible in the current snapshot.",
+      });
+    }
+    const worktree = worktreeObservationFromRow(
+      row,
+      options.providers.worktree.id,
+      nowIso(options.clock),
+    );
     throwIfAborted(context.signal);
 
     const recovery = await resolveSessionRecovery({
@@ -122,37 +116,31 @@ export function createSessionResumeAgentHandler(
         projectId: project.id,
         worktreeId: worktree.id,
         initialTitle: row?.title ?? worktree.branch,
+        harness: recovery.harness.id,
+        terminalProvider: terminalProviderId,
         clock: options.clock,
       });
       sessionSeeded = true;
       throwIfAborted(context.signal);
 
-      // The terminal runner stays provider-neutral: it opens/focuses the pane, and
-      // the harness adapter alone translates this resume target into CLI args.
-      const receipt = await options.terminalIntentRunner.submitIntent(
-        buildEnsureAgentWorkspaceIntent({
-          commandId: context.commandId,
-          project,
-          worktree,
-          sessionId,
-          terminalProvider: terminalProviderId,
-          harnessProvider: recovery.harness.id,
-          harness: { mode: "interactive" },
-          layout: payload.terminal?.layout ?? project.defaults.layout,
-          focus: payload.terminal?.focus,
-          origin: payload.terminal?.origin,
-          initialPrompt: payload.initialPrompt,
-          resume: recovery.resume,
-        }),
-        {
-          trace: context.trace,
-          signal: context.signal,
-          commandTimeoutMs: options.commandTimeoutMs,
-        },
-      );
-      if (receipt.status === "rejected") {
-        throw receipt.error;
-      }
+      // The harness adapter alone translates this provider-native resume target into CLI args.
+      await ensureAgentWorkspace({
+        terminal,
+        harness: recovery.harness,
+        launchPreflight: options.launchPreflight,
+        project,
+        worktree,
+        sessionId,
+        harnessOptions: { mode: "interactive" },
+        layout: payload.terminal?.layout ?? project.defaults.layout,
+        focus: payload.terminal?.focus,
+        origin: payload.terminal?.origin,
+        initialPrompt: payload.initialPrompt,
+        resume: recovery.resume,
+        context,
+        clock: options.clock,
+        logger: options.logger,
+      });
       throwIfAborted(context.signal);
       await options.persistence.reopenSession(sessionId);
     } catch (error) {

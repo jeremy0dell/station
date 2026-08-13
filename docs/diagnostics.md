@@ -109,12 +109,9 @@ errors remain available in diagnostic snapshots and debug evidence.
 
 Doctor's `observer-singleton` check reads the cached result of the one-shot
 post-startup duplicate inspection; it does not rescan or mutate product state.
-It is `ok` when no duplicate requires action or a prior graceful cleanup
-succeeded with keeper ownership preserved. It is `warn` for a report-only
-`would-terminate` candidate, a SIGTERM survivor, pending/cancelled inspection,
-claim contention, or process/socket/pidfile/FD evidence refusal. The message
-points first to `stn observer reap`; a surviving verified duplicate also names
-`stn observer reap --force` as the explicit manual escalation.
+It is `ok` when no duplicate requires action. It is `warn` for an eligible
+candidate or process/socket/pidfile/FD evidence refusal. The message points to
+`stn observer reap`; startup inspection never signals or acquires the boot claim.
 
 `stn snapshot --json` asks the observer for the current normalized graph. Use
 `--include-debug` when row-level diagnostic fields are needed for support
@@ -137,7 +134,7 @@ submits a command and can change runtime state.
 `stn setup check --json`, `stn setup system --check`, and
 `pnpm setup:system:check` report local tool readiness. They are read-only.
 
-Provider hooks are diagnosed as delivery hints, not runtime truth. `stn-ingress` assigns stable event ids, tries bounded delivery to the observer, attempts bounded observer auto-start when enabled, and writes a spool record only when startup or delivery fails. Harness reports are accepted into an observer-owned ingress queue before slower persistence, projection, and reconcile work. Queue depth, coalescing, drop/failure counts, and last spool-drain stats appear in observer health and diagnostic snapshots. Hook delivery decisions are written to `logs/hooks.jsonl`; hook payload attributes are redacted before they appear in logs or debug bundles.
+Provider hooks are diagnosed as delivery hints, not runtime truth. `stn-ingress` assigns stable event ids, tries bounded delivery to the observer, uses the standard CLI Observer lifecycle for bounded auto-start when enabled, and writes a spool record only when startup or delivery fails. Harness reports are accepted into an observer-owned ingress queue before slower persistence, projection, and reconcile work. Queue depth, coalescing, drop/failure counts, and last spool-drain stats appear in observer health and diagnostic snapshots. Hook delivery decisions are written to `logs/hooks.jsonl`; hook payload attributes are redacted before they appear in logs or debug bundles.
 
 An allow-listed provider hook that fails the sender's Station ownership or
 configured-root correlation gate writes one best-effort `info` record before

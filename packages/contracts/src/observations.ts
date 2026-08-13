@@ -208,40 +208,49 @@ export const TerminalTargetObservationSchema = z
 
 export type TerminalTargetObservation = z.infer<typeof TerminalTargetObservationSchema>;
 
-export const HarnessRunObservationSchema = z
-  .object({
-    id: HarnessRunIdSchema,
-    provider: ProviderIdSchema,
-    projectId: ProjectIdSchema.optional(),
-    worktreeId: WorktreeIdSchema.optional(),
-    sessionId: SessionIdSchema.optional(),
-    nativeSessionId: nonEmptyStringSchema.optional(),
-    pid: z.number().int().positive().optional(),
-    cwd: nonEmptyStringSchema.optional(),
-    state: AgentStateSchema,
-    confidence: ConfidenceSchema,
-    reason: nonEmptyStringSchema,
-    observedAt: TimestampSchema,
-    providerData: optionalProviderDataSchema,
-  })
-  .strict();
+const HarnessRunIdentityObservationSchema = z.object({
+  id: HarnessRunIdSchema,
+  provider: ProviderIdSchema,
+  projectId: ProjectIdSchema.optional(),
+  worktreeId: WorktreeIdSchema.optional(),
+  sessionId: SessionIdSchema.optional(),
+  nativeSessionId: nonEmptyStringSchema.optional(),
+  pid: z.number().int().positive().optional(),
+  cwd: nonEmptyStringSchema.optional(),
+  observedAt: TimestampSchema,
+  providerData: optionalProviderDataSchema,
+});
+
+const CurrentHarnessRunObservationSchema = HarnessRunIdentityObservationSchema.extend({
+  status: ObservedStatusSchema,
+}).strict();
+type CurrentHarnessRunObservation = z.infer<typeof CurrentHarnessRunObservationSchema>;
+
+const LegacyHarnessRunObservationSchema = HarnessRunIdentityObservationSchema.extend({
+  state: AgentStateSchema,
+  confidence: ConfidenceSchema,
+  reason: nonEmptyStringSchema,
+})
+  .strict()
+  .transform(
+    ({ state, confidence, reason, ...run }): CurrentHarnessRunObservation => ({
+      ...run,
+      status: {
+        value: state,
+        confidence,
+        reason,
+        source: "unknown",
+        updatedAt: run.observedAt,
+      },
+    }),
+  );
+
+export const HarnessRunObservationSchema = z.union([
+  CurrentHarnessRunObservationSchema,
+  LegacyHarnessRunObservationSchema,
+]);
 
 export type HarnessRunObservation = z.infer<typeof HarnessRunObservationSchema>;
-
-export const HarnessStatusObservationSchema = z
-  .object({
-    provider: ProviderIdSchema,
-    runId: HarnessRunIdSchema.optional(),
-    projectId: ProjectIdSchema.optional(),
-    worktreeId: WorktreeIdSchema.optional(),
-    sessionId: SessionIdSchema.optional(),
-    status: ObservedStatusSchema,
-    observedAt: TimestampSchema,
-    providerData: optionalProviderDataSchema,
-  })
-  .strict();
-
-export type HarnessStatusObservation = z.infer<typeof HarnessStatusObservationSchema>;
 
 export const HarnessEventObservationSchema = z
   .object({

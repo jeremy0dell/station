@@ -275,10 +275,6 @@ function agentVisual(row: WorktreeRow): AgentVisual {
   return isReadyToRead(row) ? READY_TO_READ_VISUAL : AGENT_VISUALS[row.agent?.state ?? "none"];
 }
 
-export function statusMarker(row: WorktreeRow): RowMarker {
-  return agentVisual(row).marker;
-}
-
 type MetadataSegment = {
   text: string;
   stale: boolean;

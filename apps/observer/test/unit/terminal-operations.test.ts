@@ -1,6 +1,5 @@
 import type {
   BuildHarnessLaunchRequest,
-  EnsureAgentWorkspaceIntent,
   HarnessLaunchPlan,
   LogRecord,
   OpenWorkspaceRequest,
@@ -19,33 +18,25 @@ import {
   FakeTerminalProvider,
 } from "@station/testing";
 import { describe, expect, it } from "vitest";
-import type { HarnessLaunchPreflight } from "../../src/commands/harnessLaunchPreflight.js";
+import type { CommandHandlerContext } from "../../src/commands/queue.js";
 import {
-  createTerminalIntentRunner,
-  type TerminalIntentProviderAccess,
-  type TerminalIntentRunner,
-} from "../../src/commands/terminalIntentRunner";
+  closeTerminal,
+  ensureAgentWorkspace,
+  focusTerminal,
+} from "../../src/commands/terminalOperations.js";
 import type { StationLogger } from "../../src/stationLogger.js";
 
 const now = "2026-06-04T12:00:00.000Z";
 const clock = { now: () => new Date(now) };
 
-describe("createTerminalIntentRunner", () => {
+describe("terminal operations", () => {
   it("opens the workspace, builds launch from the normalized terminal observation, and launches", async () => {
     const order: string[] = [];
     const terminal = new RecordingTerminalProvider({ order });
     const harness = new CapturingHarnessProvider({ order });
-    const runner = runnerFor(terminal, [harness]);
 
-    const receipt = await runner.submitIntent({ ...ensureIntent(), focus: false }, {});
+    await ensureAgentWorkspace(ensureInput(terminal, harness, { focus: false }));
 
-    expect(receipt).toMatchObject({
-      status: "accepted",
-      accepted: true,
-      commandId: "cmd_ensure",
-      type: "session.ensureAgentWorkspace",
-      terminalProvider: "fake-terminal",
-    });
     expect(order).toEqual(["openWorkspace", "buildLaunch", "launchProcess"]);
     expect(harness.lastBuildRequest?.terminalTarget).toMatchObject({
       id: "term_fake",
@@ -61,7 +52,6 @@ describe("createTerminalIntentRunner", () => {
         worktreePath: "/tmp/station/web/feature",
       },
     });
-    expect(terminal.snapshot().launches).toHaveLength(1);
     expect(terminal.snapshot().launches[0]?.terminalTarget).toMatchObject({
       targetId: "term_fake",
       provider: "fake-terminal",
@@ -69,38 +59,24 @@ describe("createTerminalIntentRunner", () => {
   });
 
   it("passes exact resume targets through the harness launch request", async () => {
+    const terminal = new RecordingTerminalProvider();
     const harness = new CapturingHarnessProvider();
-    const runner = runnerFor(new RecordingTerminalProvider(), [harness]);
     const resume = {
-      target: {
-        kind: "native-session" as const,
-        id: "codex_session_123",
-      },
+      target: { kind: "native-session" as const, id: "codex_session_123" },
       previousSessionId: "ses_web_feature",
       recoveryHandleId: "rec_codex_123",
     };
 
-    await expect(
-      runner.submitIntent({
-        ...ensureIntent(),
-        resume,
-      }),
-    ).resolves.toMatchObject({
-      status: "accepted",
-    });
+    await ensureAgentWorkspace(ensureInput(terminal, harness, { resume }));
 
     expect(harness.lastBuildRequest?.resume).toEqual(resume);
   });
 
   it("focuses only when requested and treats focus failure as non-fatal", async () => {
     const backgroundTerminal = new RecordingTerminalProvider();
-    const background = runnerFor(backgroundTerminal, [new CapturingHarnessProvider()]);
-
-    await expect(
-      background.submitIntent({ ...ensureIntent(), focus: false }),
-    ).resolves.toMatchObject({
-      status: "accepted",
-    });
+    await ensureAgentWorkspace(
+      ensureInput(backgroundTerminal, new CapturingHarnessProvider(), { focus: false }),
+    );
     expect(backgroundTerminal.snapshot().focused).toEqual([]);
 
     const focusFailureTerminal = new RecordingTerminalProvider({
@@ -113,20 +89,12 @@ describe("createTerminalIntentRunner", () => {
         },
       },
     });
-    const focused = runnerFor(focusFailureTerminal, [new CapturingHarnessProvider()]);
-
-    await expect(
-      focused.submitIntent({
-        ...ensureIntent(),
+    await ensureAgentWorkspace(
+      ensureInput(focusFailureTerminal, new CapturingHarnessProvider(), {
         focus: true,
-        origin: {
-          provider: "tmux",
-          clientId: "client_1",
-        },
+        origin: { provider: "tmux", clientId: "client_1" },
       }),
-    ).resolves.toMatchObject({
-      status: "accepted",
-    });
+    );
     expect(focusFailureTerminal.snapshot().launches).toHaveLength(1);
     expect(focusFailureTerminal.snapshot().focused).toEqual([]);
   });
@@ -157,42 +125,27 @@ describe("createTerminalIntentRunner", () => {
             harnessProvider: "fake-harness",
             worktreePath: "/tmp/station/web/feature",
           },
-          providerData: {
-            paneId: "%ignored",
-          },
+          providerData: { paneId: "%ignored" },
         }),
       ],
     });
-    const runner = runnerFor(terminal, [new CapturingHarnessProvider()]);
 
-    await expect(
-      runner.submitIntent({
-        type: "terminal.focus",
-        commandId: "cmd_focus",
-        terminalProvider: "fake-terminal",
-        subject: {
-          projectId: "web",
-          worktreeId: "wt_web_feature",
-          sessionId: "ses_web_feature",
-        },
-        origin: {
-          provider: "tmux",
-          clientId: "client_1",
-        },
-      }),
-    ).resolves.toMatchObject({
-      status: "accepted",
+    await focusTerminal({
+      terminal,
+      subject: {
+        projectId: "web",
+        worktreeId: "wt_web_feature",
+        sessionId: "ses_web_feature",
+      },
+      origin: { provider: "tmux", clientId: "client_1" },
+      context: commandContext("cmd_focus"),
+      clock,
     });
 
     expect(order).toEqual(["listTargets", "focusTarget"]);
     expect(terminal.snapshot().focused).toEqual(["term_agent"]);
     expect(terminal.snapshot().focusContexts).toEqual([
-      {
-        origin: {
-          provider: "tmux",
-          clientId: "client_1",
-        },
-      },
+      { origin: { provider: "tmux", clientId: "client_1" } },
     ]);
   });
 
@@ -223,25 +176,17 @@ describe("createTerminalIntentRunner", () => {
       ],
     });
 
-    await expect(
-      runnerFor(terminal, [new CapturingHarnessProvider()]).submitIntent({
-        type: "terminal.close",
-        commandId: "cmd_close",
-        terminalProvider: "fake-terminal",
-        subject: {
-          projectId: "web",
-          worktreeId: "wt_web_feature",
-        },
-        force: true,
-      }),
-    ).resolves.toMatchObject({
-      status: "accepted",
+    await closeTerminal({
+      terminal,
+      subject: { projectId: "web", worktreeId: "wt_web_feature" },
+      context: commandContext("cmd_close"),
+      clock,
     });
 
     expect(terminal.snapshot().closed).toEqual(["term_agent"]);
   });
 
-  it("rejects stale-only and missing focus or close subjects without calling provider mechanics", async () => {
+  it("rejects stale-only and missing focus or close subjects without provider mutation", async () => {
     const staleTerminal = new RecordingTerminalProvider({
       targets: [
         createFakeTerminalTarget({
@@ -255,106 +200,77 @@ describe("createTerminalIntentRunner", () => {
       ],
     });
     await expect(
-      runnerFor(staleTerminal, [new CapturingHarnessProvider()]).submitIntent({
-        type: "terminal.focus",
-        commandId: "cmd_stale_focus",
-        terminalProvider: "fake-terminal",
-        subject: {
-          projectId: "web",
-          worktreeId: "wt_web_feature",
-        },
+      focusTerminal({
+        terminal: staleTerminal,
+        subject: { projectId: "web", worktreeId: "wt_web_feature" },
+        context: commandContext("cmd_stale_focus"),
+        clock,
       }),
-    ).resolves.toMatchObject({
-      status: "rejected",
-      error: {
-        tag: "TerminalProviderError",
-        code: "TERMINAL_TARGET_STALE",
-        provider: "fake-terminal",
-        worktreeId: "wt_web_feature",
-      },
+    ).rejects.toMatchObject({
+      tag: "TerminalProviderError",
+      code: "TERMINAL_TARGET_STALE",
+      provider: "fake-terminal",
+      worktreeId: "wt_web_feature",
     });
     expect(staleTerminal.snapshot().focused).toEqual([]);
 
     const missingTerminal = new RecordingTerminalProvider();
     await expect(
-      runnerFor(missingTerminal, [new CapturingHarnessProvider()]).submitIntent({
-        type: "terminal.close",
-        commandId: "cmd_missing_close",
-        terminalProvider: "fake-terminal",
-        subject: {
-          worktreeId: "wt_missing",
-        },
+      closeTerminal({
+        terminal: missingTerminal,
+        subject: { worktreeId: "wt_missing" },
+        context: commandContext("cmd_missing_close"),
+        clock,
       }),
-    ).resolves.toMatchObject({
-      status: "rejected",
-      error: {
-        tag: "TerminalProviderError",
-        code: "TERMINAL_TARGET_MISSING",
-        provider: "fake-terminal",
-        worktreeId: "wt_missing",
-      },
+    ).rejects.toMatchObject({
+      tag: "TerminalProviderError",
+      code: "TERMINAL_TARGET_MISSING",
+      provider: "fake-terminal",
+      worktreeId: "wt_missing",
     });
     expect(missingTerminal.snapshot().closed).toEqual([]);
   });
 
-  it("returns owner-tagged rejected receipts for missing harness and provider failures", async () => {
-    await expect(
-      runnerFor(new RecordingTerminalProvider(), []).submitIntent(ensureIntent()),
-    ).resolves.toMatchObject({
-      status: "rejected",
-      error: {
-        tag: "HarnessProviderError",
-        code: "HARNESS_PROVIDER_UNAVAILABLE",
-        provider: "fake-harness",
+  it("preserves owner-tagged provider failures", async () => {
+    const terminal = new RecordingTerminalProvider({
+      failures: {
+        openWorkspace: {
+          tag: "TerminalProviderError",
+          code: "FAKE_OPEN_FAILED",
+          message: "The fake terminal failed to open.",
+          provider: "fake-terminal",
+        },
       },
     });
 
     await expect(
-      runnerFor(
-        new RecordingTerminalProvider({
-          failures: {
-            openWorkspace: {
-              tag: "TerminalProviderError",
-              code: "FAKE_OPEN_FAILED",
-              message: "The fake terminal failed to open.",
-              provider: "fake-terminal",
-            },
-          },
-        }),
-        [new CapturingHarnessProvider()],
-      ).submitIntent(ensureIntent()),
-    ).resolves.toMatchObject({
-      status: "rejected",
-      error: {
-        tag: "TerminalProviderError",
-        code: "FAKE_OPEN_FAILED",
-        provider: "fake-terminal",
-      },
+      ensureAgentWorkspace(ensureInput(terminal, new CapturingHarnessProvider())),
+    ).rejects.toMatchObject({
+      tag: "TerminalProviderError",
+      code: "FAKE_OPEN_FAILED",
+      provider: "fake-terminal",
     });
   });
 
-  it("closes an opened target before rejecting build and launch failures", async () => {
+  it("closes an opened target before surfacing build and launch failures", async () => {
     const buildFailureTerminal = new RecordingTerminalProvider();
     await expect(
-      runnerFor(buildFailureTerminal, [
-        new CapturingHarnessProvider({
-          failures: {
-            buildLaunch: {
-              tag: "HarnessProviderError",
-              code: "FAKE_BUILD_FAILED",
-              message: "The fake harness failed to build.",
-              provider: "fake-harness",
+      ensureAgentWorkspace(
+        ensureInput(
+          buildFailureTerminal,
+          new CapturingHarnessProvider({
+            failures: {
+              buildLaunch: {
+                tag: "HarnessProviderError",
+                code: "FAKE_BUILD_FAILED",
+                message: "The fake harness failed to build.",
+                provider: "fake-harness",
+              },
             },
-          },
-        }),
-      ]).submitIntent(ensureIntent()),
-    ).resolves.toMatchObject({
-      status: "rejected",
-      error: {
-        code: "FAKE_BUILD_FAILED",
-        provider: "fake-harness",
-      },
-    });
+          }),
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "FAKE_BUILD_FAILED", provider: "fake-harness" });
     expect(buildFailureTerminal.snapshot().closed).toEqual(["term_fake"]);
 
     const launchFailureTerminal = new RecordingTerminalProvider({
@@ -368,16 +284,8 @@ describe("createTerminalIntentRunner", () => {
       },
     });
     await expect(
-      runnerFor(launchFailureTerminal, [new CapturingHarnessProvider()]).submitIntent(
-        ensureIntent(),
-      ),
-    ).resolves.toMatchObject({
-      status: "rejected",
-      error: {
-        code: "FAKE_LAUNCH_FAILED",
-        provider: "fake-terminal",
-      },
-    });
+      ensureAgentWorkspace(ensureInput(launchFailureTerminal, new CapturingHarnessProvider())),
+    ).rejects.toMatchObject({ code: "FAKE_LAUNCH_FAILED", provider: "fake-terminal" });
     expect(launchFailureTerminal.snapshot().closed).toEqual(["term_fake"]);
   });
 
@@ -392,20 +300,19 @@ describe("createTerminalIntentRunner", () => {
     } as const;
 
     await expect(
-      runnerFor(terminal, [new CapturingHarnessProvider({ order })], async () => {
-        throw preflightError;
-      }).submitIntent(ensureIntent()),
-    ).resolves.toMatchObject({
-      status: "rejected",
-      error: preflightError,
-    });
-
+      ensureAgentWorkspace(
+        ensureInput(terminal, new CapturingHarnessProvider({ order }), {
+          launchPreflight: async () => {
+            throw preflightError;
+          },
+        }),
+      ),
+    ).rejects.toMatchObject(preflightError);
     expect(order).toEqual([]);
-    expect(terminal.snapshot().targets).toEqual([]);
-    expect(terminal.snapshot().launches).toEqual([]);
+    expect(terminal.snapshot()).toMatchObject({ targets: [], launches: [] });
   });
 
-  it("returns a rejected receipt for cancellation before launching", async () => {
+  it("rejects cancellation before launching", async () => {
     const terminal = new RecordingTerminalProvider();
     const controller = new AbortController();
     controller.abort({
@@ -415,119 +322,59 @@ describe("createTerminalIntentRunner", () => {
     });
 
     await expect(
-      runnerFor(terminal, [new CapturingHarnessProvider()]).submitIntent(ensureIntent(), {
-        signal: controller.signal,
-      }),
-    ).resolves.toMatchObject({
-      status: "rejected",
-      error: {
-        tag: "CancellationError",
-        code: "COMMAND_CANCELLED",
-      },
-    });
+      ensureAgentWorkspace(
+        ensureInput(terminal, new CapturingHarnessProvider(), {
+          context: commandContext("cmd_cancelled", controller.signal),
+        }),
+      ),
+    ).rejects.toMatchObject({ tag: "CancellationError", code: "COMMAND_CANCELLED" });
     expect(terminal.snapshot().launches).toEqual([]);
   });
 
-  it("deduplicates duplicate commandId and type submissions in-process", async () => {
+  it("executes independent operations without retaining command receipts", async () => {
     const terminal = new RecordingTerminalProvider();
-    const runner = runnerFor(terminal, [new CapturingHarnessProvider()]);
+    const harness = new CapturingHarnessProvider();
 
-    const first = await runner.submitIntent(ensureIntent());
-    const second = await runner.submitIntent(ensureIntent());
+    await ensureAgentWorkspace(
+      ensureInput(terminal, harness, { context: commandContext("cmd_first") }),
+    );
+    await ensureAgentWorkspace(
+      ensureInput(terminal, harness, { context: commandContext("cmd_second") }),
+    );
 
-    expect(first).toEqual(second);
-    expect(terminal.snapshot().launches).toHaveLength(1);
+    expect(terminal.snapshot().launches).toHaveLength(2);
   });
 
-  it("logs terminal intent submission and receipt with product identifiers", async () => {
+  it("leaves success lifecycle logging to the command queue", async () => {
     const logger = new CapturingLogger();
-    const runner = createTerminalIntentRunner({
-      providers: {
-        terminals: new Map([["fake-terminal", new RecordingTerminalProvider()]]),
-        harnesses: new Map([["fake-harness", new CapturingHarnessProvider()]]),
-      },
-      launchPreflight: async () => undefined,
-      clock,
-      logger,
-    });
 
-    await expect(
-      runner.submitIntent(ensureIntent(), {
-        trace: {
-          traceId: "trace_1",
-          spanId: "span_1",
-        },
-      }),
-    ).resolves.toMatchObject({
-      status: "accepted",
-    });
+    await ensureAgentWorkspace(
+      ensureInput(new RecordingTerminalProvider(), new CapturingHarnessProvider(), { logger }),
+    );
 
-    expect(logger.records).toEqual([
-      expect.objectContaining({
-        level: "info",
-        message: "Terminal intent submitted.",
-        attributes: expect.objectContaining({
-          commandId: "cmd_ensure",
-          intentType: "session.ensureAgentWorkspace",
-          terminalProvider: "fake-terminal",
-          harnessProvider: "fake-harness",
-          projectId: "web",
-          worktreeId: "wt_web_feature",
-          sessionId: "ses_web_feature",
-          traceId: "trace_1",
-          spanId: "span_1",
-        }),
-      }),
-      expect.objectContaining({
-        level: "info",
-        message: "Terminal intent accepted.",
-        attributes: expect.objectContaining({
-          commandId: "cmd_ensure",
-          intentType: "session.ensureAgentWorkspace",
-          terminalProvider: "fake-terminal",
-          harnessProvider: "fake-harness",
-          projectId: "web",
-          worktreeId: "wt_web_feature",
-          sessionId: "ses_web_feature",
-        }),
-      }),
-    ]);
+    expect(logger.records).toEqual([]);
   });
 });
 
-function runnerFor(
+function ensureInput(
   terminal: RecordingTerminalProvider,
-  harnesses: CapturingHarnessProvider[],
-  launchPreflight: HarnessLaunchPreflight = async () => undefined,
-): TerminalIntentRunner {
-  const providers: TerminalIntentProviderAccess = {
-    terminals: new Map([[terminal.id, terminal]]),
-    harnesses: new Map(harnesses.map((provider) => [provider.id, provider])),
-  };
-  return createTerminalIntentRunner({
-    providers,
-    launchPreflight,
-    clock,
-  });
-}
-
-function ensureIntent(): EnsureAgentWorkspaceIntent {
-  const worktree = createFakeWorktree({
-    id: "wt_web_feature",
-    projectId: "web",
-    branch: "feature",
-    path: "/tmp/station/web/feature",
-    now,
-  });
+  harness: CapturingHarnessProvider,
+  overrides: Partial<Parameters<typeof ensureAgentWorkspace>[0]> = {},
+): Parameters<typeof ensureAgentWorkspace>[0] {
   return {
-    type: "session.ensureAgentWorkspace",
-    commandId: "cmd_ensure",
-    terminalProvider: "fake-terminal",
+    terminal,
+    harness,
+    launchPreflight: async () => undefined,
     project,
-    worktree,
+    worktree: createFakeWorktree({
+      id: "wt_web_feature",
+      projectId: "web",
+      branch: "feature",
+      path: "/tmp/station/web/feature",
+      now,
+    }),
     sessionId: "ses_web_feature",
-    harness: {
-      provider: "fake-harness",
+    harnessOptions: {
       mode: "interactive",
       profile: "default",
       approvalPolicy: "on-request",
@@ -536,6 +383,22 @@ function ensureIntent(): EnsureAgentWorkspaceIntent {
     layout: "agent-build-shell",
     focus: true,
     initialPrompt: "Start the feature.",
+    context: commandContext("cmd_ensure"),
+    clock,
+    ...overrides,
+  };
+}
+
+function commandContext(
+  commandId: string,
+  signal = new AbortController().signal,
+): CommandHandlerContext {
+  return {
+    commandId,
+    trace: { traceId: `trace_${commandId}`, spanId: `span_${commandId}` },
+    command: { type: "terminal.focus", payload: { worktreeId: "wt_web_feature" } },
+    signal,
+    beginCommit: () => undefined,
   };
 }
 
@@ -548,9 +411,7 @@ const project: ProviderProjectConfig = {
     terminal: "fake-terminal",
     layout: "agent-build-shell",
   },
-  worktrunk: {
-    enabled: true,
-  },
+  worktrunk: { enabled: true },
 };
 
 class RecordingTerminalProvider extends FakeTerminalProvider {

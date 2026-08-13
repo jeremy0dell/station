@@ -15,9 +15,7 @@ import {
   type ObserverWorktreeDisplayTitle,
   projectProviderHealthOntoSnapshot,
 } from "../../src/reconcile/graph";
-import type { ObserverHarnessRun } from "../../src/reconcile/harnessEventStatus";
 import { projectSessionGroups } from "../../src/reconcile/sessionGroups";
-import { observerHarnessRunFromRun } from "../support/harnessRuns";
 
 const generatedAt = "2026-05-20T12:00:00.000Z";
 const observerStartedAt = "2026-05-20T11:55:00.000Z";
@@ -117,16 +115,16 @@ function terminal(
 function harness(
   id: string,
   worktreeId: string,
-  state: HarnessRunObservation["state"],
+  state: HarnessRunObservation["status"]["value"],
   reason = `Harness is ${state}.`,
-): ObserverHarnessRun {
-  return observerHarnessRunFromRun(harnessRun(id, worktreeId, state, reason));
+): HarnessRunObservation {
+  return harnessRun(id, worktreeId, state, reason);
 }
 
 function harnessRun(
   id: string,
   worktreeId: string,
-  state: HarnessRunObservation["state"],
+  state: HarnessRunObservation["status"]["value"],
   reason = `Harness is ${state}.`,
 ): HarnessRunObservation {
   return {
@@ -136,9 +134,13 @@ function harnessRun(
     worktreeId,
     sessionId: `ses_${worktreeId}`,
     pid: state === "exited" ? undefined : 5000,
-    state,
-    confidence: state === "unknown" ? "low" : "high",
-    reason,
+    status: {
+      value: state,
+      confidence: state === "unknown" ? "low" : "high",
+      reason,
+      source: "harness_process",
+      updatedAt: generatedAt,
+    },
     observedAt: generatedAt,
     providerData: {
       rawStatus: state,
@@ -150,7 +152,7 @@ function build(overrides: {
   projects?: ProviderProjectConfig[];
   worktrees?: WorktreeObservation[];
   terminals?: TerminalTargetObservation[];
-  harnessRuns?: ObserverHarnessRun[];
+  harnessRuns?: HarnessRunObservation[];
   sessionMetadata?: ObserverSessionMetadata[];
   worktreeDisplayTitles?: ObserverWorktreeDisplayTitle[];
   turnReadiness?: ObserverTurnReadiness[];
@@ -414,17 +416,21 @@ describe("observer graph derivation", () => {
       createdAt: "2026-05-20T11:50:00.000Z",
       lastSeenAt: "2026-05-20T11:55:00.000Z",
     };
-    const externalRun = observerHarnessRunFromRun({
+    const externalRun: HarnessRunObservation = {
       id: "codex:external:native_mixed",
       provider: "codex",
       projectId: "web",
       worktreeId: mixed.id,
-      state: "working",
-      confidence: "high",
-      reason: "External Codex run is active.",
+      status: {
+        value: "working",
+        confidence: "high",
+        reason: "External Codex run is active.",
+        source: "harness_event",
+        updatedAt: generatedAt,
+      },
       observedAt: generatedAt,
-    });
-    const observedTerminal = terminal("term_mixed", mixed.id, externalRun.run.id);
+    };
+    const observedTerminal = terminal("term_mixed", mixed.id, externalRun.id);
     const worktreeDisplayTitles = [
       { projectId: "web", worktreeId: mixed.id, title: "Canonical mixed workspace" },
     ];
@@ -444,7 +450,6 @@ describe("observer graph derivation", () => {
       harnessRuns: [
         {
           ...externalRun,
-          run: { ...externalRun.run, state: "exited" },
           status: { ...externalRun.status, value: "exited" },
         },
       ],
@@ -456,7 +461,7 @@ describe("observer graph derivation", () => {
     expect(active.sessions.every((session) => session.title === active.rows[0]?.title)).toBe(true);
     expect(active.sessions).toEqual([
       expect.objectContaining({ id: retained.id, origin: "station" }),
-      expect.objectContaining({ id: externalRun.run.id, origin: "external" }),
+      expect.objectContaining({ id: externalRun.id, origin: "external" }),
     ]);
     expect(active.sessions.every((session) => session.terminal === undefined)).toBe(true);
     expect(active.counts).toMatchObject({ sessions: 2, agents: 1, working: 1 });
@@ -468,17 +473,21 @@ describe("observer graph derivation", () => {
 
   it("does not activate legacy Station membership from a terminal bound to an external run", () => {
     const legacy = worktree("wt_web_external_conflict", "web", "external-conflict");
-    const externalRun = observerHarnessRunFromRun({
+    const externalRun: HarnessRunObservation = {
       id: "codex:external:native_conflict",
       provider: "codex",
       projectId: "web",
       worktreeId: legacy.id,
-      state: "working",
-      confidence: "high",
-      reason: "External Codex run is active.",
+      status: {
+        value: "working",
+        confidence: "high",
+        reason: "External Codex run is active.",
+        source: "harness_event",
+        updatedAt: generatedAt,
+      },
       observedAt: generatedAt,
-    });
-    const observedTerminal = terminal("term_external_conflict", legacy.id, externalRun.run.id);
+    };
+    const observedTerminal = terminal("term_external_conflict", legacy.id, externalRun.id);
 
     const snapshot = build({
       projects: projects.slice(0, 1),
@@ -499,7 +508,7 @@ describe("observer graph derivation", () => {
     });
 
     expect(snapshot.sessions).toEqual([
-      expect.objectContaining({ id: externalRun.run.id, origin: "external" }),
+      expect.objectContaining({ id: externalRun.id, origin: "external" }),
     ]);
   });
 
@@ -654,11 +663,11 @@ describe("observer graph derivation", () => {
   it("attaches terminals only through matching session or run identity", () => {
     const attached = worktree("wt_web_terminal_identity", "web", "terminal-identity");
     const run = harness("run_terminal_identity", attached.id, "idle");
-    const sessionBound = terminal("term_session_bound", attached.id, run.run.id);
+    const sessionBound = terminal("term_session_bound", attached.id, run.id);
     delete sessionBound.harnessRunId;
-    const runBound = terminal("term_run_bound", attached.id, run.run.id);
+    const runBound = terminal("term_run_bound", attached.id, run.id);
     delete runBound.sessionId;
-    const unbound = terminal("term_unbound", attached.id, run.run.id);
+    const unbound = terminal("term_unbound", attached.id, run.id);
     delete unbound.sessionId;
     delete unbound.harnessRunId;
 
@@ -705,23 +714,27 @@ describe("observer graph derivation", () => {
 
   it("surfaces active external run evidence without fabricating terminal or Station identity", () => {
     const external = worktree("wt_web_external", "web", "external");
-    const externalRun = observerHarnessRunFromRun({
+    const externalRun: HarnessRunObservation = {
       id: "codex:external:native_1",
       provider: "codex",
       projectId: "web",
       worktreeId: external.id,
-      state: "working",
-      confidence: "high",
-      reason: "External Codex run is active.",
+      status: {
+        value: "working",
+        confidence: "high",
+        reason: "External Codex run is active.",
+        source: "harness_event",
+        updatedAt: generatedAt,
+      },
       observedAt: generatedAt,
-    });
+    };
 
     const active = build({
       projects: projects.slice(0, 1),
       worktrees: [external],
       harnessRuns: [externalRun],
     });
-    const runBoundTerminal = terminal("term_external", external.id, externalRun.run.id);
+    const runBoundTerminal = terminal("term_external", external.id, externalRun.id);
     delete runBoundTerminal.sessionId;
     const attached = build({
       projects: projects.slice(0, 1),
@@ -736,7 +749,6 @@ describe("observer graph derivation", () => {
         harnessRuns: [
           {
             ...externalRun,
-            run: { ...externalRun.run, state },
             status: { ...externalRun.status, value: state },
           },
         ],
@@ -745,7 +757,7 @@ describe("observer graph derivation", () => {
 
     expect(active.sessions).toEqual([
       expect.objectContaining({
-        id: externalRun.run.id,
+        id: externalRun.id,
         worktreeId: external.id,
         origin: "external",
       }),
@@ -1029,12 +1041,12 @@ describe("observer graph derivation", () => {
         },
       ],
       harnessRuns: [
-        observerHarnessRunFromRun({
+        {
           ...harnessRun("run_orphan", "wt_missing", "working"),
           providerData: {
             rawRun: "snapshot-secret-harness",
           },
-        }),
+        },
       ],
     });
 
@@ -1092,7 +1104,7 @@ describe("observer graph derivation", () => {
       terminals: [terminal("term_feature", "wt_web_feature", "run_feature")],
       harnessRuns: [
         {
-          run: harnessRun("run_feature", "wt_web_feature", "unknown"),
+          ...harnessRun("run_feature", "wt_web_feature", "unknown"),
           status: {
             value: "working",
             confidence: "medium",

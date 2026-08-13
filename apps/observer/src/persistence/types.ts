@@ -8,7 +8,6 @@ import type {
   ObservedStatus,
   ProviderHealth,
   ProviderId,
-  ProviderProjectConfig,
   SafeError,
   SessionGroupId,
   SessionGroupView,
@@ -121,11 +120,6 @@ export type ProviderObservation = {
 }[keyof ProviderObservationPayloadByKind];
 
 export type ProviderObservationKind = ProviderObservation["entityKind"];
-export type CurrentProviderObservationKind = Extract<
-  ProviderObservationKind,
-  "worktree" | "terminal_target"
->;
-
 export type ProviderObservationType = "worktree" | "terminal" | "harness" | "observer";
 
 export type WorktreeMetadataCurrentKind = "change_summary" | "pull_request" | "checks";
@@ -311,7 +305,6 @@ export type ListSessionRecoveryHandlesOptions = {
 };
 
 export type PersistReconcileResultInput = {
-  projects: ProviderProjectConfig[];
   worktrees: WorktreeObservation[];
   terminalTargets: TerminalTargetObservation[];
   harnessRuns: HarnessRunObservation[];

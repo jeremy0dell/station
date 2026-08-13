@@ -33,9 +33,6 @@ import {
   type UpdateScenario,
 } from "./update/scenario.js";
 
-export type { UpdateCommandReport, UpdateCommandStep } from "./update/report.js";
-export { renderUpdateReport } from "./update/report.js";
-
 export type UpdateCommandOptions = {
   config: StationConfig;
   configPath?: string;

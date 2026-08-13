@@ -12,7 +12,6 @@ import type { EventJournal } from "../persistence/index.js";
 import type { ObserverEventBus } from "./eventBus.js";
 import type { HarnessReportProcessorDeps } from "./harnessReportProcessor.js";
 import { processHarnessIngressReport } from "./harnessReportProcessor.js";
-import type { ReconcileScheduler } from "./reconcileScheduler.js";
 
 export type SpoolDrainDeps = {
   spoolStore?: ProviderIngressSpoolStore;
@@ -22,7 +21,6 @@ export type SpoolDrainDeps = {
   providerHookIngress: ProviderHookIngress;
   harnessIngressQueue: HarnessIngressQueue;
   harnessReportDeps: HarnessReportProcessorDeps;
-  reconcileScheduler: ReconcileScheduler;
 };
 
 /**
@@ -43,13 +41,8 @@ export function createSpoolDrainer(deps: SpoolDrainDeps) {
     }
     const spoolStore = deps.spoolStore;
 
-    const processReport = async (report: HarnessEventReport) => {
-      const result = await processHarnessIngressReport(deps.harnessReportDeps, report);
-      if (result.reconcileReason !== undefined) {
-        deps.reconcileScheduler.request(result.reconcileReason);
-      }
-      return result.receipt;
-    };
+    const processReport = (report: HarnessEventReport) =>
+      processHarnessIngressReport(deps.harnessReportDeps, report);
 
     configuredSpoolDrain = runRuntimeBoundary(
       {

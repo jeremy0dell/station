@@ -23,7 +23,6 @@ import { providerObservationRetentionDays } from "../persistence/retention.js";
 import type { ProviderRegistry } from "../providers/registry.js";
 import { buildStationSnapshot } from "./graph.js";
 import { repairPersistedHarnessEventCompatibility } from "./harnessEventRepair.js";
-import type { ObserverHarnessRun } from "./harnessEventStatus.js";
 import type { ProviderReadOptions } from "./providerObservations.js";
 import type { ReconcileTiming } from "./reconcileResult.js";
 import {
@@ -64,7 +63,7 @@ type ReconcileOnceResult = {
  * USE CASE
  *
  * Orchestrates provider reads, relationship correlation, durable harness-event repair and overlays,
- * cached metadata hydration, Group projection, snapshot assembly, and atomic persistence in order.
+ * cached metadata hydration, Group projection, snapshot assembly, and atomic session persistence.
  * The same resolved title records feed snapshot composition and atomic reconcile persistence.
  */
 export async function runReconcileOnce(input: ReconcileOnceInput): Promise<ReconcileOnceResult> {
@@ -138,10 +137,9 @@ export async function runReconcileOnce(input: ReconcileOnceInput): Promise<Recon
 
   lastReconcile.eventsEmitted = await persistReconcileResult({
     ...(input.persistence === undefined ? {} : { persistence: input.persistence }),
-    projects: input.projects,
     worktrees: observations.worktrees,
     terminalTargets: observations.terminalTargets,
-    harnessRuns: observations.harnessRuns.map((harnessRun) => harnessRun.run),
+    harnessRuns: observations.harnessRuns,
     worktreeDisplayTitles: snapshotInputs.worktreeDisplayTitles,
     providerHealth,
     observedAt: finishedAt,
@@ -178,7 +176,7 @@ async function buildReconcileSnapshot(input: {
   harnessCapabilities: CurrentReconcileObservations["harnessCapabilities"];
   worktrees: WorktreeObservation[];
   terminalTargets: TerminalTargetObservation[];
-  harnessRuns: ObserverHarnessRun[];
+  harnessRuns: HarnessRunObservation[];
   snapshotInputs: ReconcileSnapshotInputs;
   featureFlags?: ClientFeatureFlags;
   persistence?: SessionGroupStore;
@@ -216,7 +214,6 @@ async function buildReconcileSnapshot(input: {
 
 async function persistReconcileResult(input: {
   persistence?: ReconcileStore & EventJournal;
-  projects: ProviderProjectConfig[];
   worktrees: WorktreeObservation[];
   terminalTargets: TerminalTargetObservation[];
   harnessRuns: HarnessRunObservation[];
@@ -230,7 +227,6 @@ async function persistReconcileResult(input: {
   }
 
   await input.persistence.persistReconcileResult({
-    projects: input.projects,
     worktrees: input.worktrees,
     terminalTargets: input.terminalTargets,
     harnessRuns: input.harnessRuns,

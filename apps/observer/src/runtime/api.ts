@@ -76,7 +76,7 @@ import {
 } from "./externalLaunch.js";
 import type { HarnessReportProcessorDeps } from "./harnessReportProcessor.js";
 import { processHarnessIngressReport } from "./harnessReportProcessor.js";
-import type { ObserverDuplicateCleanupOutcome } from "./observerDuplicateCleanup.js";
+import type { ObserverReapPlan } from "./observerReap.js";
 import { type ReconcileExecutorDeps, runReconcile } from "./reconcileExecutor.js";
 import { logReconcileSchedulerProfile } from "./reconcileProfiling.js";
 import {
@@ -113,7 +113,7 @@ export type CreateObserverApiOptions = {
   onShutdownStarted?: () => Promise<void> | void;
   onStop?: () => Promise<void> | void;
   hookReconcileDebounceMs?: number;
-  duplicateCleanupStatus?: () => ObserverDuplicateCleanupOutcome | undefined;
+  duplicateInspection?: () => Promise<ObserverReapPlan> | undefined;
 };
 
 /**
@@ -197,17 +197,14 @@ export function createObserverApi(options: CreateObserverApiOptions): ObserverAp
       return harnessIngressQueueRef.enqueue(report);
     },
   );
-  const harnessEventReportIngestion = buildHarnessEventReportIngestion(
-    options,
-    clock,
-    reconcileScheduler,
-  );
+  const harnessEventReportIngestion = buildHarnessEventReportIngestion(options, clock);
 
   const harnessReportDeps: HarnessReportProcessorDeps = {
     harnessEventReportIngestion,
     core: options.core,
     eventBus: options.eventBus,
     clock,
+    requestReconcile: reconcileScheduler.request,
     ...(options.logger === undefined ? {} : { logger: options.logger }),
   };
   if (providerHealthCache !== undefined) {
@@ -215,12 +212,7 @@ export function createObserverApi(options: CreateObserverApiOptions): ObserverAp
       providerHealthCache.refresh(providerId);
   }
 
-  const harnessIngressQueue = buildHarnessIngressQueue(
-    options,
-    harnessReportDeps,
-    clock,
-    reconcileScheduler,
-  );
+  const harnessIngressQueue = buildHarnessIngressQueue(options, harnessReportDeps, clock);
   harnessIngressQueueRef = harnessIngressQueue;
 
   const spoolDrainDeps: SpoolDrainDeps = {
@@ -230,7 +222,6 @@ export function createObserverApi(options: CreateObserverApiOptions): ObserverAp
     providerHookIngress,
     harnessIngressQueue,
     harnessReportDeps,
-    reconcileScheduler,
     ...(options.hookSpoolDir === undefined
       ? {}
       : { spoolStore: createFilesystemProviderIngressSpoolStore(options.hookSpoolDir) }),
@@ -299,9 +290,8 @@ export function createObserverApi(options: CreateObserverApiOptions): ObserverAp
     reportHarnessEvent: async (report: HarnessEventReport): Promise<HarnessEventReportReceipt> =>
       harnessIngressQueue.enqueue(report),
     prepareExternalLaunch: (params) =>
-      prepareExternalLaunchSafe(options, worktreeMutations, reconciling, reconcileDeps, params),
-    reportExternalExit: (params) =>
-      reportExternalExitSafe(options, reconciling, reconcileDeps, params),
+      prepareExternalLaunchSafe(options, worktreeMutations, reconcileScheduler, params),
+    reportExternalExit: (params) => reportExternalExitSafe(options, reconcileScheduler, params),
   };
 
   return api;
@@ -328,22 +318,10 @@ function sessionRecoveryReadiness(options: CreateObserverApiOptions): SessionRec
   return readiness;
 }
 
-function reconcileAfterExternalLaunch(
-  deps: ReconcileExecutorDeps,
-  guard: { reconciling: boolean },
-  reason: string,
-  logger?: StationLogger,
-): void {
-  void runReconcile(deps, guard, reason).catch(async (error) => {
-    await logger?.error("Post-external-launch reconcile failed.", { reason, error });
-  });
-}
-
 async function prepareExternalLaunchSafe(
   options: CreateObserverApiOptions,
   worktreeMutations: WorktreeMutationCoordinator,
-  reconciling: { reconciling: boolean },
-  reconcileDeps: ReconcileExecutorDeps,
+  reconcileScheduler: ReturnType<typeof createReconcileScheduler>,
   params: Parameters<ObserverApi["prepareExternalLaunch"]>[0],
 ): ReturnType<ObserverApi["prepareExternalLaunch"]> {
   const deps = assertProvidersAvailable(options, worktreeMutations);
@@ -373,31 +351,20 @@ async function prepareExternalLaunchSafe(
   }
   const { outcome, reconcile } = result;
   if (reconcile) {
-    reconcileAfterExternalLaunch(
-      reconcileDeps,
-      reconciling,
-      "agent.prepareExternalLaunch",
-      options.logger,
-    );
+    reconcileScheduler.request("agent.prepareExternalLaunch");
   }
   return outcome;
 }
 
 async function reportExternalExitSafe(
   options: CreateObserverApiOptions,
-  reconciling: { reconciling: boolean },
-  reconcileDeps: ReconcileExecutorDeps,
+  reconcileScheduler: ReturnType<typeof createReconcileScheduler>,
   params: Parameters<ObserverApi["reportExternalExit"]>[0],
 ): ReturnType<ObserverApi["reportExternalExit"]> {
   const providers = assertProviderRegistryAvailable(options);
   const { outcome, reconcile } = await reportExternalExit({ providers }, params);
   if (reconcile) {
-    reconcileAfterExternalLaunch(
-      reconcileDeps,
-      reconciling,
-      "agent.reportExternalExit",
-      options.logger,
-    );
+    reconcileScheduler.request("agent.reportExternalExit");
   }
   return outcome;
 }
@@ -503,12 +470,8 @@ function buildProviderHookIngress(
   return createProviderHookIngress({
     persistence: options.persistence,
     ...(options.providers === undefined ? {} : { providers: options.providers }),
-    projects: providerProjectsFromConfig(options.config ?? emptyConfig()),
     eventBus: options.eventBus,
     clock,
-    ...(options.config?.observability?.retention === undefined
-      ? {}
-      : { retention: options.config.observability.retention }),
     requestReconcile: scheduler.request,
     reportHarnessEvent,
   });
@@ -517,7 +480,6 @@ function buildProviderHookIngress(
 function buildHarnessEventReportIngestion(
   options: CreateObserverApiOptions,
   clock: RuntimeClock,
-  scheduler: ReturnType<typeof createReconcileScheduler>,
 ): HarnessEventReportIngestion {
   if (options.harnessEventReportIngestion !== undefined) return options.harnessEventReportIngestion;
   return createHarnessEventReportIngestion({
@@ -527,7 +489,6 @@ function buildHarnessEventReportIngestion(
     ...(options.config?.observability?.retention === undefined
       ? {}
       : { retention: options.config.observability.retention }),
-    requestReconcile: scheduler.request,
   });
 }
 
@@ -535,13 +496,11 @@ function buildHarnessIngressQueue(
   options: CreateObserverApiOptions,
   harnessReportDeps: HarnessReportProcessorDeps,
   clock: RuntimeClock,
-  scheduler: ReturnType<typeof createReconcileScheduler>,
 ): HarnessIngressQueue {
   if (options.harnessIngressQueue !== undefined) return options.harnessIngressQueue;
   return createHarnessIngressQueue({
     clock,
     ...(options.logger === undefined ? {} : { logger: options.logger }),
-    requestReconcile: scheduler.request,
     processReport: (report) => processHarnessIngressReport(harnessReportDeps, report),
   });
 }
@@ -625,8 +584,8 @@ function buildDiagnosticDeps(
     deps.configDiagnostics = options.configDiagnostics;
   }
   if (options.providers !== undefined) deps.providers = options.providers;
-  if (options.duplicateCleanupStatus !== undefined) {
-    deps.duplicateCleanupStatus = options.duplicateCleanupStatus;
+  if (options.duplicateInspection !== undefined) {
+    deps.duplicateInspection = options.duplicateInspection;
   }
   return deps;
 }

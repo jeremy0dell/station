@@ -2,33 +2,20 @@
 // Upstream hook contract: https://developers.openai.com/codex/hooks
 // STATION ingress flow: docs/harness-ingress.md. Keep the parsed payload shape in sync with upstream.
 import type {
-  HarnessEventContext,
   HarnessEventObservation,
   HarnessEventReport,
   ObservedStatus,
-  RawHarnessEvent,
 } from "@station/contracts";
 import {
   HarnessEventReportSchema,
   observedPathIsSameOrInside,
   STATION_SCHEMA_VERSION,
 } from "@station/contracts";
-import {
-  applyCorrelation,
-  correlateTerminalBoundHarnessEvent,
-  harnessEventDiagnostics,
-  reportCorrelation,
-} from "@station/harness-shared";
+import { harnessEventDiagnostics, reportCorrelation } from "@station/harness-shared";
 import { z } from "zod";
-import {
-  codexAppServerEventToHarnessEventObservation,
-  isCodexAppServerMessage,
-} from "./appServer/index.js";
 import { codexHarnessError } from "./errors.js";
-import { isCodexForwardedEventType } from "./ingressRules.js";
 
 const nonEmptyStringSchema = z.string().min(1);
-const hookEventNameProbeSchema = z.object({ hook_event_name: nonEmptyStringSchema }).loose();
 const USER_INPUT_TOOL = "request_user_input";
 const nullableStringSchema = z.string().nullable();
 const permissionModeSchema = z
@@ -206,61 +193,6 @@ export function parseCodexHookEvent(input: unknown): CodexHookEvent {
     );
   }
   return result.data;
-}
-
-export function normalizeCodexRawEvent(
-  raw: RawHarnessEvent,
-  context: HarnessEventContext,
-): HarnessEventObservation[] {
-  const observedAt = raw.observedAt ?? new Date().toISOString();
-  const eventNameProbe = hookEventNameProbeSchema.safeParse(raw.event);
-  if (eventNameProbe.success && !isCodexForwardedEventType(eventNameProbe.data.hook_event_name)) {
-    return [];
-  }
-  const hookEvent = CodexHookEventSchema.safeParse(raw.event);
-  if (!hookEvent.success) {
-    if (isCodexAppServerMessage(raw.event)) {
-      return codexAppServerEventToHarnessEventObservation(raw.event, { observedAt });
-    }
-    throw codexHarnessError(
-      "HARNESS_CODEX_EVENT_INVALID",
-      "Codex hook event did not match a supported strict schema.",
-      hookEvent.error,
-    );
-  }
-  const event = hookEvent.data;
-  const stationIdentityCwdMismatch = codexStationIdentityCwdMismatch(
-    event.cwd,
-    event.station_worktree_path,
-    event.station_worktree_managed_root,
-  );
-  const correlation = stationIdentityCwdMismatch
-    ? { cwd: event.cwd }
-    : correlateTerminalBoundHarnessEvent({
-        provider: "codex",
-        identity: event,
-        context,
-        cwd: event.cwd,
-      });
-  const observation: HarnessEventObservation = {
-    provider: "codex",
-    rawEventType: event.hook_event_name,
-    status: statusFromCodexHookEvent(event, observedAt),
-    observedAt,
-    providerData: providerDataFromCodexEvent(event),
-  };
-  const turn = turnFromCodexHookEvent(event);
-  if (turn !== undefined) {
-    observation.turn = turn;
-  }
-  if (stationIdentityCwdMismatch) {
-    observation.diagnostics = {
-      correlationIssue: "station_identity_cwd_mismatch",
-    };
-  }
-  applyCorrelation(observation, correlation);
-  observation.nativeSessionId = event.session_id;
-  return [observation];
 }
 
 export function codexHookPayloadToHarnessEventReport(

@@ -8,7 +8,7 @@ import { ScriptedAgentHarnessProvider } from "../../src/provider";
 const now = "2026-05-20T12:00:00.000Z";
 
 describe("ScriptedAgentHarnessProvider", () => {
-  it("reports capabilities, health, launch plans, discovery, classification, and event ingestion", async () => {
+  it("reports capabilities, health, launch plans, and discovery status", async () => {
     const root = await mkdtemp(join(tmpdir(), "station-scripted-provider-"));
     const stateDir = join(root, "scripted");
     const runsDir = join(stateDir, "runs");
@@ -45,7 +45,6 @@ describe("ScriptedAgentHarnessProvider", () => {
       canLaunch: true,
       canDiscoverRuns: true,
       canEmitEvents: true,
-      canClassifyStatus: true,
       canRunNonInteractive: true,
     });
     await expect(provider.health()).resolves.toMatchObject({
@@ -79,43 +78,16 @@ describe("ScriptedAgentHarnessProvider", () => {
     if (discoveredRun === undefined) {
       throw new Error("Expected scripted provider to discover a run.");
     }
-    await expect(
-      provider.classifyRun(discoveredRun, {
-        projects: [launchRequest(root).project],
-        worktrees: [launchRequest(root).worktree],
-        terminalTargets: [],
-      }),
-    ).resolves.toMatchObject({
+    expect(discoveredRun).toMatchObject({
       status: {
         value: "working",
         confidence: "medium",
         reason: "Editing task.txt.",
       },
     });
+    expect(discoveredRun).not.toHaveProperty("providerData");
 
-    await expect(
-      provider.ingestEvent?.(
-        {
-          provider: "scripted",
-          observedAt: now,
-          event: {
-            type: "attention",
-            at: now,
-            runId: "run_web_task",
-            worktreeId: "wt_web_task",
-            message: "Approval requested.",
-          },
-        },
-        { projects: [], worktrees: [], terminalTargets: [] },
-      ),
-    ).resolves.toEqual([
-      expect.objectContaining({
-        status: expect.objectContaining({
-          value: "needs_attention",
-          confidence: "high",
-        }),
-      }),
-    ]);
+    expect("ingestEvent" in provider).toBe(false);
   });
 });
 

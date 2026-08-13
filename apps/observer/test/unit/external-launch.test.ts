@@ -285,7 +285,6 @@ function retainedSession(
         canLaunch: true,
         canDiscoverRuns: true,
         canEmitEvents: true,
-        canClassifyStatus: true,
         canReceivePrompt: false,
         canResume: true,
         canStop: true,
@@ -832,6 +831,8 @@ describe("prepareExternalLaunch", () => {
       projectId: "web",
       worktreeId: "wt_web_feature",
       initialTitle: "Readable login task",
+      harness: "fake-harness",
+      terminalProvider: "fake-terminal",
       createdAt: now,
       lastSeenAt: now,
     });
@@ -952,6 +953,8 @@ describe("prepareExternalLaunch", () => {
       projectId: "web",
       worktreeId: "wt_web_feature",
       initialTitle: "Readable login task",
+      harness: "fake-harness",
+      terminalProvider: "fake-terminal",
       createdAt: now,
       lastSeenAt: now,
     });
@@ -1038,6 +1041,8 @@ describe("prepareExternalLaunch", () => {
       projectId: "web",
       worktreeId: "wt_web_feature",
       initialTitle: "Readable login task",
+      harness: "fake-harness",
+      terminalProvider: "fake-terminal",
       createdAt: now,
       lastSeenAt: now,
     });

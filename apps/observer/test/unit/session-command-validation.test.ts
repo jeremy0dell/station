@@ -14,7 +14,6 @@ import {
   resolveTerminalProviderOrThrow,
 } from "../../src/commands/session/shared";
 import { buildStationSnapshot, ProviderRegistry } from "../../src/internal";
-import { observerHarnessRunFromRun } from "../support/harnessRuns";
 
 const now = "2026-05-21T12:00:00.000Z";
 
@@ -128,16 +127,14 @@ function snapshotWithAgentTarget(options: SnapshotWithAgentTargetOptions = {}) {
       }),
     ],
     harnessRuns: [
-      observerHarnessRunFromRun(
-        createFakeHarnessRun({
-          id: "run_web_task",
-          projectId: "web",
-          worktreeId: "wt_web_task",
-          sessionId: "ses_web_task",
-          state: agentState,
-          now,
-        }),
-      ),
+      createFakeHarnessRun({
+        id: "run_web_task",
+        projectId: "web",
+        worktreeId: "wt_web_task",
+        sessionId: "ses_web_task",
+        state: agentState,
+        now,
+      }),
     ],
   });
 }

@@ -17,7 +17,6 @@ import {
   withSessionCorrelationFromSnapshot,
   withWorktreeCorrelationFromCwd,
 } from "../../src/reconcile/statusProjection";
-import { observerHarnessRunFromRun } from "../support/harnessRuns";
 
 const now = "2026-05-21T12:00:00.000Z";
 const eventAt = "2026-05-21T12:00:01.000Z";
@@ -552,34 +551,30 @@ function externalSnapshotFor(state: AgentState) {
     worktrees: [worktree],
     terminalTargets: [],
     harnessRuns: [
-      observerHarnessRunFromRun(
-        createFakeHarnessRun({
-          id: "run_web_external",
-          provider: "codex",
-          projectId: "web",
-          worktreeId: worktree.id,
-          state,
-          now,
-        }),
-      ),
+      createFakeHarnessRun({
+        id: "run_web_external",
+        provider: "codex",
+        projectId: "web",
+        worktreeId: worktree.id,
+        state,
+        now,
+      }),
     ],
   });
 }
 
 function harnessRunsFor(input: { state?: AgentState; confidence?: Confidence; now?: string } = {}) {
   return [
-    observerHarnessRunFromRun(
-      createFakeHarnessRun({
-        id: "run_web_task",
-        provider: "codex",
-        projectId: "web",
-        worktreeId: "wt_web_task",
-        sessionId: "ses_web_task",
-        state: input.state ?? "unknown",
-        confidence: input.confidence ?? "low",
-        now: input.now ?? now,
-      }),
-    ),
+    createFakeHarnessRun({
+      id: "run_web_task",
+      provider: "codex",
+      projectId: "web",
+      worktreeId: "wt_web_task",
+      sessionId: "ses_web_task",
+      state: input.state ?? "unknown",
+      confidence: input.confidence ?? "low",
+      now: input.now ?? now,
+    }),
   ];
 }
 

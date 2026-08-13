@@ -36,12 +36,18 @@ export function buildPiLaunchPlan(
     );
   }
 
-  const extensionPath = options.extensionPath ?? defaultPiExtensionPath();
+  const extensionPath =
+    options.extensionPath ?? fileURLToPath(new URL("../dist/piExtension.js", import.meta.url));
   const args = ["--extension", extensionPath];
   if (request.resume !== undefined) {
     // Pi can recover from its session file, so provider normalization chooses
     // that target before falling back to a native session id.
-    args.push("--session", resumeTargetValue(request));
+    args.push(
+      "--session",
+      request.resume.target.kind === "session-file"
+        ? request.resume.target.path
+        : request.resume.target.id,
+    );
   }
   if (request.initialPrompt !== undefined) {
     args.push(request.initialPrompt);
@@ -71,19 +77,4 @@ export function buildPiLaunchPlan(
     displayTitle: `${request.project.label} Pi`,
     providerData,
   };
-}
-
-function defaultPiExtensionPath(): string {
-  return fileURLToPath(new URL("../dist/piExtension.js", import.meta.url));
-}
-
-function resumeTargetValue(request: BuildHarnessLaunchRequest): string {
-  const resume = request.resume;
-  if (resume === undefined) {
-    throw new PiHarnessProviderError(
-      "HARNESS_PI_RESUME_UNSUPPORTED",
-      "Pi resume requires a recovery target.",
-    );
-  }
-  return resume.target.kind === "session-file" ? resume.target.path : resume.target.id;
 }

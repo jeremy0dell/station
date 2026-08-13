@@ -7,11 +7,11 @@ import type { ObserverEventBus } from "../../runtime/eventBus.js";
 import type { StationLogger } from "../../stationLogger.js";
 import { assertCommandType } from "../assertCommand.js";
 import type { HarnessLaunchPreflight } from "../harnessLaunchPreflight.js";
+import { resolveHarnessProviderOrThrow, resolveTerminalProviderOrThrow } from "../providers.js";
 import type { CommandHandler } from "../queue.js";
 import { reconcileAndPublish } from "../reconcile.js";
-import type { TerminalIntentRunner } from "../terminalIntentRunner.js";
+import { ensureAgentWorkspace } from "../terminalOperations.js";
 import {
-  buildEnsureAgentWorkspaceIntent,
   commandValidationError,
   defaultSessionCommandIdFactory,
   discardSessionSeedBestEffort,
@@ -19,8 +19,6 @@ import {
   publishSessionCreated,
   rememberedHarnessProviderForWorktree,
   removeWorktreeBestEffort,
-  resolveHarnessProviderOrThrow,
-  resolveTerminalProviderOrThrow,
   runProviderMutation,
   type SessionCommandIdFactory,
   seedSession,
@@ -31,7 +29,6 @@ import {
 export type CreateSessionForkHandlerOptions = {
   getProjects: () => readonly ProviderProjectConfig[];
   providers: ProviderRegistry;
-  terminalIntentRunner: TerminalIntentRunner;
   launchPreflight: HarnessLaunchPreflight;
   core: ObserverCore;
   persistence: SessionStore & EventJournal;
@@ -39,7 +36,6 @@ export type CreateSessionForkHandlerOptions = {
   clock?: RuntimeClock | undefined;
   idFactory?: Partial<SessionCommandIdFactory> | undefined;
   logger?: StationLogger | undefined;
-  commandTimeoutMs?: number | undefined;
 };
 
 /**
@@ -62,7 +58,7 @@ export function createSessionForkHandler(options: CreateSessionForkHandlerOption
     const payload = context.command.payload;
     const project = findProjectOrThrow(options.getProjects(), payload.projectId);
     const terminalProviderId = payload.terminal?.provider ?? project.defaults.terminal;
-    resolveTerminalProviderOrThrow(options.providers, terminalProviderId);
+    const terminal = resolveTerminalProviderOrThrow(options.providers, terminalProviderId);
 
     const snapshot = options.core.getSnapshot();
     const sourceRow = snapshot.rows.find((candidate) => candidate.id === payload.sourceWorktreeId);
@@ -85,13 +81,12 @@ export function createSessionForkHandler(options: CreateSessionForkHandlerOption
         worktreePath: sourceRow.path,
       })) ??
       project.defaults.harness;
-    resolveHarnessProviderOrThrow(options.providers, harnessProviderId);
+    const harness = resolveHarnessProviderOrThrow(options.providers, harnessProviderId);
     await options.launchPreflight(harnessProviderId, context.signal);
 
     const sessionId = idFactory.sessionId();
     const runtime = {
       clock: options.clock,
-      commandTimeoutMs: options.commandTimeoutMs,
       signal: context.signal,
       trace: context.trace,
     };
@@ -132,34 +127,29 @@ export function createSessionForkHandler(options: CreateSessionForkHandlerOption
         projectId: project.id,
         worktreeId: worktree.id,
         initialTitle: payload.title ?? payload.branch,
+        harness: harnessProviderId,
+        terminalProvider: terminalProviderId,
         clock: options.clock,
       });
       sessionSeeded = true;
       throwIfAborted(context.signal);
 
-      const receipt = await options.terminalIntentRunner.submitIntent(
-        buildEnsureAgentWorkspaceIntent({
-          commandId: context.commandId,
-          project,
-          worktree,
-          sessionId,
-          terminalProvider: terminalProviderId,
-          harnessProvider: harnessProviderId,
-          harness: payload.harness,
-          layout: payload.terminal?.layout ?? project.defaults.layout,
-          focus: payload.terminal?.focus,
-          origin: payload.terminal?.origin,
-          initialPrompt: payload.initialPrompt,
-        }),
-        {
-          trace: context.trace,
-          signal: context.signal,
-          commandTimeoutMs: options.commandTimeoutMs,
-        },
-      );
-      if (receipt.status === "rejected") {
-        throw receipt.error;
-      }
+      await ensureAgentWorkspace({
+        terminal,
+        harness,
+        launchPreflight: options.launchPreflight,
+        project,
+        worktree,
+        sessionId,
+        harnessOptions: payload.harness,
+        layout: payload.terminal?.layout ?? project.defaults.layout,
+        focus: payload.terminal?.focus,
+        origin: payload.terminal?.origin,
+        initialPrompt: payload.initialPrompt,
+        context,
+        clock: options.clock,
+        logger: options.logger,
+      });
       throwIfAborted(context.signal);
     } catch (error) {
       const worktreeRemoved =
@@ -167,7 +157,7 @@ export function createSessionForkHandler(options: CreateSessionForkHandlerOption
           ? false
           : await removeWorktreeBestEffort({
               providers: options.providers,
-              projectId: project.id,
+              project,
               worktreeId: createdWorktree.id,
               expectedPath: createdWorktree.path,
               expectedBranch: createdWorktree.branch,
@@ -175,7 +165,6 @@ export function createSessionForkHandler(options: CreateSessionForkHandlerOption
               context,
               logger: options.logger,
               clock: options.clock,
-              commandTimeoutMs: options.commandTimeoutMs,
             });
       if (sessionSeeded) {
         await discardSessionSeedBestEffort({

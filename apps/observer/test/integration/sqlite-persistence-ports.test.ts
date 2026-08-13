@@ -154,7 +154,6 @@ describe("SQLite-only Observer persistence behavior", () => {
         () => persistence.listCommandErrors("cmd_pure_read"),
         () => persistence.listEvents(),
         () => persistence.listProviderObservations(),
-        () => persistence.listCurrentProviderEntityObservations(),
         () => persistence.listWorktreeMetadataCurrent(),
         () => persistence.listSessions(),
         () => persistence.listSessionGroups(),
@@ -243,19 +242,6 @@ describe("SQLite-only Observer persistence behavior", () => {
         now,
       });
       await persistence.persistReconcileResult({
-        projects: [
-          {
-            id: "web",
-            label: "web",
-            root: "/tmp/station/web",
-            defaults: {
-              harness: "codex",
-              terminal: "tmux",
-              layout: "agent-shell",
-            },
-            worktrunk: { enabled: true },
-          },
-        ],
         worktrees: [worktree],
         terminalTargets: [
           createFakeTerminalTarget({
@@ -317,7 +303,6 @@ describe("SQLite-only Observer persistence behavior", () => {
         ]),
       );
       await persistence.persistReconcileResult({
-        projects: [],
         worktrees: [worktree],
         terminalTargets: [],
         harnessRuns: [
@@ -335,7 +320,7 @@ describe("SQLite-only Observer persistence behavior", () => {
       });
       await expect(persistence.listSessions()).resolves.toEqual(
         expect.arrayContaining([
-          expect.objectContaining({ id: "ses_legacy_unknown", lifecycle: "open" }),
+          expect.objectContaining({ id: "ses_legacy_unknown", lifecycle: "legacy" }),
         ]),
       );
     } finally {
@@ -344,7 +329,7 @@ describe("SQLite-only Observer persistence behavior", () => {
     }
   });
 
-  it("backfills an earlier custom title ahead of a later branch-default seed", async () => {
+  it("backfills canonical title authority without rewriting historical session rows", async () => {
     const directory = await mkdtemp(join(tmpdir(), "station-worktree-title-migration-"));
     const path = join(directory, "observer.sqlite");
     const legacyDatabase = openSqlDatabase(path);
@@ -379,15 +364,6 @@ describe("SQLite-only Observer persistence behavior", () => {
       });
       await expect(persistence.listWorktreeDisplayTitles()).resolves.toEqual([]);
       await persistence.persistReconcileResult({
-        projects: [
-          {
-            id: "web",
-            label: "web",
-            root: "/tmp/station/web",
-            defaults: { harness: "codex", terminal: "tmux", layout: "agent-shell" },
-            worktrunk: { enabled: true },
-          },
-        ],
         worktrees: [
           createFakeWorktree({
             id: "wt_title_migration",
@@ -411,7 +387,7 @@ describe("SQLite-only Observer persistence behavior", () => {
         },
       ]);
       expect((await persistence.listSessions()).map((session) => session.title)).toEqual([
-        "Readable migration title",
+        "feature/current",
         "Readable migration title",
       ]);
     } finally {

@@ -4,7 +4,6 @@ import { join } from "node:path";
 import type { StationConfig } from "@station/config";
 import { ScriptedAgentHarnessProvider } from "@station/scripted-harness";
 import {
-  createFakeHarnessRun,
   createFakeTerminalTarget,
   createFakeWorktree,
   FakeHarnessProvider,
@@ -108,7 +107,7 @@ describe("observer reconcile with scripted harness", () => {
     });
   });
 
-  it("degrades harness provider health when classification fails", async () => {
+  it("degrades harness provider health when discovery fails", async () => {
     const core = createObserverCore({
       config,
       providerTimeoutMs: 20,
@@ -122,20 +121,11 @@ describe("observer reconcile with scripted harness", () => {
         harnesses: [
           new FakeHarnessProvider({
             now,
-            runs: [
-              createFakeHarnessRun({
-                id: "run_web_task",
-                projectId: "web",
-                worktreeId: "wt_web_task",
-                state: "working",
-                now,
-              }),
-            ],
             failures: {
-              classifyRun: {
+              discoverRuns: {
                 tag: "HarnessProviderError",
-                code: "HARNESS_CLASSIFY_FAILED",
-                message: "The fake harness could not classify the run.",
+                code: "HARNESS_DISCOVER_FAILED",
+                message: "The fake harness could not discover runs.",
                 provider: "fake-harness",
               },
             },
@@ -147,12 +137,12 @@ describe("observer reconcile with scripted harness", () => {
       },
     });
 
-    const snapshot = await core.reconcile("classify-failure");
+    const snapshot = await core.reconcile("discover-failure");
 
     expect(snapshot.providerHealth["fake-harness"]).toMatchObject({
       status: "unavailable",
       lastError: {
-        code: "HARNESS_CLASSIFY_FAILED",
+        code: "HARNESS_DISCOVER_FAILED",
       },
     });
     expect(snapshot.rows[0]?.agent).toBeUndefined();

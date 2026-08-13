@@ -34,13 +34,9 @@ import type {
 } from "../persistence/index.js";
 import type { ProviderRegistry } from "../providers/registry.js";
 import type { ObserverCore } from "../reconcile/core.js";
-import type { ObserverDuplicateCleanupOutcome } from "../runtime/observerDuplicateCleanup.js";
+import type { ObserverReapPlan } from "../runtime/observerReap.js";
 import { buildSessionEnvironmentCheck } from "./environmentCheck.js";
-import type {
-  DiagnosticEvidenceSource,
-  DiagnosticLocalStateEvidence,
-  DiagnosticRecentLogEvidence,
-} from "./evidenceSource.js";
+import type { DiagnosticEvidenceSource } from "./evidenceSource.js";
 
 export type ObserverDiagnosticsDeps = {
   config: StationConfig;
@@ -54,13 +50,13 @@ export type ObserverDiagnosticsDeps = {
   providers?: ProviderRegistry;
   clock?: RuntimeClock;
   providerDoctorTimeoutMs?: number;
-  duplicateCleanupStatus?: () => ObserverDuplicateCleanupOutcome | undefined;
+  duplicateInspection?: () => Promise<ObserverReapPlan> | undefined;
 };
 
 type DiagnosticCollectionResult = {
   snapshot: DiagnosticSnapshot;
-  localStateEvidence: DiagnosticLocalStateEvidence;
-  recentLogEvidence?: DiagnosticRecentLogEvidence;
+  diagnosticsDir: string;
+  recentLogPaths?: string[];
 };
 
 /**
@@ -86,7 +82,9 @@ async function collectDiagnosticResult(
   const snapshot = deps.core.getSnapshot();
   const sqliteHealth = deps.persistenceHealth.health();
   const commands = await deps.commandJournal.listCommands();
-  const latestFailure = options.latestFailure === true ? latestFailedCommand(commands) : undefined;
+  const latestFailure = options.latestFailure
+    ? commands.findLast((command) => command.status === "failed")
+    : undefined;
   const commandIdFilter = options.commandId ?? latestFailure?.id;
   const traceIdFilter = options.traceId ?? latestFailure?.traceId;
   const hasCommandFilter = commandIdFilter !== undefined || traceIdFilter !== undefined;
@@ -159,10 +157,10 @@ async function collectDiagnosticResult(
 
   const result: DiagnosticCollectionResult = {
     snapshot: DiagnosticSnapshotSchema.parse(diagnosticSnapshot),
-    localStateEvidence,
+    diagnosticsDir: localStateEvidence.diagnosticsDir,
   };
   if (recentLogEvidence !== undefined) {
-    result.recentLogEvidence = recentLogEvidence;
+    result.recentLogPaths = recentLogEvidence.paths;
   }
   return result;
 }
@@ -184,13 +182,14 @@ export async function runDoctor(
     maxLogRecords: 50,
   });
   const doctorSnapshot = requireDoctorSnapshotState(collection.snapshot);
-  const recentLogEvidence = requireDoctorRecentLogs(collection);
+  const recentLogPaths = requireDoctorRecentLogPaths(collection);
   const providerHealth = await collectProviderHealth(deps);
   const providers = {
     ...doctorSnapshot.providerHealth,
     ...providerHealth,
   };
   const providerChecks = await collectProviderDoctorChecks(deps, options);
+  const duplicatePlan = await deps.duplicateInspection?.();
   const sqliteCheck: DoctorCheck = {
     name: "sqlite",
     status: doctorSnapshot.observerHealth.sqlite?.status === "healthy" ? "ok" : "warn",
@@ -212,7 +211,7 @@ export async function runDoctor(
       message: `${doctorSnapshot.configSummary.projectCount} project(s) configured.`,
     },
     sqliteCheck,
-    buildObserverSingletonCheck(deps.duplicateCleanupStatus?.()),
+    buildObserverSingletonCheck(duplicatePlan),
     {
       name: "providers",
       status: providerStatus(providers) === "healthy" ? "ok" : "warn",
@@ -243,7 +242,7 @@ export async function runDoctor(
     providers,
     snapshot: doctorSnapshot.snapshot,
     logs: {
-      paths: recentLogEvidence.paths,
+      paths: recentLogPaths,
       recent: doctorSnapshot.logs,
     },
     localState: doctorSnapshot.localState,
@@ -251,7 +250,7 @@ export async function runDoctor(
     recentErrors,
     debugBundle: {
       available: true,
-      diagnosticsDir: collection.localStateEvidence.diagnosticsDir,
+      diagnosticsDir: collection.diagnosticsDir,
     },
   };
   if (doctorSnapshot.observerHealth.sqlite !== undefined) {
@@ -264,53 +263,28 @@ export async function runDoctor(
   return DoctorReportSchema.parse(report);
 }
 
-function buildObserverSingletonCheck(
-  cleanup: ObserverDuplicateCleanupOutcome | undefined,
-): DoctorCheck {
-  if (cleanup === undefined || cleanup.status === "clear") {
+function buildObserverSingletonCheck(plan: ObserverReapPlan | undefined): DoctorCheck {
+  if (plan === undefined || (plan.duplicates === 0 && plan.refusals.length === 0)) {
     return {
       name: "observer-singleton",
       status: "ok",
       message: "No duplicate Observer process requires operator action.",
     };
   }
-  if (
-    cleanup.status === "terminated" &&
-    cleanup.keeperPreservation?.preserved === true &&
-    cleanup.claimReleased !== false
-  ) {
-    return {
-      name: "observer-singleton",
-      status: "ok",
-      message: `Gracefully cleaned up ${cleanup.terminatedPids.length} verified duplicate Observer process(es).`,
-    };
-  }
-  if (cleanup.status === "survived") {
+  if (plan.targets.some((target) => target.automaticEligibility.eligible)) {
     return {
       name: "observer-singleton",
       status: "warn",
       message:
-        "A verified duplicate survived SIGTERM; inspect it with `stn observer reap`, then use `stn observer reap --force` only after confirmation.",
-    };
-  }
-  if (cleanup.status === "would-terminate") {
-    return {
-      name: "observer-singleton",
-      status: "warn",
-      message:
-        "A verified duplicate Observer was reported but not signaled; inspect it with `stn observer reap`.",
+        "A duplicate Observer candidate was reported but not signaled; inspect it with `stn observer reap`.",
     };
   }
   return {
     name: "observer-singleton",
     status: "warn",
     message:
-      "Singleton cleanup could not prove a safe action; inspect refusal evidence with `stn observer reap`.",
+      "Singleton inspection could not prove a safe action; inspect refusal evidence with `stn observer reap`.",
   };
-}
-
-function latestFailedCommand(commands: readonly PersistedCommand[]): PersistedCommand | undefined {
-  return [...commands].reverse().find((command) => command.status === "failed");
 }
 
 function filterCommands(
@@ -460,11 +434,11 @@ function requireDoctorSnapshotState(snapshot: DiagnosticSnapshot): DoctorDiagnos
   return snapshot as DoctorDiagnosticSnapshot;
 }
 
-function requireDoctorRecentLogs(result: DiagnosticCollectionResult): DiagnosticRecentLogEvidence {
-  if (result.recentLogEvidence === undefined) {
+function requireDoctorRecentLogPaths(result: DiagnosticCollectionResult): string[] {
+  if (result.recentLogPaths === undefined) {
     throw missingDoctorStateError("recentLogs");
   }
-  return result.recentLogEvidence;
+  return result.recentLogPaths;
 }
 
 function missingDoctorStateError(field: string): SafeError {

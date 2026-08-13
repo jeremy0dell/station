@@ -38,17 +38,6 @@ export function addTuiToast(
   };
 }
 
-export function addTuiToasts(
-  state: DashboardState,
-  toasts: readonly ClientNotice[],
-  nowMs = Date.now(),
-): DashboardState {
-  if (toasts.length === 0) {
-    return state;
-  }
-  return toasts.reduce((current, toast) => addTuiToast(current, toast, nowMs), state);
-}
-
 export function expireTuiToasts(state: DashboardState, nowMs = Date.now()): DashboardState {
   const toasts = state.toasts.filter(
     (entry) => entry.expiresAt === undefined || entry.expiresAt > nowMs,

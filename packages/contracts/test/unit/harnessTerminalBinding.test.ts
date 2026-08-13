@@ -52,9 +52,13 @@ describe("discoverTerminalBoundHarnessRuns", () => {
         sessionId: "ses_web_task",
         pid: 1234,
         cwd: "/tmp/station/web/task",
-        state: "unknown",
-        confidence: "low",
-        reason: `terminal target is bound to ${provider.displayName}; no reliable lifecycle signal yet.`,
+        status: {
+          value: "unknown",
+          confidence: "low",
+          reason: `terminal target is bound to ${provider.displayName}; no reliable lifecycle signal yet.`,
+          source: "harness_process",
+          updatedAt: now,
+        },
         providerData: {
           terminalTargetId: "tmux:station:@1:%2",
           terminalProvider: "tmux",

@@ -8,15 +8,28 @@ import type {
   SafeError,
 } from "@station/contracts";
 import { ProviderHookReceiptSchema, STATION_SCHEMA_VERSION } from "@station/contracts";
+import type { createObserverClient, ExpectedObserverIdentity } from "@station/protocol";
 import { safeErrorFromUnknown, stationObserverBuildVersion, systemClock } from "@station/runtime";
-import { classifyObserverHealth, observerHandoffRefusedError } from "../observerProcess/health.js";
-import type { ExecutableArgv } from "../selfExec.js";
 import {
-  getProviderHookObserverStatus,
-  type ProviderHookObserverStartupDeps,
-  startProviderHookObserver,
-  waitForProviderHookObserverHealth,
-} from "./observerStartup.js";
+  classifyObserverHealth,
+  observerHandoffRefusedError,
+  waitForObserverHealth,
+} from "../observerProcess/health.js";
+import { getObserverStatus, type ObserverProcessDeps, startObserver } from "../observerProcess.js";
+import type { ExecutableArgv } from "../selfExec.js";
+
+type ProviderHookClientFactoryOptions = {
+  timeoutMs?: number;
+  expectedObserverIdentity?: ExpectedObserverIdentity;
+  expectedBuildVersion?: string;
+};
+
+export type ProviderHookDeliveryDeps = Omit<ObserverProcessDeps, "clientFactory"> & {
+  clientFactory?: (
+    socketPath: string,
+    options?: ProviderHookClientFactoryOptions,
+  ) => ReturnType<typeof createObserverClient>;
+};
 
 export type ProviderDeliveryAttempt = {
   receipt?: ProviderHookReceipt;
@@ -42,7 +55,7 @@ const nonSpoolableErrorCodes = new Set([
 /**
  * ADAPTER
  *
- * Coordinates CLI ingress delivery across Observer startup, socket transport, and spool storage without competing ownership mutation.
+ * Coordinates hook-specific throttling, delivery, and spooling around the canonical CLI Observer lifecycle.
  */
 export async function deliverProviderHookWithSpooling(input: {
   paths: ObserverPaths;
@@ -53,7 +66,7 @@ export async function deliverProviderHookWithSpooling(input: {
   rateLimitMs: number;
   configPath?: string;
   observerCommand?: ExecutableArgv;
-  deps: ProviderHookObserverStartupDeps;
+  deps: ProviderHookDeliveryDeps;
   /** Sends only through a client pinned to the selector proven by readiness. */
   deliver: (expectedBuildVersion: string) => Promise<ProviderDeliveryAttempt>;
   spoolReceipt: (error: SafeError | undefined) => Promise<ProviderHookReceipt>;
@@ -127,13 +140,13 @@ async function prepareObserverForDelivery(
     rateLimitMs: number;
     configPath?: string;
     observerCommand?: ExecutableArgv;
-    deps: ProviderHookObserverStartupDeps;
+    deps: ProviderHookDeliveryDeps;
   },
   startupDeadlineMs: number,
 ): Promise<{ ok: true; buildVersion: string } | { ok: false; error: SafeError }> {
   const statusTimeoutMs = remainingStartupBudgetMs(startupDeadlineMs);
   if (statusTimeoutMs === undefined) return providerHookStartupTimedOut();
-  const statusOptions: Parameters<typeof getProviderHookObserverStatus>[0] = {
+  const statusOptions: Parameters<typeof getObserverStatus>[0] = {
     paths: input.paths,
     timeoutMs: statusTimeoutMs,
   };
@@ -141,7 +154,7 @@ async function prepareObserverForDelivery(
   if (input.observerCommand !== undefined) {
     statusOptions.observerCommand = input.observerCommand;
   }
-  const status = await getProviderHookObserverStatus(statusOptions, input.deps);
+  const status = await getObserverStatus(statusOptions, input.deps);
   if (status.status === "running") {
     const buildVersion = input.deps.buildVersion ?? stationObserverBuildVersion();
     const classification = classifyObserverHealth(status.health, buildVersion);
@@ -222,7 +235,7 @@ async function maybeStartObserver(input: {
   observerCommand?: ExecutableArgv;
   startupDeadlineMs: number;
   rateLimitMs: number;
-  deps: ProviderHookObserverStartupDeps;
+  deps: ProviderHookDeliveryDeps;
 }) {
   const timeoutMs = remainingStartupBudgetMs(input.startupDeadlineMs);
   if (timeoutMs === undefined) return providerHookStartupTimedOut();
@@ -248,7 +261,7 @@ async function maybeStartObserver(input: {
   try {
     const startupTimeoutMs = remainingStartupBudgetMs(input.startupDeadlineMs);
     if (startupTimeoutMs === undefined) return providerHookStartupTimedOut();
-    const startupOptions: Parameters<typeof startProviderHookObserver>[0] = {
+    const startupOptions: Parameters<typeof startObserver>[0] = {
       paths: input.paths,
       timeoutMs: startupTimeoutMs,
       startupDeadlineMs: input.startupDeadlineMs,
@@ -259,7 +272,7 @@ async function maybeStartObserver(input: {
     if (input.observerCommand !== undefined) {
       startupOptions.observerCommand = input.observerCommand;
     }
-    const started = await startProviderHookObserver(startupOptions, input.deps);
+    const started = await startObserver(startupOptions, input.deps);
     if (started.status === "running") {
       if (started.health.version !== undefined) {
         return { ok: true as const, buildVersion: started.health.version };
@@ -320,7 +333,7 @@ type AutoStartLock =
 async function acquireAutoStartLock(input: {
   paths: ObserverPaths;
   staleMs: number;
-  deps: ProviderHookObserverStartupDeps;
+  deps: ProviderHookDeliveryDeps;
 }): Promise<AutoStartLock> {
   const lockDir = autoStartLockDir(input.paths);
   try {
@@ -371,13 +384,18 @@ async function acquireAutoStartLock(input: {
 async function waitForContendedAutoStart(input: {
   paths: ObserverPaths;
   timeoutMs: number;
-  deps: ProviderHookObserverStartupDeps;
+  deps: ProviderHookDeliveryDeps;
 }) {
+  let replaceableIncumbent: Awaited<ReturnType<typeof waitForObserverHealth>> | undefined;
   try {
-    const health = await waitForProviderHookObserverHealth(
+    const health = await waitForObserverHealth(
       {
         paths: input.paths,
         timeoutMs: input.timeoutMs,
+        ...(input.deps.buildVersion === undefined ? {} : { buildVersion: input.deps.buildVersion }),
+        onBuildClassification: (classification, incumbent) => {
+          if (classification.action === "replace") replaceableIncumbent = incumbent;
+        },
       },
       input.deps,
     );
@@ -386,9 +404,17 @@ async function waitForContendedAutoStart(input: {
     }
     return { ok: true as const, buildVersion: health.version };
   } catch (error) {
+    const replacementError =
+      replaceableIncumbent === undefined
+        ? error
+        : observerHandoffRefusedError(
+            replaceableIncumbent,
+            input.deps.buildVersion ?? stationObserverBuildVersion(),
+            "The replacement process did not publish compatible health.",
+          );
     return {
       ok: false as const,
-      error: safeErrorFromUnknown(error, {
+      error: safeErrorFromUnknown(replacementError, {
         tag: "HookAutoStartLockError",
         code: "HOOK_AUTOSTART_LOCKED",
         message: "Observer did not become healthy while another hook was starting it.",
@@ -404,7 +430,7 @@ function autoStartLockDir(paths: ObserverPaths): string {
 
 async function writeAutoStartLockOwner(
   lockDir: string,
-  deps: ProviderHookObserverStartupDeps,
+  deps: ProviderHookDeliveryDeps,
 ): Promise<void> {
   const clock = deps.clock ?? systemClock;
   try {

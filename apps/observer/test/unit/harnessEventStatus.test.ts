@@ -11,10 +11,8 @@ import {
   applyHarnessEventStatusOverlays,
   decayStaleBusyStatuses,
   externalHarnessRunId,
-  type ObserverHarnessRun,
   synthesizeExternalHarnessRuns,
 } from "../../src/reconcile/harnessEventStatus";
-import { observerHarnessRunFromRun } from "../support/harnessRuns";
 
 const runObservedAt = "2026-05-21T12:00:00.000Z";
 const eventObservedAt = "2026-05-21T12:00:01.000Z";
@@ -33,7 +31,7 @@ describe("harness event status overlays", () => {
       ],
     });
 
-    expect(result[0]?.run).toMatchObject({ state: "unknown" });
+    expect(result[0]?.status).toMatchObject({ value: "unknown" });
   });
 
   it("keeps a foreign native-session Stop from completing the active Codex execution", () => {
@@ -72,10 +70,9 @@ describe("harness event status overlays", () => {
       ],
     });
 
-    expect(foreignStop[0]?.run).toMatchObject({
+    expect(foreignStop[0]).toMatchObject({
       nativeSessionId: "native_a",
-      state: "working",
-      reason: "Codex subagent stopped.",
+      status: { value: "working", reason: "Codex subagent stopped." },
     });
 
     const continuation = overlay({
@@ -95,10 +92,9 @@ describe("harness event status overlays", () => {
         }),
       ],
     });
-    expect(continuation[0]?.run).toMatchObject({
+    expect(continuation[0]).toMatchObject({
       nativeSessionId: "native_a",
-      state: "working",
-      reason: "The active Codex session continued.",
+      status: { value: "working", reason: "The active Codex session continued." },
     });
 
     const completed = overlay({
@@ -118,9 +114,9 @@ describe("harness event status overlays", () => {
         }),
       ],
     });
-    expect(completed[0]?.run).toMatchObject({
+    expect(completed[0]).toMatchObject({
       nativeSessionId: "native_a",
-      state: "idle",
+      status: { value: "idle" },
     });
   });
 
@@ -136,13 +132,15 @@ describe("harness event status overlays", () => {
       ],
     });
 
-    expect(result[0]?.run).toMatchObject({
-      state: "working",
-      confidence: "medium",
-      reason: "Codex is about to use Bash.",
+    expect(result[0]).toMatchObject({
+      status: {
+        value: "working",
+        confidence: "medium",
+        reason: "Codex is about to use Bash.",
+      },
       observedAt: runObservedAt,
     });
-    expect(result[0]?.run.providerData).toBeUndefined();
+    expect(result[0]?.providerData).toBeUndefined();
     expect(result[0]?.status).toMatchObject({
       value: "working",
       source: "harness_event",
@@ -172,9 +170,9 @@ describe("harness event status overlays", () => {
       ],
     });
 
-    expect(attention[0]?.run.state).toBe("needs_attention");
     expect(attention[0]?.status.value).toBe("needs_attention");
-    expect(idle[0]?.run.state).toBe("idle");
+    expect(attention[0]?.status.value).toBe("needs_attention");
+    expect(idle[0]?.status.value).toBe("idle");
     expect(idle[0]?.status.value).toBe("idle");
   });
 
@@ -197,8 +195,8 @@ describe("harness event status overlays", () => {
       ],
     });
 
-    expect(result[0]?.run).toMatchObject({
-      state: "working",
+    expect(result[0]?.status).toMatchObject({
+      value: "working",
       confidence: "high",
       reason: "Live process is active.",
     });
@@ -226,8 +224,8 @@ describe("harness event status overlays", () => {
       ],
     });
 
-    expect(unmatched[0]?.run.state).toBe("unknown");
-    expect(ambiguous.map((entry) => entry.run.state)).toEqual(["unknown", "unknown"]);
+    expect(unmatched[0]?.status.value).toBe("unknown");
+    expect(ambiguous.map((entry) => entry.status.value)).toEqual(["unknown", "unknown"]);
   });
 
   it("uses worktree-only correlation only when exactly one live run exists", () => {
@@ -254,9 +252,9 @@ describe("harness event status overlays", () => {
       ],
     });
 
-    expect(single[0]?.run.state).toBe("working");
-    expect(single[0]?.run.providerData).toBeUndefined();
-    expect(multiple.map((entry) => entry.run.state)).toEqual(["unknown", "unknown"]);
+    expect(single[0]?.status.value).toBe("working");
+    expect(single[0]?.providerData).toBeUndefined();
+    expect(multiple.map((entry) => entry.status.value)).toEqual(["unknown", "unknown"]);
   });
 
   it("does not overwrite a newer high-confidence exited live state with older hook activity", () => {
@@ -278,8 +276,8 @@ describe("harness event status overlays", () => {
       ],
     });
 
-    expect(result[0]?.run).toMatchObject({
-      state: "exited",
+    expect(result[0]?.status).toMatchObject({
+      value: "exited",
       confidence: "high",
       reason: "Harness process exited.",
     });
@@ -316,11 +314,11 @@ describe("external run synthesis", () => {
     });
 
     expect(result).toHaveLength(1);
-    expect(result[0]?.run).toMatchObject({
+    expect(result[0]).toMatchObject({
       id: externalHarnessRunId("codex", "native_1"),
       provider: "codex",
       worktreeId: "wt_1",
-      state: "working",
+      status: { value: "working" },
     });
     expect(result[0]?.status).toMatchObject({ value: "working", updatedAt: eventObservedAt });
   });
@@ -400,7 +398,7 @@ describe("stale busy status decay", () => {
       updatedAt: runObservedAt,
     });
     expect(result[0]?.status.reason).toContain(runObservedAt);
-    expect(result[0]?.run).toMatchObject({ state: "unknown", confidence: "low" });
+    expect(result[0]?.status).toMatchObject({ value: "unknown", confidence: "low" });
   });
 
   it("decays a starting run the same way", () => {
@@ -462,25 +460,36 @@ describe("stale busy status decay", () => {
 });
 
 function overlay(input: {
-  runs: ObserverHarnessRun[];
+  runs: HarnessRunObservation[];
   observations: PersistedProviderObservation[];
-}): ObserverHarnessRun[] {
+}): HarnessRunObservation[] {
   return applyHarnessEventStatusOverlays(input);
 }
 
-function run(input: Partial<HarnessRunObservation> = {}): ObserverHarnessRun {
-  const state = input.state ?? "unknown";
-  const confidence = input.confidence ?? "low";
+function run(
+  input: Partial<HarnessRunObservation> & {
+    state?: AgentState;
+    confidence?: Confidence;
+    reason?: string;
+  } = {},
+): HarnessRunObservation {
+  const state = input.state ?? input.status?.value ?? "unknown";
+  const confidence = input.confidence ?? input.status?.confidence ?? "low";
+  const observedAt = input.observedAt ?? runObservedAt;
   const runObservation: HarnessRunObservation = {
     id: input.id ?? "run_1",
     provider: input.provider ?? "codex",
     projectId: input.projectId ?? "web",
     worktreeId: input.worktreeId ?? "wt_1",
     sessionId: input.sessionId ?? "ses_1",
-    state,
-    confidence,
-    reason: input.reason ?? "tmux target is bound to Codex.",
-    observedAt: input.observedAt ?? runObservedAt,
+    status: {
+      value: state,
+      confidence,
+      reason: input.reason ?? input.status?.reason ?? "tmux target is bound to Codex.",
+      source: input.status?.source ?? "harness_process",
+      updatedAt: input.status?.updatedAt ?? observedAt,
+    },
+    observedAt,
   };
   if (input.pid !== undefined) runObservation.pid = input.pid;
   if (input.cwd !== undefined) runObservation.cwd = input.cwd;
@@ -488,7 +497,7 @@ function run(input: Partial<HarnessRunObservation> = {}): ObserverHarnessRun {
     runObservation.nativeSessionId = input.nativeSessionId;
   }
   if (input.providerData !== undefined) runObservation.providerData = input.providerData;
-  return observerHarnessRunFromRun(runObservation);
+  return runObservation;
 }
 
 function status(

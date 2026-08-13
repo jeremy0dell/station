@@ -56,7 +56,9 @@ export async function getObserverStatus(
   }
 
   const client =
-    deps.clientFactory?.(paths.socketPath) ??
+    deps.clientFactory?.(paths.socketPath, {
+      timeoutMs: observerStatusHealthTimeoutMs(options.timeoutMs),
+    }) ??
     createObserverClient({
       socketPath: paths.socketPath,
       timeoutMs: observerStatusHealthTimeoutMs(options.timeoutMs),
@@ -93,7 +95,9 @@ export async function startObserver(
   const clock = deps.clock ?? systemClock;
   const buildVersion = deps.buildVersion ?? stationObserverBuildVersion();
   const trace = createTraceContext({ operation: "cli.observer.start" });
-  const existing = await getObserverStatus({ ...options, paths }, deps);
+  const statusTimeoutMs = remainingObserverStartBudget(timeoutMs, options.startupDeadlineMs);
+  if (statusTimeoutMs <= 0) return observerStartTimedOut(paths);
+  const existing = await getObserverStatus({ ...options, paths, timeoutMs: statusTimeoutMs }, deps);
   if (existing.status === "running") {
     const classification = classifyObserverHealth(existing.health, buildVersion);
     if (classification.action === "attach") {
@@ -107,18 +111,27 @@ export async function startObserver(
       };
     }
   }
-  if (existing.status === "unhealthy") {
-    return existing;
+  if (
+    existing.status !== "running" &&
+    (existing.status === "unhealthy" || existing.error?.code === "PROTOCOL_SCHEMA_MISMATCH")
+  ) {
+    return { ...existing, status: "unhealthy" };
   }
+
+  const processTimeoutMs = remainingObserverStartBudget(timeoutMs, options.startupDeadlineMs);
+  if (processTimeoutMs <= 0) return observerStartTimedOut(paths);
 
   const result = await startObserverProcess(
     {
       paths,
-      timeoutMs,
+      timeoutMs: processTimeoutMs,
       trace,
       clock,
       buildVersion,
       ...(options.configPath === undefined ? {} : { configPath: options.configPath }),
+      ...(options.observerCommand === undefined
+        ? {}
+        : { observerCommand: options.observerCommand }),
       ...(options.onStartupProgress === undefined
         ? {}
         : { onStartupProgress: options.onStartupProgress }),
@@ -145,6 +158,23 @@ export async function startObserver(
     status: "unhealthy",
     paths,
     error: result.error,
+  };
+}
+
+function remainingObserverStartBudget(timeoutMs: number, deadlineMs: number | undefined): number {
+  if (deadlineMs === undefined) return timeoutMs;
+  return Math.min(timeoutMs, Math.floor(deadlineMs - Date.now()));
+}
+
+function observerStartTimedOut(paths: ObserverPaths): ObserverStatus {
+  return {
+    status: "unhealthy",
+    paths,
+    error: {
+      tag: "ObserverStartupError",
+      code: "OBSERVER_START_FAILED",
+      message: "Observer did not become healthy before the startup timeout.",
+    },
   };
 }
 

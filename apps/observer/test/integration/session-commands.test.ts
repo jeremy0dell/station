@@ -7,8 +7,6 @@ import type {
   ManagedTerminalLifecycle,
   ProviderHealth,
   SafeError,
-  TerminalIntent,
-  TerminalIntentReceipt,
   TerminalLaunchProcessRequest,
 } from "@station/contracts";
 import { createCursorHarnessProvider } from "@station/cursor";
@@ -31,7 +29,6 @@ import {
   openObserverSqlite,
   ProviderRegistry,
   registerObserverCommandHandlers,
-  type TerminalIntentRunner,
 } from "../../src/internal";
 import { createUnexpectedProjectConfigWriter } from "../support/projectConfigWriter.js";
 
@@ -293,34 +290,12 @@ describe("session command vertical slice", () => {
     fixture.sqlite.close();
   });
 
-  it("submits session.create launch work through the terminal intent runner seam", async () => {
-    const terminalIntentRunner = new CapturingTerminalIntentRunner();
-    const terminal = new FakeTerminalProvider({
-      now,
-      failures: {
-        openWorkspace: {
-          tag: "TerminalProviderError",
-          code: "DIRECT_OPEN_SHOULD_NOT_RUN",
-          message: "Direct terminal open should not run from the handler.",
-          provider: "fake-terminal",
-        },
-      },
-    });
-    const harness = new FakeHarnessProvider({
-      now,
-      failures: {
-        buildLaunch: {
-          tag: "HarnessProviderError",
-          code: "DIRECT_BUILD_SHOULD_NOT_RUN",
-          message: "Direct harness build should not run from the handler.",
-          provider: "fake-harness",
-        },
-      },
-    });
+  it("routes session.create launch work directly through the selected providers", async () => {
+    const terminal = new FakeTerminalProvider({ now });
+    const harness = new FakeHarnessProvider({ now });
     const fixture = createFixture({
       terminal,
       harness,
-      terminalIntentRunner,
       sessionIds: ["ses_runner_create"],
     });
 
@@ -346,18 +321,12 @@ describe("session command vertical slice", () => {
     await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
       status: "succeeded",
     });
-    expect(terminalIntentRunner.intents).toEqual([
+    expect(terminal.snapshot().launches).toEqual([
       expect.objectContaining({
-        type: "session.ensureAgentWorkspace",
-        commandId: receipt.commandId,
-        terminalProvider: "fake-terminal",
-        sessionId: "ses_runner_create",
-        worktree: expect.objectContaining({
-          id: "wt_web_runner_create",
-        }),
+        worktree: expect.objectContaining({ id: "wt_web_runner_create" }),
+        terminalTarget: expect.objectContaining({ sessionId: "ses_runner_create" }),
       }),
     ]);
-    expect(terminal.snapshot().launches).toEqual([]);
     expect(await fixture.persistence.listSessions()).toEqual([
       expect.objectContaining({
         id: "ses_runner_create",
@@ -406,12 +375,12 @@ describe("session command vertical slice", () => {
     fixture.sqlite.close();
   });
 
-  it("submits session.fork launch work through the command composition runner", async () => {
-    const terminalIntentRunner = new CapturingTerminalIntentRunner();
+  it("routes session.fork launch work directly through the selected providers", async () => {
     const worktree = new FakeWorktreeProvider({ now });
+    const terminal = new FakeTerminalProvider({ now });
     const fixture = createFixture({
       worktree,
-      terminalIntentRunner,
+      terminal,
       sessionIds: ["ses_runner_fork", "ses_runner_fork_fallback"],
     });
     await fixture.queue.dispatch({
@@ -454,19 +423,14 @@ describe("session command vertical slice", () => {
     await expect(fixture.persistence.getCommand(fallbackReceipt.commandId)).resolves.toMatchObject({
       status: "succeeded",
     });
-    expect(terminalIntentRunner.intents).toEqual([
+    expect(terminal.snapshot().launches).toEqual([
       expect.objectContaining({
-        type: "session.ensureAgentWorkspace",
-        commandId: receipt.commandId,
-        terminalProvider: "fake-terminal",
-        sessionId: "ses_runner_fork",
         worktree: expect.objectContaining({ branch: "runner-fork" }),
+        terminalTarget: expect.objectContaining({ sessionId: "ses_runner_fork" }),
       }),
       expect.objectContaining({
-        type: "session.ensureAgentWorkspace",
-        commandId: fallbackReceipt.commandId,
-        sessionId: "ses_runner_fork_fallback",
         worktree: expect.objectContaining({ branch: "runner-fork-fallback" }),
+        terminalTarget: expect.objectContaining({ sessionId: "ses_runner_fork_fallback" }),
       }),
     ]);
     expect(await fixture.persistence.listSessions()).toEqual(
@@ -1084,6 +1048,16 @@ describe("session command vertical slice", () => {
         ],
       }),
     });
+    await fixture.persistence.seedSession({
+      sessionId: "ses_web_feature",
+      projectId: "web",
+      worktreeId: "wt_web_feature",
+      initialTitle: "feature",
+      harness: "fake-harness",
+      terminalProvider: "fake-terminal",
+      createdAt: now,
+      lastSeenAt: now,
+    });
     await fixture.core.reconcile("pre-rename");
     expect(fixture.core.getSnapshot().sessions[0]).toMatchObject({
       id: "ses_web_feature",
@@ -1180,6 +1154,8 @@ describe("session command vertical slice", () => {
       projectId: "web",
       worktreeId: "wt_web_existing",
       initialTitle: "existing",
+      harness: "fake-harness",
+      terminalProvider: "fake-terminal",
       createdAt: now,
       lastSeenAt: now,
     });
@@ -1242,10 +1218,10 @@ describe("session command vertical slice", () => {
       now,
     });
     missing.state = "missing";
-    const terminalIntentRunner = new CapturingTerminalIntentRunner();
+    const terminal = new FakeTerminalProvider({ now });
     const fixture = createFixture({
       worktree: new FakeWorktreeProvider({ now, worktrees: [missing] }),
-      terminalIntentRunner,
+      terminal,
     });
     await fixture.core.reconcile("missing-worktree");
     expect(fixture.core.getSnapshot().rows).toEqual([]);
@@ -1267,22 +1243,22 @@ describe("session command vertical slice", () => {
         worktreeId: missing.id,
       },
     });
-    expect(terminalIntentRunner.intents).toEqual([]);
+    expect(terminal.snapshot().launches).toEqual([]);
     await expect(fixture.persistence.listSessions()).resolves.toEqual([]);
     fixture.sqlite.close();
   });
 
-  it("rejects session.startAgent when provider lookup crosses project ownership", async () => {
+  it("rejects session.startAgent when a foreign worktree is absent from the current snapshot", async () => {
     const foreign = createFakeWorktree({
       id: "wt_api_foreign",
       projectId: "api",
       branch: "foreign",
       now,
     });
-    const terminalIntentRunner = new CapturingTerminalIntentRunner();
+    const terminal = new FakeTerminalProvider({ now });
     const fixture = createFixture({
       worktree: new FakeWorktreeProvider({ now, worktrees: [foreign] }),
-      terminalIntentRunner,
+      terminal,
     });
     await fixture.core.reconcile("foreign-worktree");
     expect(fixture.core.getSnapshot().rows).toEqual([]);
@@ -1300,44 +1276,22 @@ describe("session command vertical slice", () => {
       status: "failed",
       error: {
         tag: "CommandValidationError",
-        code: "WORKTREE_PROJECT_MISMATCH",
+        code: "WORKTREE_NOT_FOUND",
         projectId: "web",
         worktreeId: foreign.id,
       },
     });
-    expect(terminalIntentRunner.intents).toEqual([]);
+    expect(terminal.snapshot().launches).toEqual([]);
     await expect(fixture.persistence.listSessions()).resolves.toEqual([]);
     fixture.sqlite.close();
   });
 
-  it("submits session.startAgent launch work through the terminal intent runner seam", async () => {
-    const terminalIntentRunner = new CapturingTerminalIntentRunner();
-    const terminal = new FakeTerminalProvider({
-      now,
-      failures: {
-        openWorkspace: {
-          tag: "TerminalProviderError",
-          code: "DIRECT_OPEN_SHOULD_NOT_RUN",
-          message: "Direct terminal open should not run from the handler.",
-          provider: "fake-terminal",
-        },
-      },
-    });
-    const harness = new FakeHarnessProvider({
-      now,
-      failures: {
-        buildLaunch: {
-          tag: "HarnessProviderError",
-          code: "DIRECT_BUILD_SHOULD_NOT_RUN",
-          message: "Direct harness build should not run from the handler.",
-          provider: "fake-harness",
-        },
-      },
-    });
+  it("routes session.startAgent launch work directly through the selected providers", async () => {
+    const terminal = new FakeTerminalProvider({ now });
+    const harness = new FakeHarnessProvider({ now });
     const fixture = createFixture({
       terminal,
       harness,
-      terminalIntentRunner,
       worktree: new FakeWorktreeProvider({
         now,
         worktrees: [
@@ -1367,18 +1321,14 @@ describe("session command vertical slice", () => {
     await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
       status: "succeeded",
     });
-    expect(terminalIntentRunner.intents).toEqual([
+    expect(terminal.snapshot().launches).toEqual([
       expect.objectContaining({
-        type: "session.ensureAgentWorkspace",
-        commandId: receipt.commandId,
-        terminalProvider: "fake-terminal",
-        sessionId: "ses_runner_start",
         worktree: expect.objectContaining({
           id: "wt_web_runner_start",
         }),
+        terminalTarget: expect.objectContaining({ sessionId: "ses_runner_start" }),
       }),
     ]);
-    expect(terminal.snapshot().launches).toEqual([]);
     fixture.sqlite.close();
   });
 
@@ -1583,10 +1533,12 @@ describe("session command vertical slice", () => {
     fixture.sqlite.close();
   });
 
-  it("resumes an exact persisted recovery handle through the terminal intent runner seam", async () => {
-    const terminalIntentRunner = new CapturingTerminalIntentRunner();
+  it("resumes an exact persisted recovery handle through the selected providers", async () => {
+    const terminal = new FakeTerminalProvider({ now });
+    const harness = new CapturingHarnessProvider({ now });
     const fixture = createFixture({
-      terminalIntentRunner,
+      terminal,
+      harness,
       featureFlags: { sessionResumeAgent: true },
       managedTerminal: persistentManagedTerminal(),
       worktree: new FakeWorktreeProvider({
@@ -1602,7 +1554,6 @@ describe("session command vertical slice", () => {
       }),
     });
     await fixture.persistence.persistReconcileResult({
-      projects: config.projects,
       worktrees: [
         createFakeWorktree({
           id: "wt_web_resume",
@@ -1687,24 +1638,17 @@ describe("session command vertical slice", () => {
     await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
       status: "succeeded",
     });
-    expect(terminalIntentRunner.intents).toEqual([
-      expect.objectContaining({
-        type: "session.ensureAgentWorkspace",
-        commandId: receipt.commandId,
-        terminalProvider: "fake-terminal",
-        sessionId: "ses_previous",
-        initialPrompt: "Continue the recovered context.",
-        harness: {
-          provider: "fake-harness",
-          mode: "interactive",
-        },
-        resume: {
-          target: { kind: "native-session", id: "native_session_123" },
-          previousSessionId: "ses_previous",
-          recoveryHandleId: handle.id,
-        },
-      }),
-    ]);
+    expect(terminal.snapshot().launches).toHaveLength(1);
+    expect(harness.lastBuildRequest).toMatchObject({
+      sessionId: "ses_previous",
+      initialPrompt: "Continue the recovered context.",
+      mode: "interactive",
+      resume: {
+        target: { kind: "native-session", id: "native_session_123" },
+        previousSessionId: "ses_previous",
+        recoveryHandleId: handle.id,
+      },
+    });
     await expect(fixture.persistence.listSessions()).resolves.toEqual(
       expect.arrayContaining([expect.objectContaining({ id: "ses_previous", lifecycle: "open" })]),
     );
@@ -1849,6 +1793,8 @@ describe("session command vertical slice", () => {
       projectId: "web",
       worktreeId: "wt_web_resume_fresh",
       initialTitle: "resume-fresh",
+      harness: "fake-harness",
+      terminalProvider: "fake-terminal",
       createdAt: now,
       lastSeenAt: now,
     });
@@ -2010,8 +1956,27 @@ describe("session command vertical slice", () => {
       }),
       sessionIds: ["ses_remembered_next"],
     });
+    await fixture.persistence.seedSession({
+      sessionId: "ses_default_previous",
+      projectId: "web",
+      worktreeId: existingWorktree.id,
+      initialTitle: existingWorktree.branch,
+      harness: "fake-harness",
+      terminalProvider: "fake-terminal",
+      createdAt: "2026-05-21T11:00:00.000Z",
+      lastSeenAt: "2026-05-21T11:00:00.000Z",
+    });
+    await fixture.persistence.seedSession({
+      sessionId: "ses_remembered_later",
+      projectId: "web",
+      worktreeId: existingWorktree.id,
+      initialTitle: existingWorktree.branch,
+      harness: "remembered-harness",
+      terminalProvider: "fake-terminal",
+      createdAt: "2026-05-21T11:30:00.000Z",
+      lastSeenAt: "2026-05-21T11:30:00.000Z",
+    });
     await fixture.persistence.persistReconcileResult({
-      projects: config.projects,
       worktrees: [existingWorktree],
       terminalTargets: [],
       harnessRuns: [
@@ -2107,8 +2072,17 @@ describe("session command vertical slice", () => {
       }),
       sessionIds: ["ses_remembered_current"],
     });
+    await fixture.persistence.seedSession({
+      sessionId: "ses_remembered_old",
+      projectId: "web",
+      worktreeId: previousWorktree.id,
+      initialTitle: previousWorktree.branch,
+      harness: "remembered-harness",
+      terminalProvider: "fake-terminal",
+      createdAt: "2026-05-21T11:00:00.000Z",
+      lastSeenAt: "2026-05-21T11:00:00.000Z",
+    });
     await fixture.persistence.persistReconcileResult({
-      projects: config.projects,
       worktrees: [previousWorktree],
       terminalTargets: [],
       harnessRuns: [
@@ -2387,7 +2361,6 @@ function createFixture(
     terminal?: FakeTerminalProvider;
     harness?: HarnessProvider;
     harnesses?: HarnessProvider[];
-    terminalIntentRunner?: TerminalIntentRunner;
     managedTerminal?: ManagedTerminalLifecycle;
     sessionIds?: string[];
     sessionGroupIds?: string[];
@@ -2432,9 +2405,6 @@ function createFixture(
     featureFlags,
     eventBus,
     clock,
-    ...(options.terminalIntentRunner === undefined
-      ? {}
-      : { terminalIntentRunner: options.terminalIntentRunner }),
     idFactory: {
       sessionId: () => sessionIds.shift() ?? "ses_fallback",
       sessionGroupId: () => sessionGroupIds.shift() ?? "grp_fallback",
@@ -2528,22 +2498,6 @@ class CapturingHarnessProvider extends FakeHarnessProvider {
   override async buildLaunch(request: BuildHarnessLaunchRequest): Promise<HarnessLaunchPlan> {
     this.lastBuildRequest = request;
     return super.buildLaunch(request);
-  }
-}
-
-class CapturingTerminalIntentRunner implements TerminalIntentRunner {
-  readonly intents: TerminalIntent[] = [];
-
-  async submitIntent(intent: TerminalIntent): Promise<TerminalIntentReceipt> {
-    this.intents.push(intent);
-    return {
-      status: "accepted",
-      accepted: true,
-      commandId: intent.commandId,
-      type: intent.type,
-      terminalProvider: intent.terminalProvider,
-      timestamp: now,
-    };
   }
 }
 

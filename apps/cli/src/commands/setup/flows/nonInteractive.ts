@@ -5,7 +5,6 @@ import type {
 import { setupMessageRef } from "@station/setup-messages";
 import type { SetupFacts } from "../adapters/inspectionTypes.js";
 import { createSetupComposition, type ProjectedSetupSession } from "../composition.js";
-import { overlaySetupOperationOutcomes } from "../presentation/projectSetupResult.js";
 import type { TextSetupPresenter } from "../presenters/text.js";
 import type { SetupCommandDeps, SetupCommandOptions, SetupCommandResult } from "../types.js";
 
@@ -35,18 +34,14 @@ export async function runNonInteractiveApply(
       await composition.text.write(`${composition.text.renderInspectionFailure(preview.error)}\n`);
       return { code: 1 };
     }
-    const view = {
-      ...preview.view,
-      actions: preview.view.actions.map((action) =>
-        action.selected ? { ...action, status: "skipped" as const } : action,
-      ),
-    };
-    await composition.text.write(composition.text.renderPlan(view));
+    await composition.text.write(
+      composition.text.renderPlan(preview.text, { skipSelectedActions: true }),
+    );
     return { code: preview.plan.summary.selectionSource === "unresolved" ? 1 : 0 };
   }
 
   if (initial.plan.summary.selectionSource === "unresolved") {
-    await composition.text.write(composition.text.renderApplyResult(initial.view));
+    await composition.text.write(composition.text.renderApplyResult(initial.text));
     return { code: 1 };
   }
 
@@ -56,11 +51,6 @@ export async function runNonInteractiveApply(
     await composition.text.write(`${composition.text.renderInspectionFailure(projection.error)}\n`);
     return { code: 1 };
   }
-  const view = overlaySetupOperationOutcomes({
-    view: projection.view,
-    outcomes: projection.session.operationOutcomes,
-  });
-
   if (finished.status === "blocked") {
     if (finished.reason === "observer-activation-failed" && finished.error !== undefined) {
       await composition.text.write(
@@ -76,7 +66,7 @@ export async function runNonInteractiveApply(
         composition.text,
       );
     }
-    await composition.text.write(composition.text.renderApplyResult(view));
+    await composition.text.write(composition.text.renderApplyResult(projection.text));
     return { code: 1 };
   }
 
@@ -85,7 +75,7 @@ export async function runNonInteractiveApply(
     composition.session.snapshot()?.facts,
     composition.text,
   );
-  await composition.text.write(composition.text.renderApplyResult(view));
+  await composition.text.write(composition.text.renderApplyResult(projection.text));
   const operationFailed = projection.session.operationOutcomes.some(
     (outcome) => outcome.status === "failed",
   );
@@ -110,16 +100,10 @@ async function renderOperationFailures(
     return;
   }
   for (const failure of failures) {
-    const matchingActions = projection.view.actions.filter(
-      (candidate) => candidate.operationId === failure.operationId,
-    );
-    const action =
-      matchingActions.find((candidate) => candidate.kind === failure.operation.kind) ??
-      matchingActions[0];
     const label =
-      action === undefined
+      facts === undefined
         ? operationFailureLabel(failure, facts, presenter)
-        : presenter.text(action.label);
+        : presenter.operationLabel(projection.text, failure.operation);
     await presenter.write(`${presenter.renderProgressFailure({ label }, failure.error)}\n`);
   }
 }

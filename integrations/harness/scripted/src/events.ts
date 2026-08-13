@@ -1,7 +1,7 @@
 // Scripted-agent events -> STATION HarnessEventObservation (STATION-internal synthetic harness for tests).
 // Contract: STATION-native, no external upstream — schema defined in this file (ScriptedAgentEventSchema).
 // STATION ingress flow: docs/harness-ingress.md.
-import type { HarnessEventObservation, ObservedStatus, RawHarnessEvent } from "@station/contracts";
+import type { ObservedStatus } from "@station/contracts";
 import { TimestampSchema } from "@station/contracts";
 import { z } from "zod";
 import { scriptedHarnessError } from "./errors.js";
@@ -38,27 +38,6 @@ export function parseScriptedAgentEvent(input: unknown): ScriptedAgentEvent {
     );
   }
   return result.data;
-}
-
-export function normalizeScriptedRawEvent(event: RawHarnessEvent): HarnessEventObservation[] {
-  const parsed = parseScriptedAgentEvent(event.event);
-  const observedAt = event.observedAt ?? parsed.at;
-  const observation: HarnessEventObservation = {
-    provider: "scripted",
-    ...(parsed.sessionId === undefined ? {} : { sessionId: parsed.sessionId }),
-    ...(parsed.worktreeId === undefined ? {} : { worktreeId: parsed.worktreeId }),
-    harnessRunId: parsed.runId,
-    rawEventType: parsed.type,
-    status: statusFromScriptedEvent(parsed, observedAt),
-    observedAt,
-    providerData: {
-      event: parsed,
-    },
-  };
-  if (parsed.type === "idle" && parsed.turnComplete === true) {
-    observation.turn = { kind: "turn_completed" };
-  }
-  return [observation];
 }
 
 export function statusFromScriptedEvent(

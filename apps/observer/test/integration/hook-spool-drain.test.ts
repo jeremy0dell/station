@@ -3,7 +3,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { codexHookPayloadToHarnessEventReport, compactCodexHookPayload } from "@station/codex";
 import { DEFAULT_WORKSPACE_CONFIG, type StationConfig } from "@station/config";
-import type { HarnessEventReport, HarnessEventReportReceipt } from "@station/contracts";
+import type {
+  HarnessEventReport,
+  HarnessEventReportReceipt,
+  ProviderHookAdapter,
+} from "@station/contracts";
 import { STATION_SCHEMA_VERSION } from "@station/contracts";
 import { FakeHarnessProvider, FakeTerminalProvider, FakeWorktreeProvider } from "@station/testing";
 import { describe, expect, it } from "vitest";
@@ -19,6 +23,7 @@ import {
 import {
   createCommandQueue,
   createFilesystemProviderIngressSpoolStore,
+  createHarnessEventReportIngestion,
   createObserverApi,
   createObserverCore,
   createObserverEventBus,
@@ -171,7 +176,7 @@ describe("observer hook spool drain", () => {
     await expect(fileExists(spoolPath)).resolves.toBe(false);
   });
 
-  it("retries downstream processing after primary hook dedupe and unlinks only after completion", async () => {
+  it("retries adapter report persistence after hook dedupe and unlinks only after completion", async () => {
     const stateDir = await mkdtemp(join(tmpdir(), "station-observer-state-"));
     const spoolDir = providerIngressSpoolDir(stateDir);
     const spoolPath = await writeHookSpoolRecordFixture({
@@ -190,25 +195,58 @@ describe("observer hook spool drain", () => {
     let failProcessingOnce = true;
     const retryingPersistence = {
       ...persistence,
-      recordProviderObservationsWithIngressDedupe: async (
-        input: Parameters<typeof persistence.recordProviderObservationsWithIngressDedupe>[0],
+      recordEventAndProviderObservationWithIngressDedupe: async (
+        input: Parameters<typeof persistence.recordEventAndProviderObservationWithIngressDedupe>[0],
       ) => {
         if (failProcessingOnce) {
           failProcessingOnce = false;
           throw new Error("forced downstream processing failure");
         }
-        return persistence.recordProviderObservationsWithIngressDedupe(input);
+        return persistence.recordEventAndProviderObservationWithIngressDedupe(input);
       },
+    };
+    const adapter: ProviderHookAdapter = {
+      provider: "fake-harness",
+      kind: "harness",
+      toHarnessEventReport: (input) => ({
+        ok: true,
+        report: {
+          schemaVersion: STATION_SCHEMA_VERSION,
+          reportId: input.event.hookId ?? "report_spool_retry",
+          provider: "fake-harness",
+          kind: "harness",
+          eventType: input.event.event,
+          observedAt: input.event.receivedAt,
+          correlation: {
+            harnessRunId: "run_spool_retry",
+            worktreeId: "wt_spool_retry",
+            sessionId: "ses_spool_retry",
+          },
+          status: {
+            value: "idle",
+            confidence: "high",
+            reason: "Replay harness reported idle.",
+            source: "harness_event",
+            updatedAt: input.event.receivedAt,
+          },
+        },
+      }),
     };
     const providers = new ProviderRegistry({
       worktree: new FakeWorktreeProvider({ now }),
       terminal: new FakeTerminalProvider({ now }),
-      harnesses: [new ReplayHarnessProvider({ now })],
+      harnesses: [new FakeHarnessProvider({ now })],
+      hookAdapters: [adapter],
+    });
+    const reportIngress = createHarnessEventReportIngestion({
+      persistence: retryingPersistence,
+      clock,
     });
     const ingress = createProviderHookIngress({
       persistence: retryingPersistence,
       providers,
       clock,
+      reportHarnessEvent: (report) => reportIngress.ingest(report, { triggerReconcile: false }),
     });
     const store = createFilesystemProviderIngressSpoolStore(spoolDir);
 
@@ -560,25 +598,4 @@ async function waitFor(predicate: () => Promise<boolean>, timeoutMs = 1000): Pro
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
   throw new Error("Timed out waiting for condition.");
-}
-
-class ReplayHarnessProvider extends FakeHarnessProvider {
-  override async ingestEvent() {
-    return [
-      {
-        provider: this.id,
-        harnessRunId: "run_spool_retry",
-        worktreeId: "wt_spool_retry",
-        sessionId: "ses_spool_retry",
-        status: {
-          value: "idle" as const,
-          confidence: "high" as const,
-          reason: "Replay harness reported idle.",
-          source: "harness_event" as const,
-          updatedAt: now,
-        },
-        observedAt: now,
-      },
-    ];
-  }
 }

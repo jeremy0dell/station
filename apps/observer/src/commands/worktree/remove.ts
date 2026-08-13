@@ -25,17 +25,14 @@ import {
 import type { CommandHandler } from "../queue.js";
 import { reconcileAndPublish } from "../reconcile.js";
 import { findProjectOrThrow, runProviderMutation, throwIfAborted } from "../session/shared.js";
-import type { TerminalIntentRunner } from "../terminalIntentRunner.js";
 
 export type CreateWorktreeRemoveHandlerOptions = {
   getProjects: () => readonly ProviderProjectConfig[];
   providers: ProviderRegistry;
-  terminalIntentRunner: TerminalIntentRunner;
   core: ObserverCore;
   persistence: EventJournal & SessionStore;
   eventBus?: ObserverEventBus | undefined;
   clock?: RuntimeClock | undefined;
-  commandTimeoutMs?: number | undefined;
   logger?: StationLogger | undefined;
 };
 
@@ -66,7 +63,6 @@ export function createWorktreeRemoveHandler(
       {
         operation: `provider.${options.providers.worktree.id}.listWorktrees.removeRevalidation`,
         clock: options.clock,
-        commandTimeoutMs: options.commandTimeoutMs,
         signal: context.signal,
         trace: context.trace,
         fallback: {
@@ -106,28 +102,25 @@ export function createWorktreeRemoveHandler(
       allowUnsupportedStop: canUseTerminalCloseFallbackForWorktree(row, force),
       context,
       clock: options.clock,
-      commandTimeoutMs: options.commandTimeoutMs,
     });
     throwIfAborted(context.signal);
     await closeTerminalForWorktree({
       providers: options.providers,
-      terminalIntentRunner: options.terminalIntentRunner,
       row,
       force,
       context,
       clock: options.clock,
-      commandTimeoutMs: options.commandTimeoutMs,
     });
     throwIfAborted(context.signal);
     try {
       await removeWorktreeThroughProvider({
         providers: options.providers,
+        project,
         row,
         target: resolution.target,
         force,
         context,
         clock: options.clock,
-        commandTimeoutMs: options.commandTimeoutMs,
       });
     } catch (error) {
       const refusal = worktreeRemovalRefusalDiagnostic(error);

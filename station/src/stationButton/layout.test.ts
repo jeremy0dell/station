@@ -3,7 +3,6 @@ import {
   attentionLines,
   celebrationText,
   COLLAPSED_BASE_COLS,
-  COLLAPSED_COUNTS_COLS,
   islandDisplay,
   type IslandDisplayInput,
   targetDims,
@@ -115,11 +114,11 @@ describe("targetDims", () => {
     expect(needsYouOnly.width).toBe(workingOnly.width);
     expect(workingOnly.width).toBe(readyOnly.width);
     expect(workingOnly.width).toBeGreaterThan(COLLAPSED_BASE_COLS);
-    expect(workingOnly.width).toBeLessThan(COLLAPSED_COUNTS_COLS);
+    expect(workingOnly.width).toBeLessThan(at(1, 1, 1).width);
     // Two lanes: needs-you + working.
     expect(at(1, 1, 0).width).toBeGreaterThan(workingOnly.width);
     // All three lanes cap at the stable maximum.
-    expect(at(1, 1, 1).width).toBe(COLLAPSED_COUNTS_COLS);
+    expect(at(1, 1, 1)).toEqual(at(99, 150, 99));
   });
 
   it("keeps the roll-up card width fixed while height tracks project count", () => {

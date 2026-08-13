@@ -33,7 +33,7 @@ function createReadOnlySetupCommand(mode: "check" | "plan"): ReadOnlySetupComman
     }
     const code = mode === "check" && !projection.plan.summary.requiredOk ? 1 : 0;
     if (flags.json) return { code, output: projection.plan };
-    await composition.text.write(composition.text.renderPlan(projection.view));
+    await composition.text.write(composition.text.renderPlan(projection.text));
     return { code };
   };
 }

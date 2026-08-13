@@ -1,10 +1,9 @@
 import type { ProviderHookEvent } from "@station/contracts";
-import { HarnessEventObservationSchema, STATION_SCHEMA_VERSION } from "@station/contracts";
+import { HarnessEventReportSchema, STATION_SCHEMA_VERSION } from "@station/contracts";
 import { describe, expect, it } from "vitest";
 import { compactOpenCodeHookPayload } from "../../src/compaction";
 import { OpenCodeCompactEventSchema } from "../../src/eventSchemas";
 import {
-  normalizeOpenCodeRawEvent,
   openCodeHookPayloadToHarnessEventReport,
   parseOpenCodeCompactEvent,
 } from "../../src/events";
@@ -53,35 +52,21 @@ describe("OpenCode event parsing", () => {
       property_keys: ["callID", "input", "sessionID", "tool"],
     });
 
-    const observations = normalizeOpenCodeRawEvent(
-      {
-        provider: "opencode",
-        observedAt: now,
-        event: compaction.payload,
-      },
-      context(),
-    );
+    const report = reportForOpenCodePayload(compaction.payload);
 
-    expect(JSON.stringify(observations[0]?.providerData)).not.toContain("rm -rf");
+    expect(JSON.stringify(report.providerData)).not.toContain("rm -rf");
   });
 
   it("maps permission and question events to attention and working states", () => {
     expect(
-      normalizeOpenCodeRawEvent(
-        {
-          provider: "opencode",
-          observedAt: now,
-          event: {
-            event_type: "permission.asked",
-            cwd: "/tmp/station/web/task",
-            opencode_session_id: "opencode_session_123",
-            tool_name: "bash",
-          },
-        },
-        context(),
-      )[0],
+      reportForOpenCodePayload({
+        event_type: "permission.asked",
+        cwd: "/tmp/station/web/task",
+        opencode_session_id: "opencode_session_123",
+        tool_name: "bash",
+      }),
     ).toMatchObject({
-      rawEventType: "permission.asked",
+      eventType: "permission.asked",
       status: {
         value: "needs_attention",
         confidence: "high",
@@ -90,21 +75,14 @@ describe("OpenCode event parsing", () => {
     });
 
     expect(
-      normalizeOpenCodeRawEvent(
-        {
-          provider: "opencode",
-          observedAt: now,
-          event: {
-            event_type: "question.replied",
-            cwd: "/tmp/station/web/task",
-            opencode_session_id: "opencode_session_123",
-            question_reply: "answered",
-          },
-        },
-        context(),
-      )[0],
+      reportForOpenCodePayload({
+        event_type: "question.replied",
+        cwd: "/tmp/station/web/task",
+        opencode_session_id: "opencode_session_123",
+        question_reply: "answered",
+      }),
     ).toMatchObject({
-      rawEventType: "question.replied",
+      eventType: "question.replied",
       status: {
         value: "working",
         confidence: "high",
@@ -112,36 +90,31 @@ describe("OpenCode event parsing", () => {
     });
   });
 
-  it("uses STATION hook context before cwd correlation and carries native session ids", () => {
-    const observations = normalizeOpenCodeRawEvent(
-      {
-        provider: "opencode",
-        observedAt: now,
-        event: {
-          event_type: "session.status",
-          cwd: "/tmp/not-the-worktree",
-          opencode_session_id: "opencode_session_123",
-          status_type: "idle",
-          station_project_id: "web",
-          station_worktree_id: "wt_web_task",
-          station_worktree_path: "/tmp/station/web/task",
-          station_session_id: "ses_web_task",
-          station_terminal_provider: "tmux",
-          station_terminal_target_id: "tmux:station:@1:%2",
-        },
-      },
-      context(),
-    );
+  it("carries explicit STATION and native identity into the report", () => {
+    const report = reportForOpenCodePayload({
+      event_type: "session.status",
+      cwd: "/tmp/not-the-worktree",
+      opencode_session_id: "opencode_session_123",
+      status_type: "idle",
+      station_project_id: "web",
+      station_worktree_id: "wt_web_task",
+      station_worktree_path: "/tmp/station/web/task",
+      station_session_id: "ses_web_task",
+      station_terminal_provider: "tmux",
+      station_terminal_target_id: "tmux:station:@1:%2",
+    });
 
-    expect(HarnessEventObservationSchema.parse(observations[0])).toEqual(observations[0]);
-    expect(observations[0]).toMatchObject({
+    expect(HarnessEventReportSchema.parse(report)).toEqual(report);
+    expect(report).toMatchObject({
       provider: "opencode",
-      projectId: "web",
-      sessionId: "ses_web_task",
-      worktreeId: "wt_web_task",
-      harnessRunId: "opencode:tmux:station:@1:%2",
-      terminalTargetId: "tmux:station:@1:%2",
-      nativeSessionId: "opencode_session_123",
+      correlation: {
+        projectId: "web",
+        sessionId: "ses_web_task",
+        worktreeId: "wt_web_task",
+        harnessRunId: "opencode:tmux:station:@1:%2",
+        terminalTargetId: "tmux:station:@1:%2",
+        nativeSessionId: "opencode_session_123",
+      },
       status: {
         value: "idle",
         source: "harness_event",
@@ -205,27 +178,7 @@ describe("OpenCode event parsing", () => {
       station_terminal_target_id: "tmux:station:@1:%2",
     };
 
-    const observation = normalizeOpenCodeRawEvent(
-      {
-        provider: "opencode",
-        observedAt: now,
-        event: payload,
-      },
-      context(),
-    )[0];
-    expect(observation).toMatchObject({
-      status: {
-        value: "idle",
-      },
-    });
-    expect(observation).not.toHaveProperty("turn");
-
-    const report = openCodeHookPayloadToHarnessEventReport({
-      reportId: "report_opencode_status_idle",
-      eventType: "session.status",
-      observedAt: now,
-      payload,
-    });
+    const report = reportForOpenCodePayload(payload);
     expect(report).toMatchObject({
       status: {
         value: "idle",
@@ -243,32 +196,7 @@ describe("OpenCode event parsing", () => {
       station_terminal_target_id: "tmux:station:@1:%2",
     };
 
-    expect(
-      normalizeOpenCodeRawEvent(
-        {
-          provider: "opencode",
-          observedAt: now,
-          event: payload,
-        },
-        context(),
-      )[0],
-    ).toMatchObject({
-      status: {
-        value: "idle",
-      },
-      turn: {
-        kind: "turn_completed",
-      },
-    });
-
-    expect(
-      openCodeHookPayloadToHarnessEventReport({
-        reportId: "report_opencode_idle",
-        eventType: "session.idle",
-        observedAt: now,
-        payload,
-      }),
-    ).toMatchObject({
+    expect(reportForOpenCodePayload(payload)).toMatchObject({
       status: {
         value: "idle",
       },
@@ -295,37 +223,23 @@ describe("OpenCode event parsing", () => {
 
     for (const rule of openCodeIngressRules) {
       if (rule.statusIntents === undefined) continue;
-      const status = normalizeOpenCodeRawEvent(
-        {
-          provider: "opencode",
-          observedAt: now,
-          event: samplePayloadForEventType(rule.eventType),
-        },
-        context(),
-      )[0]?.status;
+      const status = reportForOpenCodePayload(samplePayloadForEventType(rule.eventType)).status;
 
       expect(status, rule.eventType).toBeDefined();
     }
   });
 
   it("leaves non-status OpenCode telemetry as provider data without fabricating state", () => {
-    const observations = normalizeOpenCodeRawEvent(
-      {
-        provider: "opencode",
-        observedAt: now,
-        event: {
-          event_type: "file.edited",
-          cwd: "/tmp/station/web/task",
-          file_path: "/tmp/station/web/task/src/app.ts",
-          opencode_session_id: "opencode_session_123",
-        },
-      },
-      context(),
-    );
+    const report = reportForOpenCodePayload({
+      event_type: "file.edited",
+      cwd: "/tmp/station/web/task",
+      file_path: "/tmp/station/web/task/src/app.ts",
+      opencode_session_id: "opencode_session_123",
+    });
 
-    expect(observations[0]?.status).toBeUndefined();
-    expect(observations[0]).toMatchObject({
-      rawEventType: "file.edited",
+    expect(report.status).toBeUndefined();
+    expect(report).toMatchObject({
+      eventType: "file.edited",
       providerData: {
         filePath: "/tmp/station/web/task/src/app.ts",
       },
@@ -446,41 +360,14 @@ describe("OpenCode event parsing", () => {
   });
 });
 
-function context() {
-  return {
-    projects: [],
-    worktrees: [
-      {
-        id: "wt_web_task",
-        provider: "worktrunk",
-        projectId: "web",
-        branch: "task",
-        path: "/tmp/station/web/task",
-        state: "exists" as const,
-        source: "worktrunk" as const,
-        observedAt: now,
-      },
-    ],
-    terminalTargets: [
-      {
-        id: "tmux:station:@1:%2",
-        provider: "tmux",
-        projectId: "web",
-        worktreeId: "wt_web_task",
-        sessionId: "ses_web_task",
-        state: "open" as const,
-        cwd: "/tmp/station/web/task",
-        confidence: "high" as const,
-        reason: "tmux pane has station identity binding.",
-        observedAt: now,
-        harnessBinding: {
-          role: "main-agent",
-          harnessProvider: "opencode",
-          currentCommand: "opencode",
-        },
-      },
-    ],
-  };
+function reportForOpenCodePayload(payload: unknown) {
+  const eventType = parseOpenCodeCompactEvent(payload).event_type;
+  return openCodeHookPayloadToHarnessEventReport({
+    reportId: "report_opencode_test",
+    eventType,
+    observedAt: now,
+    payload,
+  });
 }
 
 function samplePayloadForEventType(eventType: string) {

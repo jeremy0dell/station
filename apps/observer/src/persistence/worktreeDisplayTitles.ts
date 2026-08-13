@@ -34,7 +34,7 @@ export function readWorktreeDisplayTitle(
 export function insertMissingWorktreeDisplayTitles(
   database: SqlDatabase,
   titles: readonly PersistedWorktreeDisplayTitle[],
-): void {
+): number {
   const insert = database.prepare(
     `
       INSERT INTO worktree_display_titles
@@ -43,9 +43,14 @@ export function insertMissingWorktreeDisplayTitles(
       ON CONFLICT(project_id, worktree_id) DO NOTHING
     `,
   );
+  let inserted = 0;
   for (const title of titles) {
-    insert.run(title.projectId, title.worktreeId, title.title, title.createdAt, title.updatedAt);
+    inserted += Number(
+      insert.run(title.projectId, title.worktreeId, title.title, title.createdAt, title.updatedAt)
+        .changes,
+    );
   }
+  return inserted;
 }
 
 export function upsertWorktreeDisplayTitle(

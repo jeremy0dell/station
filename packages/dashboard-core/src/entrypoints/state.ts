@@ -32,8 +32,13 @@ export type {
   PersistentFilterActionId,
   TuiSemanticAction,
 } from "../state/actions.js";
-export type { TuiInputMode } from "../state/keymap.js";
+export type {
+  DashboardBindingHelp,
+  TuiDashboardBindingId,
+  TuiInputMode,
+} from "../state/keymap.js";
 export {
+  dashboardBindingHelp,
   deriveTuiInputMode,
   QUIT_HINT_CLOSE,
   QUIT_HINT_DISMISS_ERROR,

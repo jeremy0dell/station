@@ -28,11 +28,11 @@ import {
   runObserverMain,
   startObserverServer,
 } from "../../src/internal";
-import type { ObserverDuplicateProcessEvidenceSource } from "../../src/runtime/observerDuplicateCleanup.js";
 import {
   createObserverProcessIdentity,
   readObserverProcessIdentity,
 } from "../../src/runtime/observerPidfile.js";
+import type { ObserverDuplicateProcessEvidenceSource } from "../../src/runtime/observerReap.js";
 import { readSocketIdentity } from "../../src/runtime/socketOwnership.js";
 import { FakeDiagnosticEvidenceSource } from "../support/diagnosticEvidenceSources.js";
 import { createUnexpectedProjectConfigWriter } from "../support/projectConfigWriter.js";
@@ -202,7 +202,7 @@ describe("observer protocol server", () => {
     }
   });
 
-  it("keeps production duplicate inspection report-only without blocking health", async () => {
+  it("reports startup duplicate evidence without signaling or blocking health", async () => {
     const { dir, socketPath } = await createTempSocketPath();
     const stateDir = join(dir, "report-only-state");
     const processToken = ["a47ac10b", "58cc", "4372", "a567", "0e02b2c3d479"].join("-");
@@ -296,6 +296,47 @@ describe("observer protocol server", () => {
       await rm(dir, { recursive: true, force: true });
     }
   }, 16_000);
+
+  it("keeps operations gated until startup reconcile commits current provider state", async () => {
+    const { dir, socketPath } = await createTempSocketPath();
+    const stateDir = join(dir, "startup-context-state");
+    const providerReadStarted = deferred();
+    const releaseProviderRead = deferred();
+    const terminal = new FakeTerminalProvider({ now });
+    vi.spyOn(terminal, "listTargets").mockImplementation(async () => {
+      providerReadStarted.resolve();
+      await releaseProviderRead.promise;
+      return [];
+    });
+    const runtime = runObserverMain(
+      ["--socket", socketPath, "--state-dir", stateDir, "--startup-timeout-ms", "2000"],
+      {
+        providerRegistryFactory: () =>
+          new ProviderRegistry({
+            worktree: new FakeWorktreeProvider({ now }),
+            terminal,
+            harnesses: [new FakeHarnessProvider({ now })],
+          }),
+        buildVersion: observerBuildVersion,
+      },
+    );
+    const client = createObserverClient({ socketPath, requestId: ids("startup-context") });
+
+    try {
+      await providerReadStarted.promise;
+      await expect(client.getSnapshot()).rejects.toMatchObject({ code: "OBSERVER_NOT_READY" });
+      releaseProviderRead.resolve();
+      await expect(client.health()).resolves.toMatchObject({
+        lastReconcile: { reason: "observer.startup" },
+      });
+      await expect(client.getSnapshot()).resolves.toMatchObject({ observer: { healthy: true } });
+    } finally {
+      releaseProviderRead.resolve();
+      await client.stop().catch(() => undefined);
+      await runtime.catch(() => undefined);
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
 
   it("serves health, diagnostics, command dispatch, command get, and reconcile", async () => {
     const { socketPath } = await createTempSocketPath();
@@ -509,4 +550,12 @@ function observerIds() {
 function ids(prefix: string): () => string {
   let id = 0;
   return () => `${prefix}_${++id}`;
+}
+
+function deferred(): { promise: Promise<void>; resolve: () => void } {
+  let resolve = () => undefined;
+  const promise = new Promise<void>((next) => {
+    resolve = next;
+  });
+  return { promise, resolve };
 }

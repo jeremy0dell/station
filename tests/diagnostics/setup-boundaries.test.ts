@@ -20,6 +20,16 @@ const retiredSetupModules = [
   "render.ts",
   "theme.ts",
 ] as const;
+const retiredSetupCoreModules = [
+  "session/checkpoints.ts",
+  "session/transition.ts",
+  "session/transitionApplying.ts",
+  "session/transitionBlocked.ts",
+  "session/transitionEditing.ts",
+  "session/transitionInspecting.ts",
+  "session/transitionReviewing.ts",
+  "session/transitionVerifying.ts",
+] as const;
 const controlledRoles = [
   "DRIVING PORT",
   "DRIVEN PORT",
@@ -35,7 +45,6 @@ const policyNames = [
   "assessHarnessTracking",
   "planSetup",
   "deriveSetupResult",
-  "transitionSetupSession",
 ] as const;
 const drivenPortNames = [
   "SetupConfigMutationPort",
@@ -113,10 +122,25 @@ describe("setup core boundaries", () => {
       }
     }
 
-    expect(markerCount).toBe(18);
+    expect(markerCount).toBe(17);
     expect(drivingPorts.sort()).toEqual([...drivingPortNames].sort());
     expect(policies.sort()).toEqual([...policyNames].sort());
     expect(drivenPorts.sort()).toEqual([...drivenPortNames].sort());
+  });
+
+  it("has no second event, effect, transition, or checkpoint orchestration layer", async () => {
+    for (const retiredModule of retiredSetupCoreModules) {
+      await expect(readFile(resolve(sourceRoot, retiredModule), "utf8")).rejects.toMatchObject({
+        code: "ENOENT",
+      });
+    }
+
+    const source = (
+      await Promise.all((await sourceFiles(sourceRoot)).map((file) => readFile(file, "utf8")))
+    ).join("\n");
+    expect(source).not.toMatch(
+      /\b(?:SetupSessionEvent|SetupSessionEffect|SetupSessionTransition|transitionSetupSession|recordCompletedSetupOperation)\b/,
+    );
   });
 
   it("removes compatibility orchestration and all production imports of it", async () => {

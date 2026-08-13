@@ -1,8 +1,6 @@
 import type {
   HarnessCapabilities,
-  HarnessProvider,
   HarnessRunObservation,
-  HarnessStatusObservation,
   ProviderHealth,
   ProviderId,
   ProviderProjectConfig,
@@ -20,7 +18,6 @@ import {
 import type { ProviderRegistry } from "../providers/registry.js";
 import type { StationLogger } from "../stationLogger.js";
 import { safeErrorToProviderHealth } from "./graph.js";
-import type { ObserverHarnessRun } from "./harnessEventStatus.js";
 
 export type ProviderReadOptions = {
   clock: RuntimeClock;
@@ -178,7 +175,7 @@ export async function readTerminalTargetObservations(input: {
 }
 
 /**
- * Discovers and classifies harness runs sequentially per provider with the shared read boundary.
+ * Discovers harness runs sequentially per provider with the shared read boundary.
  */
 export async function readHarnessObservations(input: {
   providers: ProviderRegistry;
@@ -189,10 +186,10 @@ export async function readHarnessObservations(input: {
   providerHealth: Record<string, ProviderHealth>;
   errors: SafeError[];
 }): Promise<{
-  harnessRuns: ObserverHarnessRun[];
+  harnessRuns: HarnessRunObservation[];
   harnessCapabilities: Record<string, HarnessCapabilities>;
 }> {
-  const harnessRuns: ObserverHarnessRun[] = [];
+  const harnessRuns: HarnessRunObservation[] = [];
   const harnessCapabilities: Record<string, HarnessCapabilities> = {};
 
   for (const provider of input.providers.harnesses.values()) {
@@ -228,19 +225,7 @@ export async function readHarnessObservations(input: {
     );
 
     if (result.ok) {
-      const classifiedRuns = await classifyHarnessRuns({
-        providers: input.providers,
-        provider,
-        capabilities,
-        runs: result.value,
-        projects: input.projects,
-        worktrees: input.worktrees,
-        terminalTargets: input.terminalTargets,
-        read: input.read,
-        providerHealth: input.providerHealth,
-        errors: input.errors,
-      });
-      harnessRuns.push(...classifiedRuns);
+      harnessRuns.push(...result.value);
       continue;
     }
 
@@ -278,63 +263,6 @@ export function readRepositoryProviderHealth(input: {
       clock: input.read.clock,
     });
   }
-}
-
-async function classifyHarnessRuns(input: {
-  providers: ProviderRegistry;
-  provider: HarnessProvider;
-  capabilities: HarnessCapabilities;
-  runs: HarnessRunObservation[];
-  projects: ProviderProjectConfig[];
-  worktrees: WorktreeObservation[];
-  terminalTargets: TerminalTargetObservation[];
-  read: ProviderReadOptions;
-  providerHealth: Record<string, ProviderHealth>;
-  errors: SafeError[];
-}): Promise<ObserverHarnessRun[]> {
-  const classifiedRuns: ObserverHarnessRun[] = [];
-  for (const run of input.runs) {
-    const classification = await runProviderReadBoundary(
-      {
-        operation: `provider.${input.provider.id}.classifyRun`,
-        clock: input.read.clock,
-        timeoutMs: input.read.timeoutMs,
-        retries: input.read.retries,
-        error: {
-          tag: "HarnessProviderError",
-          code: "HARNESS_CLASSIFY_FAILED",
-          message: "The harness provider failed to classify a run.",
-          provider: input.provider.id,
-        },
-      },
-      () =>
-        input.provider.classifyRun(run, {
-          projects: input.projects,
-          worktrees: input.worktrees,
-          terminalTargets: input.terminalTargets,
-        }),
-    );
-
-    if (classification.ok) {
-      classifiedRuns.push(runWithStatus(run, classification.value));
-      continue;
-    }
-
-    await recordProviderReadFailure({
-      providers: input.providers,
-      providerId: input.provider.id,
-      providerType: "harness",
-      message: "Harness provider classification failed.",
-      error: classification.error,
-      timing: classification.timing,
-      capabilities: input.capabilities,
-      providerHealth: input.providerHealth,
-      errors: input.errors,
-      logger: input.read.logger,
-    });
-  }
-
-  return classifiedRuns;
 }
 
 // Reconcile never awaits a health probe: it reads the out-of-band cache and
@@ -456,33 +384,4 @@ function failedProviderHealth(input: {
     latencyMs: input.latencyMs,
     capabilities: input.capabilities,
   });
-}
-
-function runWithStatus(
-  run: HarnessRunObservation,
-  classification: HarnessStatusObservation,
-): ObserverHarnessRun {
-  const nextRun: HarnessRunObservation = {
-    id: run.id,
-    provider: run.provider,
-    state: classification.status.value,
-    confidence: classification.status.confidence,
-    reason: classification.status.reason,
-    observedAt: run.observedAt,
-  };
-  const projectId = classification.projectId ?? run.projectId;
-  const worktreeId = classification.worktreeId ?? run.worktreeId;
-  const sessionId = classification.sessionId ?? run.sessionId;
-  const providerData = classification.providerData ?? run.providerData;
-  if (projectId !== undefined) nextRun.projectId = projectId;
-  if (worktreeId !== undefined) nextRun.worktreeId = worktreeId;
-  if (sessionId !== undefined) nextRun.sessionId = sessionId;
-  if (run.nativeSessionId !== undefined) nextRun.nativeSessionId = run.nativeSessionId;
-  if (run.pid !== undefined) nextRun.pid = run.pid;
-  if (run.cwd !== undefined) nextRun.cwd = run.cwd;
-  if (providerData !== undefined) nextRun.providerData = providerData;
-  return {
-    run: nextRun,
-    status: classification.status,
-  };
 }

@@ -5,9 +5,7 @@ import type {
   SessionGroupId,
   SessionGroupPlacementIntent,
   SessionId,
-  SessionView,
   StationCommand,
-  TerminalFocusOrigin,
   WorktreeId,
   WorktreeRow,
 } from "@station/contracts";
@@ -69,42 +67,6 @@ export type UpdateSessionGroupMembershipCommandInput = {
   expectedVersion: number;
   sessionId: SessionId;
 };
-
-export type BuildFocusCommandOptions = {
-  origin?: TerminalFocusOrigin;
-};
-
-export function buildFocusCommand(
-  row: WorktreeRow,
-  options: BuildFocusCommandOptions = {},
-): Extract<StationCommand, { type: "terminal.focus" }> {
-  const payload: Extract<StationCommand, { type: "terminal.focus" }>["payload"] = {};
-  if (row.agent?.sessionId !== undefined) {
-    payload.sessionId = row.agent.sessionId;
-  } else {
-    payload.worktreeId = row.id;
-  }
-  if (options.origin !== undefined) {
-    payload.origin = options.origin;
-  }
-  return {
-    type: "terminal.focus",
-    payload,
-  };
-}
-
-export function buildSessionFocusCommand(
-  session: Pick<SessionView, "id">,
-  options: BuildFocusCommandOptions = {},
-): Extract<StationCommand, { type: "terminal.focus" }> {
-  const payload: Extract<StationCommand, { type: "terminal.focus" }>["payload"] = {
-    sessionId: session.id,
-  };
-  if (options.origin !== undefined) {
-    payload.origin = options.origin;
-  }
-  return { type: "terminal.focus", payload };
-}
 
 export function buildStartAgentCommand(
   row: WorktreeRow,

@@ -5,6 +5,7 @@ import type { JsonlLogger } from "@station/observability";
 import type { CreateObserverClientOptions, createObserverClient } from "@station/protocol";
 import type { RuntimeClock } from "@station/runtime";
 import type { ObserverPaths } from "../paths.js";
+import type { ExecutableArgv } from "../selfExec.js";
 
 // Shared types keep the facade and leaf modules connected without introducing runtime import cycles.
 export type ObserverStatus =
@@ -35,6 +36,8 @@ export type ObserverProcessDeps = {
 export type SpawnObserverInput = {
   paths: ObserverPaths;
   configPath?: string;
+  /** Finalized executable and fixed prefix arguments for the Observer child. */
+  observerCommand?: ExecutableArgv;
 };
 
 export type ChildProcessExit = {
@@ -63,5 +66,8 @@ export type ObserverProcessOptions = {
   configPath?: string;
   paths?: ObserverPaths;
   timeoutMs?: number;
+  /** Absolute startup budget shared by callers that perform admission before spawning. */
+  startupDeadlineMs?: number;
+  observerCommand?: ExecutableArgv;
   onStartupProgress?: (message: string) => void;
 };

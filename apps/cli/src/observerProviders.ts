@@ -712,7 +712,6 @@ class NoopHarnessProvider implements HarnessProvider {
       canLaunch: false,
       canDiscoverRuns: true,
       canEmitEvents: true,
-      canClassifyStatus: false,
       canReceivePrompt: false,
       canResume: false,
       canStop: false,
@@ -733,10 +732,6 @@ class NoopHarnessProvider implements HarnessProvider {
   async discoverRuns(): Promise<HarnessRunObservation[]> {
     return [];
   }
-
-  async classifyRun(): Promise<never> {
-    throw new Error("No harness provider is configured.");
-  }
 }
 
 class UnavailableHarnessProvider implements HarnessProvider {
@@ -747,7 +742,6 @@ class UnavailableHarnessProvider implements HarnessProvider {
       canLaunch: false,
       canDiscoverRuns: false,
       canEmitEvents: false,
-      canClassifyStatus: false,
       canReceivePrompt: false,
       canResume: false,
       canStop: false,
@@ -767,9 +761,5 @@ class UnavailableHarnessProvider implements HarnessProvider {
 
   async discoverRuns(): Promise<HarnessRunObservation[]> {
     return [];
-  }
-
-  async classifyRun(): Promise<never> {
-    throw providerUnavailableError(this.id);
   }
 }

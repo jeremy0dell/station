@@ -55,7 +55,7 @@ export const observerCliCommand: CliCommandNode = {
     {
       name: "reap",
       description:
-        "Dry-run duplicate cleanup and automatic-eligibility checks; --force explicitly permits SIGTERM then SIGKILL.",
+        "Inspect duplicate processes and automatic-eligibility checks; --force explicitly permits SIGTERM then SIGKILL.",
       usage: ["stn observer reap [--force]"],
       options: [
         {

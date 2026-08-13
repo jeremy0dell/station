@@ -1,11 +1,11 @@
 import {
   createLocalObserverProcessEvidence,
-  createObserverBootClaimCleanupExclusion,
   createObserverReap,
-  type ObserverDuplicateCleanupExclusion,
+  createObserverReapExclusion,
   type ObserverDuplicateProcessEvidenceSource,
   type ObserverProcessEntry,
   type ObserverReap,
+  type ObserverReapExclusion,
   type ObserverReapOutcome,
   type ObserverReapTarget,
 } from "@station/observer/internal";
@@ -21,7 +21,7 @@ export type ObserverReapDeps = {
   socketIdentity?: ObserverDuplicateProcessEvidenceSource["socketIdentity"];
   unixSocketFdCount?: ObserverDuplicateProcessEvidenceSource["unixSocketFdCount"];
   healthPid?: (socketPath: string) => Promise<number | undefined>;
-  exclusion?: ObserverDuplicateCleanupExclusion;
+  exclusion?: ObserverReapExclusion;
   signal?: (pid: number, sig: NodeJS.Signals | 0) => boolean;
   sleep?: (ms: number) => Promise<void>;
 };
@@ -45,7 +45,7 @@ export function createLocalObserverReap(deps: ObserverReapDeps = {}): ObserverRe
   return (socketPath, options) =>
     createObserverReap({
       evidence,
-      exclusion: deps.exclusion ?? createObserverBootClaimCleanupExclusion({ socketPath }),
+      exclusion: deps.exclusion ?? createObserverReapExclusion({ socketPath }),
       healthPid: deps.healthPid ?? defaultHealthPid,
       ...(deps.sleep === undefined ? {} : { sleep: deps.sleep }),
     })(socketPath, options);

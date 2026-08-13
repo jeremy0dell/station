@@ -414,6 +414,7 @@ describe("WorktrunkProvider", () => {
 
     const created = await provider.createWorktree({ project, branch: "feature" });
     const removed = await provider.removeWorktree({
+      project,
       worktreeId: created.id,
       expectedPath: created.path,
       expectedBranch: created.branch,
@@ -491,6 +492,7 @@ describe("WorktrunkProvider", () => {
     if (selected === undefined) throw new Error("Expected the linked worktree to be listed.");
 
     await provider.removeWorktree({
+      project: sharedProject,
       worktreeId: selected.id,
       expectedPath: selected.path,
       expectedBranch: selected.branch,
@@ -531,6 +533,7 @@ describe("WorktrunkProvider", () => {
 
     await expect(
       provider.removeWorktree({
+        project,
         worktreeId: selected.id,
         expectedPath: selected.path,
         expectedBranch: selected.branch,
@@ -575,6 +578,7 @@ describe("WorktrunkProvider", () => {
 
     await expect(
       provider.removeWorktree({
+        project,
         worktreeId: selected.id,
         expectedPath: selected.path,
         expectedBranch: selected.branch,
@@ -729,6 +733,7 @@ describe("WorktrunkProvider", () => {
 
     const created = await provider.createWorktree({ project, branch: "feature" });
     await provider.removeWorktree({
+      project,
       worktreeId: created.id,
       expectedPath: created.path,
       expectedBranch: created.branch,
@@ -768,6 +773,7 @@ describe("WorktrunkProvider", () => {
 
     const created = await provider.createWorktree({ project, branch: "feature" });
     await provider.removeWorktree({
+      project,
       worktreeId: created.id,
       expectedPath: created.path,
       expectedBranch: created.branch,
@@ -1136,6 +1142,7 @@ describe("WorktrunkProvider", () => {
 
     await expect(
       provider.removeWorktree({
+        project: guardedProject,
         worktreeId: selected.id,
         expectedPath: selected.path,
         expectedBranch: selected.branch,
@@ -1393,6 +1400,7 @@ describe("WorktrunkProvider", () => {
 
     await expect(
       provider.removeWorktree({
+        project,
         worktreeId: selected.id,
         expectedPath: selected.path,
         expectedBranch: selected.branch,

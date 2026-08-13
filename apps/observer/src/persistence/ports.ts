@@ -11,7 +11,6 @@ import type {
   StationEvent,
 } from "@station/contracts";
 import type {
-  CurrentProviderObservationKind,
   EventAndObservationIngressDedupeResult,
   EventIngressDedupeResult,
   EventRecordOptions,
@@ -125,19 +124,14 @@ export interface ObservationStore {
     latestOnly?: boolean;
     now?: string;
   }): Promise<PersistedProviderObservation[]>;
-  listCurrentProviderEntityObservations(options?: {
-    entityKind?: CurrentProviderObservationKind | readonly CurrentProviderObservationKind[];
-    includeExpired?: boolean;
-    now?: string;
-  }): Promise<PersistedProviderObservation[]>;
   pruneExpiredProviderObservations(now?: string): Promise<number>;
 }
 
 /**
  * DRIVEN PORT
  *
- * Persists the Observer's correlated reconcile projection as one atomic capability.
- * Missing canonical worktree titles initialize insert-only before session projections synchronize.
+ * Persists reconcile-owned provider evidence and insert-initializes missing canonical worktree
+ * titles from one reconcile result as an atomic capability.
  */
 export interface ReconcileStore {
   persistReconcileResult(input: PersistReconcileResultInput): Promise<void>;
@@ -146,10 +140,10 @@ export interface ReconcileStore {
 /**
  * DRIVEN PORT
  *
- * Maintains Observer-owned session lifecycle, provider-native execution bindings, canonical
- * worktree-scoped title authority, synchronized session projections, recovery, and readiness.
- * Fresh-session seed, optional root Group placement, and provenance-safe discard are one atomic
- * conversation; canonical-title handoff and recovery import also commit before recovery reconciles.
+ * Admits Observer-owned sessions with selected provider identity and maintains their lifecycle,
+ * native execution bindings, canonical worktree-scoped titles, recovery, and readiness. Seed,
+ * optional root Group placement, and provenance-safe discard are one atomic conversation;
+ * canonical-title handoff and recovery import also commit before recovery reconciles.
  */
 export interface SessionStore {
   listSessions(): Promise<PersistedSession[]>;
@@ -173,6 +167,8 @@ export interface SessionStore {
     projectId: string;
     worktreeId: string;
     initialTitle: string;
+    harness: ProviderId;
+    terminalProvider: ProviderId;
     createdAt: string;
     lastSeenAt: string;
     group?: SessionSeedGroupPlacement;

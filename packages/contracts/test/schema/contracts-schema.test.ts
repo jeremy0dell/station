@@ -22,7 +22,6 @@ import {
   HarnessLaunchPlanSchema,
   HarnessResumeTargetSchema,
   HarnessRunObservationSchema,
-  HarnessStatusObservationSchema,
   ManagedTerminalAttachmentSchema,
   ObservedStatusSchema,
   type ObserverApi,
@@ -165,7 +164,7 @@ describe("contract schemas", () => {
   });
 
   it("exports the shared schema version used by snapshot fixtures", async () => {
-    expect(STATION_SCHEMA_VERSION).toBe("0.10.0");
+    expect(STATION_SCHEMA_VERSION).toBe("0.11.0");
 
     const snapshots = (await loadJson("snapshots/snapshot-scenarios.json")) as Record<
       string,
@@ -2334,12 +2333,12 @@ describe("contract schemas", () => {
     }
 
     for (const [index, observation] of (
-      observations.harnessStatusObservations as unknown[]
+      observations.currentHarnessRunObservations as unknown[]
     ).entries()) {
       expectParses(
-        HarnessStatusObservationSchema,
+        HarnessRunObservationSchema,
         observation,
-        `harness status observation ${index}`,
+        `current harness run observation ${index}`,
       );
     }
 

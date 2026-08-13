@@ -41,6 +41,7 @@ export async function startObserverProcess(
     trace: RuntimeTraceContext;
     clock: RuntimeClock;
     configPath?: string;
+    observerCommand?: SpawnObserverInput["observerCommand"];
     onStartupProgress?: ObserverProcessOptions["onStartupProgress"];
   },
   deps: ObserverProcessDeps,
@@ -76,6 +77,9 @@ export async function startObserverProcess(
         const spawnInput: SpawnObserverInput = { paths: input.paths };
         if (input.configPath !== undefined) {
           spawnInput.configPath = input.configPath;
+        }
+        if (input.observerCommand !== undefined) {
+          spawnInput.observerCommand = input.observerCommand;
         }
         child =
           deps.spawnObserver === undefined
@@ -163,7 +167,18 @@ async function waitForStartedObserver(
   try {
     const childExit = input.child.exited;
     if (childExit === undefined) {
-      return await healthPromise;
+      try {
+        return await healthPromise;
+      } catch (error) {
+        if (replaceableIncumbent !== undefined) {
+          throw observerHandoffRefusedError(
+            replaceableIncumbent,
+            input.buildVersion,
+            "The replacement process did not publish compatible health.",
+          );
+        }
+        throw error;
+      }
     }
 
     // Early child termination must preempt the health timeout.

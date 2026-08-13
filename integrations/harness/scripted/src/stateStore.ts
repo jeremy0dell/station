@@ -1,13 +1,17 @@
 import { mkdir, readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { HarnessRunObservation } from "@station/contracts";
+import type { HarnessRunObservation, ObservedStatus } from "@station/contracts";
 import {
   type RuntimeClock,
   runRuntimeBoundaryWithRetryAndTimeout,
   systemClock,
   toIsoTimestamp,
 } from "@station/runtime";
-import { parseScriptedAgentEvent, type ScriptedAgentEvent } from "./events.js";
+import {
+  parseScriptedAgentEvent,
+  type ScriptedAgentEvent,
+  statusFromScriptedEvent,
+} from "./events.js";
 
 export type DiscoverScriptedRunsOptions = {
   stateDir: string;
@@ -88,14 +92,22 @@ function runFromEvents(events: ScriptedAgentEvent[], clock: RuntimeClock): Harne
     ...(identity.sessionId === undefined ? {} : { sessionId: identity.sessionId }),
     ...(pid === undefined ? {} : { pid }),
     ...(identity.cwd === undefined ? {} : { cwd: identity.cwd }),
-    state: "unknown",
-    confidence: "low",
-    reason: "Unclassified scripted run.",
+    status: scriptedRunStatus(latest, toIsoTimestamp(clock.now())),
     observedAt: latest.at ?? toIsoTimestamp(clock.now()),
-    providerData: {
-      events: sorted,
-    },
   };
+}
+
+function scriptedRunStatus(latest: ScriptedAgentEvent, now: string): ObservedStatus {
+  if (latest.type === "activity" && Date.parse(now) - Date.parse(latest.at) > 30_000) {
+    return {
+      value: "unknown",
+      confidence: "low",
+      reason: "Scripted activity is stale and no completion signal was observed.",
+      source: "unknown",
+      updatedAt: latest.at,
+    };
+  }
+  return statusFromScriptedEvent(latest, latest.at);
 }
 
 // Identity is sticky for a run: use the first non-empty value so later activity cannot drift it.

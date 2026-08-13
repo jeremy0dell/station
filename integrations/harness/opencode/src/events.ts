@@ -1,21 +1,9 @@
 // OpenCode plugin events -> STATION HarnessEventObservation, normalized at the provider boundary.
 // Upstream contract: https://opencode.ai/docs/plugins/
 // STATION ingress flow: docs/harness-ingress.md. Keep the parsed payload shape in sync with upstream.
-import type {
-  HarnessEventContext,
-  HarnessEventObservation,
-  HarnessEventReport,
-  ObservedStatus,
-  RawHarnessEvent,
-} from "@station/contracts";
+import type { HarnessEventReport, ObservedStatus } from "@station/contracts";
 import { HarnessEventReportSchema, STATION_SCHEMA_VERSION } from "@station/contracts";
-import {
-  applyCorrelation,
-  correlateTerminalBoundHarnessEvent,
-  harnessEventDiagnostics,
-  reportCorrelation,
-} from "@station/harness-shared";
-import { compactOpenCodeHookPayload } from "./compaction.js";
+import { harnessEventDiagnostics, reportCorrelation } from "@station/harness-shared";
 import { openCodeHarnessError } from "./errors.js";
 import {
   type OpenCodeCompactEvent,
@@ -60,53 +48,6 @@ export function normalizeOpenCodeEventType(input: string): string {
     );
   }
   return result.data;
-}
-
-export function normalizeOpenCodeRawEvent(
-  raw: RawHarnessEvent,
-  context: HarnessEventContext,
-): HarnessEventObservation[] {
-  const compaction = compactOpenCodeHookPayload(raw.event);
-  const event = parseOpenCodeCompactEvent(compaction.payload);
-  const observedAt = event.observed_at ?? raw.observedAt ?? new Date().toISOString();
-  const correlation = correlateTerminalBoundHarnessEvent({
-    provider: "opencode",
-    identity: event,
-    context,
-    cwd: event.cwd,
-    nativeSessionId: event.opencode_session_id,
-    pid: event.pid,
-    includeProjectId: true,
-    includeTerminalTargetId: true,
-    includeCwd: true,
-  });
-  const observation: HarnessEventObservation = {
-    provider: "opencode",
-    rawEventType: event.event_type,
-    observedAt,
-    providerData: providerDataFromOpenCodeEvent(event),
-  };
-  const status =
-    openCodeIngressRuleForEventType(event.event_type) !== undefined
-      ? statusFromOpenCodeEvent(event, observedAt)
-      : undefined;
-  if (status !== undefined) {
-    observation.status = status;
-  }
-  const turn = turnFromOpenCodeEvent(event);
-  if (turn !== undefined) {
-    observation.turn = turn;
-  }
-  applyCorrelation(observation, correlation);
-  if (compaction.omittedFieldNames.length > 0) {
-    observation.diagnostics = harnessEventDiagnostics(event.event_type, {
-      compacted: compaction.compacted,
-      omittedFieldNames: compaction.omittedFieldNames,
-      payloadBytes: compaction.originalByteCount,
-      compactedBytes: compaction.compactedByteCount,
-    });
-  }
-  return [observation];
 }
 
 export function openCodeHookPayloadToHarnessEventReport(

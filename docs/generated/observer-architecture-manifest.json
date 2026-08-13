@@ -369,7 +369,7 @@
           "specifier": "../providers.js",
           "resolvedPath": "apps/observer/src/commands/providers.ts",
           "edgeKind": "runtime",
-          "bindings": ["resolveHarnessProviderOrThrow"]
+          "bindings": ["resolveHarnessProviderOrThrow", "resolveTerminalProviderOrThrow"]
         },
         {
           "specifier": "../queue.js",
@@ -384,20 +384,14 @@
           "bindings": ["runProviderMutation", "throwIfAborted"]
         },
         {
-          "specifier": "../terminalIntentRunner.js",
-          "resolvedPath": "apps/observer/src/commands/terminalIntentRunner.ts",
-          "edgeKind": "type-only",
-          "bindings": ["TerminalIntentRunner"]
-        },
-        {
-          "specifier": "../terminalIntents.js",
-          "resolvedPath": "apps/observer/src/commands/terminalIntents.ts",
+          "specifier": "../terminalOperations.js",
+          "resolvedPath": "apps/observer/src/commands/terminalOperations.ts",
           "edgeKind": "runtime",
           "bindings": [
+            "closeTerminal",
             "hasCloseableTerminalAttachment",
-            "submitTerminalIntentOrThrow",
-            "terminalCloseIntentForSession",
-            "terminalCloseIntentForWorktree"
+            "terminalTargetSubjectForSession",
+            "terminalTargetSubjectForWorktree"
           ]
         },
         {
@@ -416,7 +410,14 @@
           "specifier": "@station/contracts",
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "type-only",
-          "bindings": ["HarnessProvider", "HarnessRunId", "SafeError", "SessionView", "WorktreeRow"]
+          "bindings": [
+            "HarnessProvider",
+            "HarnessRunId",
+            "ProviderProjectConfig",
+            "SafeError",
+            "SessionView",
+            "WorktreeRow"
+          ]
         },
         {
           "specifier": "@station/runtime",
@@ -1051,18 +1052,6 @@
           "bindings": ["createTerminalCloseHandler", "createTerminalFocusHandler"]
         },
         {
-          "specifier": "./terminalIntentRunner.js",
-          "resolvedPath": "apps/observer/src/commands/terminalIntentRunner.ts",
-          "edgeKind": "runtime",
-          "bindings": ["createTerminalIntentRunner"]
-        },
-        {
-          "specifier": "./terminalIntentRunner.js",
-          "resolvedPath": "apps/observer/src/commands/terminalIntentRunner.ts",
-          "edgeKind": "type-only",
-          "bindings": ["TerminalIntentRunner"]
-        },
-        {
           "specifier": "./worktree/create.js",
           "resolvedPath": "apps/observer/src/commands/worktree/create.ts",
           "edgeKind": "runtime",
@@ -1263,12 +1252,6 @@
           "bindings": ["throwIfAborted"]
         },
         {
-          "specifier": "../terminalIntentRunner.js",
-          "resolvedPath": "apps/observer/src/commands/terminalIntentRunner.ts",
-          "edgeKind": "type-only",
-          "bindings": ["TerminalIntentRunner"]
-        },
-        {
           "specifier": "../../persistence/index.js",
           "resolvedPath": "apps/observer/src/persistence/index.ts",
           "edgeKind": "type-only",
@@ -1348,6 +1331,12 @@
           "bindings": ["HarnessLaunchPreflight"]
         },
         {
+          "specifier": "../providers.js",
+          "resolvedPath": "apps/observer/src/commands/providers.ts",
+          "edgeKind": "runtime",
+          "bindings": ["resolveHarnessProviderOrThrow", "resolveTerminalProviderOrThrow"]
+        },
+        {
           "specifier": "../queue.js",
           "resolvedPath": "apps/observer/src/commands/queue.ts",
           "edgeKind": "type-only",
@@ -1364,14 +1353,11 @@
           "resolvedPath": "apps/observer/src/commands/session/shared.ts",
           "edgeKind": "runtime",
           "bindings": [
-            "buildEnsureAgentWorkspaceIntent",
             "defaultSessionCommandIdFactory",
             "discardSessionSeedBestEffort",
             "findProjectOrThrow",
             "publishSessionCreated",
             "removeWorktreeBestEffort",
-            "resolveHarnessProviderOrThrow",
-            "resolveTerminalProviderOrThrow",
             "runProviderMutation",
             "seedSession",
             "sessionSeedGroupPlacement",
@@ -1385,10 +1371,10 @@
           "bindings": ["SessionCommandIdFactory"]
         },
         {
-          "specifier": "../terminalIntentRunner.js",
-          "resolvedPath": "apps/observer/src/commands/terminalIntentRunner.ts",
-          "edgeKind": "type-only",
-          "bindings": ["TerminalIntentRunner"]
+          "specifier": "../terminalOperations.js",
+          "resolvedPath": "apps/observer/src/commands/terminalOperations.ts",
+          "edgeKind": "runtime",
+          "bindings": ["ensureAgentWorkspace"]
         },
         {
           "specifier": "../../persistence/index.js",
@@ -1464,6 +1450,12 @@
           "bindings": ["HarnessLaunchPreflight"]
         },
         {
+          "specifier": "../providers.js",
+          "resolvedPath": "apps/observer/src/commands/providers.ts",
+          "edgeKind": "runtime",
+          "bindings": ["resolveHarnessProviderOrThrow", "resolveTerminalProviderOrThrow"]
+        },
+        {
           "specifier": "../queue.js",
           "resolvedPath": "apps/observer/src/commands/queue.ts",
           "edgeKind": "type-only",
@@ -1480,7 +1472,6 @@
           "resolvedPath": "apps/observer/src/commands/session/shared.ts",
           "edgeKind": "runtime",
           "bindings": [
-            "buildEnsureAgentWorkspaceIntent",
             "commandValidationError",
             "defaultSessionCommandIdFactory",
             "discardSessionSeedBestEffort",
@@ -1488,8 +1479,6 @@
             "publishSessionCreated",
             "rememberedHarnessProviderForWorktree",
             "removeWorktreeBestEffort",
-            "resolveHarnessProviderOrThrow",
-            "resolveTerminalProviderOrThrow",
             "runProviderMutation",
             "seedSession",
             "throwIfAborted",
@@ -1503,10 +1492,10 @@
           "bindings": ["SessionCommandIdFactory"]
         },
         {
-          "specifier": "../terminalIntentRunner.js",
-          "resolvedPath": "apps/observer/src/commands/terminalIntentRunner.ts",
-          "edgeKind": "type-only",
-          "bindings": ["TerminalIntentRunner"]
+          "specifier": "../terminalOperations.js",
+          "resolvedPath": "apps/observer/src/commands/terminalOperations.ts",
+          "edgeKind": "runtime",
+          "bindings": ["ensureAgentWorkspace"]
         },
         {
           "specifier": "../../persistence/index.js",
@@ -1740,7 +1729,7 @@
           "name": "createSessionResumeAgentHandler",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Explicitly validates and preflights provider-native recovery into a selected worktree, reusing a handle's Station identity or minting one when absent. Automatic native activation recovery is owned separately by external launch. Failed cleanup discards only a newly minted projection."
+          "purpose": "Requires the selected worktree in the current Observer snapshot, then validates and preflights provider-native recovery, reusing a handle's Station identity or minting one when absent. Automatic native activation recovery is owned separately by external launch. Failed cleanup discards only a newly minted projection."
         },
         {
           "name": "CreateSessionResumeAgentHandlerOptions",
@@ -1757,10 +1746,22 @@
           "bindings": ["assertCommandType"]
         },
         {
+          "specifier": "../errors.js",
+          "resolvedPath": "apps/observer/src/commands/errors.ts",
+          "edgeKind": "runtime",
+          "bindings": ["worktreeMissingError"]
+        },
+        {
           "specifier": "../harnessLaunchPreflight.js",
           "resolvedPath": "apps/observer/src/commands/harnessLaunchPreflight.ts",
           "edgeKind": "type-only",
           "bindings": ["HarnessLaunchPreflight"]
+        },
+        {
+          "specifier": "../providers.js",
+          "resolvedPath": "apps/observer/src/commands/providers.ts",
+          "edgeKind": "runtime",
+          "bindings": ["resolveTerminalProviderOrThrow"]
         },
         {
           "specifier": "../queue.js",
@@ -1779,14 +1780,11 @@
           "resolvedPath": "apps/observer/src/commands/session/shared.ts",
           "edgeKind": "runtime",
           "bindings": [
-            "buildEnsureAgentWorkspaceIntent",
             "commandValidationError",
             "defaultSessionCommandIdFactory",
             "discardSessionSeedBestEffort",
             "findProjectOrThrow",
-            "lookupWorktree",
             "publishSessionCreated",
-            "resolveTerminalProviderOrThrow",
             "seedSession",
             "throwIfAborted",
             "validateSnapshotRow",
@@ -1800,10 +1798,10 @@
           "bindings": ["SessionCommandIdFactory"]
         },
         {
-          "specifier": "../terminalIntentRunner.js",
-          "resolvedPath": "apps/observer/src/commands/terminalIntentRunner.ts",
-          "edgeKind": "type-only",
-          "bindings": ["TerminalIntentRunner"]
+          "specifier": "../terminalOperations.js",
+          "resolvedPath": "apps/observer/src/commands/terminalOperations.ts",
+          "edgeKind": "runtime",
+          "bindings": ["ensureAgentWorkspace"]
         },
         {
           "specifier": "../../features/evaluator.js",
@@ -1883,12 +1881,6 @@
           "purpose": null
         },
         {
-          "name": "buildEnsureAgentWorkspaceIntent",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
           "name": "commandValidationError",
           "kind": "function",
           "role": null,
@@ -1914,12 +1906,6 @@
         },
         {
           "name": "launchHarnessInTerminal",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "lookupWorktree",
           "kind": "function",
           "role": null,
           "purpose": null
@@ -1968,12 +1954,6 @@
         },
         {
           "name": "SessionCommandIdFactory",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "SessionCommandLookupRuntime",
           "kind": "type",
           "role": null,
           "purpose": null
@@ -2031,8 +2011,7 @@
             "sessionGroupMissingError",
             "sessionGroupNotRootError",
             "sessionGroupPlacementAssignmentConflictError",
-            "sessionGroupProjectMismatchError",
-            "worktreeMissingError"
+            "sessionGroupProjectMismatchError"
           ]
         },
         {
@@ -2094,8 +2073,6 @@
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "type-only",
           "bindings": [
-            "EnsureAgentWorkspaceIntent",
-            "HarnessResumeOptions",
             "ProviderId",
             "ProviderProjectConfig",
             "SafeError",
@@ -2115,7 +2092,7 @@
           "specifier": "@station/runtime",
           "resolvedPath": "packages/runtime/src/index.ts",
           "edgeKind": "runtime",
-          "bindings": ["runRuntimeBoundaryWithTimeout", "systemClock", "toIsoTimestamp"]
+          "bindings": ["runRuntimeBoundary", "systemClock", "toIsoTimestamp"]
         },
         {
           "specifier": "@station/runtime",
@@ -2132,7 +2109,7 @@
           "name": "createSessionStartAgentHandler",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Validates and preflights a fresh agent lifecycle before inheriting the worktree's canonical display title. Failed launches discard only the fresh session projection."
+          "purpose": "Requires the selected worktree in the current Observer snapshot, then validates and preflights a fresh agent lifecycle before inheriting its canonical display title. Failed launches discard only the fresh session projection."
         },
         {
           "name": "CreateSessionStartAgentHandlerOptions",
@@ -2149,10 +2126,22 @@
           "bindings": ["assertCommandType"]
         },
         {
+          "specifier": "../errors.js",
+          "resolvedPath": "apps/observer/src/commands/errors.ts",
+          "edgeKind": "runtime",
+          "bindings": ["worktreeMissingError"]
+        },
+        {
           "specifier": "../harnessLaunchPreflight.js",
           "resolvedPath": "apps/observer/src/commands/harnessLaunchPreflight.ts",
           "edgeKind": "type-only",
           "bindings": ["HarnessLaunchPreflight"]
+        },
+        {
+          "specifier": "../providers.js",
+          "resolvedPath": "apps/observer/src/commands/providers.ts",
+          "edgeKind": "runtime",
+          "bindings": ["resolveHarnessProviderOrThrow", "resolveTerminalProviderOrThrow"]
         },
         {
           "specifier": "../queue.js",
@@ -2172,15 +2161,11 @@
           "edgeKind": "runtime",
           "bindings": [
             "assertNoCurrentAgent",
-            "buildEnsureAgentWorkspaceIntent",
             "defaultSessionCommandIdFactory",
             "discardSessionSeedBestEffort",
             "findProjectOrThrow",
-            "lookupWorktree",
             "publishSessionCreated",
             "rememberedHarnessProviderForWorktree",
-            "resolveHarnessProviderOrThrow",
-            "resolveTerminalProviderOrThrow",
             "seedSession",
             "throwIfAborted",
             "validateSnapshotRow",
@@ -2194,10 +2179,10 @@
           "bindings": ["SessionCommandIdFactory"]
         },
         {
-          "specifier": "../terminalIntentRunner.js",
-          "resolvedPath": "apps/observer/src/commands/terminalIntentRunner.ts",
-          "edgeKind": "type-only",
-          "bindings": ["TerminalIntentRunner"]
+          "specifier": "../terminalOperations.js",
+          "resolvedPath": "apps/observer/src/commands/terminalOperations.ts",
+          "edgeKind": "runtime",
+          "bindings": ["ensureAgentWorkspace"]
         },
         {
           "specifier": "../../persistence/index.js",
@@ -2404,6 +2389,12 @@
           ]
         },
         {
+          "specifier": "./providers.js",
+          "resolvedPath": "apps/observer/src/commands/providers.ts",
+          "edgeKind": "runtime",
+          "bindings": ["resolveTerminalProviderOrThrow"]
+        },
+        {
           "specifier": "./queue.js",
           "resolvedPath": "apps/observer/src/commands/queue.ts",
           "edgeKind": "type-only",
@@ -2416,20 +2407,21 @@
           "bindings": ["reconcileAndPublish"]
         },
         {
-          "specifier": "./terminalIntentRunner.js",
-          "resolvedPath": "apps/observer/src/commands/terminalIntentRunner.ts",
-          "edgeKind": "type-only",
-          "bindings": ["TerminalIntentRunner"]
-        },
-        {
-          "specifier": "./terminalIntents.js",
-          "resolvedPath": "apps/observer/src/commands/terminalIntents.ts",
+          "specifier": "./terminalOperations.js",
+          "resolvedPath": "apps/observer/src/commands/terminalOperations.ts",
           "edgeKind": "runtime",
           "bindings": [
-            "submitTerminalIntentOrThrow",
-            "terminalCloseIntentFromPayload",
-            "terminalFocusIntentFromPayload"
+            "closeTerminal",
+            "focusTerminal",
+            "terminalTargetSubjectForSession",
+            "terminalTargetSubjectForWorktree"
           ]
+        },
+        {
+          "specifier": "./terminalOperations.js",
+          "resolvedPath": "apps/observer/src/commands/terminalOperations.ts",
+          "edgeKind": "type-only",
+          "bindings": ["TerminalTargetSubject"]
         },
         {
           "specifier": "../persistence/index.js",
@@ -2465,7 +2457,12 @@
           "specifier": "@station/contracts",
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "type-only",
-          "bindings": ["SafeError", "StationSnapshot", "TerminalClosePayload"]
+          "bindings": [
+            "SafeError",
+            "StationSnapshot",
+            "TerminalClosePayload",
+            "TerminalFocusPayload"
+          ]
         },
         {
           "specifier": "@station/runtime",
@@ -2476,35 +2473,47 @@
       ]
     },
     {
-      "path": "apps/observer/src/commands/terminalIntentRunner.ts",
+      "path": "apps/observer/src/commands/terminalOperations.ts",
       "exports": [
         {
-          "name": "createTerminalIntentRunner",
+          "name": "closeTerminal",
           "kind": "function",
           "role": null,
           "purpose": null
         },
         {
-          "name": "DefaultTerminalIntentRunnerOptions",
+          "name": "ensureAgentWorkspace",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "focusTerminal",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "hasCloseableTerminalAttachment",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "TerminalTargetSubject",
           "kind": "type",
           "role": null,
           "purpose": null
         },
         {
-          "name": "TerminalIntentProviderAccess",
-          "kind": "type",
+          "name": "terminalTargetSubjectForSession",
+          "kind": "function",
           "role": null,
           "purpose": null
         },
         {
-          "name": "TerminalIntentRunner",
-          "kind": "type",
-          "role": "USE CASE",
-          "purpose": "Executes terminal workspace, focus, and close intents by coordinating terminal and harness ports, repeating the selected-harness preflight immediately before workspace mutation."
-        },
-        {
-          "name": "TerminalIntentSubmitContext",
-          "kind": "type",
+          "name": "terminalTargetSubjectForWorktree",
+          "kind": "function",
           "role": null,
           "purpose": null
         }
@@ -2521,6 +2530,12 @@
           "resolvedPath": "apps/observer/src/commands/harnessLaunchPreflight.ts",
           "edgeKind": "type-only",
           "bindings": ["HarnessLaunchPreflight"]
+        },
+        {
+          "specifier": "./queue.js",
+          "resolvedPath": "apps/observer/src/commands/queue.ts",
+          "edgeKind": "type-only",
+          "bindings": ["CommandHandlerContext"]
         },
         {
           "specifier": "./session/shared.js",
@@ -2544,11 +2559,7 @@
           "specifier": "@station/contracts",
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "runtime",
-          "bindings": [
-            "TerminalIntentReceiptSchema",
-            "TerminalIntentSchema",
-            "terminalTargetObservationFromBinding"
-          ]
+          "bindings": ["terminalTargetObservationFromBinding"]
         },
         {
           "specifier": "@station/contracts",
@@ -2556,19 +2567,17 @@
           "edgeKind": "type-only",
           "bindings": [
             "BuildHarnessLaunchRequest",
-            "EnsureAgentWorkspaceIntent",
             "HarnessProvider",
+            "HarnessResumeOptions",
+            "ProviderProjectConfig",
             "SafeError",
-            "TerminalCloseIntent",
-            "TerminalFocusIntent",
+            "SessionView",
             "TerminalFocusOrigin",
-            "TerminalIntent",
-            "TerminalIntentReceipt",
-            "TerminalIntentSubject",
             "TerminalProvider",
             "TerminalState",
             "TerminalTargetObservation",
-            "TraceContext"
+            "WorktreeObservation",
+            "WorktreeRow"
           ]
         },
         {
@@ -2582,98 +2591,6 @@
           "resolvedPath": "packages/runtime/src/index.ts",
           "edgeKind": "type-only",
           "bindings": ["RuntimeClock"]
-        }
-      ]
-    },
-    {
-      "path": "apps/observer/src/commands/terminalIntents.ts",
-      "exports": [
-        {
-          "name": "hasCloseableTerminalAttachment",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "submitTerminalIntentOrThrow",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "terminalCloseIntentForSession",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "terminalCloseIntentForWorktree",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "terminalCloseIntentFromPayload",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "terminalFocusIntentFromPayload",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "terminalIntentSubjectForSession",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "terminalIntentSubjectForWorktree",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        }
-      ],
-      "imports": [
-        {
-          "specifier": "./cleanup/resolve.js",
-          "resolvedPath": "apps/observer/src/commands/cleanup/resolve.ts",
-          "edgeKind": "runtime",
-          "bindings": ["resolveRowForSession"]
-        },
-        {
-          "specifier": "./queue.js",
-          "resolvedPath": "apps/observer/src/commands/queue.ts",
-          "edgeKind": "type-only",
-          "bindings": ["CommandHandlerContext"]
-        },
-        {
-          "specifier": "./terminalIntentRunner.js",
-          "resolvedPath": "apps/observer/src/commands/terminalIntentRunner.ts",
-          "edgeKind": "type-only",
-          "bindings": ["TerminalIntentRunner"]
-        },
-        {
-          "specifier": "@station/contracts",
-          "resolvedPath": "packages/contracts/src/index.ts",
-          "edgeKind": "type-only",
-          "bindings": [
-            "ProviderId",
-            "SafeError",
-            "SessionView",
-            "StationSnapshot",
-            "TerminalCloseIntent",
-            "TerminalClosePayload",
-            "TerminalFocusIntent",
-            "TerminalFocusPayload",
-            "TerminalIntent",
-            "TerminalIntentReceipt",
-            "TerminalIntentSubject",
-            "WorktreeRow"
-          ]
         }
       ]
     },
@@ -2911,12 +2828,6 @@
           "bindings": ["findProjectOrThrow", "runProviderMutation", "throwIfAborted"]
         },
         {
-          "specifier": "../terminalIntentRunner.js",
-          "resolvedPath": "apps/observer/src/commands/terminalIntentRunner.ts",
-          "edgeKind": "type-only",
-          "bindings": ["TerminalIntentRunner"]
-        },
-        {
           "specifier": "../../persistence/index.js",
           "resolvedPath": "apps/observer/src/persistence/index.ts",
           "edgeKind": "type-only",
@@ -3017,11 +2928,7 @@
           "specifier": "./evidenceSource.js",
           "resolvedPath": "apps/observer/src/diagnostics/evidenceSource.ts",
           "edgeKind": "type-only",
-          "bindings": [
-            "DiagnosticEvidenceSource",
-            "DiagnosticLocalStateEvidence",
-            "DiagnosticRecentLogEvidence"
-          ]
+          "bindings": ["DiagnosticEvidenceSource"]
         },
         {
           "specifier": "../persistence/index.js",
@@ -3049,10 +2956,10 @@
           "bindings": ["ObserverCore"]
         },
         {
-          "specifier": "../runtime/observerDuplicateCleanup.js",
-          "resolvedPath": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
+          "specifier": "../runtime/observerReap.js",
+          "resolvedPath": "apps/observer/src/runtime/observerReap.ts",
           "edgeKind": "type-only",
-          "bindings": ["ObserverDuplicateCleanupOutcome"]
+          "bindings": ["ObserverReapPlan"]
         },
         {
           "specifier": "@station/config",
@@ -3136,12 +3043,6 @@
           "purpose": null
         },
         {
-          "name": "ErrorEnvelopeInput",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
           "name": "toSafeError",
           "kind": "function",
           "role": null,
@@ -3160,12 +3061,6 @@
           "resolvedPath": "packages/observability/src/index.ts",
           "edgeKind": "runtime",
           "bindings": ["* as observability"]
-        },
-        {
-          "specifier": "@station/observability",
-          "resolvedPath": "packages/observability/src/index.ts",
-          "edgeKind": "type-only",
-          "bindings": ["ErrorEnvelopeInput"]
         }
       ]
     },
@@ -3410,12 +3305,6 @@
           "purpose": null
         },
         {
-          "name": "HarnessIngressProcessResult",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
           "name": "HarnessIngressQueue",
           "kind": "type",
           "role": null,
@@ -3454,16 +3343,7 @@
           "specifier": "@station/runtime",
           "resolvedPath": "packages/runtime/src/index.ts",
           "edgeKind": "runtime",
-          "bindings": [
-            "Deferred",
-            "Effect",
-            "Fiber",
-            "Queue",
-            "Ref",
-            "safeErrorFromUnknown",
-            "systemClock",
-            "toIsoTimestamp"
-          ]
+          "bindings": ["safeErrorFromUnknown", "systemClock", "toIsoTimestamp"]
         },
         {
           "specifier": "@station/runtime",
@@ -3492,7 +3372,7 @@
           "name": "createProviderHookIngress",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Accepts raw provider hook evidence once while allowing retries to finish durable downstream processing."
+          "purpose": "Persists raw provider hook evidence once, maps adapter-backed harness hooks to reports, and treats every other hook as a reconcile hint."
         },
         {
           "name": "CreateProviderHookIngressOptions",
@@ -3527,12 +3407,6 @@
           "bindings": ["sessionHarnessExecutionEvidenceFromReport"]
         },
         {
-          "specifier": "./providerHookIngress.js",
-          "resolvedPath": "apps/observer/src/hooks/providerHookIngress.ts",
-          "edgeKind": "runtime",
-          "bindings": ["ingestProviderHookEvent"]
-        },
-        {
           "specifier": "./turnReadiness.js",
           "resolvedPath": "apps/observer/src/hooks/turnReadiness.ts",
           "edgeKind": "runtime",
@@ -3542,7 +3416,7 @@
           "specifier": "../persistence/index.js",
           "resolvedPath": "apps/observer/src/persistence/index.ts",
           "edgeKind": "type-only",
-          "bindings": ["IngressJournal", "ObservationStore", "SessionStore"]
+          "bindings": ["IngressJournal"]
         },
         {
           "specifier": "../persistence/retention.js",
@@ -3598,7 +3472,6 @@
             "ProviderHookAdapter",
             "ProviderHookEvent",
             "ProviderHookReceipt",
-            "ProviderProjectConfig",
             "SessionRecoveryHandle",
             "StationEvent"
           ]
@@ -3695,97 +3568,6 @@
           "resolvedPath": "packages/runtime/src/index.ts",
           "edgeKind": "type-only",
           "bindings": ["ExternalCommandInput", "ExternalCommandRunner", "RuntimeClock"]
-        }
-      ]
-    },
-    {
-      "path": "apps/observer/src/hooks/providerHookIngress.ts",
-      "exports": [
-        {
-          "name": "ingestProviderHookEvent",
-          "kind": "function",
-          "role": "USE CASE",
-          "purpose": "Normalizes provider hook evidence and atomically records its observations and authorized native-execution effects before completing hook processing."
-        },
-        {
-          "name": "IngestProviderHookEventOptions",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "ProviderHookIngestResult",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        }
-      ],
-      "imports": [
-        {
-          "specifier": "../harnessExecutionIdentity.js",
-          "resolvedPath": "apps/observer/src/harnessExecutionIdentity.ts",
-          "edgeKind": "runtime",
-          "bindings": ["sessionHarnessExecutionEvidenceFromObservation"]
-        },
-        {
-          "specifier": "./turnReadiness.js",
-          "resolvedPath": "apps/observer/src/hooks/turnReadiness.ts",
-          "edgeKind": "runtime",
-          "bindings": ["sessionTurnReadinessMutationFromHarnessObservation"]
-        },
-        {
-          "specifier": "../persistence/index.js",
-          "resolvedPath": "apps/observer/src/persistence/index.ts",
-          "edgeKind": "type-only",
-          "bindings": [
-            "IngressJournal",
-            "ObservationStore",
-            "RecordProviderObservationInput",
-            "SessionStore"
-          ]
-        },
-        {
-          "specifier": "../persistence/retention.js",
-          "resolvedPath": "apps/observer/src/persistence/retention.ts",
-          "edgeKind": "runtime",
-          "bindings": ["providerObservationExpiresAt", "providerObservationRetentionDays"]
-        },
-        {
-          "specifier": "../providers/registry.js",
-          "resolvedPath": "apps/observer/src/providers/registry.ts",
-          "edgeKind": "type-only",
-          "bindings": ["ProviderRegistry"]
-        },
-        {
-          "specifier": "@station/config",
-          "resolvedPath": "packages/config/src/index.ts",
-          "edgeKind": "type-only",
-          "bindings": ["ObservabilityRetentionConfig"]
-        },
-        {
-          "specifier": "@station/contracts",
-          "resolvedPath": "packages/contracts/src/index.ts",
-          "edgeKind": "type-only",
-          "bindings": [
-            "HarnessEventObservation",
-            "ProviderHookEvent",
-            "ProviderProjectConfig",
-            "SafeError",
-            "TerminalTargetObservation",
-            "WorktreeObservation"
-          ]
-        },
-        {
-          "specifier": "@station/runtime",
-          "resolvedPath": "packages/runtime/src/index.ts",
-          "edgeKind": "runtime",
-          "bindings": ["runRuntimeBoundaryWithTimeout", "systemClock", "toIsoTimestamp"]
-        },
-        {
-          "specifier": "@station/runtime",
-          "resolvedPath": "packages/runtime/src/index.ts",
-          "edgeKind": "type-only",
-          "bindings": ["RuntimeClock"]
         }
       ]
     },
@@ -4021,7 +3803,7 @@
           "name": "runObserverMain",
           "kind": "function",
           "role": "COMPOSITION ROOT",
-          "purpose": "Claims boot ownership, branches on four-state socket evidence, selects Observer-private infrastructure from resolved runtime identity, and owns bind, pidfile, one-shot duplicate cleanup, ownership-aware shutdown, and exact build health publication."
+          "purpose": "Claims boot ownership, branches on four-state socket evidence, selects Observer-private infrastructure from resolved runtime identity, and owns bind, pidfile, read-only duplicate inspection, ownership-aware shutdown, and exact build health publication."
         },
         {
           "name": "RunObserverMainDeps",
@@ -4052,7 +3834,7 @@
           "name": "acquireObserverBootClaim",
           "kind": "function",
           "role": "ADAPTER",
-          "purpose": "Excludes cross-runtime startup and duplicate-cleanup mutation through a SQLite transaction whose ownership comes from the OS lock, never the persistent claim file."
+          "purpose": "Excludes cross-runtime startup and explicit reap mutation through a SQLite transaction whose ownership comes from the OS lock, never the persistent claim file."
         },
         {
           "name": "AppliedObserverSqliteMigration",
@@ -4110,6 +3892,12 @@
         },
         {
           "name": "closeSessionResources",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "closeTerminal",
           "kind": "function",
           "role": null,
           "purpose": null
@@ -4253,12 +4041,6 @@
           "purpose": null
         },
         {
-          "name": "createObserverBootClaimCleanupExclusion",
-          "kind": "function",
-          "role": "ADAPTER",
-          "purpose": "Gives duplicate cleanup a fail-fast startup exclusion and releases the claim after every callback outcome, including failures."
-        },
-        {
           "name": "createObserverCore",
           "kind": "function",
           "role": null,
@@ -4269,12 +4051,6 @@
           "kind": "type",
           "role": null,
           "purpose": null
-        },
-        {
-          "name": "createObserverDuplicateCleanup",
-          "kind": "function",
-          "role": "USE CASE",
-          "purpose": "Performs one single-flight duplicate inspection, quarantine, claim-held final revalidation, and optional SIGTERM-only cleanup with shutdown cancellation."
         },
         {
           "name": "createObserverEventBus",
@@ -4311,6 +4087,12 @@
           "kind": "function",
           "role": "USE CASE",
           "purpose": "Creates explicit operator reap with centralized selection and revalidation; only this manual force path may escalate from SIGTERM to SIGKILL."
+        },
+        {
+          "name": "createObserverReapExclusion",
+          "kind": "function",
+          "role": "ADAPTER",
+          "purpose": "Gives explicit reap a fail-fast startup exclusion and releases the claim after every callback outcome, including failures."
         },
         {
           "name": "createObserverReconcileHandler",
@@ -4352,7 +4134,7 @@
           "name": "createProviderHookIngress",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Accepts raw provider hook evidence once while allowing retries to finish durable downstream processing."
+          "purpose": "Persists raw provider hook evidence once, maps adapter-backed harness hooks to reports, and treats every other hook as a reconcile hint."
         },
         {
           "name": "CreateProviderHookIngressOptions",
@@ -4409,12 +4191,6 @@
           "purpose": null
         },
         {
-          "name": "createTerminalIntentRunner",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
           "name": "createWorktreeMetadataRefreshService",
           "kind": "function",
           "role": "USE CASE",
@@ -4422,18 +4198,6 @@
         },
         {
           "name": "CreateWorktreeMetadataRefreshServiceOptions",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "CurrentProviderObservationKind",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "DefaultTerminalIntentRunnerOptions",
           "kind": "type",
           "role": null,
           "purpose": null
@@ -4475,8 +4239,8 @@
           "purpose": null
         },
         {
-          "name": "ErrorEnvelopeInput",
-          "kind": "type",
+          "name": "ensureAgentWorkspace",
+          "kind": "function",
           "role": null,
           "purpose": null
         },
@@ -4505,6 +4269,12 @@
           "purpose": null
         },
         {
+          "name": "focusTerminal",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "GitRefInvalidationTarget",
           "kind": "type",
           "role": null,
@@ -4529,26 +4299,14 @@
           "purpose": null
         },
         {
-          "name": "HarnessIngressProcessResult",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
           "name": "HarnessIngressQueue",
           "kind": "type",
           "role": null,
           "purpose": null
         },
         {
-          "name": "ingestProviderHookEvent",
+          "name": "hasCloseableTerminalAttachment",
           "kind": "function",
-          "role": "USE CASE",
-          "purpose": "Normalizes provider hook evidence and atomically records its observations and authorized native-execution effects before completing hook processing."
-        },
-        {
-          "name": "IngestProviderHookEventOptions",
-          "kind": "type",
           "role": null,
           "purpose": null
         },
@@ -4569,6 +4327,12 @@
           "kind": "interface",
           "role": "DRIVEN PORT",
           "purpose": "Atomically records ingress acceptance, observations, native execution binding, recovery, and readiness under dedupe keys."
+        },
+        {
+          "name": "inspectObserverDuplicates",
+          "kind": "function",
+          "role": "USE CASE",
+          "purpose": "Collects one read-only duplicate-process plan for startup diagnostics and explicit reap without creating signal authority."
         },
         {
           "name": "latestSchemaVersion",
@@ -4649,49 +4413,7 @@
           "purpose": null
         },
         {
-          "name": "ObserverDuplicateCleanup",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "ObserverDuplicateCleanupExclusion",
-          "kind": "interface",
-          "role": "DRIVEN PORT",
-          "purpose": "Authorizes final duplicate cleanup only while startup mutation is excluded, refusing immediately when another boot owns the claim."
-        },
-        {
-          "name": "ObserverDuplicateCleanupExclusionResult",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "ObserverDuplicateCleanupOutcome",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "ObserverDuplicateCleanupPlan",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "ObserverDuplicateCleanupPlanInput",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "ObserverDuplicateCleanupRefusal",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "ObserverDuplicateCleanupTarget",
+          "name": "ObserverDuplicateInspectionDeps",
           "kind": "type",
           "role": null,
           "purpose": null
@@ -4830,6 +4552,18 @@
         },
         {
           "name": "ObserverReapAutomaticEligibility",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ObserverReapExclusion",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "purpose": "Authorizes explicit reap only while startup mutation is excluded, refusing immediately when another boot owns the claim."
+        },
+        {
+          "name": "ObserverReapExclusionResult",
           "kind": "type",
           "role": null,
           "purpose": null
@@ -5081,12 +4815,6 @@
           "purpose": null
         },
         {
-          "name": "ProviderHookIngestResult",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
           "name": "ProviderHookIngress",
           "kind": "type",
           "role": null,
@@ -5240,7 +4968,7 @@
           "name": "ReconcileStore",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Persists the Observer's correlated reconcile projection as one atomic capability. Missing canonical worktree titles initialize insert-only before session projections synchronize."
+          "purpose": "Persists reconcile-owned provider evidence and insert-initializes missing canonical worktree titles from one reconcile result as an atomic capability."
         },
         {
           "name": "ReconcileTiming",
@@ -5324,7 +5052,7 @@
           "name": "runObserverMain",
           "kind": "function",
           "role": "COMPOSITION ROOT",
-          "purpose": "Claims boot ownership, branches on four-state socket evidence, selects Observer-private infrastructure from resolved runtime identity, and owns bind, pidfile, one-shot duplicate cleanup, ownership-aware shutdown, and exact build health publication."
+          "purpose": "Claims boot ownership, branches on four-state socket evidence, selects Observer-private infrastructure from resolved runtime identity, and owns bind, pidfile, read-only duplicate inspection, ownership-aware shutdown, and exact build health publication."
         },
         {
           "name": "RunObserverMainDeps",
@@ -5349,12 +5077,6 @@
           "kind": "function",
           "role": null,
           "purpose": null
-        },
-        {
-          "name": "selectObserverDuplicateCleanupPlan",
-          "kind": "function",
-          "role": "POLICY",
-          "purpose": "Selects duplicate Observers only when the keeper's corroborated identity is exact and each candidate has no Unix-domain socket descriptors."
         },
         {
           "name": "selectObserverReapPlan",
@@ -5432,7 +5154,7 @@
           "name": "SessionStore",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Maintains Observer-owned session lifecycle, provider-native execution bindings, canonical worktree-scoped title authority, synchronized session projections, recovery, and readiness. Fresh-session seed, optional root Group placement, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles."
+          "purpose": "Admits Observer-owned sessions with selected provider identity and maintains their lifecycle, native execution bindings, canonical worktree-scoped titles, recovery, and readiness. Seed, optional root Group placement, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles."
         },
         {
           "name": "SessionTurnReadinessMutation",
@@ -5471,20 +5193,20 @@
           "purpose": null
         },
         {
-          "name": "TerminalIntentProviderAccess",
+          "name": "TerminalTargetSubject",
           "kind": "type",
           "role": null,
           "purpose": null
         },
         {
-          "name": "TerminalIntentRunner",
-          "kind": "type",
-          "role": "USE CASE",
-          "purpose": "Executes terminal workspace, focus, and close intents by coordinating terminal and harness ports, repeating the selected-harness preflight immediately before workspace mutation."
+          "name": "terminalTargetSubjectForSession",
+          "kind": "function",
+          "role": null,
+          "purpose": null
         },
         {
-          "name": "TerminalIntentSubmitContext",
-          "kind": "type",
+          "name": "terminalTargetSubjectForWorktree",
+          "kind": "function",
           "role": null,
           "purpose": null
         },
@@ -5581,8 +5303,8 @@
           "bindings": ["*"]
         },
         {
-          "specifier": "./commands/terminalIntentRunner.js",
-          "resolvedPath": "apps/observer/src/commands/terminalIntentRunner.ts",
+          "specifier": "./commands/terminalOperations.js",
+          "resolvedPath": "apps/observer/src/commands/terminalOperations.ts",
           "edgeKind": "runtime",
           "bindings": ["*"]
         },
@@ -5625,12 +5347,6 @@
         {
           "specifier": "./hooks/observerEventHooks.js",
           "resolvedPath": "apps/observer/src/hooks/observerEventHooks.ts",
-          "edgeKind": "runtime",
-          "bindings": ["*"]
-        },
-        {
-          "specifier": "./hooks/providerHookIngress.js",
-          "resolvedPath": "apps/observer/src/hooks/providerHookIngress.ts",
           "edgeKind": "runtime",
           "bindings": ["*"]
         },
@@ -5743,12 +5459,6 @@
           "bindings": ["*"]
         },
         {
-          "specifier": "./runtime/observerDuplicateCleanup.js",
-          "resolvedPath": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
-          "edgeKind": "runtime",
-          "bindings": ["*"]
-        },
-        {
           "specifier": "./runtime/observerHandoff.js",
           "resolvedPath": "apps/observer/src/runtime/observerHandoff.ts",
           "edgeKind": "runtime",
@@ -5757,6 +5467,12 @@
         {
           "specifier": "./runtime/observerProcessEvidence.js",
           "resolvedPath": "apps/observer/src/runtime/observerProcessEvidence.ts",
+          "edgeKind": "runtime",
+          "bindings": ["*"]
+        },
+        {
+          "specifier": "./runtime/observerReap.js",
+          "resolvedPath": "apps/observer/src/runtime/observerReap.ts",
           "edgeKind": "runtime",
           "bindings": ["*"]
         },
@@ -7026,12 +6742,6 @@
       ],
       "imports": [
         {
-          "specifier": "./json.js",
-          "resolvedPath": "apps/observer/src/persistence/json.ts",
-          "edgeKind": "runtime",
-          "bindings": ["maxIso", "optionalJson"]
-        },
-        {
           "specifier": "./observations.js",
           "resolvedPath": "apps/observer/src/persistence/observations.ts",
           "edgeKind": "runtime",
@@ -7056,12 +6766,6 @@
           "bindings": ["SqliteSessionRow"]
         },
         {
-          "specifier": "./terminalObservations.js",
-          "resolvedPath": "apps/observer/src/persistence/terminalObservations.ts",
-          "edgeKind": "runtime",
-          "bindings": ["stripTerminalProviderData"]
-        },
-        {
           "specifier": "./types.js",
           "resolvedPath": "apps/observer/src/persistence/types.ts",
           "edgeKind": "type-only",
@@ -7084,12 +6788,6 @@
             "synchronizeSessionTitleProjections",
             "upsertWorktreeDisplayTitle"
           ]
-        },
-        {
-          "specifier": "../sessionActivation.js",
-          "resolvedPath": "apps/observer/src/sessionActivation.ts",
-          "edgeKind": "runtime",
-          "bindings": ["harnessRunCanActivateSession", "terminalCanActivateSession"]
         },
         {
           "specifier": "../sqlite/driver.js",
@@ -7118,13 +6816,7 @@
           "specifier": "@station/contracts",
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "type-only",
-          "bindings": [
-            "HarnessRunObservation",
-            "ProviderId",
-            "ProviderProjectConfig",
-            "TerminalTargetObservation",
-            "WorktreeObservation"
-          ]
+          "bindings": ["ProviderId", "WorktreeObservation"]
         }
       ]
     },
@@ -7243,12 +6935,6 @@
         },
         {
           "name": "CreateSqliteObserverPersistenceOptions",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "CurrentProviderObservationKind",
           "kind": "type",
           "role": null,
           "purpose": null
@@ -7437,7 +7123,7 @@
           "name": "ReconcileStore",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Persists the Observer's correlated reconcile projection as one atomic capability. Missing canonical worktree titles initialize insert-only before session projections synchronize."
+          "purpose": "Persists reconcile-owned provider evidence and insert-initializes missing canonical worktree titles from one reconcile result as an atomic capability."
         },
         {
           "name": "RecordProviderObservationInput",
@@ -7515,7 +7201,7 @@
           "name": "SessionStore",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Maintains Observer-owned session lifecycle, provider-native execution bindings, canonical worktree-scoped title authority, synchronized session projections, recovery, and readiness. Fresh-session seed, optional root Group placement, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles."
+          "purpose": "Admits Observer-owned sessions with selected provider identity and maintains their lifecycle, native execution bindings, canonical worktree-scoped titles, recovery, and readiness. Seed, optional root Group placement, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles."
         },
         {
           "name": "SessionTurnReadinessMutation",
@@ -7701,12 +7387,6 @@
           "purpose": null
         },
         {
-          "name": "listCurrentProviderEntityObservations",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
           "name": "listProviderObservations",
           "kind": "function",
           "role": null,
@@ -7749,7 +7429,6 @@
           "resolvedPath": "apps/observer/src/persistence/types.ts",
           "edgeKind": "type-only",
           "bindings": [
-            "CurrentProviderObservationKind",
             "PersistedProviderObservation",
             "ProviderObservationKind",
             "ProviderObservationType",
@@ -7813,7 +7492,7 @@
           "name": "ReconcileStore",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Persists the Observer's correlated reconcile projection as one atomic capability. Missing canonical worktree titles initialize insert-only before session projections synchronize."
+          "purpose": "Persists reconcile-owned provider evidence and insert-initializes missing canonical worktree titles from one reconcile result as an atomic capability."
         },
         {
           "name": "SessionGroupStore",
@@ -7825,7 +7504,7 @@
           "name": "SessionStore",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Maintains Observer-owned session lifecycle, provider-native execution bindings, canonical worktree-scoped title authority, synchronized session projections, recovery, and readiness. Fresh-session seed, optional root Group placement, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles."
+          "purpose": "Admits Observer-owned sessions with selected provider identity and maintains their lifecycle, native execution bindings, canonical worktree-scoped titles, recovery, and readiness. Seed, optional root Group placement, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles."
         },
         {
           "name": "WorktreeMetadataStore",
@@ -7840,7 +7519,6 @@
           "resolvedPath": "apps/observer/src/persistence/types.ts",
           "edgeKind": "type-only",
           "bindings": [
-            "CurrentProviderObservationKind",
             "EventAndObservationIngressDedupeResult",
             "EventIngressDedupeResult",
             "EventRecordOptions",
@@ -8118,12 +7796,6 @@
         },
         {
           "name": "discardSessionSeedPlacement",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "emptySessionGroupState",
           "kind": "function",
           "role": null,
           "purpose": null
@@ -8496,7 +8168,6 @@
           "edgeKind": "runtime",
           "bindings": [
             "insertProviderObservation",
-            "listCurrentProviderEntityObservations",
             "listProviderObservations",
             "pruneExpiredProviderObservations"
           ]
@@ -8631,12 +8302,6 @@
     {
       "path": "apps/observer/src/persistence/types.ts",
       "exports": [
-        {
-          "name": "CurrentProviderObservationKind",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
         {
           "name": "EventAndObservationIngressDedupeResult",
           "kind": "type",
@@ -8887,7 +8552,6 @@
             "ObservedStatus",
             "ProviderHealth",
             "ProviderId",
-            "ProviderProjectConfig",
             "SafeError",
             "SessionGroupId",
             "SessionGroupView",
@@ -9369,12 +9033,6 @@
       ],
       "imports": [
         {
-          "specifier": "./harnessEventStatus.js",
-          "resolvedPath": "apps/observer/src/reconcile/harnessEventStatus.ts",
-          "edgeKind": "type-only",
-          "bindings": ["ObserverHarnessRun"]
-        },
-        {
           "specifier": "./snapshotCounts.js",
           "resolvedPath": "apps/observer/src/reconcile/snapshotCounts.ts",
           "edgeKind": "runtime",
@@ -9513,16 +9171,10 @@
           "bindings": ["applyHarnessEventStatusOverlays", "synthesizeExternalHarnessRuns"]
         },
         {
-          "specifier": "./harnessEventStatus.js",
-          "resolvedPath": "apps/observer/src/reconcile/harnessEventStatus.ts",
-          "edgeKind": "type-only",
-          "bindings": ["ObserverHarnessRun"]
-        },
-        {
           "specifier": "@station/contracts",
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "type-only",
-          "bindings": ["HarnessEventObservation"]
+          "bindings": ["HarnessEventObservation", "HarnessRunObservation"]
         }
       ]
     },
@@ -9544,12 +9196,6 @@
         {
           "name": "externalHarnessRunId",
           "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "ObserverHarnessRun",
-          "kind": "type",
           "role": null,
           "purpose": null
         },
@@ -9617,12 +9263,6 @@
           "bindings": ["PersistedSession"]
         },
         {
-          "specifier": "./harnessEventStatus.js",
-          "resolvedPath": "apps/observer/src/reconcile/harnessEventStatus.ts",
-          "edgeKind": "type-only",
-          "bindings": ["ObserverHarnessRun"]
-        },
-        {
           "specifier": "@station/contracts",
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "type-only",
@@ -9684,12 +9324,6 @@
           "bindings": ["safeErrorToProviderHealth"]
         },
         {
-          "specifier": "./harnessEventStatus.js",
-          "resolvedPath": "apps/observer/src/reconcile/harnessEventStatus.ts",
-          "edgeKind": "type-only",
-          "bindings": ["ObserverHarnessRun"]
-        },
-        {
           "specifier": "../stationLogger.js",
           "resolvedPath": "apps/observer/src/stationLogger.ts",
           "edgeKind": "type-only",
@@ -9701,9 +9335,7 @@
           "edgeKind": "type-only",
           "bindings": [
             "HarnessCapabilities",
-            "HarnessProvider",
             "HarnessRunObservation",
-            "HarnessStatusObservation",
             "ProviderHealth",
             "ProviderId",
             "ProviderProjectConfig",
@@ -9757,7 +9389,7 @@
           "name": "runReconcileOnce",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Orchestrates provider reads, relationship correlation, durable harness-event repair and overlays, cached metadata hydration, Group projection, snapshot assembly, and atomic persistence in order. The same resolved title records feed snapshot composition and atomic reconcile persistence."
+          "purpose": "Orchestrates provider reads, relationship correlation, durable harness-event repair and overlays, cached metadata hydration, Group projection, snapshot assembly, and atomic session persistence. The same resolved title records feed snapshot composition and atomic reconcile persistence."
         }
       ],
       "imports": [
@@ -9798,12 +9430,6 @@
           "resolvedPath": "apps/observer/src/reconcile/harnessEventRepair.ts",
           "edgeKind": "runtime",
           "bindings": ["repairPersistedHarnessEventCompatibility"]
-        },
-        {
-          "specifier": "./harnessEventStatus.js",
-          "resolvedPath": "apps/observer/src/reconcile/harnessEventStatus.ts",
-          "edgeKind": "type-only",
-          "bindings": ["ObserverHarnessRun"]
         },
         {
           "specifier": "./providerObservations.js",
@@ -9919,12 +9545,6 @@
           "bindings": ["decayStaleBusyStatuses"]
         },
         {
-          "specifier": "../harnessEventStatus.js",
-          "resolvedPath": "apps/observer/src/reconcile/harnessEventStatus.ts",
-          "edgeKind": "type-only",
-          "bindings": ["ObserverHarnessRun"]
-        },
-        {
           "specifier": "../observationCorrelation.js",
           "resolvedPath": "apps/observer/src/reconcile/observationCorrelation.ts",
           "edgeKind": "runtime",
@@ -9962,6 +9582,7 @@
           "edgeKind": "type-only",
           "bindings": [
             "HarnessCapabilities",
+            "HarnessRunObservation",
             "ProviderHealth",
             "ProviderProjectConfig",
             "SafeError",
@@ -10006,12 +9627,6 @@
           ]
         },
         {
-          "specifier": "../harnessEventStatus.js",
-          "resolvedPath": "apps/observer/src/reconcile/harnessEventStatus.ts",
-          "edgeKind": "type-only",
-          "bindings": ["ObserverHarnessRun"]
-        },
-        {
           "specifier": "../observationCorrelation.js",
           "resolvedPath": "apps/observer/src/reconcile/observationCorrelation.ts",
           "edgeKind": "runtime",
@@ -10028,6 +9643,7 @@
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "type-only",
           "bindings": [
+            "HarnessRunObservation",
             "ProviderProjectConfig",
             "SessionRecoveryHandle",
             "TerminalTargetObservation",
@@ -10416,10 +10032,10 @@
           "bindings": ["HarnessReportProcessorDeps"]
         },
         {
-          "specifier": "./observerDuplicateCleanup.js",
-          "resolvedPath": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
+          "specifier": "./observerReap.js",
+          "resolvedPath": "apps/observer/src/runtime/observerReap.ts",
           "edgeKind": "type-only",
-          "bindings": ["ObserverDuplicateCleanupOutcome"]
+          "bindings": ["ObserverReapPlan"]
         },
         {
           "specifier": "./reconcileExecutor.js",
@@ -10747,16 +10363,10 @@
           "purpose": null
         },
         {
-          "name": "HarnessReportProcessResult",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
           "name": "processHarnessIngressReport",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Persists one normalized report, projects authorized live status, publishes derived events, revalidates contradictory provider health, and returns the required reconcile reason."
+          "purpose": "Persists one normalized report, projects authorized live status, publishes derived events, revalidates contradictory provider health, and requests canonical convergence."
         }
       ],
       "imports": [
@@ -10872,7 +10482,7 @@
           "name": "runObserverMain",
           "kind": "function",
           "role": "COMPOSITION ROOT",
-          "purpose": "Claims boot ownership, branches on four-state socket evidence, selects Observer-private infrastructure from resolved runtime identity, and owns bind, pidfile, one-shot duplicate cleanup, ownership-aware shutdown, and exact build health publication."
+          "purpose": "Claims boot ownership, branches on four-state socket evidence, selects Observer-private infrastructure from resolved runtime identity, and owns bind, pidfile, read-only duplicate inspection, ownership-aware shutdown, and exact build health publication."
         },
         {
           "name": "RunObserverMainDeps",
@@ -10982,29 +10592,13 @@
           "specifier": "./observerBootClaim.js",
           "resolvedPath": "apps/observer/src/runtime/observerBootClaim.ts",
           "edgeKind": "runtime",
-          "bindings": ["acquireObserverBootClaim", "createObserverBootClaimCleanupExclusion"]
+          "bindings": ["acquireObserverBootClaim"]
         },
         {
           "specifier": "./observerBootClaim.js",
           "resolvedPath": "apps/observer/src/runtime/observerBootClaim.ts",
           "edgeKind": "type-only",
           "bindings": ["AcquiredObserverBootClaim", "ObserverBootClaimReleaseResult"]
-        },
-        {
-          "specifier": "./observerDuplicateCleanup.js",
-          "resolvedPath": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
-          "edgeKind": "runtime",
-          "bindings": ["createObserverDuplicateCleanup"]
-        },
-        {
-          "specifier": "./observerDuplicateCleanup.js",
-          "resolvedPath": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
-          "edgeKind": "type-only",
-          "bindings": [
-            "ObserverDuplicateCleanup",
-            "ObserverDuplicateCleanupOutcome",
-            "ObserverDuplicateProcessEvidenceSource"
-          ]
         },
         {
           "specifier": "./observerHandoff.js",
@@ -11033,6 +10627,18 @@
           "resolvedPath": "apps/observer/src/runtime/observerProcessEvidence.ts",
           "edgeKind": "runtime",
           "bindings": ["createLocalObserverProcessEvidence"]
+        },
+        {
+          "specifier": "./observerReap.js",
+          "resolvedPath": "apps/observer/src/runtime/observerReap.ts",
+          "edgeKind": "runtime",
+          "bindings": ["inspectObserverDuplicates"]
+        },
+        {
+          "specifier": "./observerReap.js",
+          "resolvedPath": "apps/observer/src/runtime/observerReap.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ObserverDuplicateProcessEvidenceSource", "ObserverReapPlan"]
         },
         {
           "specifier": "./projectConfigWriter.js",
@@ -11167,13 +10773,13 @@
           "name": "acquireObserverBootClaim",
           "kind": "function",
           "role": "ADAPTER",
-          "purpose": "Excludes cross-runtime startup and duplicate-cleanup mutation through a SQLite transaction whose ownership comes from the OS lock, never the persistent claim file."
+          "purpose": "Excludes cross-runtime startup and explicit reap mutation through a SQLite transaction whose ownership comes from the OS lock, never the persistent claim file."
         },
         {
-          "name": "createObserverBootClaimCleanupExclusion",
+          "name": "createObserverReapExclusion",
           "kind": "function",
           "role": "ADAPTER",
-          "purpose": "Gives duplicate cleanup a fail-fast startup exclusion and releases the claim after every callback outcome, including failures."
+          "purpose": "Gives explicit reap a fail-fast startup exclusion and releases the claim after every callback outcome, including failures."
         },
         {
           "name": "ObserverBootClaimError",
@@ -11202,10 +10808,10 @@
       ],
       "imports": [
         {
-          "specifier": "./observerDuplicateCleanup.js",
-          "resolvedPath": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
+          "specifier": "./observerReap.js",
+          "resolvedPath": "apps/observer/src/runtime/observerReap.ts",
           "edgeKind": "type-only",
-          "bindings": ["ObserverDuplicateCleanupExclusion"]
+          "bindings": ["ObserverReapExclusion"]
         },
         {
           "specifier": "../sqlite/driver.js",
@@ -11254,163 +10860,6 @@
           "resolvedPath": "packages/runtime/src/index.ts",
           "edgeKind": "runtime",
           "bindings": ["safeErrorFromUnknown"]
-        }
-      ]
-    },
-    {
-      "path": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
-      "exports": [
-        {
-          "name": "createObserverDuplicateCleanup",
-          "kind": "function",
-          "role": "USE CASE",
-          "purpose": "Performs one single-flight duplicate inspection, quarantine, claim-held final revalidation, and optional SIGTERM-only cleanup with shutdown cancellation."
-        },
-        {
-          "name": "createObserverReap",
-          "kind": "function",
-          "role": "USE CASE",
-          "purpose": "Creates explicit operator reap with centralized selection and revalidation; only this manual force path may escalate from SIGTERM to SIGKILL."
-        },
-        {
-          "name": "ObserverDuplicateCleanup",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "ObserverDuplicateCleanupExclusion",
-          "kind": "interface",
-          "role": "DRIVEN PORT",
-          "purpose": "Authorizes final duplicate cleanup only while startup mutation is excluded, refusing immediately when another boot owns the claim."
-        },
-        {
-          "name": "ObserverDuplicateCleanupExclusionResult",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "ObserverDuplicateCleanupOutcome",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "ObserverDuplicateCleanupPlan",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "ObserverDuplicateCleanupPlanInput",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "ObserverDuplicateCleanupRefusal",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "ObserverDuplicateCleanupTarget",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "ObserverDuplicateProcessEvidenceSource",
-          "kind": "interface",
-          "role": "DRIVEN PORT",
-          "purpose": "Supplies strict process, socket-identity, pidfile, signal, and per-process Unix-socket descriptor evidence for duplicate Observer decisions."
-        },
-        {
-          "name": "ObserverKeeperPreservation",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "ObserverReap",
-          "kind": "type",
-          "role": "DRIVING PORT",
-          "purpose": "Accepts a local operator's dry-run or explicit-force duplicate reap request."
-        },
-        {
-          "name": "ObserverReapAutomaticEligibility",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "ObserverReapOutcome",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "ObserverReapPlan",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "ObserverReapTarget",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "RunObserverReapDeps",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "selectObserverDuplicateCleanupPlan",
-          "kind": "function",
-          "role": "POLICY",
-          "purpose": "Selects duplicate Observers only when the keeper's corroborated identity is exact and each candidate has no Unix-domain socket descriptors."
-        },
-        {
-          "name": "selectObserverReapPlan",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        }
-      ],
-      "imports": [
-        {
-          "specifier": "./observerHandoff.js",
-          "resolvedPath": "apps/observer/src/runtime/observerHandoff.ts",
-          "edgeKind": "runtime",
-          "bindings": ["observerProcessEntriesMatch"]
-        },
-        {
-          "specifier": "./observerHandoff.js",
-          "resolvedPath": "apps/observer/src/runtime/observerHandoff.ts",
-          "edgeKind": "type-only",
-          "bindings": ["ObserverProcessEntry", "ObserverProcessEvidenceSource"]
-        },
-        {
-          "specifier": "./observerPidfile.js",
-          "resolvedPath": "apps/observer/src/runtime/observerPidfile.ts",
-          "edgeKind": "runtime",
-          "bindings": ["observerProcessIdentitiesMatch"]
-        },
-        {
-          "specifier": "./socketOwnership.js",
-          "resolvedPath": "apps/observer/src/runtime/socketOwnership.ts",
-          "edgeKind": "type-only",
-          "bindings": ["SocketIdentity"]
-        },
-        {
-          "specifier": "@station/contracts",
-          "resolvedPath": "packages/contracts/src/index.ts",
-          "edgeKind": "type-only",
-          "bindings": ["ObserverProcessIdentity"]
         }
       ]
     },
@@ -11665,12 +11114,6 @@
       ],
       "imports": [
         {
-          "specifier": "./observerDuplicateCleanup.js",
-          "resolvedPath": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
-          "edgeKind": "type-only",
-          "bindings": ["ObserverDuplicateProcessEvidenceSource"]
-        },
-        {
           "specifier": "./observerHandoff.js",
           "resolvedPath": "apps/observer/src/runtime/observerHandoff.ts",
           "edgeKind": "runtime",
@@ -11687,6 +11130,12 @@
           "resolvedPath": "apps/observer/src/runtime/observerPidfile.ts",
           "edgeKind": "runtime",
           "bindings": ["readObserverProcessIdentity"]
+        },
+        {
+          "specifier": "./observerReap.js",
+          "resolvedPath": "apps/observer/src/runtime/observerReap.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ObserverDuplicateProcessEvidenceSource"]
         },
         {
           "specifier": "./server.js",
@@ -11735,6 +11184,127 @@
           "resolvedPath": "zod",
           "edgeKind": "runtime",
           "bindings": ["z"]
+        }
+      ]
+    },
+    {
+      "path": "apps/observer/src/runtime/observerReap.ts",
+      "exports": [
+        {
+          "name": "createObserverReap",
+          "kind": "function",
+          "role": "USE CASE",
+          "purpose": "Creates explicit operator reap with centralized selection and revalidation; only this manual force path may escalate from SIGTERM to SIGKILL."
+        },
+        {
+          "name": "inspectObserverDuplicates",
+          "kind": "function",
+          "role": "USE CASE",
+          "purpose": "Collects one read-only duplicate-process plan for startup diagnostics and explicit reap without creating signal authority."
+        },
+        {
+          "name": "ObserverDuplicateInspectionDeps",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ObserverDuplicateProcessEvidenceSource",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "purpose": "Supplies strict process, socket-identity, pidfile, signal, and per-process Unix-socket descriptor evidence for duplicate Observer decisions."
+        },
+        {
+          "name": "ObserverKeeperPreservation",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ObserverReap",
+          "kind": "type",
+          "role": "DRIVING PORT",
+          "purpose": "Accepts a local operator's dry-run or explicit-force duplicate reap request."
+        },
+        {
+          "name": "ObserverReapAutomaticEligibility",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ObserverReapExclusion",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "purpose": "Authorizes explicit reap only while startup mutation is excluded, refusing immediately when another boot owns the claim."
+        },
+        {
+          "name": "ObserverReapExclusionResult",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ObserverReapOutcome",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ObserverReapPlan",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ObserverReapTarget",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "RunObserverReapDeps",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "selectObserverReapPlan",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "./observerHandoff.js",
+          "resolvedPath": "apps/observer/src/runtime/observerHandoff.ts",
+          "edgeKind": "runtime",
+          "bindings": ["observerProcessEntriesMatch"]
+        },
+        {
+          "specifier": "./observerHandoff.js",
+          "resolvedPath": "apps/observer/src/runtime/observerHandoff.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ObserverProcessEntry", "ObserverProcessEvidenceSource"]
+        },
+        {
+          "specifier": "./observerPidfile.js",
+          "resolvedPath": "apps/observer/src/runtime/observerPidfile.ts",
+          "edgeKind": "runtime",
+          "bindings": ["observerProcessIdentitiesMatch"]
+        },
+        {
+          "specifier": "./socketOwnership.js",
+          "resolvedPath": "apps/observer/src/runtime/socketOwnership.ts",
+          "edgeKind": "type-only",
+          "bindings": ["SocketIdentity"]
+        },
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ObserverProcessIdentity"]
         }
       ]
     },
@@ -12159,12 +11729,6 @@
           "resolvedPath": "apps/observer/src/runtime/harnessReportProcessor.ts",
           "edgeKind": "type-only",
           "bindings": ["HarnessReportProcessorDeps"]
-        },
-        {
-          "specifier": "./reconcileScheduler.js",
-          "resolvedPath": "apps/observer/src/runtime/reconcileScheduler.ts",
-          "edgeKind": "type-only",
-          "bindings": ["ReconcileScheduler"]
         },
         {
           "specifier": "@station/contracts",
@@ -12735,7 +12299,7 @@
       "declaration": "createSetupComposition",
       "kind": "function",
       "role": "COMPOSITION ROOT",
-      "purpose": "Wires one CLI invocation's semantic session, inspection and operation adapters, Clack input, and independent text and JSON presentation. The lazily created operation adapter routes Observer startup progress through the guided prompt adapter's logInfo.",
+      "purpose": "Wires one CLI invocation's semantic session, adapters, Clack input, and one schema-validated plan shared by text and JSON presentation. The lazily created operation adapter routes Observer startup progress through the guided prompt adapter's logInfo.",
       "dependencies": [
         {
           "path": "apps/cli/src/commands/setup/adapters/inspection.ts",
@@ -12802,7 +12366,7 @@
       "declaration": "createTextSetupPresenter",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Resolves typed setup views and message references into terminal prompts and output.",
+      "purpose": "Formats the canonical setup plan and semantic operation outcomes for terminal display.",
       "dependencies": []
     },
     {
@@ -12992,24 +12556,23 @@
       "declaration": "deliverProviderHookWithSpooling",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Coordinates CLI ingress delivery across Observer startup, socket transport, and spool storage without competing ownership mutation.",
+      "purpose": "Coordinates hook-specific throttling, delivery, and spooling around the canonical CLI Observer lifecycle.",
       "dependencies": [
         {
-          "path": "apps/cli/src/ingress/observerStartup.ts",
-          "declaration": "startProviderHookObserver",
+          "path": "apps/cli/src/observerProcess.ts",
+          "declaration": "getObserverStatus",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/observerProcess.ts",
+          "declaration": "startObserver",
           "kind": "function",
           "role": "ADAPTER",
           "edgeKind": "runtime"
         }
       ]
-    },
-    {
-      "path": "apps/cli/src/ingress/observerStartup.ts",
-      "declaration": "startProviderHookObserver",
-      "kind": "function",
-      "role": "ADAPTER",
-      "purpose": "Translates provider-hook delivery into compatible Observer attachment or child startup; inaccessible and listening-unhealthy sockets never authorize mutation.",
-      "dependencies": []
     },
     {
       "path": "apps/cli/src/ingress/sender.ts",
@@ -13414,31 +12977,10 @@
       "dependencies": [
         {
           "path": "apps/observer/src/runtime/observerBootClaim.ts",
-          "declaration": "createObserverBootClaimCleanupExclusion",
+          "declaration": "createObserverReapExclusion",
           "kind": "function",
           "role": "ADAPTER",
           "edgeKind": "runtime"
-        },
-        {
-          "path": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
-          "declaration": "createObserverReap",
-          "kind": "function",
-          "role": "USE CASE",
-          "edgeKind": "runtime"
-        },
-        {
-          "path": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
-          "declaration": "ObserverDuplicateProcessEvidenceSource",
-          "kind": "interface",
-          "role": "DRIVEN PORT",
-          "edgeKind": "type-only"
-        },
-        {
-          "path": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
-          "declaration": "ObserverReap",
-          "kind": "type",
-          "role": "DRIVING PORT",
-          "edgeKind": "type-only"
         },
         {
           "path": "apps/observer/src/runtime/observerProcessEvidence.ts",
@@ -13446,6 +12988,27 @@
           "kind": "function",
           "role": "ADAPTER",
           "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/observer/src/runtime/observerReap.ts",
+          "declaration": "createObserverReap",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/observer/src/runtime/observerReap.ts",
+          "declaration": "ObserverDuplicateProcessEvidenceSource",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        },
+        {
+          "path": "apps/observer/src/runtime/observerReap.ts",
+          "declaration": "ObserverReap",
+          "kind": "type",
+          "role": "DRIVING PORT",
+          "edgeKind": "type-only"
         },
         {
           "path": "packages/protocol/src/client.ts",
@@ -13464,7 +13027,7 @@
       "purpose": "Translates a CLI reap request into the Observer-owned driving port.",
       "dependencies": [
         {
-          "path": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
+          "path": "apps/observer/src/runtime/observerReap.ts",
           "declaration": "ObserverReap",
           "kind": "type",
           "role": "DRIVING PORT",
@@ -13759,7 +13322,7 @@
       "declaration": "createSessionResumeAgentHandler",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Explicitly validates and preflights provider-native recovery into a selected worktree, reusing a handle's Station identity or minting one when absent. Automatic native activation recovery is owned separately by external launch. Failed cleanup discards only a newly minted projection.",
+      "purpose": "Requires the selected worktree in the current Observer snapshot, then validates and preflights provider-native recovery, reusing a handle's Station identity or minting one when absent. Automatic native activation recovery is owned separately by external launch. Failed cleanup discards only a newly minted projection.",
       "dependencies": [
         {
           "path": "apps/observer/src/sessionRecovery.ts",
@@ -13775,7 +13338,7 @@
       "declaration": "createSessionStartAgentHandler",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Validates and preflights a fresh agent lifecycle before inheriting the worktree's canonical display title. Failed launches discard only the fresh session projection.",
+      "purpose": "Requires the selected worktree in the current Observer snapshot, then validates and preflights a fresh agent lifecycle before inheriting its canonical display title. Failed launches discard only the fresh session projection.",
       "dependencies": []
     },
     {
@@ -13793,14 +13356,6 @@
           "edgeKind": "type-only"
         }
       ]
-    },
-    {
-      "path": "apps/observer/src/commands/terminalIntentRunner.ts",
-      "declaration": "TerminalIntentRunner",
-      "kind": "type",
-      "role": "USE CASE",
-      "purpose": "Executes terminal workspace, focus, and close intents by coordinating terminal and harness ports, repeating the selected-harness preflight immediately before workspace mutation.",
-      "dependencies": []
     },
     {
       "path": "apps/observer/src/commands/worktree/create.ts",
@@ -13940,32 +13495,8 @@
       "declaration": "createProviderHookIngress",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Accepts raw provider hook evidence once while allowing retries to finish durable downstream processing.",
-      "dependencies": [
-        {
-          "path": "apps/observer/src/hooks/providerHookIngress.ts",
-          "declaration": "ingestProviderHookEvent",
-          "kind": "function",
-          "role": "USE CASE",
-          "edgeKind": "runtime"
-        }
-      ]
-    },
-    {
-      "path": "apps/observer/src/hooks/providerHookIngress.ts",
-      "declaration": "ingestProviderHookEvent",
-      "kind": "function",
-      "role": "USE CASE",
-      "purpose": "Normalizes provider hook evidence and atomically records its observations and authorized native-execution effects before completing hook processing.",
-      "dependencies": [
-        {
-          "path": "apps/observer/src/hooks/turnReadiness.ts",
-          "declaration": "sessionTurnReadinessMutationFromHarnessObservation",
-          "kind": "function",
-          "role": "POLICY",
-          "edgeKind": "runtime"
-        }
-      ]
+      "purpose": "Persists raw provider hook evidence once, maps adapter-backed harness hooks to reports, and treats every other hook as a reconcile hint.",
+      "dependencies": []
     },
     {
       "path": "apps/observer/src/hooks/spoolStore.ts",
@@ -14116,7 +13647,7 @@
       "declaration": "ReconcileStore",
       "kind": "interface",
       "role": "DRIVEN PORT",
-      "purpose": "Persists the Observer's correlated reconcile projection as one atomic capability. Missing canonical worktree titles initialize insert-only before session projections synchronize.",
+      "purpose": "Persists reconcile-owned provider evidence and insert-initializes missing canonical worktree titles from one reconcile result as an atomic capability.",
       "dependencies": []
     },
     {
@@ -14132,7 +13663,7 @@
       "declaration": "SessionStore",
       "kind": "interface",
       "role": "DRIVEN PORT",
-      "purpose": "Maintains Observer-owned session lifecycle, provider-native execution bindings, canonical worktree-scoped title authority, synchronized session projections, recovery, and readiness. Fresh-session seed, optional root Group placement, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles.",
+      "purpose": "Admits Observer-owned sessions with selected provider identity and maintains their lifecycle, native execution bindings, canonical worktree-scoped titles, recovery, and readiness. Seed, optional root Group placement, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles.",
       "dependencies": []
     },
     {
@@ -14195,7 +13726,7 @@
       "declaration": "runReconcileOnce",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Orchestrates provider reads, relationship correlation, durable harness-event repair and overlays, cached metadata hydration, Group projection, snapshot assembly, and atomic persistence in order. The same resolved title records feed snapshot composition and atomic reconcile persistence.",
+      "purpose": "Orchestrates provider reads, relationship correlation, durable harness-event repair and overlays, cached metadata hydration, Group projection, snapshot assembly, and atomic session persistence. The same resolved title records feed snapshot composition and atomic reconcile persistence.",
       "dependencies": [
         {
           "path": "apps/observer/src/persistence/ports.ts",
@@ -14417,13 +13948,6 @@
           "edgeKind": "runtime"
         },
         {
-          "path": "apps/observer/src/stationLogger.ts",
-          "declaration": "StationLogger",
-          "kind": "interface",
-          "role": "DRIVEN PORT",
-          "edgeKind": "type-only"
-        },
-        {
           "path": "packages/contracts/src/observer.ts",
           "declaration": "ObserverApi",
           "kind": "type",
@@ -14482,7 +14006,7 @@
       "declaration": "processHarnessIngressReport",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Persists one normalized report, projects authorized live status, publishes derived events, revalidates contradictory provider health, and returns the required reconcile reason.",
+      "purpose": "Persists one normalized report, projects authorized live status, publishes derived events, revalidates contradictory provider health, and requests canonical convergence.",
       "dependencies": [
         {
           "path": "apps/observer/src/reconcile/statusProjection.ts",
@@ -14514,7 +14038,7 @@
       "declaration": "runObserverMain",
       "kind": "function",
       "role": "COMPOSITION ROOT",
-      "purpose": "Claims boot ownership, branches on four-state socket evidence, selects Observer-private infrastructure from resolved runtime identity, and owns bind, pidfile, one-shot duplicate cleanup, ownership-aware shutdown, and exact build health publication.",
+      "purpose": "Claims boot ownership, branches on four-state socket evidence, selects Observer-private infrastructure from resolved runtime identity, and owns bind, pidfile, read-only duplicate inspection, ownership-aware shutdown, and exact build health publication.",
       "dependencies": [
         {
           "path": "apps/observer/src/commands/harnessLaunchPreflight.ts",
@@ -14566,20 +14090,6 @@
           "edgeKind": "runtime"
         },
         {
-          "path": "apps/observer/src/runtime/observerBootClaim.ts",
-          "declaration": "createObserverBootClaimCleanupExclusion",
-          "kind": "function",
-          "role": "ADAPTER",
-          "edgeKind": "runtime"
-        },
-        {
-          "path": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
-          "declaration": "createObserverDuplicateCleanup",
-          "kind": "function",
-          "role": "USE CASE",
-          "edgeKind": "runtime"
-        },
-        {
           "path": "apps/observer/src/runtime/observerHandoff.ts",
           "declaration": "negotiateObserverIncumbent",
           "kind": "function",
@@ -14591,6 +14101,13 @@
           "declaration": "createLocalObserverProcessEvidence",
           "kind": "function",
           "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/observer/src/runtime/observerReap.ts",
+          "declaration": "inspectObserverDuplicates",
+          "kind": "function",
+          "role": "USE CASE",
           "edgeKind": "runtime"
         },
         {
@@ -14642,15 +14159,15 @@
       "declaration": "acquireObserverBootClaim",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Excludes cross-runtime startup and duplicate-cleanup mutation through a SQLite transaction whose ownership comes from the OS lock, never the persistent claim file.",
+      "purpose": "Excludes cross-runtime startup and explicit reap mutation through a SQLite transaction whose ownership comes from the OS lock, never the persistent claim file.",
       "dependencies": []
     },
     {
       "path": "apps/observer/src/runtime/observerBootClaim.ts",
-      "declaration": "createObserverBootClaimCleanupExclusion",
+      "declaration": "createObserverReapExclusion",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Gives duplicate cleanup a fail-fast startup exclusion and releases the claim after every callback outcome, including failures.",
+      "purpose": "Gives explicit reap a fail-fast startup exclusion and releases the claim after every callback outcome, including failures.",
       "dependencies": [
         {
           "path": "apps/observer/src/runtime/observerBootClaim.ts",
@@ -14660,106 +14177,13 @@
           "edgeKind": "runtime"
         },
         {
-          "path": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
-          "declaration": "ObserverDuplicateCleanupExclusion",
+          "path": "apps/observer/src/runtime/observerReap.ts",
+          "declaration": "ObserverReapExclusion",
           "kind": "interface",
           "role": "DRIVEN PORT",
           "edgeKind": "type-only"
         }
       ]
-    },
-    {
-      "path": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
-      "declaration": "createObserverDuplicateCleanup",
-      "kind": "function",
-      "role": "USE CASE",
-      "purpose": "Performs one single-flight duplicate inspection, quarantine, claim-held final revalidation, and optional SIGTERM-only cleanup with shutdown cancellation.",
-      "dependencies": [
-        {
-          "path": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
-          "declaration": "ObserverDuplicateCleanupExclusion",
-          "kind": "interface",
-          "role": "DRIVEN PORT",
-          "edgeKind": "type-only"
-        },
-        {
-          "path": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
-          "declaration": "ObserverDuplicateProcessEvidenceSource",
-          "kind": "interface",
-          "role": "DRIVEN PORT",
-          "edgeKind": "type-only"
-        },
-        {
-          "path": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
-          "declaration": "selectObserverDuplicateCleanupPlan",
-          "kind": "function",
-          "role": "POLICY",
-          "edgeKind": "runtime"
-        }
-      ]
-    },
-    {
-      "path": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
-      "declaration": "createObserverReap",
-      "kind": "function",
-      "role": "USE CASE",
-      "purpose": "Creates explicit operator reap with centralized selection and revalidation; only this manual force path may escalate from SIGTERM to SIGKILL.",
-      "dependencies": [
-        {
-          "path": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
-          "declaration": "ObserverDuplicateProcessEvidenceSource",
-          "kind": "interface",
-          "role": "DRIVEN PORT",
-          "edgeKind": "type-only"
-        },
-        {
-          "path": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
-          "declaration": "selectObserverDuplicateCleanupPlan",
-          "kind": "function",
-          "role": "POLICY",
-          "edgeKind": "runtime"
-        }
-      ]
-    },
-    {
-      "path": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
-      "declaration": "ObserverDuplicateCleanupExclusion",
-      "kind": "interface",
-      "role": "DRIVEN PORT",
-      "purpose": "Authorizes final duplicate cleanup only while startup mutation is excluded, refusing immediately when another boot owns the claim.",
-      "dependencies": []
-    },
-    {
-      "path": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
-      "declaration": "ObserverDuplicateProcessEvidenceSource",
-      "kind": "interface",
-      "role": "DRIVEN PORT",
-      "purpose": "Supplies strict process, socket-identity, pidfile, signal, and per-process Unix-socket descriptor evidence for duplicate Observer decisions.",
-      "dependencies": [
-        {
-          "path": "apps/observer/src/runtime/observerHandoff.ts",
-          "declaration": "ObserverProcessEvidenceSource",
-          "kind": "interface",
-          "role": "DRIVEN PORT",
-          "edgeKind": "type-only"
-        }
-      ]
-    },
-    {
-      "path": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
-      "declaration": "ObserverReap",
-      "kind": "type",
-      "role": "DRIVING PORT",
-      "purpose": "Accepts a local operator's dry-run or explicit-force duplicate reap request.",
-      "dependencies": []
-    },
-    {
-      "path": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
-      "declaration": "selectObserverDuplicateCleanupPlan",
-      "kind": "function",
-      "role": "POLICY",
-      "purpose": "Selects duplicate Observers only when the keeper's corroborated identity is exact and each candidate has no Unix-domain socket descriptors.",
-      "dependencies": []
     },
     {
       "path": "apps/observer/src/runtime/observerHandoff.ts",
@@ -14823,13 +14247,84 @@
       "purpose": "Translates exact argv, executable provenance, launch nonce, OS start time, strict socket-holder and complete file-descriptor evidence, pidfiles, socket identities, and signals into conservative ownership evidence.",
       "dependencies": [
         {
-          "path": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
+          "path": "apps/observer/src/runtime/observerReap.ts",
           "declaration": "ObserverDuplicateProcessEvidenceSource",
           "kind": "interface",
           "role": "DRIVEN PORT",
           "edgeKind": "type-only"
         }
       ]
+    },
+    {
+      "path": "apps/observer/src/runtime/observerReap.ts",
+      "declaration": "createObserverReap",
+      "kind": "function",
+      "role": "USE CASE",
+      "purpose": "Creates explicit operator reap with centralized selection and revalidation; only this manual force path may escalate from SIGTERM to SIGKILL.",
+      "dependencies": [
+        {
+          "path": "apps/observer/src/runtime/observerReap.ts",
+          "declaration": "inspectObserverDuplicates",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/observer/src/runtime/observerReap.ts",
+          "declaration": "ObserverDuplicateProcessEvidenceSource",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
+      "path": "apps/observer/src/runtime/observerReap.ts",
+      "declaration": "inspectObserverDuplicates",
+      "kind": "function",
+      "role": "USE CASE",
+      "purpose": "Collects one read-only duplicate-process plan for startup diagnostics and explicit reap without creating signal authority.",
+      "dependencies": [
+        {
+          "path": "apps/observer/src/runtime/observerReap.ts",
+          "declaration": "ObserverDuplicateProcessEvidenceSource",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
+      "path": "apps/observer/src/runtime/observerReap.ts",
+      "declaration": "ObserverDuplicateProcessEvidenceSource",
+      "kind": "interface",
+      "role": "DRIVEN PORT",
+      "purpose": "Supplies strict process, socket-identity, pidfile, signal, and per-process Unix-socket descriptor evidence for duplicate Observer decisions.",
+      "dependencies": [
+        {
+          "path": "apps/observer/src/runtime/observerHandoff.ts",
+          "declaration": "ObserverProcessEvidenceSource",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
+      "path": "apps/observer/src/runtime/observerReap.ts",
+      "declaration": "ObserverReap",
+      "kind": "type",
+      "role": "DRIVING PORT",
+      "purpose": "Accepts a local operator's dry-run or explicit-force duplicate reap request.",
+      "dependencies": []
+    },
+    {
+      "path": "apps/observer/src/runtime/observerReap.ts",
+      "declaration": "ObserverReapExclusion",
+      "kind": "interface",
+      "role": "DRIVEN PORT",
+      "purpose": "Authorizes explicit reap only while startup mutation is excluded, refusing immediately when another boot owns the claim.",
+      "dependencies": []
     },
     {
       "path": "apps/observer/src/runtime/projectConfigWriter.ts",
@@ -15272,7 +14767,7 @@
       "declaration": "WorktrunkProvider",
       "kind": "class",
       "role": "ADAPTER",
-      "purpose": "Translates Worktrunk lifecycle output and commands into Station worktree contracts. Hook diagnostics use an atomic requester runtime when supplied and retain the whole Observer composition expectation as a fallback. Checkout roots are validated before Worktrunk runs, managed roots override Worktrunk's project-specific path templates, and removal revalidates native Git identity, path, and branch before mutation.",
+      "purpose": "Translates Worktrunk lifecycle output and commands into Station worktree contracts. Hook diagnostics use an atomic requester runtime when supplied and retain the whole Observer composition expectation as a fallback. List results are returned without retaining inventory; only the Worktrunk project identifier needed to preserve managed-path precedence is memoized. Checkout roots are validated before Worktrunk runs, and removal freshly revalidates native Git identity, path, and branch before mutation.",
       "dependencies": [
         {
           "path": "packages/contracts/src/providers.ts",
@@ -15343,7 +14838,7 @@
       "declaration": "HarnessProvider",
       "kind": "interface",
       "role": "DRIVEN PORT",
-      "purpose": "Supplies harness launch, discovery, status, ingress, and persisted-event compatibility policy without exposing provider-native payloads to Observer application code.",
+      "purpose": "Supplies harness launch, discovery with present-tense status, and persisted-event compatibility policy without exposing provider-native payloads to Observer application code.",
       "dependencies": []
     },
     {
@@ -15383,7 +14878,7 @@
       "declaration": "WorktreeProvider",
       "kind": "interface",
       "role": "DRIVEN PORT",
-      "purpose": "Supplies worktree lifecycle evidence and mutations without exposing provider mechanics. Removal adapters must revalidate opaque registration identity, path, and branch immediately before mutation.",
+      "purpose": "Supplies fresh worktree lifecycle evidence and mutations without exposing provider mechanics. Callers provide project context for mutations; removal adapters must revalidate opaque registration identity, path, and branch immediately before mutation.",
       "dependencies": []
     },
     {
@@ -15629,8 +15124,22 @@
       "declaration": "createSetupSessionApplication",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Coordinates one setup session's intent-bound inspections, staged prerequisite effects, and complete apply sequence without transport or restart recovery.",
+      "purpose": "Constructs one serialized setup application whose shared methods directly enforce phase order, replay prevention, and cancellation between operations.",
       "dependencies": [
+        {
+          "path": "packages/setup-core/src/policy/assessSetupPlan.ts",
+          "declaration": "assessSetupPlan",
+          "kind": "function",
+          "role": "POLICY",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "packages/setup-core/src/policy/planSetup.ts",
+          "declaration": "planSetup",
+          "kind": "function",
+          "role": "POLICY",
+          "edgeKind": "runtime"
+        },
         {
           "path": "packages/setup-core/src/ports.ts",
           "declaration": "SetupInspection",
@@ -15658,13 +15167,6 @@
           "kind": "type",
           "role": "DRIVING PORT",
           "edgeKind": "type-only"
-        },
-        {
-          "path": "packages/setup-core/src/session/transition.ts",
-          "declaration": "transitionSetupSession",
-          "kind": "function",
-          "role": "POLICY",
-          "edgeKind": "runtime"
         }
       ]
     },
@@ -15674,14 +15176,6 @@
       "kind": "type",
       "role": "DRIVING PORT",
       "purpose": "Accepts serialized setup intent editing, staged preparation, review, apply, and cancellation commands for one invocation-local session.",
-      "dependencies": []
-    },
-    {
-      "path": "packages/setup-core/src/session/transition.ts",
-      "declaration": "transitionSetupSession",
-      "kind": "function",
-      "role": "POLICY",
-      "purpose": "Advances intent editing, staged preparation, complete apply, and cancellation from normalized evidence and typed outcomes without I/O.",
       "dependencies": []
     },
     {

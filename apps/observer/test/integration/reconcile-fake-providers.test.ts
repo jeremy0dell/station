@@ -302,6 +302,8 @@ describe("observer reconcile with fake providers", () => {
       projectId: "web",
       worktreeId: oldWorktreeId,
       initialTitle: "Branch Fix too",
+      harness: "fake-harness",
+      terminalProvider: "fake-terminal",
       createdAt: now,
       lastSeenAt: now,
     });
@@ -328,7 +330,7 @@ describe("observer reconcile with fake providers", () => {
     await expect(persistence.listSessions()).resolves.toEqual([
       expect.objectContaining({
         id: sessionId,
-        worktreeId: currentWorktreeId,
+        worktreeId: oldWorktreeId,
         title: "Branch Fix too",
       }),
     ]);

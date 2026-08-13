@@ -2,6 +2,7 @@ import { DASHBOARD_FILTER_CONDITION_KEYS } from "../../selectors/dashboardFilter
 import type { PersistentFilterActionId } from "../../state/actions.js";
 import {
   dashboardBindingHelp,
+  dashboardFooterShortcuts,
   QUIT_HINT_CLOSE,
   QUIT_HINT_DISMISS_ERROR,
   QUIT_HINT_FILTER_CLOSE,
@@ -16,15 +17,13 @@ import {
 } from "./segmentLayout.js";
 
 type DashboardPersistentFilterView = NonNullable<DashboardViewState["persistentFilter"]>;
-type FooterShortcut = readonly [id: TuiDashboardBindingId, label: string];
+type FooterShortcut = {
+  id: TuiDashboardBindingId;
+  keys: string;
+  label: string;
+};
 type FooterHelper = readonly [key: string, description: string];
 type PersistentFilterConditionStage = "field" | "values";
-
-type AppliedFooterShortcut = readonly [
-  id: TuiDashboardBindingId,
-  label: string,
-  action?: PersistentFilterActionId,
-];
 
 export type DashboardFilterFooterSegmentRole = "badge" | "key" | "description" | "spacer";
 
@@ -74,57 +73,6 @@ export type DashboardFooterModelOptions = {
   screen?: DashboardScreenView;
   persistentFilter?: DashboardPersistentFilterView;
 };
-
-const FIRST_RUN_FULL_SHORTCUTS: readonly FooterShortcut[] = [
-  ["tui.dashboard.focusActivate", "add first project"],
-  ["tui.dashboard.addProject", "add project"],
-];
-
-const FIRST_RUN_COMPACT_SHORTCUTS: readonly FooterShortcut[] = [
-  ["tui.dashboard.focusActivate", "add first project"],
-];
-
-const DASHBOARD_FULL_SHORTCUTS: readonly FooterShortcut[] = [
-  ["tui.dashboard.focusActivate", "activate"],
-  ["tui.dashboard.newSession", "new"],
-  ["tui.dashboard.addProject", "add"],
-  ["tui.dashboard.nextNeedsMe", "next-needs-me"],
-  ["tui.dashboard.filter", "filter"],
-  ["tui.dashboard.remove", "delete"],
-  ["tui.dashboard.helpAlias", "help"],
-];
-
-const DASHBOARD_COMPACT_SHORTCUTS: readonly FooterShortcut[] = [
-  ["tui.dashboard.focusActivate", "activate"],
-  ["tui.dashboard.newSession", "new"],
-  ["tui.dashboard.nextNeedsMe", "next"],
-  ["tui.dashboard.filter", "filter"],
-  ["tui.dashboard.remove", "delete"],
-  ["tui.dashboard.helpAlias", "help"],
-];
-
-const APPLIED_FILTER_FULL_SHORTCUTS: readonly AppliedFooterShortcut[] = [
-  ["tui.dashboard.focusActivate", "activate"],
-  ["tui.dashboard.newSession", "new"],
-  ["tui.dashboard.addProject", "add"],
-  ["tui.dashboard.nextNeedsMe", "next-needs-me"],
-  ["tui.dashboard.filter", "edit", "persistentFilter.edit"],
-  ["tui.dashboard.dismissEsc", "clear", "persistentFilter.clear"],
-  ["tui.dashboard.remove", "delete"],
-  ["tui.dashboard.helpAlias", "help"],
-];
-
-const APPLIED_FILTER_PRIORITIZED_SHORTCUTS: readonly AppliedFooterShortcut[] = [
-  ["tui.dashboard.filter", "edit", "persistentFilter.edit"],
-  ["tui.dashboard.dismissEsc", "clear", "persistentFilter.clear"],
-  ["tui.dashboard.focusActivate", "activate"],
-  ["tui.dashboard.newSession", "new"],
-];
-
-const APPLIED_FILTER_ESSENTIAL_SHORTCUTS: readonly AppliedFooterShortcut[] = [
-  ["tui.dashboard.filter", "edit", "persistentFilter.edit"],
-  ["tui.dashboard.dismissEsc", "clear", "persistentFilter.clear"],
-];
 
 const CONDITION_FIELD_KEY_HINT = DASHBOARD_FILTER_CONDITION_KEYS.join("/");
 
@@ -191,13 +139,12 @@ export function dashboardFooterModel(options: DashboardFooterModelOptions): Dash
 }
 
 function dashboardFooter(columns: number, quitHint: string, firstRun: boolean): string {
-  let fullShortcuts = DASHBOARD_FULL_SHORTCUTS;
-  let compactShortcuts = DASHBOARD_COMPACT_SHORTCUTS;
-  if (firstRun) {
-    fullShortcuts = FIRST_RUN_FULL_SHORTCUTS;
-    compactShortcuts = FIRST_RUN_COMPACT_SHORTCUTS;
-  }
-
+  const fullShortcuts = firstRun ? firstRunShortcuts(false) : dashboardFooterShortcuts("full");
+  const compactShortcuts = firstRun
+    ? firstRunShortcuts(true)
+    : dashboardFooterShortcuts("compact").map((shortcut) =>
+        shortcut.id === "tui.dashboard.nextNeedsMe" ? { ...shortcut, label: "next" } : shortcut,
+      );
   const full = footerLine(fullShortcuts, quitHint);
   const compact = footerLine(compactShortcuts, quitHint);
   const width = normalizeTextLineWidth(columns);
@@ -214,48 +161,55 @@ function appliedFilterFooter(
   columns: number,
   quitHint: string,
 ): readonly DashboardFilterFooterSegment[] {
-  const full = appliedFooterSegments(APPLIED_FILTER_FULL_SHORTCUTS, quitHint);
-  const prioritized = appliedFooterSegments(APPLIED_FILTER_PRIORITIZED_SHORTCUTS, quitHint);
-  const essential = appliedFooterSegments(APPLIED_FILTER_ESSENTIAL_SHORTCUTS, quitHint);
-  const labeledActions = labeledAppliedFilterActions();
-  const keyOnlyActions = keyOnlyAppliedFilterActions();
-  const quitOnly = [footerSegment("Q", "description")];
+  const fullShortcuts = filteredFooterShortcuts();
+  const essentialShortcuts = fullShortcuts.filter(
+    (shortcut) => persistentFilterActionForBinding(shortcut.id) !== undefined,
+  );
+  const prioritizedShortcuts = [
+    ...essentialShortcuts,
+    ...fullShortcuts
+      .filter((shortcut) => persistentFilterActionForBinding(shortcut.id) === undefined)
+      .slice(0, 2),
+  ];
+  const full = appliedFooterSegments(fullShortcuts, quitHint);
+  const prioritized = appliedFooterSegments(prioritizedShortcuts, quitHint);
+  const essential = appliedFooterSegments(essentialShortcuts, quitHint);
+  const labeledActions = compactAppliedFilterActions(essentialShortcuts, true);
+  const keyOnlyActions = compactAppliedFilterActions(essentialShortcuts, false);
+  const quitOnly = [footerSegment(bindingKeys("tui.dashboard.quit"), "description")];
   const candidates = [full, prioritized, essential, labeledActions, keyOnlyActions, quitOnly];
   return fitFooterSegmentCandidates(columns, candidates);
 }
 
-function labeledAppliedFilterActions(): readonly DashboardFilterFooterSegment[] {
-  const edit = footerActionSegment(
-    shortcut("tui.dashboard.filter", "edit"),
-    "persistentFilter.edit",
-  );
-  const clear = footerActionSegment(
-    shortcut("tui.dashboard.dismissEsc", "clear"),
-    "persistentFilter.clear",
-  );
-  return [edit, footerSegment(" ", "spacer"), clear, footerSegment(" Q", "description")];
-}
-
-function keyOnlyAppliedFilterActions(): readonly DashboardFilterFooterSegment[] {
+function compactAppliedFilterActions(
+  shortcuts: readonly FooterShortcut[],
+  labeled: boolean,
+): readonly DashboardFilterFooterSegment[] {
+  const [edit, clear] = shortcuts;
+  if (edit === undefined || clear === undefined) {
+    throw new Error("Persistent-filter footer bindings are incomplete.");
+  }
+  const text = (shortcut: FooterShortcut) => (labeled ? shortcutText(shortcut) : shortcut.keys);
   return [
-    footerActionSegment("/", "persistentFilter.edit"),
+    footerActionSegment(text(edit), persistentFilterAction(edit.id)),
     footerSegment(" ", "spacer"),
-    footerActionSegment("Esc", "persistentFilter.clear"),
-    footerSegment(" Q", "description"),
+    footerActionSegment(text(clear), persistentFilterAction(clear.id)),
+    footerSegment(` ${bindingKeys("tui.dashboard.quit")}`, "description"),
   ];
 }
 
 function appliedFooterSegments(
-  shortcuts: readonly AppliedFooterShortcut[],
+  shortcuts: readonly FooterShortcut[],
   quitHint: string,
 ): DashboardFilterFooterSegment[] {
   const segments: DashboardFilterFooterSegment[] = [];
-  shortcuts.forEach(([id, label, action], index) => {
+  shortcuts.forEach((shortcut, index) => {
     if (index > 0) {
       segments.push(footerSegment("  ", "spacer"));
     }
 
-    const text = shortcut(id, label);
+    const action = persistentFilterActionForBinding(shortcut.id);
+    const text = shortcutText(shortcut);
     if (action === undefined) {
       segments.push(footerSegment(text, "description"));
     } else {
@@ -265,6 +219,23 @@ function appliedFooterSegments(
   segments.push(footerSegment("  ", "spacer"));
   segments.push(footerSegment(quitHint, "description"));
   return segments;
+}
+
+function firstRunShortcuts(compact: boolean): readonly FooterShortcut[] {
+  const activate = contextualFooterShortcut("tui.dashboard.focusActivate", "add first project");
+  if (compact) return [activate];
+  return [activate, contextualFooterShortcut("tui.dashboard.addProject", "add project")];
+}
+
+function filteredFooterShortcuts(): readonly FooterShortcut[] {
+  const clear = contextualFooterShortcut("tui.dashboard.dismissEsc", "clear");
+  return dashboardFooterShortcuts("full").flatMap((shortcut) =>
+    shortcut.id === "tui.dashboard.filter" ? [{ ...shortcut, label: "edit" }, clear] : [shortcut],
+  );
+}
+
+function contextualFooterShortcut(id: TuiDashboardBindingId, label: string): FooterShortcut {
+  return { id, keys: bindingKeys(id), label };
 }
 
 function fitFooterSegmentCandidates(
@@ -277,15 +248,33 @@ function fitFooterSegmentCandidates(
 }
 
 function footerLine(shortcuts: readonly FooterShortcut[], quitHint: string): string {
-  return [...shortcuts.map(([id, label]) => shortcut(id, label)), quitHint].join("  ");
+  return [...shortcuts.map(shortcutText), quitHint].join("  ");
 }
 
-function shortcut(id: TuiDashboardBindingId, label: string): string {
+function shortcutText(shortcut: FooterShortcut): string {
+  return `${shortcut.keys} ${shortcut.label}`;
+}
+
+function bindingKeys(id: TuiDashboardBindingId): string {
   const help = dashboardBindingHelp(id);
   if (help === undefined) {
     throw new Error(`Dashboard binding ${id} has no help metadata.`);
   }
-  return `${help.keys} ${label}`;
+  return help.keys;
+}
+
+function persistentFilterActionForBinding(
+  id: TuiDashboardBindingId,
+): PersistentFilterActionId | undefined {
+  if (id === "tui.dashboard.filter") return "persistentFilter.edit";
+  if (id === "tui.dashboard.dismissEsc") return "persistentFilter.clear";
+  return undefined;
+}
+
+function persistentFilterAction(id: TuiDashboardBindingId): PersistentFilterActionId {
+  const action = persistentFilterActionForBinding(id);
+  if (action === undefined) throw new Error(`Dashboard binding ${id} has no filter action.`);
+  return action;
 }
 
 function fitFooterCandidates(columns: number, candidates: readonly string[]): string {

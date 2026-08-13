@@ -1,4 +1,5 @@
 import type {
+  HarnessRunObservation,
   ProviderProjectConfig,
   SessionRecoveryHandle,
   TerminalTargetObservation,
@@ -11,7 +12,6 @@ import type {
   SessionStore,
 } from "../../persistence/index.js";
 import { resolveWorktreeDisplayTitle } from "../../worktreeDisplayTitle.js";
-import type { ObserverHarnessRun } from "../harnessEventStatus.js";
 import { reattachSessionTitleEvidence } from "../observationCorrelation.js";
 
 export type ReconcileSnapshotInputs = {
@@ -28,7 +28,7 @@ export async function readReconcileSnapshotInputs(input: {
   persistence?: SessionStore;
   projects: ProviderProjectConfig[];
   worktrees: WorktreeObservation[];
-  harnessRuns: readonly ObserverHarnessRun[];
+  harnessRuns: readonly HarnessRunObservation[];
   terminalTargets: readonly TerminalTargetObservation[];
   now: string;
 }): Promise<ReconcileSnapshotInputs> {

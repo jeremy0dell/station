@@ -11,9 +11,7 @@ import {
   type TerminalBoundHarnessCommandDefinition,
   type TerminalBoundHarnessProviderSpec,
 } from "@station/harness-shared";
-import { classifyPiRunStatus } from "./classify.js";
 import { PiHarnessProviderError, piProviderErrorFromUnknown } from "./errors.js";
-import { normalizePiRawEvent } from "./event/mapping.js";
 import { buildPiLaunchPlan } from "./launch.js";
 
 export type PiHarnessProviderOptions = CommonHarnessProviderOptions & {
@@ -29,7 +27,6 @@ const baseCapabilities: HarnessCapabilities = {
   canLaunch: true,
   canDiscoverRuns: true,
   canEmitEvents: true,
-  canClassifyStatus: true,
   canReceivePrompt: false,
   canResume: false,
   canStop: false,
@@ -65,13 +62,7 @@ const piSpec: TerminalBoundHarnessProviderSpec<PiHarnessProviderOptions> = {
       }),
   },
   buildLaunch,
-  classifyRun: (run) => classifyPiRunStatus(run),
-  ingestEvent: {
-    operation: "provider.pi.ingestEvent",
-    errorCode: "HARNESS_PI_EVENT_INGEST_FAILED",
-    errorMessage: "The Pi harness provider failed to ingest an event.",
-    normalize: (event, context) => normalizePiRawEvent(event, context),
-  },
+  unknownStatusReason: "Pi run has no reliable Pi status signal yet.",
 };
 
 function piHealthDiagnostics(output: string): Record<string, string> {

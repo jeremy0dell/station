@@ -6,11 +6,6 @@ import type {
 import { correlateHarnessExecution } from "../harnessExecutionIdentity.js";
 import type { PersistedProviderObservation } from "../persistence/index.js";
 
-export type ObserverHarnessRun = {
-  run: HarnessRunObservation;
-  status: ObservedStatus;
-};
-
 type StatusOverlay = {
   status: ObservedStatus;
   observedAt: string;
@@ -33,10 +28,10 @@ export function externalHarnessRunId(provider: string, nativeSessionId: string):
  * external run disappears from rows once its session ends.
  */
 export function synthesizeExternalHarnessRuns(input: {
-  runs: ObserverHarnessRun[];
+  runs: HarnessRunObservation[];
   observations: PersistedProviderObservation[];
-}): ObserverHarnessRun[] {
-  const existingIds = new Set(input.runs.map((run) => run.run.id));
+}): HarnessRunObservation[] {
+  const existingIds = new Set(input.runs.map((run) => run.id));
   const latestById = new Map<string, HarnessEventObservation>();
   // Any exited observation retires the session for good; tracked separately so
   // event reordering (updatedAt vs ingest observedAt divergence, out-of-order
@@ -87,7 +82,7 @@ export function synthesizeExternalHarnessRuns(input: {
     latestById.set(id, event);
   }
 
-  const synthesized: ObserverHarnessRun[] = [];
+  const synthesized: HarnessRunObservation[] = [];
   for (const [id, event] of latestById) {
     const status = event.status;
     const worktreeId = event.worktreeId;
@@ -99,17 +94,12 @@ export function synthesizeExternalHarnessRuns(input: {
       continue;
     }
     synthesized.push({
-      run: {
-        id,
-        provider: event.provider,
-        worktreeId,
-        nativeSessionId,
-        state: status.value,
-        confidence: status.confidence,
-        reason: status.reason,
-        observedAt: event.observedAt,
-      },
+      id,
+      provider: event.provider,
+      worktreeId,
+      nativeSessionId,
       status,
+      observedAt: event.observedAt,
     });
   }
   return [...input.runs, ...synthesized];
@@ -124,9 +114,9 @@ const BUSY_STATUS_DECAY_MS = 15 * 60 * 1000;
 const BUSY_STATUS_VALUES = new Set<ObservedStatus["value"]>(["working", "starting"]);
 
 export function decayStaleBusyStatuses(input: {
-  runs: ObserverHarnessRun[];
+  runs: HarnessRunObservation[];
   now: string;
-}): ObserverHarnessRun[] {
+}): HarnessRunObservation[] {
   const cutoff = Date.parse(input.now) - BUSY_STATUS_DECAY_MS;
   if (!Number.isFinite(cutoff)) {
     return input.runs;
@@ -142,23 +132,20 @@ export function decayStaleBusyStatuses(input: {
     const decayed: ObservedStatus = {
       value: "unknown",
       confidence: "low",
-      reason: `No ${run.run.provider} signals since ${run.status.updatedAt}; the run may have ended without reporting.`,
+      reason: `No ${run.provider} signals since ${run.status.updatedAt}; the run may have ended without reporting.`,
       source: "reconcile",
       // Keep the last-signal timestamp so repeated reconciles project this
       // exact status instead of minting a fresh one per pass.
       updatedAt: run.status.updatedAt,
     };
-    return {
-      run: runObservationWithStatus(run.run, decayed),
-      status: decayed,
-    };
+    return { ...run, status: decayed };
   });
 }
 
 export function applyHarnessEventStatusOverlays(input: {
-  runs: ObserverHarnessRun[];
+  runs: HarnessRunObservation[];
   observations: PersistedProviderObservation[];
-}): ObserverHarnessRun[] {
+}): HarnessRunObservation[] {
   const latestByRunId = new Map<string, StatusOverlay>();
 
   for (const observation of input.observations) {
@@ -172,12 +159,12 @@ export function applyHarnessEventStatusOverlays(input: {
 
     const match = correlateHarnessExecution({
       evidence: event,
-      runs: input.runs.map((run) => run.run),
+      runs: input.runs,
       allowNativeBinding: false,
     });
     if (match === undefined) continue;
 
-    const currentRun = input.runs.find((run) => run.run.id === match.run.id);
+    const currentRun = input.runs.find((run) => run.id === match.run.id);
     if (currentRun === undefined || shouldPreserveLiveStatus(currentRun, event.status)) continue;
 
     const overlay: StatusOverlay = {
@@ -192,7 +179,7 @@ export function applyHarnessEventStatusOverlays(input: {
   }
 
   return input.runs.map((run) => {
-    const overlay = latestByRunId.get(run.run.id);
+    const overlay = latestByRunId.get(run.id);
     return overlay === undefined ? run : applyStatusOverlay(run, overlay);
   });
 }
@@ -206,41 +193,18 @@ function eventOrdinal(event: HarnessEventObservation): number {
   return Math.max(Number.isFinite(updated) ? updated : 0, Number.isFinite(observed) ? observed : 0);
 }
 
-function shouldPreserveLiveStatus(run: ObserverHarnessRun, status: ObservedStatus): boolean {
+function shouldPreserveLiveStatus(run: HarnessRunObservation, status: ObservedStatus): boolean {
   if (run.status.value !== "exited" || run.status.confidence !== "high") {
     return false;
   }
   return Date.parse(status.updatedAt) < Date.parse(run.status.updatedAt);
 }
 
-function applyStatusOverlay(run: ObserverHarnessRun, overlay: StatusOverlay): ObserverHarnessRun {
-  const nextRun = runObservationWithStatus(run.run, overlay.status);
-  return {
-    run: nextRun,
-    status: overlay.status,
-  };
-}
-
-function runObservationWithStatus(
+function applyStatusOverlay(
   run: HarnessRunObservation,
-  status: ObservedStatus,
+  overlay: StatusOverlay,
 ): HarnessRunObservation {
-  const nextRun: HarnessRunObservation = {
-    id: run.id,
-    provider: run.provider,
-    state: status.value,
-    confidence: status.confidence,
-    reason: status.reason,
-    observedAt: run.observedAt,
-  };
-  if (run.projectId !== undefined) nextRun.projectId = run.projectId;
-  if (run.worktreeId !== undefined) nextRun.worktreeId = run.worktreeId;
-  if (run.sessionId !== undefined) nextRun.sessionId = run.sessionId;
-  if (run.nativeSessionId !== undefined) nextRun.nativeSessionId = run.nativeSessionId;
-  if (run.pid !== undefined) nextRun.pid = run.pid;
-  if (run.cwd !== undefined) nextRun.cwd = run.cwd;
-  if (run.providerData !== undefined) nextRun.providerData = run.providerData;
-  return nextRun;
+  return { ...run, status: overlay.status };
 }
 
 function compareOverlays(left: StatusOverlay, right: StatusOverlay): number {

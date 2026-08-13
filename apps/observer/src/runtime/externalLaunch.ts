@@ -46,7 +46,7 @@ type ExternalExitDeps = Pick<ExternalLaunchDeps, "providers">;
 
 export type ExternalLaunchOutcome<T> = {
   outcome: T;
-  /** Whether the caller should reconcile so the change reaches the snapshot. */
+  /** Whether the caller should request a shared scheduled reconcile for this lifecycle change. */
   reconcile: boolean;
 };
 
@@ -213,6 +213,8 @@ async function prepareExternalLaunchForWorktree(
         projectId: project.id,
         worktreeId: worktree.id,
         initialTitle: params.title ?? row.title,
+        harness: harnessProviderId,
+        terminalProvider: managedTerminal.id,
         ...(group === undefined ? {} : { group }),
         clock: deps.clock,
       });

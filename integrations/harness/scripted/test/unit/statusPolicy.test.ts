@@ -1,89 +1,68 @@
-import type { HarnessRunObservation } from "@station/contracts";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { classifyScriptedRunStatus } from "../../src/statusPolicy";
+import { discoverScriptedRuns } from "../../src/stateStore";
 
 const now = "2026-05-20T12:00:10.000Z";
 
-function run(
-  providerData: Record<string, unknown>,
-  overrides: Partial<HarnessRunObservation> = {},
-): HarnessRunObservation {
-  return {
-    id: "run_web_task",
-    provider: "scripted",
-    projectId: "web",
-    worktreeId: "wt_web_task",
-    sessionId: "ses_web_task",
-    state: "unknown",
-    confidence: "low",
-    reason: "Unclassified scripted run.",
-    observedAt: now,
-    providerData,
-    ...overrides,
-  };
-}
+describe("scripted discovery status policy", () => {
+  it("ignores an empty event file instead of creating an unclassified run", async () => {
+    expect(await discover([])).toEqual([]);
+  });
 
-describe("scripted status confidence policy", () => {
-  it("keeps ambiguous inactivity unknown with low confidence", () => {
-    const status = classifyScriptedRunStatus(run({ events: [] }), { now });
-
-    expect(status.status).toMatchObject({
-      value: "unknown",
-      confidence: "low",
-      reason: "Scripted run has no reliable lifecycle event.",
+  it("rejects malformed lifecycle events at the file boundary", async () => {
+    await expect(discover([{ events: "not-an-array" }])).rejects.toMatchObject({
+      code: "HARNESS_SCRIPTED_EVENT_INVALID",
     });
   });
 
-  it("treats malformed providerData as missing lifecycle history", () => {
-    const status = classifyScriptedRunStatus(run({ events: "not-an-array" }), { now });
-
-    expect(status.status).toMatchObject({
-      value: "unknown",
-      confidence: "low",
-      reason: "Scripted run has no reliable lifecycle event.",
-    });
-  });
-
-  it("classifies recent activity as working with medium confidence", () => {
-    const status = classifyScriptedRunStatus(
-      run({
-        events: [{ type: "activity", at: now, runId: "run_web_task", message: "Editing file." }],
-      }),
-      { now },
-    );
-
-    expect(status.status).toMatchObject({
+  it("classifies recent activity as working with medium confidence during discovery", async () => {
+    const [run] = await discover([
+      { type: "activity", at: now, runId: "run_web_task", message: "Editing file." },
+    ]);
+    expect(run?.status).toMatchObject({
       value: "working",
       confidence: "medium",
       reason: "Editing file.",
     });
   });
 
-  it("classifies reliable attention and exit signals with high confidence", () => {
-    expect(
-      classifyScriptedRunStatus(
-        run({
-          events: [{ type: "attention", at: now, runId: "run_web_task", message: "Needs input." }],
-        }),
-        { now },
-      ).status,
-    ).toMatchObject({
+  it("classifies reliable attention and exit signals with high confidence", async () => {
+    const [attention] = await discover([
+      { type: "attention", at: now, runId: "run_web_task", message: "Needs input." },
+    ]);
+    expect(attention?.status).toMatchObject({
       value: "needs_attention",
       confidence: "high",
       reason: "Needs input.",
     });
 
-    expect(
-      classifyScriptedRunStatus(
-        run({
-          events: [{ type: "exit", at: now, runId: "run_web_task", exitCode: 0 }],
-        }),
-        { now },
-      ).status,
-    ).toMatchObject({
+    const [exited] = await discover([
+      { type: "exit", at: now, runId: "run_web_task", exitCode: 0 },
+    ]);
+    expect(exited?.status).toMatchObject({
       value: "exited",
       confidence: "high",
       reason: "Scripted agent exited with code 0.",
     });
   });
 });
+
+async function discover(events: readonly unknown[]) {
+  const stateDir = await mkdtemp(join(tmpdir(), "station-scripted-discovery-status-"));
+  try {
+    const runsDir = join(stateDir, "runs");
+    await mkdir(runsDir, { recursive: true });
+    await writeFile(
+      join(runsDir, "run.jsonl"),
+      events.map((event) => JSON.stringify(event)).join("\n"),
+    );
+    return await discoverScriptedRuns({
+      stateDir,
+      clock: { now: () => new Date(now) },
+    });
+  } finally {
+    await rm(stateDir, { recursive: true, force: true });
+  }
+}
