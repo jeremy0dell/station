@@ -301,7 +301,7 @@ describe("OpenCodeHarnessProvider", () => {
       schemaVersion: 1 as const,
       launcher: join(root, "requester", "bin", "stn-ingress"),
       runtimeKind: "source" as const,
-      version: "0.0.0-pre-alpha.5.8",
+      version: "0.0.0-pre-alpha.5.9",
       buildIdentity: "a".repeat(64),
     };
 
