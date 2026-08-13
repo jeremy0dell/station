@@ -36,7 +36,8 @@ export function buildPiLaunchPlan(
     );
   }
 
-  const extensionPath = options.extensionPath ?? defaultPiExtensionPath();
+  const extensionPath =
+    options.extensionPath ?? fileURLToPath(new URL("../dist/piExtension.js", import.meta.url));
   const args = ["--extension", extensionPath];
   if (request.resume !== undefined) {
     // Pi can recover from its session file, so provider normalization chooses
@@ -71,10 +72,6 @@ export function buildPiLaunchPlan(
     displayTitle: `${request.project.label} Pi`,
     providerData,
   };
-}
-
-function defaultPiExtensionPath(): string {
-  return fileURLToPath(new URL("../dist/piExtension.js", import.meta.url));
 }
 
 function resumeTargetValue(request: BuildHarnessLaunchRequest): string {
