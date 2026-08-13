@@ -80,7 +80,6 @@ export function persistReconcileResult(
     });
   }
   for (const run of input.harnessRuns.map((value) => HarnessRunObservationSchema.parse(value))) {
-    upsertHarnessRun(database, run);
     insertProviderObservation(database, {
       id: options.idFactory.observationId(),
       provider: run.provider,
@@ -473,45 +472,6 @@ function upsertTerminalTarget(database: SqlDatabase, target: TerminalTargetObser
       target.id,
       null,
       target.observedAt,
-    );
-}
-
-function upsertHarnessRun(database: SqlDatabase, run: HarnessRunObservation): void {
-  database
-    .prepare(
-      `
-        INSERT INTO harness_runs
-          (id, session_id, project_id, worktree_id, harness, pid, external_run_id, state, confidence, reason, provider_data_json, last_event_at, last_seen_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(id) DO UPDATE SET
-          session_id = excluded.session_id,
-          project_id = excluded.project_id,
-          worktree_id = excluded.worktree_id,
-          harness = excluded.harness,
-          pid = excluded.pid,
-          external_run_id = excluded.external_run_id,
-          state = excluded.state,
-          confidence = excluded.confidence,
-          reason = excluded.reason,
-          provider_data_json = excluded.provider_data_json,
-          last_event_at = excluded.last_event_at,
-          last_seen_at = excluded.last_seen_at
-      `,
-    )
-    .run(
-      run.id,
-      run.sessionId ?? null,
-      run.projectId ?? null,
-      run.worktreeId ?? null,
-      run.provider,
-      run.pid ?? null,
-      run.id,
-      run.state,
-      run.confidence,
-      run.reason,
-      optionalJson(run.providerData),
-      run.observedAt,
-      run.observedAt,
     );
 }
 
