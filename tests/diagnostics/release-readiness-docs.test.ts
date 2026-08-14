@@ -294,7 +294,8 @@ describe("release readiness docs", () => {
     expect(releasing).toContain("repository-wide publication lock");
     expect(releasing).toContain("`full-handoff`");
     expect(releasing).toContain("`preserved-refusal`");
-    expect(releasing).toContain("only to prove discovery, download, and installation");
+    expect(releasing).toContain("compiled predecessors must preserve and visibly");
+    expect(releasing).toContain("scenario must complete the version change");
     expect(releasing).not.toContain(exactVersion);
     expect(homebrew).toContain("Homebrew installation is not currently supported");
     expect(homebrew).toContain("This distribution policy is separate from first-run dependencies");

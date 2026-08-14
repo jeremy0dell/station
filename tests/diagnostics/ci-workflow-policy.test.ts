@@ -465,6 +465,7 @@ describe("hosted CI policy", () => {
     expect(installDraft).toContain('--target-release-dir "$RUNNER_TEMP/update-release"');
     expect(installDraft).toContain('--target-build-identity "$target_build_identity"');
     expect(installDraft).toContain("--scenarios full");
+    expect(installDraft).toContain("--busy-host-outcome preserved-refusal");
     expect(accepted).toContain('test "$current_ids" = "$(cat candidate/asset-ids.txt)"');
     expect(accepted).not.toContain(": > candidate/asset-ids.txt");
 

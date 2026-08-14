@@ -589,7 +589,7 @@ jobs:
             --target-tag "$TAG" \
             --target-build-identity "$target_build_identity" \
             --scenarios full \
-            --busy-host-outcome full-handoff
+            --busy-host-outcome preserved-refusal
       - name: Verify lock refusal and same-version retry
         env:
           EXPECTED_VERSION: ${{ needs.validate.outputs.version }}

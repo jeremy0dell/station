@@ -21,9 +21,11 @@ builds the four native targets, creates a six-asset draft, exercises the stamped
 draft installer, binds the exact numeric asset IDs and shared target build
 identity, and records an immutable `accepted-release-candidate-*` artifact. The
 macOS candidate lane selects the newest complete immutable predecessor and
-requires `full-handoff`; post-promotion public update checks use the no-Host
-scenario only to prove discovery, download, and installation. The tag workflow
-never publishes the draft automatically.
+runs the full scenario set: compiled predecessors must preserve and visibly
+refuse busy Hosts whose in-process PTYs cannot hand off, while the no-Host
+scenario must complete the version change. Post-promotion public update checks
+repeat the no-Host discovery, download, and installation proof. The tag
+workflow never publishes the draft automatically.
 
 Do not begin manual acceptance until the workflow succeeds. Treat the workflow,
 not this prose, as the source of truth for artifact names, checksums, and target

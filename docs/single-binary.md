@@ -201,8 +201,10 @@ completed install and Observer crossover while the old Host and PTYs remain
 usable and the target native UI refuses that Host. The pane-free tmux dashboard
 may still render against the matching target Observer; Host-producing work stays
 guarded by the terminal provider boundary. Release staging requires full
-handoff; post-promotion public checks use the no-Host scenario only to prove
-discovery, download, and installation.
+scenario coverage: compiled predecessor busy Hosts must take the
+`preserved-refusal` path, and the no-Host scenario must complete discovery,
+download, installation, and crossover. Post-promotion public checks repeat the
+no-Host path.
 
 Native release CI builds and tests `darwin-arm64`, `darwin-x64`, `linux-arm64`,
 and `linux-x64`. The manual release gate covers real TTY rendering, shell job
