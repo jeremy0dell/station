@@ -86,10 +86,10 @@ fresh worktree—the operation closes with a warning instead of permitting a
 duplicate branch submission.
 
 Group Settings is one stable-ID screen per canonical Group, with General,
-Sessions, and Remove Group sections. Opening it anchors dashboard focus to the
-Group menu cell; the future complete Group menu can open General or Remove
-directly without owning settings state. General captures the Group version for
-one `sessionGroup.rename`. Sessions captures that version plus each Project
+Sessions, and Remove Group sections. Activating the Group `[▾]` control opens
+General and anchors dashboard focus to that cell; a future complete Group menu
+can open General or Remove directly without owning settings state. General
+captures the Group version for one `sessionGroup.rename`. Sessions captures that version plus each Project
 session's expected current Group, stages desired membership locally, and emits
 one atomic `sessionGroup.updateMembership` add/remove delta; selecting a member
 of another Group is an expected move, and an empty desired set is valid. Remove

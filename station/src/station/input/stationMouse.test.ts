@@ -564,6 +564,17 @@ describe("routeStationMouse", () => {
     routeStationMouse({ kind: "dashboardCell", rowId: groupId, cellId: "menu" }, LEFT_DOWN, store);
     expect([...store.state.getState().collapsedGroupIds]).toEqual([]);
     expect(store.state.getState().dashboardFocus).toEqual({ rowId: groupId, cellId: "menu" });
+    expect(store.state.getState().screen).toMatchObject({
+      name: "groupSettings",
+      groupId: "group_design_refresh",
+      section: "general",
+    });
+
+    routeStationMouse(
+      { kind: "groupSettingsAction", actionId: "back" },
+      LEFT_DOWN,
+      store,
+    );
     expect(store.state.getState().screen).toEqual({ name: "dashboard" });
 
     const beforeFrame = store.state.getState();

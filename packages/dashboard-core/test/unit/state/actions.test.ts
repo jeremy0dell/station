@@ -370,7 +370,7 @@ describe("dashboard state actions", () => {
     ).toEqual({ state });
   });
 
-  it("toggles Group identity, submits Group Quick Session, and keeps the menu inert", () => {
+  it("toggles Group identity, submits Group Quick Session, and opens Group Settings", () => {
     const state = createInitialTuiState({ initialSnapshot: createGroupedDashboardSnapshot() });
     const rowId = dashboardRowIds.group("group_active");
     const collapsed = handleTuiAction(
@@ -406,6 +406,20 @@ describe("dashboard state actions", () => {
     expect(menu.operations).toBeUndefined();
     expect(menu.state.dashboardFocus).toEqual({ rowId, cellId: "menu" });
     expect(menu.state.collapsedGroupIds.size).toBe(0);
+    expect(menu.state.screen).toMatchObject({
+      name: "groupSettings",
+      groupId: "group_active",
+      section: "general",
+      focus: "list",
+    });
+
+    const focused = {
+      ...state,
+      dashboardFocus: { rowId, cellId: "menu" } as const,
+    };
+    expect(handleTuiKey(focused, { input: "\r", return: true }, context).state.screen).toEqual(
+      menu.state.screen,
+    );
   });
 
   it("routes Project-menu and Create Group actions through the shared semantic surface", () => {
