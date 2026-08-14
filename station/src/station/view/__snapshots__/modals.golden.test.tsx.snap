@@ -368,11 +368,11 @@ exports[`modal flow golden frames renders the group settings sessions compact 1`
 "┌──────────────────────────────────────┐
 │ Sessions · Design refresh            │
 │ Sessions                             │
-│▸ 1 [✓] group-contracts        working│
-│  2 [✓] group-keyboard            idle│
-│  3 [ ] handoff-refusa needs attention│
+│▸ 1 [✓] group-contracts  in this Group│
+│  2 [✓] group-keyboard   in this Group│
+│  3 [ ] handoff-re in Observer harden…│
 │ ↓ 9 more                             │
-│ Space toggles; another Group selectio│
+│ Uncheck = ungroup on Save. Space/Ente│
 │  Save (Enter)       Back (Esc)       │
 │ ↑↓ focus · enter activate · esc secti│
 └──────────────────────────────────────┘

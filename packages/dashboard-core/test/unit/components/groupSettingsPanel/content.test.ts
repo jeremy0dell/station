@@ -30,9 +30,26 @@ describe("Group Settings panel content", () => {
       activity: "working",
       checked: true,
       currentGroupName: "Build",
-      movesOnSave: true,
+      membershipLabel: "move from Build",
     });
     expect(model?.membershipChanged).toBe(true);
+  });
+
+  it("labels an unchecked member as staged to ungroup without coupling membership to focus", () => {
+    const setup = sessionsState();
+    const staged = toggleGroupSettingsSession(setup.state, "ses_wt_web_attention");
+    if (staged.screen.name !== "groupSettings") throw new Error("expected Group Settings");
+    const model = groupSettingsPanelModel(setup.snapshot, staged.screen, 20);
+    const member = model?.sessions.find((session) => session.sessionId === "ses_wt_web_attention");
+
+    expect(member).toMatchObject({
+      checked: false,
+      focused: true,
+      membershipLabel: "ungroup on Save",
+    });
+    expect(
+      model?.sessions.find((session) => session.sessionId === "ses_wt_web_idle"),
+    ).toMatchObject({ checked: true, membershipLabel: "in this Group" });
   });
 
   it("windows a long canonical Project list around the stable cursor", () => {

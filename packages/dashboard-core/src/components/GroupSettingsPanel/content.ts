@@ -17,7 +17,7 @@ export type GroupSettingsSessionLine = {
   focused: boolean;
   currentGroupId: SessionGroupId | null;
   currentGroupName?: string;
-  movesOnSave: boolean;
+  membershipLabel: string;
 };
 
 export type GroupSettingsPanelModel = {
@@ -71,18 +71,19 @@ export function groupSettingsPanelModel(
       const absoluteIndex = visibleRows.start + visibleIndex;
       const currentGroup = groupsBySessionId.get(session.id);
       const currentGroupId = currentGroup?.id ?? null;
+      const checked = screen.desiredSessionIds.has(session.id);
       const line: GroupSettingsSessionLine = {
         sessionId: session.id,
         slot: keys[absoluteIndex] ?? "·",
         title: session.title,
         activity: session.status.value.replaceAll("_", " "),
-        checked: screen.desiredSessionIds.has(session.id),
+        checked,
         focused:
           screen.focus === "detail" &&
           screen.detailFocus === "sessionList" &&
           screen.sessionCursor === session.id,
         currentGroupId,
-        movesOnSave: screen.desiredSessionIds.has(session.id) && currentGroupId !== screen.groupId,
+        membershipLabel: sessionMembershipLabel(checked, currentGroup, screen.groupId),
       };
       if (currentGroup !== undefined) line.currentGroupName = currentGroup.name;
       return line;
@@ -100,6 +101,19 @@ export function groupSettingsPanelModel(
     removeArmed: isRemoveSessionGroupArmed(screen),
     pending: screen.pending !== undefined,
   };
+}
+
+function sessionMembershipLabel(
+  checked: boolean,
+  currentGroup: DashboardSnapshotView["sessionGroups"][number] | undefined,
+  targetGroupId: SessionGroupId,
+): string {
+  if (checked) {
+    if (currentGroup?.id === targetGroupId) return "in this Group";
+    return currentGroup === undefined ? "add on Save" : `move from ${currentGroup.name}`;
+  }
+  if (currentGroup?.id === targetGroupId) return "ungroup on Save";
+  return currentGroup === undefined ? "ungrouped" : `in ${currentGroup.name}`;
 }
 
 function windowRange(

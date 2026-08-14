@@ -35,7 +35,7 @@ function settingsState(section: "general" | "sessions" | "remove") {
   );
   state = handleTuiKey(state, { input: "", rightArrow: true }).state;
   if (state.screen.name !== "groupSettings") throw new Error("expected Group Settings");
-  return { snapshot, screen: state.screen };
+  return { snapshot, state, screen: state.screen };
 }
 
 async function render(
@@ -87,6 +87,7 @@ describe("GroupSettingsPanelView", () => {
 
     expect(lines[row]).toContain("▸");
     expect(lines[row]).toContain("[✓]");
+    expect(lines[row]).toContain("in this Group");
     await setup.mockMouse.click(column, row, MouseButtons.LEFT);
     expect(
       targets.some(
@@ -95,6 +96,21 @@ describe("GroupSettingsPanelView", () => {
           target.sessionId === "ses_wt_group_contracts",
       ),
     ).toBe(true);
+  });
+
+  it("makes staged ungrouping explicit without changing the focus marker", async () => {
+    const initial = settingsState("sessions");
+    const staged = handleTuiKey(initial.state, { input: " " }).state;
+    if (staged.screen.name !== "groupSettings") throw new Error("expected Group Settings");
+    const { setup } = await render(initial.snapshot, staged.screen);
+    const line = setup
+      .captureCharFrame()
+      .split("\n")
+      .find((candidate) => candidate.includes("group-contracts"));
+
+    expect(line).toContain("▸");
+    expect(line).toContain("[ ]");
+    expect(line).toContain("ungroup on Save");
   });
 
   it("keeps destructive copy and actions visible in a short minimum-width frame", async () => {

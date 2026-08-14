@@ -562,9 +562,11 @@ Activating a Group's `[▾]` opens Group Settings at General. The stable open-at
 open-at-Remove actions remain available to a future complete Group menu. One responsive settings
 shell contains General, Sessions, and Remove Group; `G`, `S`, and `R`, arrows plus Enter, and
 semantic pointer targets reach every section and control. General shows read-only Project identity and saves one versioned Group rename. Sessions
-lists only canonical sessions in the Group's Project with non-color cursor and checkbox markers;
-selection stages desired membership, identifies moves from another Group, and Save emits one atomic
-expected-assignment add/remove delta. An empty Project and an empty desired Group remain usable.
+lists only canonical sessions in the Group's Project with an independent non-color cursor and
+checkbox marker. `[✓]` means the session will belong to this Group after Save; unchecking a current
+member is labeled `ungroup on Save`, while checking another Group's member is labeled as a move.
+Save emits one atomic expected-assignment add/remove delta. An empty Project and an empty desired
+Group remain usable.
 Remove Group states that member sessions remain open and become ungrouped, requires the exact
 `delete <Group name>` phrase, and dispatches only Group deletion—never session, agent, terminal,
 worktree, or provider lifecycle.

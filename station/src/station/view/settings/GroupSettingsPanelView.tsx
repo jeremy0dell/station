@@ -2,6 +2,7 @@ import { TextAttributes } from "@opentui/core";
 import {
   groupSettingsPanelModel,
   settingsPanelLayout,
+  truncateCells,
 } from "@station/dashboard-core/selectors";
 import type {
   DashboardScreenView,
@@ -251,7 +252,7 @@ function SessionsDetail({
         <text fg={toOpenTuiColor(theme.text.muted)}>{fit(` ↓ ${model.hiddenBelow} more`, width)}</text>
       ) : null}
       <text fg={toOpenTuiColor(theme.text.primary)} attributes={TextAttributes.DIM}>
-        {fit(" Space toggles; another Group selection moves on Save.", width)}
+        {fit(" Uncheck = ungroup on Save. Space/Enter toggles.", width)}
       </text>
       <SheetButtonRow
         width={width}
@@ -295,15 +296,14 @@ function SessionRow({
   const [hover, setHover] = useStationHoverState();
   const marker = session.focused ? "▸" : " ";
   const checkbox = session.checked ? "[✓]" : "[ ]";
-  const move = session.movesOnSave && session.currentGroupName !== undefined
-    ? ` ← ${session.currentGroupName}`
-    : "";
-  const activityWidth = Math.min(16, Math.max(5, session.activity.length));
   const prefix = `${marker} ${session.slot} ${checkbox} `;
-  const suffix = ` ${session.activity}`;
+  const membership = truncateCells(
+    session.membershipLabel,
+    Math.max(0, Math.floor(width / 2)),
+  );
+  const suffix = membership.length === 0 ? "" : ` ${membership}`;
   const titleWidth = Math.max(0, width - prefix.length - suffix.length);
-  const title = `${session.title}${move}`.slice(0, titleWidth);
-  const spacing = " ".repeat(Math.max(0, titleWidth - title.length));
+  const title = fit(session.title, titleWidth);
   return (
     <text
       fg={toOpenTuiColor(theme.text.primary)}
@@ -318,12 +318,11 @@ function SessionRow({
     >
       {prefix}
       {title}
-      {spacing}{" "}
       <span
         fg={toOpenTuiColor(theme.text.muted)}
         attributes={TextAttributes.DIM}
       >
-        {session.activity.slice(0, activityWidth)}
+        {suffix}
       </span>
     </text>
   );

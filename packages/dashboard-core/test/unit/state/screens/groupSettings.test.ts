@@ -50,6 +50,16 @@ describe("Group Settings screen", () => {
     expect(groupScreen(general).nameDraft.value).toBe("Active work");
   });
 
+  it("moves focus without changing staged membership", () => {
+    const state = selectGroupSettingsSection(opened(), "sessions");
+    const before = groupScreen(state);
+    const moved = handleTuiKey(state, { input: "", downArrow: true }).state;
+    const after = groupScreen(moved);
+
+    expect(after.sessionCursor).not.toBe(before.sessionCursor);
+    expect(after.desiredSessionIds).toEqual(before.desiredSessionIds);
+  });
+
   it("stages one atomic add/remove delta with original assignment expectations", () => {
     let state = selectGroupSettingsSection(opened(), "sessions");
     state = toggleGroupSettingsSession(state, "ses_wt_web_attention");

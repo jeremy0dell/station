@@ -1138,6 +1138,58 @@ describe("routeStationMouse", () => {
     });
   });
 
+  it("unchecks a current member and dispatches one ungroup membership delta", async () => {
+    const snapshot = groupedManyProjectsSnapshot();
+    const fixture = makeStationTestRuntime({ terminalRows: 14, snapshot });
+    const store = fixture.runtime;
+
+    routeStationMouse(
+      {
+        kind: "dashboardCell",
+        rowId: dashboardRowIds.group("group_design_refresh"),
+        cellId: "menu",
+      },
+      LEFT_DOWN,
+      store,
+    );
+    routeStationMouse(
+      { kind: "groupSettingsSection", section: "sessions" },
+      LEFT_DOWN,
+      store,
+    );
+    routeStationMouse(
+      { kind: "groupSettingsSession", sessionId: "ses_wt_group_contracts" },
+      LEFT_DOWN,
+      store,
+    );
+    routeStationMouse(
+      { kind: "groupSettingsAction", actionId: "save" },
+      LEFT_DOWN,
+      store,
+    );
+
+    await waitFor(() =>
+      fixture.service.dispatched.some(
+        (command) => command.type === "sessionGroup.updateMembership",
+      ),
+    );
+    expect(
+      fixture.service.dispatched.find(
+        (command) => command.type === "sessionGroup.updateMembership",
+      ),
+    ).toMatchObject({
+      payload: {
+        groupId: "group_design_refresh",
+        remove: [
+          {
+            sessionId: "ses_wt_group_contracts",
+            expectedGroupId: "group_design_refresh",
+          },
+        ],
+      },
+    });
+  });
+
   it("keeps Group Settings targets inert outside its mode", () => {
     const store = makeStore(groupedManyProjectsSnapshot());
     const before = store.state.getState().screen;

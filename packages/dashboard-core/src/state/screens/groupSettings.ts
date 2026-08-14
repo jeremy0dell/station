@@ -531,6 +531,8 @@ function controlBelongsToSection(
 }
 
 function sessionIdForSlot(sessionIds: readonly SessionId[], input: string): SessionId | undefined {
+  // Arrow events carry empty input, which String#indexOf would otherwise map to slot 0.
+  if (input.length !== 1) return undefined;
   const keys = "123456789abcdefghijklmnopqrstuvwxyz";
   const index = keys.indexOf(input.toLowerCase());
   return index < 0 ? undefined : sessionIds[index];

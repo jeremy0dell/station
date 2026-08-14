@@ -378,6 +378,12 @@ describe("FullscreenDashboard mouse composition", () => {
       cellId: "menu",
     });
     expect([...fixture.runtime.state.getState().collapsedGroupIds]).toEqual([]);
+    expect(fixture.runtime.state.getState().screen).toMatchObject({
+      name: "groupSettings",
+      groupId: "group_design_refresh",
+      section: "general",
+    });
+    await actOn(() => fixture.runtime.actions.dispatch({ type: "groupSettings.back" }));
 
     group = groupLine();
     await actOn(() =>

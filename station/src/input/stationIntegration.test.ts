@@ -146,7 +146,14 @@ describe("station overlay layer in the keymap stack", () => {
     routeKey("\r", station.getState(), keymap);
     expect(view.state.getState().dashboardFocus).toEqual({ rowId: groupId, cellId: "menu" });
     expect([...view.state.getState().collapsedGroupIds]).toEqual([]);
+    expect(view.state.getState().screen).toMatchObject({
+      name: "groupSettings",
+      groupId: "group_design_refresh",
+      section: "general",
+    });
 
+    routeKey("\x1b", station.getState(), keymap);
+    expect(view.state.getState().screen).toEqual({ name: "dashboard" });
     routeKey("a", station.getState(), keymap);
     expect(activatedSessionIds).toEqual(["ses_wt_runtime_cleanup"]);
 
