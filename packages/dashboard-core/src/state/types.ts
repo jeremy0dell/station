@@ -137,6 +137,25 @@ export type TuiObserverConnectionStatus =
   | { state: "reconnecting"; since: number; lastError?: SafeError }
   | { state: "displayOnly"; since: number; lastError?: SafeError };
 
+export type GroupSettingsSection = "general" | "sessions" | "remove";
+
+/** Which pane of the two-pane Group Settings panel owns keyboard input. */
+export type GroupSettingsFocus = "list" | "detail";
+
+/** Section-local control focus in Group Settings detail panes. */
+export type GroupSettingsDetailFocus =
+  | "name"
+  | "generalSave"
+  | "generalCancel"
+  | "sessionList"
+  | "membershipSave"
+  | "sessionsBack"
+  | "removeConfirm"
+  | "removeSubmit"
+  | "removeBack";
+
+export type GroupSettingsPendingMutation = "rename" | "membership" | "delete";
+
 export type TuiScreen =
   | { name: "dashboard" }
   | { name: "help" }
@@ -221,6 +240,22 @@ export type TuiScreen =
       focus: ProjectSettingsFocus;
       activeId: ProjectSettingsItemId;
       removeDraft: EditableTextInputState;
+    }
+  | {
+      name: "groupSettings";
+      projectId: ProjectId;
+      groupId: SessionGroupId;
+      section: GroupSettingsSection;
+      focus: GroupSettingsFocus;
+      detailFocus: GroupSettingsDetailFocus;
+      expectedVersion: number;
+      baselineName: string;
+      nameDraft: EditableTextInputState;
+      baselineAssignments: ReadonlyMap<SessionId, SessionGroupId | null>;
+      desiredSessionIds: ReadonlySet<SessionId>;
+      sessionCursor?: SessionId;
+      removeDraft: EditableTextInputState;
+      pending?: GroupSettingsPendingMutation;
     }
   | { name: "widgetSettings"; focus: WidgetSettingsFocus; cursor: number; pickerCursor: number };
 

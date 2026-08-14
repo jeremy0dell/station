@@ -10,6 +10,7 @@ import {
   openAddProject,
   selectAddProjectRow,
 } from "../../../src/state/screens/addProjectScreen.js";
+import { openGroupSettings } from "../../../src/state/screens/groupSettings.js";
 import { openProjectDefaultAgentPicker } from "../../../src/state/screens/projectDefaultAgent.js";
 import {
   focusProjectSettingsItem,
@@ -97,6 +98,12 @@ const STATE_ACTION_CASES: readonly StateActionCase[] = [
     reduce: (state) => openProjectSettings(state, "web"),
   },
   {
+    name: "groupSettings.open",
+    action: { type: "groupSettings.open", groupId: "group_active", section: "remove" },
+    state: groupedDashboardState,
+    reduce: (state) => openGroupSettings(state, "group_active", "remove"),
+  },
+  {
     name: "widgetSettings.open",
     action: { type: "widgetSettings.open" },
     state: dashboardState,
@@ -140,6 +147,7 @@ const STALE_STATE_ACTIONS: readonly DashboardStateAction[] = [
   { type: "removeWorktree.openConfirm", rowId: "missing" },
   { type: "projectDefaultAgent.open", projectId: "missing" },
   { type: "projectSettings.open", projectId: "missing" },
+  { type: "groupSettings.open", groupId: "missing", section: "general" },
   {
     type: "forkSession.openDetails",
     rowId: "missing",
@@ -531,6 +539,10 @@ describe("dashboard state actions", () => {
 
 function dashboardState(): DashboardState {
   return createInitialTuiState({ initialSnapshot: createDashboardSnapshot() });
+}
+
+function groupedDashboardState(): DashboardState {
+  return createInitialTuiState({ initialSnapshot: createGroupedDashboardSnapshot() });
 }
 
 function scrollingDashboardState(): DashboardState {

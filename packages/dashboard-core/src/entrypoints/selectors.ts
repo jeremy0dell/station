@@ -55,21 +55,24 @@ export type {
   CreateGroupSheetContent,
 } from "../components/GroupCreateSheet/content.js";
 export { createGroupSheetContent } from "../components/GroupCreateSheet/content.js";
-
+export type {
+  GroupSettingsPanelModel,
+  GroupSettingsSessionLine,
+} from "../components/GroupSettingsPanel/content.js";
+export { groupSettingsPanelModel } from "../components/GroupSettingsPanel/content.js";
 export {
   helpPanelLayout,
   helpPanelLines,
 } from "../components/HelpOverlay/helpPanel.js";
-
 export {
   newSessionEditGroupDraftContent,
   newSessionEditNameContent,
   newSessionReviewContent,
 } from "../components/NewSessionBottomSheet/content.js";
-
 export { newSessionContentRowCount } from "../components/NewSessionBottomSheet/layout.js";
 
-export { projectSettingsPanelLayout } from "../components/ProjectSettingsPanel/layout.js";
+export type { SettingsPanelLayout } from "../components/SettingsPanel/layout.js";
+export { settingsPanelLayout } from "../components/SettingsPanel/layout.js";
 
 export { textMatchSegments } from "../components/TextMatch/segments.js";
 export type { ToastBorderColorName } from "../components/ToastOverlay/content.js";

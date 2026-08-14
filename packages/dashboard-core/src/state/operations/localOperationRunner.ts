@@ -12,6 +12,11 @@ import {
 } from "./addProject.js";
 import { createDashboardCapabilityOperationRunner } from "./capabilityOperation.js";
 import { runQuickSessionInGroupOperation } from "./groupQuickSession.js";
+import {
+  runDeleteSessionGroupOperation,
+  runRenameSessionGroupOperation,
+  runUpdateSessionGroupMembershipOperation,
+} from "./groupSettings.js";
 import { projectCommandOperations } from "./projectCommands.js";
 import { runRemoveWorktreeOperation } from "./removeWorktree.js";
 import { runRenameSessionOperation } from "./renameSession.js";
@@ -192,6 +197,39 @@ export function createTuiLocalOperationRunner(input: {
     createSessionGroupForMove: (operation) => {
       input.scope.run(() =>
         runCreateSessionGroupForMoveOperation({
+          store: store(),
+          service: input.service,
+          operation,
+          clientLabel: input.clientLabel,
+          scope: input.scope,
+        }),
+      );
+    },
+    renameSessionGroup: (operation) => {
+      input.scope.run(() =>
+        runRenameSessionGroupOperation({
+          store: store(),
+          service: input.service,
+          operation,
+          clientLabel: input.clientLabel,
+          scope: input.scope,
+        }),
+      );
+    },
+    updateSessionGroupMembership: (operation) => {
+      input.scope.run(() =>
+        runUpdateSessionGroupMembershipOperation({
+          store: store(),
+          service: input.service,
+          operation,
+          clientLabel: input.clientLabel,
+          scope: input.scope,
+        }),
+      );
+    },
+    deleteSessionGroup: (operation) => {
+      input.scope.run(() =>
+        runDeleteSessionGroupOperation({
           store: store(),
           service: input.service,
           operation,

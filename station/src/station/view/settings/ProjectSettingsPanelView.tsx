@@ -5,7 +5,7 @@
 // machine; this layer is render + mouse targets only.
 import { TextAttributes } from "@opentui/core";
 import type { ProviderId } from "@station/contracts";
-import { projectSettingsPanelLayout, selectNewSessionHarnessChoices, selectProjectDefaultHarness } from "@station/dashboard-core/selectors";
+import { settingsPanelLayout, selectNewSessionHarnessChoices, selectProjectDefaultHarness } from "@station/dashboard-core/selectors";
 import {
   isRemoveProjectArmed,
   PROJECT_SETTINGS_AGENT_LIST_ID,
@@ -49,7 +49,7 @@ export function ProjectSettingsPanelView({
   const project = snapshot.projects.find((candidate) => candidate.id === screen.projectId);
 
   const { top, left, width, height, innerWidth, contentHeight, leftWidth, rightWidth } =
-    projectSettingsPanelLayout(columns, rows);
+    settingsPanelLayout(columns, rows);
 
   const projectLabel = project?.label ?? "Project";
   const title = "Project settings";

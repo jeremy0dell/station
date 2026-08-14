@@ -34,6 +34,7 @@ import {
   openRemoveWorktreeConfirmForRow,
   openProjectDefaultAgentPicker,
   openCreateGroup,
+  openGroupSettings,
   openMoveToGroupForRow,
   openProjectMenu,
   openProjectSettings,
@@ -265,6 +266,45 @@ const CASES: ModalCase[] = [
     keys: [{ input: "P" }],
     trimSnapshotTrailingWhitespace: true,
     expect: ["Project Settings", "↑↓ move   ↵ select   1-9/a-z jump   Esc cancel", "station"],
+  },
+  {
+    name: "group settings general",
+    keys: [{ input: "", rightArrow: true }],
+    snapshot: groupedManyProjectsSnapshot,
+    prepare: (state) => openGroupSettings(state, "group_design_refresh", "general"),
+    expect: [
+      "Group settings · Design refresh",
+      "General",
+      "Sessions",
+      "Remove Group",
+      "Project station (read-only)",
+      "Save",
+      "Cancel",
+    ],
+  },
+  {
+    name: "group settings sessions compact",
+    keys: [],
+    snapshot: groupedManyProjectsSnapshot,
+    size: { width: 40, height: 12 },
+    prepare: (state) =>
+      handleTuiKey(
+        openGroupSettings(state, "group_design_refresh", "sessions"),
+        { input: "", rightArrow: true },
+      ).state,
+    expect: ["Sessions · Design refresh", "[✓]", "Save", "Back"],
+  },
+  {
+    name: "group settings remove short",
+    keys: [],
+    snapshot: groupedManyProjectsSnapshot,
+    size: { width: 40, height: 12 },
+    prepare: (state) =>
+      handleTuiKey(
+        openGroupSettings(state, "group_design_refresh", "remove"),
+        { input: "", rightArrow: true },
+      ).state,
+    expect: ["Remove Group", "remain open", "delete Design refresh", "Remove", "Back"],
   },
   {
     name: "project settings panel",

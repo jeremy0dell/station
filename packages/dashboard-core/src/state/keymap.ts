@@ -30,6 +30,7 @@ export type TuiInputMode =
   | "newSessionEditGroupDraft"
   | "projectDefaultAgent"
   | "projectSettings"
+  | "groupSettings"
   | "addProjectStart"
   | "addProjectChoose"
   | "addProjectFilter"
@@ -88,6 +89,8 @@ export function deriveTuiInputMode(state: DashboardStateView): TuiInputMode {
       return "projectDefaultAgent";
     case "projectSettings":
       return "projectSettings";
+    case "groupSettings":
+      return "groupSettings";
     case "widgetSettings":
       return "widgetSettings";
   }

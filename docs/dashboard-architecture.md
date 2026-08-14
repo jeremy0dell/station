@@ -85,6 +85,27 @@ launch succeeded but visibility remains uncertain—or safe cleanup retained the
 fresh worktree—the operation closes with a warning instead of permitting a
 duplicate branch submission.
 
+Group Settings is one stable-ID screen per canonical Group, with General,
+Sessions, and Remove Group sections. Opening it anchors dashboard focus to the
+Group menu cell; the future complete Group menu can open General or Remove
+directly without owning settings state. General captures the Group version for
+one `sessionGroup.rename`. Sessions captures that version plus each Project
+session's expected current Group, stages desired membership locally, and emits
+one atomic `sessionGroup.updateMembership` add/remove delta; selecting a member
+of another Group is an expected move, and an empty desired set is valid. Remove
+requires `delete <Group name>` and emits only `sessionGroup.delete`, so member
+sessions and runtime resources remain open and become ungrouped.
+
+Completed rename and membership commands reseed their editor from canonical
+client state while retaining the settings screen and Group identity. Ordinary
+failure retains the draft or staged intent and returns focus to the initiating
+Save control; assignment/version conflicts are never retried. Snapshot
+replacement preserves the active draft, prunes sessions that cease to be
+canonical, and uses ordinary screen/focus reconciliation when the Group or
+Project disappears. Successful deletion closes settings and focuses the owning
+Project header. Pending settings mutations intercept keys and pointer input and
+add no generic pending, disconnected, failure, or disappearance screen.
+
 ## Dashboard hierarchy, cursor, and viewport
 
 Dashboard structure has one projection path:

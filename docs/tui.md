@@ -557,6 +557,26 @@ Group, and Escape or click-away returns to the same Project `menu` cell. The ove
 Project row when it would overflow and clamps in narrow or short terminals without reflowing the
 dashboard. Native right-click exposes the same four actions through the shared core transitions.
 
+Group Settings is the stable destination for a Group menu, although `[▾]` remains a focusable no-op
+until that complete menu lands. One responsive settings shell contains General, Sessions, and Remove
+Group; `G`, `S`, and `R`, arrows plus Enter, and semantic pointer targets reach every section and
+control. General shows read-only Project identity and saves one versioned Group rename. Sessions
+lists only canonical sessions in the Group's Project with non-color cursor and checkbox markers;
+selection stages desired membership, identifies moves from another Group, and Save emits one atomic
+expected-assignment add/remove delta. An empty Project and an empty desired Group remain usable.
+Remove Group states that member sessions remain open and become ungrouped, requires the exact
+`delete <Group name>` phrase, and dispatches only Group deletion—never session, agent, terminal,
+worktree, or provider lifecycle.
+
+Switching Group Settings sections discards the abandoned section draft and reseeds from the latest
+canonical snapshot. Save success retains the settings shell for rename and membership; failure
+retains edited/staged state and Save focus. Pending submission leaves the complete surface visible
+and inert. Explicit Cancel/Back returns to the invoking Group menu cell; successful deletion focuses
+the owning Project header. Canonical Group, Project, or session removal while settings is open uses
+ordinary screen reconciliation and deterministic dashboard focus fallback without a Group-specific
+notice or failure screen. The shared settings geometry stays within the terminal frame, uses two
+panes when space permits, and presents the active list or detail pane at compact widths.
+
 Bounded screens use one active-screen overlay layer. Dashboard-core exposes the narrow
 `TuiScreenBehavior` contract, and the owning screen module supplies its safe `clickAway`
 cancellation. Shared composition uses the presence of that capability for both the viewport

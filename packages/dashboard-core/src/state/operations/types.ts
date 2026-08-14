@@ -131,6 +131,27 @@ export type CreateSessionGroupForMoveOperation = {
   command: Extract<StationCommand, { type: "sessionGroup.create" }>;
 };
 
+export type RenameSessionGroupOperation = {
+  type: "renameSessionGroup";
+  projectId: ProjectView["id"];
+  groupId: SessionGroupId;
+  command: Extract<StationCommand, { type: "sessionGroup.rename" }>;
+};
+
+export type UpdateSessionGroupMembershipOperation = {
+  type: "updateSessionGroupMembership";
+  projectId: ProjectView["id"];
+  groupId: SessionGroupId;
+  command: Extract<StationCommand, { type: "sessionGroup.updateMembership" }>;
+};
+
+export type DeleteSessionGroupOperation = {
+  type: "deleteSessionGroup";
+  projectId: ProjectView["id"];
+  groupId: SessionGroupId;
+  command: Extract<StationCommand, { type: "sessionGroup.delete" }>;
+};
+
 export type DashboardCapabilityOperation =
   | ActivateSessionOperation
   | CreateManagedSessionOperation
@@ -152,4 +173,7 @@ export type TuiOperation =
   | CreateSessionGroupOperation
   | CreateQuickSessionInGroupOperation
   | MoveSessionToGroupOperation
-  | CreateSessionGroupForMoveOperation;
+  | CreateSessionGroupForMoveOperation
+  | RenameSessionGroupOperation
+  | UpdateSessionGroupMembershipOperation
+  | DeleteSessionGroupOperation;

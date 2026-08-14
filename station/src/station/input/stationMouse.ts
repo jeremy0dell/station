@@ -1,3 +1,4 @@
+import type { SessionId } from "@station/contracts";
 import type { DashboardActions, DashboardStateSource } from "@station/dashboard-core/runtime";
 import type {
   CreateGroupActionId,
@@ -9,6 +10,8 @@ import type {
   AddProjectActionId,
   DashboardFilterConditionField,
   ForkSessionActionId,
+  GroupSettingsDetailFocus,
+  GroupSettingsSection,
   NewSessionActionId,
   PersistentFilterActionId,
   ProjectSettingsItemId,
@@ -53,6 +56,10 @@ export type StationMouseTarget =
   | { kind: "removeWorktreeAction"; actionId: RemoveWorktreeActionId }
   | { kind: "projectSettingsItem"; itemId: ProjectSettingsItemId }
   | { kind: "projectSettingsConfirmRemove" }
+  | { kind: "groupSettingsSection"; section: GroupSettingsSection }
+  | { kind: "groupSettingsControl"; control: GroupSettingsDetailFocus }
+  | { kind: "groupSettingsSession"; sessionId: SessionId }
+  | { kind: "groupSettingsAction"; actionId: "save" | "back" }
   | { kind: "widgetSettingsOpen" }
   | { kind: "widgetSettingsRow"; index: number }
   | { kind: "widgetSettingsRemove"; index: number }
@@ -180,6 +187,37 @@ export function routeStationMouse(
       return { kind: "handled" };
     case "projectSettingsConfirmRemove":
       confirmProjectRemoval(runtime, mode);
+      return { kind: "handled" };
+    case "groupSettingsSection":
+      if (mode === "groupSettings") {
+        runtime.actions.dispatch({
+          type: "groupSettings.section.select",
+          section: target.section,
+        });
+      }
+      return { kind: "handled" };
+    case "groupSettingsControl":
+      if (mode === "groupSettings") {
+        runtime.actions.dispatch({
+          type: "groupSettings.control.focus",
+          control: target.control,
+        });
+      }
+      return { kind: "handled" };
+    case "groupSettingsSession":
+      if (mode === "groupSettings") {
+        runtime.actions.dispatch({
+          type: "groupSettings.session.toggle",
+          sessionId: target.sessionId,
+        });
+      }
+      return { kind: "handled" };
+    case "groupSettingsAction":
+      if (mode === "groupSettings") {
+        runtime.actions.dispatch({
+          type: target.actionId === "save" ? "groupSettings.save" : "groupSettings.back",
+        });
+      }
       return { kind: "handled" };
     case "widgetSettingsOpen":
       if (mode === "dashboard") runtime.actions.dispatch({ type: "widgetSettings.open" });

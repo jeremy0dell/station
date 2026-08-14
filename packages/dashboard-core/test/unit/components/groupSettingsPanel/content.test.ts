@@ -1,0 +1,67 @@
+import { describe, expect, it } from "vitest";
+import { groupSettingsPanelModel } from "../../../../src/components/GroupSettingsPanel/content.js";
+import { createInitialTuiState } from "../../../../src/state/screen.js";
+import {
+  openGroupSettings,
+  selectGroupSettingsSection,
+  toggleGroupSettingsSession,
+} from "../../../../src/state/screens/groupSettings.js";
+import { createGroupedDashboardSnapshot } from "../../../fixtures/snapshots.js";
+
+function sessionsState() {
+  const snapshot = createGroupedDashboardSnapshot();
+  const state = selectGroupSettingsSection(
+    openGroupSettings(createInitialTuiState({ initialSnapshot: snapshot }), "group_active"),
+    "sessions",
+  );
+  if (state.screen.name !== "groupSettings") throw new Error("expected Group Settings");
+  return { snapshot, state, screen: state.screen };
+}
+
+describe("Group Settings panel content", () => {
+  it("projects canonical titles, activity, checked state, and move-on-save context", () => {
+    const setup = sessionsState();
+    const staged = toggleGroupSettingsSession(setup.state, "ses_wt_web_working");
+    if (staged.screen.name !== "groupSettings") throw new Error("expected Group Settings");
+    const model = groupSettingsPanelModel(setup.snapshot, staged.screen, 20);
+    const moving = model?.sessions.find((session) => session.sessionId === "ses_wt_web_working");
+    expect(moving).toMatchObject({
+      title: "cache-refactor",
+      activity: "working",
+      checked: true,
+      currentGroupName: "Build",
+      movesOnSave: true,
+    });
+    expect(model?.membershipChanged).toBe(true);
+  });
+
+  it("windows a long canonical Project list around the stable cursor", () => {
+    const setup = sessionsState();
+    const lastSession = setup.snapshot.sessions
+      .filter((session) => session.projectId === "web")
+      .at(-1);
+    if (lastSession === undefined) throw new Error("expected sessions");
+    const screen = { ...setup.screen, sessionCursor: lastSession.id };
+    const model = groupSettingsPanelModel(setup.snapshot, screen, 3);
+    expect(model?.sessions).toHaveLength(3);
+    expect(model?.sessions.at(-1)?.sessionId).toBe(lastSession.id);
+    expect(model?.hiddenAbove).toBeGreaterThan(0);
+    expect(model?.hiddenBelow).toBe(0);
+  });
+
+  it("keeps an empty Project usable and supplies bounded confirmation copy", () => {
+    const setup = sessionsState();
+    const emptySnapshot = {
+      ...setup.snapshot,
+      sessions: setup.snapshot.sessions.filter((session) => session.projectId !== "web"),
+      sessionGroups: setup.snapshot.sessionGroups.map((group) =>
+        group.projectId === "web" ? { ...group, sessionIds: [] } : group,
+      ),
+    };
+    const model = groupSettingsPanelModel(emptySnapshot, setup.screen, 4);
+    expect(model?.sessions).toEqual([]);
+    expect(model?.sessionCount).toBe(0);
+    expect(model?.removePhrase).toBe("delete Active work");
+    expect(model?.group.memberCount).toBe(0);
+  });
+});

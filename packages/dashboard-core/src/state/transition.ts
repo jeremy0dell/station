@@ -3,6 +3,7 @@ import type { TuiOperation } from "./operations/types.js";
 import { handleAddProjectKey } from "./screens/addProjectScreen.js";
 import { handleDashboardKey } from "./screens/dashboard.js";
 import { handleForkKey } from "./screens/fork.js";
+import { handleGroupSettingsKey } from "./screens/groupSettings.js";
 import { handleHelpKey } from "./screens/help.js";
 import { handleMoveToGroupKey } from "./screens/moveToGroup.js";
 import { handleNewSessionKey } from "./screens/newSession.js";
@@ -92,6 +93,8 @@ export function handleTuiKey(
       return handleProjectDefaultAgentKey(state, key);
     case "projectSettings":
       return handleProjectSettingsKey(state, key);
+    case "groupSettings":
+      return handleGroupSettingsKey(state, key);
     case "addProject":
       return handleAddProjectKey(state, key);
     case "widgetSettings":

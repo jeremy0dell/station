@@ -1,4 +1,4 @@
-import type { SessionGroupId, SessionId } from "@station/contracts";
+import type { ProjectId, SessionGroupId, SessionId } from "@station/contracts";
 import { clampDashboardScrollOffset, dashboardBodyRows } from "../components/Dashboard/layout.js";
 import type { DashboardSessionRow } from "../selectors/dashboardSessionRows.js";
 import {
@@ -79,11 +79,33 @@ function revealSessionAncestry(state: DashboardState, sessionId: SessionId): Das
   return { ...state, screen: { name: "dashboard" }, collapsedProjectIds, collapsedGroupIds };
 }
 
+/** Focuses one canonical Project header control. */
+export function focusDashboardProject(
+  state: DashboardState,
+  projectId: ProjectId,
+  cellId: Extract<DashboardCellId, "identity" | "menu"> = "identity",
+): DashboardState {
+  if (state.snapshot?.projects.some((candidate) => candidate.id === projectId) !== true) {
+    return clearDashboardFocus({ ...state, screen: { name: "dashboard" } });
+  }
+  const dashboard = { ...state, screen: { name: "dashboard" as const } };
+  const tree = dashboardTree(dashboard);
+  const cursor = treeGridCursorForRow({
+    projection: tree,
+    rowId: dashboardRowIds.project(projectId),
+    preferredCell: cellId,
+    policy: dashboardPolicy,
+  });
+  return cursor === undefined
+    ? clearDashboardFocus(dashboard)
+    : focusResolvedDashboardCursor(dashboard, tree, cursor);
+}
+
 /** Reveals and focuses one canonical Group header cell. */
 export function focusDashboardGroup(
   state: DashboardState,
   groupId: SessionGroupId,
-  cellId: Extract<DashboardCellId, "identity" | "quickSession"> = "identity",
+  cellId: Extract<DashboardCellId, "identity" | "quickSession" | "menu"> = "identity",
 ): DashboardState {
   const group = state.snapshot?.sessionGroups.find((candidate) => candidate.id === groupId);
   if (group === undefined) return clearDashboardFocus(state);

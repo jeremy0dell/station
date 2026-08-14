@@ -3,6 +3,7 @@ import { reconcileNewSessionFlow } from "../flows/newSession.js";
 import { selectMoveToGroupSessionContext } from "../selectors/selectors.js";
 import { reconcileDashboardFocus } from "./dashboardFocus.js";
 import { createEmptyTuiLocalRows, pruneLocalRowsForSnapshot } from "./localRows.js";
+import { reconcileGroupSettingsScreen } from "./screens/groupSettings.js";
 import { seedNewSessionPickerCursor } from "./selection/specs/newSession.js";
 import type { CreateInitialTuiStateOptions, DashboardState } from "./types.js";
 
@@ -47,12 +48,16 @@ export function replaceSnapshot(state: DashboardState, snapshot: StationSnapshot
           flow: reconcileNewSessionFlow(projectSurface.flow, snapshot),
         }
       : projectSurface;
-  const screen =
-    flowScreen.name === "moveToGroup" &&
-    flowScreen.step !== "chooseSlot" &&
-    selectMoveToGroupSessionContext(snapshot, flowScreen.sessionId) === undefined
-      ? { name: "dashboard" as const }
+  const groupSettingsScreen =
+    flowScreen.name === "groupSettings"
+      ? (reconcileGroupSettingsScreen(flowScreen, snapshot) ?? { name: "dashboard" as const })
       : flowScreen;
+  const screen =
+    groupSettingsScreen.name === "moveToGroup" &&
+    groupSettingsScreen.step !== "chooseSlot" &&
+    selectMoveToGroupSessionContext(snapshot, groupSettingsScreen.sessionId) === undefined
+      ? { name: "dashboard" as const }
+      : groupSettingsScreen;
   const next: DashboardState = {
     ...state,
     screen,
