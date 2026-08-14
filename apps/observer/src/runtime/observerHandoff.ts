@@ -14,6 +14,7 @@ import { z } from "zod";
 import { observerProcessIdentitiesMatch } from "./observerPidfile.js";
 
 const GRACEFUL_HANDOFF_BUDGET_RATIO = 0.5;
+const MAX_STOP_ACKNOWLEDGEMENT_MS = 1_000;
 const DEFAULT_HANDOFF_POLL_INTERVAL_MS = 50;
 const MIN_HANDOFF_TIMEOUT_MS = 1;
 const INTERNAL_PREVIEW_VERSION_PATTERN = /^0\.7\.1-rc\.(?:0|[1-9]\d*)$/u;
@@ -304,7 +305,7 @@ export async function negotiateObserverIncumbent(
     }
     try {
       await deps.lifecycle.stop(input.socketPath, {
-        timeoutMs: remainingHandoffMs(gracefulDeadline, now),
+        timeoutMs: Math.min(MAX_STOP_ACKNOWLEDGEMENT_MS, remainingHandoffMs(gracefulDeadline, now)),
         expectedObserver: revalidatedIncumbent.health,
       });
     } catch {

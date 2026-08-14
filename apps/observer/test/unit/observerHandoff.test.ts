@@ -248,6 +248,23 @@ describe("negotiateObserverIncumbent", () => {
     expect(fixture.signal).not.toHaveBeenCalled();
   });
 
+  it("bounds the stop acknowledgement wait so exact-exit fallback keeps the handoff budget", async () => {
+    const fixture = handoffFixture();
+
+    await expect(runNegotiation(fixture, 4_000)).rejects.toMatchObject({
+      code: "OBSERVER_HANDOFF_REFUSED",
+    });
+    expect(fixture.stop).toHaveBeenCalledWith(socketPath, {
+      timeoutMs: 1_000,
+      expectedObserver: {
+        pid: fixture.incumbentHealth.pid,
+        startedAt: fixture.incumbentHealth.startedAt,
+        version: fixture.incumbentHealth.version,
+        socketPath,
+      },
+    });
+  });
+
   it("refuses when the exact process changes between verification and stop", async () => {
     const fixture = handoffFixture();
     const replacementHealth = {
@@ -548,9 +565,9 @@ function handoffFixture() {
   return Object.assign(fixture, { lifecycle, evidence, identity });
 }
 
-function runNegotiation(fixture: ReturnType<typeof handoffFixture>) {
+function runNegotiation(fixture: ReturnType<typeof handoffFixture>, timeoutMs = 40) {
   return negotiateObserverIncumbent(
-    { socketPath, candidate, timeoutMs: 40 },
+    { socketPath, candidate, timeoutMs },
     {
       lifecycle: fixture.lifecycle,
       evidence: fixture.evidence,
