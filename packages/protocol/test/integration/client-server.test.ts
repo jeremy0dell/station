@@ -14,6 +14,7 @@ import {
   startProtocolServer,
 } from "@station/protocol";
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 import { createTempSocketPath } from "../../../../tests/support/sockets";
 import { createFakeObserverApi, emptySnapshot, ids, protocolTestNow } from "../support/fixtures.js";
 
@@ -248,7 +249,7 @@ describe("protocol client/server", () => {
     }
   });
 
-  it("translates the previous lifecycle schema for an identity-pinned stop", async () => {
+  it("retries the previous lifecycle schema for an identity-pinned stop", async () => {
     const { socketPath } = await createTempSocketPath();
     const expectedObserverIdentity = {
       pid: 42,
@@ -256,11 +257,38 @@ describe("protocol client/server", () => {
       version: "0.0.0-pre-alpha.5.2",
       socketPath,
     };
+    const previousLifecycleRequestSchema = z
+      .object({
+        schemaVersion: z.literal("0.10.0"),
+        jsonrpc: z.literal("2.0"),
+        id: z.string().min(1),
+        method: z.enum(["observer.health", "observer.stop"]),
+      })
+      .strict();
+    let connectionCount = 0;
     const server = await listenUnixSocket({
       socketPath,
       onConnection: async (connection) => {
+        connectionCount += 1;
         const iterator = connection.messages()[Symbol.asyncIterator]();
-        const healthRequest = ProtocolRequestSchema.parse((await iterator.next()).value);
+        const firstRequest = (await iterator.next()).value;
+        if (connectionCount === 1) {
+          const currentRequest = ProtocolRequestSchema.parse(firstRequest);
+          connection.send({
+            schemaVersion: "0.10.0",
+            jsonrpc: "2.0",
+            id: currentRequest.id,
+            error: {
+              tag: "ProtocolError",
+              code: "PROTOCOL_SCHEMA_MISMATCH",
+              message: "Observer protocol schema mismatch.",
+            },
+          });
+          return;
+        }
+
+        const healthRequest = previousLifecycleRequestSchema.parse(firstRequest);
+        expect(healthRequest.method).toBe("observer.health");
         connection.send({
           schemaVersion: "0.10.0",
           jsonrpc: "2.0",
@@ -272,7 +300,8 @@ describe("protocol client/server", () => {
           },
         });
 
-        const stopRequest = ProtocolRequestSchema.parse((await iterator.next()).value);
+        const stopRequest = previousLifecycleRequestSchema.parse((await iterator.next()).value);
+        expect(stopRequest.method).toBe("observer.stop");
         connection.send({
           schemaVersion: "0.10.0",
           jsonrpc: "2.0",
@@ -294,6 +323,7 @@ describe("protocol client/server", () => {
         stopped: true,
         at: protocolTestNow,
       });
+      expect(connectionCount).toBe(2);
     } finally {
       await server.close();
     }
