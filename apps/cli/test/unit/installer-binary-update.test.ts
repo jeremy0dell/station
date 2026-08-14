@@ -30,7 +30,7 @@ import {
 
 const CURRENT_TAG = "v0.7.1-rc.8";
 const CURRENT_VERSION = CURRENT_TAG.slice(1);
-const TARGET_TAG = "v0.0.0-pre-alpha.5.11";
+const TARGET_TAG = "v0.0.0-pre-alpha.5.12";
 const TARGET_VERSION = TARGET_TAG.slice(1);
 const TARGETS = ["darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64"] as const;
 const RECEIPT = "station-installer-binary-v1\n";
