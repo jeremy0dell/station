@@ -230,6 +230,8 @@ describe("observer protocol server", () => {
     };
     const signals: Array<[number, NodeJS.Signals | 0]> = [];
     const duplicateProcessEvidence: ObserverDuplicateProcessEvidenceSource = {
+      readObserverProcess: (pid) =>
+        [keeperProcess, candidateProcess].find((entry) => entry.pid === pid),
       listObserverProcesses: () => [keeperProcess, candidateProcess],
       socketHolders: () => [process.pid],
       processStartToken: (pid) =>

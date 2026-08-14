@@ -76,6 +76,10 @@ when all fields still match the process's published identity.
 
 ## Attach versus coordinated handoff
 
+Handoff reads process evidence only for the incumbent PID named by the corroborated socket and
+pidfile identity. Unrelated Observer-looking processes cannot participate in that decision;
+duplicate discovery remains global and fail-closed.
+
 A listening exact-selector Observer is reused. A higher valid SemVer incumbent is also
 reused by a lower candidate. The declared public version-line reset orders
 `0.0.0-pre-alpha.*` after the internal `0.7.1-rc.*` previews despite ordinary SemVer

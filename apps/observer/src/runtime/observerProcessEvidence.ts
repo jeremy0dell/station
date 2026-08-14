@@ -46,9 +46,9 @@ type LocalObserverProcessEvidenceDeps = {
 /**
  * ADAPTER
  *
- * Translates exact argv, executable provenance, launch nonce, OS start time,
- * strict socket-holder and complete file-descriptor evidence, pidfiles, socket
- * identities, and signals into conservative ownership evidence.
+ * Translates targeted and global exact argv, executable provenance, launch nonce,
+ * OS start time, strict socket-holder and complete file-descriptor evidence,
+ * pidfiles, socket identities, and signals into conservative ownership evidence.
  */
 export function createLocalObserverProcessEvidence(
   deps: LocalObserverProcessEvidenceDeps = {},
@@ -66,14 +66,12 @@ export function createLocalObserverProcessEvidence(
       requireExactLocalObserverProcess(entry, readProcessArgv, processExecutableMatches),
     );
   };
+  const readObserverProcess = (pid: number): ObserverProcessEntry | undefined =>
+    readEntries(["-ww", "-p", String(pid), "-o", "pid=,lstart=,command="]).find(
+      (entry) => entry.pid === pid,
+    );
   const readExactProcess = (expected: ObserverProcessEntry): ObserverProcessEntry => {
-    const current = readEntries([
-      "-ww",
-      "-p",
-      String(expected.pid),
-      "-o",
-      "pid=,lstart=,command=",
-    ]).find((entry) => entry.pid === expected.pid);
+    const current = readObserverProcess(expected.pid);
     if (current === undefined || !observerProcessEntriesMatch(current, expected)) {
       throw new Error(`Observer process ${expected.pid} changed while evidence was collected.`);
     }
@@ -81,6 +79,7 @@ export function createLocalObserverProcessEvidence(
   };
 
   return {
+    readObserverProcess,
     listObserverProcesses: () => readEntries(processListArgs()),
     socketHolders: deps.socketHolders ?? readObserverSocketHolderPids,
     processStartToken: (pid) => readProcessStartToken(pid, execFile),
