@@ -12,7 +12,7 @@ import type {
   StationEvent,
 } from "@station/contracts";
 import { STATION_SCHEMA_VERSION, StationEventSchema } from "@station/contracts";
-import { Effect, runRuntimeBoundaryWithTimeout } from "@station/runtime";
+import { Effect, isSafeError, runRuntimeBoundaryWithTimeout } from "@station/runtime";
 import { z } from "zod";
 import {
   JsonRpcVersionSchema,
@@ -64,7 +64,7 @@ export type CreateObserverClientOptions = {
   expectedBuildVersion?: string;
   /** Exact process identity required before an ownership-changing operation. */
   expectedObserverIdentity?: ExpectedObserverIdentity;
-  /** Accepts the immediately previous schema for health and stop during an upgrade crossover. */
+  /** Negotiates the immediately previous schema for health and stop during an upgrade crossover. */
   acceptPreviousLifecycleSchema?: boolean;
 };
 
@@ -74,6 +74,7 @@ type OpenSubscription = {
 };
 
 const defaultRequestId = () => `req_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+const PREVIOUS_LIFECYCLE_SCHEMA_VERSION = "0.10.0";
 const ProtocolSchemaVersionProbeSchema = z
   .object({
     schemaVersion: z.union([z.string(), z.number()]).optional(),
@@ -87,15 +88,15 @@ const ProtocolEventEnvelopeMessageSchema = z
   .strict();
 const PreviousLifecycleSuccessResponseSchema = z
   .object({
-    schemaVersion: z.literal("0.10.0"),
+    schemaVersion: z.literal(PREVIOUS_LIFECYCLE_SCHEMA_VERSION),
     jsonrpc: JsonRpcVersionSchema,
     id: z.string().min(1),
-    result: z.object({ schemaVersion: z.literal("0.10.0") }).passthrough(),
+    result: z.object({ schemaVersion: z.literal(PREVIOUS_LIFECYCLE_SCHEMA_VERSION) }).passthrough(),
   })
   .strict();
 const PreviousLifecycleErrorResponseSchema = z
   .object({
-    schemaVersion: z.literal("0.10.0"),
+    schemaVersion: z.literal(PREVIOUS_LIFECYCLE_SCHEMA_VERSION),
     jsonrpc: JsonRpcVersionSchema,
     id: z.string().min(1),
     error: z.unknown(),
@@ -163,27 +164,44 @@ async function requestProtocolMethod<TMethod extends ProtocolMethod>(
     (method === "observer.health" || method === "observer.stop");
   const result = await runRuntimeBoundaryWithTimeout(
     protocolClientBoundary(method, requestTimeoutMs(options)),
-    ({ signal }) =>
-      openRequestConnection(options, signal, async (connection) => {
-        const iterator = connection.messages()[Symbol.asyncIterator]();
-        if (expectedObserver !== undefined) {
-          await assertExpectedObserver(
+    async ({ signal }) => {
+      const request = (usePreviousLifecycleSchema: boolean) =>
+        openRequestConnection(options, signal, async (connection) => {
+          const iterator = connection.messages()[Symbol.asyncIterator]();
+          if (expectedObserver !== undefined) {
+            await assertExpectedObserver(
+              connection,
+              iterator,
+              `${id}_health`,
+              expectedObserver,
+              acceptPreviousLifecycleSchema,
+              usePreviousLifecycleSchema,
+            );
+          }
+          return readResponseForRequest(
             connection,
             iterator,
-            `${id}_health`,
-            expectedObserver,
+            id,
+            method,
+            params,
             acceptPreviousLifecycleSchema,
+            usePreviousLifecycleSchema,
           );
+        });
+
+      try {
+        return await request(false);
+      } catch (error) {
+        if (
+          !acceptPreviousLifecycleSchema ||
+          !isSafeError(error) ||
+          error.code !== "PROTOCOL_SCHEMA_MISMATCH"
+        ) {
+          throw error;
         }
-        return readResponseForRequest(
-          connection,
-          iterator,
-          id,
-          method,
-          params,
-          acceptPreviousLifecycleSchema,
-        );
-      }),
+        return request(true);
+      }
+    },
   );
 
   return unwrapBoundaryResult(result);
@@ -229,8 +247,14 @@ async function readResponseForRequest<TMethod extends ProtocolMethod>(
   method: TMethod,
   params?: unknown,
   acceptPreviousLifecycleSchema = false,
+  usePreviousLifecycleSchema = false,
 ): Promise<ProtocolResult<TMethod>> {
-  connection.send(protocolRequest(id, method, params));
+  const request = protocolRequest(id, method, params);
+  connection.send(
+    usePreviousLifecycleSchema
+      ? { ...request, schemaVersion: PREVIOUS_LIFECYCLE_SCHEMA_VERSION }
+      : request,
+  );
 
   for (;;) {
     const next = await iterator.next();
@@ -251,6 +275,7 @@ async function assertExpectedObserver(
   id: string,
   expectedObserver: ExpectedObserver,
   acceptPreviousLifecycleSchema: boolean,
+  usePreviousLifecycleSchema: boolean,
 ): Promise<void> {
   const health = await readResponseForRequest(
     connection,
@@ -259,6 +284,7 @@ async function assertExpectedObserver(
     "observer.health",
     undefined,
     acceptPreviousLifecycleSchema,
+    usePreviousLifecycleSchema,
   );
   assertObserverIdentity(expectedObserver, health);
 }
