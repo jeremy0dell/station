@@ -389,6 +389,7 @@ function handleGeneralKey(
   key: TuiKey,
 ): TuiTransition {
   if (screen.detailFocus === "name") {
+    if (isReturnKey(key)) return submitGroupSettings(state);
     if (key.downArrow === true) {
       return { state: withDetailFocus(state, "generalSave") };
     }
@@ -471,6 +472,7 @@ function handleRemoveKey(
   key: TuiKey,
 ): TuiTransition {
   if (screen.detailFocus === "removeConfirm") {
+    if (isReturnKey(key)) return submitGroupSettings(state);
     if (key.downArrow === true) return { state: withDetailFocus(state, "removeSubmit") };
     const intent = editableTextInputIntentForInput({ input: key.input, key });
     if (intent.type !== "edit") return { state };

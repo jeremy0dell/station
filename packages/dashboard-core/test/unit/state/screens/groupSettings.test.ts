@@ -127,10 +127,10 @@ describe("Group Settings screen", () => {
       screen: {
         ...groupScreen(selectGroupSettingsSection(opened(), "general")),
         nameDraft: createEditableTextInputState("Renamed Group"),
-        detailFocus: "generalSave",
+        detailFocus: "name",
       },
     };
-    const transition = submitGroupSettings(state);
+    const transition = handleTuiKey(state, { input: "\r", return: true });
     expect(transition.operations).toEqual([
       {
         type: "renameSessionGroup",
@@ -147,20 +147,27 @@ describe("Group Settings screen", () => {
         },
       },
     ]);
-    expect(groupScreen(transition.state).pending).toBe("rename");
+    expect(groupScreen(transition.state)).toMatchObject({
+      pending: "rename",
+      nameDraft: { value: "Renamed Group" },
+    });
   });
 
   it("requires the typed Group name and dispatches only Group deletion", () => {
     const base = selectGroupSettingsSection(opened("remove"), "remove");
-    expect(submitGroupSettings(base).operations).toBeUndefined();
+    const unarmed = handleTuiKey(base, { input: "\n", return: true });
+    expect(unarmed.operations).toBeUndefined();
+    expect(groupScreen(unarmed.state).removeDraft.value).toBe("");
+    const phrase = removeSessionGroupConfirmPhrase("Active work");
     const armed: DashboardState = {
       ...base,
       screen: {
         ...groupScreen(base),
-        removeDraft: createEditableTextInputState(removeSessionGroupConfirmPhrase("Active work")),
+        removeDraft: createEditableTextInputState(phrase),
       },
     };
-    expect(submitGroupSettings(armed).operations).toEqual([
+    const deleted = handleTuiKey(armed, { input: "\r", return: true });
+    expect(deleted.operations).toEqual([
       {
         type: "deleteSessionGroup",
         projectId: "web",
@@ -175,6 +182,10 @@ describe("Group Settings screen", () => {
         },
       },
     ]);
+    expect(groupScreen(deleted.state)).toMatchObject({
+      pending: "delete",
+      removeDraft: { value: phrase },
+    });
   });
 
   it("makes keys and cancellation inert while a mutation is pending", () => {
