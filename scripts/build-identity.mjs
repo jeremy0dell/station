@@ -86,7 +86,7 @@ async function computeBuildInputIdentity(root) {
       throw error;
     }
 
-    updateHashField(hash, "mode", (info.mode & 0o7777).toString(8));
+    updateHashField(hash, "mode", buildInputMode(info));
     if (info.isFile()) {
       updateHashField(hash, "type", "file");
       updateHashField(hash, "content", await readFile(absolutePath));
@@ -101,6 +101,10 @@ async function computeBuildInputIdentity(root) {
   }
 
   return hash.digest("hex");
+}
+
+export function buildInputMode(info) {
+  return (info.isSymbolicLink() ? 0o777 : info.mode & 0o7777).toString(8);
 }
 
 async function computeBuildOutputIdentity(root) {

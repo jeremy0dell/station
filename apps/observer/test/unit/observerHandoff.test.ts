@@ -90,7 +90,7 @@ describe("classifyObserverIncumbent", () => {
   });
 
   it("orders the public pre-alpha after the internal preview version line", () => {
-    const publicPreAlpha = observerBuildVersion("0.0.0-pre-alpha.5.8", higherBuildIdentity);
+    const publicPreAlpha = observerBuildVersion("0.0.0-pre-alpha.5.9", higherBuildIdentity);
     const internalPreview = observerBuildVersion("0.7.1-rc.8", lowerBuildIdentity);
 
     expect(decisionFor(publicPreAlpha, internalPreview)).toEqual({
@@ -246,6 +246,23 @@ describe("negotiateObserverIncumbent", () => {
     expect(healthTimeouts).toEqual([40, 20]);
     expect(fixture.stop).not.toHaveBeenCalled();
     expect(fixture.signal).not.toHaveBeenCalled();
+  });
+
+  it("bounds the stop acknowledgement wait so exact-exit fallback keeps the handoff budget", async () => {
+    const fixture = handoffFixture();
+
+    await expect(runNegotiation(fixture, 4_000)).rejects.toMatchObject({
+      code: "OBSERVER_HANDOFF_REFUSED",
+    });
+    expect(fixture.stop).toHaveBeenCalledWith(socketPath, {
+      timeoutMs: 1_000,
+      expectedObserver: {
+        pid: fixture.incumbentHealth.pid,
+        startedAt: fixture.incumbentHealth.startedAt,
+        version: fixture.incumbentHealth.version,
+        socketPath,
+      },
+    });
   });
 
   it("refuses when the exact process changes between verification and stop", async () => {
@@ -548,9 +565,9 @@ function handoffFixture() {
   return Object.assign(fixture, { lifecycle, evidence, identity });
 }
 
-function runNegotiation(fixture: ReturnType<typeof handoffFixture>) {
+function runNegotiation(fixture: ReturnType<typeof handoffFixture>, timeoutMs = 40) {
   return negotiateObserverIncumbent(
-    { socketPath, candidate, timeoutMs: 40 },
+    { socketPath, candidate, timeoutMs },
     {
       lifecycle: fixture.lifecycle,
       evidence: fixture.evidence,
