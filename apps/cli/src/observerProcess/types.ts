@@ -25,7 +25,10 @@ export type ObserverProcessDeps = {
   buildVersion?: string;
   clientFactory?: (
     socketPath: string,
-    options?: Pick<CreateObserverClientOptions, "expectedObserverIdentity" | "timeoutMs">,
+    options?: Pick<
+      CreateObserverClientOptions,
+      "acceptPreviousLifecycleSchema" | "expectedObserverIdentity" | "timeoutMs"
+    >,
   ) => ReturnType<typeof createObserverClient>;
   spawnObserver?: (input: SpawnObserverInput) => ChildProcessLike | Promise<ChildProcessLike>;
   clock?: RuntimeClock;

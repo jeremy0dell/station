@@ -248,6 +248,57 @@ describe("protocol client/server", () => {
     }
   });
 
+  it("translates the previous lifecycle schema for an identity-pinned stop", async () => {
+    const { socketPath } = await createTempSocketPath();
+    const expectedObserverIdentity = {
+      pid: 42,
+      startedAt: protocolTestNow,
+      version: "0.0.0-pre-alpha.5.2",
+      socketPath,
+    };
+    const server = await listenUnixSocket({
+      socketPath,
+      onConnection: async (connection) => {
+        const iterator = connection.messages()[Symbol.asyncIterator]();
+        const healthRequest = ProtocolRequestSchema.parse((await iterator.next()).value);
+        connection.send({
+          schemaVersion: "0.10.0",
+          jsonrpc: "2.0",
+          id: healthRequest.id,
+          result: {
+            schemaVersion: "0.10.0",
+            status: "healthy",
+            ...expectedObserverIdentity,
+          },
+        });
+
+        const stopRequest = ProtocolRequestSchema.parse((await iterator.next()).value);
+        connection.send({
+          schemaVersion: "0.10.0",
+          jsonrpc: "2.0",
+          id: stopRequest.id,
+          result: { schemaVersion: "0.10.0", stopped: true, at: protocolTestNow },
+        });
+      },
+    });
+    const client = createObserverClient({
+      socketPath,
+      expectedObserverIdentity,
+      acceptPreviousLifecycleSchema: true,
+      requestId: ids("previous-stop"),
+    });
+
+    try {
+      await expect(client.stop()).resolves.toEqual({
+        schemaVersion: STATION_SCHEMA_VERSION,
+        stopped: true,
+        at: protocolTestNow,
+      });
+    } finally {
+      await server.close();
+    }
+  });
+
   it("checks legacy process health and stops it on one connection", async () => {
     const { socketPath } = await createTempSocketPath();
     const expectedObserverIdentity = {

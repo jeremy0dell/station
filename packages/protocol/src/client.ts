@@ -15,6 +15,7 @@ import { STATION_SCHEMA_VERSION, StationEventSchema } from "@station/contracts";
 import { Effect, runRuntimeBoundaryWithTimeout } from "@station/runtime";
 import { z } from "zod";
 import {
+  JsonRpcVersionSchema,
   type ProtocolMethod,
   type ProtocolResponse,
   ProtocolResponseSchema,
@@ -63,6 +64,8 @@ export type CreateObserverClientOptions = {
   expectedBuildVersion?: string;
   /** Exact process identity required before an ownership-changing operation. */
   expectedObserverIdentity?: ExpectedObserverIdentity;
+  /** Accepts the immediately previous schema for health and stop during an upgrade crossover. */
+  acceptPreviousLifecycleSchema?: boolean;
 };
 
 type OpenSubscription = {
@@ -80,6 +83,22 @@ const ProtocolEventEnvelopeMessageSchema = z
   .object({
     schemaVersion: z.literal(STATION_SCHEMA_VERSION),
     event: z.unknown(),
+  })
+  .strict();
+const PreviousLifecycleSuccessResponseSchema = z
+  .object({
+    schemaVersion: z.literal("0.10.0"),
+    jsonrpc: JsonRpcVersionSchema,
+    id: z.string().min(1),
+    result: z.object({ schemaVersion: z.literal("0.10.0") }).passthrough(),
+  })
+  .strict();
+const PreviousLifecycleErrorResponseSchema = z
+  .object({
+    schemaVersion: z.literal("0.10.0"),
+    jsonrpc: JsonRpcVersionSchema,
+    id: z.string().min(1),
+    error: z.unknown(),
   })
   .strict();
 
@@ -139,15 +158,31 @@ async function requestProtocolMethod<TMethod extends ProtocolMethod>(
 ): Promise<ProtocolResult<TMethod>> {
   const expectedObserver =
     method === "observer.health" ? undefined : resolveExpectedObserver(options);
+  const acceptPreviousLifecycleSchema =
+    options.acceptPreviousLifecycleSchema === true &&
+    (method === "observer.health" || method === "observer.stop");
   const result = await runRuntimeBoundaryWithTimeout(
     protocolClientBoundary(method, requestTimeoutMs(options)),
     ({ signal }) =>
       openRequestConnection(options, signal, async (connection) => {
         const iterator = connection.messages()[Symbol.asyncIterator]();
         if (expectedObserver !== undefined) {
-          await assertExpectedObserver(connection, iterator, `${id}_health`, expectedObserver);
+          await assertExpectedObserver(
+            connection,
+            iterator,
+            `${id}_health`,
+            expectedObserver,
+            acceptPreviousLifecycleSchema,
+          );
         }
-        return readResponseForRequest(connection, iterator, id, method, params);
+        return readResponseForRequest(
+          connection,
+          iterator,
+          id,
+          method,
+          params,
+          acceptPreviousLifecycleSchema,
+        );
       }),
   );
 
@@ -193,6 +228,7 @@ async function readResponseForRequest<TMethod extends ProtocolMethod>(
   id: string,
   method: TMethod,
   params?: unknown,
+  acceptPreviousLifecycleSchema = false,
 ): Promise<ProtocolResult<TMethod>> {
   connection.send(protocolRequest(id, method, params));
 
@@ -201,7 +237,7 @@ async function readResponseForRequest<TMethod extends ProtocolMethod>(
     if (next.done) {
       throw protocolSocketClosedError();
     }
-    const response = parseProtocolResponseMessage(next.value);
+    const response = parseProtocolResponseMessage(next.value, acceptPreviousLifecycleSchema);
     if (response.id !== id) {
       continue;
     }
@@ -214,8 +250,16 @@ async function assertExpectedObserver(
   iterator: AsyncIterator<unknown>,
   id: string,
   expectedObserver: ExpectedObserver,
+  acceptPreviousLifecycleSchema: boolean,
 ): Promise<void> {
-  const health = await readResponseForRequest(connection, iterator, id, "observer.health");
+  const health = await readResponseForRequest(
+    connection,
+    iterator,
+    id,
+    "observer.health",
+    undefined,
+    acceptPreviousLifecycleSchema,
+  );
   assertObserverIdentity(expectedObserver, health);
 }
 
@@ -467,13 +511,39 @@ async function readSubscriptionEvent(
   });
 }
 
-function parseProtocolResponseMessage(message: unknown): ProtocolResponse {
+function parseProtocolResponseMessage(
+  message: unknown,
+  acceptPreviousLifecycleSchema = false,
+): ProtocolResponse {
   const parsed = ProtocolResponseSchema.safeParse(message);
   if (parsed.success) {
     return parsed.data;
   }
+  if (acceptPreviousLifecycleSchema) {
+    const previous = normalizePreviousLifecycleResponse(message);
+    if (previous !== undefined) return previous;
+  }
   throwProtocolSchemaMismatchIfPresent(message);
   throw parsed.error;
+}
+
+function normalizePreviousLifecycleResponse(message: unknown): ProtocolResponse | undefined {
+  const success = PreviousLifecycleSuccessResponseSchema.safeParse(message);
+  if (success.success) {
+    const normalized = ProtocolResponseSchema.safeParse({
+      ...success.data,
+      schemaVersion: STATION_SCHEMA_VERSION,
+      result: { ...success.data.result, schemaVersion: STATION_SCHEMA_VERSION },
+    });
+    return normalized.success ? normalized.data : undefined;
+  }
+  const failure = PreviousLifecycleErrorResponseSchema.safeParse(message);
+  if (!failure.success) return undefined;
+  const normalized = ProtocolResponseSchema.safeParse({
+    ...failure.data,
+    schemaVersion: STATION_SCHEMA_VERSION,
+  });
+  return normalized.success ? normalized.data : undefined;
 }
 
 function parseProtocolEventEnvelope(message: unknown) {

@@ -87,12 +87,14 @@ export function createObserverLifecycleClient(options: {
       createObserverClient({
         socketPath,
         timeoutMs: requestTimeout(request.timeoutMs),
+        acceptPreviousLifecycleSchema: true,
       }).health(),
     stop: (socketPath, request) =>
       createObserverClient({
         socketPath,
         timeoutMs: requestTimeout(request.timeoutMs),
         expectedObserverIdentity: request.expectedObserver,
+        acceptPreviousLifecycleSchema: true,
       }).stop(),
     socketListening: async (socketPath, request) => {
       const probe = await probeObserverSocket(socketPath, {

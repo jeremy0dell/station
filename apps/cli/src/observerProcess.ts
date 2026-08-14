@@ -58,10 +58,12 @@ export async function getObserverStatus(
   const client =
     deps.clientFactory?.(paths.socketPath, {
       timeoutMs: observerStatusHealthTimeoutMs(options.timeoutMs),
+      acceptPreviousLifecycleSchema: true,
     }) ??
     createObserverClient({
       socketPath: paths.socketPath,
       timeoutMs: observerStatusHealthTimeoutMs(options.timeoutMs),
+      acceptPreviousLifecycleSchema: true,
     });
   try {
     return {
@@ -215,11 +217,13 @@ async function stopRunningObserver(
     deps.clientFactory?.(status.paths.socketPath, {
       expectedObserverIdentity,
       timeoutMs: requestTimeoutMs,
+      acceptPreviousLifecycleSchema: true,
     }) ??
     createObserverClient({
       socketPath: status.paths.socketPath,
       timeoutMs: requestTimeoutMs,
       expectedObserverIdentity,
+      acceptPreviousLifecycleSchema: true,
     });
   const receipt = await client.stop();
   const convergenceTimeoutMs = remainingStopTimeoutMs(deadlineMs);
