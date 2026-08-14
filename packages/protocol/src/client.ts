@@ -75,6 +75,7 @@ type OpenSubscription = {
 
 const defaultRequestId = () => `req_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 const PREVIOUS_LIFECYCLE_SCHEMA_VERSION = "0.10.0";
+const PREVIOUS_LIFECYCLE_SCHEMA_REQUIRED = "PROTOCOL_PREVIOUS_LIFECYCLE_SCHEMA_REQUIRED";
 const ProtocolSchemaVersionProbeSchema = z
   .object({
     schemaVersion: z.union([z.string(), z.number()]).optional(),
@@ -195,7 +196,8 @@ async function requestProtocolMethod<TMethod extends ProtocolMethod>(
         if (
           !acceptPreviousLifecycleSchema ||
           !isSafeError(error) ||
-          error.code !== "PROTOCOL_SCHEMA_MISMATCH"
+          (error.code !== "PROTOCOL_SCHEMA_MISMATCH" &&
+            error.code !== PREVIOUS_LIFECYCLE_SCHEMA_REQUIRED)
         ) {
           throw error;
         }
@@ -260,6 +262,15 @@ async function readResponseForRequest<TMethod extends ProtocolMethod>(
     const next = await iterator.next();
     if (next.done) {
       throw protocolSocketClosedError();
+    }
+    if (acceptPreviousLifecycleSchema && !usePreviousLifecycleSchema) {
+      const previousError = PreviousLifecycleErrorResponseSchema.safeParse(next.value);
+      if (previousError.success && previousError.data.id === id) {
+        throw protocolSafeError({
+          code: PREVIOUS_LIFECYCLE_SCHEMA_REQUIRED,
+          message: "Observer requires the immediately previous lifecycle schema.",
+        });
+      }
     }
     const response = parseProtocolResponseMessage(next.value, acceptPreviousLifecycleSchema);
     if (response.id !== id) {

@@ -280,8 +280,8 @@ describe("protocol client/server", () => {
             id: currentRequest.id,
             error: {
               tag: "ProtocolError",
-              code: "PROTOCOL_SCHEMA_MISMATCH",
-              message: "Observer protocol schema mismatch.",
+              code: "PROTOCOL_ERROR",
+              message: "Invalid protocol request.",
             },
           });
           return;
