@@ -53,6 +53,11 @@ function createEvidence(
   let candidateAlive = options.candidateAlive ?? true;
   const signals: Array<[number, NodeJS.Signals | 0]> = [];
   const evidence: ObserverDuplicateProcessEvidenceSource = {
+    readObserverProcess: (pid) =>
+      [
+        processEntry(100, "keeper-start"),
+        ...(candidateAlive ? [processEntry(200, "candidate-start")] : []),
+      ].find((entry) => entry.pid === pid),
     listObserverProcesses: () => [
       processEntry(100, "keeper-start"),
       ...(candidateAlive ? [processEntry(200, "candidate-start")] : []),

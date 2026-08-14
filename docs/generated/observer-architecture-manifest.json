@@ -4026,7 +4026,7 @@
           "name": "createLocalObserverProcessEvidence",
           "kind": "function",
           "role": "ADAPTER",
-          "purpose": "Translates exact argv, executable provenance, launch nonce, OS start time, strict socket-holder and complete file-descriptor evidence, pidfiles, socket identities, and signals into conservative ownership evidence."
+          "purpose": "Translates targeted and global exact argv, executable provenance, launch nonce, OS start time, strict socket-holder and complete file-descriptor evidence, pidfiles, socket identities, and signals into conservative ownership evidence."
         },
         {
           "name": "createObserverApi",
@@ -4422,7 +4422,7 @@
           "name": "ObserverDuplicateProcessEvidenceSource",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Supplies strict process, socket-identity, pidfile, signal, and per-process Unix-socket descriptor evidence for duplicate Observer decisions."
+          "purpose": "Supplies strict process, socket-identity, pidfile, signal, and per-process Unix-socket descriptor evidence for fail-closed global duplicate decisions."
         },
         {
           "name": "ObserverEventBus",
@@ -4524,7 +4524,7 @@
           "name": "ObserverProcessEvidenceSource",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Supplies exact local-process evidence without exposing operating-system commands; unavailable socket-holder evidence throws and never means zero."
+          "purpose": "Supplies exact incumbent-process evidence without exposing operating-system commands; unavailable socket-holder evidence throws and never means zero."
         },
         {
           "name": "ObserverProcessSignalResult",
@@ -10942,7 +10942,7 @@
           "name": "ObserverProcessEvidenceSource",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Supplies exact local-process evidence without exposing operating-system commands; unavailable socket-holder evidence throws and never means zero."
+          "purpose": "Supplies exact incumbent-process evidence without exposing operating-system commands; unavailable socket-holder evidence throws and never means zero."
         },
         {
           "name": "ObserverProcessSignalResult",
@@ -11097,7 +11097,7 @@
           "name": "createLocalObserverProcessEvidence",
           "kind": "function",
           "role": "ADAPTER",
-          "purpose": "Translates exact argv, executable provenance, launch nonce, OS start time, strict socket-holder and complete file-descriptor evidence, pidfiles, socket identities, and signals into conservative ownership evidence."
+          "purpose": "Translates targeted and global exact argv, executable provenance, launch nonce, OS start time, strict socket-holder and complete file-descriptor evidence, pidfiles, socket identities, and signals into conservative ownership evidence."
         },
         {
           "name": "parseObserverProcessList",
@@ -11212,7 +11212,7 @@
           "name": "ObserverDuplicateProcessEvidenceSource",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Supplies strict process, socket-identity, pidfile, signal, and per-process Unix-socket descriptor evidence for duplicate Observer decisions."
+          "purpose": "Supplies strict process, socket-identity, pidfile, signal, and per-process Unix-socket descriptor evidence for fail-closed global duplicate decisions."
         },
         {
           "name": "ObserverKeeperPreservation",
@@ -14236,7 +14236,7 @@
       "declaration": "ObserverProcessEvidenceSource",
       "kind": "interface",
       "role": "DRIVEN PORT",
-      "purpose": "Supplies exact local-process evidence without exposing operating-system commands; unavailable socket-holder evidence throws and never means zero.",
+      "purpose": "Supplies exact incumbent-process evidence without exposing operating-system commands; unavailable socket-holder evidence throws and never means zero.",
       "dependencies": []
     },
     {
@@ -14244,7 +14244,7 @@
       "declaration": "createLocalObserverProcessEvidence",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Translates exact argv, executable provenance, launch nonce, OS start time, strict socket-holder and complete file-descriptor evidence, pidfiles, socket identities, and signals into conservative ownership evidence.",
+      "purpose": "Translates targeted and global exact argv, executable provenance, launch nonce, OS start time, strict socket-holder and complete file-descriptor evidence, pidfiles, socket identities, and signals into conservative ownership evidence.",
       "dependencies": [
         {
           "path": "apps/observer/src/runtime/observerReap.ts",
@@ -14299,7 +14299,7 @@
       "declaration": "ObserverDuplicateProcessEvidenceSource",
       "kind": "interface",
       "role": "DRIVEN PORT",
-      "purpose": "Supplies strict process, socket-identity, pidfile, signal, and per-process Unix-socket descriptor evidence for duplicate Observer decisions.",
+      "purpose": "Supplies strict process, socket-identity, pidfile, signal, and per-process Unix-socket descriptor evidence for fail-closed global duplicate decisions.",
       "dependencies": [
         {
           "path": "apps/observer/src/runtime/observerHandoff.ts",

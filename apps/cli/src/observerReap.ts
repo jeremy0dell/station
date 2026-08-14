@@ -34,6 +34,7 @@ export type ObserverReapDeps = {
 export function createLocalObserverReap(deps: ObserverReapDeps = {}): ObserverReap {
   const localEvidence = createLocalObserverProcessEvidence();
   const evidence: ObserverDuplicateProcessEvidenceSource = {
+    readObserverProcess: localEvidence.readObserverProcess,
     listObserverProcesses: deps.listObserverProcesses ?? localEvidence.listObserverProcesses,
     socketHolders: deps.socketHolders ?? localEvidence.socketHolders,
     processStartToken: deps.processStartToken ?? localEvidence.processStartToken,

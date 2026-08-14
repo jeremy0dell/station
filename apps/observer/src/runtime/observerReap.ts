@@ -15,9 +15,10 @@ const SIGKILL_CONFIRM_MS = 500;
  * DRIVEN PORT
  *
  * Supplies strict process, socket-identity, pidfile, signal, and per-process
- * Unix-socket descriptor evidence for duplicate Observer decisions.
+ * Unix-socket descriptor evidence for fail-closed global duplicate decisions.
  */
 export interface ObserverDuplicateProcessEvidenceSource extends ObserverProcessEvidenceSource {
+  listObserverProcesses(): ObserverProcessEntry[];
   socketIdentity(socketPath: string): Promise<SocketIdentity | undefined>;
   unixSocketFdCount(process: ObserverProcessEntry): number;
 }

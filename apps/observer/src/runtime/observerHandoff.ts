@@ -104,11 +104,11 @@ export type ObserverStopRequest = ObserverLifecycleRequest & {
 /**
  * DRIVEN PORT
  *
- * Supplies exact local-process evidence without exposing operating-system
+ * Supplies exact incumbent-process evidence without exposing operating-system
  * commands; unavailable socket-holder evidence throws and never means zero.
  */
 export interface ObserverProcessEvidenceSource {
-  listObserverProcesses(): ObserverProcessEntry[];
+  readObserverProcess(pid: number): ObserverProcessEntry | undefined;
   socketHolders(socketPath: string): number[];
   processStartToken(pid: number): string | undefined;
   readProcessIdentity(socketPath: string): Promise<ObserverProcessIdentity | undefined>;
@@ -411,9 +411,7 @@ async function requireVerifiedProcessEvidence(
   if (currentIdentity === undefined || !observerProcessIdentitiesMatch(currentIdentity, identity)) {
     throw handoffRefused("The incumbent Observer pidfile changed during handoff.");
   }
-  const processEntry = deps.evidence
-    .listObserverProcesses()
-    .find((entry) => entry.pid === identity.pid);
+  const processEntry = deps.evidence.readObserverProcess(identity.pid);
   if (
     processEntry === undefined ||
     processEntry.socketPath !== socketPath ||

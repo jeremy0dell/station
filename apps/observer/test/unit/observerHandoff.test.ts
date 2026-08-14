@@ -443,7 +443,7 @@ describe("negotiateObserverIncumbent", () => {
     fixture.stop.mockImplementation(async () => {
       fixture.listening = false;
       fixture.startToken = undefined;
-      fixture.evidence.listObserverProcesses = () => {
+      fixture.evidence.readObserverProcess = () => {
         throw new Error("successor process evidence is unavailable");
       };
       return {
@@ -546,17 +546,18 @@ function handoffFixture() {
     socketListening: async () => fixture.listening,
   };
   const evidence: ObserverProcessEvidenceSource = {
-    listObserverProcesses: () => [
-      {
-        pid: identity.pid,
-        argv: ["/opt/station/stn", "__observer", "--socket", socketPath],
-        executablePath: "/opt/station/stn",
-        startToken: identity.osStartTime,
-        processToken: identity.processToken,
-        buildVersion: identity.version,
-        socketPath,
-      },
-    ],
+    readObserverProcess: (pid) =>
+      pid === identity.pid
+        ? {
+            pid: identity.pid,
+            argv: ["/opt/station/stn", "__observer", "--socket", socketPath],
+            executablePath: "/opt/station/stn",
+            startToken: identity.osStartTime,
+            processToken: identity.processToken,
+            buildVersion: identity.version,
+            socketPath,
+          }
+        : undefined,
     socketHolders: () => fixture.holders,
     processStartToken: () => fixture.startToken,
     readProcessIdentity: async () => ({ ...identity }),
