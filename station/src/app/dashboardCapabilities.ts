@@ -1,6 +1,10 @@
 import type { ClientNotice, ObserverService, StationClientStateSource } from "@station/client";
 import type { SafeError } from "@station/contracts";
-import { createObserverActivationCapabilities, dashboardExecution } from "@station/dashboard-core/runtime";
+import {
+  createObserverActivationCapabilities,
+  createObserverWorktreeRemovalCapabilities,
+  dashboardExecution,
+} from "@station/dashboard-core/runtime";
 import type { DashboardCapabilities, DashboardExecutionHandle, DashboardExecutionResult } from "@station/dashboard-core/runtime";
 import {
   resolveDashboardShellTarget,
@@ -15,6 +19,8 @@ import {
   waitForSessionByBranch,
   waitForSessionPlacementByBranch,
 } from "../input/runtime/stationRows.js";
+import type { PtyRegistry } from "../terminal/registry/ptyRegistry.js";
+import { prepareNativeWorktreeRemoval } from "./nativeWorktreeRemoval.js";
 
 const SESSION_PLACEMENT_UNCONFIRMED_NOTICE = {
   kind: "error",
@@ -28,6 +34,7 @@ export type CreateNativeDashboardCapabilitiesOptions = {
   observerService: ObserverService;
   store: StationStore;
   paneEffects: PaneEffects;
+  registry: PtyRegistry;
   managedLaunch: ManagedLaunch;
 };
 
@@ -174,6 +181,20 @@ export function createDashboardCapabilities(
         );
       },
     },
+    worktreeRemoval: createObserverWorktreeRemovalCapabilities({
+      service: options.observerService,
+      clientLabel: "Station",
+      beforeRemove: (request) =>
+        prepareNativeWorktreeRemoval(
+          {
+            service: options.observerService,
+            clientState: options.clientState,
+            store: options.store,
+            registry: options.registry,
+          },
+          request.worktreeId,
+        ),
+    }),
     shell: {
       open: (request) => {
         const target = resolveDashboardShellTarget(options.clientState, request);

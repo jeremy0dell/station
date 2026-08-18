@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import type { ManagedLaunch, ManagedLaunchResult } from "../input/runtime/managedLaunch.js";
 import type { PaneEffects } from "../input/runtime/paneEffects.js";
 import { createStationStore } from "../state/store.js";
+import type { PtyRegistry } from "../terminal/registry/ptyRegistry.js";
 import { STATION_OVERLAY_ID } from "../state/types.js";
 import { manyProjectsSnapshot } from "../station/fixtures/scenarios.js";
 import { FakeStationSource } from "../station/test/support/fakeStationSource.js";
@@ -39,6 +40,7 @@ function harness() {
     observerService: service,
     store,
     paneEffects,
+    registry: {} as PtyRegistry,
     managedLaunch,
   });
   return {

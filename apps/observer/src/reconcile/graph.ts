@@ -407,9 +407,13 @@ function terminalAttachment(
     (capabilities?.canCloseTarget !== false && isCloseableTerminalState(terminal.state));
   if (focusable) {
     attachment.focusable = true;
+  } else if (terminal.focusable === false || capabilities?.canFocusTarget === false) {
+    attachment.focusable = false;
   }
   if (closeable) {
     attachment.closeable = true;
+  } else if (terminal.closeable === false || capabilities?.canCloseTarget === false) {
+    attachment.closeable = false;
   }
   if (terminal.worktreeId !== undefined) attachment.hasWorkspace = true;
   if (hasPrimaryAgentEndpoint(terminal, harnessRun)) {

@@ -68,7 +68,7 @@ client-owned source; dashboard queries are reserved for reads where local
 filter, focus, screen, or optimistic state participates.
 
 Semantic execution enters through capabilities selected at composition
-(activation, managed sessions, dismissal, shell), never through state
+(activation, managed sessions, worktree removal, dismissal, shell), never through state
 replacement or synthetic key replay. The runtime owns subscriptions, timers,
 operation bookkeeping, and cancellation; disposal is idempotent and testable.
 

@@ -16,6 +16,10 @@ import type { Automation } from "../../config/stationConfig.js";
 import type { StationClientStateSource } from "@station/client";
 import type { WorktreeRow } from "@station/contracts";
 import { paneInputBytes } from "./sequenceNormalize.js";
+import {
+  closePaneWithTerminal,
+  type ManagedAgentPaneCleanupDeps,
+} from "./managedAgentPaneCleanup.js";
 import type { OpenPaneSpawn } from "../stationInput.js";
 
 /** Lines of scrollback per wheel tick, and arrow repeats per tick when a
@@ -74,6 +78,7 @@ type PaneEffectsDeps = {
   automations: readonly Automation[];
   writeToTerminal: ((paneId: PaneId, bytes: string) => boolean) | undefined;
   pasteToTerminal: ((paneId: PaneId, text: string) => boolean) | undefined;
+  reportExternalExit?: ManagedAgentPaneCleanupDeps["reportExternalExit"];
 };
 
 export function createPaneEffects(deps: PaneEffectsDeps): PaneEffects {
@@ -297,11 +302,11 @@ export function createPaneEffects(deps: PaneEffectsDeps): PaneEffects {
   }
 
   function closePane(paneId: PaneId): void {
-    // Destroy the process before dropping the record. kill() closes a host-owned aux PTY on the
-    // host (so a closed pane never lingers as a reattachable orphan), kills a local shell's bridge,
-    // and is a no-op for an attached agent (the observer owns it — the pane then detaches on dispose).
-    registry?.get(paneId)?.terminal?.kill();
-    store.actions.closePane(paneId);
+    // Capture managed-agent identity before the pane record disappears; the exit event can arrive after reconcile disposes the registry entry.
+    closePaneWithTerminal(
+      { store, registry, reportExternalExit: deps.reportExternalExit },
+      paneId,
+    );
   }
 
   return {

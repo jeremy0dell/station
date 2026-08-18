@@ -183,6 +183,7 @@ export function createStationInputRuntime(options: StationInputRuntimeOptions): 
       automations: options.automations ?? [],
       writeToTerminal: options.writeToTerminal,
       pasteToTerminal: options.pasteToTerminal,
+      reportExternalExit: undefined,
     });
 
   // Pane chords are `reserved`, so they pierce the context-menu catch-all; gate on that real modal

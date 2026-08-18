@@ -93,6 +93,7 @@ function pendingDashboardCapabilities(): DashboardCapabilities {
       fork: () => execution,
       quickCreate: () => execution,
     },
+    worktreeRemoval: { remove: () => execution },
     shell: { open: () => execution },
     dismissal: {
       dismissDashboard: () => execution,

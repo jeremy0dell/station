@@ -54,6 +54,7 @@ function makeViewStore(
             quickCreate: () => dashboardExecution({ kind: "success" }),
             fork: () => dashboardExecution({ kind: "success" }),
           },
+          worktreeRemoval: { remove: () => dashboardExecution({ kind: "success" }) },
           shell: { open: () => dashboardExecution({ kind: "success" }) },
           dismissal: {
             dismissDashboard: () => {

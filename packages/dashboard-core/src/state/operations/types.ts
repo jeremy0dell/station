@@ -156,13 +156,13 @@ export type DashboardCapabilityOperation =
   | ActivateSessionOperation
   | CreateManagedSessionOperation
   | ForkManagedSessionOperation
+  | RemoveWorktreeOperation
   | OpenDashboardShellOperation
   | DismissDashboardOperation
   | ExitDashboardRendererOperation;
 
 export type TuiOperation =
   | DashboardCapabilityOperation
-  | RemoveWorktreeOperation
   | RenameSessionOperation
   | LoadProjectDirectoryOperation
   | ReviewProjectFolderOperation

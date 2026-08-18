@@ -27,6 +27,50 @@ describe("nextSplitSeqFromPanes", () => {
   });
 });
 
+describe("managed pane close", () => {
+  it("releases a local managed target before dropping the pane identity", () => {
+    const store = createStationStore({ boot: "empty" });
+    const paneId = agentWorktreePaneId("wt_station_working");
+    store.actions.createPane(paneId, { role: "primary-agent" });
+    store.actions.setPrimaryAgent(paneId, {
+      sessionId: "ses_station_working",
+      terminalTargetId: "native:wt_station_working",
+      terminalBindingToken: "binding_1",
+    });
+    let kills = 0;
+    const registry = {
+      get: () => ({ terminal: { kill: () => (kills += 1) } }),
+    } as unknown as PtyRegistry;
+    const reported: unknown[] = [];
+    const effects = createPaneEffects({
+      store,
+      clientState: undefined,
+      registry,
+      resolveAuxShellPlacement: undefined,
+      autoCloseOverlay: false,
+      automations: [],
+      writeToTerminal: undefined,
+      pasteToTerminal: undefined,
+      reportExternalExit: async (params) => {
+        reported.push(params);
+        return { acknowledged: true, terminalTargetId: params.terminalTargetId };
+      },
+    });
+
+    effects.closePane(paneId);
+
+    expect(reported).toEqual([
+      {
+        terminalTargetId: "native:wt_station_working",
+        expectedSessionId: "ses_station_working",
+        expectedBindingToken: "binding_1",
+      },
+    ]);
+    expect(kills).toBe(1);
+    expect(store.getState().workspace.panes).toEqual([]);
+  });
+});
+
 describe("split cwd resolution along the anchor chain", () => {
   // Regression: the walk to the worktree-owning pane must follow the full split-anchor chain.
   // A row-count-bounded guard wrongly returned undefined for a restored chain deeper than the

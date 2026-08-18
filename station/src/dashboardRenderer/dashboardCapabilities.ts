@@ -1,5 +1,10 @@
 import { toSafeError, type ObserverService, type StationClientStateSource } from "@station/client";
-import { createObserverActivationCapabilities, createObserverManagedSessionCapabilities, dashboardExecution } from "@station/dashboard-core/runtime";
+import {
+  createObserverActivationCapabilities,
+  createObserverManagedSessionCapabilities,
+  createObserverWorktreeRemovalCapabilities,
+  dashboardExecution,
+} from "@station/dashboard-core/runtime";
 import type { DashboardCapabilities, DashboardExecutionResult, OpenDashboardShellRequest } from "@station/dashboard-core/runtime";
 import {
   resolveDashboardShellTarget,
@@ -58,6 +63,10 @@ export function createDashboardCapabilities(
   return {
     activation: createObserverActivationCapabilities(activationOptions),
     managedSessions: createObserverManagedSessionCapabilities(managedOptions),
+    worktreeRemoval: createObserverWorktreeRemovalCapabilities({
+      service: options.observerService,
+      clientLabel: "station",
+    }),
     shell: {
       open: (request) => dashboardExecution(openShell(options, request)),
     },

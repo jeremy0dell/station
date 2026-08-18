@@ -4,11 +4,13 @@ import type { SessionActivationCapabilities } from "./activation.js";
 import type { DashboardDismissalCapabilities } from "./dismissal.js";
 import type { ManagedSessionCapabilities } from "./managedSessions.js";
 import type { DashboardShellCapabilities } from "./shell.js";
+import type { WorktreeRemovalCapabilities } from "./worktreeRemoval.js";
 
-/** The four renderer-selected capability groups required by every dashboard runtime. */
+/** The renderer-selected capability groups required by every dashboard runtime. */
 export type DashboardCapabilities = {
   activation: SessionActivationCapabilities;
   managedSessions: ManagedSessionCapabilities;
+  worktreeRemoval: WorktreeRemovalCapabilities;
   shell: DashboardShellCapabilities;
   dismissal: DashboardDismissalCapabilities;
 };

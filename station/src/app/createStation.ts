@@ -61,6 +61,7 @@ export function createStation(options: CreateStationOptions): Station {
     automations,
     writeToTerminal: undefined,
     pasteToTerminal: undefined,
+    reportExternalExit: (params) => stationClient.service.reportExternalExit(params),
   });
   const managedLaunch = createManagedLaunch({
     store,
@@ -74,6 +75,7 @@ export function createStation(options: CreateStationOptions): Station {
     observerService: stationClient.service,
     store,
     paneEffects,
+    registry,
     managedLaunch,
   });
   const dashboardRuntime = createStationDashboardRuntime(

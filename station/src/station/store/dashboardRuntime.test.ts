@@ -1,5 +1,10 @@
 import { describe, expect, it } from "bun:test";
-import { createObserverActivationCapabilities, createObserverManagedSessionCapabilities, dashboardExecution } from "@station/dashboard-core/runtime";
+import {
+  createObserverActivationCapabilities,
+  createObserverManagedSessionCapabilities,
+  createObserverWorktreeRemovalCapabilities,
+  dashboardExecution,
+} from "@station/dashboard-core/runtime";
 import type { DashboardCapabilities } from "@station/dashboard-core/runtime";
 import { selectDashboardViewport } from "@station/dashboard-core/selectors";
 import type { TuiFolderService } from "@station/dashboard-core/runtime";
@@ -128,6 +133,7 @@ function makeStore(folderService?: TuiFolderService): DashboardRuntime {
   const capabilities: DashboardCapabilities = {
     activation: createObserverActivationCapabilities({ source, service, clientLabel: "Station" }),
     managedSessions: createObserverManagedSessionCapabilities({ service, clientLabel: "Station" }),
+    worktreeRemoval: createObserverWorktreeRemovalCapabilities({ service, clientLabel: "Station" }),
     shell: { open: () => dashboardExecution({ kind: "success" }) },
     dismissal: {
       dismissDashboard: () => dashboardExecution({ kind: "success" }),
