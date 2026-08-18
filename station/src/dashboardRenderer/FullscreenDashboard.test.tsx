@@ -361,7 +361,7 @@ describe("FullscreenDashboard mouse composition", () => {
     ).toHaveLength(1);
     let group = groupLine();
     await actOn(() =>
-      setup.mockMouse.click(group.line.indexOf("[qs]"), group.row, MouseButtons.LEFT),
+      setup.mockMouse.click(group.line.indexOf("[quick session]"), group.row, MouseButtons.LEFT),
     );
     expect(fixture.runtime.state.getState().dashboardFocus).toEqual({
       rowId: groupId,
@@ -378,6 +378,12 @@ describe("FullscreenDashboard mouse composition", () => {
       cellId: "menu",
     });
     expect([...fixture.runtime.state.getState().collapsedGroupIds]).toEqual([]);
+    expect(fixture.runtime.state.getState().screen).toMatchObject({
+      name: "groupSettings",
+      groupId: "group_design_refresh",
+      section: "general",
+    });
+    await actOn(() => fixture.runtime.actions.dispatch({ type: "groupSettings.back" }));
 
     group = groupLine();
     await actOn(() =>

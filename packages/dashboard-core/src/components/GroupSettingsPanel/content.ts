@@ -1,0 +1,131 @@
+import type { SessionGroupId, SessionId } from "@station/contracts";
+import {
+  hasGroupSettingsMembershipDelta,
+  isRemoveSessionGroupArmed,
+  removeSessionGroupConfirmPhrase,
+} from "../../state/screens/groupSettings.js";
+import type { DashboardScreenView, DashboardSnapshotView } from "../../state/types.js";
+
+type GroupSettingsScreenView = Extract<DashboardScreenView, { name: "groupSettings" }>;
+
+export type GroupSettingsSessionLine = {
+  sessionId: SessionId;
+  slot: string;
+  title: string;
+  activity: string;
+  checked: boolean;
+  focused: boolean;
+  currentGroupId: SessionGroupId | null;
+  currentGroupName?: string;
+  membershipLabel: string;
+};
+
+export type GroupSettingsPanelModel = {
+  project: {
+    id: string;
+    label: string;
+    root: string;
+  };
+  group: {
+    id: SessionGroupId;
+    name: string;
+    memberCount: number;
+  };
+  sessions: readonly GroupSettingsSessionLine[];
+  sessionCount: number;
+  hiddenAbove: number;
+  hiddenBelow: number;
+  membershipChanged: boolean;
+  removePhrase: string;
+  removeArmed: boolean;
+  pending: boolean;
+};
+
+/** Pure canonical/staged content projection for the Group Settings renderer. */
+export function groupSettingsPanelModel(
+  snapshot: DashboardSnapshotView,
+  screen: GroupSettingsScreenView,
+  maxSessionRows: number,
+): GroupSettingsPanelModel | undefined {
+  const project = snapshot.projects.find((candidate) => candidate.id === screen.projectId);
+  const group = snapshot.sessionGroups.find(
+    (candidate) => candidate.id === screen.groupId && candidate.projectId === screen.projectId,
+  );
+  if (project === undefined || group === undefined) return undefined;
+
+  const groupsBySessionId = new Map<SessionId, (typeof snapshot.sessionGroups)[number]>();
+  for (const candidate of snapshot.sessionGroups) {
+    if (candidate.projectId !== project.id) continue;
+    for (const sessionId of candidate.sessionIds) groupsBySessionId.set(sessionId, candidate);
+  }
+  const projectSessions = snapshot.sessions.filter((session) => session.projectId === project.id);
+  const cursorIndex = Math.max(
+    0,
+    projectSessions.findIndex((session) => session.id === screen.sessionCursor),
+  );
+  const visibleRows = windowRange(projectSessions.length, cursorIndex, maxSessionRows);
+  const keys = "123456789abcdefghijklmnopqrstuvwxyz";
+  const sessions = projectSessions
+    .slice(visibleRows.start, visibleRows.end)
+    .map((session, visibleIndex): GroupSettingsSessionLine => {
+      const absoluteIndex = visibleRows.start + visibleIndex;
+      const currentGroup = groupsBySessionId.get(session.id);
+      const currentGroupId = currentGroup?.id ?? null;
+      const checked = screen.desiredSessionIds.has(session.id);
+      const line: GroupSettingsSessionLine = {
+        sessionId: session.id,
+        slot: keys[absoluteIndex] ?? "·",
+        title: session.title,
+        activity: session.status.value.replaceAll("_", " "),
+        checked,
+        focused:
+          screen.focus === "detail" &&
+          screen.detailFocus === "sessionList" &&
+          screen.sessionCursor === session.id,
+        currentGroupId,
+        membershipLabel: sessionMembershipLabel(checked, currentGroup, screen.groupId),
+      };
+      if (currentGroup !== undefined) line.currentGroupName = currentGroup.name;
+      return line;
+    });
+
+  return {
+    project: { id: project.id, label: project.label, root: project.root },
+    group: { id: group.id, name: group.name, memberCount: group.sessionIds.length },
+    sessions,
+    sessionCount: projectSessions.length,
+    hiddenAbove: visibleRows.start,
+    hiddenBelow: projectSessions.length - visibleRows.end,
+    membershipChanged: hasGroupSettingsMembershipDelta(screen),
+    removePhrase: removeSessionGroupConfirmPhrase(screen.baselineName),
+    removeArmed: isRemoveSessionGroupArmed(screen),
+    pending: screen.pending !== undefined,
+  };
+}
+
+function sessionMembershipLabel(
+  checked: boolean,
+  currentGroup: DashboardSnapshotView["sessionGroups"][number] | undefined,
+  targetGroupId: SessionGroupId,
+): string {
+  if (checked) {
+    if (currentGroup?.id === targetGroupId) return "in this Group";
+    return currentGroup === undefined ? "add on Save" : `move from ${currentGroup.name}`;
+  }
+  if (currentGroup?.id === targetGroupId) return "ungroup on Save";
+  return currentGroup === undefined ? "ungrouped" : `in ${currentGroup.name}`;
+}
+
+function windowRange(
+  itemCount: number,
+  cursorIndex: number,
+  maxRows: number,
+): { start: number; end: number } {
+  const size = Math.max(0, Math.min(itemCount, maxRows));
+  if (size === 0) return { start: 0, end: 0 };
+  const start = Math.min(
+    Math.max(0, cursorIndex - Math.floor(size / 2)),
+    Math.max(0, itemCount - size),
+  );
+  return { start, end: start + size };
+}

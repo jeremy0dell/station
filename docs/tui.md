@@ -388,7 +388,7 @@ reattach; pane borders and neighboring panes must remain unlinked.
 - Treat the active UI as the full terminal canvas. Layout code should account for the terminal viewport, not a decorative parent container.
 - Native Station owns its opaque Station canvas. The standalone dashboard uses opaque terminal-default background intent for its unaccented canvas, panels, prompts, Help surface, and toasts; this behavior is provider-neutral and does not use transparency.
 - Keep header, body, footer, overlays, prompts, and toasts from overlapping at narrow or short terminal sizes.
-- Render canonical Groups as contiguous blocks in the projected row order. An expanded Group uses its header as the top edge, inert side rails around direct members, and one inert closing-frame row; an empty expanded Group therefore has a header and closing edge only. A collapsed Group keeps the bounded identity and any enabled optional actions but omits its members and closing edge. `[qs]` and `[▾]` are visible by default; runtime composition may independently suppress either action, with no user-facing config key yet. Identity toggles collapse, `[qs]` expands the Group and launches a Quick Session into it, and `[▾]` remains a focusable no-op until the complete Group menu lands.
+- Render canonical Groups as contiguous blocks in the projected row order. An expanded Group uses its header as the top edge, inert side rails around direct members, and one inert closing-frame row; an empty expanded Group therefore has a header and closing edge only. A collapsed Group keeps the bounded identity and any enabled optional actions but omits its members and closing edge. The responsive `[qs]`/`[quick session]` action and `[▾]` are visible by default; runtime composition may independently suppress either action, with no user-facing config key yet. Identity toggles collapse, Quick Session expands the Group and launches into it, and `[▾]` opens Group Settings at General.
 - Group rings use the quiet hairline role by default, bright working color while the header is focused, and dim working color while a direct member has focus. Exact target focus uses compact focus; member focus and hover keep the ordinary dashboard fills. Borders, separators, whitespace, and closing rows are inert, and viewport clipping may show any ordinary edge of the projected block without renderer-owned regrouping.
 - The tmux popup runs the same interactive observer-backed dashboard without
   native Station panes. Its close behavior and footer copy must match popup
@@ -504,7 +504,8 @@ moves without wrapping through `identity` → `shell` → `quickSession` → `me
 and `identity` → `quickSession` → `menu` for Groups, skipping optional Group actions omitted by
 runtime composition. Omitted actions have no rendered target and are invalid semantic cells. Group
 identity toggles collapse; Group quick session launches through the same pointer/focused activation
-contract and the Group menu remains a focus-preserving no-op until its workflow slice lands. Up/Down leaves any header segment immediately, and Left/Right on a
+contract, and the Group menu control opens Group Settings at General while preserving its anchor for
+safe return. Up/Down leaves any header segment immediately, and Left/Right on a
 session row or empty-project action is inert. Remove, rename, move-to-Group, and fork row choosers retain a separate
 visible, selectable canonical-session traversal; slots and Enter resolve through that same chooser
 policy. Next-needs-me uses its own canonical-session policy. `N` continues to open the session flow
@@ -544,7 +545,7 @@ Escape, click-away, unchanged selection, and a successful change return to `menu
 removal while open uses the same deterministic focus fallback. The dashboard footer describes Enter
 as `activate` because it may activate a session row, project-header control, or empty-project action.
 
-Activating a Group's `[qs]` launches an ordinary Quick Session without embedding Group placement in
+Activating a Group's responsive `[qs]`/`[quick session]` action launches an ordinary Quick Session without embedding Group placement in
 the create request. While pending, its targeted local row is rendered inside the expanded Group. On
 successful launch, dashboard-core reloads canonical truth, correlates the new session by Project and
 generated branch, reads the latest Group version, and records one expected membership addition. It
@@ -556,6 +557,29 @@ default agent, and Project settings… in that order. Up/Down wraps, Enter activ
 Group, and Escape or click-away returns to the same Project `menu` cell. The overlay opens above its
 Project row when it would overflow and clamps in narrow or short terminals without reflowing the
 dashboard. Native right-click exposes the same four actions through the shared core transitions.
+
+Activating a Group's `[▾]` opens Group Settings at General. The stable open-at-General and
+open-at-Remove actions remain available to a future complete Group menu. One responsive settings
+shell contains General, Sessions, and Remove Group; `G`, `S`, and `R`, arrows plus Enter, and
+semantic pointer targets reach every section and control. General shows read-only Project identity and saves one versioned Group rename. Sessions
+lists only canonical sessions in the Group's Project with an independent non-color cursor and
+checkbox marker. `[✓]` means the session will belong to this Group after Save; unchecking a current
+member is labeled `ungroup on Save`, while checking another Group's member is labeled as a move.
+Save emits one atomic expected-assignment add/remove delta. An empty Project and an empty desired
+Group remain usable.
+Remove Group states that member sessions remain open and become ungrouped, requires the exact
+`delete <Group name>` phrase, and dispatches only Group deletion—never session, agent, terminal,
+worktree, or provider lifecycle.
+
+Switching Group Settings sections discards the abandoned section draft and reseeds from the latest
+canonical snapshot. Save success retains the settings shell for rename and membership; failure
+retains edited/staged state and Save focus. Pending submission leaves the complete surface visible
+and inert. Explicit Cancel/Back returns to the invoking Group menu cell; successful deletion focuses
+the owning Project header. Canonical Group, Project, or session removal while settings is open uses
+ordinary screen reconciliation and deterministic dashboard focus fallback without a Group-specific
+notice or failure screen. Project and Group Settings share one responsive shell that stays within
+the terminal frame, uses two panes when space permits, and presents the active list or detail pane
+at compact widths.
 
 Bounded screens use one active-screen overlay layer. Dashboard-core exposes the narrow
 `TuiScreenBehavior` contract, and the owning screen module supplies its safe `clickAway`

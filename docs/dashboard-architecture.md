@@ -85,6 +85,27 @@ launch succeeded but visibility remains uncertain—or safe cleanup retained the
 fresh worktree—the operation closes with a warning instead of permitting a
 duplicate branch submission.
 
+Group Settings is one stable-ID screen per canonical Group, with General,
+Sessions, and Remove Group sections. Activating the Group `[▾]` control opens
+General and anchors dashboard focus to that cell; a future complete Group menu
+can open General or Remove directly without owning settings state. General
+captures the Group version for one `sessionGroup.rename`. Sessions captures that version plus each Project
+session's expected current Group, stages desired membership locally, and emits
+one atomic `sessionGroup.updateMembership` add/remove delta; selecting a member
+of another Group is an expected move, and an empty desired set is valid. Remove
+requires `delete <Group name>` and emits only `sessionGroup.delete`, so member
+sessions and runtime resources remain open and become ungrouped.
+
+Completed rename and membership commands reseed their editor from canonical
+client state while retaining the settings screen and Group identity. Ordinary
+failure retains the draft or staged intent and returns focus to the initiating
+Save control; assignment/version conflicts are never retried. Snapshot
+replacement preserves the active draft, prunes sessions that cease to be
+canonical, and uses ordinary screen/focus reconciliation when the Group or
+Project disappears. Successful deletion closes settings and focuses the owning
+Project header. Pending settings mutations intercept keys and pointer input and
+add no generic pending, disconnected, failure, or disappearance screen.
+
 ## Dashboard hierarchy, cursor, and viewport
 
 Dashboard structure has one projection path:
@@ -146,9 +167,9 @@ menu owns Quick Group, New Group, default-agent, and settings transitions.
 Group rows always use `identity` and show `quickSession` and `menu` by default.
 Runtime composition may independently omit either optional action; omitted cells
 are not rendered, focusable, or activatable. This visibility seam has no public
-config key yet. Identity toggles collapse, `[qs]` launches an ordinary Quick
-Session followed by one expected membership update, and `[▾]` remains a
-focusable no-op until the complete Group menu lands. Group Quick Session expands
+config key yet. Identity toggles collapse, the responsive `[qs]`/`[quick session]` action launches
+an ordinary Quick Session followed by one expected membership update, and `[▾]` opens Group
+Settings at General. Group Quick Session expands
 a collapsed Group for its optimistic row.
 The row remains Group-framed only as a convergence bridge; canonical placement
 still comes exclusively from `snapshot.sessionGroups`. A focused direct visible member decorates its Group with
@@ -193,8 +214,10 @@ projection, `state/runtimeEffectScope.ts` for private effect admission and
 settlement, `state/capabilities/*` for semantic renderer authority,
 `state/operations/*` for scope-bound command flow (including durable Group
 creation before optional Quick Session launch and expected membership), and
-`components/`/`widgets/` for shared layout and content logic. The `[tui]` config shapes live in
-`@station/contracts`; `@station/config` retains load/persist authority.
+`components/`/`widgets/` for shared layout and content logic. Dashboard-core owns responsive
+settings geometry; Station owns one OpenTUI settings shell, while each settings screen retains its
+navigation policy, detail controls, drafts, and mutation lifecycle. The `[tui]` config shapes
+live in `@station/contracts`; `@station/config` retains load/persist authority.
 
 ## Dependency direction and enforcement
 

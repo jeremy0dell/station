@@ -564,6 +564,17 @@ describe("routeStationMouse", () => {
     routeStationMouse({ kind: "dashboardCell", rowId: groupId, cellId: "menu" }, LEFT_DOWN, store);
     expect([...store.state.getState().collapsedGroupIds]).toEqual([]);
     expect(store.state.getState().dashboardFocus).toEqual({ rowId: groupId, cellId: "menu" });
+    expect(store.state.getState().screen).toMatchObject({
+      name: "groupSettings",
+      groupId: "group_design_refresh",
+      section: "general",
+    });
+
+    routeStationMouse(
+      { kind: "groupSettingsAction", actionId: "back" },
+      LEFT_DOWN,
+      store,
+    );
     expect(store.state.getState().screen).toEqual({ name: "dashboard" });
 
     const beforeFrame = store.state.getState();
@@ -1083,6 +1094,123 @@ describe("routeStationMouse", () => {
       store,
     );
     expect(store.state.getState().screen?.name).not.toBe("projectDefaultAgent");
+  });
+
+  it("routes Group Settings sections, session toggles, and Back through core actions", () => {
+    const store = makeStore(groupedManyProjectsSnapshot());
+    store.actions.dispatch({
+      type: "groupSettings.open",
+      groupId: "group_design_refresh",
+      section: "general",
+    });
+
+    routeStationMouse(
+      { kind: "groupSettingsSection", section: "sessions" },
+      LEFT_DOWN,
+      store,
+    );
+    expect(store.state.getState().screen).toMatchObject({
+      name: "groupSettings",
+      section: "sessions",
+      focus: "detail",
+    });
+
+    routeStationMouse(
+      { kind: "groupSettingsSession", sessionId: "ses_wt_group_contracts" },
+      LEFT_DOWN,
+      store,
+    );
+    const staged = store.state.getState().screen;
+    expect(
+      staged.name === "groupSettings" &&
+        staged.desiredSessionIds.has("ses_wt_group_contracts"),
+    ).toBe(false);
+
+    routeStationMouse(
+      { kind: "groupSettingsAction", actionId: "back" },
+      LEFT_DOWN,
+      store,
+    );
+    expect(store.state.getState().screen).toEqual({ name: "dashboard" });
+    expect(store.state.getState().dashboardFocus).toEqual({
+      rowId: "group:group_design_refresh",
+      cellId: "menu",
+    });
+  });
+
+  it("unchecks a current member and dispatches one ungroup membership delta", async () => {
+    const snapshot = groupedManyProjectsSnapshot();
+    const fixture = makeStationTestRuntime({ terminalRows: 14, snapshot });
+    const store = fixture.runtime;
+
+    routeStationMouse(
+      {
+        kind: "dashboardCell",
+        rowId: dashboardRowIds.group("group_design_refresh"),
+        cellId: "menu",
+      },
+      LEFT_DOWN,
+      store,
+    );
+    routeStationMouse(
+      { kind: "groupSettingsSection", section: "sessions" },
+      LEFT_DOWN,
+      store,
+    );
+    routeStationMouse(
+      { kind: "groupSettingsSession", sessionId: "ses_wt_group_contracts" },
+      LEFT_DOWN,
+      store,
+    );
+    routeStationMouse(
+      { kind: "groupSettingsAction", actionId: "save" },
+      LEFT_DOWN,
+      store,
+    );
+
+    await waitFor(() =>
+      fixture.service.dispatched.some(
+        (command) => command.type === "sessionGroup.updateMembership",
+      ),
+    );
+    expect(
+      fixture.service.dispatched.find(
+        (command) => command.type === "sessionGroup.updateMembership",
+      ),
+    ).toMatchObject({
+      payload: {
+        groupId: "group_design_refresh",
+        remove: [
+          {
+            sessionId: "ses_wt_group_contracts",
+            expectedGroupId: "group_design_refresh",
+          },
+        ],
+      },
+    });
+  });
+
+  it("keeps Group Settings targets inert outside its mode", () => {
+    const store = makeStore(groupedManyProjectsSnapshot());
+    const before = store.state.getState().screen;
+
+    routeStationMouse(
+      { kind: "groupSettingsSection", section: "remove" },
+      LEFT_DOWN,
+      store,
+    );
+    routeStationMouse(
+      { kind: "groupSettingsAction", actionId: "save" },
+      LEFT_DOWN,
+      store,
+    );
+    routeStationMouse(
+      { kind: "groupSettingsSession", sessionId: "ses_wt_group_contracts" },
+      LEFT_DOWN,
+      store,
+    );
+
+    expect(store.state.getState().screen).toEqual(before);
   });
 
   it("focuses a settings item on click and leaves an unarmed remove click inert", () => {

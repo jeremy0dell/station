@@ -281,6 +281,27 @@ describe("dashboard golden frames", () => {
     expect(scrolledFrame).toMatchSnapshot();
   });
 
+  it("uses the same responsive Quick Session label for Group and Project headers", async () => {
+    for (const { width, label, absent } of [
+      { width: 80, label: "[qs]", absent: "[quick session]" },
+      { width: 120, label: "[quick session]", absent: "[qs]" },
+    ]) {
+      const setup = await renderDashboard({
+        width,
+        height: 24,
+        snapshot: groupedManyProjectsSnapshot(),
+      });
+      const lines = setup.captureCharFrame().split("\n");
+      const projectLine = lines.find((line) => line.includes("▼ station"));
+      const groupLine = lines.find((line) => line.includes("▼ Design refresh"));
+
+      expect(projectLine).toContain(label);
+      expect(projectLine).not.toContain(absent);
+      expect(groupLine).toContain(label);
+      expect(groupLine).not.toContain(absent);
+    }
+  });
+
   it("paints exact Group focus targets and focused-member containment", async () => {
     const snapshot = groupedManyProjectsSnapshot();
     for (const [targetIndex, cellId] of ["identity", "quickSession", "menu"].entries()) {

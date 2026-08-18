@@ -2,11 +2,14 @@ import { describe, expect, it } from "vitest";
 import {
   buildCreateSessionCommand,
   buildCreateSessionGroupCommand,
+  buildDeleteSessionGroupCommand,
   buildForkSessionCommand,
   buildRenameSessionCommand,
+  buildRenameSessionGroupCommand,
   buildResumeAgentCommand,
   buildStartAgentCommand,
   buildUpdateSessionGroupMembershipCommand,
+  buildUpdateSessionGroupMembershipDeltaCommand,
   cleanupForceRequired,
 } from "../../../src/state/commandBuilders.js";
 import { createCommandSnapshot, createDashboardSnapshot } from "../../fixtures/snapshots.js";
@@ -159,6 +162,53 @@ describe("TUI command builders", () => {
         expectedVersion: 4,
         add: [{ sessionId: "ses_launches", expectedGroupId: null }],
       },
+    });
+  });
+
+  it("builds Group Settings rename, bulk membership, and delete commands", () => {
+    expect(
+      buildRenameSessionGroupCommand({
+        projectId: "web",
+        groupId: "group_launches",
+        expectedVersion: 4,
+        name: "  Shipped  ",
+      }),
+    ).toEqual({
+      type: "sessionGroup.rename",
+      payload: {
+        projectId: "web",
+        groupId: "group_launches",
+        expectedVersion: 4,
+        name: "Shipped",
+      },
+    });
+    expect(
+      buildUpdateSessionGroupMembershipDeltaCommand({
+        projectId: "web",
+        groupId: "group_launches",
+        expectedVersion: 4,
+        add: [{ sessionId: "ses_add", expectedGroupId: "group_other" }],
+        remove: [{ sessionId: "ses_remove", expectedGroupId: "group_launches" }],
+      }),
+    ).toEqual({
+      type: "sessionGroup.updateMembership",
+      payload: {
+        projectId: "web",
+        groupId: "group_launches",
+        expectedVersion: 4,
+        add: [{ sessionId: "ses_add", expectedGroupId: "group_other" }],
+        remove: [{ sessionId: "ses_remove", expectedGroupId: "group_launches" }],
+      },
+    });
+    expect(
+      buildDeleteSessionGroupCommand({
+        projectId: "web",
+        groupId: "group_launches",
+        expectedVersion: 4,
+      }),
+    ).toEqual({
+      type: "sessionGroup.delete",
+      payload: { projectId: "web", groupId: "group_launches", expectedVersion: 4 },
     });
   });
 

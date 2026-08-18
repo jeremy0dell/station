@@ -9,8 +9,12 @@ import {
   matchDashboardBinding,
 } from "../../../src/state/keymap.js";
 import { createInitialTuiState } from "../../../src/state/screen.js";
+import { openGroupSettings } from "../../../src/state/screens/groupSettings.js";
 import { handleTuiKey } from "../../../src/state/transition.js";
-import { createDashboardSnapshot } from "../../fixtures/snapshots.js";
+import {
+  createDashboardSnapshot,
+  createGroupedDashboardSnapshot,
+} from "../../fixtures/snapshots.js";
 
 const KEY_CONTEXT = { cwd: "/Users/example/Developer/station", homeDir: "/Users/example" };
 
@@ -39,6 +43,14 @@ describe("dashboard key bindings", () => {
         },
       }),
     ).toBe("persistentFilter");
+  });
+
+  it("derives the dedicated Group Settings input mode", () => {
+    const state = openGroupSettings(
+      createInitialTuiState({ initialSnapshot: createGroupedDashboardSnapshot() }),
+      "group_active",
+    );
+    expect(deriveTuiInputMode(state)).toBe("groupSettings");
   });
 
   it("gives the global Ctrl-C exit precedence over slot matching", () => {

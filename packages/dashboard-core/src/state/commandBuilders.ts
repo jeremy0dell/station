@@ -61,12 +61,33 @@ export type CreateSessionGroupCommandInput = {
   name: string;
 };
 
+export type RenameSessionGroupCommandInput = {
+  projectId: ProjectView["id"];
+  groupId: SessionGroupId;
+  expectedVersion: number;
+  name: string;
+};
+
 export type UpdateSessionGroupMembershipCommandInput = {
   projectId: ProjectView["id"];
   groupId: SessionGroupId;
   expectedVersion: number;
   sessionId: SessionId;
   expectedGroupId?: SessionGroupId | null;
+};
+
+export type UpdateSessionGroupMembershipDeltaCommandInput = {
+  projectId: ProjectView["id"];
+  groupId: SessionGroupId;
+  expectedVersion: number;
+  add: readonly { sessionId: SessionId; expectedGroupId: SessionGroupId | null }[];
+  remove: readonly { sessionId: SessionId; expectedGroupId: SessionGroupId | null }[];
+};
+
+export type DeleteSessionGroupCommandInput = {
+  projectId: ProjectView["id"];
+  groupId: SessionGroupId;
+  expectedVersion: number;
 };
 
 export type MoveSessionToGroupCommandInput = {
@@ -254,6 +275,20 @@ export function buildCreateSessionGroupCommand(
   };
 }
 
+export function buildRenameSessionGroupCommand(
+  input: RenameSessionGroupCommandInput,
+): Extract<StationCommand, { type: "sessionGroup.rename" }> {
+  return {
+    type: "sessionGroup.rename",
+    payload: {
+      projectId: input.projectId,
+      groupId: input.groupId,
+      expectedVersion: input.expectedVersion,
+      name: input.name.trim(),
+    },
+  };
+}
+
 export function buildUpdateSessionGroupMembershipCommand(
   input: UpdateSessionGroupMembershipCommandInput,
 ): Extract<StationCommand, { type: "sessionGroup.updateMembership" }> {
@@ -264,6 +299,33 @@ export function buildUpdateSessionGroupMembershipCommand(
       groupId: input.groupId,
       expectedVersion: input.expectedVersion,
       add: [{ sessionId: input.sessionId, expectedGroupId: input.expectedGroupId ?? null }],
+    },
+  };
+}
+
+/** Builds one atomic add/remove delta without emitting empty payload collections. */
+export function buildUpdateSessionGroupMembershipDeltaCommand(
+  input: UpdateSessionGroupMembershipDeltaCommandInput,
+): Extract<StationCommand, { type: "sessionGroup.updateMembership" }> {
+  const payload: Extract<StationCommand, { type: "sessionGroup.updateMembership" }>["payload"] = {
+    projectId: input.projectId,
+    groupId: input.groupId,
+    expectedVersion: input.expectedVersion,
+  };
+  if (input.add.length > 0) payload.add = [...input.add];
+  if (input.remove.length > 0) payload.remove = [...input.remove];
+  return { type: "sessionGroup.updateMembership", payload };
+}
+
+export function buildDeleteSessionGroupCommand(
+  input: DeleteSessionGroupCommandInput,
+): Extract<StationCommand, { type: "sessionGroup.delete" }> {
+  return {
+    type: "sessionGroup.delete",
+    payload: {
+      projectId: input.projectId,
+      groupId: input.groupId,
+      expectedVersion: input.expectedVersion,
     },
   };
 }

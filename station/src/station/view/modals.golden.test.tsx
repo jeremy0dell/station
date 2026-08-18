@@ -34,6 +34,7 @@ import {
   openRemoveWorktreeConfirmForRow,
   openProjectDefaultAgentPicker,
   openCreateGroup,
+  openGroupSettings,
   openMoveToGroupForRow,
   openProjectMenu,
   openProjectSettings,
@@ -267,9 +268,68 @@ const CASES: ModalCase[] = [
     expect: ["Project Settings", "↑↓ move   ↵ select   1-9/a-z jump   Esc cancel", "station"],
   },
   {
+    name: "group settings general",
+    keys: [{ input: "", rightArrow: true }],
+    snapshot: groupedManyProjectsSnapshot,
+    prepare: (state) => openGroupSettings(state, "group_design_refresh", "general"),
+    expect: [
+      "Group settings · Design refresh",
+      "General",
+      "Sessions",
+      "Remove Group",
+      "Project station (read-only)",
+      "Save",
+      "Cancel",
+    ],
+  },
+  {
+    name: "group settings sessions compact",
+    keys: [],
+    snapshot: groupedManyProjectsSnapshot,
+    size: { width: 40, height: 12 },
+    prepare: (state) =>
+      handleTuiKey(
+        openGroupSettings(state, "group_design_refresh", "sessions"),
+        { input: "", rightArrow: true },
+      ).state,
+    expect: ["Sessions · Design refresh", "[✓]", "Save", "Back"],
+  },
+  {
+    name: "group settings remove short",
+    keys: [],
+    snapshot: groupedManyProjectsSnapshot,
+    size: { width: 40, height: 12 },
+    prepare: (state) =>
+      handleTuiKey(
+        openGroupSettings(state, "group_design_refresh", "remove"),
+        { input: "", rightArrow: true },
+      ).state,
+    expect: ["Remove Group", "remain open", "delete Design refresh", "Remove", "Back"],
+  },
+  {
     name: "project settings panel",
     keys: [{ input: "P" }, { input: "1" }],
     expect: ["Project settings", "Default agent", "Remove project", "✓ current"],
+  },
+  {
+    name: "project settings compact list",
+    keys: [],
+    size: { width: 40, height: 12 },
+    prepare: (state) => openProjectSettings(state, "station"),
+    expect: ["Project settings", "Default agent", "Remove project"],
+    reject: ["✓ current"],
+  },
+  {
+    name: "project settings compact detail",
+    keys: [],
+    size: { width: 40, height: 12 },
+    prepare: (state) =>
+      handleTuiKey(openProjectSettings(state, "station"), {
+        input: "",
+        rightArrow: true,
+      }).state,
+    expect: ["Default agent · station", "✓ current"],
+    reject: ["Remove project"],
   },
   {
     name: "project settings remove pane",

@@ -10,6 +10,7 @@ import { HelpOverlayView } from "./HelpOverlayView.js";
 import { NewSessionSheetView } from "./sheets/NewSessionSheetView.js";
 import { ProjectChoiceSheetView } from "./sheets/ProjectChoiceSheetView.js";
 import { ProjectDefaultAgentSheetView } from "./sheets/ProjectDefaultAgentSheetView.js";
+import { GroupSettingsPanelView } from "./settings/GroupSettingsPanelView.js";
 import { ProjectSettingsPanelView } from "./settings/ProjectSettingsPanelView.js";
 import { ProjectMenuView } from "./ProjectMenuView.js";
 import { WidgetSettingsPanelView } from "./settings/WidgetSettingsPanelView.js";
@@ -195,6 +196,15 @@ function renderActiveScreenOverlay({
           screen={screen}
           selection={selection}
           localRows={localRows}
+        />
+      );
+    case "groupSettings":
+      return (
+        <GroupSettingsPanelView
+          columns={columns}
+          rows={rows}
+          snapshot={snapshot}
+          screen={screen}
         />
       );
     case "fork":

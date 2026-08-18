@@ -17,6 +17,14 @@ import {
   openForkDetailsForRow,
 } from "./screens/fork.js";
 import {
+  cancelGroupSettings,
+  focusGroupSettingsControl,
+  openGroupSettings,
+  selectGroupSettingsSection,
+  submitGroupSettings,
+  toggleGroupSettingsSession,
+} from "./screens/groupSettings.js";
+import {
   openMoveToGroupCreate,
   openMoveToGroupForRow,
   selectMoveToGroupDestination,
@@ -63,6 +71,8 @@ import type {
   CreateGroupReturnTarget,
   DashboardFilterConditionField,
   DashboardState,
+  GroupSettingsDetailFocus,
+  GroupSettingsSection,
   ProjectSettingsItemId,
 } from "./types.js";
 
@@ -125,7 +135,12 @@ export type TuiSemanticAction =
       projectId: ProjectId;
       returnTo: CreateGroupReturnTarget;
     }
-  | { type: "sessionGroup.quickCreate"; projectId?: ProjectId };
+  | { type: "sessionGroup.quickCreate"; projectId?: ProjectId }
+  | { type: "groupSettings.section.select"; section: GroupSettingsSection }
+  | { type: "groupSettings.control.focus"; control: GroupSettingsDetailFocus }
+  | { type: "groupSettings.session.toggle"; sessionId: SessionId }
+  | { type: "groupSettings.save" }
+  | { type: "groupSettings.back" };
 
 /** State-only dashboard events for focus, screen, selection, scrolling, and widget transitions. */
 export type DashboardStateAction =
@@ -139,6 +154,7 @@ export type DashboardStateAction =
   | { type: "removeWorktree.openConfirm"; rowId: SessionId }
   | { type: "projectDefaultAgent.open"; projectId: ProjectId }
   | { type: "projectSettings.open"; projectId: ProjectId }
+  | { type: "groupSettings.open"; groupId: SessionGroupId; section: GroupSettingsSection }
   | { type: "forkSession.openDetails"; rowId: SessionId; returnTo: "dashboard" }
   | { type: "widgetSettings.open" }
   | { type: "widgetSettings.toggle"; index: number }
@@ -207,6 +223,16 @@ export function handleTuiAction(
         state,
         action.projectId === undefined ? {} : { projectId: action.projectId },
       );
+    case "groupSettings.section.select":
+      return stateTransition(selectGroupSettingsSection(state, action.section));
+    case "groupSettings.control.focus":
+      return stateTransition(focusGroupSettingsControl(state, action.control));
+    case "groupSettings.session.toggle":
+      return stateTransition(toggleGroupSettingsSession(state, action.sessionId));
+    case "groupSettings.save":
+      return submitGroupSettings(state);
+    case "groupSettings.back":
+      return stateTransition(cancelGroupSettings(state));
     default:
       return handleDashboardStateAction(state, action);
   }
@@ -234,6 +260,7 @@ function handleDashboardStateAction(
     case "removeWorktree.openConfirm":
     case "projectDefaultAgent.open":
     case "projectSettings.open":
+    case "groupSettings.open":
     case "forkSession.openDetails":
       return handleDashboardScreenAction(state, action);
     default:
@@ -251,6 +278,7 @@ function handleDashboardScreenAction(
     | { type: "removeWorktree.openConfirm" }
     | { type: "projectDefaultAgent.open" }
     | { type: "projectSettings.open" }
+    | { type: "groupSettings.open" }
     | { type: "forkSession.openDetails" }
   >,
 ): TuiTransition {
@@ -271,6 +299,8 @@ function handleDashboardScreenAction(
       return stateTransition(openProjectDefaultAgentPicker(state, action.projectId));
     case "projectSettings.open":
       return stateTransition(openProjectSettings(state, action.projectId));
+    case "groupSettings.open":
+      return stateTransition(openGroupSettings(state, action.groupId, action.section));
     case "forkSession.openDetails":
       return stateTransition(
         openForkDetailsForRow(state, action.rowId, { returnTo: action.returnTo }),

@@ -1,6 +1,7 @@
 import { addProjectScreenBehavior } from "./screens/addProjectScreen.js";
 import { dashboardScreenBehavior } from "./screens/dashboard.js";
 import { forkScreenBehavior } from "./screens/fork.js";
+import { groupSettingsScreenBehavior } from "./screens/groupSettings.js";
 import { helpScreenBehavior } from "./screens/help.js";
 import { moveToGroupScreenBehavior } from "./screens/moveToGroup.js";
 import { newSessionScreenBehavior } from "./screens/newSession.js";
@@ -59,6 +60,8 @@ export function tuiScreenBehavior(screen: DashboardScreenView): TuiScreenBehavio
       return projectDefaultAgentScreenBehavior;
     case "projectSettings":
       return projectSettingsScreenBehavior;
+    case "groupSettings":
+      return groupSettingsScreenBehavior;
     case "widgetSettings":
       return widgetSettingsScreenBehavior;
   }

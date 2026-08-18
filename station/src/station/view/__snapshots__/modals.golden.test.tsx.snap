@@ -336,6 +336,66 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 "
 `;
 
+exports[`modal flow golden frames renders the group settings general 1`] = `
+"                                                                                
+FLEET  ● 0 ready  ⠋ 3 working  ! 1 needs you  x 1 exited  ○ 6 idle  1 · 12 · 11 
+───┌────────────────────────────────────────────────────────────────────────┐── 
+   │ Group settings · Design refresh                                        │   
+▼ s│ Design refresh           │ General                                     │▾] 
+╭▼ │▸ General                 │  Name Design refresh                        │]╮ 
+│ [│  Sessions                │ Save renames; sessions stay attached.       │…│ 
+│ [│  Remove Group            │                                             │✓│ 
+╰──│                          │ Project station (read-only)                 │─╯ 
+╭▼ │                          │ /Users/example/Developer/station            │]╮ 
+│ [│                          │                                             │6│ 
+╰──│                          │  Save (Enter)    Cancel (Esc)               │─╯ 
+╭▼ │                          │                                             │]╮ 
+│ [│                          │                                             │7│ 
+│ [│                          │                                             │1│ 
+│ [│                          │                                             │…│ 
+╰──│                          │                                             │─╯ 
+╭▼ │                          │                                             │]╮ 
+╰──│                          │                                             │─╯ 
+╭▼ │                          │                                             │]╮ 
+│ [│ ↑↓ or G/S/R select · →/enter edit · esc back                           │2│ 
+▼ 5└────────────────────────────────────────────────────────────────────────┘   
+─────────────────────────────────────────────────────────────────────────────── 
+↵ activate  N new  ⇥ next  / filter  X delete  ? help  Q/esc:close              
+"
+`;
+
+exports[`modal flow golden frames renders the group settings sessions compact 1`] = `
+"┌──────────────────────────────────────┐
+│ Sessions · Design refresh            │
+│ Sessions                             │
+│▸ 1 [✓] group-contracts  in this Group│
+│  2 [✓] group-keyboard   in this Group│
+│  3 [ ] handoff-re in Observer harden…│
+│ ↓ 9 more                             │
+│ Uncheck = ungroup on Save. Space/Ente│
+│  Save (Enter)       Back (Esc)       │
+│ ↑↓ focus · enter activate · esc secti│
+└──────────────────────────────────────┘
+↵ activate  N new  ⇥ next  / filter  X… 
+"
+`;
+
+exports[`modal flow golden frames renders the group settings remove short 1`] = `
+"┌──────────────────────────────────────┐
+│ Remove Group · Design refresh        │
+│ Remove Group                         │
+│ Its 2 sessions remain open           │
+│ and become ungrouped.                │
+│ Type "delete Design refresh"         │
+│ to confirm.                          │
+│▸ |delete Design refresh              │
+│  Remove Group (Enter)    Back (Esc)  │
+│ ↑↓ focus · enter activate · esc secti│
+└──────────────────────────────────────┘
+↵ activate  N new  ⇥ next  / filter  X… 
+"
+`;
+
 exports[`modal flow golden frames renders the project settings panel 1`] = `
 "                                                                                
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
@@ -361,6 +421,38 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
    └────────────────────────────────────────────────────────────────────────┘   
 ─────────────────────────────────────────────────────────────────────────────── 
 ↵ activate  N new  ⇥ next  / filter  X delete  ? help  Q/esc:close              
+"
+`;
+
+exports[`modal flow golden frames renders the project settings compact list 1`] = `
+"┌──────────────────────────────────────┐
+│ Project settings                     │
+│ station                              │
+│▸ Default agent                       │
+│  Remove project                      │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│ ↑↓ move   →/enter edit   esc close   │
+└──────────────────────────────────────┘
+↵ activate  N new  ⇥ next  / filter  X… 
+"
+`;
+
+exports[`modal flow golden frames renders the project settings compact detail 1`] = `
+"┌──────────────────────────────────────┐
+│ Default agent · station              │
+│ Default agent                        │
+│✓1 codex ● update v0.3.0 → v0.4.0     │
+│ 2 opencode unknown                   │
+│                                      │
+│ ✓ current · ↑↓ ↵ · 1-9/a-z           │
+│                                      │
+│                                      │
+│ ↑↓ move   ↵ choose   ←/esc back      │
+└──────────────────────────────────────┘
+↵ activate  N new  ⇥ next  / filter  X… 
 "
 `;
 

@@ -137,6 +137,25 @@ export type TuiObserverConnectionStatus =
   | { state: "reconnecting"; since: number; lastError?: SafeError }
   | { state: "displayOnly"; since: number; lastError?: SafeError };
 
+export type GroupSettingsSection = "general" | "sessions" | "remove";
+
+/** Which pane of a responsive settings panel owns keyboard input. */
+export type SettingsPanelFocus = "list" | "detail";
+
+/** Section-local control focus in Group Settings detail panes. */
+export type GroupSettingsDetailFocus =
+  | "name"
+  | "generalSave"
+  | "generalCancel"
+  | "sessionList"
+  | "membershipSave"
+  | "sessionsBack"
+  | "removeConfirm"
+  | "removeSubmit"
+  | "removeBack";
+
+export type GroupSettingsPendingMutation = "rename" | "membership" | "delete";
+
 export type TuiScreen =
   | { name: "dashboard" }
   | { name: "help" }
@@ -218,17 +237,31 @@ export type TuiScreen =
   | {
       name: "projectSettings";
       projectId: ProjectId;
-      focus: ProjectSettingsFocus;
+      focus: SettingsPanelFocus;
       activeId: ProjectSettingsItemId;
       removeDraft: EditableTextInputState;
+    }
+  | {
+      name: "groupSettings";
+      projectId: ProjectId;
+      groupId: SessionGroupId;
+      section: GroupSettingsSection;
+      focus: SettingsPanelFocus;
+      detailFocus: GroupSettingsDetailFocus;
+      expectedVersion: number;
+      baselineName: string;
+      nameDraft: EditableTextInputState;
+      baselineAssignments: ReadonlyMap<SessionId, SessionGroupId | null>;
+      desiredSessionIds: ReadonlySet<SessionId>;
+      sessionCursor?: SessionId;
+      removeDraft: EditableTextInputState;
+      pending?: GroupSettingsPendingMutation;
     }
   | { name: "widgetSettings"; focus: WidgetSettingsFocus; cursor: number; pickerCursor: number };
 
 /** Whether the widget list or the add-widget picker owns keyboard input. */
 export type WidgetSettingsFocus = "list" | "picker";
 
-/** Which pane of the two-pane settings panel owns keyboard input. */
-export type ProjectSettingsFocus = "list" | "detail";
 /** Left-list item ids; extend alongside the registry in screens/projectSettings.ts. */
 export type ProjectSettingsItemId = "agent" | "remove";
 

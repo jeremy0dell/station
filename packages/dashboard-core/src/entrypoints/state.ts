@@ -2,7 +2,8 @@
  * Role entrypoint: dashboard state views, keys, screens, and flows.
  *
  * Read-only state projections, key/action handling, screen transitions,
- * toasts, Project-menu/Create-Group actions, and the new-session/add-project flow machines. Mutable internal
+ * toasts, Project/Group Settings actions and screens, Project-menu/Create-Group actions, and the
+ * new-session/add-project flow machines. Mutable internal
  * state models are not exported here; they remain private to the runtime
  * implementation and its focused tests.
  */
@@ -57,6 +58,13 @@ export {
 export { openNewSession } from "../state/screens/dashboard.js";
 export type { ForkSessionActionId } from "../state/screens/fork.js";
 export {
+  GROUP_SETTINGS_ITEMS,
+  hasGroupSettingsMembershipDelta,
+  isRemoveSessionGroupArmed,
+  openGroupSettings,
+  removeSessionGroupConfirmPhrase,
+} from "../state/screens/groupSettings.js";
+export {
   MOVE_TO_GROUP_CREATE_CHOICE_ID,
   MOVE_TO_GROUP_LIST_ID,
   MOVE_TO_GROUP_UNGROUPED_CHOICE_ID,
@@ -66,7 +74,6 @@ export {
   selectMoveToGroupDestination,
   submitMoveToGroupCreate,
 } from "../state/screens/moveToGroup.js";
-
 export { openProjectDefaultAgentPicker } from "../state/screens/projectDefaultAgent.js";
 export {
   isRemoveProjectArmed,
@@ -121,9 +128,13 @@ export type {
   DashboardSnapshotView,
   DashboardStateView,
   DashboardViewState,
+  GroupSettingsDetailFocus,
+  GroupSettingsPendingMutation,
+  GroupSettingsSection,
   ProjectMenuActionId,
   ProjectMenuScreenView,
   ProjectSettingsItemId,
+  SettingsPanelFocus,
   TuiToastEntry,
   WidgetSettingsFocus,
 } from "../state/types.js";
