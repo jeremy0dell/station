@@ -1,27 +1,31 @@
-// The two-pane Project Settings panel: a left list of items and a right detail
-// pane that hosts the item's editor (reusing existing components — the agent
-// selector renders here verbatim). Centered absolute overlay above the
-// dashboard, like HelpOverlayView. Keyboard/focus live in the dashboard-core
-// machine; this layer is render + mouse targets only.
 import { TextAttributes } from "@opentui/core";
 import type { ProviderId } from "@station/contracts";
-import { settingsPanelLayout, selectNewSessionHarnessChoices, selectProjectDefaultHarness } from "@station/dashboard-core/selectors";
+import {
+  selectNewSessionHarnessChoices,
+  selectProjectDefaultHarness,
+  settingsPanelLayout,
+} from "@station/dashboard-core/selectors";
 import {
   isRemoveProjectArmed,
   PROJECT_SETTINGS_AGENT_LIST_ID,
   PROJECT_SETTINGS_ITEMS,
   removeProjectConfirmPhrase,
- } from "@station/dashboard-core/state";
-import type { DashboardScreenView, DashboardSnapshotView, DashboardStateView } from "@station/dashboard-core/state";
+} from "@station/dashboard-core/state";
+import type {
+  DashboardScreenView,
+  DashboardSnapshotView,
+  DashboardStateView,
+} from "@station/dashboard-core/state";
+import { toOpenTuiColor, useStationTheme } from "../../../theme/index.js";
 import { EditableTextInputView } from "../EditableTextInputView.js";
 import { AgentChoiceListView } from "../sheets/AgentChoiceListView.js";
 import { fit, SheetLine } from "../sheets/parts.js";
 import {
+  stationMouseProps,
   useStationHoverState,
   useStationMouse,
-  stationMouseProps,
 } from "../stationMouseContext.js";
-import { toOpenTuiColor, toOpenTuiOpaqueColor, useStationTheme } from "../../../theme/index.js";
+import { SettingsPanelView, SettingsPaneHeader } from "./SettingsPanelView.js";
 
 type ProjectSettingsScreen = Extract<DashboardScreenView, { name: "projectSettings" }>;
 type DashboardLocalRowsView = DashboardStateView["localRows"];
@@ -43,16 +47,11 @@ export function ProjectSettingsPanelView({
   rows,
   localRows,
 }: ProjectSettingsPanelViewProps) {
-  const theme = useStationTheme();
-  const surfaceBackground = toOpenTuiOpaqueColor(theme.surfaces.settings);
-  const dispatch = useStationMouse();
   const project = snapshot.projects.find((candidate) => candidate.id === screen.projectId);
-
-  const { top, left, width, height, innerWidth, contentHeight, leftWidth, rightWidth } =
-    settingsPanelLayout(columns, rows);
-
+  const layout = settingsPanelLayout(columns, rows);
   const projectLabel = project?.label ?? "Project";
-  const title = "Project settings";
+  const activeLabel =
+    PROJECT_SETTINGS_ITEMS.find((item) => item.id === screen.activeId)?.label ?? projectLabel;
   const footer =
     screen.focus === "list"
       ? "↑↓ move   →/enter edit   esc close"
@@ -61,100 +60,32 @@ export function ProjectSettingsPanelView({
         : "←/esc back";
 
   return (
-    <box
-      position="absolute"
-      top={top}
-      left={left}
-      width={width}
-      height={height}
-      zIndex={10}
-      border
-      borderColor={toOpenTuiColor(theme.interaction.hairline)}
-      backgroundColor={surfaceBackground}
-      flexDirection="column"
-      {...stationMouseProps(dispatch, { kind: "sheetBackdrop" })}
-    >
-      <text fg={toOpenTuiColor(theme.text.primary)} attributes={TextAttributes.BOLD}>
-        {fit(` ${title}`, innerWidth)}
-      </text>
-      <box flexDirection="row" width={innerWidth} height={contentHeight}>
-        <box flexDirection="column" width={leftWidth}>
-          <ItemList
-            screen={screen}
-            width={leftWidth}
-            headerLabel={projectLabel}
-            focused={screen.focus === "list"}
-          />
-        </box>
-        <VerticalDivider height={contentHeight} />
-        <box flexDirection="column" width={rightWidth}>
-          <DetailPane
-            snapshot={snapshot}
-            screen={screen}
-            width={rightWidth}
-            focused={screen.focus === "detail"}
-            localRows={localRows}
-            selectedAgentId={
-              selection.get(PROJECT_SETTINGS_AGENT_LIST_ID) as ProviderId | undefined
-            }
-          />
-        </box>
-      </box>
-      <text fg={toOpenTuiColor(theme.text.primary)} attributes={TextAttributes.DIM}>
-        {fit(` ${footer}`, innerWidth)}
-      </text>
-    </box>
-  );
-}
-
-function ItemList({
-  screen,
-  width,
-  headerLabel,
-  focused,
-}: {
-  screen: ProjectSettingsScreen;
-  width: number;
-  headerLabel: string;
-  focused: boolean;
-}) {
-  return (
-    <>
-      <PaneHeader label={headerLabel} width={width} focused={focused} />
-      {PROJECT_SETTINGS_ITEMS.map((item) => (
-        <SettingsItemRow
-          key={item.id}
-          item={item}
-          active={item.id === screen.activeId}
+    <SettingsPanelView
+      layout={layout}
+      focus={screen.focus}
+      title="Project settings"
+      compactDetailTitle={`${activeLabel} · ${projectLabel}`}
+      footer={footer}
+      listHeader={projectLabel}
+      items={PROJECT_SETTINGS_ITEMS.map((item) => ({
+        id: item.id,
+        label: item.label,
+        active: item.id === screen.activeId,
+        mouseTarget: { kind: "projectSettingsItem", itemId: item.id },
+      }))}
+      renderDetail={({ width, focused }) => (
+        <DetailPane
+          snapshot={snapshot}
+          screen={screen}
           width={width}
+          focused={focused}
+          localRows={localRows}
+          selectedAgentId={
+            selection.get(PROJECT_SETTINGS_AGENT_LIST_ID) as ProviderId | undefined
+          }
         />
-      ))}
-    </>
-  );
-}
-
-function SettingsItemRow({
-  item,
-  active,
-  width,
-}: {
-  item: (typeof PROJECT_SETTINGS_ITEMS)[number];
-  active: boolean;
-  width: number;
-}) {
-  const theme = useStationTheme();
-  const dispatch = useStationMouse();
-  const [hover, setHover] = useStationHoverState();
-  return (
-    <text
-      fg={toOpenTuiColor(active ? theme.action.primary : theme.text.primary)}
-      {...(hover ? { bg: toOpenTuiColor(theme.interaction.hover) } : {})}
-      {...stationMouseProps(dispatch, { kind: "projectSettingsItem", itemId: item.id })}
-      onMouseOver={() => setHover(true)}
-      onMouseOut={() => setHover(false)}
-    >
-      {fit(`${active ? "▸ " : "  "}${item.label}`, width)}
-    </text>
+      )}
+    />
   );
 }
 
@@ -210,7 +141,7 @@ function AgentDetail({
     project === undefined ? undefined : selectProjectDefaultHarness(localRows, project);
   return (
     <>
-      <PaneHeader label="Default agent" width={width} focused={focused} />
+      <SettingsPaneHeader label="Default agent" width={width} focused={focused} />
       {choices.length === 0 ? (
         <text fg={toOpenTuiColor(theme.text.primary)} attributes={TextAttributes.DIM}>
           {fit(" No agents available", width)}
@@ -248,7 +179,7 @@ function RemoveDetail({
   const phrase = removeProjectConfirmPhrase(screen.projectId);
   return (
     <>
-      <PaneHeader label="Remove project" width={width} focused={focused} danger />
+      <SettingsPaneHeader label="Remove project" width={width} focused={focused} danger />
       <text fg={toOpenTuiColor(theme.text.primary)}>{fit(" Removes it from Station.", width)}</text>
       <text fg={toOpenTuiColor(theme.text.primary)}>
         {fit(" Worktrees & files stay on disk.", width)}
@@ -267,11 +198,7 @@ function RemoveDetail({
   );
 }
 
-// The highlight hugs the button label (not the full row), so the indent space
-// sits outside the colored span. Hover only lights up while armed (enabled); a
-// disarmed button stays dim so hover never implies it can be clicked. The label
-// is truncated (never padded) to width minus the indent so it cannot overflow a
-// narrow pane while the highlight still hugs the visible text.
+// The highlight hugs the button label; disabled hover cannot imply that removal is available.
 function RemoveButton({ armed, width }: { armed: boolean; width: number }) {
   const theme = useStationTheme();
   const dispatch = useStationMouse();
@@ -293,58 +220,6 @@ function RemoveButton({ armed, width }: { armed: boolean; width: number }) {
       >
         {label}
       </text>
-    </box>
-  );
-}
-
-// The focused pane's header renders as a filled accent bar (fit() pads to full
-// width, so bg fills the row); the unfocused pane keeps a plain bold label. The
-// remove section stays red either way so the header keeps its danger cue.
-function PaneHeader({
-  label,
-  width,
-  focused,
-  danger = false,
-}: {
-  label: string;
-  width: number;
-  focused: boolean;
-  danger?: boolean;
-}) {
-  const theme = useStationTheme();
-  const accent = danger ? theme.status.danger : theme.action.primary;
-  if (focused) {
-    return (
-      <text
-        fg={toOpenTuiColor(theme.text.inverse)}
-        bg={toOpenTuiColor(accent)}
-        attributes={TextAttributes.BOLD}
-      >
-        {fit(` ${label}`, width)}
-      </text>
-    );
-  }
-  return (
-    <text
-      fg={toOpenTuiColor(danger ? theme.status.danger : theme.text.primary)}
-      attributes={TextAttributes.BOLD}
-    >
-      {fit(` ${label}`, width)}
-    </text>
-  );
-}
-
-// One-column gray rule between the two panes. Stays width 1 so the layout's
-// reserved spacer column (rightWidth = innerWidth - leftWidth - 1) is unchanged.
-function VerticalDivider({ height }: { height: number }) {
-  const theme = useStationTheme();
-  return (
-    <box flexDirection="column" width={1}>
-      {Array.from({ length: height }, (_, row) => (
-        <text key={row} fg={toOpenTuiColor(theme.text.muted)}>
-          │
-        </text>
-      ))}
     </box>
   );
 }

@@ -71,7 +71,10 @@ export {
 } from "../components/NewSessionBottomSheet/content.js";
 export { newSessionContentRowCount } from "../components/NewSessionBottomSheet/layout.js";
 
-export type { SettingsPanelLayout } from "../components/SettingsPanel/layout.js";
+export type {
+  SettingsPanelLayout,
+  SettingsPanelPaneMode,
+} from "../components/SettingsPanel/layout.js";
 export { settingsPanelLayout } from "../components/SettingsPanel/layout.js";
 
 export { textMatchSegments } from "../components/TextMatch/segments.js";

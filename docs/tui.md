@@ -577,8 +577,9 @@ retains edited/staged state and Save focus. Pending submission leaves the comple
 and inert. Explicit Cancel/Back returns to the invoking Group menu cell; successful deletion focuses
 the owning Project header. Canonical Group, Project, or session removal while settings is open uses
 ordinary screen reconciliation and deterministic dashboard focus fallback without a Group-specific
-notice or failure screen. The shared settings geometry stays within the terminal frame, uses two
-panes when space permits, and presents the active list or detail pane at compact widths.
+notice or failure screen. Project and Group Settings share one responsive shell that stays within
+the terminal frame, uses two panes when space permits, and presents the active list or detail pane
+at compact widths.
 
 Bounded screens use one active-screen overlay layer. Dashboard-core exposes the narrow
 `TuiScreenBehavior` contract, and the owning screen module supplies its safe `clickAway`

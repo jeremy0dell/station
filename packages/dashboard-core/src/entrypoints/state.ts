@@ -129,12 +129,12 @@ export type {
   DashboardStateView,
   DashboardViewState,
   GroupSettingsDetailFocus,
-  GroupSettingsFocus,
   GroupSettingsPendingMutation,
   GroupSettingsSection,
   ProjectMenuActionId,
   ProjectMenuScreenView,
   ProjectSettingsItemId,
+  SettingsPanelFocus,
   TuiToastEntry,
   WidgetSettingsFocus,
 } from "../state/types.js";

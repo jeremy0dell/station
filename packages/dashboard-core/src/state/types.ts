@@ -139,8 +139,8 @@ export type TuiObserverConnectionStatus =
 
 export type GroupSettingsSection = "general" | "sessions" | "remove";
 
-/** Which pane of the two-pane Group Settings panel owns keyboard input. */
-export type GroupSettingsFocus = "list" | "detail";
+/** Which pane of a responsive settings panel owns keyboard input. */
+export type SettingsPanelFocus = "list" | "detail";
 
 /** Section-local control focus in Group Settings detail panes. */
 export type GroupSettingsDetailFocus =
@@ -237,7 +237,7 @@ export type TuiScreen =
   | {
       name: "projectSettings";
       projectId: ProjectId;
-      focus: ProjectSettingsFocus;
+      focus: SettingsPanelFocus;
       activeId: ProjectSettingsItemId;
       removeDraft: EditableTextInputState;
     }
@@ -246,7 +246,7 @@ export type TuiScreen =
       projectId: ProjectId;
       groupId: SessionGroupId;
       section: GroupSettingsSection;
-      focus: GroupSettingsFocus;
+      focus: SettingsPanelFocus;
       detailFocus: GroupSettingsDetailFocus;
       expectedVersion: number;
       baselineName: string;
@@ -262,8 +262,6 @@ export type TuiScreen =
 /** Whether the widget list or the add-widget picker owns keyboard input. */
 export type WidgetSettingsFocus = "list" | "picker";
 
-/** Which pane of the two-pane settings panel owns keyboard input. */
-export type ProjectSettingsFocus = "list" | "detail";
 /** Left-list item ids; extend alongside the registry in screens/projectSettings.ts. */
 export type ProjectSettingsItemId = "agent" | "remove";
 

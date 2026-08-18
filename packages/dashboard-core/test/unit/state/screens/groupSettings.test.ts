@@ -36,7 +36,7 @@ describe("Group Settings screen", () => {
     expect(state.dashboardFocus).toEqual({ rowId: "group:group_active", cellId: "menu" });
   });
 
-  it("supports direct section keys and reseeds abandoned drafts", () => {
+  it("keeps a draft at a navigation bound and reseeds it only after changing sections", () => {
     const editing: DashboardState = {
       ...opened(),
       screen: {
@@ -44,7 +44,10 @@ describe("Group Settings screen", () => {
         nameDraft: createEditableTextInputState("Abandoned"),
       },
     };
-    const sessions = handleTuiKey(editing, { input: "S" }).state;
+    const clamped = handleTuiKey(editing, { input: "", upArrow: true }).state;
+    expect(groupScreen(clamped).nameDraft.value).toBe("Abandoned");
+
+    const sessions = handleTuiKey(clamped, { input: "S" }).state;
     expect(groupScreen(sessions)).toMatchObject({ section: "sessions", focus: "list" });
     const general = handleTuiKey(sessions, { input: "G" }).state;
     expect(groupScreen(general).nameDraft.value).toBe("Active work");

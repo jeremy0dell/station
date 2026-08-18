@@ -214,8 +214,10 @@ projection, `state/runtimeEffectScope.ts` for private effect admission and
 settlement, `state/capabilities/*` for semantic renderer authority,
 `state/operations/*` for scope-bound command flow (including durable Group
 creation before optional Quick Session launch and expected membership), and
-`components/`/`widgets/` for shared layout and content logic. The `[tui]` config shapes live in
-`@station/contracts`; `@station/config` retains load/persist authority.
+`components/`/`widgets/` for shared layout and content logic. Dashboard-core owns responsive
+settings geometry and list-navigation intents; Station owns one OpenTUI settings shell, while each
+settings screen retains its detail controls, drafts, and mutation lifecycle. The `[tui]` config shapes
+live in `@station/contracts`; `@station/config` retains load/persist authority.
 
 ## Dependency direction and enforcement
 

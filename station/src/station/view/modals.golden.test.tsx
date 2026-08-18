@@ -312,6 +312,26 @@ const CASES: ModalCase[] = [
     expect: ["Project settings", "Default agent", "Remove project", "✓ current"],
   },
   {
+    name: "project settings compact list",
+    keys: [],
+    size: { width: 40, height: 12 },
+    prepare: (state) => openProjectSettings(state, "station"),
+    expect: ["Project settings", "Default agent", "Remove project"],
+    reject: ["✓ current"],
+  },
+  {
+    name: "project settings compact detail",
+    keys: [],
+    size: { width: 40, height: 12 },
+    prepare: (state) =>
+      handleTuiKey(openProjectSettings(state, "station"), {
+        input: "",
+        rightArrow: true,
+      }).state,
+    expect: ["Default agent · station", "✓ current"],
+    reject: ["Remove project"],
+  },
+  {
     name: "project settings remove pane",
     keys: [
       { input: "P" },

@@ -17,20 +17,21 @@ import {
 } from "../commandBuilders.js";
 import { isReturnKey, type TuiKey } from "../keys.js";
 import { addPendingProjectDefaultHarness } from "../localRows.js";
+import {
+  resolveSettingsPanelListIntent,
+  type SettingsPanelNavigationItem,
+} from "../settingsPanelNavigation.js";
 import type { TuiTransition } from "../transition.js";
 import type { DashboardState, ProjectSettingsItemId } from "../types.js";
 
-export type ProjectSettingsItem = { id: ProjectSettingsItemId; label: string };
+export type ProjectSettingsItem = SettingsPanelNavigationItem<ProjectSettingsItemId> & {
+  label: string;
+};
 
 /** List id for the agent detail cursor on the shared selection engine. */
 export const PROJECT_SETTINGS_AGENT_LIST_ID = "projectSettingsAgent";
 
-/**
- * Ordered left-list registry for the two-pane Project Settings panel. The panel
- * engine is item-agnostic — extending it is adding an entry here (plus the
- * detail rendering and, for new fields, a persist vertical). The agent detail is
- * the only sub-list wired to the shared selection engine (via the list id above).
- */
+/** Ordered Project Settings items; feature-owned detail behavior is keyed by this registry. */
 export const PROJECT_SETTINGS_ITEMS: readonly ProjectSettingsItem[] = [
   { id: "agent", label: "Default agent" },
   { id: "remove", label: "Remove project" },
@@ -140,20 +141,21 @@ function handleListKey(
   screen: ProjectSettingsScreen,
   key: TuiKey,
 ): TuiTransition {
-  if (key.escape === true) {
-    return { state: toDashboard(state) };
+  const intent = resolveSettingsPanelListIntent(PROJECT_SETTINGS_ITEMS, screen.activeId, key, {
+    closeOnLeft: false,
+  });
+  switch (intent.type) {
+    case "close":
+      return { state: toDashboard(state) };
+    case "select":
+      return { state: selectProjectSettingsItem(state, screen, intent.itemId) };
+    case "openDetail": {
+      const detail: ProjectSettingsScreen = { ...screen, focus: "detail" };
+      return { state: descend({ ...state, screen: detail }, detail) };
+    }
+    case "none":
+      return { state };
   }
-  if (key.upArrow === true) {
-    return { state: moveActive(state, screen, -1) };
-  }
-  if (key.downArrow === true) {
-    return { state: moveActive(state, screen, 1) };
-  }
-  if (key.rightArrow === true || isReturnKey(key)) {
-    const detail: ProjectSettingsScreen = { ...screen, focus: "detail" };
-    return { state: descend({ ...state, screen: detail }, detail) };
-  }
-  return { state };
 }
 
 // The cross-pane slot handler: resolve the harness from the slot key, then
@@ -251,24 +253,15 @@ function handleRemoveDetail(
   };
 }
 
-function moveActive(
+function selectProjectSettingsItem(
   state: DashboardState,
   screen: ProjectSettingsScreen,
-  delta: number,
+  itemId: ProjectSettingsItemId,
 ): DashboardState {
-  const index = PROJECT_SETTINGS_ITEMS.findIndex((item) => item.id === screen.activeId);
-  const next = Math.min(
-    Math.max(0, (index === -1 ? 0 : index) + delta),
-    PROJECT_SETTINGS_ITEMS.length - 1,
-  );
-  const item = PROJECT_SETTINGS_ITEMS[next];
-  if (item === undefined || item.id === screen.activeId) {
-    return state;
-  }
-  const nextScreen: ProjectSettingsScreen = { ...screen, activeId: item.id };
+  const nextScreen: ProjectSettingsScreen = { ...screen, activeId: itemId };
   // Leaving the remove item drops an abandoned confirm phrase so a forgotten
   // "delete <id>" can't keep the destructive action armed on return.
-  if (item.id !== "remove") {
+  if (itemId !== "remove") {
     nextScreen.removeDraft = createEditableTextInputState("");
   }
   return { ...state, screen: nextScreen };

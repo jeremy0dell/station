@@ -10,7 +10,7 @@ import type {
   GroupSettingsDetailFocus,
 } from "@station/dashboard-core/state";
 import { GROUP_SETTINGS_ITEMS } from "@station/dashboard-core/state";
-import { toOpenTuiColor, toOpenTuiOpaqueColor, useStationTheme } from "../../../theme/index.js";
+import { toOpenTuiColor, useStationTheme } from "../../../theme/index.js";
 import { EditableTextInputView } from "../EditableTextInputView.js";
 import { fit, SheetButtonRow, SheetLine } from "../sheets/parts.js";
 import {
@@ -18,6 +18,7 @@ import {
   useStationHoverState,
   useStationMouse,
 } from "../stationMouseContext.js";
+import { SettingsPanelView, SettingsPaneHeader } from "./SettingsPanelView.js";
 
 type GroupSettingsScreen = Extract<DashboardScreenView, { name: "groupSettings" }>;
 
@@ -34,22 +35,13 @@ export function GroupSettingsPanelView({
   columns,
   rows,
 }: GroupSettingsPanelViewProps) {
-  const theme = useStationTheme();
-  const dispatch = useStationMouse();
   const layout = settingsPanelLayout(columns, rows);
-  const compact = layout.innerWidth < 54;
-  const showList = !compact || screen.focus === "list";
-  const showDetail = !compact || screen.focus === "detail";
-  const detailWidth = compact ? layout.innerWidth : layout.rightWidth;
   const model = groupSettingsPanelModel(
     snapshot,
     screen,
     Math.max(0, layout.contentHeight - 4),
   );
   if (model === undefined) return null;
-  const title = compact && showDetail
-    ? `${sectionLabel(screen.section)} · ${model.group.name}`
-    : `Group settings · ${model.group.name}`;
   const footer = model.pending
     ? "Saving…"
     : screen.focus === "list"
@@ -57,96 +49,23 @@ export function GroupSettingsPanelView({
       : "↑↓ focus · enter activate · esc sections";
 
   return (
-    <box
-      position="absolute"
-      top={layout.top}
-      left={layout.left}
-      width={layout.width}
-      height={layout.height}
-      zIndex={10}
-      border
-      borderColor={toOpenTuiColor(theme.interaction.hairline)}
-      backgroundColor={toOpenTuiOpaqueColor(theme.surfaces.settings)}
-      flexDirection="column"
-      {...stationMouseProps(dispatch, { kind: "sheetBackdrop" })}
-    >
-      <text fg={toOpenTuiColor(theme.text.primary)} attributes={TextAttributes.BOLD}>
-        {fit(` ${title}`, layout.innerWidth)}
-      </text>
-      <box flexDirection="row" width={layout.innerWidth} height={layout.contentHeight}>
-        {showList ? (
-          <box
-            flexDirection="column"
-            width={compact ? layout.innerWidth : layout.leftWidth}
-          >
-            <SectionList
-              screen={screen}
-              width={compact ? layout.innerWidth : layout.leftWidth}
-              groupName={model.group.name}
-            />
-          </box>
-        ) : null}
-        {!compact ? <VerticalDivider height={layout.contentHeight} /> : null}
-        {showDetail ? (
-          <box flexDirection="column" width={detailWidth}>
-            <DetailPane model={model} screen={screen} width={detailWidth} />
-          </box>
-        ) : null}
-      </box>
-      <text fg={toOpenTuiColor(theme.text.primary)} attributes={TextAttributes.DIM}>
-        {fit(` ${footer}`, layout.innerWidth)}
-      </text>
-    </box>
-  );
-}
-
-function SectionList({
-  screen,
-  width,
-  groupName,
-}: {
-  screen: GroupSettingsScreen;
-  width: number;
-  groupName: string;
-}) {
-  return (
-    <>
-      <PaneHeader label={groupName} width={width} focused={screen.focus === "list"} />
-      {GROUP_SETTINGS_ITEMS.map((item) => (
-        <SectionRow key={item.id} screen={screen} item={item} width={width} />
-      ))}
-    </>
-  );
-}
-
-function SectionRow({
-  screen,
-  item,
-  width,
-}: {
-  screen: GroupSettingsScreen;
-  item: (typeof GROUP_SETTINGS_ITEMS)[number];
-  width: number;
-}) {
-  const theme = useStationTheme();
-  const dispatch = useStationMouse();
-  const [hover, setHover] = useStationHoverState();
-  const active = item.id === screen.section;
-  const danger = item.id === "remove";
-  return (
-    <text
-      fg={toOpenTuiColor(
-        danger ? theme.status.danger : active ? theme.action.primary : theme.text.primary,
-      )}
-      {...(hover && screen.pending === undefined
-        ? { bg: toOpenTuiColor(theme.interaction.hover) }
-        : {})}
-      {...stationMouseProps(dispatch, { kind: "groupSettingsSection", section: item.id })}
-      onMouseOver={() => setHover(true)}
-      onMouseOut={() => setHover(false)}
-    >
-      {fit(`${active ? "▸ " : "  "}${item.label}`, width)}
-    </text>
+    <SettingsPanelView
+      layout={layout}
+      focus={screen.focus}
+      title={`Group settings · ${model.group.name}`}
+      compactDetailTitle={`${sectionLabel(screen.section)} · ${model.group.name}`}
+      footer={footer}
+      listHeader={model.group.name}
+      items={GROUP_SETTINGS_ITEMS.map((item) => ({
+        id: item.id,
+        label: item.label,
+        active: item.id === screen.section,
+        danger: item.id === "remove",
+        disabled: model.pending,
+        mouseTarget: { kind: "groupSettingsSection", section: item.id },
+      }))}
+      renderDetail={({ width }) => <DetailPane model={model} screen={screen} width={width} />}
+    />
   );
 }
 
@@ -169,11 +88,7 @@ function DetailPane({
   }
 }
 
-function GeneralDetail({
-  model,
-  screen,
-  width,
-}: DetailProps) {
+function GeneralDetail({ model, screen, width }: DetailProps) {
   const theme = useStationTheme();
   const saveEnabled =
     screen.pending === undefined &&
@@ -181,7 +96,7 @@ function GeneralDetail({
     screen.nameDraft.value.trim() !== screen.baselineName;
   return (
     <>
-      <PaneHeader label="General" width={width} focused={screen.focus === "detail"} />
+      <SettingsPaneHeader label="General" width={width} focused={screen.focus === "detail"} />
       <ControlInputLine
         screen={screen}
         control="name"
@@ -227,15 +142,11 @@ function GeneralDetail({
   );
 }
 
-function SessionsDetail({
-  model,
-  screen,
-  width,
-}: DetailProps) {
+function SessionsDetail({ model, screen, width }: DetailProps) {
   const theme = useStationTheme();
   return (
     <>
-      <PaneHeader label="Sessions" width={width} focused={screen.focus === "detail"} />
+      <SettingsPaneHeader label="Sessions" width={width} focused={screen.focus === "detail"} />
       {model.hiddenAbove > 0 ? (
         <text fg={toOpenTuiColor(theme.text.muted)}>{fit(` ↑ ${model.hiddenAbove} more`, width)}</text>
       ) : null}
@@ -318,26 +229,24 @@ function SessionRow({
     >
       {prefix}
       {title}
-      <span
-        fg={toOpenTuiColor(theme.text.muted)}
-        attributes={TextAttributes.DIM}
-      >
+      <span fg={toOpenTuiColor(theme.text.muted)} attributes={TextAttributes.DIM}>
         {suffix}
       </span>
     </text>
   );
 }
 
-function RemoveDetail({
-  model,
-  screen,
-  width,
-}: DetailProps) {
+function RemoveDetail({ model, screen, width }: DetailProps) {
   const theme = useStationTheme();
   const sessionWord = model.group.memberCount === 1 ? "session" : "sessions";
   return (
     <>
-      <PaneHeader label="Remove Group" width={width} focused={screen.focus === "detail"} danger />
+      <SettingsPaneHeader
+        label="Remove Group"
+        width={width}
+        focused={screen.focus === "detail"}
+        danger
+      />
       <text fg={toOpenTuiColor(theme.text.primary)} attributes={TextAttributes.BOLD}>
         {fit(` Its ${model.group.memberCount} ${sessionWord} remain open`, width)}
       </text>
@@ -425,50 +334,6 @@ function ControlInputLine({
         {...(placeholder === undefined ? {} : { placeholder })}
       />
     </text>
-  );
-}
-
-function PaneHeader({
-  label,
-  width,
-  focused,
-  danger = false,
-}: {
-  label: string;
-  width: number;
-  focused: boolean;
-  danger?: boolean;
-}) {
-  const theme = useStationTheme();
-  const accent = danger ? theme.status.danger : theme.action.primary;
-  return focused ? (
-    <text
-      fg={toOpenTuiColor(theme.text.inverse)}
-      bg={toOpenTuiColor(accent)}
-      attributes={TextAttributes.BOLD}
-    >
-      {fit(` ${label}`, width)}
-    </text>
-  ) : (
-    <text
-      fg={toOpenTuiColor(danger ? theme.status.danger : theme.text.primary)}
-      attributes={TextAttributes.BOLD}
-    >
-      {fit(` ${label}`, width)}
-    </text>
-  );
-}
-
-function VerticalDivider({ height }: { height: number }) {
-  const theme = useStationTheme();
-  return (
-    <box flexDirection="column" width={1}>
-      {Array.from({ length: height }, (_, row) => (
-        <text key={row} fg={toOpenTuiColor(theme.text.muted)}>
-          │
-        </text>
-      ))}
-    </box>
   );
 }
 

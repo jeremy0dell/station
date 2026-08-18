@@ -424,6 +424,38 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 "
 `;
 
+exports[`modal flow golden frames renders the project settings compact list 1`] = `
+"┌──────────────────────────────────────┐
+│ Project settings                     │
+│ station                              │
+│▸ Default agent                       │
+│  Remove project                      │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│ ↑↓ move   →/enter edit   esc close   │
+└──────────────────────────────────────┘
+↵ activate  N new  ⇥ next  / filter  X… 
+"
+`;
+
+exports[`modal flow golden frames renders the project settings compact detail 1`] = `
+"┌──────────────────────────────────────┐
+│ Default agent · station              │
+│ Default agent                        │
+│✓1 codex ● update v0.3.0 → v0.4.0     │
+│ 2 opencode unknown                   │
+│                                      │
+│ ✓ current · ↑↓ ↵ · 1-9/a-z           │
+│                                      │
+│                                      │
+│ ↑↓ move   ↵ choose   ←/esc back      │
+└──────────────────────────────────────┘
+↵ activate  N new  ⇥ next  / filter  X… 
+"
+`;
+
 exports[`modal flow golden frames renders the project settings remove pane 1`] = `
 "                                                                                
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 

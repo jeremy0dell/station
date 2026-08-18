@@ -1,8 +1,11 @@
+export type SettingsPanelPaneMode = "split" | "single";
+
 export type SettingsPanelLayout = {
   left: number;
   top: number;
   width: number;
   height: number;
+  paneMode: SettingsPanelPaneMode;
   /** Inside the border: usable width and height for the two columns + footer. */
   innerWidth: number;
   contentHeight: number;
@@ -20,8 +23,9 @@ const SCREEN_MARGIN_Y = 4;
 const LEFT_COLUMN_RATIO = 0.4;
 const LEFT_COLUMN_MIN = 16;
 const LEFT_COLUMN_MAX = 26;
+const SINGLE_PANE_MAX_INNER_WIDTH = 53;
 
-/** Shared centered two-pane settings geometry, bounded to the terminal viewport. */
+/** Shared responsive list/detail settings geometry, bounded to the terminal viewport. */
 export function settingsPanelLayout(columns: number, rows: number): SettingsPanelLayout {
   const availableColumns = Math.max(3, columns);
   const availableRows = Math.max(5, rows);
@@ -47,6 +51,7 @@ export function settingsPanelLayout(columns: number, rows: number): SettingsPane
     top: Math.max(0, Math.floor((rows - height) / 2)),
     width,
     height,
+    paneMode: innerWidth <= SINGLE_PANE_MAX_INNER_WIDTH ? "single" : "split",
     innerWidth,
     contentHeight,
     leftWidth,

@@ -6,6 +6,7 @@ describe("shared settings panel layout", () => {
     expect(settingsPanelLayout(120, 40)).toEqual({
       width: 88,
       height: 20,
+      paneMode: "split",
       left: 16,
       top: 10,
       innerWidth: 86,
@@ -15,9 +16,20 @@ describe("shared settings panel layout", () => {
     });
   });
 
-  it("uses the viewport at minimum size without clipping the frame", () => {
+  it("uses one pane at compact size without clipping the frame", () => {
     const layout = settingsPanelLayout(40, 10);
-    expect(layout).toMatchObject({ width: 40, height: 10, left: 0, top: 0 });
+    expect(layout).toMatchObject({
+      width: 40,
+      height: 10,
+      paneMode: "single",
+      left: 0,
+      top: 0,
+    });
+  });
+
+  it("selects pane mode from the shared inner-width breakpoint", () => {
+    expect(settingsPanelLayout(61, 20).paneMode).toBe("single");
+    expect(settingsPanelLayout(62, 20).paneMode).toBe("split");
   });
 
   it("sizes the left column by ratio between its min and max", () => {
