@@ -14,14 +14,13 @@ import {
   useStationHoverState,
   useStationMouse,
 } from "./stationMouseContext.js";
+import {
+  dashboardQuickSessionActionLabel,
+  dashboardShellActionLabel,
+} from "./dashboardHeaderActionLabels.js";
 
-const SHELL_AFFORDANCE_LABEL = "[shell]";
-const SHELL_AFFORDANCE_LABEL_COMPACT = "[sh]";
 const MENU_AFFORDANCE_LABEL = "[▾]";
-const QUICK_SESSION_AFFORDANCE_LABEL = "[quick session]";
-const QUICK_SESSION_AFFORDANCE_LABEL_COMPACT = "[qs]";
 const PROJECT_HEADER_SEPARATOR_COUNT = 3;
-const RESPONSIVE_AFFORDANCE_BREAKPOINT = 90;
 
 export function ProjectHeaderView({
   columns,
@@ -40,11 +39,8 @@ export function ProjectHeaderView({
   focusedCellId?: DashboardCellId | undefined;
   persistentFilterMatch?: DashboardPersistentFilterProjectMatch | undefined;
 }) {
-  const compact = columns < RESPONSIVE_AFFORDANCE_BREAKPOINT;
-  const shellLabel = compact ? SHELL_AFFORDANCE_LABEL_COMPACT : SHELL_AFFORDANCE_LABEL;
-  const quickSessionLabel = compact
-    ? QUICK_SESSION_AFFORDANCE_LABEL_COMPACT
-    : QUICK_SESSION_AFFORDANCE_LABEL;
+  const shellLabel = dashboardShellActionLabel(columns);
+  const quickSessionLabel = dashboardQuickSessionActionLabel(columns);
   const controlsWidth =
     shellLabel.length +
     quickSessionLabel.length +

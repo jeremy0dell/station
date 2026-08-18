@@ -388,7 +388,7 @@ reattach; pane borders and neighboring panes must remain unlinked.
 - Treat the active UI as the full terminal canvas. Layout code should account for the terminal viewport, not a decorative parent container.
 - Native Station owns its opaque Station canvas. The standalone dashboard uses opaque terminal-default background intent for its unaccented canvas, panels, prompts, Help surface, and toasts; this behavior is provider-neutral and does not use transparency.
 - Keep header, body, footer, overlays, prompts, and toasts from overlapping at narrow or short terminal sizes.
-- Render canonical Groups as contiguous blocks in the projected row order. An expanded Group uses its header as the top edge, inert side rails around direct members, and one inert closing-frame row; an empty expanded Group therefore has a header and closing edge only. A collapsed Group keeps the bounded identity and any enabled optional actions but omits its members and closing edge. `[qs]` and `[▾]` are visible by default; runtime composition may independently suppress either action, with no user-facing config key yet. Identity toggles collapse, `[qs]` expands the Group and launches a Quick Session into it, and `[▾]` opens Group Settings at General.
+- Render canonical Groups as contiguous blocks in the projected row order. An expanded Group uses its header as the top edge, inert side rails around direct members, and one inert closing-frame row; an empty expanded Group therefore has a header and closing edge only. A collapsed Group keeps the bounded identity and any enabled optional actions but omits its members and closing edge. The responsive `[qs]`/`[quick session]` action and `[▾]` are visible by default; runtime composition may independently suppress either action, with no user-facing config key yet. Identity toggles collapse, Quick Session expands the Group and launches into it, and `[▾]` opens Group Settings at General.
 - Group rings use the quiet hairline role by default, bright working color while the header is focused, and dim working color while a direct member has focus. Exact target focus uses compact focus; member focus and hover keep the ordinary dashboard fills. Borders, separators, whitespace, and closing rows are inert, and viewport clipping may show any ordinary edge of the projected block without renderer-owned regrouping.
 - The tmux popup runs the same interactive observer-backed dashboard without
   native Station panes. Its close behavior and footer copy must match popup
@@ -545,7 +545,7 @@ Escape, click-away, unchanged selection, and a successful change return to `menu
 removal while open uses the same deterministic focus fallback. The dashboard footer describes Enter
 as `activate` because it may activate a session row, project-header control, or empty-project action.
 
-Activating a Group's `[qs]` launches an ordinary Quick Session without embedding Group placement in
+Activating a Group's responsive `[qs]`/`[quick session]` action launches an ordinary Quick Session without embedding Group placement in
 the create request. While pending, its targeted local row is rendered inside the expanded Group. On
 successful launch, dashboard-core reloads canonical truth, correlates the new session by Project and
 generated branch, reads the latest Group version, and records one expected membership addition. It

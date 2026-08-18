@@ -11,16 +11,13 @@ import {
 } from "../commandBuilders.js";
 import { focusDashboardGroup } from "../dashboardFocus.js";
 import { isReturnKey, type TuiKey } from "../keys.js";
-import {
-  resolveSettingsPanelListIntent,
-  type SettingsPanelNavigationItem,
-} from "../settingsPanelNavigation.js";
 import type { TuiTransition } from "../transition.js";
 import type { DashboardState, GroupSettingsDetailFocus, GroupSettingsSection } from "../types.js";
 
 type GroupSettingsScreen = Extract<DashboardState["screen"], { name: "groupSettings" }>;
 
-export type GroupSettingsItem = SettingsPanelNavigationItem<GroupSettingsSection> & {
+export type GroupSettingsItem = {
+  id: GroupSettingsSection;
   label: string;
   shortcut: "G" | "S" | "R";
 };
@@ -366,19 +363,27 @@ function handleSectionListKey(
   screen: GroupSettingsScreen,
   key: TuiKey,
 ): TuiTransition {
-  const intent = resolveSettingsPanelListIntent(GROUP_SETTINGS_ITEMS, screen.section, key, {
-    closeOnLeft: true,
-  });
-  switch (intent.type) {
-    case "close":
-      return { state: cancelGroupSettings(state) };
-    case "select":
-      return { state: selectGroupSettingsSection(state, intent.itemId, "list") };
-    case "openDetail":
-      return { state: { ...state, screen: { ...screen, focus: "detail" } } };
-    case "none":
-      return { state };
+  if (key.escape === true || key.leftArrow === true) {
+    return { state: cancelGroupSettings(state) };
   }
+  const direct = GROUP_SETTINGS_ITEMS.find((item) => item.shortcut === key.input)?.id;
+  if (direct !== undefined && direct !== screen.section) {
+    return { state: selectGroupSettingsSection(state, direct, "list") };
+  }
+  if (key.upArrow === true || key.downArrow === true) {
+    const index = GROUP_SETTINGS_ITEMS.findIndex((item) => item.id === screen.section);
+    const nextIndex = Math.min(
+      GROUP_SETTINGS_ITEMS.length - 1,
+      Math.max(0, index + (key.upArrow === true ? -1 : 1)),
+    );
+    const section = GROUP_SETTINGS_ITEMS[nextIndex]?.id;
+    if (section === undefined || section === screen.section) return { state };
+    return { state: selectGroupSettingsSection(state, section, "list") };
+  }
+  if (key.rightArrow === true || isReturnKey(key)) {
+    return { state: { ...state, screen: { ...screen, focus: "detail" } } };
+  }
+  return { state };
 }
 
 function handleGeneralKey(

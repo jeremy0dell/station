@@ -167,9 +167,9 @@ menu owns Quick Group, New Group, default-agent, and settings transitions.
 Group rows always use `identity` and show `quickSession` and `menu` by default.
 Runtime composition may independently omit either optional action; omitted cells
 are not rendered, focusable, or activatable. This visibility seam has no public
-config key yet. Identity toggles collapse, `[qs]` launches an ordinary Quick
-Session followed by one expected membership update, and `[▾]` remains a
-focusable no-op until the complete Group menu lands. Group Quick Session expands
+config key yet. Identity toggles collapse, the responsive `[qs]`/`[quick session]` action launches
+an ordinary Quick Session followed by one expected membership update, and `[▾]` opens Group
+Settings at General. Group Quick Session expands
 a collapsed Group for its optimistic row.
 The row remains Group-framed only as a convergence bridge; canonical placement
 still comes exclusively from `snapshot.sessionGroups`. A focused direct visible member decorates its Group with
@@ -215,8 +215,8 @@ settlement, `state/capabilities/*` for semantic renderer authority,
 `state/operations/*` for scope-bound command flow (including durable Group
 creation before optional Quick Session launch and expected membership), and
 `components/`/`widgets/` for shared layout and content logic. Dashboard-core owns responsive
-settings geometry and list-navigation intents; Station owns one OpenTUI settings shell, while each
-settings screen retains its detail controls, drafts, and mutation lifecycle. The `[tui]` config shapes
+settings geometry; Station owns one OpenTUI settings shell, while each settings screen retains its
+navigation policy, detail controls, drafts, and mutation lifecycle. The `[tui]` config shapes
 live in `@station/contracts`; `@station/config` retains load/persist authority.
 
 ## Dependency direction and enforcement

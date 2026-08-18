@@ -361,7 +361,7 @@ describe("FullscreenDashboard mouse composition", () => {
     ).toHaveLength(1);
     let group = groupLine();
     await actOn(() =>
-      setup.mockMouse.click(group.line.indexOf("[qs]"), group.row, MouseButtons.LEFT),
+      setup.mockMouse.click(group.line.indexOf("[quick session]"), group.row, MouseButtons.LEFT),
     );
     expect(fixture.runtime.state.getState().dashboardFocus).toEqual({
       rowId: groupId,

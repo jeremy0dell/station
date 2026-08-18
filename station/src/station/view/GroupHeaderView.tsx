@@ -21,9 +21,9 @@ import {
   useStationHoverState,
   useStationMouse,
 } from "./stationMouseContext.js";
+import { dashboardQuickSessionActionLabel } from "./dashboardHeaderActionLabels.js";
 import { GroupFrameText, type GroupFrameFocus } from "./GroupFrameView.js";
 
-const QUICK_SESSION_LABEL = "[qs]";
 const MENU_LABEL = "[▾]";
 
 type GroupHeaderAction = {
@@ -47,7 +47,7 @@ export function GroupHeaderView({
   containsFocusedRow?: true | undefined;
 }) {
   const width = Math.max(1, Math.floor(columns));
-  const actions = groupHeaderActions(cells);
+  const actions = groupHeaderActions(cells, width);
   const focus = {
     focusedHeader: focusedCellId !== undefined,
     containsFocusedRow: containsFocusedRow === true,
@@ -170,10 +170,13 @@ function CollapsedGroupHeader({
   );
 }
 
-function groupHeaderActions(cells: readonly DashboardCellId[]): GroupHeaderAction[] {
+function groupHeaderActions(
+  cells: readonly DashboardCellId[],
+  columns: number,
+): GroupHeaderAction[] {
   const actions: GroupHeaderAction[] = [];
   if (cells.includes("quickSession")) {
-    actions.push({ cellId: "quickSession", label: QUICK_SESSION_LABEL });
+    actions.push({ cellId: "quickSession", label: dashboardQuickSessionActionLabel(columns) });
   }
   if (cells.includes("menu")) {
     actions.push({ cellId: "menu", label: MENU_LABEL });

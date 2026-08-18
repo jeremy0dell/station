@@ -17,14 +17,11 @@ import {
 } from "../commandBuilders.js";
 import { isReturnKey, type TuiKey } from "../keys.js";
 import { addPendingProjectDefaultHarness } from "../localRows.js";
-import {
-  resolveSettingsPanelListIntent,
-  type SettingsPanelNavigationItem,
-} from "../settingsPanelNavigation.js";
 import type { TuiTransition } from "../transition.js";
 import type { DashboardState, ProjectSettingsItemId } from "../types.js";
 
-export type ProjectSettingsItem = SettingsPanelNavigationItem<ProjectSettingsItemId> & {
+export type ProjectSettingsItem = {
+  id: ProjectSettingsItemId;
   label: string;
 };
 
@@ -141,21 +138,24 @@ function handleListKey(
   screen: ProjectSettingsScreen,
   key: TuiKey,
 ): TuiTransition {
-  const intent = resolveSettingsPanelListIntent(PROJECT_SETTINGS_ITEMS, screen.activeId, key, {
-    closeOnLeft: false,
-  });
-  switch (intent.type) {
-    case "close":
-      return { state: toDashboard(state) };
-    case "select":
-      return { state: selectProjectSettingsItem(state, screen, intent.itemId) };
-    case "openDetail": {
-      const detail: ProjectSettingsScreen = { ...screen, focus: "detail" };
-      return { state: descend({ ...state, screen: detail }, detail) };
-    }
-    case "none":
-      return { state };
+  if (key.escape === true) {
+    return { state: toDashboard(state) };
   }
+  if (key.upArrow === true || key.downArrow === true) {
+    const index = PROJECT_SETTINGS_ITEMS.findIndex((item) => item.id === screen.activeId);
+    const nextIndex = Math.min(
+      PROJECT_SETTINGS_ITEMS.length - 1,
+      Math.max(0, index + (key.upArrow === true ? -1 : 1)),
+    );
+    const item = PROJECT_SETTINGS_ITEMS[nextIndex];
+    if (item === undefined || item.id === screen.activeId) return { state };
+    return { state: selectProjectSettingsItem(state, screen, item.id) };
+  }
+  if (key.rightArrow === true || isReturnKey(key)) {
+    const detail: ProjectSettingsScreen = { ...screen, focus: "detail" };
+    return { state: descend({ ...state, screen: detail }, detail) };
+  }
+  return { state };
 }
 
 // The cross-pane slot handler: resolve the harness from the slot key, then
