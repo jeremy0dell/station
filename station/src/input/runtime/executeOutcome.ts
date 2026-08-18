@@ -59,6 +59,9 @@ export function executeOutcome(outcome: RouteOutcome, effects: StationInputEffec
     case "context-menu-select":
       selectContextMenuItem(effects, outcome.itemIndex);
       return true;
+    case "context-menu-shortcut":
+      selectContextMenuShortcut(effects, outcome.key);
+      return true;
     case "open-url":
       effects.openExternalUrl(outcome.url);
       return true;
@@ -87,6 +90,20 @@ function moveContextMenuSelection(delta: -1 | 1, effects: StationInputEffects): 
   }
   const next = (menu.activeIndex + delta + items.length) % items.length;
   store.actions.setContextMenuActiveIndex(next);
+}
+
+function selectContextMenuShortcut(effects: StationInputEffects, key: string): void {
+  const state = effects.store.getState();
+  const menu = state.input.contextMenu;
+  if (menu === null) return;
+  const items = buildContextMenuItems(
+    menu.target,
+    state,
+    effects.dashboardRuntime?.state.getState(),
+    effects.automations,
+  );
+  const index = items.findIndex((item) => item.shortcut === key);
+  if (index >= 0) selectContextMenuItem(effects, index);
 }
 
 function selectContextMenuItem(effects: StationInputEffects, itemIndex: number | undefined): void {
@@ -169,6 +186,16 @@ function selectContextMenuItem(effects: StationInputEffects, itemIndex: number |
     case "openProjectSettings":
       if (dashboardRuntime !== undefined) {
         dashboardRuntime.actions.dispatch({ type: "projectSettings.open", projectId: action.projectId });
+      }
+      return;
+    case "groupMenuAction":
+      if (dashboardRuntime !== undefined) {
+        dashboardRuntime.actions.dispatch({
+          type: "sessionGroup.menuAction",
+          projectId: action.projectId,
+          groupId: action.groupId,
+          actionId: action.actionId,
+        });
       }
       return;
     case "forkSession":

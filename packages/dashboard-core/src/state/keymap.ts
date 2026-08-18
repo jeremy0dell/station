@@ -6,6 +6,7 @@ export type TuiInputMode =
   | "dashboard"
   | "help"
   | "projectMenu"
+  | "groupMenu"
   | "createGroup"
   | "persistentFilter"
   | "persistentFilterConditionField"
@@ -49,6 +50,8 @@ export function deriveTuiInputMode(state: DashboardStateView): TuiInputMode {
       return "help";
     case "projectMenu":
       return "projectMenu";
+    case "groupMenu":
+      return "groupMenu";
     case "createGroup":
       return "createGroup";
     case "persistentFilter":

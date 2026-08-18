@@ -86,9 +86,10 @@ fresh worktree—the operation closes with a warning instead of permitting a
 duplicate branch submission.
 
 Group Settings is one stable-ID screen per canonical Group, with General,
-Sessions, and Remove Group sections. Activating the Group `[▾]` control opens
-General and anchors dashboard focus to that cell; a future complete Group menu
-can open General or Remove directly without owning settings state. General
+Sessions, and Remove Group sections. Activating the Group `[▾]` control opens a
+stable-ID Group menu anchored to that cell. Quick Session and preselected New
+Session reuse their existing workflows; Group Settings… opens General and
+Remove Group… opens Remove without the menu owning settings state. General
 captures the Group version for one `sessionGroup.rename`. Sessions captures that version plus each Project
 session's expected current Group, stages desired membership locally, and emits
 one atomic `sessionGroup.updateMembership` add/remove delta; selecting a member
@@ -168,8 +169,8 @@ Group rows always use `identity` and show `quickSession` and `menu` by default.
 Runtime composition may independently omit either optional action; omitted cells
 are not rendered, focusable, or activatable. This visibility seam has no public
 config key yet. Identity toggles collapse, the responsive `[qs]`/`[quick session]` action launches
-an ordinary Quick Session followed by one expected membership update, and `[▾]` opens Group
-Settings at General. Group Quick Session expands
+an ordinary Quick Session followed by one expected membership update, and `[▾]` opens the
+Q/N/S/R Group menu. Group Quick Session expands
 a collapsed Group for its optimistic row.
 The row remains Group-framed only as a convergence bridge; canonical placement
 still comes exclusively from `snapshot.sessionGroups`. A focused direct visible member decorates its Group with
@@ -190,9 +191,11 @@ scroll as ordinary projected rows.
 
 Pointer targets identify one `dashboardCell`. In dashboard mode both pointer
 activation and focused Enter resolve that cell through the current visible tree
-and dispatch the same `dashboard.cell.activate` transition. Invalid, hidden,
-filtered, or stale cell targets are inert. Chooser modes accept only canonical
-session identity cells and retain their existing slot semantics.
+and dispatch the same `dashboard.cell.activate` transition. The anchored Group
+menu and native Group-header context menu resolve Q/N/S/R through one validated
+stable-ID action path; native presentation does not own workflow behavior.
+Invalid, hidden, filtered, or stale cell targets are inert. Chooser modes accept
+only canonical session identity cells and retain their existing slot semantics.
 
 ## Package surface
 

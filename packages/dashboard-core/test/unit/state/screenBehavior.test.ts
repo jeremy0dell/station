@@ -89,6 +89,16 @@ const screenBehaviorCases: readonly [
   ["help", { name: "help" }, "present"],
   ["project menu", { name: "projectMenu", projectId: "web", focus: "quickGroup" }, "present"],
   [
+    "Group menu",
+    {
+      name: "groupMenu",
+      projectId: "web",
+      groupId: "group_active",
+      focus: "quickSession",
+    },
+    "present",
+  ],
+  [
     "create group",
     {
       name: "createGroup",
@@ -230,6 +240,12 @@ describe("TUI screen behavior", () => {
 
   it("returns Project surfaces to their invocation focus and keeps a pending sheet inert", () => {
     const menu = withScreen({ name: "projectMenu", projectId: "web", focus: "settings" });
+    const groupMenu = withScreen({
+      name: "groupMenu",
+      projectId: "web",
+      groupId: "group_active",
+      focus: "remove",
+    });
     const createGroup = withScreen({
       name: "createGroup",
       projectId: "web",
@@ -243,6 +259,10 @@ describe("TUI screen behavior", () => {
     expect(clickAway(menu)).toMatchObject({
       screen: { name: "dashboard" },
       dashboardFocus: { rowId: "project:web", cellId: "menu" },
+    });
+    expect(clickAway(groupMenu)).toMatchObject({
+      screen: { name: "dashboard" },
+      dashboardFocus: { rowId: "group:group_active", cellId: "menu" },
     });
     expect(clickAway(createGroup).screen).toEqual({
       name: "projectMenu",

@@ -355,6 +355,38 @@ describe("primary workflow interaction parity", () => {
     }
   });
 
+  it("converges Group-menu pointer, focused Enter, and shortcut paths", () => {
+    const rowId = dashboardRowIds.group("group_active");
+    const base = createInitialTuiState({
+      initialSnapshot: createGroupedDashboardSnapshot(),
+      dashboardFocus: { rowId, cellId: "menu" },
+    });
+    const menu = handleTuiAction(
+      base,
+      { type: "dashboard.cell.activate", rowId, cellId: "menu" },
+      context,
+    ).state;
+    const pointer = handleTuiAction(
+      menu,
+      { type: "groupMenu.activate", actionId: "quickSession" },
+      context,
+    );
+    const focused = handleTuiKey(menu, { input: "\r", return: true }, context);
+    const shortcut = handleTuiKey(menu, { input: "Q" }, context);
+
+    for (const transition of [pointer, focused, shortcut]) {
+      expect(transition.state.screen).toEqual({ name: "dashboard" });
+      expect(transition.state.dashboardFocus).toEqual({ rowId, cellId: "menu" });
+      expect(transition.operations).toEqual([
+        expect.objectContaining({
+          type: "quickCreateSessionInGroup",
+          groupId: "group_active",
+          fallbackCell: "menu",
+        }),
+      ]);
+    }
+  });
+
   it("converges direct, pointer, and focused Project paths on one Quick Group operation", () => {
     const rowId = dashboardRowIds.project("web");
     const base = createInitialTuiState({

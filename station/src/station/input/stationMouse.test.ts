@@ -564,6 +564,18 @@ describe("routeStationMouse", () => {
     routeStationMouse({ kind: "dashboardCell", rowId: groupId, cellId: "menu" }, LEFT_DOWN, store);
     expect([...store.state.getState().collapsedGroupIds]).toEqual([]);
     expect(store.state.getState().dashboardFocus).toEqual({ rowId: groupId, cellId: "menu" });
+    expect(store.state.getState().screen).toEqual({
+      name: "groupMenu",
+      projectId: "station",
+      groupId: "group_design_refresh",
+      focus: "quickSession",
+    });
+
+    routeStationMouse(
+      { kind: "groupMenuAction", actionId: "settings" },
+      LEFT_DOWN,
+      store,
+    );
     expect(store.state.getState().screen).toMatchObject({
       name: "groupSettings",
       groupId: "group_design_refresh",
@@ -1149,6 +1161,11 @@ describe("routeStationMouse", () => {
         rowId: dashboardRowIds.group("group_design_refresh"),
         cellId: "menu",
       },
+      LEFT_DOWN,
+      store,
+    );
+    routeStationMouse(
+      { kind: "groupMenuAction", actionId: "settings" },
       LEFT_DOWN,
       store,
     );

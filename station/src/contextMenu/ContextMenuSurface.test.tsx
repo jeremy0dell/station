@@ -99,6 +99,70 @@ describe("ContextMenuSurface", () => {
     }
   });
 
+  it("renders Group keyboard shortcuts and separators without changing item indices", async () => {
+    const calls: MouseTargetRef[] = [];
+    const items: readonly ContextMenuItem[] = [
+      {
+        id: "group.quickSession",
+        label: "Quick session",
+        shortcut: "Q",
+        action: { kind: "noop" },
+      },
+      {
+        id: "group.newSession",
+        label: "New session…",
+        shortcut: "N",
+        action: { kind: "noop" },
+      },
+      {
+        id: "group.openSettings",
+        label: "Group settings…",
+        shortcut: "S",
+        separatorBefore: true,
+        action: { kind: "noop" },
+      },
+      {
+        id: "group.remove",
+        label: "Remove Group…",
+        shortcut: "R",
+        separatorBefore: true,
+        danger: true,
+        action: { kind: "noop" },
+      },
+    ];
+    const setup = await testRender(
+      <StationThemeProvider theme={nativeStationTheme}>
+        <ContextMenuSurface
+          items={items}
+          activeIndex={0}
+          width={22}
+          height={8}
+          dispatchMouse={(target) => {
+            calls.push(target);
+            return true;
+          }}
+        />
+      </StationThemeProvider>,
+      { width: 24, height: 9 },
+    );
+    await setup.flush();
+    try {
+      const frame = setup.captureCharFrame();
+      const spans = setup.captureSpans();
+      expect(frame.split("\n")[1]).toMatch(/Quick session\s+Q\|/);
+      expect(frame.split("\n")[2]).toMatch(/New session…\s+N\|/);
+      expect(frame.split("\n")[3]).toContain("+--------------------+");
+      expect(frame.split("\n")[4]).toMatch(/Group settings…\s+S\|/);
+      expect(frame.split("\n")[5]).toContain("+--------------------+");
+      expect(frame.split("\n")[6]).toMatch(/Remove Group…\s+R\|/);
+      expect(spanAtFrameCell(spans, 6, 2)?.fg).not.toEqual(spanAtFrameCell(spans, 1, 2)?.fg);
+      await setup.mockMouse.click(2, 6, MouseButtons.LEFT);
+      expect(calls.at(-1)).toEqual({ kind: "contextMenuItem", itemIndex: 3 });
+    } finally {
+      setup.renderer.destroy();
+    }
+  });
+
   it("routes item hover targets on mouse move", async () => {
     const calls: Array<{ target: MouseTargetRef; event: StationMouseEvent }> = [];
     const setup = await renderSurface((target, event) => {

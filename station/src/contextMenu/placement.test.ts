@@ -13,6 +13,23 @@ describe("context menu placement", () => {
     expect(measureContextMenu(ITEMS)).toEqual({ width: 15, height: 5 });
   });
 
+  it("includes separator rows in measured height", () => {
+    expect(
+      measureContextMenu([
+        ITEMS[0]!,
+        { ...ITEMS[1]!, separatorBefore: true },
+        { ...ITEMS[2]!, separatorBefore: true },
+      ]),
+    ).toEqual({ width: 15, height: 7 });
+  });
+
+  it("includes visible keyboard shortcuts in measured width", () => {
+    expect(measureContextMenu([{ ...ITEMS[0]!, shortcut: "R" }])).toEqual({
+      width: 17,
+      height: 3,
+    });
+  });
+
   it("uses bottom-start placement by default", () => {
     expect(placeContextMenu({ x: 4, y: 3 }, { width: 10, height: 4 }, { width: 40, height: 20 })).toEqual({
       left: 4,
