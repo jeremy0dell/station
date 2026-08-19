@@ -236,7 +236,7 @@ describeReal("real native Station mouse input", () => {
         runtime,
         (frame) =>
           frame.includes("[shell]") &&
-          frame.includes(`╭▼ ${groupName} 1 session`) &&
+          frame.includes(`╭ ▼ ${groupName} 1 session`) &&
           hasDashboardSessionRow(frame, branch),
         "The native-only Station overlay did not render its Group and real session.",
       );

@@ -339,7 +339,7 @@ describe("FullscreenDashboard mouse composition", () => {
       return { row, line: lines[row] ?? "" };
     };
 
-    expect(setup.captureCharFrame()).toContain("╭▼ Design refresh 2 sessions");
+    expect(setup.captureCharFrame()).toContain("╭ ▼ Design refresh 2 sessions");
     expect(setup.captureCharFrame()).toContain("│ [1]");
     const member = cellFor(setup.captureCharFrame(), "group-contracts");
     await actOn(async () => {
@@ -367,6 +367,7 @@ describe("FullscreenDashboard mouse composition", () => {
       rowId: groupId,
       cellId: "quickSession",
     });
+    expect(groupLine().line).toContain("▸[quick session]");
     expect([...fixture.runtime.state.getState().collapsedGroupIds]).toEqual([]);
 
     group = groupLine();

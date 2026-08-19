@@ -62,12 +62,16 @@ describe("MoveToGroupSheetView", () => {
       new Map([["moveToGroupDestination", "moveToGroup:existing:group_observer_hardening"]]),
     );
     const frame = setup.captureCharFrame();
+    const lines = frame.split("\n");
+    const currentLine = lines.find((line) => line.includes("1 Design refresh"));
+    const focusedLine = lines.find((line) => line.includes("2 Observer hardening"));
     expect(frame).toContain("Current    Design refresh");
     expect(frame).toContain("✓1 Design refresh");
-    expect(frame).toContain("2 Observer hardening");
+    expect(currentLine).not.toContain("▸");
+    expect(focusedLine).toContain("▸ 2 Observer hardening");
+    expect(focusedLine).not.toContain("✓");
     expect(frame).toContain("N Create new Group…");
 
-    const lines = frame.split("\n");
     for (const label of ["U Ungrouped", "2 Observer hardening", "N Create new Group…"]) {
       const row = lines.findIndex((line) => line.includes(label));
       await setup.mockMouse.click(lines[row]?.indexOf(label) ?? -1, row, MouseButtons.LEFT);
@@ -77,6 +81,18 @@ describe("MoveToGroupSheetView", () => {
       { kind: "sheetChoice", choiceKey: "2" },
       { kind: "sheetChoice", choiceKey: "N" },
     ]);
+
+    const { setup: currentSetup } = await render(
+      {
+        name: "moveToGroup",
+        step: "chooseDestination",
+        sessionId: "ses_wt_group_contracts",
+        sessionTitle: "group-contracts",
+        submitting: false,
+      },
+      new Map([["moveToGroupDestination", "moveToGroup:existing:group_design_refresh"]]),
+    );
+    expect(currentSetup.captureCharFrame()).toContain("▸✓1 Design refresh");
   });
 
   it("renders create-and-move progress without a duplicate submit target", async () => {

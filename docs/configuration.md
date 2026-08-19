@@ -272,12 +272,6 @@ Nested project tables:
 | `[projects.env]` | any key | string | Extra env for project launches; local overlays cannot set it. |
 | `[projects.display]` | `group` | string | Optional grouping label. |
 | `[projects.display]` | `sort_order` | int | Optional sort order. |
-
-`[projects.display].group` is a static label for organizing whole projects. It is unrelated to
-dynamic Session Groups, which are Observer-owned state stored in SQLite and projected through
-`StationSnapshot.sessionGroups`. Session Groups are not configured under `[workspace]`, `[tui]`,
-the runtime `config.toml`, or project-local `.station/config.toml`; recorded `sessionGroup.*`
-Observer commands are their mutation boundary.
 | `[projects.worktrunk]` | `enabled` | bool | Defaults to `true` when omitted. |
 | `[projects.worktrunk]` | `base` | string | Overrides `[worktree.worktrunk].base` for this project. |
 | `[projects.worktrunk]` | `managed_root` | string | Per-project authoritative managed root; relative paths resolve against `project.root`. If omitted and global `managed_root` is set, STATION derives a unique project child directory. |
@@ -287,6 +281,13 @@ Observer commands are their mutation boundary.
 | `[projects.recovery_breadcrumbs]` | `path` | string | Optional breadcrumb path. |
 | `[projects.local_config]` | `enabled` | bool | Required inside the table; only `true` reads the project-local file. |
 | `[projects.local_config]` | `path` | string | Required inside the table; `~/` expands against `$HOME`, anything else resolves against `project.root`. |
+
+`[projects.display].group` is a static label for organizing whole projects. It is unrelated to
+dynamic Session Groups, which are Observer-owned state stored in SQLite and projected through
+`StationSnapshot.sessionGroups`. Session Groups are not configured under `[workspace]`, `[tui]`,
+the runtime `config.toml`, or project-local `.station/config.toml`. They change only through
+Observer-owned operations, including recorded `sessionGroup.*` commands and atomic session
+seed/placement; config is never Group state.
 
 `stn project add` refuses both a first add and an idempotent re-add when the
 checkout-style `root` has local `core.bare=true`; the failed mutation leaves the
