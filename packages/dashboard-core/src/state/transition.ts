@@ -3,6 +3,7 @@ import type { TuiOperation } from "./operations/types.js";
 import { handleAddProjectKey } from "./screens/addProjectScreen.js";
 import { handleDashboardKey } from "./screens/dashboard.js";
 import { handleForkKey } from "./screens/fork.js";
+import { handleGroupMenuKey } from "./screens/groupMenu.js";
 import { handleGroupSettingsKey } from "./screens/groupSettings.js";
 import { handleHelpKey } from "./screens/help.js";
 import { handleMoveToGroupKey } from "./screens/moveToGroup.js";
@@ -71,6 +72,8 @@ export function handleTuiKey(
       return handleHelpKey(state, key);
     case "projectMenu":
       return handleProjectMenuKey(state, key);
+    case "groupMenu":
+      return handleGroupMenuKey(state, key);
     case "createGroup":
       return handleCreateGroupKey(state, key);
     case "persistentFilter":

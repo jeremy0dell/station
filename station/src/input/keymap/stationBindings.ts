@@ -142,7 +142,7 @@ const contextMenuLayer: KeymapLayer<RouteOutcome> = {
       action: () => ({ kind: "context-menu-select" }),
     },
   ],
-  catchAll: () => ({ kind: "swallowed" }),
+  catchAll: (key) => ({ kind: "context-menu-shortcut", key }),
 };
 
 /**

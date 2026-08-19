@@ -1,10 +1,11 @@
 import { normalize } from "node:path";
+import type { ProjectId, SessionGroupId } from "@station/contracts";
 import type { Automation } from "../config/stationConfig.js";
 import { MAIN_PANE_ID, worktreeIdFromAgentPaneId, type StationState } from "../state/types.js";
 import { selectDashboardViewport } from "@station/dashboard-core/selectors";
 import type { DashboardSessionRow } from "@station/dashboard-core/selectors";
-import { isAgentRemovalUnavailable } from "@station/dashboard-core/state";
-import type { DashboardStateView } from "@station/dashboard-core/state";
+import { GROUP_MENU_ITEMS, isAgentRemovalUnavailable } from "@station/dashboard-core/state";
+import type { DashboardStateView, GroupMenuActionId } from "@station/dashboard-core/state";
 import type {
   ContextMenuItem,
   ContextMenuItemAction,
@@ -110,7 +111,7 @@ function buildStationItems(
     case "projectHeader":
       return buildProjectItems(row.payload.project.id, state);
     case "groupHeader":
-      return [noActionsItem()];
+      return buildGroupItems(row.payload.group.id, row.payload.group.projectId, state);
     case "session": {
       const sessionRow = row.payload.row;
       return viewport.rowChoices.some((choice) => choice.value.id === sessionRow.id)
@@ -165,6 +166,37 @@ function buildSessionItems(
     });
   }
   return items.length === 0 ? [noActionsItem()] : items;
+}
+
+const GROUP_CONTEXT_ITEM_IDS: Record<GroupMenuActionId, ContextMenuItem["id"]> = {
+  quickSession: "group.quickSession",
+  newSession: "group.newSession",
+  settings: "group.openSettings",
+  remove: "group.remove",
+};
+
+function buildGroupItems(
+  groupId: SessionGroupId,
+  projectId: ProjectId,
+  state: DashboardStateView,
+): readonly ContextMenuItem[] {
+  const group = state.snapshot?.sessionGroups.find(
+    (candidate) => candidate.id === groupId && candidate.projectId === projectId,
+  );
+  if (group === undefined) return [noActionsItem()];
+  return GROUP_MENU_ITEMS.map((item) => ({
+    id: GROUP_CONTEXT_ITEM_IDS[item.id],
+    label: item.label,
+    shortcut: item.shortcut,
+    ...(item.separatorBefore === true ? { separatorBefore: true as const } : {}),
+    ...(item.danger === true ? { danger: true } : {}),
+    action: {
+      kind: "groupMenuAction" as const,
+      projectId: group.projectId,
+      groupId: group.id,
+      actionId: item.id,
+    },
+  }));
 }
 
 function buildProjectItems(

@@ -370,7 +370,7 @@ describe("dashboard state actions", () => {
     ).toEqual({ state });
   });
 
-  it("toggles Group identity, submits Group Quick Session, and opens Group Settings", () => {
+  it("toggles Group identity, submits Group Quick Session, and opens the Group menu", () => {
     const state = createInitialTuiState({ initialSnapshot: createGroupedDashboardSnapshot() });
     const rowId = dashboardRowIds.group("group_active");
     const collapsed = handleTuiAction(
@@ -406,11 +406,11 @@ describe("dashboard state actions", () => {
     expect(menu.operations).toBeUndefined();
     expect(menu.state.dashboardFocus).toEqual({ rowId, cellId: "menu" });
     expect(menu.state.collapsedGroupIds.size).toBe(0);
-    expect(menu.state.screen).toMatchObject({
-      name: "groupSettings",
+    expect(menu.state.screen).toEqual({
+      name: "groupMenu",
+      projectId: "web",
       groupId: "group_active",
-      section: "general",
-      focus: "list",
+      focus: "quickSession",
     });
 
     const focused = {
@@ -420,6 +420,42 @@ describe("dashboard state actions", () => {
     expect(handleTuiKey(focused, { input: "\r", return: true }, context).state.screen).toEqual(
       menu.state.screen,
     );
+  });
+
+  it("routes anchored and native Group-menu actions through the shared semantic surface", () => {
+    const state = createInitialTuiState({ initialSnapshot: createGroupedDashboardSnapshot() });
+    const menu = handleTuiAction(
+      state,
+      {
+        type: "dashboard.cell.activate",
+        rowId: dashboardRowIds.group("group_active"),
+        cellId: "menu",
+      },
+      context,
+    ).state;
+    const anchored = handleTuiAction(
+      menu,
+      { type: "groupMenu.activate", actionId: "remove" },
+      context,
+    );
+    const native = handleTuiAction(
+      state,
+      {
+        type: "sessionGroup.menuAction",
+        projectId: "web",
+        groupId: "group_active",
+        actionId: "remove",
+      },
+      context,
+    );
+
+    for (const transition of [anchored, native]) {
+      expect(transition.state.screen).toMatchObject({
+        name: "groupSettings",
+        groupId: "group_active",
+        section: "remove",
+      });
+    }
   });
 
   it("routes Project-menu and Create Group actions through the shared semantic surface", () => {

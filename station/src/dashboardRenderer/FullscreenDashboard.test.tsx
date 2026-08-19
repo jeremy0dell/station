@@ -378,6 +378,15 @@ describe("FullscreenDashboard mouse composition", () => {
       cellId: "menu",
     });
     expect([...fixture.runtime.state.getState().collapsedGroupIds]).toEqual([]);
+    expect(fixture.runtime.state.getState().screen).toEqual({
+      name: "groupMenu",
+      projectId: "station",
+      groupId: "group_design_refresh",
+      focus: "quickSession",
+    });
+    expect(setup.captureCharFrame()).toContain("Group settings…");
+    const settings = cellFor(setup.captureCharFrame(), "Group settings…");
+    await actOn(() => setup.mockMouse.click(settings.col, settings.row, MouseButtons.LEFT));
     expect(fixture.runtime.state.getState().screen).toMatchObject({
       name: "groupSettings",
       groupId: "group_design_refresh",

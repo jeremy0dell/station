@@ -20,10 +20,18 @@ const HORIZONTAL_PADDING = 2;
 const BORDER_CELLS = 2;
 
 export function measureContextMenu(items: readonly ContextMenuItem[]): ContextMenuSize {
-  const labelWidth = Math.max(1, ...items.map((item) => stringWidth(item.label)));
+  const labelWidth = Math.max(
+    1,
+    ...items.map(
+      (item) =>
+        stringWidth(item.label) +
+        (item.shortcut === undefined ? 0 : stringWidth(item.shortcut) + 1),
+    ),
+  );
+  const separatorRows = items.filter((item) => item.separatorBefore === true).length;
   return {
     width: labelWidth + HORIZONTAL_PADDING + BORDER_CELLS,
-    height: Math.max(1, items.length + BORDER_CELLS),
+    height: Math.max(1, items.length + separatorRows + BORDER_CELLS),
   };
 }
 
