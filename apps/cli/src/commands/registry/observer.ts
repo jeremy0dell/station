@@ -13,6 +13,7 @@ export const observerCliCommand: CliCommandNode = {
   run: runObserverCliCommand,
   usage: [
     "stn observer start",
+    "stn observer ensure-exact-build",
     "stn observer status",
     "stn observer stop",
     "stn observer restart",
@@ -32,6 +33,14 @@ export const observerCliCommand: CliCommandNode = {
       usage: ["stn observer start [--timeout-ms <ms>]"],
       options: [{ name: "--timeout-ms <ms>", description: "Override the startup health timeout." }],
       examples: ["pnpm stn observer start"],
+    },
+    {
+      name: "ensure-exact-build",
+      description:
+        "Reuse or cooperatively replace the configured Observer so its immutable build exactly matches this CLI.",
+      usage: ["stn observer ensure-exact-build [--timeout-ms <ms>]"],
+      options: [{ name: "--timeout-ms <ms>", description: "Override the activation timeout." }],
+      examples: ["pnpm stn observer ensure-exact-build"],
     },
     {
       name: "status",
@@ -76,7 +85,7 @@ async function runObserverCliCommand(context: CliCommandRunContext) {
   );
   const action = parseObserverCommandAction(context.args);
   const failedStart =
-    (action === "start" || action === "restart") &&
+    (action === "start" || action === "restart" || action === "ensure-exact-build") &&
     "status" in result &&
     result.status !== "running";
   return { code: failedStart ? 1 : 0, output: observerCommandSummary(result) };

@@ -12310,6 +12310,64 @@
       ]
     },
     {
+      "path": "apps/cli/src/commands/observer.ts",
+      "declaration": "runObserverCommand",
+      "kind": "function",
+      "role": "COMPOSITION ROOT",
+      "purpose": "Selects Observer process lifecycle and duplicate-inspection adapters for one CLI action.",
+      "dependencies": [
+        {
+          "path": "apps/cli/src/observerProcess.ts",
+          "declaration": "ensureExactObserverBuild",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/observerProcess.ts",
+          "declaration": "getObserverStatus",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/observerProcess.ts",
+          "declaration": "restartObserver",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/observerProcess.ts",
+          "declaration": "startObserver",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/observerProcess.ts",
+          "declaration": "stopObserver",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/observerReap.ts",
+          "declaration": "createLocalObserverReap",
+          "kind": "function",
+          "role": "COMPOSITION ROOT",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/observerReap.ts",
+          "declaration": "runObserverReap",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
       "path": "apps/cli/src/commands/popup.ts",
       "declaration": "runPopupCommand",
       "kind": "function",
@@ -12902,6 +12960,29 @@
           "declaration": "runObserverMain",
           "kind": "function",
           "role": "COMPOSITION ROOT",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
+      "path": "apps/cli/src/observerProcess.ts",
+      "declaration": "ensureExactObserverBuild",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Converges one configured Observer socket to this caller's exact immutable build within one deadline. At most the admitted identity-pinned incumbent is stopped cooperatively; the child preserves any later non-exact owner. Failures report their phase and the admitted incumbent's last proven disposition without changing generic singleton ordering.",
+      "dependencies": [
+        {
+          "path": "apps/cli/src/observerProcess.ts",
+          "declaration": "getObserverStatus",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "packages/protocol/src/client.ts",
+          "declaration": "createObserverClient",
+          "kind": "function",
+          "role": "ADAPTER",
           "edgeKind": "runtime"
         }
       ]

@@ -16,5 +16,11 @@ export * from "./commands/setup/index.js";
 export * from "./commands/snapshot.js";
 export * from "./commands/tui.js";
 export { runCliMain, shouldSuppressCliProcessOutput } from "./main.js";
-export type { ChildProcessLike, ObserverProcessDeps } from "./observerProcess.js";
+export type {
+  ChildProcessLike,
+  ExactObserverActivationPhase,
+  ExactObserverBuildStatus,
+  ExactObserverIncumbentDisposition,
+  ObserverProcessDeps,
+} from "./observerProcess.js";
 export * from "./selfExec.js";

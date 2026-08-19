@@ -1,6 +1,12 @@
 import { chmod, lstat, readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { getObserverStatus, restartObserver, startObserver, stopObserver } from "@station/cli";
+import {
+  ensureExactObserverBuild,
+  getObserverStatus,
+  restartObserver,
+  startObserver,
+  stopObserver,
+} from "@station/cli";
 import type { ChildProcessLike } from "@station/cli/internal";
 import { listenUnixSocket } from "@station/protocol";
 import { describe, expect, it, vi } from "vitest";
@@ -16,6 +22,33 @@ const exactOneBuildVersion = `1.0.0+station.${"a".repeat(64)}`;
 const exactTwoBuildVersion = `2.0.0+station.${"a".repeat(64)}`;
 
 describe("CLI observer process lifecycle", () => {
+  it("reports an absent socket as stopped without spending the remaining deadline on health", async () => {
+    const fixture = await createTempState();
+    let healthRequested = false;
+    const dateNow = vi.spyOn(Date, "now").mockReturnValueOnce(100).mockReturnValue(101);
+
+    try {
+      const result = await getObserverStatus(
+        { config: fixture.config, timeoutMs: 1 },
+        {
+          probeSocket: async () => ({ status: "absent" }),
+          clientFactory: () => {
+            healthRequested = true;
+            throw new Error("health must not be requested without a socket");
+          },
+        },
+      );
+
+      expect(result).toMatchObject({
+        status: "stopped",
+        paths: { socketPath: fixture.socketPath },
+      });
+      expect(healthRequested).toBe(false);
+    } finally {
+      dateNow.mockRestore();
+    }
+  });
+
   it("maps stale sockets distinctly from stopped observers", async () => {
     const fixture = await createTempState();
     await createRealStaleSocket(fixture.socketPath);
@@ -264,16 +297,32 @@ describe("CLI observer process lifecycle", () => {
     });
     try {
       await chmod(fixture.socketPath, 0o000);
-      for (const operation of [getObserverStatus, startObserver, restartObserver]) {
-        await expect(
-          operation(
-            { config: fixture.config, timeoutMs: 100 },
-            { buildVersion: zeroBuildVersion, spawnObserver, clientFactory },
-          ),
-        ).resolves.toMatchObject({
+      for (const operation of [
+        getObserverStatus,
+        startObserver,
+        ensureExactObserverBuild,
+        restartObserver,
+      ]) {
+        const result = await operation(
+          { config: fixture.config, timeoutMs: 100 },
+          { buildVersion: zeroBuildVersion, spawnObserver, clientFactory },
+        );
+        expect(result).toMatchObject({
           status: "unhealthy",
-          error: { code: "OBSERVER_SOCKET_INACCESSIBLE" },
+          error: {
+            code:
+              operation === ensureExactObserverBuild
+                ? "OBSERVER_EXACT_BUILD_ACTIVATION_FAILED"
+                : "OBSERVER_SOCKET_INACCESSIBLE",
+          },
         });
+        if (operation === ensureExactObserverBuild) {
+          expect(result).toMatchObject({
+            phase: "inspection",
+            incumbentDisposition: "preserved",
+            error: { hint: expect.stringContaining("OBSERVER_SOCKET_INACCESSIBLE") },
+          });
+        }
       }
       const after = await lstat(fixture.socketPath, { bigint: true });
       expect({ ino: after.ino, birthtimeNs: after.birthtimeNs }).toEqual({
@@ -318,6 +367,236 @@ describe("CLI observer process lifecycle", () => {
       expect(result).toMatchObject({ status: "running", health: { version, pid: 1234 } });
     }
     expect(spawned).toBe(false);
+  });
+
+  it("reuses an exact Observer build without stopping or spawning", async () => {
+    const fixture = await createTempState();
+    const stop = vi.fn();
+    const spawnObserver = vi.fn();
+
+    const result = await ensureExactObserverBuild(
+      { config: fixture.config },
+      {
+        buildVersion: losingBuildVersion,
+        spawnObserver,
+        clientFactory: () =>
+          ({
+            health: async () => ({
+              schemaVersion: "0.11.0",
+              status: "healthy",
+              pid: 1234,
+              startedAt: now,
+              version: losingBuildVersion,
+              socketPath: fixture.socketPath,
+            }),
+            stop,
+          }) as never,
+      },
+    );
+
+    expect(result).toMatchObject({
+      status: "running",
+      lifecycle: "reused",
+      health: { pid: 1234, version: losingBuildVersion },
+    });
+    expect(stop).not.toHaveBeenCalled();
+    expect(spawnObserver).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["same-version deterministic winner", winningBuildVersion],
+    ["higher public version", exactTwoBuildVersion],
+  ])("replaces a %s when exact build activation is explicit", async (_label, incumbentVersion) => {
+    const fixture = await createTempState();
+    let running = true;
+    let version = incumbentVersion;
+    let pid = 1234;
+    let stopExpectation: unknown;
+    let spawnInput: unknown;
+    const lifecycle: string[] = [];
+
+    const result = await ensureExactObserverBuild(
+      { config: fixture.config, timeoutMs: 500 },
+      {
+        buildVersion: losingBuildVersion,
+        spawnObserver: async (input) => {
+          spawnInput = input;
+          lifecycle.push("spawn");
+          running = true;
+          version = losingBuildVersion;
+          pid = 5678;
+          return { pid, unref: () => undefined };
+        },
+        clientFactory: (_socketPath, options) => {
+          if (options?.expectedObserverIdentity !== undefined) {
+            stopExpectation = options.expectedObserverIdentity;
+          }
+          return {
+            health: async () => {
+              if (!running) throw new Error("stopped");
+              return {
+                schemaVersion: "0.11.0",
+                status: "healthy",
+                pid,
+                startedAt: now,
+                version,
+                socketPath: fixture.socketPath,
+              };
+            },
+            stop: async () => {
+              lifecycle.push("stop");
+              running = false;
+              return { schemaVersion: "0.11.0", stopped: true, at: now };
+            },
+          } as never;
+        },
+      },
+    );
+
+    expect(result).toMatchObject({
+      status: "running",
+      lifecycle: "replaced",
+      health: { pid: 5678, version: losingBuildVersion },
+    });
+    expect(stopExpectation).toEqual({
+      pid: 1234,
+      startedAt: now,
+      version: incumbentVersion,
+      socketPath: fixture.socketPath,
+    });
+    expect(lifecycle).toEqual(["stop", "spawn"]);
+    expect(spawnInput).toMatchObject({ incumbentPolicy: "preserve" });
+  });
+
+  it("does not authorize a second non-exact owner for replacement after the pinned stop", async () => {
+    const fixture = await createTempState();
+    let running = true;
+    let version = exactTwoBuildVersion;
+    let pid = 1234;
+    let stops = 0;
+    let spawnInput: unknown;
+
+    const result = await ensureExactObserverBuild(
+      { config: fixture.config, timeoutMs: 100 },
+      {
+        buildVersion: losingBuildVersion,
+        spawnObserver: async (input) => {
+          spawnInput = input;
+          running = true;
+          version = zeroBuildVersion;
+          pid = 9999;
+          return { pid: 5678, unref: () => undefined };
+        },
+        clientFactory: () =>
+          ({
+            health: async () => {
+              if (!running) throw new Error("stopped");
+              return {
+                schemaVersion: "0.11.0",
+                status: "healthy",
+                pid,
+                startedAt: now,
+                version,
+                socketPath: fixture.socketPath,
+              };
+            },
+            stop: async () => {
+              stops += 1;
+              running = false;
+              return { schemaVersion: "0.11.0", stopped: true, at: now };
+            },
+          }) as never,
+        sleep: async () => new Promise((resolve) => setTimeout(resolve, 1)),
+      },
+    );
+
+    expect(spawnInput).toMatchObject({ incumbentPolicy: "preserve" });
+    expect(stops).toBe(1);
+    expect(result).toMatchObject({
+      status: "unhealthy",
+      phase: "start",
+      incumbentDisposition: "stopped",
+      error: {
+        code: "OBSERVER_EXACT_BUILD_ACTIVATION_FAILED",
+        hint: expect.stringContaining("no exact successor was confirmed"),
+      },
+    });
+  });
+
+  it("shares one status deadline between socket inspection and health", async () => {
+    const fixture = await createTempState();
+    let clientTimeoutMs: number | undefined;
+    const startedAt = Date.now();
+
+    const result = await getObserverStatus(
+      { config: fixture.config, timeoutMs: 60 },
+      {
+        probeSocket: async () => {
+          await new Promise((resolve) => setTimeout(resolve, 35));
+          return { status: "listening", identity: { ino: 1n, birthtimeNs: 1n } };
+        },
+        clientFactory: (_socketPath, options) => {
+          clientTimeoutMs = options?.timeoutMs;
+          return {
+            health: async () => ({
+              schemaVersion: "0.11.0",
+              status: "healthy",
+              pid: 1234,
+              startedAt: now,
+              version: losingBuildVersion,
+              socketPath: fixture.socketPath,
+            }),
+          } as never;
+        },
+      },
+    );
+
+    expect(result.status).toBe("running");
+    expect(clientTimeoutMs).toBeGreaterThan(0);
+    expect(clientTimeoutMs).toBeLessThan(40);
+    expect(Date.now() - startedAt).toBeLessThan(200);
+  });
+
+  it("refuses a non-exact final Observer selected during activation", async () => {
+    const fixture = await createTempState();
+    let healthCalls = 0;
+    let spawned = false;
+
+    const result = await ensureExactObserverBuild(
+      { config: fixture.config, timeoutMs: 200 },
+      {
+        buildVersion: losingBuildVersion,
+        spawnObserver: async () => {
+          spawned = true;
+          return { pid: 5678, unref: () => undefined };
+        },
+        clientFactory: () =>
+          ({
+            health: async () => {
+              healthCalls += 1;
+              if (!spawned) throw new Error("stopped");
+              return {
+                schemaVersion: "0.11.0",
+                status: "healthy",
+                pid: 9999,
+                startedAt: now,
+                version: exactTwoBuildVersion,
+                socketPath: fixture.socketPath,
+              };
+            },
+          }) as never,
+        sleep: async () => undefined,
+      },
+    );
+
+    expect(healthCalls).toBeGreaterThanOrEqual(3);
+    expect(result).toMatchObject({
+      status: "unhealthy",
+      error: {
+        code: "OBSERVER_EXACT_BUILD_ACTIVATION_FAILED",
+        hint: expect.stringContaining("configured socket changed owners"),
+      },
+    });
   });
 
   it("refuses without spawning when a same-version incumbent has the winning identity", async () => {

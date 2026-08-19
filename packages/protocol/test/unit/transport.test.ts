@@ -201,6 +201,26 @@ describe("Unix socket NDJSON transport", () => {
     }
   });
 
+  it("bounds holder evidence with the caller's socket-probe timeout", () => {
+    let observedTimeoutMs: number | undefined;
+    expect(() =>
+      readUnixSocketHolderPids("/tmp/socket", {
+        timeoutMs: 25,
+        runLsof: (_file, _args, timeoutMs) => {
+          observedTimeoutMs = timeoutMs;
+          return {
+            status: null,
+            stdout: "",
+            stderr: "",
+            signal: "SIGKILL",
+            error: Object.assign(new Error("timed out"), { code: "ETIMEDOUT" }),
+          };
+        },
+      }),
+    ).toThrow(expect.objectContaining({ code: "PROTOCOL_SOCKET_EVIDENCE_UNAVAILABLE" }));
+    expect(observedTimeoutMs).toBe(25);
+  });
+
   it("abandons a displaced listener without deleting its successor pathname", async () => {
     const { socketPath } = await createTempSocketPath();
     const displaced = await listenUnixSocket({ socketPath, onConnection: () => undefined });

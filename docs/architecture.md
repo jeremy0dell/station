@@ -82,6 +82,12 @@ When these disagree, reconcile from config, providers, and current observer stat
 - Station resolves managed-terminal attachments through its own host attacher. An absent attachment permits the existing local launch; an advertised attachment that cannot resolve fails visibly and must never fall through to a local spawn.
 - The Station UI is a client. It renders snapshots/events and dispatches typed commands; shared dispatch/completion normalization belongs to `@station/client`, while optimistic rows, fallback copy, toasts, and renderer effects remain dashboard or composition policy. Station must not import providers, read SQLite, run `wt`, run `tmux`, run `git`/`gh`, or parse raw provider payloads for core behavior.
 - Observer singleton selection remains generic: non-UI commands, hooks, ingress, and protocol clients may use the healthy handoff winner selected by Observer build ordering. A command-capable Station UI launcher adds a stricter composition check after that selection and proceeds only when its complete caller selector exactly equals the accepted Observer selector. Native Station directly operates Station Host, while the pane-free popup dashboard can dispatch commands that produce later Host work, so both refuse before renderer, reconcile, popup, Host, PTY, or layout effects.
+- Checkout-local devbox orchestration explicitly converges only its configured
+  Observer socket to the checkout's exact immutable build before private hook
+  preparation and UI launch. The CLI lifecycle adapter may cooperatively stop a
+  different identity-pinned incumbent for that explicit operation, but it does
+  not change generic singleton ordering, inspect other sockets, or address the
+  separate persistent Station Host.
 - The outer terminal environment is authoritative only for Station's OpenTUI
   renderer. Its strictly observed palette is appearance authority only for the
   embedded standalone/tmux dashboard; Station resolves that evidence into one

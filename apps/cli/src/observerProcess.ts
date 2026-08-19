@@ -22,6 +22,9 @@ import {
 } from "./observerProcess/health.js";
 import { startObserverProcess } from "./observerProcess/startup.js";
 import type {
+  ExactObserverActivationPhase,
+  ExactObserverBuildStatus,
+  ExactObserverIncumbentDisposition,
   ObserverProcessDeps,
   ObserverProcessOptions,
   ObserverStatus,
@@ -31,6 +34,9 @@ import { type ObserverPaths, resolveObserverPaths } from "./paths.js";
 // Commands intentionally keep one stable lifecycle import while implementation lives in observerProcess/.
 export type {
   ChildProcessLike,
+  ExactObserverActivationPhase,
+  ExactObserverBuildStatus,
+  ExactObserverIncumbentDisposition,
   ObserverProcessDeps,
   ObserverProcessOptions,
   ObserverStatus,
@@ -47,7 +53,9 @@ export async function getObserverStatus(
   deps: ObserverProcessDeps = {},
 ): Promise<ObserverStatus> {
   const paths = options.paths ?? resolveObserverPaths(options.config);
-  const probe = await probeUnixSocket(paths.socketPath);
+  const timeoutMs = observerStatusHealthTimeoutMs(options.timeoutMs);
+  const deadlineMs = Date.now() + timeoutMs;
+  const probe = await (deps.probeSocket ?? probeUnixSocket)(paths.socketPath, { timeoutMs });
   if (probe.status === "stale") {
     return { status: "stale", paths };
   }
@@ -55,14 +63,19 @@ export async function getObserverStatus(
     return { status: "unhealthy", paths, error: observerSocketInaccessibleError(paths.socketPath) };
   }
 
+  const healthTimeoutMs = remainingStatusTimeoutMs(deadlineMs);
+  if (healthTimeoutMs <= 0) {
+    return probe.status === "absent" ? { status: "stopped", paths } : observerHealthTimedOut(paths);
+  }
+
   const client =
     deps.clientFactory?.(paths.socketPath, {
-      timeoutMs: observerStatusHealthTimeoutMs(options.timeoutMs),
+      timeoutMs: healthTimeoutMs,
       acceptPreviousLifecycleSchema: true,
     }) ??
     createObserverClient({
       socketPath: paths.socketPath,
-      timeoutMs: observerStatusHealthTimeoutMs(options.timeoutMs),
+      timeoutMs: healthTimeoutMs,
       acceptPreviousLifecycleSchema: true,
     });
   try {
@@ -82,6 +95,23 @@ export async function getObserverStatus(
   }
 }
 
+function remainingStatusTimeoutMs(deadlineMs: number): number {
+  return Math.max(0, Math.floor(deadlineMs - Date.now()));
+}
+
+function observerHealthTimedOut(paths: ObserverPaths): ObserverStatus {
+  return {
+    status: "unhealthy",
+    paths,
+    error: {
+      tag: "ObserverConnectionError",
+      code: "OBSERVER_HEALTH_TIMEOUT",
+      message: `Observer status did not complete within its deadline for ${paths.socketPath}.`,
+      hint: "Retry after checking socket ownership and Observer health.",
+    },
+  };
+}
+
 /**
  * ADAPTER
  *
@@ -91,6 +121,14 @@ export async function getObserverStatus(
 export async function startObserver(
   options: ObserverProcessOptions = {},
   deps: ObserverProcessDeps = {},
+): Promise<ObserverStatus> {
+  return startObserverWithPolicy(options, deps);
+}
+
+async function startObserverWithPolicy(
+  options: ObserverProcessOptions,
+  deps: ObserverProcessDeps,
+  incumbentPolicy?: "preserve",
 ): Promise<ObserverStatus> {
   const paths = options.paths ?? resolveObserverPaths(options.config);
   const timeoutMs = options.timeoutMs ?? 10_000;
@@ -137,6 +175,7 @@ export async function startObserver(
       ...(options.onStartupProgress === undefined
         ? {}
         : { onStartupProgress: options.onStartupProgress }),
+      ...(incumbentPolicy === undefined ? {} : { incumbentPolicy }),
     },
     deps,
   );
@@ -201,6 +240,171 @@ export async function stopObserver(
     );
   }
   return stopRunningObserver(status, options, deps);
+}
+
+/**
+ * ADAPTER
+ *
+ * Converges one configured Observer socket to this caller's exact immutable build within one
+ * deadline. At most the admitted identity-pinned incumbent is stopped cooperatively; the child
+ * preserves any later non-exact owner. Failures report their phase and the admitted incumbent's
+ * last proven disposition without changing generic singleton ordering.
+ */
+export async function ensureExactObserverBuild(
+  options: ObserverProcessOptions = {},
+  deps: ObserverProcessDeps = {},
+): Promise<ExactObserverBuildStatus> {
+  const paths = options.paths ?? resolveObserverPaths(options.config);
+  const timeoutMs = options.timeoutMs ?? 10_000;
+  const deadlineMs = Date.now() + timeoutMs;
+  const buildVersion = deps.buildVersion ?? stationObserverBuildVersion();
+  const status = await getObserverStatus(
+    { ...options, paths, timeoutMs: remainingStopTimeoutMs(deadlineMs) },
+    deps,
+  );
+
+  if (status.status === "running" && status.health.version === buildVersion) {
+    return { ...status, lifecycle: "reused" };
+  }
+  if (status.status === "unhealthy") {
+    return exactBuildActivationFailure(paths, {
+      phase: "inspection",
+      incumbentDisposition: "preserved",
+      error: status.error,
+    });
+  }
+
+  const incumbent = status.status === "running" ? status.health : undefined;
+  let incumbentDisposition: ExactObserverIncumbentDisposition =
+    incumbent === undefined ? "none" : "unknown";
+  if (status.status === "running") {
+    try {
+      await stopRunningObserver(
+        status,
+        { ...options, paths, timeoutMs: remainingStopTimeoutMs(deadlineMs) },
+        deps,
+      );
+      incumbentDisposition = "stopped";
+    } catch (error) {
+      const remainingMs = remainingStopTimeoutMs(deadlineMs);
+      if (remainingMs <= 0) {
+        return exactBuildActivationFailure(paths, {
+          phase: "stop",
+          incumbentDisposition: "unknown",
+          error,
+        });
+      }
+      const current = await getObserverStatus({ ...options, paths, timeoutMs: remainingMs }, deps);
+      if (current.status === "running" && current.health.version === buildVersion) {
+        return { ...current, lifecycle: "replaced" };
+      }
+      if (current.status !== "stopped" && current.status !== "stale") {
+        return exactBuildActivationFailure(paths, {
+          phase: "stop",
+          incumbentDisposition: "unknown",
+          error,
+        });
+      }
+      incumbentDisposition = "stopped";
+    }
+  }
+
+  const remainingMs = remainingStopTimeoutMs(deadlineMs);
+  if (remainingMs <= 0) {
+    return exactBuildActivationFailure(paths, {
+      phase: "start",
+      incumbentDisposition,
+      error: observerStopTimeoutError(),
+    });
+  }
+  const started = await startObserverWithPolicy(
+    {
+      ...options,
+      paths,
+      timeoutMs: remainingMs,
+      startupDeadlineMs: deadlineMs,
+    },
+    deps,
+    "preserve",
+  );
+  if (started.status !== "running") {
+    return exactBuildActivationFailure(paths, {
+      phase: "start",
+      incumbentDisposition,
+      error: started.error ?? {
+        tag: "ObserverStartupError",
+        code: "OBSERVER_START_FAILED",
+        message: "Observer startup failed without a diagnostic.",
+      },
+    });
+  }
+  if (started.health.version !== buildVersion) {
+    return exactBuildActivationFailure(paths, {
+      phase: "verification",
+      incumbentDisposition,
+      error: exactBuildMismatchError(started.health, buildVersion),
+    });
+  }
+  return {
+    ...started,
+    lifecycle: incumbent === undefined ? "started" : "replaced",
+  };
+}
+
+function exactBuildActivationFailure(
+  paths: ObserverPaths,
+  input: {
+    phase: ExactObserverActivationPhase;
+    incumbentDisposition: ExactObserverIncumbentDisposition;
+    error: unknown;
+  },
+): ExactObserverBuildStatus {
+  const cause = safeErrorFromUnknown(input.error, {
+    tag: "ObserverStartupError",
+    code: "OBSERVER_EXACT_BUILD_ACTIVATION_CAUSE_UNKNOWN",
+    message: "The exact Observer build activation failed for an unknown reason.",
+  });
+  const error: SafeError = {
+    tag: "ObserverStartupError",
+    code: "OBSERVER_EXACT_BUILD_ACTIVATION_FAILED",
+    message: "The exact Observer build could not be activated safely.",
+    hint: exactBuildFailureHint(input.phase, input.incumbentDisposition, cause),
+  };
+  if (cause.traceId !== undefined) error.traceId = cause.traceId;
+  if (cause.diagnosticId !== undefined) error.diagnosticId = cause.diagnosticId;
+  return {
+    status: "unhealthy",
+    paths,
+    error,
+    phase: input.phase,
+    incumbentDisposition: input.incumbentDisposition,
+  };
+}
+
+function exactBuildFailureHint(
+  phase: ExactObserverActivationPhase,
+  incumbentDisposition: ExactObserverIncumbentDisposition,
+  cause: SafeError,
+): string {
+  const recovery =
+    incumbentDisposition === "stopped"
+      ? "The admitted incumbent stopped, but no exact successor was confirmed; retry the same activation command."
+      : incumbentDisposition === "preserved"
+        ? "No stop was attempted; resolve the reported access or ownership failure before retrying."
+        : incumbentDisposition === "none"
+          ? "No incumbent was observed, and no exact successor was confirmed; retry after resolving the startup failure."
+          : "The admitted incumbent's final state could not be proven; inspect status before retrying.";
+  const causeHint = cause.hint === undefined ? "" : ` ${cause.hint}`;
+  return `Activation phase: ${phase}. Incumbent: ${incumbentDisposition}. ${recovery} Cause (${cause.code}): ${cause.message}${causeHint}`;
+}
+
+function exactBuildMismatchError(health: ObserverHealth, requestedVersion: string): SafeError {
+  return {
+    tag: "ObserverStartupError",
+    code: "OBSERVER_EXACT_BUILD_ACTIVATION_FAILED",
+    message: "The exact Observer build could not be activated safely.",
+    hint: `Running build: ${formatObserverBuild(health.version)}. Requested build: ${formatObserverBuild(requestedVersion)}. The configured socket changed owners during activation; the running Observer was preserved.`,
+  };
 }
 
 async function stopRunningObserver(

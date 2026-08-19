@@ -11,6 +11,11 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+// An installed Station pane can carry a Bun-embedded asset path that is valid
+// only inside that binary process. Source devbox children must resolve their
+// checkout plugin body instead.
+delete process.env.STATION_OPENCODE_PLUGIN_BODY_PATH;
+
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const DS = join(repoRoot, ".dev-state");
 const CFG = join(DS, "config.toml");
@@ -190,8 +195,8 @@ function help() {
     [
       "Usage: pnpm station:devbox [start|dev|restart|status|logs|stop|reset]",
       "",
-      "  start            (default) build if needed, then start the isolated Station sandbox",
-      "  dev, --hot       build if needed, then start the isolated Station sandbox with UI HMR",
+      "  start            (default) build, sync the isolated Observer to this checkout, then open Station",
+      "  dev, --hot       build, sync the isolated Observer to this checkout, then open with UI HMR",
       "  restart          rebuild + recycle the isolated observer (persistent host/agents survive)",
       "  status           report the isolated observer/host (+ host build mismatch warning) and global observer",
       "  logs [--follow]  tail the isolated observer/host/cli logs",

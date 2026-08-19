@@ -47,6 +47,9 @@ describe("CLI observer commands", () => {
       runObserverCommand(["start"], { config: fixture.config }, deps),
     ).resolves.toMatchObject({ status: "running" });
     await expect(
+      runObserverCommand(["ensure-exact-build"], { config: fixture.config }, deps),
+    ).resolves.toMatchObject({ status: "running", lifecycle: "reused" });
+    await expect(
       runObserverCommand(["status"], { config: fixture.config }, deps),
     ).resolves.toMatchObject({ status: "running" });
     await expect(
@@ -98,6 +101,18 @@ describe("CLI observer commands", () => {
         status: "running",
         socketPath: fixture.socketPath,
         health: { status: "healthy" },
+      },
+    });
+    await expect(
+      runCli(["--config", configPath, "observer", "ensure-exact-build"], {
+        observerDeps: deps,
+      }),
+    ).resolves.toMatchObject({
+      code: 0,
+      output: {
+        status: "running",
+        socketPath: fixture.socketPath,
+        lifecycle: "reused",
       },
     });
     await expect(
@@ -208,16 +223,31 @@ describe("CLI observer commands", () => {
           error: { code: "OBSERVER_SOCKET_INACCESSIBLE" },
         },
       });
-      for (const action of ["start", "restart"]) {
-        await expect(
-          runCli(["--config", configPath, "observer", action], { observerDeps }),
-        ).resolves.toMatchObject({
+      for (const action of ["start", "ensure-exact-build", "restart"]) {
+        const result = await runCli(["--config", configPath, "observer", action], {
+          observerDeps,
+        });
+        expect(result).toMatchObject({
           code: 1,
           output: {
             status: "unhealthy",
-            error: { code: "OBSERVER_SOCKET_INACCESSIBLE" },
+            error: {
+              code:
+                action === "ensure-exact-build"
+                  ? "OBSERVER_EXACT_BUILD_ACTIVATION_FAILED"
+                  : "OBSERVER_SOCKET_INACCESSIBLE",
+            },
           },
         });
+        if (action === "ensure-exact-build") {
+          expect(result).toMatchObject({
+            output: {
+              phase: "inspection",
+              incumbentDisposition: "preserved",
+              error: { hint: expect.stringContaining("OBSERVER_SOCKET_INACCESSIBLE") },
+            },
+          });
+        }
       }
       await expect(runCli(["--config", configPath, "doctor"], { observerDeps })).rejects.toThrow(
         /OBSERVER_SOCKET_INACCESSIBLE/u,

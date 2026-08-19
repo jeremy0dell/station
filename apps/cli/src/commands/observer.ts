@@ -2,6 +2,8 @@ import type { StationConfig } from "@station/config";
 import type { ObserverHealth, ObserverStopReceipt } from "@station/contracts";
 import { parsePositiveIntegerOption } from "../args.js";
 import {
+  type ExactObserverBuildStatus,
+  ensureExactObserverBuild,
   getObserverStatus,
   type ObserverProcessDeps,
   type ObserverStatus,
@@ -20,6 +22,7 @@ import { type ObserverPaths, resolveObserverPaths } from "../paths.js";
 
 export type ObserverCommandResult =
   | ObserverStatus
+  | ExactObserverBuildStatus
   | ObserverStopReceipt
   | ObserverReapOutcome
   | {
@@ -35,6 +38,11 @@ export type ObserverCommandOptions = {
   reapDeps?: ObserverReapDeps;
 };
 
+/**
+ * COMPOSITION ROOT
+ *
+ * Selects Observer process lifecycle and duplicate-inspection adapters for one CLI action.
+ */
 export async function runObserverCommand(
   args: string[],
   options: ObserverCommandOptions = {},
@@ -60,6 +68,8 @@ export async function runObserverCommand(
       return getObserverStatus(runtimeOptions, deps);
     case "start":
       return startObserver(runtimeOptions, deps);
+    case "ensure-exact-build":
+      return ensureExactObserverBuild(runtimeOptions, deps);
     case "stop":
       return stopObserver(runtimeOptions, deps);
     case "restart":
@@ -160,6 +170,7 @@ export function observerCommandSummary(result: ObserverCommandResult): unknown {
       status: result.status,
       socketPath: result.paths.socketPath,
       health: result.health satisfies ObserverHealth,
+      ...("lifecycle" in result ? { lifecycle: result.lifecycle } : {}),
     };
   }
   if ("paths" in result) {
