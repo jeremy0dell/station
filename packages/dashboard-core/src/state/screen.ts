@@ -40,14 +40,14 @@ export function createInitialTuiState(options: CreateInitialTuiStateOptions = {}
 }
 
 export function replaceSnapshot(state: DashboardState, snapshot: StationSnapshot): DashboardState {
-  const projectSurface = reconcileProjectSurface(state, snapshot);
+  const transientSurface = reconcileTransientSurface(state, snapshot);
   const flowScreen =
-    projectSurface.name === "newSession"
+    transientSurface.name === "newSession"
       ? {
           name: "newSession" as const,
-          flow: reconcileNewSessionFlow(projectSurface.flow, snapshot),
+          flow: reconcileNewSessionFlow(transientSurface.flow, snapshot),
         }
-      : projectSurface;
+      : transientSurface;
   const groupSettingsScreen =
     flowScreen.name === "groupSettings"
       ? (reconcileGroupSettingsScreen(flowScreen, snapshot) ?? { name: "dashboard" as const })
@@ -68,11 +68,15 @@ export function replaceSnapshot(state: DashboardState, snapshot: StationSnapshot
   return seedNewSessionPickerCursor(reconcileDashboardFocus(state, next));
 }
 
-function reconcileProjectSurface(
+function reconcileTransientSurface(
   state: DashboardState,
   snapshot: StationSnapshot,
 ): DashboardState["screen"] {
   const screen = state.screen;
+  if (screen.name === "groupMenu") {
+    const group = snapshot.sessionGroups.find((candidate) => candidate.id === screen.groupId);
+    return group?.projectId === screen.projectId ? screen : { name: "dashboard" };
+  }
   if (screen.name !== "projectMenu" && screen.name !== "createGroup") return screen;
   return snapshot.projects.some((project) => project.id === screen.projectId)
     ? screen

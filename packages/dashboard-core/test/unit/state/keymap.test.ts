@@ -45,6 +45,21 @@ describe("dashboard key bindings", () => {
     ).toBe("persistentFilter");
   });
 
+  it("derives the dedicated Group menu input mode", () => {
+    const base = createInitialTuiState({ initialSnapshot: createGroupedDashboardSnapshot() });
+    expect(
+      deriveTuiInputMode({
+        ...base,
+        screen: {
+          name: "groupMenu",
+          projectId: "web",
+          groupId: "group_active",
+          focus: "quickSession",
+        },
+      }),
+    ).toBe("groupMenu");
+  });
+
   it("derives the dedicated Group Settings input mode", () => {
     const state = openGroupSettings(
       createInitialTuiState({ initialSnapshot: createGroupedDashboardSnapshot() }),

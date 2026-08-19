@@ -57,6 +57,15 @@ export {
 } from "../state/screens/addProjectScreen.js";
 export { openNewSession } from "../state/screens/dashboard.js";
 export type { ForkSessionActionId } from "../state/screens/fork.js";
+export type {
+  GroupMenuInputActionId,
+  GroupMenuItem,
+} from "../state/screens/groupMenu.js";
+export {
+  activateSessionGroupMenuAction,
+  GROUP_MENU_ITEMS,
+  openGroupMenu,
+} from "../state/screens/groupMenu.js";
 export {
   GROUP_SETTINGS_ITEMS,
   hasGroupSettingsMembershipDelta,
@@ -128,6 +137,8 @@ export type {
   DashboardSnapshotView,
   DashboardStateView,
   DashboardViewState,
+  GroupMenuActionId,
+  GroupMenuScreenView,
   GroupSettingsDetailFocus,
   GroupSettingsPendingMutation,
   GroupSettingsSection,

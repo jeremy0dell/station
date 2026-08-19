@@ -10,6 +10,7 @@ import type {
   AddProjectActionId,
   DashboardFilterConditionField,
   ForkSessionActionId,
+  GroupMenuActionId,
   GroupSettingsDetailFocus,
   GroupSettingsSection,
   NewSessionActionId,
@@ -69,6 +70,7 @@ export type StationMouseTarget =
   | { kind: "addProjectAction"; actionId: AddProjectActionId }
   | { kind: "newSessionAction"; actionId: NewSessionActionId }
   | { kind: "projectMenuAction"; actionId: ProjectMenuInputActionId }
+  | { kind: "groupMenuAction"; actionId: GroupMenuActionId }
   | { kind: "createGroupAction"; actionId: CreateGroupActionId }
   | { kind: "moveToGroupCreateSubmit" }
   | { kind: "renameSessionSubmit" }
@@ -253,6 +255,9 @@ export function routeStationMouse(
       return { kind: "handled" };
     case "projectMenuAction":
       dispatchStationAction(runtime, { type: "projectMenu.activate", actionId: target.actionId });
+      return { kind: "handled" };
+    case "groupMenuAction":
+      dispatchStationAction(runtime, { type: "groupMenu.activate", actionId: target.actionId });
       return { kind: "handled" };
     case "createGroupAction":
       dispatchStationAction(runtime, { type: "createGroup.activate", actionId: target.actionId });

@@ -110,7 +110,7 @@ export type CreateQuickSessionInGroupOperation = {
   title: string;
   hiddenBranch: string;
   harness: ProviderId;
-  fallbackCell: "identity" | "quickSession";
+  fallbackCell: "identity" | "quickSession" | "menu";
 };
 
 export type MoveSessionToGroupOperation = {

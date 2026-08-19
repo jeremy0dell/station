@@ -17,6 +17,11 @@ import {
   openForkDetailsForRow,
 } from "./screens/fork.js";
 import {
+  activateSessionGroupMenuAction,
+  type GroupMenuInputActionId,
+  handleGroupMenuAction,
+} from "./screens/groupMenu.js";
+import {
   cancelGroupSettings,
   focusGroupSettingsControl,
   openGroupSettings,
@@ -71,6 +76,7 @@ import type {
   CreateGroupReturnTarget,
   DashboardFilterConditionField,
   DashboardState,
+  GroupMenuActionId,
   GroupSettingsDetailFocus,
   GroupSettingsSection,
   ProjectSettingsItemId,
@@ -129,6 +135,13 @@ export type TuiSemanticAction =
   | { type: "moveToGroup.create.open" }
   | { type: "moveToGroup.create.submit" }
   | { type: "projectMenu.activate"; actionId: ProjectMenuInputActionId }
+  | { type: "groupMenu.activate"; actionId: GroupMenuInputActionId }
+  | {
+      type: "sessionGroup.menuAction";
+      projectId: ProjectId;
+      groupId: SessionGroupId;
+      actionId: GroupMenuActionId;
+    }
   | { type: "createGroup.activate"; actionId: CreateGroupActionId }
   | {
       type: "createGroup.open";
@@ -214,6 +227,10 @@ export function handleTuiAction(
       return submitMoveToGroupCreate(state);
     case "projectMenu.activate":
       return handleProjectMenuAction(state, action.actionId);
+    case "groupMenu.activate":
+      return handleGroupMenuAction(state, action.actionId);
+    case "sessionGroup.menuAction":
+      return activateSessionGroupMenuAction(state, action);
     case "createGroup.activate":
       return handleCreateGroupAction(state, action.actionId);
     case "createGroup.open":

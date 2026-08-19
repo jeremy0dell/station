@@ -6,7 +6,7 @@ import {
 } from "../selectors/dashboardTree.js";
 import { focusResolvedDashboardCursor, reconcileDashboardFocus } from "./dashboardFocus.js";
 import { activateDashboardRow } from "./rowActivation.js";
-import { openGroupSettings } from "./screens/groupSettings.js";
+import { openGroupMenu } from "./screens/groupMenu.js";
 import { toggleDashboardProjectCollapsed } from "./screens/projectCollapse.js";
 import { submitQuickSession, submitQuickSessionInGroup } from "./screens/quickSession.js";
 import { openProjectMenu } from "./screens/sessionGroups.js";
@@ -37,7 +37,7 @@ export function activateDashboardCell(
       if (cellId === "quickSession") {
         return submitQuickSessionInGroup(focused, row.payload.group.id);
       }
-      return { state: openGroupSettings(focused, row.payload.group.id) };
+      return { state: openGroupMenu(focused, row.payload.group.id) };
     case "session":
       return cellId === "identity" &&
         row.payload.pendingRemove === undefined &&

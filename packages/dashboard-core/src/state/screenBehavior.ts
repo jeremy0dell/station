@@ -1,6 +1,7 @@
 import { addProjectScreenBehavior } from "./screens/addProjectScreen.js";
 import { dashboardScreenBehavior } from "./screens/dashboard.js";
 import { forkScreenBehavior } from "./screens/fork.js";
+import { groupMenuScreenBehavior } from "./screens/groupMenu.js";
 import { groupSettingsScreenBehavior } from "./screens/groupSettings.js";
 import { helpScreenBehavior } from "./screens/help.js";
 import { moveToGroupScreenBehavior } from "./screens/moveToGroup.js";
@@ -36,6 +37,8 @@ export function tuiScreenBehavior(screen: DashboardScreenView): TuiScreenBehavio
       return helpScreenBehavior;
     case "projectMenu":
       return projectMenuScreenBehavior;
+    case "groupMenu":
+      return groupMenuScreenBehavior;
     case "createGroup":
       return createGroupScreenBehavior;
     case "persistentFilter":

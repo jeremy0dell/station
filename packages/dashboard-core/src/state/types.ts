@@ -161,6 +161,12 @@ export type TuiScreen =
   | { name: "help" }
   | { name: "projectMenu"; projectId: ProjectId; focus: ProjectMenuActionId }
   | {
+      name: "groupMenu";
+      projectId: ProjectId;
+      groupId: SessionGroupId;
+      focus: GroupMenuActionId;
+    }
+  | {
       name: "createGroup";
       projectId: ProjectId;
       draftName: EditableTextInputState;
@@ -268,6 +274,9 @@ export type ProjectSettingsItemId = "agent" | "remove";
 /** Actionable Project-menu rows in their rendered traversal order. */
 export type ProjectMenuActionId = "quickGroup" | "newGroup" | "defaultAgent" | "settings";
 
+/** Actionable Group-menu rows in their rendered traversal order. */
+export type GroupMenuActionId = "quickSession" | "newSession" | "settings" | "remove";
+
 /** Create Group control focus in rendered traversal order. */
 export type CreateGroupFocus = "name" | "quickSession" | "create" | "cancel";
 
@@ -276,6 +285,9 @@ export type CreateGroupReturnTarget = "projectMenu" | "projectHeader";
 
 /** Readonly Project-menu state consumed by shared presentation. */
 export type ProjectMenuScreenView = Extract<DashboardScreenView, { name: "projectMenu" }>;
+
+/** Readonly Group-menu state consumed by shared presentation. */
+export type GroupMenuScreenView = Extract<DashboardScreenView, { name: "groupMenu" }>;
 
 /** Readonly Create-Group state consumed by shared presentation and content selectors. */
 export type CreateGroupScreenView = Extract<DashboardScreenView, { name: "createGroup" }>;
