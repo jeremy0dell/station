@@ -394,6 +394,18 @@ describe("session command vertical slice", () => {
     if (source === undefined) {
       throw new Error("fork source was not created");
     }
+    await fixture.persistence.seedSession({
+      sessionId: "ses_fork_source",
+      projectId: "web",
+      worktreeId: source.id,
+      initialTitle: "Fork source",
+      harness: "fake-harness",
+      terminalProvider: "fake-terminal",
+      createdAt: now,
+      lastSeenAt: now,
+      group: { kind: "create", groupId: "group_fork_source", name: "Fork source Group" },
+    });
+    await fixture.core.reconcile("group-fork-source");
 
     const receipt = await fixture.queue.dispatch({
       type: "session.fork",
@@ -402,6 +414,11 @@ describe("session command vertical slice", () => {
         sourceWorktreeId: source.id,
         branch: "runner-fork",
         title: "Hexagonal PT 12 Fork",
+        group: {
+          kind: "source",
+          sourceSessionId: "ses_fork_source",
+          groupId: "group_fork_source",
+        },
         terminal: { provider: "fake-terminal", focus: false },
       },
     });
@@ -433,6 +450,17 @@ describe("session command vertical slice", () => {
         terminalTarget: expect.objectContaining({ sessionId: "ses_runner_fork_fallback" }),
       }),
     ]);
+    expect(fixture.core.getSnapshot().sessionGroups).toContainEqual(
+      expect.objectContaining({
+        id: "group_fork_source",
+        sessionIds: ["ses_fork_source", "ses_runner_fork"],
+      }),
+    );
+    expect(
+      fixture.core
+        .getSnapshot()
+        .sessionGroups.some((group) => group.sessionIds.includes("ses_runner_fork_fallback")),
+    ).toBe(false);
     expect(await fixture.persistence.listSessions()).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -490,6 +518,76 @@ describe("session command vertical slice", () => {
     expect(terminal.snapshot()).toMatchObject({ targets: [], launches: [] });
     await expect(fixture.persistence.listSessions()).resolves.toEqual([]);
     await expect(fixture.persistence.listWorktreeDisplayTitles()).resolves.toEqual(titlesBefore);
+    fixture.sqlite.close();
+  });
+
+  it("removes only fork-owned membership when a grouped fork launch fails", async () => {
+    const source = createFakeWorktree({
+      id: "wt_web_fork_cleanup_source",
+      projectId: "web",
+      branch: "fork-cleanup-source",
+      now,
+    });
+    const worktree = new FakeWorktreeProvider({ now, worktrees: [source] });
+    const terminal = new FakeTerminalProvider({
+      now,
+      failures: {
+        launchProcess: {
+          tag: "TerminalProviderError",
+          code: "FAKE_FORK_LAUNCH_FAILED",
+          message: "The fork launch failed.",
+          provider: "fake-terminal",
+        },
+      },
+    });
+    const fixture = createFixture({
+      worktree,
+      terminal,
+      sessionIds: ["ses_failed_grouped_fork"],
+    });
+    await fixture.persistence.seedSession({
+      sessionId: "ses_fork_cleanup_source",
+      projectId: "web",
+      worktreeId: source.id,
+      initialTitle: "Fork cleanup source",
+      harness: "fake-harness",
+      terminalProvider: "fake-terminal",
+      createdAt: now,
+      lastSeenAt: now,
+      group: { kind: "create", groupId: "group_fork_cleanup", name: "Cleanup" },
+    });
+    await fixture.core.reconcile("fork-cleanup-source");
+
+    const receipt = await fixture.queue.dispatch({
+      type: "session.fork",
+      payload: {
+        projectId: "web",
+        sourceWorktreeId: source.id,
+        branch: "failed-grouped-fork",
+        group: {
+          kind: "source",
+          sourceSessionId: "ses_fork_cleanup_source",
+          groupId: "group_fork_cleanup",
+        },
+        terminal: { provider: "fake-terminal" },
+      },
+    });
+    await fixture.queue.drain();
+
+    await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
+      status: "failed",
+      error: { code: "FAKE_FORK_LAUNCH_FAILED" },
+    });
+    await expect(fixture.persistence.listSessions()).resolves.toEqual([
+      expect.objectContaining({ id: "ses_fork_cleanup_source" }),
+    ]);
+    await expect(fixture.persistence.listSessionGroups()).resolves.toContainEqual(
+      expect.objectContaining({
+        id: "group_fork_cleanup",
+        sessionIds: ["ses_fork_cleanup_source"],
+      }),
+    );
+    expect(worktree.snapshot().worktrees).toEqual([source]);
     fixture.sqlite.close();
   });
 
@@ -2623,6 +2721,53 @@ describe("worktree.fork command", () => {
       base: "feature",
       seedFrom: { path: source.path, worktreeId: source.id },
     });
+    fixture.sqlite.close();
+  });
+
+  it("validates source Group intent without minting native fork membership", async () => {
+    const worktree = new FakeWorktreeProvider({ now });
+    const fixture = createFixture({ worktree });
+    const source = await createSource(fixture, "grouped-feature");
+    await fixture.persistence.seedSession({
+      sessionId: "ses_native_fork_source",
+      projectId: "web",
+      worktreeId: source.id,
+      initialTitle: "Native fork source",
+      harness: "fake-harness",
+      terminalProvider: "fake-terminal",
+      createdAt: now,
+      lastSeenAt: now,
+      group: { kind: "create", groupId: "group_native_fork", name: "Native fork" },
+    });
+    await fixture.core.reconcile("native-fork-source-group");
+
+    const receipt = await fixture.queue.dispatch({
+      type: "worktree.fork",
+      payload: {
+        projectId: "web",
+        sourceWorktreeId: source.id,
+        branch: "grouped-feature-fork",
+        group: {
+          kind: "source",
+          sourceSessionId: "ses_native_fork_source",
+          groupId: "group_native_fork",
+        },
+      },
+    });
+    await fixture.queue.drain();
+
+    await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
+      status: "succeeded",
+    });
+    expect(fixture.core.getSnapshot().sessions).toEqual([
+      expect.objectContaining({ id: "ses_native_fork_source" }),
+    ]);
+    expect(fixture.core.getSnapshot().sessionGroups).toContainEqual(
+      expect.objectContaining({
+        id: "group_native_fork",
+        sessionIds: ["ses_native_fork_source"],
+      }),
+    );
     fixture.sqlite.close();
   });
 

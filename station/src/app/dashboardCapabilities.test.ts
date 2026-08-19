@@ -27,13 +27,17 @@ function harness() {
   let activationResult: ManagedLaunchResult = { kind: "success", landed: true };
   let createResult: ManagedLaunchResult = { kind: "success", landed: false };
   const createRequests: Parameters<ManagedLaunch["create"]>[0][] = [];
+  const forkRequests: Parameters<ManagedLaunch["fork"]>[0][] = [];
   const managedLaunch: ManagedLaunch = {
     activate: async () => activationResult,
     create: async (request) => {
       createRequests.push(request);
       return createResult;
     },
-    fork: async () => createResult,
+    fork: async (request) => {
+      forkRequests.push(request);
+      return createResult;
+    },
   };
   const capabilities = createDashboardCapabilities({
     clientState: source,
@@ -50,6 +54,7 @@ function harness() {
     store,
     opened,
     createRequests,
+    forkRequests,
     setActivationResult: (result: ManagedLaunchResult) => (activationResult = result),
     setCreateResult: (result: ManagedLaunchResult) => (createResult = result),
   };
@@ -170,6 +175,44 @@ describe("native dashboard capabilities", () => {
         branch: "station-new-123",
         harness: "codex",
         group: { kind: "existing", groupId: "grp_release" },
+      },
+    ]);
+  });
+
+  it("carries source Group inheritance into native Fork execution", async () => {
+    const fixture = harness();
+    const project = manyProjectsSnapshot().projects.find((candidate) => candidate.id === "station");
+    if (project === undefined) throw new Error("project fixture missing");
+
+    const handle = fixture.capabilities.managedSessions.fork({
+      project,
+      sourceWorktreeId: "wt_station_working",
+      title: "Forked session",
+      hiddenBranch: "forked-session-123",
+      copyDirty: true,
+      inheritedHarness: "codex",
+      group: {
+        kind: "source",
+        sourceSessionId: "ses_wt_station_working",
+        groupId: "group_active",
+      },
+    });
+
+    expect(handle.optimistic).toBe("pending-create");
+    await expect(handle.completion).resolves.toEqual({ kind: "success" });
+    expect(fixture.forkRequests).toEqual([
+      {
+        projectId: "station",
+        sourceWorktreeId: "wt_station_working",
+        title: "Forked session",
+        branch: "forked-session-123",
+        copyDirty: true,
+        harness: "codex",
+        group: {
+          kind: "source",
+          sourceSessionId: "ses_wt_station_working",
+          groupId: "group_active",
+        },
       },
     ]);
   });

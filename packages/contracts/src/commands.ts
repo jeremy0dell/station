@@ -45,6 +45,18 @@ export const RemoveWorktreePayloadSchema = z
 
 export type RemoveWorktreePayload = z.infer<typeof RemoveWorktreePayloadSchema>;
 
+export const SourceSessionGroupPlacementIntentSchema = z
+  .object({
+    kind: z.literal("source"),
+    sourceSessionId: SessionIdSchema,
+    groupId: SessionGroupIdSchema,
+  })
+  .strict();
+
+export type SourceSessionGroupPlacementIntent = z.infer<
+  typeof SourceSessionGroupPlacementIntentSchema
+>;
+
 // Fork a worktree: new branch off the source HEAD, optionally seeding its working tree.
 export const ForkWorktreePayloadSchema = z
   .object({
@@ -54,6 +66,7 @@ export const ForkWorktreePayloadSchema = z
     launchHarness: ProviderIdSchema.optional(),
     base: nonEmptyStringSchema.optional(),
     copyDirty: z.boolean().optional(),
+    group: SourceSessionGroupPlacementIntentSchema.optional(),
   })
   .strict();
 
@@ -116,6 +129,16 @@ export const SessionGroupPlacementIntentSchema = z.discriminatedUnion("kind", [
 
 export type SessionGroupPlacementIntent = z.infer<typeof SessionGroupPlacementIntentSchema>;
 
+export const FreshSessionGroupPlacementIntentSchema = z.discriminatedUnion("kind", [
+  ExistingSessionGroupPlacementIntentSchema,
+  CreateSessionGroupPlacementIntentSchema,
+  SourceSessionGroupPlacementIntentSchema,
+]);
+
+export type FreshSessionGroupPlacementIntent = z.infer<
+  typeof FreshSessionGroupPlacementIntentSchema
+>;
+
 export const CreateSessionPayloadSchema = z
   .object({
     projectId: ProjectIdSchema,
@@ -169,6 +192,7 @@ export const ForkSessionPayloadSchema = z
     title: userFacingTitleSchema.optional(),
     base: nonEmptyStringSchema.optional(),
     copyDirty: z.boolean().optional(),
+    group: SourceSessionGroupPlacementIntentSchema.optional(),
     harness: StartAgentHarnessCommandOptionsSchema.optional(),
     terminal: TerminalCommandOptionsSchema.partial().optional(),
     initialPrompt: nonEmptyStringSchema.optional(),

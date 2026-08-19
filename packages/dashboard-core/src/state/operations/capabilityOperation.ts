@@ -124,6 +124,7 @@ async function runDashboardCapabilityOperation(input: {
           title: operation.title,
           hiddenBranch: operation.hiddenBranch,
           copyDirty: operation.copyDirty,
+          ...(operation.group === undefined ? {} : { group: operation.group }),
           ...(operation.inheritedHarness === undefined
             ? {}
             : { inheritedHarness: operation.inheritedHarness }),
@@ -223,6 +224,9 @@ function applyCapabilityOptimisticState(
     if (operation.type === "forkManagedSession") {
       if (operation.inheritedHarness !== undefined) {
         pendingRow.harnessProvider = operation.inheritedHarness;
+      }
+      if (operation.group !== undefined) {
+        pendingRow.targetGroupId = operation.group.groupId;
       }
     } else {
       pendingRow.harnessProvider = operation.harness;

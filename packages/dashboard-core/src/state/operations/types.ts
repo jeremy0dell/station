@@ -4,6 +4,7 @@ import type {
   SessionGroupId,
   SessionGroupPlacementIntent,
   SessionId,
+  SourceSessionGroupPlacementIntent,
   StationCommand,
   WorktreeId,
 } from "@station/contracts";
@@ -37,6 +38,7 @@ export type ForkManagedSessionOperation = {
   title: string;
   hiddenBranch: string;
   copyDirty: boolean;
+  group?: SourceSessionGroupPlacementIntent;
   inheritedHarness?: ProviderId;
 };
 

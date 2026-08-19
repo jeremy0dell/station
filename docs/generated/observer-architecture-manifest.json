@@ -1427,7 +1427,7 @@
           "name": "createSessionForkHandler",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Resolves and preflights the selected harness, forks an existing worktree onto an internal branch, durably seeds its independent title, and launches a fresh agent; cleanup retires title authority only after verified rollback."
+          "purpose": "Resolves and preflights the selected harness, forks an existing worktree onto an internal branch, and atomically seeds its title with the source session's current Group when requested before launching a fresh agent; cleanup retires only fork-owned state after verified rollback."
         },
         {
           "name": "CreateSessionForkHandlerOptions",
@@ -1479,8 +1479,10 @@
             "publishSessionCreated",
             "rememberedHarnessProviderForWorktree",
             "removeWorktreeBestEffort",
+            "resolveForkSessionGroupPlacement",
             "runProviderMutation",
             "seedSession",
+            "sessionSeedGroupPlacement",
             "throwIfAborted",
             "validateSnapshotRow"
           ]
@@ -1501,7 +1503,7 @@
           "specifier": "../../persistence/index.js",
           "resolvedPath": "apps/observer/src/persistence/index.ts",
           "edgeKind": "type-only",
-          "bindings": ["EventJournal", "SessionStore"]
+          "bindings": ["EventJournal", "SessionSeedGroupProvenance", "SessionStore"]
         },
         {
           "specifier": "../../providers/registry.js",
@@ -1929,6 +1931,12 @@
           "purpose": null
         },
         {
+          "name": "resolveForkSessionGroupPlacement",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "resolveHarnessProviderOrThrow",
           "kind": "function",
           "role": null,
@@ -2073,13 +2081,14 @@
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "type-only",
           "bindings": [
+            "FreshSessionGroupPlacementIntent",
             "ProviderId",
             "ProviderProjectConfig",
             "SafeError",
             "SessionGroupId",
-            "SessionGroupPlacementIntent",
             "SessionId",
             "SessionView",
+            "SourceSessionGroupPlacementIntent",
             "StationSnapshot",
             "TerminalLaunchProcessRequest",
             "TerminalLaunchProcessResult",
@@ -2686,7 +2695,7 @@
           "name": "createWorktreeForkHandler",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Worktree-only half of session.fork: branch off the source HEAD and seed its working tree (when copyDirty), minting no session and launching no terminal so Station can host the inherited harness itself. A selected launch harness is preflighted before mutation. No live-agent guard on the source — the seed is a read-only snapshot."
+          "purpose": "Worktree-only half of session.fork: branch off the source HEAD and seed its working tree (when copyDirty), validating any source-Group inheritance intent while minting no session and launching no terminal so Station can host the inherited harness itself. A selected launch harness is preflighted before mutation. No live-agent guard on the source — the seed is a read-only snapshot."
         },
         {
           "name": "WorktreeForkHandlerOptions",
@@ -2727,6 +2736,7 @@
           "bindings": [
             "commandValidationError",
             "findProjectOrThrow",
+            "resolveForkSessionGroupPlacement",
             "runProviderMutation",
             "throwIfAborted",
             "validateSnapshotRow"
@@ -5274,7 +5284,7 @@
           "name": "SessionStore",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Admits Observer-owned sessions with selected provider identity and maintains their lifecycle, native execution bindings, canonical worktree-scoped titles, recovery, and readiness. Seed, optional root Group placement, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles."
+          "purpose": "Admits Observer-owned sessions with selected provider identity and maintains their lifecycle, native execution bindings, canonical worktree-scoped titles, recovery, and readiness. Seed, explicit root Group placement or current source-Group inheritance, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles."
         },
         {
           "name": "SessionTurnReadinessMutation",
@@ -7321,7 +7331,7 @@
           "name": "SessionStore",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Admits Observer-owned sessions with selected provider identity and maintains their lifecycle, native execution bindings, canonical worktree-scoped titles, recovery, and readiness. Seed, optional root Group placement, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles."
+          "purpose": "Admits Observer-owned sessions with selected provider identity and maintains their lifecycle, native execution bindings, canonical worktree-scoped titles, recovery, and readiness. Seed, explicit root Group placement or current source-Group inheritance, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles."
         },
         {
           "name": "SessionTurnReadinessMutation",
@@ -7624,7 +7634,7 @@
           "name": "SessionStore",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Admits Observer-owned sessions with selected provider identity and maintains their lifecycle, native execution bindings, canonical worktree-scoped titles, recovery, and readiness. Seed, optional root Group placement, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles."
+          "purpose": "Admits Observer-owned sessions with selected provider identity and maintains their lifecycle, native execution bindings, canonical worktree-scoped titles, recovery, and readiness. Seed, explicit root Group placement or current source-Group inheritance, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles."
         },
         {
           "name": "WorktreeMetadataStore",
@@ -10349,7 +10359,7 @@
           "name": "prepareExternalLaunch",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Returns a live or attachable managed identity first, then exactly recovers the canonical open Station session before permitting a fresh identity. Both launch paths preflight only the selected provider and pass provider-neutral resume options to the harness. A fresh identity is atomically seeded into its optional root Group before target publication, and confirmed failed launch cleanup removes its membership and owned inline Group without touching retained recovery state."
+          "purpose": "Returns a live or attachable managed identity first, then exactly recovers the canonical open Station session before permitting a fresh identity. Both launch paths preflight only the selected provider and pass provider-neutral resume options to the harness. A fresh identity is atomically seeded with explicit root placement or the requested source session's current Group before target publication, and confirmed failed launch cleanup removes only its membership and owned inline Group without touching source or retained recovery state."
         },
         {
           "name": "reportExternalExit",
@@ -10385,6 +10395,7 @@
             "defaultSessionCommandIdFactory",
             "findProjectOrThrow",
             "rememberedHarnessProviderForWorktree",
+            "resolveForkSessionGroupPlacement",
             "seedSession",
             "sessionSeedGroupPlacement",
             "worktreeObservationFromRow"
@@ -13453,7 +13464,7 @@
       "declaration": "createSessionForkHandler",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Resolves and preflights the selected harness, forks an existing worktree onto an internal branch, durably seeds its independent title, and launches a fresh agent; cleanup retires title authority only after verified rollback.",
+      "purpose": "Resolves and preflights the selected harness, forks an existing worktree onto an internal branch, and atomically seeds its title with the source session's current Group when requested before launching a fresh agent; cleanup retires only fork-owned state after verified rollback.",
       "dependencies": []
     },
     {
@@ -13533,7 +13544,7 @@
       "declaration": "createWorktreeForkHandler",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Worktree-only half of session.fork: branch off the source HEAD and seed its working tree (when copyDirty), minting no session and launching no terminal so Station can host the inherited harness itself. A selected launch harness is preflighted before mutation. No live-agent guard on the source — the seed is a read-only snapshot.",
+      "purpose": "Worktree-only half of session.fork: branch off the source HEAD and seed its working tree (when copyDirty), validating any source-Group inheritance intent while minting no session and launching no terminal so Station can host the inherited harness itself. A selected launch harness is preflighted before mutation. No live-agent guard on the source — the seed is a read-only snapshot.",
       "dependencies": []
     },
     {
@@ -13826,7 +13837,7 @@
       "declaration": "SessionStore",
       "kind": "interface",
       "role": "DRIVEN PORT",
-      "purpose": "Admits Observer-owned sessions with selected provider identity and maintains their lifecycle, native execution bindings, canonical worktree-scoped titles, recovery, and readiness. Seed, optional root Group placement, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles.",
+      "purpose": "Admits Observer-owned sessions with selected provider identity and maintains their lifecycle, native execution bindings, canonical worktree-scoped titles, recovery, and readiness. Seed, explicit root Group placement or current source-Group inheritance, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles.",
       "dependencies": []
     },
     {
@@ -14124,7 +14135,7 @@
       "declaration": "prepareExternalLaunch",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Returns a live or attachable managed identity first, then exactly recovers the canonical open Station session before permitting a fresh identity. Both launch paths preflight only the selected provider and pass provider-neutral resume options to the harness. A fresh identity is atomically seeded into its optional root Group before target publication, and confirmed failed launch cleanup removes its membership and owned inline Group without touching retained recovery state.",
+      "purpose": "Returns a live or attachable managed identity first, then exactly recovers the canonical open Station session before permitting a fresh identity. Both launch paths preflight only the selected provider and pass provider-neutral resume options to the harness. A fresh identity is atomically seeded with explicit root placement or the requested source session's current Group before target publication, and confirmed failed launch cleanup removes only its membership and owned inline Group without touching source or retained recovery state.",
       "dependencies": [
         {
           "path": "apps/observer/src/commands/harnessLaunchPreflight.ts",

@@ -459,6 +459,17 @@ const CASES: ModalCase[] = [
     reject: ["Branch"],
   },
   {
+    name: "fork details grouped source",
+    keys: [{ input: "F" }, { input: "1" }, { input: "", downArrow: true }],
+    snapshot: groupedManyProjectsSnapshot,
+    expect: [
+      "Fork Session",
+      "▸ Group",
+      "[x] create in Design refresh",
+      "Space/Enter toggle · ↑↓ focus · Esc back",
+    ],
+  },
+  {
     name: "fork details copy focus",
     keys: [{ input: "F" }, { input: "1" }, { input: "", downArrow: true }],
     expect: ["Fork Session", "▸ Copy", "Space/Enter toggle · ↑↓ focus · Esc back"],

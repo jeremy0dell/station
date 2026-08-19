@@ -1,6 +1,10 @@
 import type { ProviderProjectConfig, WorktreeObservation } from "@station/contracts";
 import type { RuntimeClock } from "@station/runtime";
-import type { EventJournal, SessionStore } from "../../persistence/index.js";
+import type {
+  EventJournal,
+  SessionSeedGroupProvenance,
+  SessionStore,
+} from "../../persistence/index.js";
 import type { ProviderRegistry } from "../../providers/registry.js";
 import type { ObserverCore } from "../../reconcile/core.js";
 import type { ObserverEventBus } from "../../runtime/eventBus.js";
@@ -19,9 +23,11 @@ import {
   publishSessionCreated,
   rememberedHarnessProviderForWorktree,
   removeWorktreeBestEffort,
+  resolveForkSessionGroupPlacement,
   runProviderMutation,
   type SessionCommandIdFactory,
   seedSession,
+  sessionSeedGroupPlacement,
   throwIfAborted,
   validateSnapshotRow,
 } from "./shared.js";
@@ -42,8 +48,8 @@ export type CreateSessionForkHandlerOptions = {
  * USE CASE
  *
  * Resolves and preflights the selected harness, forks an existing worktree onto an internal
- * branch, durably seeds its independent title, and launches a fresh agent; cleanup retires title
- * authority only after verified rollback.
+ * branch, and atomically seeds its title with the source session's current Group when requested
+ * before launching a fresh agent; cleanup retires only fork-owned state after verified rollback.
  */
 export function createSessionForkHandler(options: CreateSessionForkHandlerOptions): CommandHandler {
   const idFactory = {
@@ -72,6 +78,14 @@ export function createSessionForkHandler(options: CreateSessionForkHandlerOption
       });
     }
 
+    const groupIntent = resolveForkSessionGroupPlacement({
+      snapshot,
+      intent: payload.group,
+      projectId: project.id,
+      sourceWorktreeId: sourceRow.id,
+    });
+    const group = sessionSeedGroupPlacement(groupIntent, idFactory.sessionGroupId);
+
     const harnessProviderId =
       payload.harness?.provider ??
       (await rememberedHarnessProviderForWorktree({
@@ -97,6 +111,7 @@ export function createSessionForkHandler(options: CreateSessionForkHandlerOption
 
     let createdWorktree: WorktreeObservation | undefined;
     let sessionSeeded = false;
+    let groupProvenance: SessionSeedGroupProvenance | undefined;
 
     try {
       const worktree = await runProviderMutation(
@@ -121,7 +136,7 @@ export function createSessionForkHandler(options: CreateSessionForkHandlerOption
       createdWorktree = worktree;
       throwIfAborted(context.signal);
 
-      await seedSession({
+      const seed = await seedSession({
         persistence: options.persistence,
         sessionId,
         projectId: project.id,
@@ -129,9 +144,11 @@ export function createSessionForkHandler(options: CreateSessionForkHandlerOption
         initialTitle: payload.title ?? payload.branch,
         harness: harnessProviderId,
         terminalProvider: terminalProviderId,
+        ...(group === undefined ? {} : { group }),
         clock: options.clock,
       });
       sessionSeeded = true;
+      groupProvenance = seed.groupProvenance;
       throwIfAborted(context.signal);
 
       await ensureAgentWorkspace({
@@ -170,6 +187,7 @@ export function createSessionForkHandler(options: CreateSessionForkHandlerOption
         await discardSessionSeedBestEffort({
           persistence: options.persistence,
           sessionId,
+          ...(groupProvenance === undefined ? {} : { groupProvenance }),
           ...(worktreeRemoved && createdWorktree !== undefined
             ? { removedWorktree: { projectId: project.id, worktreeId: createdWorktree.id } }
             : {}),

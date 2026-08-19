@@ -21,6 +21,7 @@ import type { DashboardStateView } from "../../../src/state/types.js";
 import {
   createCommandSnapshot,
   createDashboardSnapshot,
+  createGroupedDashboardSnapshot,
   createNoProjectsSnapshot,
   createZeroWorktreeSnapshot,
   fixtureNow,
@@ -320,6 +321,42 @@ describe("dashboard runtime", () => {
     });
     expect(store.state.getState().localRows.pendingCreate).toHaveLength(1);
     expect(capabilities.quickCreateRequests).toHaveLength(1);
+  });
+
+  it("targets a grouped Fork optimistic row and capability request at the source Group", () => {
+    const snapshot = createGroupedDashboardSnapshot();
+    const capabilities = createFakeDashboardCapabilities();
+    capabilities.forkHandle = () =>
+      dashboardExecution(new Promise(() => {}), {
+        optimistic: "pending-create",
+        successDisposition: "wait-for-canonical",
+      });
+    const store = createTestDashboardRuntime({
+      service: new FakeTuiObserverService(snapshot),
+      initialSnapshot: snapshot,
+      capabilities,
+    });
+
+    store.actions.dispatch({
+      type: "forkSession.openDetails",
+      rowId: "ses_wt_web_idle",
+      returnTo: "dashboard",
+    });
+    store.actions.dispatch({ type: "forkSession.activate", actionId: "details.submit" });
+
+    expect(capabilities.forkRequests).toEqual([
+      expect.objectContaining({
+        sourceWorktreeId: "wt_web_idle",
+        group: {
+          kind: "source",
+          sourceSessionId: "ses_wt_web_idle",
+          groupId: "group_active",
+        },
+      }),
+    ]);
+    expect(store.state.getState().localRows.pendingCreate).toEqual([
+      expect.objectContaining({ projectId: "web", targetGroupId: "group_active" }),
+    ]);
   });
 
   it("owns failed optimistic rows without exposing mutation methods", async () => {

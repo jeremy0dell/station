@@ -22,10 +22,14 @@ afterEach(() => {
   for (const teardown of teardowns.splice(0)) teardown();
 });
 
-function detailsScreen(focus: ForkDetailsScreen["focus"]): ForkDetailsScreen {
-  return {
+function detailsScreen(
+  focus: ForkDetailsScreen["focus"],
+  options: { grouped?: boolean; inheritSourceGroup?: boolean } = {},
+): ForkDetailsScreen {
+  const screen: ForkDetailsScreen = {
     name: "fork",
     step: "details",
+    sourceSessionId: "ses_example" as ForkDetailsScreen["sourceSessionId"],
     sourceWorktreeId: "wt_example" as ForkDetailsScreen["sourceWorktreeId"],
     projectId: "station" as ForkDetailsScreen["projectId"],
     projectLabel: "station",
@@ -34,18 +38,32 @@ function detailsScreen(focus: ForkDetailsScreen["focus"]): ForkDetailsScreen {
     sourceAgentRunning: true,
     branch: "main-fork-aaaaaa",
     draftTitle: createEditableTextInputState("fork-title"),
+    ...(options.grouped === true
+      ? {
+          sourceGroup: {
+            id: "group_long" as NonNullable<ForkDetailsScreen["sourceGroup"]>["id"],
+            name: "Input parity and minimum-width interaction verification",
+          },
+        }
+      : {}),
+    inheritSourceGroup: options.inheritSourceGroup ?? true,
     copyDirty: true,
     focus,
   };
+  return screen;
 }
 
-async function render(focus: ForkDetailsScreen["focus"], width = 80) {
+async function render(
+  focus: ForkDetailsScreen["focus"],
+  width = 80,
+  options: { grouped?: boolean; inheritSourceGroup?: boolean } = {},
+) {
   const targets: StationMouseTarget[] = [];
   const setup = await testRender(
     <StationThemeProvider theme={nativeStationTheme}>
       <StationHoverProvider value>
         <StationMouseProvider value={(target) => targets.push(target)}>
-          <ForkSessionSheetView screen={detailsScreen(focus)} columns={width} rows={16} />
+          <ForkSessionSheetView screen={detailsScreen(focus, options)} columns={width} rows={16} />
         </StationMouseProvider>
       </StationHoverProvider>
     </StationThemeProvider>,
@@ -68,6 +86,36 @@ describe("ForkSessionSheetView", () => {
     expect(copy.setup.captureCharFrame()).toContain("Space/Enter toggle");
   });
 
+  it("renders an ungrouped source as a read-only row without a checkbox target", async () => {
+    const { setup, targets } = await render("name");
+    const lines = setup.captureCharFrame().split("\n");
+    const groupRow = lines.findIndex((line) => line.includes("Group"));
+    const groupCol = lines[groupRow]?.indexOf("Group") ?? -1;
+
+    expect(setup.captureCharFrame()).toContain("Group  (Ungrouped)");
+    expect(setup.captureCharFrame()).not.toContain("[ ] (Ungrouped)");
+    await setup.mockMouse.click(groupCol, groupRow, MouseButtons.LEFT);
+    expect(
+      targets.some(
+        (target) =>
+          target.kind === "forkSessionAction" && target.actionId === "details.group",
+      ),
+    ).toBe(false);
+  });
+
+  it("renders checked and unchecked grouped states with normal truncation", async () => {
+    const checked = await render("group", 40, { grouped: true });
+    expect(checked.setup.captureCharFrame()).toContain("▸ Group");
+    expect(checked.setup.captureCharFrame()).toContain("[x] create in Input parity");
+    expect(checked.setup.captureCharFrame()).toContain("Space/↵ toggle");
+
+    const unchecked = await render("group", 40, {
+      grouped: true,
+      inheritSourceGroup: false,
+    });
+    expect(unchecked.setup.captureCharFrame()).toContain("[ ] (Ungrouped)");
+  });
+
   it("emits exact bounded targets for Name, Copy, and Fork", async () => {
     const { setup, targets } = await render("name");
     const lines = setup.captureCharFrame().split("\n");
@@ -88,6 +136,16 @@ describe("ForkSessionSheetView", () => {
       { kind: "forkSessionAction", actionId: "details.copyDirty" },
       { kind: "forkSessionAction", actionId: "details.submit" },
     ]);
+  });
+
+  it("emits one Group target only for a grouped source", async () => {
+    const { setup, targets } = await render("group", 80, { grouped: true });
+    const lines = setup.captureCharFrame().split("\n");
+    const row = lines.findIndex((line) => line.includes("Group"));
+    const col = lines[row]?.indexOf("Group") ?? -1;
+
+    await setup.mockMouse.click(col, row, MouseButtons.LEFT);
+    expect(targets).toEqual([{ kind: "forkSessionAction", actionId: "details.group" }]);
   });
 
   it("keeps Copy hover bounded to its control cells", async () => {

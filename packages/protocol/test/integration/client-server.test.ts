@@ -538,6 +538,24 @@ describe("protocol client/server", () => {
         worktreeId: "wt_web_inline",
         group: { kind: "create", name: "Inline work" },
       });
+      await client.prepareExternalLaunch({
+        projectId: "web",
+        worktreeId: "wt_web_fork",
+        group: {
+          kind: "source",
+          sourceSessionId: "ses_web_source",
+          groupId: "grp_active",
+        },
+      });
+      expect(preparedParams[2]).toEqual({
+        projectId: "web",
+        worktreeId: "wt_web_fork",
+        group: {
+          kind: "source",
+          sourceSessionId: "ses_web_source",
+          groupId: "grp_active",
+        },
+      });
       const rejected = await sendRawRequest(socketPath, {
         schemaVersion: STATION_SCHEMA_VERSION,
         jsonrpc: "2.0",

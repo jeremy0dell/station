@@ -21,7 +21,11 @@ export type ForkDetailsScreen = Extract<
 type ForkScreenView = Extract<DashboardScreenView, { name: "fork" }>;
 type ForkDetailsScreenView = Extract<ForkScreenView, { step: "details" }>;
 
-export type ForkSessionActionId = "details.name" | "details.copyDirty" | "details.submit";
+export type ForkSessionActionId =
+  | "details.name"
+  | "details.group"
+  | "details.copyDirty"
+  | "details.submit";
 
 const forkChooseSlotBehavior = { dashboardHoverEnabled: true };
 const forkDetailsBehavior = {
@@ -41,6 +45,37 @@ export function forkScreenBehavior(screen: ForkScreenView) {
 
 type ForkWorktreeRowView = DashboardSnapshotView["rows"][number];
 
+/** Refreshes Fork's display-only source Group while preserving an explicit Ungrouped opt-out. */
+export function reconcileForkDetailsScreen(
+  screen: ForkDetailsScreen,
+  snapshot: DashboardSnapshotView,
+): ForkDetailsScreen {
+  const sourceSession = snapshot.sessions.find(
+    (candidate) =>
+      candidate.id === screen.sourceSessionId &&
+      candidate.projectId === screen.projectId &&
+      candidate.worktreeId === screen.sourceWorktreeId,
+  );
+  const sourceGroup =
+    sourceSession === undefined
+      ? undefined
+      : snapshot.sessionGroups.find(
+          (candidate) =>
+            candidate.projectId === screen.projectId &&
+            candidate.sessionIds.includes(sourceSession.id),
+        );
+  const next: ForkDetailsScreen = {
+    ...screen,
+    focus: screen.focus === "group" && sourceGroup === undefined ? "copyDirty" : screen.focus,
+  };
+  if (sourceGroup === undefined) {
+    delete next.sourceGroup;
+  } else {
+    next.sourceGroup = { id: sourceGroup.id, name: sourceGroup.name };
+  }
+  return next;
+}
+
 export type ForkSessionCreateValidation =
   | {
       ok: true;
@@ -49,6 +84,11 @@ export type ForkSessionCreateValidation =
       title: string;
       branch: string;
       copyDirty: boolean;
+      group?: {
+        kind: "source";
+        sourceSessionId: ForkDetailsScreenView["sourceSessionId"];
+        groupId: NonNullable<ForkDetailsScreenView["sourceGroup"]>["id"];
+      };
     }
   | { ok: false; message: string };
 
@@ -66,7 +106,7 @@ export function validateForkSessionCreate(
   if (project === undefined) {
     return { ok: false, message: "The source project is no longer available." };
   }
-  return {
+  const validation: Extract<ForkSessionCreateValidation, { ok: true }> = {
     ok: true,
     project,
     sourceWorktreeId: screen.sourceWorktreeId,
@@ -74,9 +114,29 @@ export function validateForkSessionCreate(
     branch,
     copyDirty: screen.copyDirty,
   };
+  const sourceSession = snapshot.sessions.find(
+    (candidate) =>
+      candidate.id === screen.sourceSessionId &&
+      candidate.projectId === screen.projectId &&
+      candidate.worktreeId === screen.sourceWorktreeId,
+  );
+  const sourceGroup =
+    sourceSession === undefined
+      ? undefined
+      : snapshot.sessionGroups.find(
+          (candidate) =>
+            candidate.projectId === screen.projectId &&
+            candidate.sessionIds.includes(sourceSession.id),
+        );
+  if (screen.inheritSourceGroup && sourceSession !== undefined && sourceGroup !== undefined) {
+    validation.group = {
+      kind: "source",
+      sourceSessionId: sourceSession.id,
+      groupId: sourceGroup.id,
+    };
+  }
+  return validation;
 }
-
-const FOCUS_ORDER = ["name", "copyDirty", "submit"] as const;
 
 export function handleForkKey(state: DashboardState, key: TuiKey): TuiTransition {
   if (state.screen.name !== "fork") {
@@ -105,6 +165,18 @@ export function handleForkSessionAction(
   switch (actionId) {
     case "details.name":
       return { state: { ...state, screen: { ...screen, focus: "name" } } };
+    case "details.group":
+      if (screen.sourceGroup === undefined) return { state };
+      return {
+        state: {
+          ...state,
+          screen: {
+            ...screen,
+            focus: "group",
+            inheritSourceGroup: !screen.inheritSourceGroup,
+          },
+        },
+      };
     case "details.copyDirty":
       return {
         state: {
@@ -155,6 +227,7 @@ export function openForkDetailsForRow(
   const screen: ForkDetailsScreen = {
     name: "fork",
     step: "details",
+    sourceSessionId: sessionRow.session.id,
     sourceWorktreeId: row.id,
     projectId: row.projectId,
     projectLabel: row.projectLabel,
@@ -165,9 +238,16 @@ export function openForkDetailsForRow(
     ),
     branch,
     draftTitle: createEditableTextInputState(`${row.branch}-fork`),
+    inheritSourceGroup: true,
     copyDirty: true,
     focus: "name",
   };
+  const sourceGroup = snapshot.sessionGroups.find((candidate) =>
+    candidate.sessionIds.includes(sessionRow.session.id),
+  );
+  if (sourceGroup !== undefined) {
+    screen.sourceGroup = { id: sourceGroup.id, name: sourceGroup.name };
+  }
   if (options.returnTo !== undefined) {
     screen.returnTo = options.returnTo;
   }
@@ -206,19 +286,26 @@ function handleDetailsKey(
   }
 
   if (isReturnKey(key)) {
-    return handleForkSessionAction(
-      state,
-      screen.focus === "copyDirty" ? "details.copyDirty" : "details.submit",
-    );
+    const actionId =
+      screen.focus === "group"
+        ? "details.group"
+        : screen.focus === "copyDirty"
+          ? "details.copyDirty"
+          : "details.submit";
+    return handleForkSessionAction(state, actionId);
   }
 
   if (key.upArrow === true || key.downArrow === true) {
     return {
       state: {
         ...state,
-        screen: { ...screen, focus: cycleFocus(screen.focus, key.upArrow === true) },
+        screen: { ...screen, focus: cycleFocus(screen, key.upArrow === true) },
       },
     };
+  }
+
+  if (screen.focus === "group") {
+    return key.input === " " ? handleForkSessionAction(state, "details.group") : { state };
   }
 
   if (screen.focus === "copyDirty") {
@@ -289,6 +376,7 @@ function submitFork(state: DashboardState, screen: ForkDetailsScreen): TuiTransi
         title: validation.title,
         hiddenBranch: validation.branch,
         copyDirty: validation.copyDirty,
+        ...(validation.group === undefined ? {} : { group: validation.group }),
         ...(inheritedHarness === undefined ? {} : { inheritedHarness }),
       },
     ],
@@ -304,14 +392,15 @@ function rejected(
   return { state: { ...state, screen: { ...screen, validationError: message } } };
 }
 
-function cycleFocus(
-  focus: ForkDetailsScreen["focus"],
-  backwards: boolean,
-): ForkDetailsScreen["focus"] {
-  const index = FOCUS_ORDER.indexOf(focus);
+function cycleFocus(screen: ForkDetailsScreen, backwards: boolean): ForkDetailsScreen["focus"] {
+  const focusOrder: readonly ForkDetailsScreen["focus"][] =
+    screen.sourceGroup === undefined
+      ? ["name", "copyDirty", "submit"]
+      : ["name", "group", "copyDirty", "submit"];
+  const index = focusOrder.indexOf(screen.focus);
   const delta = backwards ? -1 : 1;
-  const next = (index + delta + FOCUS_ORDER.length) % FOCUS_ORDER.length;
-  return FOCUS_ORDER[next] ?? "name";
+  const next = (index + delta + focusOrder.length) % focusOrder.length;
+  return focusOrder[next] ?? "name";
 }
 
 function assertNever(_value: never): never {

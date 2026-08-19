@@ -30,12 +30,17 @@ const SOURCE_LABEL_WIDTH = 8;
 const CONTROL_LABEL_WIDTH = 6;
 const CHOOSE_SLOT_CONTENT_ROWS = 5;
 const CHOOSE_SLOT_MIN_HEIGHT = 7;
-const DETAILS_BASE_CONTENT_ROWS = 7;
-const DETAILS_MIN_HEIGHT = 9;
+const DETAILS_BASE_CONTENT_ROWS = 8;
+const DETAILS_MIN_HEIGHT = 10;
 
 const FORK_ACTION_HELP = {
   expanded: "↑↓ focus · Enter fork · Esc back",
   compact: "↑↓ · Enter fork · Esc",
+} as const satisfies ResponsiveSheetText;
+
+const GROUP_HELP = {
+  expanded: "Space/Enter toggle · ↑↓ focus · Esc back",
+  compact: "Space/↵ toggle · ↑↓ · Esc back",
 } as const satisfies ResponsiveSheetText;
 
 const COPY_DIRTY_HELP = {
@@ -45,6 +50,7 @@ const COPY_DIRTY_HELP = {
 
 const DETAILS_HELP_BY_FOCUS = {
   name: FORK_ACTION_HELP,
+  group: GROUP_HELP,
   copyDirty: COPY_DIRTY_HELP,
   submit: FORK_ACTION_HELP,
 } as const satisfies Record<ForkDetailsScreen["focus"], ResponsiveSheetText>;
@@ -105,6 +111,12 @@ function ForkDetails({
       screen.draftTitle.value
     );
   const footerText = responsiveSheetFooterText(contentWidth, DETAILS_HELP_BY_FOCUS[focus]);
+  const groupValue =
+    screen.sourceGroup === undefined
+      ? "(Ungrouped)"
+      : screen.inheritSourceGroup
+        ? `[x] create in ${screen.sourceGroup.name}`
+        : "[ ] (Ungrouped)";
   const extraRows = [
     screen.sourceAgentRunning,
     screen.validationError !== undefined,
@@ -133,6 +145,24 @@ function ForkDetails({
         focused={focus === "name"}
         mouseTarget={{ kind: "forkSessionAction", actionId: "details.name" }}
       />
+      {screen.sourceGroup === undefined ? (
+        <SheetLabelValue
+          width={contentWidth}
+          label="Group"
+          labelWidth={CONTROL_LABEL_WIDTH}
+          value={groupValue}
+        />
+      ) : (
+        <SheetControlRow
+          width={contentWidth}
+          label="Group"
+          labelWidth={CONTROL_LABEL_WIDTH}
+          value={groupValue}
+          valueCells={groupValue.length}
+          focused={focus === "group"}
+          mouseTarget={{ kind: "forkSessionAction", actionId: "details.group" }}
+        />
+      )}
       <SheetControlRow
         width={contentWidth}
         label="Copy"

@@ -17,6 +17,7 @@ import {
   defaultSessionCommandIdFactory,
   findProjectOrThrow,
   rememberedHarnessProviderForWorktree,
+  resolveForkSessionGroupPlacement,
   type SessionCommandIdFactory,
   seedSession,
   sessionSeedGroupPlacement,
@@ -56,8 +57,9 @@ export type ExternalLaunchOutcome<T> = {
  * Returns a live or attachable managed identity first, then exactly recovers the canonical open
  * Station session before permitting a fresh identity. Both launch paths preflight only the selected
  * provider and pass provider-neutral resume options to the harness. A fresh identity is atomically
- * seeded into its optional root Group before target publication, and confirmed failed launch cleanup
- * removes its membership and owned inline Group without touching retained recovery state.
+ * seeded with explicit root placement or the requested source session's current Group before target
+ * publication, and confirmed failed launch cleanup removes only its membership and owned inline
+ * Group without touching source or retained recovery state.
  */
 export async function prepareExternalLaunch(
   deps: ExternalLaunchDeps,
@@ -198,8 +200,16 @@ async function prepareExternalLaunchForWorktree(
   const freshSession = retainedSession === undefined;
   const idFactory = { ...defaultSessionCommandIdFactory, ...deps.idFactory };
   const sessionId = retainedSession?.id ?? idFactory.sessionId();
+  const acceptedGroupIntent =
+    params.group?.kind === "source"
+      ? resolveForkSessionGroupPlacement({
+          snapshot,
+          intent: params.group,
+          projectId: project.id,
+        })
+      : params.group;
   const group = freshSession
-    ? sessionSeedGroupPlacement(params.group, idFactory.sessionGroupId)
+    ? sessionSeedGroupPlacement(acceptedGroupIntent, idFactory.sessionGroupId)
     : undefined;
   const seededAt = nowIso(deps.clock);
   let opened: ManagedOpenWorkspaceResult | undefined;

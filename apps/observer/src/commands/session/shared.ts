@@ -1,12 +1,13 @@
 import { randomUUID } from "node:crypto";
 import {
+  type FreshSessionGroupPlacementIntent,
   type ProviderId,
   type ProviderProjectConfig,
   type SafeError,
   type SessionGroupId,
-  type SessionGroupPlacementIntent,
   type SessionId,
   type SessionView,
+  type SourceSessionGroupPlacementIntent,
   type StationSnapshot,
   type TerminalLaunchProcessRequest,
   type TerminalLaunchProcessResult,
@@ -76,11 +77,47 @@ export const defaultSessionCommandIdFactory: SessionCommandIdFactory = {
 
 /** Converts boundary placement intent into the exact placement owned by SessionStore. */
 export function sessionSeedGroupPlacement(
-  intent: SessionGroupPlacementIntent | undefined,
+  intent: FreshSessionGroupPlacementIntent | undefined,
   sessionGroupId: SessionCommandIdFactory["sessionGroupId"],
 ): SessionSeedGroupPlacement | undefined {
   if (intent === undefined || intent.kind === "existing") return intent;
+  if (intent.kind === "source") {
+    return { kind: "source", sourceSessionId: intent.sourceSessionId };
+  }
   return { kind: "create", groupId: sessionGroupId(), name: intent.name };
+}
+
+/** Re-resolves a submitted fork inheritance intent from current canonical source membership. */
+export function resolveForkSessionGroupPlacement(input: {
+  snapshot: StationSnapshot;
+  intent: SourceSessionGroupPlacementIntent | undefined;
+  projectId: string;
+  sourceWorktreeId?: string;
+}): SourceSessionGroupPlacementIntent | undefined {
+  const intent = input.intent;
+  if (intent === undefined) return undefined;
+  const sourceSession = input.snapshot.sessions.find(
+    (candidate) => candidate.id === intent.sourceSessionId,
+  );
+  if (sourceSession === undefined) return undefined;
+  if (
+    sourceSession.projectId !== input.projectId ||
+    (input.sourceWorktreeId !== undefined && sourceSession.worktreeId !== input.sourceWorktreeId)
+  ) {
+    throw commandValidationError({
+      code: "FORK_GROUP_SOURCE_MISMATCH",
+      message: "The source session Group intent no longer matches the selected worktree.",
+      projectId: input.projectId,
+      worktreeId: input.sourceWorktreeId,
+      sessionId: sourceSession.id,
+    });
+  }
+  const group = input.snapshot.sessionGroups.find(
+    (candidate) =>
+      candidate.projectId === input.projectId && candidate.sessionIds.includes(sourceSession.id),
+  );
+  if (group === undefined) return undefined;
+  return { kind: "source", sourceSessionId: sourceSession.id, groupId: group.id };
 }
 
 export function findProjectOrThrow(
@@ -220,7 +257,8 @@ export async function seedSession(input: {
   });
   if (result.ok) return result;
 
-  const groupId = input.group?.groupId ?? "generated";
+  const groupId =
+    input.group?.kind === "source" ? "source-group" : (input.group?.groupId ?? "generated");
   switch (result.reason) {
     case "group_not_found":
       throw sessionGroupMissingError(groupId, input.projectId);

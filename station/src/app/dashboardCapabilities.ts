@@ -180,6 +180,7 @@ export function createDashboardCapabilities(
             branch: request.hiddenBranch,
             copyDirty: request.copyDirty,
             harness: request.inheritedHarness,
+            ...(request.group === undefined ? {} : { group: request.group }),
           }),
         );
       },

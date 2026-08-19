@@ -365,15 +365,17 @@ reattach; pane borders and neighboring panes must remain unlinked.
 - `DashboardStateSource` returns `DashboardStateView`, a recursively readonly type projection that includes snapshots, screens, local rows, widgets, arrays, maps, and sets. The projection preserves the store's exact object and notification identities: it performs no runtime copying, freezing, or proxying. Dashboard readers and Station consumers must accept the exported readonly view types rather than importing private mutable state models.
 - Presentation receives the readonly `DashboardStateSource` for dashboard projection and the canonical client source where snapshot-only rendering requires it. Input adapters receive only their explicit dashboard state and action capabilities, while native and standalone composition roots alone own full runtime lifecycle and inject terminal-specific implementations of the semantic capability groups. Config persistence receives only the dashboard subscription and `pushToast` capability it needs.
 - Native and standalone input adapters dispatch the closed dashboard action contract rather than importing reducers, replacing runtime state, or returning renderer-control intents. Dashboard-core invokes the injected semantic capability and owns optimistic rows, success/failure dispositions, notices, toasts, and expiry; capability implementations receive stable product requests and canonical client state, never dashboard state or mutation methods. Failed Quick Session rows retain the four-second `expiresAt` authority but share one runtime-owned timer targeting the earliest deadline; each firing removes every expired row and schedules the next deadline. Deliberate New Session has no optimistic or failed root row: its retained sheet is the progress and retry surface. Native successful-but-unconfirmed creation closes that sheet with a refresh-before-retry warning instead of reopening a duplicate submission path.
-- New Session and Fork Session expose **Name** as the editable product concept. New Session initially names itself after its generated branch; Fork Session uses `<source>-fork` while its hidden branch carries a collision-resistant token that changes on each fresh open, so an unobserved Git-ref collision is recoverable by retrying. Later name edits may contain spaces and punctuation and never mutate that hidden branch identity. Quick Session uses its generated branch as the default name. New Session also exposes **Group** between Agent and Create: `G` opens a root-only chooser with `U` Ungrouped, normal slots, and `N` inline Create. Project changes and invalid snapshot replacements reset placement to Ungrouped; Group renames preserve selection by ID.
+- New Session and Fork Session expose **Name** as the editable product concept. New Session initially names itself after its generated branch; Fork Session uses `<source>-fork` while its hidden branch carries a collision-resistant token that changes on each fresh open, so an unobserved Git-ref collision is recoverable by retrying. Later name edits may contain spaces and punctuation and never mutate that hidden branch identity. Quick Session uses its generated branch as the default name. New Session also exposes **Group** between Agent and Create: `G` opens a root-only chooser with `U` Ungrouped, normal slots, and `N` inline Create. Project changes and invalid snapshot replacements reset placement to Ungrouped; Group renames preserve selection by ID. Fork Details has no picker: a grouped source gets a checked **create in Group** control, while an ungrouped source shows read-only `(Ungrouped)`.
 - Station service code may use `@station/runtime` (and the shared `@station/client`) for observer IO, subscriptions, command dispatch, timeout, retry, cancellation, and cleanup boundaries. Prefer Effect in boundary code when a single path must coordinate async iterators, cancellation/interruption, cleanup, retry/reconnect, timeouts, and typed error conversion. Keep that Effect usage behind Promise/AsyncIterable facades for React callers.
 - The UI may filter, group, sort, label, and decorate snapshot rows. It must not infer agent truth from provider-specific details.
 - Treat `snapshot.sessions` as session-membership and session/activity-count truth. Dashboard rows,
   filtering, selection, and actions project those sessions and join `snapshot.rows` only for checkout
   metadata; bare worktrees remain inventory and do not appear in the primary session list.
   `snapshot.sessionGroups` exclusively organizes those sessions under their Project; the current
-  dashboard flattens optional parent links and leaves Quick Session/Fork optimistic creates at the
-  Project root. Deliberate grouped creation first appears from a canonical snapshot with membership.
+  dashboard flattens optional parent links. Quick Session and explicitly Ungrouped Fork optimistic
+  creates stay at the Project root, while a Group-inheriting Fork targets its pending row at the
+  source Group until canonical membership replaces it. Deliberate grouped creation first appears
+  from a canonical snapshot with membership.
 - `terminal.focusable` describes external dashboard control, not native Station
   interaction. Native row activation resolves an advertised managed attachment
   and creates or reveals the local pane without dispatching `terminal.focus`;
@@ -665,11 +667,17 @@ Yes/No controls. Keep is the safe initial focus; Left/Right moves without wrappi
 activates the current choice, and Y/N retain their direct meanings. Both controls dispatch stable
 semantic actions, use the shared bounded button treatment, and keep trailing sheet cells inert.
 
-Fork Session renders Name and Copy through the same bounded field-control grammar as Create Session.
-Clicking Name focuses its editor, clicking Copy focuses and toggles it once, and the Fork button
-submits through a shared semantic action. Copy-focused Enter toggles rather than submitting; Enter
-on Name or Fork submits. The managed-session capability hosts native forks in a Station pane and
-routes standalone/tmux forks through the shared Observer-backed implementation.
+Fork Session renders Name, Group, and Copy through the same bounded field-control grammar as Create
+Session. For a grouped source, Group is a focusable checkbox that defaults to `[x] create in
+<Group>`; Space, focused Enter, and pointer activation toggle it to `[ ] (Ungrouped)` through one
+semantic action. For an ungrouped source it is read-only `(Ungrouped)` with no inert checkbox or
+focus stop. The displayed name follows canonical source membership and uses ordinary sheet
+truncation. Group renames or moves update by stable identity while the sheet is open; an explicit
+opt-out remains Ungrouped, and deletion before seed commit lets the fork succeed Ungrouped. Clicking
+Name focuses its editor, clicking Copy focuses and toggles it once, and the Fork button submits
+through a shared semantic action. Copy-focused Enter toggles rather than submitting; Enter on Name
+or Fork submits. The managed-session capability hosts native forks in a Station pane and routes
+standalone/tmux forks through the shared Observer-backed implementation.
 
 Create Session review renders Project, Name, Agent, and Group as compact field controls, followed by a
 compact Create button. Labels, bold yellow accelerators (`P`, `N`, `A`, `G`, and `C`), values, and inline
