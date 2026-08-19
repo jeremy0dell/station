@@ -33,6 +33,9 @@ describe("ContextMenuSurface", () => {
       expect(frame).toContain("Split Right");
       expect(frame).toContain("Split Below");
       expect(frame).toContain("Close Pane");
+      expect(frame.split("\n").find((line) => line.includes("Close Pane"))).toContain(
+        "|▸Close Pane",
+      );
     } finally {
       setup.renderer.destroy();
     }
@@ -149,12 +152,14 @@ describe("ContextMenuSurface", () => {
     try {
       const frame = setup.captureCharFrame();
       const spans = setup.captureSpans();
-      expect(frame.split("\n")[1]).toMatch(/Quick session\s+Q\|/);
-      expect(frame.split("\n")[2]).toMatch(/New session…\s+N\|/);
-      expect(frame.split("\n")[3]).toContain("+--------------------+");
-      expect(frame.split("\n")[4]).toMatch(/Group settings…\s+S\|/);
-      expect(frame.split("\n")[5]).toContain("+--------------------+");
-      expect(frame.split("\n")[6]).toMatch(/Remove Group…\s+R\|/);
+      const lines = frame.split("\n");
+      expect(lines[1]).toMatch(/\|▸Quick session\s+Q\|/);
+      expect(lines[2]).toMatch(/\| New session…\s+N\|/);
+      expect(lines[3]).toContain("+--------------------+");
+      expect(lines[4]).toMatch(/\| Group settings…\s+S\|/);
+      expect(lines[5]).toContain("+--------------------+");
+      expect(lines[6]).toMatch(/\| Remove Group…\s+R\|/);
+      expect(lines.filter((line) => line.includes("▸"))).toHaveLength(1);
       expect(spanAtFrameCell(spans, 6, 2)?.fg).not.toEqual(spanAtFrameCell(spans, 1, 2)?.fg);
       await setup.mockMouse.click(2, 6, MouseButtons.LEFT);
       expect(calls.at(-1)).toEqual({ kind: "contextMenuItem", itemIndex: 3 });

@@ -2199,17 +2199,13 @@ async function fixtureDiagnostics(fixture: DashboardFixture): Promise<string> {
 }
 
 function isDashboardContent(content: string): boolean {
-  return (
-    content.includes("FLEET") &&
-    content.includes("Station snapshot mock") &&
-    content.includes("? help")
-  );
+  return content.includes("FLEET") && content.includes("station · overview");
 }
 
 function isGroupedManyProjectDashboardContent(content: string): boolean {
   return (
     content.includes("FLEET") &&
-    content.includes("╭▼ Design refresh") &&
+    content.includes("╭ ▼ Design refresh") &&
     content.includes("group-contracts") &&
     content.includes("? help")
   );
@@ -2397,7 +2393,7 @@ function dashboardFrameMatchesGeometry(content: string, dimensions: Dimensions):
     lines[2] === divider &&
     lines[3]?.includes("SESSION") === true &&
     lines[dimensions.rows - 2] === divider &&
-    lines[dimensions.rows - 1]?.startsWith("↵ open") === true &&
+    lines[dimensions.rows - 1]?.startsWith("↵ activate") === true &&
     !lines.includes("─")
   );
 }
@@ -2412,7 +2408,7 @@ function assertDashboardFrameGeometry(
   expect(lines[2], `${label} top divider`).toBe(divider);
   expect(lines[3], `${label} column header`).toContain("SESSION");
   expect(lines[dimensions.rows - 2], `${label} bottom divider`).toBe(divider);
-  expect(lines[dimensions.rows - 1], `${label} footer`).toMatch(/^↵ open/u);
+  expect(lines[dimensions.rows - 1], `${label} footer`).toMatch(/^↵ activate/u);
   expect(
     lines.filter((line) => line === divider),
     `${label} divider rows`,

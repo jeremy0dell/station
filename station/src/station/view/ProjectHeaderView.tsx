@@ -60,7 +60,7 @@ export function ProjectHeaderView({
         persistentFilterMatch={persistentFilterMatch}
       />
       <box flexGrow={1} height={1} />
-      <ProjectHeaderSeparator dimmed={dimmed} />
+      <ProjectHeaderCursor focused={focusedCellId === "shell"} dimmed={dimmed} />
       <ProjectHeaderAction
         label={shellLabel}
         rowId={rowId}
@@ -68,7 +68,7 @@ export function ProjectHeaderView({
         focused={focusedCellId === "shell"}
         dimmed={dimmed}
       />
-      <ProjectHeaderSeparator dimmed={dimmed} />
+      <ProjectHeaderCursor focused={focusedCellId === "quickSession"} dimmed={dimmed} />
       <ProjectHeaderAction
         label={quickSessionLabel}
         rowId={rowId}
@@ -76,7 +76,7 @@ export function ProjectHeaderView({
         focused={focusedCellId === "quickSession"}
         dimmed={dimmed}
       />
-      <ProjectHeaderSeparator dimmed={dimmed} />
+      <ProjectHeaderCursor focused={focusedCellId === "menu"} dimmed={dimmed} />
       <ProjectHeaderAction
         label={MENU_AFFORDANCE_LABEL}
         rowId={rowId}
@@ -120,11 +120,12 @@ function ProjectHeaderPrimary({
       onMouseOver={() => setHover(true)}
       onMouseOut={() => setHover(false)}
     >
+      {focused ? "▸" : " "}
       <ProjectHeaderLabel
         project={project}
         collapsed={collapsed}
         groupCount={groupCount}
-        width={width}
+        width={Math.max(0, width - 1)}
         dimmed={dimmed}
         persistentFilterMatch={persistentFilterMatch}
       />
@@ -132,7 +133,7 @@ function ProjectHeaderPrimary({
   );
 }
 
-// Each action has its own trailing cell so its click cannot also toggle the project header.
+// Each action's preceding cursor cell stays inert so whitespace cannot activate the action.
 function ProjectHeaderAction({
   label,
   rowId,
@@ -164,15 +165,15 @@ function ProjectHeaderAction({
   );
 }
 
-function ProjectHeaderSeparator({ dimmed }: { dimmed: boolean }) {
+function ProjectHeaderCursor({ focused, dimmed }: { focused: boolean; dimmed: boolean }) {
   const theme = useStationTheme();
   return (
     <text
       flexShrink={0}
-      fg={toOpenTuiColor(theme.text.muted)}
+      fg={toOpenTuiColor(focused ? theme.status.working : theme.text.muted)}
       attributes={dimmed ? TextAttributes.DIM : TextAttributes.NONE}
     >
-      {" "}
+      {focused ? "▸" : " "}
     </text>
   );
 }

@@ -390,6 +390,10 @@ project. Inside the snapshot-writer turn they validate configured-project and
 canonical-session identity plus requested parent ancestry, enter a non-cancellable commit
 immediately before calling `SessionGroupStore`, and project only the command project without
 reconcile repair.
+Reparenting accepts only an existing parent in the same project; a missing or cross-project parent,
+self-parenting, and every direct or transitive cycle fail atomically before commit. Deletion ungroups
+only the deleted Group's direct members and reparents its direct children to its parent or the project
+root. Neither operation closes or removes a session, agent, terminal, worktree, or provider resource.
 Changed Group events derive from the mutation result and are persisted and published in
 canonical order before command success; validated no-ops emit no Group event. This path
 does not read providers or publish `observer.reconciled`.
@@ -935,7 +939,7 @@ participate. Nonliteral dynamic module edges fail because their ownership cannot
 be resolved. External literal dynamics such as `bun:sqlite` and `node:sqlite`
 remain recorded external edges rather than source-cycle members.
 
-The current Observer graph contains 147 production modules and no strongly
+The current Observer graph contains 146 production modules and no strongly
 connected component. `migrations/migration.ts` now owns
 `ObserverSqliteMigration`, so numbered migration declarations do not depend on
 their ordered aggregator. `reconcile/reconcileResult.ts` owns
