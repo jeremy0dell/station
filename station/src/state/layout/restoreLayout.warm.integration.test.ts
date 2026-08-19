@@ -124,6 +124,7 @@ function warmDeps(socketPath: string, live: HostListEntry[], expectedBuildVersio
 describe("warm reattach (real host: aux PTY survives a UI restart)", () => {
   it("warm-reattaches a live aux PTY with its scrollback, then cold-respawns once it is gone", async () => {
     const scripted = createScriptedTerminal({ cols: 80, rows: 24 });
+    scripted.terminal.kill = () => scripted.helpers.emitExit({ exitCode: 0 });
     const socketPath = await startHostWith(scripted);
     const client = createStationHostClient({ socketPath });
 
