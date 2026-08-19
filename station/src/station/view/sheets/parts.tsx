@@ -153,12 +153,12 @@ export function SheetChoiceLine({
   const dispatch = useStationMouse();
   const [hover, setHover] = useStationHoverState();
   const focused = hover || selected;
-  // The marker reuses the prefix's leading margin column so the key/label
-  // columns stay aligned and the row width is unchanged whether or not it is set.
+  // Cursor and canonical selection stay independent without changing row width.
+  const cursor = selected ? "▸" : " ";
   const marker = current ? "✓" : " ";
   const keyPrefix = `${choiceKey} `;
   const detailPrefix = `${label} `;
-  const detailWidth = Math.max(0, width - 1 - keyPrefix.length - detailPrefix.length);
+  const detailWidth = Math.max(0, width - 2 - keyPrefix.length - detailPrefix.length);
   const visibleDetail = detail.slice(0, detailWidth);
   // Whatever the detail leaves unused is split into a gap then the right-aligned
   // note, so the row stays exactly `width` wide whether or not a note is set.
@@ -173,6 +173,7 @@ export function SheetChoiceLine({
       onMouseOver={() => setHover(true)}
       onMouseOut={() => setHover(false)}
     >
+      {cursor}
       <span {...(current ? { fg: toOpenTuiColor(theme.action.primary) } : {})}>{marker}</span>
       {keyPrefix}
       {detailPrefix}

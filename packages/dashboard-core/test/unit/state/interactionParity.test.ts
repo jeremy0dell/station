@@ -366,24 +366,63 @@ describe("primary workflow interaction parity", () => {
       { type: "dashboard.cell.activate", rowId, cellId: "menu" },
       context,
     ).state;
-    const pointer = handleTuiAction(
-      menu,
-      { type: "groupMenu.activate", actionId: "quickSession" },
-      context,
-    );
-    const focused = handleTuiKey(menu, { input: "\r", return: true }, context);
-    const shortcut = handleTuiKey(menu, { input: "Q" }, context);
+    const cases = [
+      { actionId: "quickSession", shortcut: "Q", down: 0 },
+      { actionId: "newSession", shortcut: "N", down: 1 },
+      { actionId: "settings", shortcut: "S", down: 2 },
+      { actionId: "remove", shortcut: "R", down: 3 },
+    ] as const;
 
-    for (const transition of [pointer, focused, shortcut]) {
-      expect(transition.state.screen).toEqual({ name: "dashboard" });
-      expect(transition.state.dashboardFocus).toEqual({ rowId, cellId: "menu" });
-      expect(transition.operations).toEqual([
-        expect.objectContaining({
-          type: "quickCreateSessionInGroup",
-          groupId: "group_active",
-          fallbackCell: "menu",
-        }),
-      ]);
+    for (const testCase of cases) {
+      let focusedMenu = menu;
+      for (let index = 0; index < testCase.down; index += 1) {
+        focusedMenu = handleTuiKey(focusedMenu, { input: "", downArrow: true }, context).state;
+      }
+      const transitions = [
+        handleTuiAction(menu, { type: "groupMenu.activate", actionId: testCase.actionId }, context),
+        handleTuiKey(focusedMenu, { input: "\r", return: true }, context),
+        handleTuiKey(menu, { input: testCase.shortcut }, context),
+      ];
+
+      for (const transition of transitions) {
+        expect(transition.state.dashboardFocus).toEqual({ rowId, cellId: "menu" });
+        switch (testCase.actionId) {
+          case "quickSession":
+            expect(transition.state.screen).toEqual({ name: "dashboard" });
+            expect(transition.operations).toEqual([
+              expect.objectContaining({
+                type: "quickCreateSessionInGroup",
+                groupId: "group_active",
+                fallbackCell: "menu",
+              }),
+            ]);
+            break;
+          case "newSession":
+            expect(transition.state.screen).toMatchObject({
+              name: "newSession",
+              flow: {
+                mode: "review",
+                selectedProjectId: "web",
+                groupSelection: { kind: "existing", groupId: "group_active" },
+              },
+            });
+            expect(transition.operations).toBeUndefined();
+            break;
+          case "settings":
+          case "remove":
+            expect(transition.state.screen).toMatchObject({
+              name: "groupSettings",
+              projectId: "web",
+              groupId: "group_active",
+              section: testCase.actionId === "settings" ? "general" : "remove",
+              ...(testCase.actionId === "remove"
+                ? { focus: "detail", detailFocus: "removeConfirm" }
+                : { focus: "list" }),
+            });
+            expect(transition.operations).toBeUndefined();
+            break;
+        }
+      }
     }
   });
 

@@ -29,6 +29,7 @@ import {
   applyAddProjectFolderReviewFailed,
   applyAddProjectFolderReviewed,
   applyAddProjectSubmitted,
+  activateSessionGroupMenuAction,
   createInitialTuiState,
   handleTuiKey,
   openRemoveWorktreeConfirmForRow,
@@ -322,10 +323,11 @@ const CASES: ModalCase[] = [
     snapshot: groupedManyProjectsSnapshot,
     size: { width: 40, height: 12 },
     prepare: (state) =>
-      handleTuiKey(
-        openGroupSettings(state, "group_design_refresh", "remove"),
-        { input: "", rightArrow: true },
-      ).state,
+      activateSessionGroupMenuAction(state, {
+        projectId: "station",
+        groupId: "group_design_refresh",
+        actionId: "remove",
+      }).state,
     expect: ["Remove Group", "remain open", "delete Design refresh", "Remove", "Back"],
   },
   {

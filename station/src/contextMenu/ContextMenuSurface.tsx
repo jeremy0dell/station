@@ -112,7 +112,7 @@ function ContextMenuItemRow({
         onMouseDown={onMouseDown}
         onMouseMove={onMouseMove}
       >
-        {`| ${content}|`}
+        {`|${active ? "▸" : " "}${content}|`}
       </text>
     </box>
   );

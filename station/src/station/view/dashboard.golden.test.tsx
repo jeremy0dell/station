@@ -328,12 +328,21 @@ describe("dashboard golden frames", () => {
         quickSession: line.indexOf("[qs]"),
         menu: line.indexOf("[▾]"),
       } as const;
+      const markerColumns = {
+        identity: line.indexOf("▼ Design refresh") - 1,
+        quickSession: samples.quickSession - 1,
+        menu: samples.menu - 1,
+      } as const;
       const spans = setup.captureSpans();
+      const focusMarkerColumn = line.indexOf("▸");
 
       expect(spanHex(spanAtFrameCell(spans, row, 0))).toBe(
         stationColorSnapshotValue(nativeStationTheme.status.working),
       );
       expect((spanAtFrameCell(spans, row, 0)?.attributes ?? 0) & TextAttributes.DIM).toBe(0);
+      expect(line.match(/▸/gu)).toHaveLength(1);
+      expect(focusMarkerColumn).toBeGreaterThan(0);
+      expect(focusMarkerColumn).toBe(markerColumns[cellId as keyof typeof markerColumns]);
       for (const [target, column] of Object.entries(samples)) {
         expect(column).toBeGreaterThan(0);
         const background = spanBgHex(spanAtFrameCell(spans, row, column));
@@ -370,6 +379,8 @@ describe("dashboard golden frames", () => {
 
     expect(spanHex(ring)).toBe(stationColorSnapshotValue(nativeStationTheme.status.working));
     expect(((ring?.attributes ?? 0) & TextAttributes.DIM) !== 0).toBe(true);
+    expect(memberLines[memberRow]).toMatch(/^│▏/u);
+    expect(memberLines[memberRow]?.match(/▏/gu)).toHaveLength(1);
     expect(spanBgHex(spanAtFrameCell(spans, memberRow, memberColumn))).toBe(
       stationColorSnapshotValue(nativeStationTheme.interaction.keyboardFocus),
     );
@@ -1091,10 +1102,11 @@ describe("dashboard golden frames", () => {
         const shellStart = line.indexOf(shellLabel);
         const quickStart = line.indexOf(quickLabel);
         const defaultStart = line.indexOf("[▾]");
-        const primaryEnd = line.slice(0, shellStart).trimEnd().length;
+        const primaryEnd = line.slice(0, shellStart - 1).trimEnd().length;
         expect(row).toBeGreaterThan(0);
-        expect(line.trimStart().startsWith("▼ station")).toBe(true);
+        expect(line.trimStart()).toMatch(/^(?:▸)?▼ station/u);
         expect(line).not.toContain("▏");
+        expect(line.match(/▸/gu)).toHaveLength(1);
 
         const spans = setup.captureSpans();
         const samples = {
@@ -1103,6 +1115,13 @@ describe("dashboard golden frames", () => {
           quickSession: quickStart,
           menu: defaultStart,
         } as const;
+        const markerColumns = {
+          primary: line.indexOf("▼ station") - 1,
+          shell: shellStart - 1,
+          quickSession: quickStart - 1,
+          menu: defaultStart - 1,
+        } as const;
+        expect(line.indexOf("▸")).toBe(markerColumns[controls[index]]);
         for (const [control, column] of Object.entries(samples)) {
           const background = spanBgHex(spanAtFrameCell(spans, row, column));
           if (control === controls[index]) {

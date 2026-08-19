@@ -6,7 +6,7 @@ import { addTuiToast } from "../toasts.js";
 import type { TuiTransition } from "../transition.js";
 import type { DashboardState, GroupMenuActionId } from "../types.js";
 import { openNewSession } from "./dashboard.js";
-import { openGroupSettings } from "./groupSettings.js";
+import { focusGroupSettingsControl, openGroupSettings } from "./groupSettings.js";
 import { submitQuickSessionInGroup } from "./quickSession.js";
 
 export type GroupMenuInputActionId = GroupMenuActionId | "cancel";
@@ -134,8 +134,10 @@ export function activateSessionGroupMenuAction(
       });
     case "settings":
       return { state: openGroupSettings(dashboardState, input.groupId, "general") };
-    case "remove":
-      return { state: openGroupSettings(dashboardState, input.groupId, "remove") };
+    case "remove": {
+      const settings = openGroupSettings(dashboardState, input.groupId, "remove");
+      return { state: focusGroupSettingsControl(settings, "removeConfirm") };
+    }
   }
 }
 

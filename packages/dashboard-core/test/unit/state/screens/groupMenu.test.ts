@@ -8,6 +8,8 @@ import {
   handleGroupMenuKey,
   openGroupMenu,
 } from "../../../../src/state/screens/groupMenu.js";
+import { handleTuiKey } from "../../../../src/state/transition.js";
+import type { DashboardState } from "../../../../src/state/types.js";
 import { createGroupedDashboardSnapshot } from "../../../fixtures/snapshots.js";
 
 describe("Group menu", () => {
@@ -106,7 +108,14 @@ describe("Group menu", () => {
         projectId: "web",
         groupId: "group_active",
         section,
+        ...(actionId === "remove"
+          ? { focus: "detail", detailFocus: "removeConfirm" }
+          : { focus: "list" }),
       });
+      if (actionId === "remove") {
+        const typed = handleTuiKey(transition.state, { input: "d" }).state;
+        expect(groupSettingsScreen(typed).removeDraft.value).toBe("d");
+      }
     }
   });
 
@@ -155,6 +164,11 @@ describe("Group menu", () => {
     expect(replaceSnapshot(opened, withoutGroup).screen).toEqual({ name: "dashboard" });
   });
 });
+
+function groupSettingsScreen(state: DashboardState) {
+  if (state.screen.name !== "groupSettings") throw new Error("expected Group Settings");
+  return state.screen;
+}
 
 function baseState() {
   return createInitialTuiState({ initialSnapshot: createGroupedDashboardSnapshot() });

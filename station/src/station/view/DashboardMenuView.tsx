@@ -118,7 +118,7 @@ function DashboardMenuItem({
       onMouseOver={() => setHover(true)}
       onMouseOut={() => setHover(false)}
     >
-      {` ${content}`}
+      {`${item.focused ? "▸" : " "}${content}`}
     </text>
   );
 }

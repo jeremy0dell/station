@@ -136,10 +136,11 @@ Station renderers
 `selectors/dashboardTree.ts` is the sole dashboard hierarchy adapter. It joins
 canonical sessions to worktree metadata, merges optimistic creates, applies
 filter and collapse state, and projects Project roots, direct Group blocks,
-project-root sessions, inert Group closing-frame rows, and inert gaps. Every
+project-root sessions, inert Group closing-frame rows, and inert inter-project gaps. Every
 expanded Group ends with one cell-less frame row, including an empty Group, so
 the visible ring has truthful viewport height without gaining focus, a slot, or
-an action. `snapshot.sessionGroups` is the exclusive membership authority;
+an action. That closing edge is part of the frame, not a synthetic spacer before
+or after the Group block. `snapshot.sessionGroups` is the exclusive membership authority;
 optional parent links are deliberately flattened. Ordinary optimistic create
 rows remain at the project root. A Quick Group launch may temporarily target
 one pending row at its new Group and suppress the exact matching ungrouped
@@ -151,14 +152,20 @@ canonical replacement. A Group-inheriting Fork targets its optimistic row at the
 a source move, deletion, or canonical replacement prunes that hint without synthesizing membership
 or exposing a duplicate root row. Deliberate New Session retains its sheet and never creates such a
 row.
-The renderer-local `GroupOrderingMode` chooses Groups-first or whole-block
-alphabetical interleaving without changing canonical arrays.
+The renderer-local `GroupOrderingMode` is `"groups-first" | "alphabetical-interleaved"`.
+Groups-first is the default and places alphabetized Group blocks before project-root sessions.
+Alphabetical interleaving compares Group names with root-session display titles while keeping each
+Group header, direct members, and closing edge together as one block. Neither mode changes canonical
+arrays, collapse state, filtering, or the continuous slots assigned only to rendered sessions; no
+public config currently selects the mode.
 The internal `treeGrid.ts` controller knows only immutable nodes, ordered cells,
 visibility, and a supplied eligibility policy; it has no dashboard or terminal
 knowledge and is not a package entrypoint.
 
 Project and Group collapse sets remain renderer-local and survive snapshot
-replacement even when an ID is temporarily absent. Persistent filtering admits
+replacement, Observer restart, and warm popup dismissal/reopen even when an ID is temporarily
+absent. Filtering and ordering never mutate either collapse set; resize and scroll changes retain or
+deterministically reconcile the stable cursor and viewport. Persistent filtering admits
 session rows through one candidate projection while retaining durable Project
 and Group containers; Group-name matches provide member text context, member
 matches retain their Group header, and container match ranges remain semantic
