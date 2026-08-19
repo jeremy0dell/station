@@ -415,6 +415,9 @@ describe("primary workflow interaction parity", () => {
               projectId: "web",
               groupId: "group_active",
               section: testCase.actionId === "settings" ? "general" : "remove",
+              ...(testCase.actionId === "remove"
+                ? { focus: "detail", detailFocus: "removeConfirm" }
+                : { focus: "list" }),
             });
             expect(transition.operations).toBeUndefined();
             break;
