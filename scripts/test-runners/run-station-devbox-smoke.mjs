@@ -7,7 +7,7 @@
 // Warning: runs against the real .dev-state for this checkout — it starts and
 // then STOPS the devbox, so a live devbox here will be stopped.
 import { spawn, spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
   chmodSync,
   existsSync,
@@ -44,6 +44,7 @@ const codexProfileConfig = join(ds, "codex-home", "station.config.toml");
 const globalStateFragment = join(".local", "state", "station");
 const bunShimRoot = mkdtempSync(join(tmpdir(), "station-devbox-smoke-bun-"));
 const bunInvocationLog = join(bunShimRoot, "invocations.log");
+const rendererEnvironmentLog = join(bunShimRoot, "renderer-environment.log");
 const bunShim = join(bunShimRoot, "bun");
 const resolvedBun = spawnSync("bash", ["-c", "command -v bun"], { encoding: "utf8" });
 assert(resolvedBun.status === 0, `bun is unavailable: ${resolvedBun.stderr}`);
@@ -55,12 +56,30 @@ set -euo pipefail
   for argument in "$@"; do printf '%s\\037' "$argument"; done
   printf '\\n'
 } >> "$STATION_DEVBOX_SMOKE_BUN_LOG"
+if [ "\${STATION_DEVBOX_SMOKE_CAPTURE_RENDERER_ENV:-}" = "1" ] && [ "\${1:-}" = "run" ] && { [ "\${2:-}" = "station" ] || [ "\${2:-}" = "dev" ]; }; then
+  : > "$STATION_DEVBOX_SMOKE_RENDERER_ENV_LOG"
+  for name in \
+    STATION_SOURCE STATION_SCENARIO STATION_HOST_SOCKET_PATH STATION_LAYOUT_PATH \
+    STATION_OBSERVER_SOCKET_PATH STATION_CONFIG_PATH STATION_OBSERVER_STATE_DIR \
+    STATION_STATE_DIR STATION_HOOK_SPOOL_DIR STATION_INGRESS_BIN STATION_HOST_HANDOFF \
+    STATION_CLIENT_BUILD_VERSION STATION_OBSERVER_BUILD_VERSION STATION_UI_RUN_ID \
+    STATION_PROJECT_ID STATION_WORKTREE_ID STATION_SESSION_ID STATION_CURSOR_HOOKS_PATH
+  do
+    if value="$(printenv "$name")"; then
+      printf '%s=%s\n' "$name" "$value" >> "$STATION_DEVBOX_SMOKE_RENDERER_ENV_LOG"
+    else
+      printf '%s=__ABSENT__\n' "$name" >> "$STATION_DEVBOX_SMOKE_RENDERER_ENV_LOG"
+    fi
+  done
+  exit 0
+fi
 exec "$STATION_DEVBOX_SMOKE_REAL_BUN" "$@"
 `,
   { mode: 0o700 },
 );
 let socketRestricted = false;
 let hostPid;
+let alternateObserverPid;
 
 process.stderr.write(
   "station:devbox smoke — starts and STOPS this checkout's devbox (.dev-state).\n",
@@ -164,6 +183,35 @@ try {
   );
   process.kill(hostPid, 0);
 
+  // A source renderer launched from an existing Station pane must discard that
+  // pane's runtime selectors before it can inspect a Host, layout, or hook path.
+  devbox(["start"], "hostile inherited environment", {
+    PATH: `${bunShimRoot}:${process.env.PATH ?? ""}`,
+    STATION_DEVBOX_SMOKE_BUN_LOG: bunInvocationLog,
+    STATION_DEVBOX_SMOKE_REAL_BUN: resolvedBun.stdout.trim(),
+    STATION_DEVBOX_SMOKE_CAPTURE_RENDERER_ENV: "1",
+    STATION_DEVBOX_SMOKE_RENDERER_ENV_LOG: rendererEnvironmentLog,
+    STATION_HOST_SOCKET_PATH: "/tmp/another-station-host.sock",
+    STATION_LAYOUT_PATH: "/tmp/another-station-layout.json",
+    STATION_HOST_HANDOFF: "1",
+    STATION_CLIENT_BUILD_VERSION: "another-checkout-client",
+    STATION_OBSERVER_BUILD_VERSION: "another-checkout-observer",
+    STATION_SOURCE: "mock",
+    STATION_SCENARIO: "disconnected",
+    STATION_HOOK_SPOOL_DIR: "/tmp/another-station-spool",
+    STATION_OBSERVER_STATE_DIR: "/tmp/another-station-state",
+    STATION_STATE_DIR: "/tmp/another-station-state",
+    STATION_INGRESS_BIN: "/tmp/another-checkout/stn-ingress",
+    STATION_CURSOR_HOOKS_PATH: "/tmp/another-cursor-hooks.json",
+    STATION_UI_RUN_ID: "ui_outer",
+    STATION_PROJECT_ID: "outer-project",
+    STATION_WORKTREE_ID: "outer-worktree",
+    STATION_SESSION_ID: "outer-session",
+  });
+  assertRendererEnvironment();
+  process.kill(originalPid, 0);
+  process.kill(hostPid, 0);
+
   chmodSync(observerSock, 0o000);
   socketRestricted = true;
   const blocked = spawnResult("node", [wrapper, "start"], {
@@ -175,10 +223,10 @@ try {
     `inaccessible devbox start hid the Observer diagnosis\n${blocked.stderr}`,
   );
   assert(
-    blocked.stderr.includes(
-      "The persistent Station Host, hosted agents, and .dev-state were preserved.",
-    ),
-    `inaccessible devbox start omitted preservation guidance\n${blocked.stderr}`,
+    blocked.stderr.includes('"phase": "inspection"') &&
+      blocked.stderr.includes('"incumbentDisposition": "preserved"') &&
+      blocked.stderr.includes("The Station Host and hosted agents were not targeted"),
+    `inaccessible devbox start omitted exact activation state\n${blocked.stderr}`,
   );
   assert(
     blocked.stderr.includes("pnpm station:devbox status") &&
@@ -206,17 +254,64 @@ try {
     "restoring socket access did not reconnect to the original devbox Observer",
   );
 
-  devbox(["restart"], "restart");
+  const recoveredHealth = parseJson(
+    recoveredStatus.stdout,
+    "recovered isolated observer status",
+  ).health;
+  const requestedVersion = recoveredHealth?.version;
+  assert(typeof requestedVersion === "string", "recovered Observer omitted its build selector");
+  const differentVersion = differentBuildSelector(requestedVersion);
+  spawnChecked("node", [cli, "--config", cfg, "observer", "stop"], {
+    label: "stop exact Observer before changed-build start",
+    env: sourceCliEnv(),
+  });
+  await waitForPathAbsent(observerSock, "exact Observer socket");
+  const alternateObserver = spawn(
+    process.execPath,
+    [
+      join(repoRoot, "tests", "support", "observerMain.js"),
+      "--socket",
+      observerSock,
+      "--state-dir",
+      join(ds, "observer"),
+      "--startup-timeout-ms",
+      "10000",
+      "--build-version",
+      differentVersion,
+      "--process-token",
+      randomUUID(),
+    ],
+    {
+      cwd: repoRoot,
+      detached: true,
+      stdio: "ignore",
+      env: { ...sourceCliEnv(), STATION_TEST_REPO_ROOT: repoRoot },
+    },
+  );
+  alternateObserver.unref();
+  alternateObserverPid = alternateObserver.pid;
+  assert(Number.isInteger(alternateObserverPid), "failed to launch different-build incumbent");
+  await waitForPath(observerSock, "different-build Observer socket");
+
+  const changedBuildStart = devbox(["start"], "changed-build start", {
+    STATION_ISOLATED_NO_LAUNCH: "1",
+  });
+  assert(
+    changedBuildStart.stdout.includes("Checkout build changed"),
+    `start did not report exact-build replacement\n${changedBuildStart.stdout}`,
+  );
+  await waitForProcessExit(alternateObserverPid, "different-build incumbent");
+  alternateObserverPid = undefined;
   const restartedStatus = spawnChecked("node", [cli, "--config", cfg, "observer", "status"], {
-    label: "restarted isolated observer status",
+    label: "changed-build start observer status",
     env: sourceCliEnv(),
   });
   assert(
-    parseJson(restartedStatus.stdout, "restarted isolated observer status").health?.pid !==
-      originalPid,
-    "devbox restart did not replace the isolated Observer",
+    parseJson(restartedStatus.stdout, "changed-build start observer status").health?.version ===
+      requestedVersion,
+    "devbox start did not activate this checkout's exact Observer build",
   );
-  assertHookDoctors("restart");
+  assertHookDoctors("changed-build start");
   assertCodexHookDelivery();
   process.kill(hostPid, 0);
 
@@ -231,6 +326,7 @@ try {
 } catch (error) {
   // Best-effort teardown so a failed assertion never leaves the observer running.
   if (socketRestricted) chmodSync(observerSock, 0o600);
+  if (alternateObserverPid !== undefined) process.kill(alternateObserverPid, "SIGKILL");
   spawnSync("node", [wrapper, "stop"], { cwd: repoRoot, encoding: "utf8", timeout: 30_000 });
   throw error;
 } finally {
@@ -244,6 +340,29 @@ async function waitForPath(path, label) {
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
   throw new Error(`${label} was not created at ${path}`);
+}
+
+async function waitForPathAbsent(path, label) {
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline) {
+    if (!existsSync(path)) return;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error(`${label} remained at ${path}`);
+}
+
+async function waitForProcessExit(pid, label) {
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline) {
+    try {
+      process.kill(pid, 0);
+    } catch (error) {
+      if (error?.code === "ESRCH") return;
+      throw error;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error(`${label} PID ${pid} remained alive`);
 }
 
 function parseArgs(args) {
@@ -276,6 +395,47 @@ function assertNoGlobalLeak(output, label) {
     !output.includes(globalStateFragment),
     `${label} leaked the global state dir (${globalStateFragment}); it must stay on .dev-state\n${output}`,
   );
+}
+
+function assertRendererEnvironment() {
+  const environment = Object.fromEntries(
+    readFileSync(rendererEnvironmentLog, "utf8")
+      .trim()
+      .split("\n")
+      .map((line) => {
+        const equals = line.indexOf("=");
+        return [line.slice(0, equals), line.slice(equals + 1)];
+      }),
+  );
+  const expected = {
+    STATION_SOURCE: "observer",
+    STATION_SCENARIO: "__ABSENT__",
+    STATION_HOST_SOCKET_PATH: hostSock,
+    STATION_LAYOUT_PATH: join(ds, "station", "layout.json"),
+    STATION_OBSERVER_SOCKET_PATH: observerSock,
+    STATION_CONFIG_PATH: cfg,
+    STATION_OBSERVER_STATE_DIR: join(ds, "observer"),
+    STATION_STATE_DIR: "__ABSENT__",
+    STATION_HOOK_SPOOL_DIR: join(ds, "observer", "spool", "hooks"),
+    STATION_INGRESS_BIN: join(repoRoot, "bin", "stn-ingress"),
+    STATION_HOST_HANDOFF: "__ABSENT__",
+    STATION_CLIENT_BUILD_VERSION: "__ABSENT__",
+    STATION_OBSERVER_BUILD_VERSION: "__ABSENT__",
+    STATION_UI_RUN_ID: "__ABSENT__",
+    STATION_PROJECT_ID: "__ABSENT__",
+    STATION_WORKTREE_ID: "__ABSENT__",
+    STATION_SESSION_ID: "__ABSENT__",
+    STATION_CURSOR_HOOKS_PATH: "__ABSENT__",
+  };
+  assert(
+    JSON.stringify(environment) === JSON.stringify(expected),
+    `renderer environment escaped devbox isolation\nexpected=${JSON.stringify(expected, null, 2)}\nactual=${JSON.stringify(environment, null, 2)}`,
+  );
+}
+
+function differentBuildSelector(version) {
+  const replacement = version.endsWith("f") ? "e" : "f";
+  return `${version.slice(0, -1)}${replacement}`;
 }
 
 function assertHookDoctors(label) {

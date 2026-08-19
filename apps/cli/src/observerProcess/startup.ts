@@ -42,6 +42,7 @@ export async function startObserverProcess(
     clock: RuntimeClock;
     configPath?: string;
     observerCommand?: SpawnObserverInput["observerCommand"];
+    incumbentPolicy?: SpawnObserverInput["incumbentPolicy"];
     onStartupProgress?: ObserverProcessOptions["onStartupProgress"];
   },
   deps: ObserverProcessDeps,
@@ -80,6 +81,9 @@ export async function startObserverProcess(
         }
         if (input.observerCommand !== undefined) {
           spawnInput.observerCommand = input.observerCommand;
+        }
+        if (input.incumbentPolicy !== undefined) {
+          spawnInput.incumbentPolicy = input.incumbentPolicy;
         }
         child =
           deps.spawnObserver === undefined

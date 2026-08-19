@@ -12969,18 +12969,11 @@
       "declaration": "ensureExactObserverBuild",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Converges one configured Observer socket to this caller's exact immutable build through identity-pinned cooperative replacement without changing generic singleton ordering.",
+      "purpose": "Converges one configured Observer socket to this caller's exact immutable build within one deadline. At most the admitted identity-pinned incumbent is stopped cooperatively; the child preserves any later non-exact owner. Failures report their phase and the admitted incumbent's last proven disposition without changing generic singleton ordering.",
       "dependencies": [
         {
           "path": "apps/cli/src/observerProcess.ts",
           "declaration": "getObserverStatus",
-          "kind": "function",
-          "role": "ADAPTER",
-          "edgeKind": "runtime"
-        },
-        {
-          "path": "apps/cli/src/observerProcess.ts",
-          "declaration": "startObserver",
           "kind": "function",
           "role": "ADAPTER",
           "edgeKind": "runtime"

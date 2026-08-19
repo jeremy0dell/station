@@ -33,7 +33,7 @@ export async function defaultSpawnObserver(
     const [command, ...args] = argv;
     child = spawn(command, args, {
       detached: process.env.STATION_RUNTIME_OWNER_FOREGROUND !== "1",
-      env: environmentWithoutGitLocals(),
+      env: observerSpawnEnvironment(input),
       stdio: ["ignore", bootLog.fd, bootLog.fd],
     });
     const startedChild = Object.assign(
@@ -51,6 +51,22 @@ export async function defaultSpawnObserver(
     }
     throw error;
   }
+}
+
+/**
+ * Builds a child environment that defaults to generic singleton ordering and only
+ * opts into preserve-incumbent admission for an explicit exact-build activation.
+ */
+export function observerSpawnEnvironment(
+  input: Pick<DefaultSpawnObserverInput, "incumbentPolicy">,
+  inheritedEnvironment: NodeJS.ProcessEnv = process.env,
+): NodeJS.ProcessEnv {
+  const env = environmentWithoutGitLocals(inheritedEnvironment);
+  delete env.STATION_OBSERVER_STARTUP_POLICY;
+  if (input.incumbentPolicy === "preserve") {
+    env.STATION_OBSERVER_STARTUP_POLICY = "preserve-incumbent";
+  }
+  return env;
 }
 
 export function observerSpawnArgv(input: DefaultSpawnObserverInput): [string, ...string[]] {

@@ -78,10 +78,13 @@ Use reset only when this checkout's runtime and sessions are disposable.
 ## Isolation and safety
 
 The devbox generates `.dev-state/config.toml`, places Observer state under
-`.dev-state`, and uses a short checkout-keyed socket directory. Its default
-terminal is `noop-terminal`, so the isolated Observer does not enumerate agents
-from the machine-global tmux server. Native Host-backed Station panes remain
-available.
+`.dev-state`, uses a short checkout-keyed socket directory, and pins the native
+Host socket and layout snapshot to that same checkout. It clears inherited
+Station build, source, Host-handoff, UI, session, worktree, and hook-routing
+selectors before refreshing hooks or opening the renderer, so launching from a
+Station-owned pane cannot select the outer Station runtime. Its default terminal
+is `noop-terminal`, so the isolated Observer does not enumerate agents from the
+machine-global tmux server. Native Host-backed Station panes remain available.
 
 Codex, Claude, Cursor, and OpenCode receive checkout-local provider homes and
 Station hook configuration. This protects global configuration and hook files,
@@ -96,9 +99,12 @@ instructions, inspect `station:devbox status`, and retry the same start command.
 Exact-build activation is scoped to the checkout-keyed socket in the generated
 config. It uses the Observer's identity-pinned cooperative stop, never the
 devbox `stop` teardown, and never signals, reaps, or unlinks an incumbent. A
-failed replacement preserves `.dev-state`, the persistent Host, and hosted
-agents. If the old Observer stopped before its successor failed, retry the same
-`start` or `dev` command; do not reset the lane.
+replacement child also preserves any non-exact owner that wins the socket after
+the admitted incumbent exits. Failure output names the activation phase and the
+admitted incumbent's last proven disposition. The Host and hosted agents are not
+targeted and `.dev-state` is not reset. If the old Observer is reported
+`stopped`, retry the same `start` or `dev` command; if its disposition is
+`unknown`, inspect `status` first. Do not reset the lane for routine recovery.
 
 There is no `STATION_STATE_DIR` environment variable. Manual isolation uses
 `[observer] state_dir` and `socket_path` in a config file. `--config` is a global

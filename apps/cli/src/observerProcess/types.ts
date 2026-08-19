@@ -2,7 +2,11 @@ import type { ChildProcess } from "node:child_process";
 import type { StationConfig } from "@station/config";
 import type { ObserverHealth, SafeError } from "@station/contracts";
 import type { JsonlLogger } from "@station/observability";
-import type { CreateObserverClientOptions, createObserverClient } from "@station/protocol";
+import type {
+  CreateObserverClientOptions,
+  createObserverClient,
+  probeUnixSocket,
+} from "@station/protocol";
 import type { RuntimeClock } from "@station/runtime";
 import type { ObserverPaths } from "../paths.js";
 import type { ExecutableArgv } from "../selfExec.js";
@@ -20,6 +24,14 @@ export type ObserverStatus =
       error?: SafeError;
     };
 
+export type ExactObserverActivationPhase = "inspection" | "stop" | "start" | "verification";
+
+export type ExactObserverIncumbentDisposition = "none" | "preserved" | "stopped" | "unknown";
+
+/**
+ * Result of converging one configured socket to the caller's exact immutable build.
+ * Failures identify the phase and the last proven state of the Observer present at admission.
+ */
 export type ExactObserverBuildStatus =
   | {
       status: "running";
@@ -27,7 +39,13 @@ export type ExactObserverBuildStatus =
       health: ObserverHealth;
       lifecycle: "reused" | "started" | "replaced";
     }
-  | Exclude<ObserverStatus, { status: "running" }>;
+  | {
+      status: "unhealthy";
+      paths: ObserverPaths;
+      error: SafeError;
+      phase: ExactObserverActivationPhase;
+      incumbentDisposition: ExactObserverIncumbentDisposition;
+    };
 
 export type ObserverProcessDeps = {
   /** Requested Observer build selector; production defaults to this executable's immutable selector. */
@@ -39,6 +57,8 @@ export type ObserverProcessDeps = {
       "acceptPreviousLifecycleSchema" | "expectedObserverIdentity" | "timeoutMs"
     >,
   ) => ReturnType<typeof createObserverClient>;
+  /** Test/composition seam for bounded Unix-socket ownership inspection. */
+  probeSocket?: typeof probeUnixSocket;
   spawnObserver?: (input: SpawnObserverInput) => ChildProcessLike | Promise<ChildProcessLike>;
   clock?: RuntimeClock;
   sleep?: (ms: number) => Promise<void>;
@@ -50,6 +70,8 @@ export type SpawnObserverInput = {
   configPath?: string;
   /** Finalized executable and fixed prefix arguments for the Observer child. */
   observerCommand?: ExecutableArgv;
+  /** Preserve any listening incumbent instead of invoking generic automatic handoff. */
+  incumbentPolicy?: "preserve";
 };
 
 export type ChildProcessExit = {

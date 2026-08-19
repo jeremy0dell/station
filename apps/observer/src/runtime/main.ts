@@ -110,6 +110,8 @@ export type RunObserverMainDeps = {
   duplicateProcessEvidence?: ObserverDuplicateProcessEvidenceSource;
   handoffNow?: () => number;
   handoffSleep?: (ms: number) => Promise<void>;
+  /** Test/composition override for the child-side incumbent admission policy. */
+  startupPolicy?: "generic" | "preserve-incumbent";
   exit?: (code: number) => void;
 };
 
@@ -147,6 +149,9 @@ export async function runObserverMain(
     throw new Error("--build-version must match the running Observer build selector.");
   }
   const handoffNow = deps.handoffNow ?? Date.now;
+  const startupPolicy = deps.startupPolicy ?? observerStartupPolicy(process.env);
+  // This is one-child admission authority, not launch context for providers or hosted agents.
+  delete process.env.STATION_OBSERVER_STARTUP_POLICY;
   const startupDeadline = handoffNow() + options.startupTimeoutMs;
   await mkdir(stateDir, { recursive: true, mode: 0o700 });
   const claimResult = await acquireObserverBootClaim({
@@ -160,14 +165,37 @@ export async function runObserverMain(
   // This outer lifetime keeps the claim through any pre-ready socket and
   // pidfile cleanup; the ready gate performs the normal early release.
   try {
-    const processEvidence = deps.processEvidence ?? createLocalObserverProcessEvidence();
+    const probeTimeoutMs = Math.max(MIN_STARTUP_BUDGET_MS, startupDeadline - handoffNow());
+    const processEvidence =
+      startupPolicy === "generic"
+        ? (deps.processEvidence ?? createLocalObserverProcessEvidence())
+        : undefined;
     const socketProbe = await probeObserverSocket(socketPath, {
-      timeoutMs: DEFAULT_STARTUP_TIMEOUT_MS,
-      socketHolders: (path: string) => processEvidence.socketHolders(path),
+      timeoutMs: probeTimeoutMs,
+      ...(processEvidence === undefined
+        ? {}
+        : { socketHolders: (path: string) => processEvidence.socketHolders(path) }),
     });
     if (socketProbe.status === "inaccessible") throw socketProbe.error;
     if (socketProbe.status === "listening") {
       const remainingStartupMs = Math.max(MIN_STARTUP_BUDGET_MS, startupDeadline - handoffNow());
+      if (startupPolicy === "preserve-incumbent") {
+        const lifecycle =
+          deps.incumbentLifecycle ??
+          createObserverLifecycleClient({ timeoutMs: remainingStartupMs });
+        const incumbent = await lifecycle.health(socketPath, {
+          timeoutMs: remainingStartupMs,
+        });
+        if (incumbent.version === buildVersion) return 0;
+        throw preserveIncumbentRefusal(
+          socketPath,
+          incumbent.version ?? "legacy/unknown build",
+          buildVersion,
+        );
+      }
+      if (processEvidence === undefined) {
+        throw new Error("Generic Observer startup requires process evidence.");
+      }
       const parentReserveMs = Math.min(
         HANDOFF_PARENT_RESERVE_MAX_MS,
         Math.max(
@@ -215,6 +243,30 @@ export async function runObserverMain(
   } finally {
     releaseObserverBootClaim(claimResult);
   }
+}
+
+/** Reads the internal child policy strictly so inherited or misspelled values fail closed. */
+function observerStartupPolicy(
+  env: Readonly<Record<string, string | undefined>>,
+): "generic" | "preserve-incumbent" {
+  const value = env.STATION_OBSERVER_STARTUP_POLICY;
+  if (value === undefined || value === "") return "generic";
+  if (value === "preserve-incumbent") return value;
+  throw new Error("STATION_OBSERVER_STARTUP_POLICY must be empty or preserve-incumbent.");
+}
+
+function preserveIncumbentRefusal(
+  socketPath: string,
+  incumbentVersion: string,
+  requestedVersion: string,
+): Error & SafeError {
+  const safeError: SafeError = {
+    tag: "ObserverStartupError",
+    code: "OBSERVER_EXACT_BUILD_ACTIVATION_FAILED",
+    message: "The exact Observer build could not claim the configured socket safely.",
+    hint: `A different Observer (${incumbentVersion}) claimed ${socketPath} before ${requestedVersion} could start. That new owner was preserved.`,
+  };
+  return Object.assign(new Error(safeError.message), safeError);
 }
 
 async function runClaimedObserverRuntime(input: {

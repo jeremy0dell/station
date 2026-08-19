@@ -224,15 +224,30 @@ describe("CLI observer commands", () => {
         },
       });
       for (const action of ["start", "ensure-exact-build", "restart"]) {
-        await expect(
-          runCli(["--config", configPath, "observer", action], { observerDeps }),
-        ).resolves.toMatchObject({
+        const result = await runCli(["--config", configPath, "observer", action], {
+          observerDeps,
+        });
+        expect(result).toMatchObject({
           code: 1,
           output: {
             status: "unhealthy",
-            error: { code: "OBSERVER_SOCKET_INACCESSIBLE" },
+            error: {
+              code:
+                action === "ensure-exact-build"
+                  ? "OBSERVER_EXACT_BUILD_ACTIVATION_FAILED"
+                  : "OBSERVER_SOCKET_INACCESSIBLE",
+            },
           },
         });
+        if (action === "ensure-exact-build") {
+          expect(result).toMatchObject({
+            output: {
+              phase: "inspection",
+              incumbentDisposition: "preserved",
+              error: { hint: expect.stringContaining("OBSERVER_SOCKET_INACCESSIBLE") },
+            },
+          });
+        }
       }
       await expect(runCli(["--config", configPath, "doctor"], { observerDeps })).rejects.toThrow(
         /OBSERVER_SOCKET_INACCESSIBLE/u,

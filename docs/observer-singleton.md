@@ -97,11 +97,17 @@ operation for a caller that intentionally owns the configured runtime, such as a
 checkout-local devbox. Exact health is reused. A different healthy selector is
 stopped only through the existing identity-pinned cooperative stop connection;
 the operation waits for endpoint closure, starts the caller build, and requires
-that exact selector as its final postcondition. An owner change is re-probed only
+that exact selector as its final postcondition. Its inspection, socket-holder
+evidence, health, stop convergence, child startup, and verification share one
+deadline. The replacement child uses preserve-incumbent admission: it may accept
+an exact successor or claim an absent/proven-stale endpoint, but it cannot invoke
+ordinary automatic handoff against a later non-exact owner. An owner change is re-probed only
 to accept an already-established exact successor or stopped endpoint; the
 operation does not repeatedly stop moving non-exact owners. It never uses reap,
 signals, forced cleanup, or a weaker socket probe. Ordinary `start`, automatic
-handoff, and deterministic winner selection retain the policy above.
+handoff, and deterministic winner selection retain the policy above. Failure
+results name the activation phase and the last proven disposition of the
+incumbent admitted at the beginning of the operation.
 
 A winning replacement candidate may coordinate handoff only while holding the boot claim.
 It revalidates holder, health, pidfile, argv, socket, and OS start token before controlled
