@@ -5,6 +5,7 @@ import type {
   SessionGroupId,
   SessionGroupPlacementIntent,
   SessionId,
+  SourceSessionGroupPlacementIntent,
   StationCommand,
   WorktreeId,
   WorktreeRow,
@@ -42,6 +43,7 @@ export type ForkSessionCommandInput = {
   branch: string;
   base?: string;
   copyDirty?: boolean;
+  group?: SourceSessionGroupPlacementIntent;
   // Omit to let the observer inherit the source worktree's harness.
   harnessProvider?: ProviderId;
   initialPrompt?: string;
@@ -217,6 +219,9 @@ export function buildForkSessionCommand(input: ForkSessionCommandInput): Station
   }
   if (input.copyDirty !== undefined) {
     payload.copyDirty = input.copyDirty;
+  }
+  if (input.group !== undefined) {
+    payload.group = input.group;
   }
   if (input.harnessProvider !== undefined) {
     payload.harness = { provider: input.harnessProvider };

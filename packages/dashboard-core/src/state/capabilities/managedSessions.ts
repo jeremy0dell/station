@@ -4,6 +4,7 @@ import type {
   ProviderId,
   SafeError,
   SessionGroupPlacementIntent,
+  SourceSessionGroupPlacementIntent,
   StationCommand,
   TerminalFocusOrigin,
 } from "@station/contracts";
@@ -33,6 +34,7 @@ export type ForkManagedSessionRequest = {
   title: string;
   hiddenBranch: string;
   copyDirty: boolean;
+  group?: SourceSessionGroupPlacementIntent;
   inheritedHarness?: ProviderId;
 };
 
@@ -129,6 +131,7 @@ async function runFork(
     title: request.title,
     branch: request.hiddenBranch,
     copyDirty: request.copyDirty,
+    ...(request.group === undefined ? {} : { group: request.group }),
     ...(request.inheritedHarness === undefined
       ? {}
       : { harnessProvider: request.inheritedHarness }),

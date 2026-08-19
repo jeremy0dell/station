@@ -319,6 +319,28 @@ describe("contract schemas", () => {
       },
       "external launch params without optional title",
     );
+    expectParses(
+      AgentPrepareExternalLaunchParamsSchema,
+      {
+        projectId: "project_api",
+        worktreeId: "wt_api_fork",
+        group: {
+          kind: "source",
+          sourceSessionId: "ses_api_source",
+          groupId: "grp_active",
+        },
+      },
+      "external fork launch params with source Group inheritance",
+    );
+    expectFails(
+      AgentPrepareExternalLaunchParamsSchema,
+      {
+        projectId: "project_api",
+        worktreeId: "wt_api_fork",
+        group: { kind: "source", sourceSessionId: "ses_api_source", name: "Active" },
+      },
+      "external source Group inheritance without a stable Group id",
+    );
     expectFails(
       AgentPrepareExternalLaunchParamsSchema,
       {
@@ -1169,6 +1191,11 @@ describe("contract schemas", () => {
           projectId: "web",
           sourceWorktreeId: "wt_web_main",
           branch: "feature/fork",
+          group: {
+            kind: "source",
+            sourceSessionId: "ses_web_main",
+            groupId: "grp_active",
+          },
         },
       },
       "worktree-only fork without launch harness",
@@ -1190,6 +1217,11 @@ describe("contract schemas", () => {
           sourceWorktreeId: "wt_web_main",
           branch: "feature/fork",
           launchHarness: "codex",
+          group: {
+            kind: "source",
+            sourceSessionId: "ses_web_main",
+            groupId: "grp_active",
+          },
           readiness: true,
         },
       },
@@ -1577,6 +1609,11 @@ describe("contract schemas", () => {
           sourceWorktreeId: "wt_source",
           branch: "station-fork-e91f2b",
           title: "Hexagonal PT 12",
+          group: {
+            kind: "source",
+            sourceSessionId: "ses_source",
+            groupId: "grp_active",
+          },
         },
       },
       "session fork with title containing spaces",

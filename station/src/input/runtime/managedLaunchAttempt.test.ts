@@ -275,7 +275,7 @@ function openOverlay(harness: ReturnType<typeof attemptHarness>): void {
 }
 
 describe("createManagedLaunchAttempt", () => {
-  it("passes fresh-session Group placement only to Observer preparation", async () => {
+  it("passes explicit and source Group placement only to Observer preparation", async () => {
     const harness = attemptHarness();
 
     await harness.runManagedLaunchAttempt(PANE_ID, {
@@ -285,6 +285,18 @@ describe("createManagedLaunchAttempt", () => {
       group: { kind: "existing", groupId: "grp_release" },
     });
 
+    const sourceHarness = attemptHarness();
+    await sourceHarness.runManagedLaunchAttempt(PANE_ID, {
+      ...TARGET,
+      title: "Forked work",
+      harness: "codex",
+      group: {
+        kind: "source",
+        sourceSessionId: "ses_wt_station_source",
+        groupId: "grp_source",
+      },
+    });
+
     expect(harness.prepareCalls).toEqual([
       {
         projectId: "station",
@@ -292,6 +304,19 @@ describe("createManagedLaunchAttempt", () => {
         title: "Release work",
         harness: "codex",
         group: { kind: "existing", groupId: "grp_release" },
+      },
+    ]);
+    expect(sourceHarness.prepareCalls).toEqual([
+      {
+        projectId: "station",
+        worktreeId: WORKTREE_ID,
+        title: "Forked work",
+        harness: "codex",
+        group: {
+          kind: "source",
+          sourceSessionId: "ses_wt_station_source",
+          groupId: "grp_source",
+        },
       },
     ]);
   });

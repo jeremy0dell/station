@@ -114,6 +114,11 @@ describe("TUI command builders", () => {
         title: "Hexagonal PT 12",
         branch: "fix-nav-mobile-fork",
         copyDirty: true,
+        group: {
+          kind: "source",
+          sourceSessionId: "ses_wt_web_idle",
+          groupId: "group_active",
+        },
       }),
     ).toMatchObject({
       type: "session.fork",
@@ -123,6 +128,11 @@ describe("TUI command builders", () => {
         title: "Hexagonal PT 12",
         branch: "fix-nav-mobile-fork",
         copyDirty: true,
+        group: {
+          kind: "source",
+          sourceSessionId: "ses_wt_web_idle",
+          groupId: "group_active",
+        },
       },
     });
   });

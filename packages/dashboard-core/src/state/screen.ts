@@ -3,6 +3,7 @@ import { reconcileNewSessionFlow } from "../flows/newSession.js";
 import { selectMoveToGroupSessionContext } from "../selectors/selectors.js";
 import { reconcileDashboardFocus } from "./dashboardFocus.js";
 import { createEmptyTuiLocalRows, pruneLocalRowsForSnapshot } from "./localRows.js";
+import { reconcileForkDetailsScreen } from "./screens/fork.js";
 import { reconcileGroupSettingsScreen } from "./screens/groupSettings.js";
 import { seedNewSessionPickerCursor } from "./selection/specs/newSession.js";
 import type { CreateInitialTuiStateOptions, DashboardState } from "./types.js";
@@ -41,13 +42,17 @@ export function createInitialTuiState(options: CreateInitialTuiStateOptions = {}
 
 export function replaceSnapshot(state: DashboardState, snapshot: StationSnapshot): DashboardState {
   const transientSurface = reconcileTransientSurface(state, snapshot);
+  const forkScreen =
+    transientSurface.name === "fork" && transientSurface.step === "details"
+      ? reconcileForkDetailsScreen(transientSurface, snapshot)
+      : transientSurface;
   const flowScreen =
-    transientSurface.name === "newSession"
+    forkScreen.name === "newSession"
       ? {
           name: "newSession" as const,
-          flow: reconcileNewSessionFlow(transientSurface.flow, snapshot),
+          flow: reconcileNewSessionFlow(forkScreen.flow, snapshot),
         }
-      : transientSurface;
+      : forkScreen;
   const groupSettingsScreen =
     flowScreen.name === "groupSettings"
       ? (reconcileGroupSettingsScreen(flowScreen, snapshot) ?? { name: "dashboard" as const })

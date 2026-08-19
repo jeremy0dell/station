@@ -2,12 +2,15 @@ import type { StationSnapshot } from "@station/contracts";
 import { describe, expect, it } from "vitest";
 import { handleTuiAction } from "../../../../src/state/actions.js";
 import type { TuiKey } from "../../../../src/state/keys.js";
-import { createInitialTuiState } from "../../../../src/state/screen.js";
+import { createInitialTuiState, replaceSnapshot } from "../../../../src/state/screen.js";
 import { openForkDetailsForRow } from "../../../../src/state/screens/fork.js";
 import type { TuiTransition } from "../../../../src/state/transition.js";
 import { handleTuiKey } from "../../../../src/state/transition.js";
 import type { DashboardState } from "../../../../src/state/types.js";
-import { createDashboardSnapshot } from "../../../fixtures/snapshots.js";
+import {
+  createDashboardSnapshot,
+  createGroupedDashboardSnapshot,
+} from "../../../fixtures/snapshots.js";
 
 const CTX = { cwd: "/Users/example/Developer/station", homeDir: "/Users/example" };
 
@@ -44,6 +47,14 @@ function openDetails(branchToken = "aaaaaa"): DashboardState {
   return openForkDetailsForRow(base(), "ses_wt_web_idle", { branchToken });
 }
 
+function openGroupedDetails(branchToken = "aaaaaa"): DashboardState {
+  return openForkDetailsForRow(
+    createInitialTuiState({ initialSnapshot: createGroupedDashboardSnapshot() }),
+    "ses_wt_web_idle",
+    { branchToken },
+  );
+}
+
 function clearTitle(state: DashboardState): DashboardState {
   let current = state;
   while (
@@ -67,6 +78,8 @@ describe("fork screen", () => {
     expect(screen.draftTitle.value).toBe(`${screen.sourceBranch}-fork`);
     expect(screen.branch).toMatch(/^fix-nav-mobile-fork-[a-f0-9]+$/);
     expect(screen.branch).not.toBe(screen.draftTitle.value);
+    expect(screen.inheritSourceGroup).toBe(true);
+    expect(screen.sourceGroup).toBeUndefined();
     expect(screen.copyDirty).toBe(true);
     expect(screen.focus).toBe("name");
     expect(screen.sourceWorktreeId.length).toBeGreaterThan(0);
@@ -95,6 +108,137 @@ describe("fork screen", () => {
     expect(operation.sourceWorktreeId).toBe(screen.sourceWorktreeId);
     expect(operation.copyDirty).toBe(true);
     expect(operation.inheritedHarness).toBeDefined();
+  });
+
+  it("inherits a grouped source by stable identity and targets the grouped operation", () => {
+    const opened = openGroupedDetails();
+    const screen = detailsScreen(opened);
+    expect(screen.sourceGroup).toEqual({ id: "group_active", name: "Active work" });
+    expect(screen.inheritSourceGroup).toBe(true);
+
+    const transition = step(opened, ENTER);
+    const operation = transition.operations?.[0];
+    if (operation?.type !== "forkManagedSession") throw new Error("expected fork operation");
+    expect(operation.group).toEqual({
+      kind: "source",
+      sourceSessionId: "ses_wt_web_idle",
+      groupId: "group_active",
+    });
+  });
+
+  it("toggles Group placement through Space, focused Enter, and the semantic pointer action", () => {
+    const groupFocused = step(openGroupedDetails(), DOWN).state;
+    expect(detailsScreen(groupFocused).focus).toBe("group");
+
+    const spaced = step(groupFocused, type(" "));
+    expect(detailsScreen(spaced.state)).toMatchObject({
+      focus: "group",
+      inheritSourceGroup: false,
+    });
+    expect(spaced.operations).toBeUndefined();
+
+    const entered = step(spaced.state, ENTER);
+    expect(detailsScreen(entered.state).inheritSourceGroup).toBe(true);
+    expect(entered.operations).toBeUndefined();
+
+    const clicked = handleTuiAction(
+      entered.state,
+      { type: "forkSession.activate", actionId: "details.group" },
+      CTX,
+    );
+    expect(detailsScreen(clicked.state)).toMatchObject({
+      focus: "group",
+      inheritSourceGroup: false,
+    });
+    const submit = handleTuiAction(
+      clicked.state,
+      { type: "forkSession.activate", actionId: "details.submit" },
+      CTX,
+    );
+    const operation = submit.operations?.[0];
+    if (operation?.type !== "forkManagedSession") throw new Error("expected fork operation");
+    expect(operation.group).toBeUndefined();
+  });
+
+  it("keeps an ungrouped source read-only and out of the focus order", () => {
+    const opened = openDetails();
+    expect(detailsScreen(opened).sourceGroup).toBeUndefined();
+    expect(detailsScreen(step(opened, DOWN).state).focus).toBe("copyDirty");
+    expect(
+      handleTuiAction(opened, { type: "forkSession.activate", actionId: "details.group" }, CTX),
+    ).toEqual({ state: opened });
+  });
+
+  it("follows canonical source Group changes while preserving an explicit opt-out", () => {
+    const opened = openGroupedDetails();
+    const snapshot = opened.snapshot;
+    if (snapshot === undefined) throw new Error("expected snapshot");
+    const renamed = replaceSnapshot(opened, {
+      ...snapshot,
+      sessionGroups: snapshot.sessionGroups.map((group) =>
+        group.id === "group_active" ? { ...group, name: "Renamed work" } : group,
+      ),
+    });
+    expect(detailsScreen(renamed).sourceGroup).toEqual({
+      id: "group_active",
+      name: "Renamed work",
+    });
+
+    const moved = replaceSnapshot(renamed, {
+      ...snapshot,
+      sessionGroups: snapshot.sessionGroups.map((group) => {
+        if (group.id === "group_active") {
+          return {
+            ...group,
+            sessionIds: group.sessionIds.filter((id) => id !== "ses_wt_web_idle"),
+          };
+        }
+        if (group.id === "group_empty") {
+          return { ...group, sessionIds: ["ses_wt_web_idle"] };
+        }
+        return group;
+      }),
+    });
+    expect(detailsScreen(moved)).toMatchObject({
+      sourceGroup: { id: "group_empty", name: "Empty" },
+      inheritSourceGroup: true,
+    });
+    const movedSubmit = handleTuiAction(
+      moved,
+      { type: "forkSession.activate", actionId: "details.submit" },
+      CTX,
+    );
+    expect(movedSubmit.operations?.[0]).toMatchObject({
+      type: "forkManagedSession",
+      group: {
+        kind: "source",
+        sourceSessionId: "ses_wt_web_idle",
+        groupId: "group_empty",
+      },
+    });
+
+    const optedOut = handleTuiAction(
+      moved,
+      { type: "forkSession.activate", actionId: "details.group" },
+      CTX,
+    ).state;
+    expect(detailsScreen(optedOut).inheritSourceGroup).toBe(false);
+    const removed = replaceSnapshot(optedOut, {
+      ...snapshot,
+      sessionGroups: snapshot.sessionGroups
+        .filter((group) => group.id !== "group_empty")
+        .map((group) =>
+          group.id === "group_active"
+            ? {
+                ...group,
+                sessionIds: group.sessionIds.filter((id) => id !== "ses_wt_web_idle"),
+              }
+            : group,
+        ),
+    });
+    expect(detailsScreen(removed).sourceGroup).toBeUndefined();
+    expect(detailsScreen(removed).inheritSourceGroup).toBe(false);
+    expect(detailsScreen(removed).focus).toBe("copyDirty");
   });
 
   it("toggles copy-dirty off and reflects it in the submitted command", () => {

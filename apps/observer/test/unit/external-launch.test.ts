@@ -29,7 +29,7 @@ import {
   FakeWorktreeProvider,
 } from "@station/testing";
 import { describe, expect, it } from "vitest";
-import type { SessionStore } from "../../src/persistence/index";
+import type { SessionSeedGroupProvenance, SessionStore } from "../../src/persistence/index";
 import { ProviderRegistry } from "../../src/providers/registry";
 import type { ObserverCore } from "../../src/reconcile/core";
 import { prepareExternalLaunch, reportExternalExit } from "../../src/runtime/externalLaunch";
@@ -348,20 +348,22 @@ function trackingPersistence() {
     findRememberedHarnessProviderForWorktree: async () => undefined,
     seedSession: async (input: Parameters<SessionStore["seedSession"]>[0]) => {
       seeded.push(input);
-      const groupProvenance =
-        input.group === undefined
-          ? undefined
-          : input.group.kind === "existing"
-            ? { kind: "existing" as const, groupId: input.group.groupId }
-            : {
-                kind: "created" as const,
-                groupId: input.group.groupId,
-                projectId: input.projectId,
-                name: input.group.name,
-                version: 1,
-                createdAt: input.createdAt,
-                updatedAt: input.createdAt,
-              };
+      let groupProvenance: SessionSeedGroupProvenance | undefined;
+      if (input.group?.kind === "existing") {
+        groupProvenance = { kind: "existing", groupId: input.group.groupId };
+      } else if (input.group?.kind === "source") {
+        groupProvenance = { kind: "source", groupId: "group_source" };
+      } else if (input.group?.kind === "create") {
+        groupProvenance = {
+          kind: "created",
+          groupId: input.group.groupId,
+          projectId: input.projectId,
+          name: input.group.name,
+          version: 1,
+          createdAt: input.createdAt,
+          updatedAt: input.createdAt,
+        };
+      }
       return {
         ok: true,
         session: {

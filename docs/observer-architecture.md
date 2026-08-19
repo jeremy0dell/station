@@ -635,11 +635,14 @@ handle remains.
 A new managed session repeats the full selected-harness preflight immediately
 before title, target, or process mutation, then durably seeds the session from
 canonical worktree title authority before target registration and process launch.
-Optional New Session Group placement is part of that transaction: an existing ID
-must still be a same-project root, while inline creation uses an Observer-minted ID.
-Failed fresh launch cleanup conditionally releases only the target still bound to
-that fresh session and atomically discards the seed, membership, and owned inline
-Group only after release is confirmed absent or complete.
+Optional Group placement is part of that transaction. New Session existing placement must still
+be a same-project root, while inline creation uses an Observer-minted ID. Fork inheritance resolves
+the source session's transaction-current same-project assignment by stable Group identity, including
+backend-nested Groups; a moved source follows its new Group, while missing assignment or definition
+commits the fork Ungrouped. Failed fresh launch cleanup conditionally releases only the target still
+bound to that fresh session and atomically discards the seed, its membership, and any owned inline
+Group only after release is confirmed absent or complete; source membership and definitions remain
+unchanged.
 
 When preparation mints a fresh session and receives a title, it persists that
 title before registering the managed target so reconcile cannot publish the new
@@ -751,10 +754,12 @@ when it changes several tables:
 - `SessionStore` owns explicit durable Station-session admission with selected harness and terminal
   identity, lifecycle, canonical worktree-scoped title authority and projection, durable
   provider-native execution bindings, recovery handles, turn readiness, and purpose-specific
-  remembered-harness lookup. A fresh-session
-  seed may atomically validate and place the session in an existing root Group or create its first
-  root Group. Discard consumes the seed result's placement provenance: existing placement removes
-  only the still-matching membership, while inline placement deletes the Group only when its full
+  remembered-harness lookup. A fresh-session seed may atomically validate and place the session in
+  an existing root Group, create its first root Group, or inherit a source session's transaction-
+  current Group. Missing source placement succeeds Ungrouped. Discard consumes the seed result's
+  placement provenance: existing placement removes only the still-matching membership, source
+  inheritance also permits cleanup after Group deletion already removed that membership, while
+  inline placement deletes the Group only when its full
   definition, root parentage, sole membership, and absence of children remain unchanged. Any drift
   aborts session, title, membership, and Group cleanup together. Rename, seed/discard, confirmed
   worktree retirement, and canonical-title/recovery import keep their multi-table changes atomic.

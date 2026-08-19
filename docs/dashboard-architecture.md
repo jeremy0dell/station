@@ -141,9 +141,11 @@ one pending row at its new Group and suppress the exact matching ungrouped
 canonical row while the expected membership command converges. That placement
 is renderer-local intent, never inferred or durable membership, and is pruned
 as soon as canonical truth places the session or removes its target.
-Quick Session and Fork otherwise place optimistic create rows at the project
-root until canonical replacement; deliberate New Session retains its sheet and
-never creates such a row.
+Quick Session and explicitly Ungrouped Fork place optimistic create rows at the project root until
+canonical replacement. A Group-inheriting Fork targets its optimistic row at the source Group ID;
+a source move, deletion, or canonical replacement prunes that hint without synthesizing membership
+or exposing a duplicate root row. Deliberate New Session retains its sheet and never creates such a
+row.
 The renderer-local `GroupOrderingMode` chooses Groups-first or whole-block
 alphabetical interleaving without changing canonical arrays.
 The internal `treeGrid.ts` controller knows only immutable nodes, ordered cells,

@@ -254,11 +254,13 @@ export type PersistedSession = {
 
 export type SessionSeedGroupPlacement =
   | { kind: "existing"; groupId: SessionGroupId }
-  | { kind: "create"; groupId: SessionGroupId; name: string };
+  | { kind: "create"; groupId: SessionGroupId; name: string }
+  | { kind: "source"; sourceSessionId: SessionId };
 
-/** Exact Group state established by a session seed and required for provenance-safe discard. */
+/** Group placement established by a session seed and required for provenance-safe discard. */
 export type SessionSeedGroupProvenance =
   | { kind: "existing"; groupId: SessionGroupId }
+  | { kind: "source"; groupId: SessionGroupId }
   | {
       kind: "created";
       groupId: SessionGroupId;
