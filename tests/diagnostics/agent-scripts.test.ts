@@ -1491,13 +1491,20 @@ describe("tui dev script", () => {
     expect(nodePtyRepairScript).toMatch(/cd \\"\$\{root\}\\" && bun install --frozen-lockfile/u);
 
     const frozenInstall = isolatedScript.indexOf("bun install --frozen-lockfile");
+    expect(isolatedScript).toContain("unset STATION_OPENCODE_PLUGIN_BODY_PATH");
+    expect(devboxScript).toContain("delete process.env.STATION_OPENCODE_PLUGIN_BODY_PATH");
     expect(isolatedScript).toContain('if [ "$COMMAND" = "inventory" ]');
     expect(isolatedScript.indexOf('if [ "$COMMAND" = "inventory" ]')).toBeLessThan(frozenInstall);
     expect(isolatedScript).toContain('if [ "$COMMAND" = "prune" ]');
     expect(isolatedScript.indexOf('if [ "$COMMAND" = "prune" ]')).toBeLessThan(frozenInstall);
     expect(frozenInstall).toBeGreaterThan(isolatedScript.indexOf('if [ "$COMMAND" = "stop" ]'));
     expect(frozenInstall).toBeLessThan(isolatedScript.indexOf('mkdir -p "$DS/observer"'));
-    expect(frozenInstall).toBeLessThan(isolatedScript.indexOf("observer start 2>&1"));
+    const exactActivation = isolatedScript.indexOf("observer ensure-exact-build 2>&1");
+    const hookInstall = isolatedScript.indexOf('hooks install "$harness" --yes');
+    const hookDoctor = isolatedScript.indexOf('hooks doctor "$harness"');
+    expect(frozenInstall).toBeLessThan(exactActivation);
+    expect(exactActivation).toBeLessThan(hookInstall);
+    expect(hookInstall).toBeLessThan(hookDoctor);
     expect(isolatedScript).toContain("exec bun run dev");
     expect(devboxScript).toContain('run("bun", ["run", "station:isolated", "dev"]');
     expect(stationPackage.scripts?.dev).not.toContain("bun --hot");

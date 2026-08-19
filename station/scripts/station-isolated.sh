@@ -4,6 +4,10 @@
 # tears the isolated observer and host down.
 set -euo pipefail
 
+# The compiled Station binary exports a Bun-embedded OpenCode asset path to its
+# panes. That path is not readable by source checkout processes.
+unset STATION_OPENCODE_PLUGIN_BODY_PATH
+
 # Resolve THIS worktree's root from the script's own location, so the tooling
 # always targets the checkout it lives in (never the global state).
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -292,11 +296,12 @@ seed_cursor_link "$HOME/.git-credentials" "$STATION_CURSOR_HOME/.git-credentials
 seed_cursor_link "$HOME/.ssh" "$STATION_CURSOR_HOME/.ssh"
 seed_cursor_link "$HOME/.config/git" "$STATION_CURSOR_HOME/.config/git"
 
-# Idempotent: reuses a healthy observer, so reopening Station leaves agents alone.
-if ! observer_start_output="$(node "$CLI" --config "$CFG" observer start 2>&1)"; then
-  printf '%s\n' "$observer_start_output" >&2
+# Exact reopen is idempotent. A changed checkout build cooperatively replaces
+# only this checkout's Observer; the separate persistent Host keeps its PTYs.
+if ! observer_activation_output="$(node "$CLI" --config "$CFG" observer ensure-exact-build 2>&1)"; then
+  printf '%s\n' "$observer_activation_output" >&2
   echo >&2
-  echo "The isolated Observer and .dev-state were preserved." >&2
+  echo "The persistent Station Host, hosted agents, and .dev-state were preserved." >&2
   echo "Restore the socket access or evidence named above, then run:" >&2
   echo "  pnpm station:devbox status" >&2
   echo "  pnpm station:devbox start" >&2
@@ -305,11 +310,30 @@ if ! observer_start_output="$(node "$CLI" --config "$CFG" observer start 2>&1)";
 fi
 
 # Install status hooks against THIS observer so the launch guard lets these
-# harnesses spawn; each writes into its own isolated home/state, never globals.
+# harnesses spawn; then verify the private artifacts before opening the UI.
+# Each command writes or reads its own isolated home/state, never globals.
 for harness in codex claude cursor opencode; do
-  node "$CLI" --config "$CFG" hooks install "$harness" --yes >/dev/null
+  if ! hook_output="$(node "$CLI" --config "$CFG" hooks install "$harness" --yes 2>&1)"; then
+    printf '%s\n' "$hook_output" >&2
+    echo >&2
+    echo "Private $harness hook refresh failed; the Station UI was not opened." >&2
+    echo "The isolated Observer, persistent Host, hosted agents, and .dev-state were preserved." >&2
+    echo "Retry: pnpm station:devbox $COMMAND" >&2
+    exit 1
+  fi
+  if ! hook_doctor_output="$(node "$CLI" --config "$CFG" hooks doctor "$harness" 2>&1)"; then
+    printf '%s\n' "$hook_doctor_output" >&2
+    echo >&2
+    echo "Private $harness hook validation failed; the Station UI was not opened." >&2
+    echo "The isolated Observer, persistent Host, hosted agents, and .dev-state were preserved." >&2
+    echo "Retry: pnpm station:devbox $COMMAND" >&2
+    exit 1
+  fi
 done
 
+if printf '%s\n' "$observer_activation_output" | grep -q '"lifecycle": "replaced"'; then
+  echo "Checkout build changed — recycled only this devbox's Observer; persistent Host and agents were preserved."
+fi
 echo "Isolated observer up — $STATION_OBSERVER_SOCKET_PATH"
 if [ "$COMMAND" = "dev" ]; then
   echo "  Hot reload: edit station/src/**; Bun HMR updates the isolated UI."

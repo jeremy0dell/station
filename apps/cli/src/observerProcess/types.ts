@@ -20,6 +20,15 @@ export type ObserverStatus =
       error?: SafeError;
     };
 
+export type ExactObserverBuildStatus =
+  | {
+      status: "running";
+      paths: ObserverPaths;
+      health: ObserverHealth;
+      lifecycle: "reused" | "started" | "replaced";
+    }
+  | Exclude<ObserverStatus, { status: "running" }>;
+
 export type ObserverProcessDeps = {
   /** Requested Observer build selector; production defaults to this executable's immutable selector. */
   buildVersion?: string;

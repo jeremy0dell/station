@@ -324,6 +324,14 @@ Application composition proceeds around that boundary in this order:
 Station Host is outside the Observer singleton lifecycle and continues to own
 live PTYs independently.
 
+Checkout-local devbox composition may explicitly request exact-build activation
+for its configured socket. The CLI process adapter reuses exact health or
+cooperatively stops the identity-pinned non-exact incumbent before starting the
+caller build, then requires exact health as the postcondition. This orchestration
+does not address the Station Host socket, so the Host and its PTYs remain outside
+the replacement. It is an explicit configured-runtime operation rather than a
+change to singleton ordering or automatic handoff authority.
+
 Singleton startup may hand commands, hooks, ingress, and generic protocol clients
 the healthy winner selected by the existing attach-versus-handoff policy. After
 acceptance, clients pin that exact selector. Each later operation checks health

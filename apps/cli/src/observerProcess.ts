@@ -22,6 +22,7 @@ import {
 } from "./observerProcess/health.js";
 import { startObserverProcess } from "./observerProcess/startup.js";
 import type {
+  ExactObserverBuildStatus,
   ObserverProcessDeps,
   ObserverProcessOptions,
   ObserverStatus,
@@ -31,6 +32,7 @@ import { type ObserverPaths, resolveObserverPaths } from "./paths.js";
 // Commands intentionally keep one stable lifecycle import while implementation lives in observerProcess/.
 export type {
   ChildProcessLike,
+  ExactObserverBuildStatus,
   ObserverProcessDeps,
   ObserverProcessOptions,
   ObserverStatus,
@@ -201,6 +203,109 @@ export async function stopObserver(
     );
   }
   return stopRunningObserver(status, options, deps);
+}
+
+/**
+ * ADAPTER
+ *
+ * Converges one configured Observer socket to this caller's exact immutable build through
+ * identity-pinned cooperative replacement without changing generic singleton ordering.
+ */
+export async function ensureExactObserverBuild(
+  options: ObserverProcessOptions = {},
+  deps: ObserverProcessDeps = {},
+): Promise<ExactObserverBuildStatus> {
+  const paths = options.paths ?? resolveObserverPaths(options.config);
+  const timeoutMs = options.timeoutMs ?? 10_000;
+  const deadlineMs = Date.now() + timeoutMs;
+  const buildVersion = deps.buildVersion ?? stationObserverBuildVersion();
+  const status = await getObserverStatus(
+    { ...options, paths, timeoutMs: remainingStopTimeoutMs(deadlineMs) },
+    deps,
+  );
+
+  if (status.status === "running" && status.health.version === buildVersion) {
+    return { ...status, lifecycle: "reused" };
+  }
+  if (status.status === "unhealthy") {
+    return status;
+  }
+
+  const incumbent = status.status === "running" ? status.health : undefined;
+  if (status.status === "running") {
+    try {
+      await stopRunningObserver(
+        status,
+        { ...options, paths, timeoutMs: remainingStopTimeoutMs(deadlineMs) },
+        deps,
+      );
+    } catch (error) {
+      const remainingMs = remainingStopTimeoutMs(deadlineMs);
+      if (remainingMs <= 0) {
+        return exactBuildActivationFailure(paths, error);
+      }
+      const current = await getObserverStatus({ ...options, paths, timeoutMs: remainingMs }, deps);
+      if (current.status === "running" && current.health.version === buildVersion) {
+        return { ...current, lifecycle: "replaced" };
+      }
+      if (current.status !== "stopped" && current.status !== "stale") {
+        return exactBuildActivationFailure(paths, error);
+      }
+    }
+  }
+
+  const remainingMs = remainingStopTimeoutMs(deadlineMs);
+  if (remainingMs <= 0) {
+    return exactBuildActivationFailure(paths, observerStopTimeoutError());
+  }
+  const started = await startObserver(
+    {
+      ...options,
+      paths,
+      timeoutMs: remainingMs,
+      startupDeadlineMs: deadlineMs,
+    },
+    deps,
+  );
+  if (started.status !== "running") {
+    if (started.error === undefined || incumbent === undefined) return started;
+    return { ...started, error: annotateReplacedIncumbent(started.error, incumbent) };
+  }
+  if (started.health.version !== buildVersion) {
+    return {
+      status: "unhealthy",
+      paths,
+      error: exactBuildMismatchError(started.health, buildVersion),
+    };
+  }
+  return {
+    ...started,
+    lifecycle: incumbent === undefined ? "started" : "replaced",
+  };
+}
+
+function exactBuildActivationFailure(
+  paths: ObserverPaths,
+  error: unknown,
+): ExactObserverBuildStatus {
+  return {
+    status: "unhealthy",
+    paths,
+    error: safeErrorFromUnknown(error, {
+      tag: "ObserverStartupError",
+      code: "OBSERVER_EXACT_BUILD_ACTIVATION_FAILED",
+      message: "The exact Observer build could not be activated safely.",
+    }),
+  };
+}
+
+function exactBuildMismatchError(health: ObserverHealth, requestedVersion: string): SafeError {
+  return {
+    tag: "ObserverStartupError",
+    code: "OBSERVER_EXACT_BUILD_ACTIVATION_FAILED",
+    message: "The exact Observer build could not be activated safely.",
+    hint: `Running build: ${formatObserverBuild(health.version)}. Requested build: ${formatObserverBuild(requestedVersion)}. The configured socket changed owners during activation; the running Observer was preserved.`,
+  };
 }
 
 async function stopRunningObserver(

@@ -6,7 +6,7 @@
 //
 // Warning: runs against the real .dev-state for this checkout — it starts and
 // then STOPS the devbox, so a live devbox here will be stopped.
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   chmodSync,
@@ -36,6 +36,7 @@ const socketDir = join(
 );
 const observerSock = join(socketDir, "observer.sock");
 const hostSock = join(socketDir, "station-host.sock");
+const hostEntry = join(repoRoot, "station", "src", "host", "hostMain.ts");
 const hooksDir = join(ds, "observer", "hooks");
 const hookLog = join(ds, "observer", "logs", "hooks.jsonl");
 const codexHookScript = join(hooksDir, "station-codex-hook.sh");
@@ -59,6 +60,7 @@ exec "$STATION_DEVBOX_SMOKE_REAL_BUN" "$@"
   { mode: 0o700 },
 );
 let socketRestricted = false;
+let hostPid;
 
 process.stderr.write(
   "station:devbox smoke — starts and STOPS this checkout's devbox (.dev-state).\n",
@@ -117,6 +119,20 @@ try {
   );
   assertHookDoctors("initial start");
 
+  spawnChecked("bash", [join(repoRoot, "station", "scripts", "link-station-packages.sh")], {
+    label: "link Station packages for persistent Host smoke",
+    env: { ...process.env, STATION_QUIET_PRELAUNCH: "1" },
+  });
+  const host = spawn(
+    resolvedBun.stdout.trim(),
+    [hostEntry, "--socket", hostSock, "--state-dir", join(ds, "observer")],
+    { cwd: join(repoRoot, "station"), detached: true, stdio: "ignore" },
+  );
+  host.unref();
+  hostPid = host.pid;
+  assert(Number.isInteger(hostPid), "failed to launch the persistent source Host");
+  await waitForPath(hostSock, "persistent Host socket");
+
   // status through the wrapper reports the isolated socket; the direct isolated
   // observer status must not leak the global state dir.
   const status = devbox(["status"], "status");
@@ -126,6 +142,7 @@ try {
   );
   const isoStatus = spawnChecked("node", [cli, "--config", cfg, "observer", "status"], {
     label: "isolated observer status",
+    env: sourceCliEnv(),
   });
   assertNoGlobalLeak(isoStatus.stdout, "isolated observer status");
   const healthyStatus = parseJson(isoStatus.stdout, "isolated observer status");
@@ -135,6 +152,17 @@ try {
     `isolated status did not report a PID\n${isoStatus.stdout}`,
   );
   const originalSocket = statSync(observerSock);
+
+  devbox(["start"], "exact reopen", { STATION_ISOLATED_NO_LAUNCH: "1" });
+  const exactReopenStatus = spawnChecked("node", [cli, "--config", cfg, "observer", "status"], {
+    label: "exact reopen observer status",
+    env: sourceCliEnv(),
+  });
+  assert(
+    parseJson(exactReopenStatus.stdout, "exact reopen observer status").health?.pid === originalPid,
+    "an exact devbox reopen unnecessarily recycled the Observer",
+  );
+  process.kill(hostPid, 0);
 
   chmodSync(observerSock, 0o000);
   socketRestricted = true;
@@ -147,7 +175,9 @@ try {
     `inaccessible devbox start hid the Observer diagnosis\n${blocked.stderr}`,
   );
   assert(
-    blocked.stderr.includes("The isolated Observer and .dev-state were preserved."),
+    blocked.stderr.includes(
+      "The persistent Station Host, hosted agents, and .dev-state were preserved.",
+    ),
     `inaccessible devbox start omitted preservation guidance\n${blocked.stderr}`,
   );
   assert(
@@ -156,6 +186,7 @@ try {
     `inaccessible devbox start omitted recovery commands\n${blocked.stderr}`,
   );
   process.kill(originalPid, 0);
+  process.kill(hostPid, 0);
   const blockedSocket = statSync(observerSock);
   assert(
     blockedSocket.dev === originalSocket.dev && blockedSocket.ino === originalSocket.ino,
@@ -167,6 +198,7 @@ try {
   devbox(["start"], "recovery start", { STATION_ISOLATED_NO_LAUNCH: "1" });
   const recoveredStatus = spawnChecked("node", [cli, "--config", cfg, "observer", "status"], {
     label: "recovered isolated observer status",
+    env: sourceCliEnv(),
   });
   assert(
     parseJson(recoveredStatus.stdout, "recovered isolated observer status").health?.pid ===
@@ -177,6 +209,7 @@ try {
   devbox(["restart"], "restart");
   const restartedStatus = spawnChecked("node", [cli, "--config", cfg, "observer", "status"], {
     label: "restarted isolated observer status",
+    env: sourceCliEnv(),
   });
   assert(
     parseJson(restartedStatus.stdout, "restarted isolated observer status").health?.pid !==
@@ -185,6 +218,7 @@ try {
   );
   assertHookDoctors("restart");
   assertCodexHookDelivery();
+  process.kill(hostPid, 0);
 
   // stop removes the isolated observer + host sockets (teardown scoped to .dev-state).
   devbox(["stop"], "stop");
@@ -201,6 +235,15 @@ try {
   throw error;
 } finally {
   rmSync(bunShimRoot, { recursive: true, force: true });
+}
+
+async function waitForPath(path, label) {
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline) {
+    if (existsSync(path)) return;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error(`${label} was not created at ${path}`);
 }
 
 function parseArgs(args) {
@@ -240,7 +283,7 @@ function assertHookDoctors(label) {
     const result = spawnChecked("node", [cli, "--config", cfg, "hooks", "doctor", provider], {
       label: `${label} ${provider} hook doctor`,
       env: {
-        ...process.env,
+        ...sourceCliEnv(),
         CLAUDE_CONFIG_DIR: join(ds, "claude-home"),
         CODEX_HOME: join(ds, "codex-home"),
         OPENCODE_CONFIG_DIR: join(ds, "opencode-config"),
@@ -271,7 +314,7 @@ function assertCodexHookDelivery() {
     label: "restarted Codex hook delivery",
     input: payload,
     env: {
-      ...process.env,
+      ...sourceCliEnv(),
       STATION_CONFIG_PATH: cfg,
       STATION_HOOK_SPOOL_DIR: join(ds, "observer", "spool", "hooks"),
       STATION_OBSERVER_SOCKET_PATH: observerSock,
@@ -291,6 +334,12 @@ function assertCodexHookDelivery() {
     ),
     `Codex hook did not deliver to the restarted Observer\n${JSON.stringify(newRecords, null, 2)}`,
   );
+}
+
+function sourceCliEnv() {
+  const env = { ...process.env };
+  delete env.STATION_OPENCODE_PLUGIN_BODY_PATH;
+  return env;
 }
 
 function readBunInvocations() {

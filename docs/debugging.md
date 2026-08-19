@@ -237,6 +237,16 @@ attach to different code. Compare `lsof -t <socket>` with the strict pidfile and
 `ps -ww -p <pid> -o lstart=,command=`, then retry only after resolving missing
 or conflicting evidence. Automatic handoff never uses SIGKILL.
 
+`OBSERVER_EXACT_BUILD_ACTIVATION_FAILED` means an explicit configured-runtime
+activation could not finish with the caller's exact immutable selector. In a
+checkout devbox, the persistent Host, hosted agents, and `.dev-state` remain
+preserved. If the incumbent could not be pinned or the socket became
+inaccessible, inspect `pnpm station:devbox status` and the named evidence before
+retrying. If the cooperative stop completed but successor startup failed, the
+isolated Observer may be down while Host-owned PTYs remain live; rerun the same
+`pnpm station:devbox start` or `dev` command. Do not use reset as routine build
+recovery. Exact activation never signals, reaps, or invokes devbox Host teardown.
+
 ## Preserve Sessions Before Runtime Surgery
 
 When an Observer or Host handoff is blocked and live agent work must survive,
