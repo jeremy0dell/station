@@ -680,7 +680,7 @@ function artifactOwner(launcher: string, runtimeKind: "compiled" | "source", dig
     schemaVersion: 1 as const,
     launcher,
     runtimeKind,
-    version: runtimeKind === "compiled" ? "0.7.1" : "0.0.0-pre-alpha.5.15",
+    version: runtimeKind === "compiled" ? "0.7.1" : "0.0.0-pre-alpha.5.16",
     buildIdentity: digit.repeat(64),
   };
 }
