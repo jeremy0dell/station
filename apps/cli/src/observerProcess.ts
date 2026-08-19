@@ -64,7 +64,9 @@ export async function getObserverStatus(
   }
 
   const healthTimeoutMs = remainingStatusTimeoutMs(deadlineMs);
-  if (healthTimeoutMs <= 0) return observerHealthTimedOut(paths);
+  if (healthTimeoutMs <= 0) {
+    return probe.status === "absent" ? { status: "stopped", paths } : observerHealthTimedOut(paths);
+  }
 
   const client =
     deps.clientFactory?.(paths.socketPath, {

@@ -22,6 +22,33 @@ const exactOneBuildVersion = `1.0.0+station.${"a".repeat(64)}`;
 const exactTwoBuildVersion = `2.0.0+station.${"a".repeat(64)}`;
 
 describe("CLI observer process lifecycle", () => {
+  it("reports an absent socket as stopped without spending the remaining deadline on health", async () => {
+    const fixture = await createTempState();
+    let healthRequested = false;
+    const dateNow = vi.spyOn(Date, "now").mockReturnValueOnce(100).mockReturnValue(101);
+
+    try {
+      const result = await getObserverStatus(
+        { config: fixture.config, timeoutMs: 1 },
+        {
+          probeSocket: async () => ({ status: "absent" }),
+          clientFactory: () => {
+            healthRequested = true;
+            throw new Error("health must not be requested without a socket");
+          },
+        },
+      );
+
+      expect(result).toMatchObject({
+        status: "stopped",
+        paths: { socketPath: fixture.socketPath },
+      });
+      expect(healthRequested).toBe(false);
+    } finally {
+      dateNow.mockRestore();
+    }
+  });
+
   it("maps stale sockets distinctly from stopped observers", async () => {
     const fixture = await createTempState();
     await createRealStaleSocket(fixture.socketPath);
