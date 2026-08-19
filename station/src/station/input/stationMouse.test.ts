@@ -305,6 +305,28 @@ describe("routeStationMouse", () => {
     });
   });
 
+  it("toggles grouped Fork placement through the shared pointer action", () => {
+    const store = makeStore(groupedManyProjectsSnapshot());
+    const rowId = "ses_wt_group_contracts";
+    store.actions.handleKey({ input: "F" });
+    store.actions.handleKey({ input: slotForRow(store, rowId) });
+
+    expect(
+      routeStationMouse(
+        { kind: "forkSessionAction", actionId: "details.group" },
+        LEFT_DOWN,
+        store,
+      ),
+    ).toEqual({ kind: "handled" });
+    expect(store.state.getState().screen).toMatchObject({
+      name: "fork",
+      step: "details",
+      focus: "group",
+      sourceGroup: { id: "group_design_refresh", name: "Design refresh" },
+      inheritSourceGroup: false,
+    });
+  });
+
   it("dispatches fork submit through the semantic capability path", () => {
     const store = makeStore();
     const worktreeId = "wt_station_working";

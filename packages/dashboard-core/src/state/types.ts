@@ -224,6 +224,7 @@ export type TuiScreen =
   | {
       name: "fork";
       step: "details";
+      sourceSessionId: SessionId;
       sourceWorktreeId: WorktreeId;
       projectId: ProjectId;
       projectLabel: string;
@@ -232,8 +233,10 @@ export type TuiScreen =
       sourceAgentRunning: boolean;
       branch: string;
       draftTitle: EditableTextInputState;
+      sourceGroup?: { id: SessionGroupId; name: string };
+      inheritSourceGroup: boolean;
       copyDirty: boolean;
-      focus: "name" | "copyDirty" | "submit";
+      focus: "name" | "group" | "copyDirty" | "submit";
       returnTo?: "dashboard";
       validationError?: string;
     }

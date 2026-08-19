@@ -783,16 +783,44 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
                                                                                 
 ▼ observer  3 sessions · 3 agents                                 [sh] [qs] [▾] 
  [6] x batch-export                       opencode  exited                 #8 ✓ 
- [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 … 
-┌────────────────────────────────────────────┐code  idle             +1 -1 #4 ✓ 
-│ Fork Session                               │                                  
-│ Source   station · cli-help-man            │                    [sh] [qs] [▾] 
-│▸ Name   Hexagonal PT 12|                   │code  idle           +14 -6 #5 x1 
+┌────────────────────────────────────────────┐code  working        +32 -8 #16 … 
+│ Fork Session                               │code  idle             +1 -1 #4 ✓ 
+│ Source   station · cli-help-man            │                                  
+│▸ Name   Hexagonal PT 12|                   │                    [sh] [qs] [▾] 
+│ Group  (Ungrouped)                         │code  idle           +14 -6 #5 x1 
 │  Copy   [x] uncommitted changes            │code  unknown           +3 -1 #10 
 │ Source keeps running — copy is read-only.  │                                  
 │                                            │                    [sh] [qs] [▾] 
 │  Fork (enter)                              │                                  
 │ ↑↓ focus · Enter fork · Esc back           │───────────────────────────────── 
+└────────────────────────────────────────────┘ ? help  Q/esc:close              
+"
+`;
+
+exports[`modal flow golden frames renders the fork details grouped source 1`] = `
+"                                                                                
+FLEET  ● 0 ready  ⠋ 3 working  ! 1 needs you  x 1 exited  ○ 6 idle  1 · 12 · 11 
+─────────────────────────────────────────────────────────────────────────────── 
+       SESSION                     AGENT     STATUS                 DIFF · PR   
+▼ station  12 sessions · 6 Groups · 11 agents                     [sh] [qs] [▾] 
+╭▼ Design refresh 2 sessions──────────────────────────────────────────[qs] [▾]╮ 
+│ [1] ⠋ group-contracts             codex     working           +84 -20 #481 …│ 
+│ [2] ○ group-keyboard              codex     idle               +16 -4 #482 ✓│ 
+╰─────────────────────────────────────────────────────────────────────────────╯ 
+╭▼ Input parity and minimum-width interaction verification 1 session──[qs] [▾]╮ 
+│ [3] ○ input-routing               codex     idle                      +27 -6│ 
+╰─────────────────────────────────────────────────────────────────────────────╯ 
+╭▼ Observer hardening 3 sessions──────────────────────────────────────[qs] [▾]╮ 
+┌────────────────────────────────────────────┐idle                      +38 -7│ 
+│ Fork Session                               │Agent needs app… +53 -11 #476 x1│ 
+│ Source   station · group-contracts         │working           +91 -22 #478 …│ 
+│  Name   group-contracts-fork               │────────────────────────────────╯ 
+│▸ Group  [x] create in Design refresh       │────────────────────────[qs] [▾]╮ 
+│  Copy   [x] uncommitted changes            │────────────────────────────────╯ 
+│ Source keeps running — copy is read-only.  │────────────────────────[qs] [▾]╮ 
+│                                            │exited                    +19 -2│ 
+│  Fork (enter)                              │                                  
+│ Space/Enter toggle · ↑↓ focus · Esc back   │───────────────────────────────── 
 └────────────────────────────────────────────┘ ? help  Q/esc:close              
 "
 `;
@@ -811,11 +839,11 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
                                                                                 
 ▼ observer  3 sessions · 3 agents                                 [sh] [qs] [▾] 
  [6] x batch-export                       opencode  exited                 #8 ✓ 
- [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 … 
-┌────────────────────────────────────────────┐code  idle             +1 -1 #4 ✓ 
-│ Fork Session                               │                                  
-│ Source   station · cli-help-man            │                    [sh] [qs] [▾] 
-│  Name   cli-help-man-fork                  │code  idle           +14 -6 #5 x1 
+┌────────────────────────────────────────────┐code  working        +32 -8 #16 … 
+│ Fork Session                               │code  idle             +1 -1 #4 ✓ 
+│ Source   station · cli-help-man            │                                  
+│  Name   cli-help-man-fork                  │                    [sh] [qs] [▾] 
+│ Group  (Ungrouped)                         │code  idle           +14 -6 #5 x1 
 │▸ Copy   [x] uncommitted changes            │code  unknown           +3 -1 #10 
 │ Source keeps running — copy is read-only.  │                                  
 │                                            │                    [sh] [qs] [▾] 
@@ -839,11 +867,11 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
                                                                                 
 ▼ observer  3 sessions · 3 agents                                 [sh] [qs] [▾] 
  [6] x batch-export                       opencode  exited                 #8 ✓ 
- [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 … 
-┌────────────────────────────────────────────┐code  idle             +1 -1 #4 ✓ 
-│ Fork Session                               │                                  
-│ Source   station · cli-help-man            │                    [sh] [qs] [▾] 
-│  Name   cli-help-man-fork                  │code  idle           +14 -6 #5 x1 
+┌────────────────────────────────────────────┐code  working        +32 -8 #16 … 
+│ Fork Session                               │code  idle             +1 -1 #4 ✓ 
+│ Source   station · cli-help-man            │                                  
+│  Name   cli-help-man-fork                  │                    [sh] [qs] [▾] 
+│ Group  (Ungrouped)                         │code  idle           +14 -6 #5 x1 
 │  Copy   [x] uncommitted changes            │code  unknown           +3 -1 #10 
 │ Source keeps running — copy is read-only.  │                                  
 │                                            │                    [sh] [qs] [▾] 
@@ -859,11 +887,11 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0
 ─────────────────────────────────────── 
        SESSION             STATUS       
 ▼ station  5 sessions · … [sh] [qs] [▾] 
- [1] ○ cli-help-man        idle         
 ┌──────────────────────────────────────┐
 │ Fork Session                         │
 │ Source   station · cli-help-man      │
 │  Name   cli-help-man-fork            │
+│ Group  (Ungrouped)                   │
 │▸ Copy   [x] uncommitted changes      │
 │ Source running; copy is read-only.   │
 │                                      │

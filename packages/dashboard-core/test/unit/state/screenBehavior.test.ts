@@ -49,6 +49,7 @@ const renameEdit: Extract<TuiScreen, { name: "renameSession"; step: "editName" }
 const forkDetails: Extract<TuiScreen, { name: "fork"; step: "details" }> = {
   name: "fork",
   step: "details",
+  sourceSessionId: "ses_wt_web_idle",
   sourceWorktreeId: "wt_web_idle",
   projectId: "web",
   projectLabel: "Web",
@@ -57,6 +58,7 @@ const forkDetails: Extract<TuiScreen, { name: "fork"; step: "details" }> = {
   sourceAgentRunning: false,
   branch: "main-fork-abcdef",
   draftTitle: createEditableTextInputState("main-fork"),
+  inheritSourceGroup: true,
   copyDirty: true,
   focus: "name",
 };

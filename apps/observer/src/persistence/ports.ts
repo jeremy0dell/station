@@ -142,8 +142,9 @@ export interface ReconcileStore {
  *
  * Admits Observer-owned sessions with selected provider identity and maintains their lifecycle,
  * native execution bindings, canonical worktree-scoped titles, recovery, and readiness. Seed,
- * optional root Group placement, and provenance-safe discard are one atomic conversation;
- * canonical-title handoff and recovery import also commit before recovery reconciles.
+ * explicit root Group placement or current source-Group inheritance, and provenance-safe discard
+ * are one atomic conversation; canonical-title handoff and recovery import also commit before
+ * recovery reconciles.
  */
 export interface SessionStore {
   listSessions(): Promise<PersistedSession[]>;

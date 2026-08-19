@@ -581,6 +581,32 @@ describe("FullscreenDashboard mouse composition", () => {
     });
   });
 
+  it("routes the grouped Fork placement row through standalone pointer input", async () => {
+    const fixture = makeStationTestRuntime({
+      terminalRows: SURFACE.height,
+      snapshot: groupedManyProjectsSnapshot(),
+    });
+    const setup = await render(fixture.runtime);
+    await actOn(async () => {
+      fixture.runtime.actions.dispatch({
+        type: "forkSession.openDetails",
+        rowId: "ses_wt_group_contracts",
+        returnTo: "dashboard",
+      });
+      await setup.flush();
+    });
+    const group = cellFor(setup.captureCharFrame(), "[x] create in");
+
+    await actOn(() => setup.mockMouse.click(group.col, group.row, MouseButtons.LEFT));
+    expect(fixture.runtime.state.getState().screen).toMatchObject({
+      name: "fork",
+      step: "details",
+      focus: "group",
+      sourceGroup: { id: "group_design_refresh", name: "Design refresh" },
+      inheritSourceGroup: false,
+    });
+  });
+
   it("scrolls when the wheel is used over a child row", async () => {
     const fixture = makeStationTestRuntime({ terminalRows: 12 });
     const setup = await render(fixture.runtime, { width: 80, height: 12 });

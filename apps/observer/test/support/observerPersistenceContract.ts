@@ -2269,6 +2269,108 @@ export function observerPersistenceContract(
         });
       });
 
+      it("inherits the source's transaction-current Group and falls back to Ungrouped when removed", async () => {
+        await withPersistence(createFixture, async ({ persistence }) => {
+          await persistence.createSessionGroup({
+            id: "group_source_initial",
+            projectId: "web",
+            name: "Initial",
+            createdAt: earlier,
+          });
+          await persistence.createSessionGroup({
+            id: "group_source_parent",
+            projectId: "web",
+            name: "Parent",
+            createdAt: earlier,
+          });
+          await persistence.createSessionGroup({
+            id: "group_source_latest",
+            projectId: "web",
+            name: "Latest nested",
+            parentGroupId: "group_source_parent",
+            createdAt: earlier,
+          });
+          await persistence.seedSession({
+            ...seedInput("ses_source"),
+            group: { kind: "existing", groupId: "group_source_initial" },
+          });
+          await persistence.updateSessionGroupMembership({
+            id: "group_source_latest",
+            expectedVersion: 1,
+            add: [
+              {
+                sessionId: "ses_source",
+                projectId: "web",
+                expectedGroupId: "group_source_initial",
+              },
+            ],
+            updatedAt: later,
+          });
+
+          const inherited = await persistence.seedSession({
+            ...seedInput("ses_fork"),
+            group: { kind: "source", sourceSessionId: "ses_source" },
+          });
+          expect(inherited).toMatchObject({
+            ok: true,
+            groupProvenance: { kind: "source", groupId: "group_source_latest" },
+          });
+          await expect(persistence.listSessionGroups()).resolves.toContainEqual(
+            expect.objectContaining({
+              id: "group_source_latest",
+              sessionIds: ["ses_fork", "ses_source"],
+            }),
+          );
+          if (!inherited.ok || inherited.groupProvenance === undefined) {
+            throw new Error("expected inherited Group provenance");
+          }
+          await persistence.discardSessionSeed({
+            sessionId: "ses_fork",
+            groupProvenance: inherited.groupProvenance,
+            discardedAt: latest,
+          });
+          await expect(persistence.listSessionGroups()).resolves.toContainEqual(
+            expect.objectContaining({ id: "group_source_latest", sessionIds: ["ses_source"] }),
+          );
+
+          const deletedGroupSeed = await persistence.seedSession({
+            ...seedInput("ses_fork_deleted_group"),
+            group: { kind: "source", sourceSessionId: "ses_source" },
+          });
+          if (!deletedGroupSeed.ok || deletedGroupSeed.groupProvenance === undefined) {
+            throw new Error("expected deleted-Group fork provenance");
+          }
+
+          const latestGroup = (await persistence.listSessionGroups()).find(
+            (group) => group.id === "group_source_latest",
+          );
+          if (latestGroup === undefined) throw new Error("expected latest source Group");
+          await persistence.deleteSessionGroup({
+            id: latestGroup.id,
+            expectedVersion: latestGroup.version,
+            updatedAt: latest,
+          });
+          await expect(
+            persistence.discardSessionSeed({
+              sessionId: "ses_fork_deleted_group",
+              groupProvenance: deletedGroupSeed.groupProvenance,
+              discardedAt: latest,
+            }),
+          ).resolves.toEqual({ discardedSessions: 1, discardedWorktreeTitles: 0 });
+          await expect(
+            persistence.seedSession({
+              ...seedInput("ses_stale_fork"),
+              group: { kind: "source", sourceSessionId: "ses_source" },
+            }),
+          ).resolves.toMatchObject({ ok: true, session: { id: "ses_stale_fork" } });
+          expect(
+            (await persistence.listSessionGroups()).some((group) =>
+              group.sessionIds.includes("ses_stale_fork"),
+            ),
+          ).toBe(false);
+        });
+      });
+
       it("rejects invalid placement without partial session, title, membership, or Group writes", async () => {
         await withPersistence(createFixture, async ({ persistence }) => {
           await persistence.createSessionGroup({
@@ -2291,6 +2393,9 @@ export function observerPersistenceContract(
             id: "group_other",
             projectId: "api",
             name: "Other",
+            initialMembers: [
+              { sessionId: "ses_other_source", projectId: "api", expectedGroupId: null },
+            ],
             createdAt: earlier,
           });
 
@@ -2302,6 +2407,11 @@ export function observerPersistenceContract(
               "group_project_mismatch",
             ],
             ["ses_nested", { kind: "existing", groupId: "group_nested" }, "group_not_root"],
+            [
+              "ses_source_wrong_project",
+              { kind: "source", sourceSessionId: "ses_other_source" },
+              "group_project_mismatch",
+            ],
             [
               "ses_collision",
               { kind: "create", groupId: "group_root", name: "Collision" },

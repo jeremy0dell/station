@@ -11,6 +11,7 @@ import { reconcileAndPublish } from "../reconcile.js";
 import {
   commandValidationError,
   findProjectOrThrow,
+  resolveForkSessionGroupPlacement,
   runProviderMutation,
   throwIfAborted,
   validateSnapshotRow,
@@ -30,9 +31,10 @@ export type WorktreeForkHandlerOptions = {
  * USE CASE
  *
  * Worktree-only half of session.fork: branch off the source HEAD and seed its
- * working tree (when copyDirty), minting no session and launching no terminal so
- * Station can host the inherited harness itself. A selected launch harness is
- * preflighted before mutation. No live-agent guard on the source — the seed is a read-only snapshot.
+ * working tree (when copyDirty), validating any source-Group inheritance intent while minting no
+ * session and launching no terminal so Station can host the inherited harness itself. A selected
+ * launch harness is preflighted before mutation. No live-agent guard on the source — the seed is a
+ * read-only snapshot.
  */
 export function createWorktreeForkHandler(options: WorktreeForkHandlerOptions): CommandHandler {
   return async (context) => {
@@ -42,9 +44,8 @@ export function createWorktreeForkHandler(options: WorktreeForkHandlerOptions): 
     const payload = context.command.payload;
     const project = findProjectOrThrow(options.getProjects(), payload.projectId);
 
-    const sourceRow = options.core
-      .getSnapshot()
-      .rows.find((candidate) => candidate.id === payload.sourceWorktreeId);
+    const snapshot = options.core.getSnapshot();
+    const sourceRow = snapshot.rows.find((candidate) => candidate.id === payload.sourceWorktreeId);
     validateSnapshotRow(sourceRow, payload.projectId);
     if (sourceRow === undefined) {
       throw commandValidationError({
@@ -54,6 +55,12 @@ export function createWorktreeForkHandler(options: WorktreeForkHandlerOptions): 
         worktreeId: payload.sourceWorktreeId,
       });
     }
+    resolveForkSessionGroupPlacement({
+      snapshot,
+      intent: payload.group,
+      projectId: project.id,
+      sourceWorktreeId: sourceRow.id,
+    });
     if (payload.launchHarness !== undefined) {
       await options.launchPreflight(payload.launchHarness, context.signal);
     }

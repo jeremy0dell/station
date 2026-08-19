@@ -5,7 +5,7 @@ import {
   type ObserverService,
   type StationClientStateSource,
 } from "@station/client";
-import type { ProviderId, SafeError, SessionGroupPlacementIntent } from "@station/contracts";
+import type { FreshSessionGroupPlacementIntent, ProviderId, SafeError } from "@station/contracts";
 import { StationHostProviderError } from "@station/host";
 import { paneTreeIds } from "../../state/paneTree.js";
 import { selectPaneRecord } from "../../state/selectors.js";
@@ -33,7 +33,7 @@ export type ManagedLaunchTarget = {
   title?: string;
   /** Harness selected for a fresh session; row activation lets Observer inherit it. */
   harness?: ProviderId;
-  group?: SessionGroupPlacementIntent;
+  group?: FreshSessionGroupPlacementIntent;
   /** Spawn in the background without landing on the pane. */
   background?: boolean;
 };

@@ -84,6 +84,11 @@ describe("observer managed-session capability", () => {
       title: "Forked session",
       hiddenBranch: "forked-session-123",
       copyDirty: true,
+      group: {
+        kind: "source",
+        sourceSessionId: "ses_wt_web_idle",
+        groupId: "group_active",
+      },
       inheritedHarness: "codex",
     });
 
@@ -95,6 +100,11 @@ describe("observer managed-session capability", () => {
         projectId: project.id,
         sourceWorktreeId: "wt_web_idle",
         copyDirty: true,
+        group: {
+          kind: "source",
+          sourceSessionId: "ses_wt_web_idle",
+          groupId: "group_active",
+        },
         harness: { provider: "codex" },
       },
     });
