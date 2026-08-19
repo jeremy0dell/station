@@ -416,6 +416,7 @@ describe("Station app composition", () => {
     store.actions.setPrimaryAgent(paneId, {
       sessionId: "ses_managed",
       terminalTargetId: "native:wt_station_idle",
+      terminalBindingToken: "binding_app_exit",
     });
 
     // Lazy spawn on first resize, then the harness process exits.
@@ -428,6 +429,7 @@ describe("Station app composition", () => {
       {
         terminalTargetId: "native:wt_station_idle",
         expectedSessionId: "ses_managed",
+        expectedBindingToken: "binding_app_exit",
       },
     ]);
   });
@@ -513,6 +515,7 @@ describe("Station app composition", () => {
     store.actions.setPrimaryAgent(paneId, {
       sessionId: "ses_managed",
       terminalTargetId: "native:wt_station_idle",
+      terminalBindingToken: "binding_hmr_exit",
     });
     first.registry.ensure(paneId, { cwd: "/tmp/station/station/idle" });
     first.registry.resize(paneId, { cols: 80, rows: 24 });
@@ -564,6 +567,7 @@ describe("Station app composition", () => {
       {
         terminalTargetId: "native:wt_station_idle",
         expectedSessionId: "ses_managed",
+        expectedBindingToken: "binding_hmr_exit",
       },
     ]);
   });

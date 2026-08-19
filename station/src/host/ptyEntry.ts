@@ -49,6 +49,11 @@ export type PtyEntry = {
   controllerAttachmentId?: string;
   attachments: Map<string, PtyAttachment>;
   subscriptions: StationTerminalDisposable[];
+  /** One explicit close waits on the same proven terminal exit as passive lifecycle. */
+  closePromise?: Promise<boolean>;
+  closeResolve?: (closed: boolean) => void;
+  closeReject?: (error: unknown) => void;
+  closeTimer?: ReturnType<typeof setTimeout>;
 };
 
 /** Everything activation needs beyond what spawn/adoption build per lane. */

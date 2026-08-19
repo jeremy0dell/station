@@ -433,6 +433,8 @@ export function createStationClientRuntime(
     },
     prepareExternalLaunch: (params) => upstreamService.prepareExternalLaunch(params),
     reportExternalExit: (params) => upstreamService.reportExternalExit(params),
+    prepareWorktreeRemoval: (params) => upstreamService.prepareWorktreeRemoval(params),
+    cancelWorktreeRemoval: (params) => upstreamService.cancelWorktreeRemoval(params),
   };
 
   return {

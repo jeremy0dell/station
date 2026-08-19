@@ -169,6 +169,38 @@ describe("observer external-launch reconcile", () => {
     fixture.sqlite.close();
   });
 
+  it("blocks a replacement launch while validated worktree removal is reserved", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-external-remove-reservation-"));
+    const fixture = createFixture(providerIngressSpoolDir(root));
+    await fixture.api.reconcile("seed-removal-reservation");
+    const row = (await fixture.api.getSnapshot()).rows[0];
+    if (row?.registrationIdentity === undefined) {
+      throw new Error("Expected a registered worktree row.");
+    }
+
+    const reservation = await fixture.api.prepareWorktreeRemoval({
+      projectId: row.projectId,
+      worktreeId: row.id,
+      expectedPath: row.path,
+      expectedBranch: row.branch,
+      expectedRegistrationIdentity: row.registrationIdentity,
+      force: true,
+    });
+    let launchSettled = false;
+    const launch = fixture.api
+      .prepareExternalLaunch({ projectId: row.projectId, worktreeId: row.id })
+      .then((result) => {
+        launchSettled = true;
+        return result;
+      });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(launchSettled).toBe(false);
+
+    await fixture.api.cancelWorktreeRemoval({ reservationId: reservation.reservationId });
+    await expect(launch).resolves.toMatchObject({ kind: "prepared" });
+    fixture.sqlite.close();
+  });
+
   it("recovers one canonical session with its title, idle evidence, and readiness", async () => {
     const stateDir = await mkdtemp(join(tmpdir(), "station-observer-ext-"));
     const previousRun = createFakeHarnessRun({

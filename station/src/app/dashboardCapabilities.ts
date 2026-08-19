@@ -20,7 +20,10 @@ import {
   waitForSessionPlacementByBranch,
 } from "../input/runtime/stationRows.js";
 import type { PtyRegistry } from "../terminal/registry/ptyRegistry.js";
-import { prepareNativeWorktreeRemoval } from "./nativeWorktreeRemoval.js";
+import {
+  finalizeNativeWorktreeRemoval,
+  prepareNativeWorktreeRemoval,
+} from "./nativeWorktreeRemoval.js";
 
 const SESSION_PLACEMENT_UNCONFIRMED_NOTICE = {
   kind: "error",
@@ -194,6 +197,8 @@ export function createDashboardCapabilities(
           },
           request.worktreeId,
         ),
+      afterRemove: (request) =>
+        finalizeNativeWorktreeRemoval({ store: options.store }, request.worktreeId),
     }),
     shell: {
       open: (request) => {

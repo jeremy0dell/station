@@ -21,14 +21,17 @@ import type {
   StationEvent,
 } from "@station/contracts";
 import { STARTUP_RECONCILE_REASONS, STATION_SCHEMA_VERSION } from "@station/contracts";
+import { createTraceContext } from "@station/observability";
 import {
   type RuntimeClock,
   safeErrorFromUnknown,
   systemClock,
   toIsoTimestamp,
 } from "@station/runtime";
+import { resolveWorktreeRowOrThrow } from "../commands/cleanup/index.js";
 import type { CommandQueue } from "../commands/queue.js";
 import { commandRecordFromPersisted } from "../commands/record.js";
+import { validateWorktreeRemoval } from "../commands/worktree/removalValidation.js";
 import {
   collectDiagnosticSnapshot,
   type ObserverDiagnosticsDeps,
@@ -292,9 +295,47 @@ export function createObserverApi(options: CreateObserverApiOptions): ObserverAp
     prepareExternalLaunch: (params) =>
       prepareExternalLaunchSafe(options, worktreeMutations, reconcileScheduler, params),
     reportExternalExit: (params) => reportExternalExitSafe(options, reconcileScheduler, params),
+    prepareWorktreeRemoval: (params) =>
+      prepareWorktreeRemovalSafe(options, worktreeMutations, params),
+    cancelWorktreeRemoval: (params) =>
+      Promise.resolve({ cancelled: worktreeMutations.cancel(params.reservationId) }),
   };
 
   return api;
+}
+
+async function prepareWorktreeRemovalSafe(
+  options: CreateObserverApiOptions,
+  worktreeMutations: WorktreeMutationCoordinator,
+  params: Parameters<ObserverApi["prepareWorktreeRemoval"]>[0],
+): ReturnType<ObserverApi["prepareWorktreeRemoval"]> {
+  const providers = assertProviderRegistryAvailable(options);
+  const snapshotRow = resolveWorktreeRowOrThrow(
+    options.core.getSnapshot(),
+    params.worktreeId,
+    params.projectId,
+  );
+  const trace = createTraceContext({ operation: "worktree.prepareRemoval" });
+  const signal = new AbortController().signal;
+  const reservation = await worktreeMutations.reserve(snapshotRow.projectId, snapshotRow.id, () =>
+    validateWorktreeRemoval(
+      {
+        getProjects: () => providerProjectsFromConfig(options.config ?? emptyConfig()),
+        providers,
+        core: options.core,
+        clock: options.clock,
+        logger: options.logger,
+      },
+      params,
+      { signal, trace },
+    ),
+  );
+  return {
+    reservationId: reservation.id,
+    projectId: reservation.projectId,
+    worktreeId: reservation.worktreeId,
+    externalTerminalExitRequired: reservation.value.externalTerminalExitRequired,
+  };
 }
 
 function sessionRecoveryReadiness(options: CreateObserverApiOptions): SessionRecoveryReadiness {

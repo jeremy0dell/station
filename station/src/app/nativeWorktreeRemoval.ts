@@ -1,7 +1,9 @@
 import type { ObserverService, StationClientStateSource } from "@station/client";
-import { isRunningAgentState } from "@station/contracts";
-import { STATION_HOST_PROVIDER_ID } from "@station/host";
-import { closeLocalManagedAgentPaneTreeForWorktree } from "../input/runtime/managedAgentPaneCleanup.js";
+import { isRunningAgentState, type SafeError } from "@station/contracts";
+import {
+  finalizeManagedPanesForWorktree,
+  prepareManagedPanesForWorktree,
+} from "../input/runtime/managedAgentPaneCleanup.js";
 import type { StationStore } from "../state/store.js";
 import type { PtyRegistry } from "../terminal/registry/ptyRegistry.js";
 
@@ -13,14 +15,16 @@ export type NativeWorktreeRemovalOptions = {
   clientState: StationClientStateSource;
   store: StationStore;
   registry: PtyRegistry;
+  /** Test seam; production waits ten seconds for canonical exit projection. */
+  exitSettleTimeoutMs?: number;
 };
 
-/** Close UI-owned PTY state and settle its exit before Observer removes the worktree. */
+/** Settle UI-owned PTYs and exact target release under an Observer removal reservation. */
 export async function prepareNativeWorktreeRemoval(
   options: NativeWorktreeRemovalOptions,
   worktreeId: string,
 ): Promise<void> {
-  const closed = await closeLocalManagedAgentPaneTreeForWorktree(
+  const result = await prepareManagedPanesForWorktree(
     {
       store: options.store,
       registry: options.registry,
@@ -28,38 +32,38 @@ export async function prepareNativeWorktreeRemoval(
     },
     worktreeId,
   );
-  if (
-    !closed.localTargetReleased &&
-    !localStationAgentExitIsPending(options.clientState, worktreeId)
-  ) {
+  if (!result.externalExitSettled && !externalStationAgentExitIsPending(options.clientState, worktreeId)) {
     return;
   }
 
-  // Close Pane reports target release asynchronously, so Delete may arrive before that reconcile settles.
-  await options.service.reconcile(LOCAL_AGENT_EXIT_RECONCILE_REASON).catch(() => undefined);
-  await waitForWorktreeAgentToStop(options.clientState, worktreeId);
+  await options.service.reconcile(LOCAL_AGENT_EXIT_RECONCILE_REASON);
+  await waitForWorktreeAgentToStop(
+    options.clientState,
+    worktreeId,
+    options.exitSettleTimeoutMs ?? LOCAL_AGENT_EXIT_SETTLE_TIMEOUT_MS,
+  );
 }
 
-function localStationAgentExitIsPending(
+/** Finalize retained transcript/layout records after canonical worktree removal succeeds. */
+export function finalizeNativeWorktreeRemoval(
+  options: Pick<NativeWorktreeRemovalOptions, "store">,
+  worktreeId: string,
+): void {
+  finalizeManagedPanesForWorktree(options.store, worktreeId);
+}
+
+function externalStationAgentExitIsPending(
   source: StationClientStateSource,
   worktreeId: string,
 ): boolean {
   const snapshot = source.getState().snapshot;
   const row = snapshot?.rows.find((candidate) => candidate.id === worktreeId);
-  if (!isRunningAgentState(row?.agent?.state)) {
-    return false;
-  }
+  if (!isRunningAgentState(row?.agent?.state)) return false;
   const stationOwned = snapshot?.sessions.some(
     (session) => session.worktreeId === worktreeId && session.origin === "station",
   );
-  if (stationOwned !== true) {
-    return false;
-  }
-  return (
-    row?.terminal === undefined ||
-    (row.terminal.provider === STATION_HOST_PROVIDER_ID &&
-      snapshot?.providerHealth[STATION_HOST_PROVIDER_ID]?.capabilities?.canCloseTarget === false)
-  );
+  if (stationOwned !== true) return false;
+  return row?.terminal === undefined || row.terminal.closeable === false;
 }
 
 function worktreeAgentIsRunning(source: StationClientStateSource, worktreeId: string): boolean {
@@ -70,21 +74,28 @@ function worktreeAgentIsRunning(source: StationClientStateSource, worktreeId: st
 function waitForWorktreeAgentToStop(
   source: StationClientStateSource,
   worktreeId: string,
+  timeoutMs: number,
 ): Promise<void> {
-  if (!worktreeAgentIsRunning(source, worktreeId)) {
-    return Promise.resolve();
-  }
-  return new Promise((resolve) => {
-    const timer = setTimeout(settle, LOCAL_AGENT_EXIT_SETTLE_TIMEOUT_MS);
+  if (!worktreeAgentIsRunning(source, worktreeId)) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => settle(exitSettlementTimeout(worktreeId)), timeoutMs);
     const unsubscribe = source.subscribe(() => {
-      if (!worktreeAgentIsRunning(source, worktreeId)) {
-        settle();
-      }
+      if (!worktreeAgentIsRunning(source, worktreeId)) settle();
     });
-    function settle(): void {
+    function settle(error?: SafeError): void {
       clearTimeout(timer);
       unsubscribe();
-      resolve();
+      error === undefined ? resolve() : reject(error);
     }
   });
+}
+
+function exitSettlementTimeout(worktreeId: string): SafeError {
+  return {
+    tag: "TerminalProviderError",
+    code: "TERMINAL_EXIT_NOT_CONFIRMED",
+    message: "Station did not confirm that the worktree agent exited.",
+    hint: "Keep the worktree and retry after the terminal process has exited.",
+    worktreeId,
+  };
 }

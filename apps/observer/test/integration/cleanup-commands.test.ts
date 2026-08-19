@@ -350,6 +350,32 @@ describe("cleanup command handlers", () => {
     fixture.sqlite.close();
   });
 
+  it("refuses unreserved removal while a Station renderer owns the active terminal", async () => {
+    const fixture = await createFixture({ state: "working", terminalCloseable: false });
+    await fixture.core.reconcile("pre-cleanup");
+
+    const receipt = await fixture.queue.dispatch({
+      type: "worktree.remove",
+      payload: {
+        worktreeId: "wt_web_cleanup",
+        projectId: "web",
+        expectedPath: "/tmp/station/web/cleanup",
+        expectedBranch: "cleanup",
+        expectedRegistrationIdentity: "git-registration:cleanup",
+        force: true,
+      },
+    });
+    await fixture.queue.drain();
+
+    await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
+      status: "failed",
+      error: { code: "EXTERNAL_TERMINAL_EXIT_REQUIRED" },
+    });
+    expect(fixture.harness.snapshot().stopped).toEqual([]);
+    expect(fixture.worktree.snapshot().removed).toEqual([]);
+    fixture.sqlite.close();
+  });
+
   it("force-removes an active worktree after stopping harness and closing terminal", async () => {
     const fixture = await createFixture({ dirty: true, state: "working" });
     await fixture.persistence.seedSession({
@@ -584,7 +610,7 @@ describe("cleanup command handlers", () => {
     fixture.sqlite.close();
   });
 
-  it("refuses active worktree removal when neither harness nor terminal can stop it", async () => {
+  it("refuses active worktree removal before probing a renderer-owned terminal", async () => {
     const fixture = await createFixture({
       dirty: true,
       state: "working",
@@ -608,7 +634,7 @@ describe("cleanup command handlers", () => {
 
     await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
       status: "failed",
-      error: { code: "HARNESS_STOP_UNSUPPORTED" },
+      error: { code: "EXTERNAL_TERMINAL_EXIT_REQUIRED" },
     });
     expect(fixture.harness.snapshot().stopped).toEqual([]);
     expect(fixture.terminal.snapshot().closed).toEqual([]);

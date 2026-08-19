@@ -567,6 +567,54 @@ describe("protocol client/server", () => {
     }
   });
 
+  it("round-trips worktree removal reservation lifecycle", async () => {
+    const { socketPath } = await createTempSocketPath();
+    const prepared: unknown[] = [];
+    const cancelled: unknown[] = [];
+    const api = createFakeObserverApi({
+      prepareWorktreeRemoval: async (params) => {
+        prepared.push(params);
+        return {
+          reservationId: "reservation_round_trip",
+          projectId: params.projectId ?? "web",
+          worktreeId: params.worktreeId,
+          externalTerminalExitRequired: false,
+        };
+      },
+      cancelWorktreeRemoval: async (params) => {
+        cancelled.push(params);
+        return { cancelled: true };
+      },
+    });
+    const server = await startProtocolServer({ socketPath, api });
+    const client = createObserverClient({ socketPath, requestId: ids("removal") });
+
+    try {
+      await expect(
+        client.prepareWorktreeRemoval({
+          projectId: "web",
+          worktreeId: "wt_web_feature",
+          expectedPath: "/tmp/station/web/feature",
+          expectedBranch: "feature",
+          expectedRegistrationIdentity: "registration_1",
+          force: true,
+        }),
+      ).resolves.toEqual({
+        reservationId: "reservation_round_trip",
+        projectId: "web",
+        worktreeId: "wt_web_feature",
+        externalTerminalExitRequired: false,
+      });
+      await expect(
+        client.cancelWorktreeRemoval({ reservationId: "reservation_round_trip" }),
+      ).resolves.toEqual({ cancelled: true });
+      expect(prepared).toHaveLength(1);
+      expect(cancelled).toEqual([{ reservationId: "reservation_round_trip" }]);
+    } finally {
+      await server.close();
+    }
+  });
+
   it("returns SafeError envelopes for invalid params without leaking validator details", async () => {
     const { socketPath } = await createTempSocketPath();
     const server = await startProtocolServer({ socketPath, api: createFakeObserverApi() });

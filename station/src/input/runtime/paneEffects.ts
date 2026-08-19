@@ -177,12 +177,13 @@ export function createPaneEffects(deps: PaneEffectsDeps): PaneEffects {
     let current: PaneId | undefined = paneId;
     while (current !== undefined && !visited.has(current)) {
       visited.add(current);
+      const pane = store.getState().workspace.panes.find((candidate) => candidate.id === current);
+      if (pane?.worktreeId !== undefined) return pane.worktreeId;
       for (const row of rows) {
         if (agentWorktreePaneId(row.id) === current || worktreePaneId(row.id) === current) {
           return row.id;
         }
       }
-      const pane = store.getState().workspace.panes.find((candidate) => candidate.id === current);
       current = pane?.split?.anchorPaneId;
     }
     return undefined;
@@ -251,6 +252,7 @@ export function createPaneEffects(deps: PaneEffectsDeps): PaneEffects {
         command === undefined && role === "shell" ? resolveAuxShellPlacement?.(paneId) : undefined;
       registry?.ensure(paneId, spawnOptions, createTerminal);
       const createOptions: CreatePaneOptions = { role };
+      if (spawn.worktreeId !== undefined) createOptions.worktreeId = spawn.worktreeId;
       // Tile the shell beside the worktree's agent pane when it exists, else split off the active
       // pane; rooting its own session stacked a full-screen pane over the current one.
       const split = shellSplitForWorktree(spawn, role) ?? activeShellSplit(role);
@@ -272,7 +274,11 @@ export function createPaneEffects(deps: PaneEffectsDeps): PaneEffects {
     // Host-placed when the daemon is up (survives a UI restart), else local.
     const createTerminal = resolveAuxShellPlacement?.(newId);
     registry?.ensure(newId, cwd === undefined ? undefined : { cwd }, createTerminal);
-    store.actions.createPane(newId, { split: { anchorPaneId, direction } });
+    const owner = selectPaneRecord(store.getState(), anchorPaneId)?.worktreeId;
+    store.actions.createPane(newId, {
+      split: { anchorPaneId, direction },
+      ...(owner === undefined ? {} : { worktreeId: owner }),
+    });
   }
 
   function runAutomation(automationId: string, anchorPaneId: PaneId): void {
@@ -290,7 +296,11 @@ export function createPaneEffects(deps: PaneEffectsDeps): PaneEffects {
       const newId: PaneId = `${SPLIT_PANE_ID_PREFIX}${splitSeq++}`;
       const createTerminal = resolveAuxShellPlacement?.(newId);
       registry?.ensure(newId, cwd === undefined ? undefined : { cwd }, createTerminal);
-      store.actions.createPane(newId, { split: { anchorPaneId: stepAnchor, direction: step.split } });
+      const owner = selectPaneRecord(store.getState(), anchorPaneId)?.worktreeId;
+      store.actions.createPane(newId, {
+        split: { anchorPaneId: stepAnchor, direction: step.split },
+        ...(owner === undefined ? {} : { worktreeId: owner }),
+      });
       // Execute appends CR (the shell's line terminator) to auto-submit; write leaves the command typed.
       sendWhenReady(newId, step.run === "execute" ? `${step.command}\r` : step.command);
       previousPaneId = newId;

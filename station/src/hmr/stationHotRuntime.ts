@@ -18,7 +18,9 @@ import type { StationHotDisposalSlots } from "./hotDisposalBarrier.js";
 // a retained managed pane.
 // v6: stores gained a shared managed-launch flight guard; a preserved v5 store
 // could let old and replacement HMR compositions prepare the same pane concurrently.
-export const STATION_HOT_RUNTIME_VERSION = 6;
+// v7: stores gained exact exit-report flights and registries gained awaited PTY
+// termination; a preserved v6 runtime cannot safely coordinate native removal.
+export const STATION_HOT_RUNTIME_VERSION = 7;
 
 export type StationHotRenderer = { destroy(): void };
 

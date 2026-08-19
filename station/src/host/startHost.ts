@@ -258,10 +258,10 @@ function buildHostHandlers(input: {
         ptyTable.focus(ptyId); // best-effort
         return { ok: true as const };
       },
-      "host.close": (params) => {
-        // confirm is required by the schema — a guarded, explicit kill.
+      "host.close": async (params) => {
+        // confirm is required by the schema; response waits for proven process exit.
         const { ptyId } = HostCloseParamsSchema.parse(params);
-        return { closed: ptyTable.close(ptyId) };
+        return { closed: await ptyTable.close(ptyId) };
       },
     },
     attach: (params, attachmentId) => {

@@ -19,14 +19,17 @@ export type WorktreeRemovalCapabilities = {
   remove(request: RemoveWorktreeRequest): DashboardExecutionHandle;
 };
 
-/** Options for Observer-backed worktree removal with an optional renderer-owned preflight. */
+/** Options for Observer-backed worktree removal with optional renderer-owned settlement hooks. */
 export type ObserverWorktreeRemovalCapabilitiesOptions = {
   service: ObserverService;
   clientLabel?: string;
+  /** Runs only after Observer validates and reserves the exact worktree mutation slot. */
   beforeRemove?: (request: RemoveWorktreeRequest) => Promise<void>;
+  /** Finalizes renderer layout only after canonical removal succeeds. */
+  afterRemove?: (request: RemoveWorktreeRequest) => Promise<void> | void;
 };
 
-/** Create worktree removal execution while keeping renderer mechanics outside dashboard-core. */
+/** Create reserved worktree removal execution while keeping renderer mechanics outside dashboard-core. */
 export function createObserverWorktreeRemovalCapabilities(
   options: ObserverWorktreeRemovalCapabilitiesOptions,
 ): WorktreeRemovalCapabilities {
@@ -43,12 +46,31 @@ async function runRemove(
   request: RemoveWorktreeRequest,
 ): Promise<DashboardExecutionResult> {
   try {
-    await options.beforeRemove?.(request);
-    const execution = await executeObserverCommand(options.service, request.command, {
+    const preparation = await options.service.prepareWorktreeRemoval(request.command.payload);
+    const preparedRequest = withRemovalReservation(request, preparation);
+    try {
+      if (preparation.externalTerminalExitRequired && options.beforeRemove === undefined) {
+        throw externalTerminalSettlementUnavailable(request.worktreeId);
+      }
+      await options.beforeRemove?.(preparedRequest);
+    } catch (error) {
+      await options.service
+        .cancelWorktreeRemoval({ reservationId: preparation.reservationId })
+        .catch(() => undefined);
+      throw error;
+    }
+
+    const execution = await executeObserverCommand(options.service, preparedRequest.command, {
       clientLabel: options.clientLabel ?? "TUI",
     });
     if (execution.status === "succeeded" || execution.status === "accepted") {
+      await options.afterRemove?.(preparedRequest);
       return { kind: "success" };
+    }
+    if (execution.status === "rejected") {
+      await options.service
+        .cancelWorktreeRemoval({ reservationId: preparation.reservationId })
+        .catch(() => undefined);
     }
     return {
       kind: "failure",
@@ -65,6 +87,33 @@ async function runRemove(
       disposition: "remove-immediately",
     };
   }
+}
+
+function withRemovalReservation(
+  request: RemoveWorktreeRequest,
+  preparation: Awaited<ReturnType<ObserverService["prepareWorktreeRemoval"]>>,
+): RemoveWorktreeRequest {
+  return {
+    ...request,
+    command: {
+      ...request.command,
+      payload: {
+        ...request.command.payload,
+        projectId: preparation.projectId,
+        removalReservationId: preparation.reservationId,
+      },
+    },
+  };
+}
+
+function externalTerminalSettlementUnavailable(worktreeId: WorktreeId): SafeError {
+  return {
+    tag: "TerminalProviderError",
+    code: "EXTERNAL_TERMINAL_SETTLEMENT_UNAVAILABLE",
+    message: "This worktree has a terminal owned by another Station renderer.",
+    hint: "Close it from the native Station workspace, then retry removal.",
+    worktreeId,
+  };
 }
 
 function rejectedCommandError(error: SafeError | undefined): SafeError {

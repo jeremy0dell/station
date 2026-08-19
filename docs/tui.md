@@ -382,6 +382,13 @@ reattach; pane borders and neighboring panes must remain unlinked.
   authorization to relaunch a proven-exited managed pane. Pane clicks, pane
   cycling, overlay close, PTY exit, reconcile, restore, and HMR never relaunch;
   they may continue to expose the retained exit transcript.
+- Native worktree deletion begins only after Observer validation reserves that
+  worktree against replacement launch. UI-owned agent and child PTYs retain their
+  registry subscriptions until a real exit event, exact binding release and
+  canonical reconcile fail closed, Host `close` acknowledges only after process
+  exit, and pane records retain worktree ownership until successful command
+  completion removes the complete tree. Provider-wide health and provider IDs
+  never decide per-target ownership.
 
 ## Surface Rules
 

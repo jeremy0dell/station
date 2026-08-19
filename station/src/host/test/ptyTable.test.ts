@@ -187,7 +187,9 @@ describe("createPtyTable", () => {
     const partial = "before\x1b[1;23r\x1b[";
 
     scripted.helpers.emitData(partial);
-    table.close(ptyId);
+    const closing = table.close(ptyId);
+    scripted.helpers.emitExit({ exitCode: 0 });
+    await closing;
 
     const first = await iterator.next();
     const second = await iterator.next();
@@ -835,12 +837,37 @@ describe("createPtyTable", () => {
     const { ptyId } = table.spawn(baseParams);
     const frames = (await attach(table, liveRef(table, ptyId))).frames[Symbol.asyncIterator]();
 
-    expect(table.close(ptyId)).toBe(true);
+    let closeSettled = false;
+    const closing = table.close(ptyId).then((closed) => {
+      closeSettled = true;
+      return closed;
+    });
+    await Promise.resolve();
+    expect(closeSettled).toBe(false);
+    expect(scripted.helpers.isDisposed()).toBe(false);
+    expect(table.list()).toHaveLength(1);
+
+    scripted.helpers.emitExit({ exitCode: 0 });
+    expect(await closing).toBe(true);
     expect(scripted.helpers.isDisposed()).toBe(true);
     expect(table.list()).toEqual([]);
     expect(await frames.next()).toMatchObject({ value: { type: "exit", ptyId } });
     // Idempotent: closing an unknown PTY is a no-op.
-    expect(table.close(ptyId)).toBe(false);
+    expect(await table.close(ptyId)).toBe(false);
+  });
+
+  it("close fails closed when the process never emits exit", async () => {
+    const scripted = createScriptedTerminal({ cols: 80, rows: 24 });
+    const table = createPtyTable({
+      createTerminal: () => scripted.terminal,
+      closeTimeoutMs: 1,
+    });
+    const { ptyId } = table.spawn(baseParams);
+
+    await expect(table.close(ptyId)).rejects.toMatchObject({ code: "HOST_PTY_CLOSE_TIMEOUT" });
+    expect(table.list()).toHaveLength(1);
+    expect(scripted.helpers.isDisposed()).toBe(false);
+    scripted.helpers.emitExit({ exitCode: 0 });
   });
 
   it("disposeAll broadcasts exit to attachments so streams end (no hang on shutdown)", async () => {

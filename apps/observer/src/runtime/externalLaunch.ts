@@ -369,15 +369,15 @@ async function resolveAutomaticRecovery(
 /**
  * USE CASE
  *
- * Forgets only the matching managed target/session and, when reported, generation.
- * A missing expected session or superseded binding fails closed without reconcile;
+ * Forgets only the matching managed target, session, and binding generation.
+ * Missing exact identity or a superseded binding fails closed without reconcile;
  * reconciliation may retain the durable Station session as `No Agent`.
  */
 export async function reportExternalExit(
   deps: ExternalExitDeps,
   params: AgentReportExternalExitParams,
 ): Promise<ExternalLaunchOutcome<AgentReportExternalExitResult>> {
-  if (params.expectedSessionId === undefined) {
+  if (params.expectedSessionId === undefined || params.expectedBindingToken === undefined) {
     return {
       outcome: { acknowledged: false, terminalTargetId: params.terminalTargetId },
       reconcile: false,
@@ -387,9 +387,7 @@ export async function reportExternalExit(
     (await deps.providers.managedTerminal?.releaseTarget({
       targetId: params.terminalTargetId,
       expectedSessionId: params.expectedSessionId,
-      ...(params.expectedBindingToken === undefined
-        ? {}
-        : { expectedBindingToken: params.expectedBindingToken }),
+      expectedBindingToken: params.expectedBindingToken,
     })) ?? false;
   return {
     outcome: { acknowledged, terminalTargetId: params.terminalTargetId },

@@ -6,6 +6,8 @@ import {
   DoctorOptionsSchema,
   SafeErrorSchema,
   STATION_SCHEMA_VERSION,
+  WorktreeCancelRemovalParamsSchema,
+  WorktreePrepareRemovalParamsSchema,
 } from "@station/contracts";
 import { Effect, runRuntimeBoundaryWithTimeout } from "@station/runtime";
 import { ZodError } from "zod";
@@ -184,6 +186,14 @@ async function routeSingleResponseRequest(
       case "agent.reportExternalExit": {
         const params = AgentReportExternalExitParamsSchema.parse(request.params);
         return await api.reportExternalExit(params);
+      }
+      case "worktree.prepareRemoval": {
+        const params = WorktreePrepareRemovalParamsSchema.parse(request.params);
+        return await api.prepareWorktreeRemoval(params);
+      }
+      case "worktree.cancelRemoval": {
+        const params = WorktreeCancelRemovalParamsSchema.parse(request.params);
+        return await api.cancelWorktreeRemoval(params);
       }
       case "doctor.run": {
         const params = DoctorOptionsSchema.parse(request.params);
