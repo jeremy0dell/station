@@ -111,6 +111,7 @@ export function registerObserverCommandHandlers(
       providers: options.providers,
       core: options.core,
       persistence: options.persistence,
+      worktreeMutations,
       eventBus: options.eventBus,
       clock: options.clock,
       logger: options.logger,

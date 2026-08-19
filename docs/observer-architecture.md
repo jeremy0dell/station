@@ -397,8 +397,15 @@ does not read providers or publish `observer.reconciled`.
 `worktree.remove` carries the selected worktree ID, canonical path, branch, and
 opaque Git registration identity plus the configured project context. Its use case refreshes provider evidence and
 uniquely re-resolves that identity before terminal or worktree cleanup, refusing
-primary, default-branch, stale, missing, or ambiguous targets. The worktree
-adapter retains no earlier list as authority and freshly rechecks the expected registration identity, path, and branch immediately
+primary, default-branch, stale, missing, or ambiguous targets. A renderer that
+must settle externally owned PTYs first requests an opaque removal reservation:
+the Observer validates under the worktree mutation coordinator, blocks launch and
+session-close mutations for that worktree, and lets only the command carrying the
+exact reservation consume the slot. Renderer failure cancels the reservation and
+a bounded expiry releases an abandoned client without authorizing removal;
+unreserved commands fail whenever an external Station renderer still owns the
+active terminal. The command refreshes canonical runtime state after renderer settlement, while the
+worktree adapter retains no earlier list as authority and freshly rechecks the expected registration identity, path, and branch immediately
 before mutation so an external checkout replacement cannot reuse the selected
 path and branch as removal identity. Adapter race refusals retain provider-neutral,
 trace-correlated diagnostic evidence.
@@ -652,10 +659,12 @@ seed and coherent Group placement remain so a dangling target cannot lose its
 title or organizational identity. A title or Group placement supplied while
 returning an existing session is ignored.
 
-External exit reports carry the target plus the Station session expected to own
-it. The managed-terminal adapter atomically forgets only that exact binding;
-missing identity, unknown targets, and superseded sessions are no-ops that do not
-request reconcile. Release never terminates the process.
+External exit reports carry the target, Station session, and opaque binding
+generation expected to own it. The managed-terminal adapter atomically forgets
+only that exact binding; missing identity, unknown targets, and superseded
+sessions or generations are no-ops that do not request reconcile. Tokenless Host
+pane exits never release a target; Host inventory and reconcile remain liveness
+authority. Release never terminates the process.
 
 A managed launch result may include an opaque attachment that Station resolves
 to its host mechanics. An absent attachment permits Station's local launch path;
@@ -698,7 +707,7 @@ expires.
 | Socket ownership evidence | Connect success proves listening. Only `ECONNREFUSED`, or Bun's existing-path `ENOENT`, plus strict zero-holder `lsof` evidence proves stale. Permission failures, timeouts, live holders, evidence failure, path replacement, and non-socket collisions are inaccessible and authorize no spawn, unlink, stop, or signal. |
 | Observer build ordering | Health and pidfile `version` carry display SemVer plus reserved `station.<sha256>` build metadata derived from both repository inputs and production package outputs. Exact identified selectors attach. At one display version, the lexicographically greater immutable build identity is the only candidate allowed to replace; the loser and any missing legacy identity refuse, so neither silently delegates to different code. Each source process verifies the published identity once before adopting it and reuses that selector without further Git or hash I/O for its lifetime. Different display versions retain SemVer precedence and the existing exact-string equal-precedence tiebreak, except that the declared public reset orders `0.0.0-pre-alpha.*` after internal `0.7.1-rc.*` previews. An explicit restart from a higher build cooperatively stops the health-pinned incumbent before spawning its successor, which lets an already installed launcher replace the Observer even when the old process executable names the now-replaced installation path. Lower-build restarts still refuse. Automatic handoff and signal recovery continue to require complete executable-provenance evidence, and replacement never uses automatic SIGKILL. |
 | Command ordering | Commands serialize by session, worktree, project, terminal target, or command-specific fallback scope. Different scopes can execute concurrently. |
-| Managed target release | Station target IDs are deterministic per worktree, so release is compare-and-delete on target plus expected Station session. A delayed old exit or failed-launch cleanup cannot remove a replacement binding; `false` proves absence or supersession, while rejection leaves cleanup uncertain. |
+| Managed target release | Station target IDs are deterministic per worktree, so external release is compare-and-delete on target, expected Station session, and binding generation. Tokenless Host exits reconcile instead of releasing. A delayed old exit or failed-launch cleanup cannot remove a replacement binding; `false` proves absence or supersession, while rejection leaves cleanup uncertain. |
 | Command timeout and cancellation | Handlers receive a signal combining the runtime timeout and queue shutdown. Concrete provider adapters own bounded external settlement; command use cases pass cancellation and normalize failures without starting another provider-operation timer. A handler with a non-cancellable durable section calls `beginCommit` after read-only validation and immediately before its first write; cancellation may prevent entry, but the queue drains a begun commit to one completion. Other cancellation remains cooperative, and the process shutdown backstop handles ignored signals. |
 | Snapshot writer ordering | Full reconciles, Group mutation commits, and harness-report authorization plus base projection share a non-poisoning promise chain. A Group mutation projects only its command project and never scans providers, repairs other durable state, or publishes a reconcile event. Readiness persistence revalidates the live snapshot after its write. Scheduled reconcile requests coalesce; queued work after a run receives a later flush. |
 | Persisted harness compatibility | A harness adapter may use a provider-local strict schema to reject recognizable observations accepted by an earlier build. Unparseable legacy data remains admitted. Reconcile excludes only provider-rejected observations, then atomically replaces the affected session's derived native binding and readiness from the remaining admitted history; a succeeded acknowledgement remains authoritative. |

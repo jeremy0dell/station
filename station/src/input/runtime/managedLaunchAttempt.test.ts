@@ -387,6 +387,7 @@ describe("createManagedLaunchAttempt", () => {
       sessionId: "ses_old",
       terminalTargetId: TERMINAL_TARGET_ID,
       terminalBindingToken: TERMINAL_BINDING_TOKEN,
+      processOwner: "ui",
       harnessProvider: "codex",
     });
     expect(selectStationOverlayVisible(harness.store.getState())).toBe(true);
@@ -758,6 +759,10 @@ describe("createManagedLaunchAttempt", () => {
     ]);
     expect(harness.ensured).toEqual([{ cwd: CWD }]);
     expect(harness.terminalFactories).toEqual([factory]);
+    expect(selectPaneRecord(harness.store.getState(), PANE_ID)?.agentIdentity).toMatchObject({
+      terminalBindingToken: TERMINAL_BINDING_TOKEN,
+      processOwner: "host",
+    });
   });
 
   it("never falls back to local ensure when an advertised attachment is missing or fails", async () => {

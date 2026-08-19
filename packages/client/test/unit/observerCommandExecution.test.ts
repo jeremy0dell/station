@@ -320,6 +320,10 @@ function commandService(
     reportExternalExit: async () => {
       throw new Error("not used");
     },
+    prepareWorktreeRemoval: async () => {
+      throw new Error("not used");
+    },
+    cancelWorktreeRemoval: async () => ({ cancelled: false }),
   };
 }
 

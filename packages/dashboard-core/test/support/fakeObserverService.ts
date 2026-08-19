@@ -88,6 +88,19 @@ export class FakeTuiObserverService implements ObserverService {
     throw new Error("FakeTuiObserverService.reportExternalExit is not configured.");
   }
 
+  async prepareWorktreeRemoval(params: Parameters<ObserverService["prepareWorktreeRemoval"]>[0]) {
+    return {
+      reservationId: "reservation_tui_1",
+      projectId: params.projectId ?? "web",
+      worktreeId: params.worktreeId,
+      externalTerminalExitRequired: false,
+    };
+  }
+
+  async cancelWorktreeRemoval() {
+    return { cancelled: true };
+  }
+
   async reconcile(reason?: string): Promise<StationSnapshot> {
     this.reconcileReasons.push(reason);
     const command: StationCommand = {

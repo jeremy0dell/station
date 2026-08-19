@@ -45,6 +45,7 @@ describe("planLayoutRestoreColdShells", () => {
     const plan = planLayoutRestoreColdShells(snapshotWithAgentAndShells());
 
     expect(plan.workspace.panes.map((p) => p.id)).toEqual(["pane-split-0", "pane-split-1", "pane-wt-7"]);
+    expect(plan.workspace.panes.map((pane) => pane.worktreeId)).toEqual(["42", "42", "7"]);
     // pane-split-0 anchored to the dropped agent → re-rooted.
     expect(plan.workspace.panes[0]?.split).toBeNull();
     // pane-split-1 anchored to a surviving shell → keeps its split.
@@ -166,6 +167,7 @@ describe("planLayoutRestoreWarm", () => {
     expect(plan.workspace.panes.find((p) => p.id === "pane-agent-wt-42")?.agentIdentity).toEqual({
       sessionId: "ses-1",
       terminalTargetId: "native:wt-42",
+      processOwner: "host",
       harnessProvider: "claude",
     });
   });
@@ -212,7 +214,12 @@ describe("planLayoutRestoreWarm", () => {
 
     // The orphan (no persisted slot) recovers its pane id and roots itself.
     const orphan = plan.workspace.panes.find((p) => p.id === "pane-split-99");
-    expect(orphan).toEqual({ id: "pane-split-99", split: null, role: "shell" });
+    expect(orphan).toEqual({
+      id: "pane-split-99",
+      split: null,
+      role: "shell",
+      worktreeId: "wt-42",
+    });
     expect(plan.seeds.find((s) => s.paneId === "pane-split-99")?.createTerminalOverride).toBeDefined();
     expect(plan.seeds.find((s) => s.paneId === "pane-split-99")?.cwd).toBe("/work/orphan");
   });

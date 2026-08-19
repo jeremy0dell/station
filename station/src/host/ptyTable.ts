@@ -60,6 +60,8 @@ export type {
 } from "./ptyHandoff.js";
 
 const DEFAULT_SCROLLBACK_BYTES = 256 * 1024;
+// Settle before the Host client's five-second unary request budget.
+const DEFAULT_CLOSE_TIMEOUT_MS = 4_000;
 
 export type PtyTableOptions = {
   /** Test seam: inject a fake terminal so unit tests need no real node-pty. */
@@ -75,6 +77,8 @@ export type PtyTableOptions = {
   orphanBridges?: PtyTableOrphanOptions;
   /** Test seam for adoption without real control sockets; defaults to the bridge adopter. */
   adoptTerminal?: PtyTerminalAdopter;
+  /** Test seam for deterministic explicit-close settlement. */
+  closeTimeoutMs?: number;
 };
 
 export type PtySpawnOutcome = HostSpawnResult & { created: boolean };
@@ -113,8 +117,8 @@ export type PtyTable = {
     attachmentId: string,
     intent: HostAttachmentIntent,
   ): Promise<HostAttachmentSource>;
-  /** Guarded kill: dispose the PTY, broadcast exit to attached clients, drop it. */
-  close(ptyId: string): boolean;
+  /** Guarded kill: resolve only after the PTY emits exit and is dropped. */
+  close(ptyId: string): Promise<boolean>;
   /** Best-effort focus: broadcast a focus frame to attached clients. */
   focus(ptyId: string): boolean;
   has(ptyId: string): boolean;
@@ -144,6 +148,7 @@ export type PtyTable = {
 export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
   const createTerminal = options.createTerminal ?? createLocalPtyTerminal;
   const maxScrollbackBytes = options.maxScrollbackBytes ?? DEFAULT_SCROLLBACK_BYTES;
+  const closeTimeoutMs = options.closeTimeoutMs ?? DEFAULT_CLOSE_TIMEOUT_MS;
   const createSemanticTerminal =
     options.createSemanticTerminal ?? createSemanticTerminalSnapshot;
   const emit = options.onEvent ?? (() => undefined);
@@ -374,6 +379,21 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
 
   // Broadcast a terminal exit, release the terminal's resources, and drop the entry.
   function reap(entry: PtyEntry, exitFrame: HostExitFrame, reason: string): void {
+    if (entry.closeTimer !== undefined) clearTimeout(entry.closeTimer);
+    if (reason === "host-stop") {
+      entry.closeReject?.(
+        new StationHostProviderError(
+          "HOST_UNREACHABLE",
+          "Station Host stopped before PTY exit was confirmed.",
+        ),
+      );
+    } else {
+      entry.closeResolve?.(true);
+    }
+    delete entry.closePromise;
+    delete entry.closeResolve;
+    delete entry.closeReject;
+    delete entry.closeTimer;
     publishOutput(entry, entry.outputCompatibility.flush());
     entry.exited = true;
     entry.lastExit = exitFrame;
@@ -803,13 +823,39 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
       };
     },
 
-    close(ptyId) {
+    async close(ptyId) {
       const entry = entriesByPtyId.get(ptyId);
-      if (entry === undefined) {
-        return false;
+      if (entry === undefined) return false;
+      if (entry.closePromise !== undefined) return entry.closePromise;
+
+      const closePromise = new Promise<boolean>((resolve, reject) => {
+        entry.closeResolve = resolve;
+        entry.closeReject = reject;
+      });
+      entry.closePromise = closePromise;
+      entry.closeTimer = setTimeout(() => {
+        const error = new StationHostProviderError(
+          "HOST_PTY_CLOSE_TIMEOUT",
+          `Timed out waiting for Host PTY "${ptyId}" to exit.`,
+        );
+        entry.closeReject?.(error);
+        delete entry.closePromise;
+        delete entry.closeResolve;
+        delete entry.closeReject;
+        delete entry.closeTimer;
+      }, closeTimeoutMs);
+      entry.closeTimer.unref?.();
+      try {
+        entry.terminal.kill();
+      } catch (error) {
+        if (entry.closeTimer !== undefined) clearTimeout(entry.closeTimer);
+        entry.closeReject?.(error);
+        delete entry.closePromise;
+        delete entry.closeResolve;
+        delete entry.closeReject;
+        delete entry.closeTimer;
       }
-      reap(entry, { type: "exit", ptyId: entry.ptyId, exitCode: 0 }, "close");
-      return true;
+      return closePromise;
     },
 
     focus(ptyId) {

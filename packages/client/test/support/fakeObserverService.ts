@@ -80,6 +80,14 @@ export class FakeObserverService implements ObserverService {
     throw new Error("External exit reporting is not configured in this client test fake.");
   }
 
+  async prepareWorktreeRemoval(): Promise<never> {
+    throw new Error("Worktree removal preparation is not configured in this client test fake.");
+  }
+
+  async cancelWorktreeRemoval(): Promise<never> {
+    throw new Error("Worktree removal cancellation is not configured in this client test fake.");
+  }
+
   // Subclasses that replace subscribeEvents call this so reconnect-timing
   // tests can read subscribeTimes regardless of the subscription's fate.
   protected recordSubscribe(): void {

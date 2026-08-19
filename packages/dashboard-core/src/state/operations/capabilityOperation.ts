@@ -11,6 +11,7 @@ import {
   addPendingStartAgentRow,
   failPendingCreateSessionRow,
   removeCreateSessionLocalRow,
+  removePendingRemoveWorktreeRow,
   removePendingStartAgentRow,
 } from "../localRows.js";
 import type { DashboardRuntimeEffectScope } from "../runtimeEffectScope.js";
@@ -127,6 +128,12 @@ async function runDashboardCapabilityOperation(input: {
           ...(operation.inheritedHarness === undefined
             ? {}
             : { inheritedHarness: operation.inheritedHarness }),
+        });
+        break;
+      case "removeWorktree":
+        handle = capabilities.worktreeRemoval.remove({
+          worktreeId: operation.worktreeId,
+          command: operation.command,
         });
         break;
       case "openDashboardShell":
@@ -306,6 +313,10 @@ function removeCapabilityOptimisticRow(
     if (operation.localId !== undefined) {
       markStartAgentRowFailed(store, operation.localId);
     }
+    return;
+  }
+  if (operation.type === "removeWorktree") {
+    store.setState(removePendingRemoveWorktreeRow(store.getState(), operation.localId));
     return;
   }
   if (

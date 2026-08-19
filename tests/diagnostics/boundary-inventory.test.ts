@@ -82,6 +82,10 @@ const setTimeoutAllowlist = new Map([
     "Explicit SIGTERM and SIGKILL grace delays are operator-authorized OS process timing, not command timeout or retry plumbing.",
   ],
   [
+    "apps/observer/src/worktreeMutationCoordinator.ts",
+    "An in-memory abandonment lease releases a renderer reservation; provider operations retain their own runtime boundaries.",
+  ],
+  [
     "apps/cli/src/observerProcess/startup.ts",
     "UI-only progress timers report a runtime-bounded observer launch; they do not implement startup timeout or retry control.",
   ],

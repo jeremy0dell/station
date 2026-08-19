@@ -276,6 +276,10 @@ async function resolvePreparedLaunch(
         identity: {
           sessionId: prepared.sessionId,
           terminalTargetId: prepared.attachment.terminalTargetId,
+          ...(prepared.kind !== "prepared" || prepared.terminalBindingToken === undefined
+            ? {}
+            : { terminalBindingToken: prepared.terminalBindingToken }),
+          processOwner: "host",
           harnessProvider:
             prepared.kind === "prepared" ? prepared.launchPlan.provider : prepared.harnessProvider,
         },
@@ -309,6 +313,7 @@ async function resolvePreparedLaunch(
       ...(prepared.terminalBindingToken === undefined
         ? {}
         : { terminalBindingToken: prepared.terminalBindingToken }),
+      processOwner: "ui",
       harnessProvider: prepared.launchPlan.provider,
     },
   };
@@ -383,7 +388,10 @@ async function openPreparedPane(
     return notice("The agent pane changed while Station was preparing its relaunch.");
   }
 
-  runtime.store.actions.createPane(context.paneId, { role: "primary-agent" });
+  runtime.store.actions.createPane(context.paneId, {
+    role: "primary-agent",
+    worktreeId: context.target.worktreeId,
+  });
   runtime.store.actions.setPrimaryAgent(context.paneId, action.identity);
   if (placement.kind === "recycled") {
     if (context.landInPane) {

@@ -1467,6 +1467,44 @@ describe("reportExternalExit", () => {
     expect(await station.listTargets()).toMatchObject([{ sessionId: "ses_replacement" }]);
   });
 
+  it("does not let a tokenless Host exit release a same-session replacement", async () => {
+    const station = new FakeManagedTerminalLifecycle();
+    const observedWorktree = {
+      id: "wt_web_feature",
+      provider: "fake-worktree",
+      projectId: "web",
+      branch: "feature/login",
+      path: "/tmp/station/web/feature",
+      state: "exists" as const,
+      source: "worktrunk" as const,
+      observedAt: now,
+    };
+    await station.openManagedWorkspace({
+      project,
+      worktree: observedWorktree,
+      harness: "fake-harness",
+      layout: "agent-shell",
+      sessionId: "ses_recoverable",
+    });
+    await station.openManagedWorkspace({
+      project,
+      worktree: observedWorktree,
+      harness: "fake-harness",
+      layout: "agent-shell",
+      sessionId: "ses_recoverable",
+    });
+
+    const staleExit = await reportExternalExit(deps([row()], station), {
+      terminalTargetId: managedTargetId("wt_web_feature"),
+      expectedSessionId: "ses_recoverable",
+    });
+
+    expect(staleExit.reconcile).toBe(false);
+    expect(staleExit.outcome.acknowledged).toBe(false);
+    expect(station.released).toEqual([]);
+    expect(await station.listTargets()).toMatchObject([{ sessionId: "ses_recoverable" }]);
+  });
+
   it("does not let a stale same-session exit release a newer binding generation", async () => {
     const station = new FakeManagedTerminalLifecycle();
     const observedWorktree = {

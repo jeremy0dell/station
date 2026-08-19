@@ -3,7 +3,12 @@
 // via client runtime (keeping store and runtime reducer synchronized).
 import type { StationEvent, StationSnapshot } from "@station/contracts";
 import { afterEach, describe, expect, it } from "bun:test";
-import { createObserverActivationCapabilities, createObserverManagedSessionCapabilities, dashboardExecution } from "@station/dashboard-core/runtime";
+import {
+  createObserverActivationCapabilities,
+  createObserverManagedSessionCapabilities,
+  createObserverWorktreeRemovalCapabilities,
+  dashboardExecution,
+} from "@station/dashboard-core/runtime";
 import type { DashboardCapabilities } from "@station/dashboard-core/runtime";
 import { dashboardRowIds, selectDashboardViewport } from "@station/dashboard-core/selectors";
 import { createObserverStationClient } from "../../sources/observerStationClient.js";
@@ -49,6 +54,10 @@ describe("station command dispatch through the shared client", () => {
         waitForFocusCompletion: true,
       }),
       managedSessions: createObserverManagedSessionCapabilities({
+        service: client.service,
+        clientLabel: "Station test",
+      }),
+      worktreeRemoval: createObserverWorktreeRemovalCapabilities({
         service: client.service,
         clientLabel: "Station test",
       }),

@@ -68,9 +68,14 @@ client-owned source; dashboard queries are reserved for reads where local
 filter, focus, screen, or optimistic state participates.
 
 Semantic execution enters through capabilities selected at composition
-(activation, managed sessions, dismissal, shell), never through state
-replacement or synthetic key replay. The runtime owns subscriptions, timers,
-operation bookkeeping, and cancellation; disposal is idempotent and testable.
+(activation, managed sessions, worktree removal, dismissal, shell), never through state
+replacement or synthetic key replay. Observer-backed worktree removal first
+obtains authoritative validation and an opaque worktree reservation, then invokes
+optional renderer PTY settlement, dispatches the reservation-qualified command,
+and finalizes renderer layout only after command success; preparation or renderer
+failure performs no command mutation and cancels the unused reservation. The
+runtime owns subscriptions, timers, operation bookkeeping, and cancellation;
+disposal is idempotent and testable.
 
 New Session owns one bounded review flow shared by native and standalone
 renderers. Its Group field selects Ungrouped, a current same-project root Group

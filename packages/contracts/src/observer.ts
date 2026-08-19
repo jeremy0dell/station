@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { CommandReceipt, CommandRecord, StationCommand } from "./commands.js";
-import { FreshSessionGroupPlacementIntentSchema } from "./commands.js";
+import { FreshSessionGroupPlacementIntentSchema, RemoveWorktreePayloadSchema } from "./commands.js";
 import type {
   DiagnosticCollectionOptions,
   DiagnosticSnapshot,
@@ -210,6 +210,33 @@ export const AgentReportExternalExitResultSchema = z
 
 export type AgentReportExternalExitResult = z.infer<typeof AgentReportExternalExitResultSchema>;
 
+export const WorktreePrepareRemovalParamsSchema = RemoveWorktreePayloadSchema.omit({
+  removalReservationId: true,
+});
+
+export type WorktreePrepareRemovalParams = z.infer<typeof WorktreePrepareRemovalParamsSchema>;
+
+export const WorktreePrepareRemovalResultSchema = z
+  .object({
+    reservationId: nonEmptyStringSchema,
+    projectId: ProjectIdSchema,
+    worktreeId: WorktreeIdSchema,
+    externalTerminalExitRequired: z.boolean(),
+  })
+  .strict();
+
+export type WorktreePrepareRemovalResult = z.infer<typeof WorktreePrepareRemovalResultSchema>;
+
+export const WorktreeCancelRemovalParamsSchema = z
+  .object({ reservationId: nonEmptyStringSchema })
+  .strict();
+
+export type WorktreeCancelRemovalParams = z.infer<typeof WorktreeCancelRemovalParamsSchema>;
+
+export const WorktreeCancelRemovalResultSchema = z.object({ cancelled: z.boolean() }).strict();
+
+export type WorktreeCancelRemovalResult = z.infer<typeof WorktreeCancelRemovalResultSchema>;
+
 /**
  * DRIVING PORT
  *
@@ -232,6 +259,12 @@ export type ObserverApi = {
     params: AgentPrepareExternalLaunchParams,
   ): Promise<AgentPrepareExternalLaunchResult>;
   reportExternalExit(params: AgentReportExternalExitParams): Promise<AgentReportExternalExitResult>;
+  /** Validate and reserve one worktree before a renderer settles externally owned PTYs. */
+  prepareWorktreeRemoval(
+    params: WorktreePrepareRemovalParams,
+  ): Promise<WorktreePrepareRemovalResult>;
+  /** Release an unused worktree-removal reservation after renderer preparation fails. */
+  cancelWorktreeRemoval(params: WorktreeCancelRemovalParams): Promise<WorktreeCancelRemovalResult>;
   runDoctor(options?: DoctorOptions): Promise<DoctorReport>;
   collectDiagnostics(options?: DiagnosticCollectionOptions): Promise<DiagnosticSnapshot>;
 };

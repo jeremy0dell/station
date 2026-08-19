@@ -142,6 +142,10 @@ export function createObserverClient(options: CreateObserverClientOptions): Obse
       requestProtocolMethod(options, requestId(), "agent.prepareExternalLaunch", params),
     reportExternalExit: async (params) =>
       requestProtocolMethod(options, requestId(), "agent.reportExternalExit", params),
+    prepareWorktreeRemoval: async (params) =>
+      requestProtocolMethod(options, requestId(), "worktree.prepareRemoval", params),
+    cancelWorktreeRemoval: async (params) =>
+      requestProtocolMethod(options, requestId(), "worktree.cancelRemoval", params),
     runDoctor: async (params?: DoctorOptions) =>
       requestProtocolMethod(options, requestId(), "doctor.run", params),
     collectDiagnostics: async (params?: DiagnosticCollectionOptions) =>

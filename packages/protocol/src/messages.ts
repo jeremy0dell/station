@@ -25,6 +25,10 @@ import {
   StationCommandSchema,
   StationEventSchema,
   StationSnapshotSchema,
+  WorktreeCancelRemovalParamsSchema,
+  WorktreeCancelRemovalResultSchema,
+  WorktreePrepareRemovalParamsSchema,
+  WorktreePrepareRemovalResultSchema,
 } from "@station/contracts";
 import { z } from "zod";
 
@@ -41,6 +45,8 @@ export const ProtocolMethods = [
   "observer.harnessEvent.report",
   "agent.prepareExternalLaunch",
   "agent.reportExternalExit",
+  "worktree.prepareRemoval",
+  "worktree.cancelRemoval",
   "doctor.run",
   "diagnostics.collect",
 ] as const;
@@ -152,6 +158,8 @@ export const ProtocolParamSchemas = {
   "observer.harnessEvent.report": HarnessEventReportParamsSchema,
   "agent.prepareExternalLaunch": AgentPrepareExternalLaunchParamsSchema,
   "agent.reportExternalExit": AgentReportExternalExitParamsSchema,
+  "worktree.prepareRemoval": WorktreePrepareRemovalParamsSchema,
+  "worktree.cancelRemoval": WorktreeCancelRemovalParamsSchema,
   "doctor.run": DoctorOptionsSchema,
   "diagnostics.collect": DiagnosticCollectionOptionsSchema,
 } as const satisfies Record<ProtocolMethod, z.ZodTypeAny>;
@@ -169,6 +177,8 @@ export const ProtocolResultSchemas = {
   "observer.harnessEvent.report": HarnessEventReportReceiptSchema,
   "agent.prepareExternalLaunch": AgentPrepareExternalLaunchResultSchema,
   "agent.reportExternalExit": AgentReportExternalExitResultSchema,
+  "worktree.prepareRemoval": WorktreePrepareRemovalResultSchema,
+  "worktree.cancelRemoval": WorktreeCancelRemovalResultSchema,
   "doctor.run": DoctorReportSchema,
   "diagnostics.collect": DiagnosticSnapshotSchema,
 } as const satisfies Record<ProtocolMethod, z.ZodTypeAny>;

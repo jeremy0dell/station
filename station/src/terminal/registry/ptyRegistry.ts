@@ -17,6 +17,7 @@ import type {
 import { createStationVtScreen, type StationVtScreen } from "../vt/screen.js";
 
 const DEFAULT_RESIZE_DEBOUNCE_MS = 75;
+const DEFAULT_TERMINATION_TIMEOUT_MS = 10_000;
 // Grace for the async resize path (debounce, bridge hop, host ack) before a
 // screen/PTY/pane size disagreement counts as divergence rather than transit.
 const GEOMETRY_SETTLE_MS = 2_000;
@@ -100,6 +101,8 @@ export type PtyRegistry = {
    * `updateTerminalTheme` instead.
    */
   setRuntimeOptions(options: PtyRegistryRuntimeOptions): void;
+  /** Signal one UI-owned PTY and resolve only after its registered exit event. */
+  terminate(paneId: PaneId, options?: { timeoutMs?: number }): Promise<void>;
   dispose(paneId: PaneId): void;
   disposeAll(): void;
 };
@@ -496,6 +499,49 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
     }, geometrySettleMs);
   };
 
+  const terminateEntry = async (
+    paneId: PaneId,
+    timeoutMs: number = DEFAULT_TERMINATION_TIMEOUT_MS,
+  ): Promise<void> => {
+    const entry = entries.get(paneId);
+    if (entry === undefined || entry.terminal === null || entry.exited) return;
+
+    await new Promise<void>((resolve, reject) => {
+      let settled = false;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      let unsubscribe: (() => void) | undefined;
+      const settle = (error?: Error): void => {
+        if (settled) return;
+        settled = true;
+        if (timer !== undefined) clearTimeout(timer);
+        unsubscribe?.();
+        error === undefined ? resolve() : reject(error);
+      };
+      const observe = (): void => {
+        const current = entries.get(paneId);
+        if (current === entry && current.exited) {
+          settle();
+        } else if (current !== entry) {
+          settle(new Error(`PTY ${paneId} was disposed before process exit was proven.`));
+        }
+      };
+      unsubscribe = (() => {
+        listeners.add(observe);
+        return () => listeners.delete(observe);
+      })();
+      timer = setTimeout(
+        () => settle(new Error(`Timed out waiting for PTY ${paneId} to exit.`)),
+        timeoutMs,
+      );
+      try {
+        entry.terminal?.kill();
+        observe();
+      } catch (error) {
+        settle(error instanceof Error ? error : new Error(`Could not terminate PTY ${paneId}.`));
+      }
+    });
+  };
+
   const disposeEntry = (entry: InternalEntry): void => {
     if (entries.get(entry.paneId) === entry) {
       entries.delete(entry.paneId);
@@ -634,6 +680,9 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
       scrollOnOutput = nextOptions.scrollOnOutput;
       scrollbackLines = nextOptions.scrollbackLines;
     },
+
+    terminate: (paneId, terminateOptions) =>
+      terminateEntry(paneId, terminateOptions?.timeoutMs),
 
     dispose: (paneId) => {
       const entry = entries.get(paneId);

@@ -71,6 +71,13 @@ export function createFakeObserverApi(
       acknowledged: true,
       terminalTargetId: params.terminalTargetId,
     }),
+    prepareWorktreeRemoval: async (params) => ({
+      reservationId: "reservation_protocol_1",
+      projectId: params.projectId ?? "project",
+      worktreeId: params.worktreeId,
+      externalTerminalExitRequired: false,
+    }),
+    cancelWorktreeRemoval: async () => ({ cancelled: true }),
     runDoctor: async (): Promise<DoctorReport> => doctorReport(snapshot),
     collectDiagnostics: async (): Promise<DiagnosticSnapshot> => diagnosticSnapshot(snapshot),
     ...overrides,

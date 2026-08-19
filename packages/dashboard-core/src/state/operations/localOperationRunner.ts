@@ -18,7 +18,6 @@ import {
   runUpdateSessionGroupMembershipOperation,
 } from "./groupSettings.js";
 import { projectCommandOperations } from "./projectCommands.js";
-import { runRemoveWorktreeOperation } from "./removeWorktree.js";
 import { runRenameSessionOperation } from "./renameSession.js";
 import {
   runCreateSessionGroupForMoveOperation,
@@ -71,17 +70,7 @@ export function createTuiLocalOperationRunner(input: {
     openDashboardShell: runCapabilityOperation,
     dismissDashboard: runCapabilityOperation,
     exitDashboardRenderer: runCapabilityOperation,
-    removeWorktree: (operation) => {
-      input.scope.run(() =>
-        runRemoveWorktreeOperation({
-          store: store(),
-          service: input.service,
-          operation,
-          clientLabel: input.clientLabel,
-          scope: input.scope,
-        }),
-      );
-    },
+    removeWorktree: runCapabilityOperation,
     renameSession: (operation) => {
       input.scope.run(() =>
         runRenameSessionOperation({

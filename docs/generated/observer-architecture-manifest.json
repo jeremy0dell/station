@@ -2781,13 +2781,113 @@
       ]
     },
     {
+      "path": "apps/observer/src/commands/worktree/removalValidation.ts",
+      "exports": [
+        {
+          "name": "refreshReservedWorktreeRemoval",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "validateWorktreeRemoval",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "WorktreeRemovalValidation",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "WorktreeRemovalValidationOptions",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "WorktreeRemovalValidationRuntime",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "../cleanup/index.js",
+          "resolvedPath": "apps/observer/src/commands/cleanup/index.ts",
+          "edgeKind": "runtime",
+          "bindings": [
+            "assertWorktreeRemovalAllowed",
+            "resolveWorktreeRemovalTarget",
+            "resolveWorktreeRowOrThrow"
+          ]
+        },
+        {
+          "specifier": "../cleanup/index.js",
+          "resolvedPath": "apps/observer/src/commands/cleanup/index.ts",
+          "edgeKind": "type-only",
+          "bindings": ["VerifiedWorktreeRemovalTarget"]
+        },
+        {
+          "specifier": "../session/shared.js",
+          "resolvedPath": "apps/observer/src/commands/session/shared.ts",
+          "edgeKind": "runtime",
+          "bindings": ["findProjectOrThrow", "runProviderMutation", "throwIfAborted"]
+        },
+        {
+          "specifier": "../../providers/registry.js",
+          "resolvedPath": "apps/observer/src/providers/registry.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ProviderRegistry"]
+        },
+        {
+          "specifier": "../../reconcile/core.js",
+          "resolvedPath": "apps/observer/src/reconcile/core.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ObserverCore"]
+        },
+        {
+          "specifier": "../../stationLogger.js",
+          "resolvedPath": "apps/observer/src/stationLogger.ts",
+          "edgeKind": "type-only",
+          "bindings": ["StationLogger"]
+        },
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "runtime",
+          "bindings": ["isRunningAgentState"]
+        },
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "type-only",
+          "bindings": [
+            "ProviderProjectConfig",
+            "RemoveWorktreePayload",
+            "TraceContext",
+            "WorktreeRow"
+          ]
+        },
+        {
+          "specifier": "@station/runtime",
+          "resolvedPath": "packages/runtime/src/index.ts",
+          "edgeKind": "type-only",
+          "bindings": ["RuntimeClock"]
+        }
+      ]
+    },
+    {
       "path": "apps/observer/src/commands/worktree/remove.ts",
       "exports": [
         {
           "name": "createWorktreeRemoveHandler",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Revalidates selected checkout and Git registration identity before coordinating removal. Provider-confirmed removal atomically ends sessions and retires canonical title authority."
+          "purpose": "Revalidates selected checkout and Git registration identity before coordinating removal. A renderer reservation holds the same worktree mutation slot while external PTYs settle; provider-confirmed removal then atomically ends sessions and retires canonical title authority."
         },
         {
           "name": "CreateWorktreeRemoveHandlerOptions",
@@ -2808,13 +2908,11 @@
           "resolvedPath": "apps/observer/src/commands/cleanup/index.ts",
           "edgeKind": "runtime",
           "bindings": [
-            "assertWorktreeRemovalAllowed",
             "canUseTerminalCloseFallbackForWorktree",
             "closeTerminalForWorktree",
             "publishRemovedSessionIfAbsent",
             "publishWorktreeRemoved",
             "removeWorktreeThroughProvider",
-            "resolveWorktreeRemovalTarget",
             "resolveWorktreeRowOrThrow",
             "stopHarnessForWorktree"
           ]
@@ -2823,7 +2921,7 @@
           "specifier": "../queue.js",
           "resolvedPath": "apps/observer/src/commands/queue.ts",
           "edgeKind": "type-only",
-          "bindings": ["CommandHandler"]
+          "bindings": ["CommandHandler", "CommandHandlerContext"]
         },
         {
           "specifier": "../reconcile.js",
@@ -2835,7 +2933,19 @@
           "specifier": "../session/shared.js",
           "resolvedPath": "apps/observer/src/commands/session/shared.ts",
           "edgeKind": "runtime",
-          "bindings": ["findProjectOrThrow", "runProviderMutation", "throwIfAborted"]
+          "bindings": ["throwIfAborted"]
+        },
+        {
+          "specifier": "./removalValidation.js",
+          "resolvedPath": "apps/observer/src/commands/worktree/removalValidation.ts",
+          "edgeKind": "runtime",
+          "bindings": ["refreshReservedWorktreeRemoval", "validateWorktreeRemoval"]
+        },
+        {
+          "specifier": "./removalValidation.js",
+          "resolvedPath": "apps/observer/src/commands/worktree/removalValidation.ts",
+          "edgeKind": "type-only",
+          "bindings": ["WorktreeRemovalValidation"]
         },
         {
           "specifier": "../../persistence/index.js",
@@ -2874,6 +2984,12 @@
           "bindings": ["nowIso"]
         },
         {
+          "specifier": "../../worktreeMutationCoordinator.js",
+          "resolvedPath": "apps/observer/src/worktreeMutationCoordinator.ts",
+          "edgeKind": "type-only",
+          "bindings": ["WorktreeMutationCoordinator"]
+        },
+        {
           "specifier": "@station/contracts",
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "runtime",
@@ -2883,7 +2999,11 @@
           "specifier": "@station/contracts",
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "type-only",
-          "bindings": ["ProviderProjectConfig", "WorktreeRemovalRefusalDiagnosticDetail"]
+          "bindings": [
+            "ProviderProjectConfig",
+            "SafeError",
+            "WorktreeRemovalRefusalDiagnosticDetail"
+          ]
         },
         {
           "specifier": "@station/runtime",
@@ -9892,6 +10012,12 @@
       ],
       "imports": [
         {
+          "specifier": "../commands/cleanup/index.js",
+          "resolvedPath": "apps/observer/src/commands/cleanup/index.ts",
+          "edgeKind": "runtime",
+          "bindings": ["resolveWorktreeRowOrThrow"]
+        },
+        {
           "specifier": "../commands/queue.js",
           "resolvedPath": "apps/observer/src/commands/queue.ts",
           "edgeKind": "type-only",
@@ -9902,6 +10028,12 @@
           "resolvedPath": "apps/observer/src/commands/record.ts",
           "edgeKind": "runtime",
           "bindings": ["commandRecordFromPersisted"]
+        },
+        {
+          "specifier": "../commands/worktree/removalValidation.js",
+          "resolvedPath": "apps/observer/src/commands/worktree/removalValidation.ts",
+          "edgeKind": "runtime",
+          "bindings": ["validateWorktreeRemoval"]
         },
         {
           "specifier": "../diagnostics/collector.js",
@@ -10152,6 +10284,12 @@
           ]
         },
         {
+          "specifier": "@station/observability",
+          "resolvedPath": "packages/observability/src/index.ts",
+          "edgeKind": "runtime",
+          "bindings": ["createTraceContext"]
+        },
+        {
           "specifier": "@station/runtime",
           "resolvedPath": "packages/runtime/src/index.ts",
           "edgeKind": "runtime",
@@ -10227,7 +10365,7 @@
           "name": "reportExternalExit",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Forgets only the matching managed target/session and, when reported, generation. A missing expected session or superseded binding fails closed without reconcile; reconciliation may retain the durable Station session as `No Agent`."
+          "purpose": "Forgets only the matching managed target, session, and binding generation. Missing exact identity or a superseded binding fails closed without reconcile; reconciliation may retain the durable Station session as `No Agent`."
         }
       ],
       "imports": [
@@ -12090,13 +12228,38 @@
           "purpose": null
         },
         {
+          "name": "CreateWorktreeMutationCoordinatorOptions",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "WorktreeMutationCoordinator",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "WorktreeMutationReservation",
           "kind": "type",
           "role": null,
           "purpose": null
         }
       ],
-      "imports": []
+      "imports": [
+        {
+          "specifier": "node:crypto",
+          "resolvedPath": "node:crypto",
+          "edgeKind": "runtime",
+          "bindings": ["randomUUID"]
+        },
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "type-only",
+          "bindings": ["SafeError"]
+        }
+      ]
     }
   ],
   "controlledDeclarations": [
@@ -13389,7 +13552,7 @@
       "declaration": "createWorktreeRemoveHandler",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Revalidates selected checkout and Git registration identity before coordinating removal. Provider-confirmed removal atomically ends sessions and retires canonical title authority.",
+      "purpose": "Revalidates selected checkout and Git registration identity before coordinating removal. A renderer reservation holds the same worktree mutation slot while external PTYs settle; provider-confirmed removal then atomically ends sessions and retires canonical title authority.",
       "dependencies": []
     },
     {
@@ -14009,7 +14172,7 @@
       "declaration": "reportExternalExit",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Forgets only the matching managed target/session and, when reported, generation. A missing expected session or superseded binding fails closed without reconcile; reconciliation may retain the durable Station session as `No Agent`.",
+      "purpose": "Forgets only the matching managed target, session, and binding generation. Missing exact identity or a superseded binding fails closed without reconcile; reconciliation may retain the durable Station session as `No Agent`.",
       "dependencies": []
     },
     {

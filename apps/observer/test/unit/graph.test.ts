@@ -832,8 +832,8 @@ describe("observer graph derivation", () => {
 
     const terminalAttachment = snapshot.rows.find((row) => row.id === "wt_web_idle")?.terminal;
     expect(terminalAttachment?.provider).toBe("fake-terminal");
-    expect(terminalAttachment?.focusable).toBeUndefined();
-    expect(terminalAttachment?.closeable).toBeUndefined();
+    expect(terminalAttachment?.focusable).toBe(false);
+    expect(terminalAttachment?.closeable).toBe(false);
     expect(StationSnapshotSchema.parse(snapshot)).toEqual(snapshot);
   });
 

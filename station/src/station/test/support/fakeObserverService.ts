@@ -1,4 +1,10 @@
-import type { CommandReceipt, StationCommand, StationEvent, StationSnapshot } from "@station/contracts";
+import type {
+  CommandReceipt,
+  StationCommand,
+  StationEvent,
+  StationSnapshot,
+  WorktreePrepareRemovalParams,
+} from "@station/contracts";
 import type {
   AgentPrepareExternalLaunchParams,
   AgentPrepareExternalLaunchResult,
@@ -12,6 +18,8 @@ export class FakeTuiObserverService implements ObserverService {
   readonly events: StationEvent[] = [];
   readonly reconcileReasons: Array<string | undefined> = [];
   readonly waitedForCommandIds: string[] = [];
+  readonly preparedRemovals: WorktreePrepareRemovalParams[] = [];
+  readonly cancelledRemovalReservations: string[] = [];
   cleanupCount = 0;
   loadCount = 0;
   subscribeCount = 0;
@@ -123,6 +131,21 @@ export class FakeTuiObserverService implements ObserverService {
   ): Promise<AgentReportExternalExitResult> {
     this.reportedExits.push(params);
     return { acknowledged: true, terminalTargetId: params.terminalTargetId };
+  }
+
+  async prepareWorktreeRemoval(params: WorktreePrepareRemovalParams) {
+    this.preparedRemovals.push(params);
+    return {
+      reservationId: `reservation_${this.preparedRemovals.length}`,
+      projectId: params.projectId ?? "project",
+      worktreeId: params.worktreeId,
+      externalTerminalExitRequired: false,
+    };
+  }
+
+  async cancelWorktreeRemoval(params: { reservationId: string }) {
+    this.cancelledRemovalReservations.push(params.reservationId);
+    return { cancelled: true };
   }
 
   emit(event: StationEvent): void {

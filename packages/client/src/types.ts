@@ -9,6 +9,10 @@ import type {
   StationCommand,
   StationEvent,
   StationSnapshot,
+  WorktreeCancelRemovalParams,
+  WorktreeCancelRemovalResult,
+  WorktreePrepareRemovalParams,
+  WorktreePrepareRemovalResult,
 } from "@station/contracts";
 
 export type {
@@ -49,6 +53,12 @@ export type ObserverService = {
   ): Promise<AgentPrepareExternalLaunchResult>;
   /** Report that an externally-hosted agent's process exited. */
   reportExternalExit(params: AgentReportExternalExitParams): Promise<AgentReportExternalExitResult>;
+  /** Validate and reserve one worktree while native PTYs settle. */
+  prepareWorktreeRemoval(
+    params: WorktreePrepareRemovalParams,
+  ): Promise<WorktreePrepareRemovalResult>;
+  /** Release a reservation when native preparation fails before command dispatch. */
+  cancelWorktreeRemoval(params: WorktreeCancelRemovalParams): Promise<WorktreeCancelRemovalResult>;
 };
 
 export type ClientNotice = {

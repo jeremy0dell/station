@@ -773,6 +773,7 @@ describe("createStationInputRuntime open-pane wiring", () => {
         observerService: service,
         store,
         paneEffects,
+        registry,
         managedLaunch,
       }),
       initialState: { terminalRows: 12 },
@@ -949,6 +950,7 @@ describe("createStationInputRuntime open-pane wiring", () => {
         observerService: service,
         store,
         paneEffects,
+        registry,
         managedLaunch,
       }),
     });

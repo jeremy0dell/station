@@ -4,6 +4,7 @@ import {
   createDashboardRuntime,
   createObserverActivationCapabilities,
   createObserverManagedSessionCapabilities,
+  createObserverWorktreeRemovalCapabilities,
   dashboardExecution,
  } from "@station/dashboard-core/runtime";
 import type {
@@ -120,6 +121,10 @@ function createStationTestCapabilities(options: {
   return {
     activation: createObserverActivationCapabilities(activationOptions),
     managedSessions: createObserverManagedSessionCapabilities(managedOptions),
+    worktreeRemoval: createObserverWorktreeRemovalCapabilities({
+      service: options.service,
+      clientLabel: "Station test",
+    }),
     shell: { open: () => dashboardExecution({ kind: "success" }) },
     dismissal: {
       dismissDashboard: () => {

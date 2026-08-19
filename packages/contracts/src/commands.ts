@@ -38,6 +38,8 @@ export const RemoveWorktreePayloadSchema = z
     expectedBranch: nonEmptyStringSchema,
     expectedRegistrationIdentity: nonEmptyStringSchema,
     force: z.boolean().optional(),
+    /** Opaque Observer reservation used when a renderer must settle external PTYs before removal. */
+    removalReservationId: nonEmptyStringSchema.optional(),
   })
   .strict();
 

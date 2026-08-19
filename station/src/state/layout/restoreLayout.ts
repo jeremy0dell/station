@@ -8,6 +8,8 @@ import {
   type PaneId,
   type PaneRecord,
   type WorkspaceSlice,
+  worktreeIdFromAgentPaneId,
+  worktreeIdFromWorktreePaneId,
 } from "../types.js";
 
 /**
@@ -42,14 +44,18 @@ export function planLayoutRestoreColdShells(
     (pane) => pane.role === "shell" && paneCwdIsRestorable(snapshot, pane, options),
   );
   const shellIds = new Set(shellPanes.map((pane) => pane.id));
-  const panes: PaneRecord[] = shellPanes.map((pane) => ({
-    id: pane.id,
-    split:
-      pane.split !== null && shellIds.has(pane.split.anchorPaneId)
-        ? { anchorPaneId: pane.split.anchorPaneId, direction: pane.split.direction }
-        : null,
-    role: "shell",
-  }));
+  const panes: PaneRecord[] = shellPanes.map((pane) => {
+    const worktreeId = restoredWorktreeId(snapshot, pane);
+    return {
+      id: pane.id,
+      split:
+        pane.split !== null && shellIds.has(pane.split.anchorPaneId)
+          ? { anchorPaneId: pane.split.anchorPaneId, direction: pane.split.direction }
+          : null,
+      role: "shell",
+      ...(worktreeId === undefined ? {} : { worktreeId }),
+    };
+  });
   const activePaneId =
     snapshot.activePaneId !== null && shellIds.has(snapshot.activePaneId)
       ? snapshot.activePaneId
@@ -115,13 +121,19 @@ export function planLayoutRestoreWarm(
     const live = lookupTarget === undefined ? undefined : deps.liveByTarget.get(lookupTarget);
     if (lookupTarget !== undefined && live !== undefined) {
       claimedTargets.add(lookupTarget);
-      const record: PaneRecord = { id: pane.id, split: reanchor(pane, keptIds), role: pane.role };
+      const record: PaneRecord = {
+        id: pane.id,
+        split: reanchor(pane, keptIds),
+        role: pane.role,
+        worktreeId: live.worktreeId,
+      };
       if (pane.role === "primary-agent") {
         // Reattaching a live agent re-derives its identity from the host entry —
         // never trusted from disk — so its exit still reports to the observer.
         record.agentIdentity = {
           sessionId: live.sessionId,
           terminalTargetId: live.terminalTargetId,
+          processOwner: "host",
           harnessProvider: live.harnessProvider,
         };
       }
@@ -134,7 +146,14 @@ export function planLayoutRestoreWarm(
       if (!paneCwdIsRestorable(snapshot, pane, deps)) {
         continue;
       }
-      panes.push({ id: pane.id, split: reanchor(pane, keptIds), role: "shell" });
+      const record: PaneRecord = {
+        id: pane.id,
+        split: reanchor(pane, keptIds),
+        role: "shell",
+      };
+      const worktreeId = restoredWorktreeId(snapshot, pane);
+      if (worktreeId !== undefined) record.worktreeId = worktreeId;
+      panes.push(record);
       keptIds.add(pane.id);
       const seed: RestoreSeed = { paneId: pane.id, cwd: snapshot.cwdByPane[pane.id] };
       const freshOverride = deps.resolveAuxShellPlacement?.(pane.id);
@@ -155,7 +174,7 @@ export function planLayoutRestoreWarm(
     if (keptIds.has(paneId)) {
       continue;
     }
-    panes.push({ id: paneId, split: null, role: "shell" });
+    panes.push({ id: paneId, split: null, role: "shell", worktreeId: entry.worktreeId });
     keptIds.add(paneId);
     seeds.push({ paneId, cwd: entry.worktreePath, createTerminalOverride: deps.makeHostTerminal(entry) });
   }
@@ -165,6 +184,25 @@ export function planLayoutRestoreWarm(
       ? snapshot.activePaneId
       : (panes[0]?.id ?? null);
   return { workspace: { panes, activePaneId }, seeds };
+}
+
+function restoredWorktreeId(
+  snapshot: StationLayoutSnapshot,
+  pane: StationLayoutSnapshot["panes"][number],
+): string | undefined {
+  const byId = new Map(snapshot.panes.map((candidate) => [candidate.id, candidate]));
+  const visited = new Set<PaneId>();
+  let current: StationLayoutSnapshot["panes"][number] | undefined = pane;
+  while (current !== undefined && !visited.has(current.id)) {
+    visited.add(current.id);
+    const encoded =
+      current.worktreeId ??
+      worktreeIdFromAgentPaneId(current.id) ??
+      worktreeIdFromWorktreePaneId(current.id);
+    if (encoded !== undefined) return encoded;
+    current = current.split === null ? undefined : byId.get(current.split.anchorPaneId);
+  }
+  return undefined;
 }
 
 /** Keep a split anchored only to a pane that survived; else re-root it. */

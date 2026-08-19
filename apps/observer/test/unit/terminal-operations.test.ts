@@ -10,6 +10,7 @@ import type {
   TerminalLaunchProcessResult,
   TerminalTargetId,
   TerminalTargetObservation,
+  WorktreeRow,
 } from "@station/contracts";
 import {
   createFakeTerminalTarget,
@@ -23,6 +24,7 @@ import {
   closeTerminal,
   ensureAgentWorkspace,
   focusTerminal,
+  hasCloseableTerminalAttachment,
 } from "../../src/commands/terminalOperations.js";
 import type { StationLogger } from "../../src/stationLogger.js";
 
@@ -30,6 +32,22 @@ const now = "2026-06-04T12:00:00.000Z";
 const clock = { now: () => new Date(now) };
 
 describe("terminal operations", () => {
+  it("does not infer close authority from an open attachment", () => {
+    const row = {
+      terminal: { provider: "native", state: "open" },
+    } as WorktreeRow;
+
+    expect(hasCloseableTerminalAttachment({ row })).toBe(false);
+  });
+
+  it("permits cleanup only when close authority is explicit", () => {
+    const row = {
+      terminal: { provider: "native", state: "open", closeable: true },
+    } as WorktreeRow;
+
+    expect(hasCloseableTerminalAttachment({ row })).toBe(true);
+  });
+
   it("opens the workspace, builds launch from the normalized terminal observation, and launches", async () => {
     const order: string[] = [];
     const terminal = new RecordingTerminalProvider({ order });
