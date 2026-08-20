@@ -48,11 +48,30 @@ async function resolveRecovery(
     harnesses?: HarnessProvider[];
     recoveryHandleId?: string;
     expected?: { sessionId: string; provider: string };
+    localSession?: "open" | "ended" | "none";
   } = {},
 ) {
   const persistence = createInMemoryObserverPersistence({
     clock: { now: () => new Date(now) },
   });
+  if (options.localSession !== "none") {
+    await persistence.seedSession({
+      sessionId: "ses_feature",
+      projectId: "web",
+      worktreeId: worktree.id,
+      initialTitle: "feature",
+      harness: "fake-harness",
+      terminalProvider: "fake-terminal",
+      createdAt: now,
+      lastSeenAt: now,
+    });
+    if (options.localSession === "ended") {
+      await persistence.markSessionsEnded({
+        subject: { kind: "session", sessionId: "ses_feature" },
+        endedAt: now,
+      });
+    }
+  }
   const persistedIds = new Map<string, string>();
   for (const handle of options.handles ?? []) {
     const persisted = await persistence.upsertSessionRecoveryHandle(handle);
@@ -104,19 +123,17 @@ describe("resolveSessionRecovery", () => {
     });
   });
 
-  it("omits previousSessionId when the selected handle has no Station identity", async () => {
+  it("rejects a selected handle with no Station identity", async () => {
     const handle = recoveryHandle();
     delete handle.sessionId;
 
-    const result = await resolveRecovery({
-      handles: [handle],
-      recoveryHandleId: handle.id,
-    });
-
-    expect(result.resume).toEqual({
-      target: handle.target,
-      recoveryHandleId: result.handle.id,
-    });
+    await expect(
+      resolveRecovery({
+        handles: [handle],
+        recoveryHandleId: handle.id,
+        localSession: "none",
+      }),
+    ).rejects.toMatchObject({ code: "SESSION_RECOVERY_HANDLE_MISMATCH" });
   });
 
   it("rejects missing and cross-worktree selected handles", async () => {
@@ -178,9 +195,14 @@ describe("resolveSessionRecovery", () => {
       provider: "unregistered-harness",
       target: { kind: "native-session", id: "native_unregistered" },
     });
+    const wrongSession = recoveryHandle({
+      id: "rec_wrong_session",
+      sessionId: "ses_other",
+      target: { kind: "native-session", id: "native_wrong_session" },
+    });
 
     const result = await resolveRecovery({
-      handles: [selected, disabled, unregistered],
+      handles: [selected, disabled, unregistered, wrongSession],
       harnesses: [
         new FakeHarnessProvider({ id: "fake-harness", now }),
         new FakeHarnessProvider({
@@ -224,36 +246,56 @@ describe("resolveSessionRecovery", () => {
     const missingSession = recoveryHandle();
     delete missingSession.sessionId;
     await expect(resolveRecovery({ handles: [missingSession], expected })).rejects.toMatchObject({
-      code: "SESSION_RECOVERY_HANDLE_MISMATCH",
+      code: "SESSION_RECOVERY_HANDLE_NOT_FOUND",
     });
     await expect(
       resolveRecovery({ handles: [recoveryHandle({ sessionId: "ses_other" })], expected }),
-    ).rejects.toMatchObject({ code: "SESSION_RECOVERY_HANDLE_MISMATCH" });
+    ).rejects.toMatchObject({ code: "SESSION_RECOVERY_HANDLE_NOT_FOUND" });
     await expect(
       resolveRecovery({
         handles: [recoveryHandle({ provider: "other-harness" })],
         harnesses: [new FakeHarnessProvider({ id: "other-harness", now })],
         expected,
       }),
-    ).rejects.toMatchObject({ code: "SESSION_RECOVERY_HANDLE_MISMATCH" });
+    ).rejects.toMatchObject({ code: "SESSION_RECOVERY_HANDLE_NOT_FOUND" });
   });
 
-  it("accepts absent or nested cwd and rejects recovery outside the worktree", async () => {
+  it("requires present cwd evidence inside the current worktree", async () => {
     const withoutCwd = recoveryHandle();
     delete withoutCwd.cwd;
-    const withoutCwdResult = await resolveRecovery({ handles: [withoutCwd] });
-    expect(withoutCwdResult.handle).not.toHaveProperty("cwd");
     await expect(
-      resolveRecovery({
-        handles: [withoutCwd],
-        expected: { sessionId: "ses_feature", provider: "fake-harness" },
-      }),
+      resolveRecovery({ handles: [withoutCwd], recoveryHandleId: withoutCwd.id }),
     ).rejects.toMatchObject({ code: "SESSION_RECOVERY_CWD_MISMATCH" });
     await expect(
       resolveRecovery({ handles: [recoveryHandle({ cwd: `${worktree.path}/nested` })] }),
     ).resolves.toMatchObject({ handle: { cwd: `${worktree.path}/nested` } });
     await expect(
       resolveRecovery({ handles: [recoveryHandle({ cwd: "/tmp/station/other" })] }),
-    ).rejects.toMatchObject({ code: "SESSION_RECOVERY_CWD_MISMATCH" });
+    ).rejects.toMatchObject({ code: "SESSION_RECOVERY_HANDLE_NOT_FOUND" });
+  });
+
+  it("rejects a selected handle bound to a locally ended session", async () => {
+    const selected = recoveryHandle();
+    await expect(
+      resolveRecovery({
+        handles: [selected],
+        recoveryHandleId: selected.id,
+        localSession: "ended",
+      }),
+    ).rejects.toMatchObject({ code: "SESSION_RECOVERY_HANDLE_MISMATCH" });
+  });
+
+  it("retains explicit imported-handle compatibility when no local session exists", async () => {
+    const selected = recoveryHandle();
+    await expect(
+      resolveRecovery({
+        handles: [selected],
+        recoveryHandleId: selected.id,
+        localSession: "none",
+      }),
+    ).resolves.toMatchObject({
+      handle: { sessionId: "ses_feature" },
+      resume: { previousSessionId: "ses_feature" },
+    });
   });
 });
