@@ -16,6 +16,7 @@ import {
   repairInventoryDigestProjection,
 } from "../../src/commands/repair/inventory";
 import { planRecoveryRepair } from "../../src/commands/repair/recoveryPlan";
+import { planRuntimeRepair } from "../../src/commands/repair/runtimePlan";
 
 const firstNow = "2026-08-20T12:00:00.000Z";
 const later = "2026-08-20T13:00:00.000Z";
@@ -123,6 +124,125 @@ describe("repair command", () => {
     });
   });
 
+  it("re-inventories and refuses when a Host PTY instance changes after selection", async () => {
+    let capture = 0;
+    const deps = repairDeps(observerInventory());
+    deps.runtimeEvidence = {
+      inspectObserver: async () => verifiedOwnership("observer", "/state/observer.sock", 40),
+      inspectHost: async () => {
+        capture += 1;
+        return {
+          ownership: verifiedOwnership("host", "/state/station-host.sock", 50),
+          terminalGroups: [
+            terminalGroup({
+              targetKey: capture === 1 ? "runtime:target-1" : "runtime:target-2",
+              ptyInstanceId: capture === 1 ? "instance-1" : "instance-2",
+            }),
+          ],
+        };
+      },
+    };
+    const inventory = (await runRepairCommand(["inventory", "--json"], { config }, deps))
+      .output as RepairInventory;
+    const result = await runRepairCommand(
+      [
+        "runtime",
+        "--dry-run",
+        "--expect-inventory",
+        inventory.inventoryDigest,
+        "--target",
+        "runtime:target-1",
+        "--json",
+      ],
+      { config },
+      deps,
+    );
+
+    expect(result).toMatchObject({
+      code: 1,
+      output: {
+        status: "refused",
+        plannedActions: [],
+        blockers: expect.arrayContaining([
+          expect.objectContaining({ code: "REPAIR_INVENTORY_CHANGED" }),
+          expect.objectContaining({ code: "REPAIR_TARGET_NOT_FOUND" }),
+        ]),
+      },
+    });
+  });
+
+  it("keeps exact but different Observer and Host build identities separate", async () => {
+    const deps = repairDeps(observerInventory());
+    deps.runtimeEvidence = {
+      inspectObserver: async () =>
+        verifiedOwnership("observer", "/state/observer.sock", 40, "observer-build"),
+      inspectHost: async () => ({
+        ownership: verifiedOwnership("host", "/state/station-host.sock", 50, "host-build"),
+        terminalGroups: [terminalGroup({ hostBuildVersion: "host-build" })],
+      }),
+    };
+    const inventory = (await runRepairCommand(["inventory", "--json"], { config }, deps))
+      .output as RepairInventory;
+    expect(inventory).toMatchObject({
+      completeness: "complete",
+      observer: { buildVersion: "observer-build" },
+      host: { buildVersion: "host-build" },
+      terminalGroups: [{ hostBuildVersion: "host-build" }],
+    });
+
+    const report = planRuntimeRepair(inventory, {
+      schemaVersion: 1,
+      dryRun: true,
+      expectInventory: inventory.inventoryDigest,
+      targetKeys: ["runtime:target-1"],
+    });
+    expect(report.plannedActions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          action: "drain-terminal",
+          target: expect.objectContaining({ hostBuildVersion: "host-build" }),
+        }),
+      ]),
+    );
+  });
+
+  it("deduplicates warnings when multiple auxiliary PTYs are visible", async () => {
+    const deps = repairDeps(observerInventory());
+    deps.runtimeEvidence = {
+      inspectObserver: async () => verifiedOwnership("observer", "/state/observer.sock", 40),
+      inspectHost: async () => ({
+        ownership: verifiedOwnership("host", "/state/station-host.sock", 50),
+        terminalGroups: [
+          terminalGroup({
+            targetKey: "runtime:aux-1",
+            kind: "aux",
+            disposition: "non-recoverable",
+          }),
+          terminalGroup({
+            targetKey: "runtime:aux-2",
+            kind: "aux",
+            disposition: "non-recoverable",
+          }),
+          terminalGroup(),
+        ],
+      }),
+    };
+    const inventory = (await runRepairCommand(["inventory", "--json"], { config }, deps))
+      .output as RepairInventory;
+
+    expect(
+      planRuntimeRepair(inventory, {
+        schemaVersion: 1,
+        dryRun: true,
+        expectInventory: inventory.inventoryDigest,
+        targetKeys: ["runtime:target-1"],
+      }),
+    ).toMatchObject({
+      status: "planned",
+      warnings: [{ code: "AUX_PTY_NON_RECOVERABLE" }],
+    });
+  });
+
   it("previews explicit recovery keep/prune without dispatching or writing", async () => {
     const inspectRepairInventory = vi.fn(async () => observerInventory());
     const deps = repairDeps(observerInventory(), inspectRepairInventory);
@@ -214,6 +334,88 @@ describe("repair command", () => {
       blockers: [expect.objectContaining({ code: "REPAIR_HANDLE_SCOPE_MISMATCH" })],
     });
   });
+
+  it("handles zero, one, many, ended, and explicit-prune recovery decisions", async () => {
+    const inventory = (
+      await runRepairCommand(["inventory", "--json"], { config }, repairDeps(observerInventory()))
+    ).output as RepairInventory;
+    const singleHandle = {
+      ...inventory,
+      recoveryHandles: [inventory.recoveryHandles[0] as RepairRecoveryHandle],
+    };
+    expect(
+      planRecoveryRepair(singleHandle, {
+        schemaVersion: 1,
+        dryRun: true,
+        expectInventory: inventory.inventoryDigest,
+        sessionId: "session-1",
+        pruneHandleIds: [],
+      }),
+    ).toMatchObject({
+      status: "planned",
+      selectedTargets: ["handle-new"],
+      plannedActions: [
+        expect.objectContaining({ action: "validate-recovery-handle", targetKey: "handle-new" }),
+        expect.objectContaining({ action: "keep-recovery-handle", targetKey: "handle-new" }),
+      ],
+    });
+
+    expect(
+      planRecoveryRepair(singleHandle, {
+        schemaVersion: 1,
+        dryRun: true,
+        expectInventory: inventory.inventoryDigest,
+        sessionId: "session-1",
+        pruneHandleIds: ["handle-new"],
+      }),
+    ).toMatchObject({
+      status: "refused",
+      plannedActions: [],
+      blockers: expect.arrayContaining([
+        expect.objectContaining({ code: "REPAIR_KEEP_HANDLE_REQUIRED" }),
+      ]),
+    });
+
+    const ended = {
+      ...inventory,
+      sessions: [{ ...inventory.sessions[0], lifecycle: "ended" as const, endedAt: later }],
+    };
+    expect(
+      planRecoveryRepair(ended, {
+        schemaVersion: 1,
+        dryRun: true,
+        expectInventory: inventory.inventoryDigest,
+        sessionId: "session-1",
+        keepHandleId: "handle-new",
+        pruneHandleIds: [],
+      }),
+    ).toMatchObject({
+      status: "refused",
+      plannedActions: [],
+      blockers: expect.arrayContaining([expect.objectContaining({ code: "REPAIR_SESSION_ENDED" })]),
+    });
+
+    const unknownProvider = {
+      ...inventory,
+      sessions: inventory.sessions.map(({ harnessProvider: _provider, ...session }) => session),
+    };
+    expect(
+      planRecoveryRepair(unknownProvider, {
+        schemaVersion: 1,
+        dryRun: true,
+        expectInventory: inventory.inventoryDigest,
+        sessionId: "session-1",
+        keepHandleId: "handle-new",
+        pruneHandleIds: [],
+      }),
+    ).toMatchObject({
+      status: "refused",
+      plannedActions: [],
+      blockers: expect.arrayContaining([
+        expect.objectContaining({ code: "REPAIR_SESSION_PROVIDER_UNVERIFIED" }),
+      ]),
+    });
+  });
 });
 
 function repairDeps(
@@ -251,6 +453,7 @@ function verifiedOwnership(
   component: "observer" | "host",
   socketPath: string,
   pid: number,
+  buildVersion = "build-1",
 ): RepairRuntimeOwnership {
   return {
     component,
@@ -259,12 +462,12 @@ function verifiedOwnership(
     socketIdentity,
     holderPids: [pid],
     process: { ...processIdentity, pid },
-    buildVersion: "build-1",
+    buildVersion,
     ...(component === "host" ? { protocolVersion: 8 } : {}),
   };
 }
 
-function terminalGroup(): RepairTerminalGroup {
+function terminalGroup(overrides: Partial<RepairTerminalGroup> = {}): RepairTerminalGroup {
   return {
     targetKey: "runtime:target-1",
     disposition: "verified",
@@ -294,6 +497,7 @@ function terminalGroup(): RepairTerminalGroup {
         startToken: processIdentity.startToken,
       },
     ],
+    ...overrides,
   };
 }
 

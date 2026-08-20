@@ -31,6 +31,7 @@ export * from "./runtime/logging.js";
 export * from "./runtime/main.js";
 export * from "./runtime/observerBootClaim.js";
 export * from "./runtime/observerHandoff.js";
+export { observerProcessIdentitiesMatch } from "./runtime/observerPidfile.js";
 export * from "./runtime/observerProcessEvidence.js";
 export * from "./runtime/observerReap.js";
 export * from "./runtime/reconcileScheduler.js";

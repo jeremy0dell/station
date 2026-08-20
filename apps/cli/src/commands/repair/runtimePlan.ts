@@ -142,10 +142,26 @@ export function repairWarning(code: string, message: string): SafeError {
 }
 
 export function sortErrors(errors: readonly SafeError[]): SafeError[] {
-  return [...errors].sort(
-    (left, right) =>
-      left.code.localeCompare(right.code) || left.message.localeCompare(right.message),
-  );
+  const unique = new Map(errors.map((error) => [safeErrorKey(error), error]));
+  return [...unique.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([, error]) => error);
+}
+
+function safeErrorKey(error: SafeError): string {
+  return JSON.stringify([
+    error.code,
+    error.message,
+    error.tag,
+    error.hint ?? "",
+    error.commandId ?? "",
+    error.projectId ?? "",
+    error.worktreeId ?? "",
+    error.sessionId ?? "",
+    error.provider ?? "",
+    error.traceId ?? "",
+    error.diagnosticId ?? "",
+  ]);
 }
 
 export function planDigestProjection(report: Omit<RepairPreviewReport, "planDigest">): unknown {

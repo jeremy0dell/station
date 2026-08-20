@@ -89,6 +89,10 @@ structured refusals. Inventory never starts or reconciles Observer, starts or
 hands off Host, closes a PTY, signals a process, dispatches a recorded command,
 backs up SQLite, or writes durable state. If current evidence cannot be read
 without one of those effects, the result is partial and reports a blocker.
+On a first install with no implicit global config yet, inventory uses the empty
+default configuration to inspect the default runtime paths and returns partial
+evidence without creating config or state. An explicitly supplied missing or
+invalid `--config` path still fails instead of silently substituting defaults.
 
 Runtime and recovery repair are preview-only in this release:
 

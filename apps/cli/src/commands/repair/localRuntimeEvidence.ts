@@ -18,6 +18,8 @@ import {
   createLocalObserverProcessEvidence,
   type ObserverDuplicateProcessEvidenceSource,
   type ObserverProcessEntry,
+  observerProcessEntriesMatch,
+  observerProcessIdentitiesMatch,
 } from "@station/observer/internal";
 import {
   probeUnixSocket,
@@ -130,8 +132,16 @@ async function inspectObserverOwnership(
   }
 
   const health = status.health;
-  if (health.pid === undefined || health.startedAt === undefined || health.version === undefined) {
+  if (
+    health.pid === undefined ||
+    health.startedAt === undefined ||
+    health.version === undefined ||
+    health.socketPath === undefined
+  ) {
     return refusedOwnership("observer", input.socketPath, "OBSERVER_IDENTITY_INCOMPLETE");
+  }
+  if (health.socketPath !== input.socketPath) {
+    return refusedOwnership("observer", input.socketPath, "OBSERVER_IDENTITY_CHANGED");
   }
   const exactHealth = {
     ...health,
@@ -145,10 +155,20 @@ async function inspectObserverOwnership(
       return refusedOwnership("observer", input.socketPath, "OBSERVER_SOCKET_CHANGED");
     }
     const holders = sortedNumbers(deps.observerEvidence.socketHolders(input.socketPath));
-    const processEntry = exactObserverProcess(deps.observerEvidence, exactHealth, input.socketPath);
+    const firstIdentity = await deps.observerEvidence.readProcessIdentity(input.socketPath);
+    const processEntry = exactObserverProcess(
+      deps.observerEvidence,
+      exactHealth,
+      firstIdentity,
+      input.socketPath,
+    );
+    if (processEntry === undefined) {
+      return refusedOwnership("observer", input.socketPath, "OBSERVER_IDENTITY_CHANGED", holders);
+    }
     const firstStartToken = deps.observerEvidence.processStartToken(processEntry.pid);
     const secondProcess = deps.observerEvidence.readObserverProcess(processEntry.pid);
     const secondStartToken = deps.observerEvidence.processStartToken(processEntry.pid);
+    const secondIdentity = await deps.observerEvidence.readProcessIdentity(input.socketPath);
     const secondHolders = sortedNumbers(deps.observerEvidence.socketHolders(input.socketPath));
     const secondProbe = await deps.probeSocket(input.socketPath);
     if (
@@ -158,8 +178,11 @@ async function inspectObserverOwnership(
       firstStartToken === undefined ||
       firstStartToken !== processEntry.startToken ||
       secondStartToken !== firstStartToken ||
+      firstIdentity === undefined ||
+      secondIdentity === undefined ||
+      !observerProcessIdentitiesMatch(firstIdentity, secondIdentity) ||
       secondProcess === undefined ||
-      !sameObserverProcess(processEntry, secondProcess) ||
+      !observerProcessEntriesMatch(processEntry, secondProcess) ||
       secondProbe.status !== "listening" ||
       !sameSocketIdentity(firstProbe.identity, secondProbe.identity)
     ) {
@@ -187,16 +210,23 @@ async function inspectObserverOwnership(
 function exactObserverProcess(
   evidence: ObserverDuplicateProcessEvidenceSource,
   health: ObserverHealth & { pid: number; startedAt: string; version: string },
+  identity: Awaited<ReturnType<ObserverDuplicateProcessEvidenceSource["readProcessIdentity"]>>,
   socketPath: string,
-): ObserverProcessEntry {
+): ObserverProcessEntry | undefined {
   const entry = evidence.readObserverProcess(health.pid);
   if (
+    identity === undefined ||
+    identity.pid !== health.pid ||
+    identity.version !== health.version ||
+    identity.socketPath !== socketPath ||
     entry === undefined ||
     entry.socketPath !== socketPath ||
     entry.buildVersion !== health.version ||
-    !sameSecond(entry.startToken, health.startedAt)
+    entry.pid !== identity.pid ||
+    entry.startToken !== identity.osStartTime ||
+    entry.processToken !== identity.processToken
   ) {
-    throw new Error("Observer process did not match health identity.");
+    return undefined;
   }
   return entry;
 }
@@ -335,6 +365,7 @@ function terminalGroup(
     .sort((left, right) => left.pid - right.pid);
   const leader = firstMembers.find((entry) => entry.pid === fallback.processGroupId);
   const topologyStable =
+    pty.alive &&
     firstChild !== undefined &&
     secondChild !== undefined &&
     sameTopology(firstChild, secondChild) &&
@@ -586,28 +617,6 @@ function sortedPtys(ptys: readonly HostListEntry[]): HostListEntry[] {
 
 function samePtys(left: readonly HostListEntry[], right: readonly HostListEntry[]): boolean {
   return JSON.stringify(left) === JSON.stringify(right);
-}
-
-function sameObserverProcess(left: ObserverProcessEntry, right: ObserverProcessEntry): boolean {
-  return (
-    left.pid === right.pid &&
-    left.startToken === right.startToken &&
-    left.processToken === right.processToken &&
-    left.buildVersion === right.buildVersion &&
-    left.socketPath === right.socketPath &&
-    left.executablePath === right.executablePath &&
-    JSON.stringify(left.argv) === JSON.stringify(right.argv)
-  );
-}
-
-function sameSecond(left: string, right: string): boolean {
-  const leftMs = Date.parse(left);
-  const rightMs = Date.parse(right);
-  return (
-    Number.isFinite(leftMs) &&
-    Number.isFinite(rightMs) &&
-    Math.floor(leftMs / 1000) === Math.floor(rightMs / 1000)
-  );
 }
 
 function sameSocketIdentity(left: SocketIdentity, right: SocketIdentity): boolean {

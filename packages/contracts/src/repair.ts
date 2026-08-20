@@ -56,13 +56,18 @@ export const RepairRuntimeOwnershipSchema = z
       (ownership.socketIdentity === undefined ||
         ownership.holderPids.length !== 1 ||
         ownership.process === undefined ||
-        ownership.holderPids[0] !== ownership.process.pid)
+        ownership.holderPids[0] !== ownership.process.pid ||
+        ownership.buildVersion === undefined ||
+        (ownership.component === "host" && ownership.protocolVersion === undefined))
     ) {
       issue(
         context,
         ["status"],
-        "Verified ownership requires one matching holder, socket identity, and process identity.",
+        "Verified ownership requires one matching holder plus complete socket, process, and build identity.",
       );
+    }
+    if (ownership.status === "verified" && ownership.refusalCode !== undefined) {
+      issue(context, ["refusalCode"], "Verified ownership cannot carry a refusal code.");
     }
     if (ownership.status === "absent" && ownership.holderPids.length > 0) {
       issue(context, ["holderPids"], "Absent ownership cannot carry socket holders.");
@@ -120,6 +125,13 @@ export const RepairTerminalGroupSchema = z
       )
     ) {
       issue(context, ["members"], "Every member must match the selected terminal topology.");
+    }
+    if (target.disposition === "verified" && !hasExactLeaderAndChild(target)) {
+      issue(
+        context,
+        ["members"],
+        "Verified terminal groups require the selected child and exact process-group leader.",
+      );
     }
     if (target.kind === "aux" && target.disposition !== "non-recoverable") {
       issue(context, ["disposition"], "Auxiliary PTYs are never repair targets.");
@@ -266,7 +278,29 @@ export const RepairTargetReferenceSchema = z
     leaderStartToken: nonEmptyStringSchema,
     members: z.array(RepairProcessGroupMemberSchema).min(1),
   })
-  .strict();
+  .strict()
+  .superRefine((target, context) => {
+    if (!strictlySortedNumbers(target.members.map((member) => member.pid))) {
+      issue(context, ["members"], "Process-group members must be unique and sorted by PID.");
+    }
+    if (
+      target.members.some(
+        (member) =>
+          member.processGroupId !== target.processGroupId ||
+          member.sessionId !== target.terminalSessionId ||
+          member.tty !== target.tty,
+      )
+    ) {
+      issue(context, ["members"], "Every member must match the selected terminal topology.");
+    }
+    if (!hasExactLeaderAndChild(target)) {
+      issue(
+        context,
+        ["members"],
+        "Exact targets require the selected child and exact process-group leader.",
+      );
+    }
+  });
 export type RepairTargetReference = z.infer<typeof RepairTargetReferenceSchema>;
 
 export const RuntimeRepairDryRunRequestSchema = z
@@ -365,6 +399,18 @@ export const RepairPreviewReportSchema = z
     if ((report.status === "refused") !== report.blockers.length > 0) {
       issue(context, ["status"], "Only refused previews carry blockers.");
     }
+    if (report.status === "refused" && report.plannedActions.length > 0) {
+      issue(context, ["plannedActions"], "Refused previews cannot carry planned actions.");
+    }
+    if (report.status === "planned" && report.plannedActions.length === 0) {
+      issue(context, ["plannedActions"], "Planned previews require at least one action.");
+    }
+    const actionKinds = new Set(report.plannedActions.map((action) => repairActionKind(action)));
+    if (actionKinds.size > 0 && (actionKinds.size !== 1 || !actionKinds.has(report.action))) {
+      issue(context, ["plannedActions"], "Planned actions must match the report action.");
+    }
+    sortedUniqueBy(report.blockers, safeErrorKey, context, ["blockers"]);
+    sortedUniqueBy(report.warnings, safeErrorKey, context, ["warnings"]);
   });
 export type RepairPreviewReport = z.infer<typeof RepairPreviewReportSchema>;
 
@@ -421,6 +467,8 @@ export const RepairAuditResultSchema: z.ZodType<RepairAuditResult> = z
   .strict()
   .superRefine((result, context) => {
     sortedUniqueBy(result.targets, (target) => target.targetKey, context, ["targets"]);
+    sortedUniqueBy(result.errors, safeErrorKey, context, ["errors"]);
+    sortedUniqueBy(result.warnings, safeErrorKey, context, ["warnings"]);
     if (
       result.mode === "preview" &&
       (result.backup !== undefined ||
@@ -462,6 +510,50 @@ export const RepairAuditResultSchema: z.ZodType<RepairAuditResult> = z
 
 function issue(context: z.RefinementCtx, path: PropertyKey[], message: string): void {
   context.addIssue({ code: "custom", path, message });
+}
+
+function hasExactLeaderAndChild(target: {
+  childPid: number;
+  processGroupId: number;
+  leaderStartToken: string;
+  members: readonly RepairProcessGroupMember[];
+}): boolean {
+  const leader = target.members.find((member) => member.pid === target.processGroupId);
+  return (
+    target.members.some((member) => member.pid === target.childPid) &&
+    leader !== undefined &&
+    leader.startToken === target.leaderStartToken
+  );
+}
+
+function repairActionKind(action: RepairPlannedAction): "runtime" | "recovery" {
+  switch (action.action) {
+    case "reinventory":
+    case "drain-terminal":
+    case "reap-process-group":
+    case "verify-runtime":
+      return "runtime";
+    case "validate-recovery-handle":
+    case "keep-recovery-handle":
+    case "prune-recovery-handle":
+      return "recovery";
+  }
+}
+
+function safeErrorKey(error: SafeError): string {
+  return JSON.stringify([
+    error.code,
+    error.message,
+    error.tag,
+    error.hint ?? "",
+    error.commandId ?? "",
+    error.projectId ?? "",
+    error.worktreeId ?? "",
+    error.sessionId ?? "",
+    error.provider ?? "",
+    error.traceId ?? "",
+    error.diagnosticId ?? "",
+  ]);
 }
 
 function strictlySortedStrings(values: readonly string[]): boolean {

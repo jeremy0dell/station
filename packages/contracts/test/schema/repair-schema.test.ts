@@ -5,11 +5,14 @@ import {
   RepairAuditResultSchema,
   RepairInventorySchema,
   RepairPreviewReportSchema,
+  RepairRuntimeOwnershipSchema,
+  RepairTargetReferenceSchema,
   RuntimeRepairDryRunRequestSchema,
 } from "@station/contracts";
 import { describe, expect, it } from "vitest";
 
 const now = "2026-08-20T12:00:00.000Z";
+const earlier = "2026-08-20T11:00:00.000Z";
 const digest = "a".repeat(64);
 const socketIdentity = { inode: "10", birthtimeNs: "20" };
 const processIdentity = {
@@ -94,6 +97,56 @@ describe("repair schemas", () => {
     ).toBe(false);
   });
 
+  it("rejects incomplete verified ownership and incomplete exact targets", () => {
+    expect(
+      RepairRuntimeOwnershipSchema.safeParse({ ...ownership, buildVersion: undefined }).success,
+    ).toBe(false);
+    expect(
+      RepairRuntimeOwnershipSchema.safeParse({
+        ...ownership,
+        component: "host",
+        protocolVersion: undefined,
+      }).success,
+    ).toBe(false);
+    expect(
+      RepairRuntimeOwnershipSchema.safeParse({ ...ownership, refusalCode: "SHOULD_NOT_EXIST" })
+        .success,
+    ).toBe(false);
+
+    const target = {
+      targetKey: "runtime:target-1",
+      kind: "agent" as const,
+      hostSocketIdentity: socketIdentity,
+      hostProcess: processIdentity,
+      hostBuildVersion: "build-1",
+      hostProtocolVersion: 8,
+      ptyId: "pty-1",
+      ptyInstanceId: "instance-1",
+      terminalTargetId: "terminal-1",
+      projectId: "project-1",
+      worktreeId: "worktree-1",
+      stationSessionId: "session-1",
+      harnessProvider: "codex",
+      childPid: 201,
+      processGroupId: 200,
+      terminalSessionId: 200,
+      tty: "ttys001",
+      leaderStartToken: now,
+      members: [
+        { pid: 200, processGroupId: 200, sessionId: 200, tty: "ttys001", startToken: now },
+        { pid: 201, processGroupId: 200, sessionId: 200, tty: "ttys001", startToken: now },
+      ],
+    };
+    expect(RepairTargetReferenceSchema.parse(target)).toEqual(target);
+    expect(
+      RepairTargetReferenceSchema.safeParse({ ...target, members: target.members.slice(1) })
+        .success,
+    ).toBe(false);
+    expect(
+      RepairTargetReferenceSchema.safeParse({ ...target, leaderStartToken: earlier }).success,
+    ).toBe(false);
+  });
+
   it("preserves absence for optional recovery metadata", () => {
     const parsed = ObserverRepairInventorySchema.parse({
       schemaVersion: 1,
@@ -172,6 +225,22 @@ describe("repair schemas", () => {
     expect(
       RepairPreviewReportSchema.safeParse({ ...preview, appliedActions: ["handle-1"] }).success,
     ).toBe(false);
+    expect(
+      RepairPreviewReportSchema.safeParse({
+        ...preview,
+        status: "refused",
+        blockers: [{ tag: "RepairRefusal", code: "REFUSED", message: "Refused." }],
+      }).success,
+    ).toBe(false);
+    expect(
+      RepairPreviewReportSchema.safeParse({
+        ...preview,
+        action: "runtime",
+      }).success,
+    ).toBe(false);
+    expect(RepairPreviewReportSchema.safeParse({ ...preview, plannedActions: [] }).success).toBe(
+      false,
+    );
 
     const audit = {
       schemaVersion: 1,

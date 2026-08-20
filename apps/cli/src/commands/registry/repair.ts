@@ -1,5 +1,11 @@
+import { emptyConfig } from "@station/config";
 import { loadedConfigCommandOptions } from "../cliCommand/helpers.js";
-import type { CliCommandNode, CliCommandRunContext } from "../cliCommand/types.js";
+import type {
+  CliCommandConfigErrorContext,
+  CliCommandNode,
+  CliCommandRunContext,
+} from "../cliCommand/types.js";
+import { isConfigError } from "../configDiagnostics.js";
 import { runRepairCommand } from "../repair/index.js";
 
 export const repairCliCommand: CliCommandNode = {
@@ -7,6 +13,7 @@ export const repairCliCommand: CliCommandNode = {
   description: "Inventory read-only repair evidence and preview-only runtime or recovery repairs.",
   requiresConfig: true,
   run: runRepairCliCommand,
+  handleConfigError: handleRepairConfigError,
   usage: [
     "stn repair inventory [--json]",
     "stn repair runtime --dry-run --expect-inventory <sha256> --target <target-key>... [--json]",
@@ -36,6 +43,17 @@ export const repairCliCommand: CliCommandNode = {
   ],
   verification: ["stn repair inventory --json"],
 };
+
+async function handleRepairConfigError(error: unknown, context: CliCommandConfigErrorContext) {
+  if (
+    !isConfigError(error) ||
+    error.code !== "CONFIG_FILE_NOT_FOUND" ||
+    context.configPath !== undefined
+  ) {
+    return undefined;
+  }
+  return runRepairCliCommand({ ...context, config: emptyConfig() });
+}
 
 async function runRepairCliCommand(context: CliCommandRunContext) {
   const loaded = loadedConfigCommandOptions(context);

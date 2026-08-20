@@ -4657,6 +4657,12 @@
           "purpose": "Supplies exact incumbent-process evidence without exposing operating-system commands; unavailable socket-holder evidence throws and never means zero."
         },
         {
+          "name": "observerProcessIdentitiesMatch",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "ObserverProcessSignalResult",
           "kind": "type",
           "role": null,
@@ -5599,6 +5605,12 @@
           "resolvedPath": "apps/observer/src/runtime/observerHandoff.ts",
           "edgeKind": "runtime",
           "bindings": ["*"]
+        },
+        {
+          "specifier": "./runtime/observerPidfile.js",
+          "resolvedPath": "apps/observer/src/runtime/observerPidfile.ts",
+          "edgeKind": "runtime",
+          "bindings": ["observerProcessIdentitiesMatch"]
         },
         {
           "specifier": "./runtime/observerProcessEvidence.js",
