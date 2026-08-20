@@ -232,6 +232,10 @@ describe("Codex hook setup", () => {
     expect(verification.message).toContain(
       "stn --config /tmp/station/config.toml hooks doctor codex",
     );
+    expect(verification.message).toContain(
+      "stn --config /tmp/station/config.toml hooks install codex --yes",
+    );
+    expect(verification.message).toContain("repair the same resolved artifacts");
     expect(verification.message).toContain(`--codex-config ${configPath}`);
     expect(verification.message).toContain(`--hook-script ${hookScriptPath}`);
     expect(verification.message).toContain("--hook-bin /opt/custom-stn-ingress");
@@ -275,6 +279,10 @@ describe("Codex hook setup", () => {
     expect(verification.message).toContain(
       `--codex-config ${configPath} --hook-script ${hookScriptPath}`,
     );
+    expect(verification.message).toContain(
+      "stn --config /tmp/station/config.toml hooks install codex --yes",
+    );
+    expect(verification.message).toContain("Correct invalid configuration or ownership first");
     await expect(readFile(configPath, "utf8")).resolves.toBe("not = [valid");
     await expect(readFile(hookScriptPath, "utf8")).resolves.toContain("codex > /dev/null");
   });

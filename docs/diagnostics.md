@@ -366,9 +366,13 @@ Existing write-triggered profile and base-config backups remain available for
 recovery. A verified no-op reports `changed: false` and creates no new backup.
 Artifact ownership remains fail-closed: transfer requires the separate explicit
 `--takeover` flag, and verification never transfers ownership. For manual
-follow-up, preview the same paths with `hooks plan codex`, rerun the confirmed
-`hooks install codex --yes` repair after addressing the reported condition, and
-finish with the exact `hooks doctor codex` command returned in the warning.
+follow-up, the warning returns exact same-path install and doctor commands. If
+Station config does not request Codex hooks, it instead names the
+`[harness.codex]` `install_hooks = true` change and exact install command needed
+to keep the written artifacts, plus an exact uninstall command to remove them.
+Preview the same paths with `hooks plan codex`, address the reported condition,
+rerun the returned confirmed repair command, and finish with the returned
+doctor command.
 
 This verification proves only the current Station-owned Codex artifacts. It
 does not prove provider-hook delivery, Codex `/hooks` trust or approval, Codex

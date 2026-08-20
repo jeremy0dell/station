@@ -682,24 +682,37 @@ describe("CLI Codex hook commands", () => {
     });
     expect(writeCompleted.output).toEqual(
       expect.objectContaining({
-        message: expect.stringContaining(
-          commandLine([
-            "stn",
-            "--config",
-            configPath,
-            "hooks",
-            "doctor",
-            "codex",
-            "--codex-config",
-            codexConfigPath,
-            "--hook-script",
-            hookScriptPath,
-            "--hook-bin",
-            "/opt/custom-stn-ingress",
-          ]),
-        ),
+        message: expect.stringContaining("`install_hooks = true` under `[harness.codex]`"),
       }),
     );
+    const expectedFollowUpCommands = [
+      ["install", "--yes"],
+      ["uninstall", "--yes"],
+      ["doctor"],
+    ] as const;
+    for (const [action, ...confirmation] of expectedFollowUpCommands) {
+      expect(writeCompleted.output).toEqual(
+        expect.objectContaining({
+          message: expect.stringContaining(
+            commandLine([
+              "stn",
+              "--config",
+              configPath,
+              "hooks",
+              action,
+              "codex",
+              ...confirmation,
+              "--codex-config",
+              codexConfigPath,
+              "--hook-script",
+              hookScriptPath,
+              "--hook-bin",
+              "/opt/custom-stn-ingress",
+            ]),
+          ),
+        }),
+      );
+    }
     const installedProfile = await readFile(codexConfigPath, "utf8");
     await writeFile(
       codexConfigPath,
