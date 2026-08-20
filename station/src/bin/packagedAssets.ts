@@ -11,8 +11,9 @@ import {
   rm,
   unlink,
   writeFile,
+  type FileHandle,
 } from "node:fs/promises";
-import { rmSync } from "node:fs";
+import { rmSync, type Dirent, type Stats } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { stationBuildInfo } from "@station/runtime";
 import type {
@@ -205,7 +206,7 @@ async function ensurePrivateDirectory(path: string): Promise<void> {
 }
 
 async function isValidAsset(path: string, spec: AssetSpec): Promise<boolean> {
-  let stats;
+  let stats: Stats;
   try {
     stats = await lstat(path);
   } catch (error) {
@@ -242,7 +243,7 @@ async function writeAssetAtomically(targetPath: string, spec: AssetSpec): Promis
     dirname(targetPath),
     `.${basename(targetPath)}.${process.pid}.${randomUUID()}.tmp`,
   );
-  let handle;
+  let handle: FileHandle | undefined;
   try {
     handle = await open(temporaryPath, "wx", spec.mode);
     await handle.writeFile(spec.bytes);
@@ -385,7 +386,7 @@ async function pruneStaleHelpers(
   currentDir: string,
   removeStalePath: StalePathRemover,
 ): Promise<void> {
-  let entries;
+  let entries: Dirent[];
   try {
     entries = await readdir(cttyDir, { withFileTypes: true });
   } catch {

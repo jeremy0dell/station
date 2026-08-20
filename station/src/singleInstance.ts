@@ -47,7 +47,12 @@ const defaults: StationTtyOwnershipDeps = {
   platform: process.platform,
   readStdinStat: () => fstatSync(0, { bigint: true }),
   readTtyPathStat: (path) => statSync(path, { bigint: true }),
-  effectiveUid: () => process.geteuid!(),
+  effectiveUid: () => {
+    if (process.geteuid === undefined) {
+      throw new Error("Effective UID is unavailable on this platform.");
+    }
+    return process.geteuid();
+  },
   rendezvousDirectory: (uid) => `/tmp/station-tui-${uid}`,
   runPs: (args) => execFileSync("ps", [...args], { encoding: "utf8", maxBuffer: 1024 * 1024 }),
   selfPid: process.pid,

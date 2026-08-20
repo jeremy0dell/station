@@ -96,6 +96,25 @@ describe("ToastOverlayView actions", () => {
     expect(fixture.targets).toEqual([{ kind: "toast" }]);
     expect(fixture.runtime.state.getState().toasts).toEqual([]);
   });
+
+  it("restarts copy feedback when the notice is copied again", async () => {
+    const fixture = await renderNotice();
+    const firstCopy = cellFor(fixture.frame(), "[ copy ]");
+
+    await act(async () => {
+      await fixture.setup.mockMouse.click(firstCopy.col, firstCopy.row, MouseButtons.LEFT);
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    });
+    const secondCopy = cellFor(fixture.frame(), "[ copied ]");
+    await act(async () => {
+      await fixture.setup.mockMouse.click(secondCopy.col, secondCopy.row, MouseButtons.LEFT);
+      await new Promise((resolve) => setTimeout(resolve, 1_100));
+    });
+    await fixture.setup.flush();
+
+    expect(fixture.copied).toEqual([COPY_TEXT, COPY_TEXT]);
+    expect(fixture.frame()).toContain("[ copied ]");
+  });
 });
 
 async function renderNotice() {

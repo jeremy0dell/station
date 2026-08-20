@@ -1,4 +1,4 @@
-import { startStationHost } from "./startHost.js";
+import { startStationHost, type StationHostInstance } from "./startHost.js";
 import type { PreparedPtyRuntime } from "../bin/packagedAssets.js";
 
 export type RunStationHostMainOptions = {
@@ -63,7 +63,7 @@ export async function runStationHostMain(
 ): Promise<void> {
   const { socketPath, stateDir, buildVersion } = parseArgs(argv);
   const ptyRuntime = await options.preparePtyRuntime?.(stateDir);
-  let host;
+  let host: StationHostInstance;
   try {
     host = await startStationHost({
       socketPath,
