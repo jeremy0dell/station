@@ -10,7 +10,6 @@ import {
   normalizeTerminalTargetsForCurrentWorktrees,
   resolveWorktreeByProjectPath,
 } from "../../src/reconcile/observationCorrelation";
-import { observerHarnessRunFromRun } from "../support/harnessRuns";
 
 const now = "2026-06-19T12:00:00.000Z";
 
@@ -59,10 +58,10 @@ describe("reconcile observation correlation", () => {
 
     expect(
       normalizeHarnessRunsForCurrentWorktrees({
-        harnessRuns: [observerHarnessRunFromRun(run)],
+        harnessRuns: [run],
         worktrees,
         terminalTargets: [terminal],
-      })[0]?.run,
+      })[0],
     ).toEqual({ ...run, worktreeId: "wt_current" });
   });
 
@@ -115,10 +114,10 @@ describe("reconcile observation correlation", () => {
 
     expect(
       normalizeHarnessRunsForCurrentWorktrees({
-        harnessRuns: [observerHarnessRunFromRun(run)],
+        harnessRuns: [run],
         worktrees: [createFakeWorktree({ id: "wt_current", path: "/tmp/station/web/task" })],
         terminalTargets: [],
       }),
-    ).toEqual([observerHarnessRunFromRun(run)]);
+    ).toEqual([run]);
   });
 });

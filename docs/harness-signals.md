@@ -66,7 +66,9 @@ Normalized events are `HarnessEventReport` / `HarnessEventObservation`
    bake stale semantics. An integration that submits an already-typed
    `HarnessEventReport` instead normalizes in its own adapter and is not
    normalized again by the observer. Shipped Pi and OpenCode hook transports
-   use the raw `stn-ingress` path.
+   use the raw `stn-ingress` path. `HarnessProvider` has no fallback raw-event
+   ingestion operation; cwd-only and other unresolved report evidence is
+   correlated against current graph truth only during Observer projection.
 2. **No provider vocabulary in core.** Observer core and the TUI must not
    match on provider prose (`reason` strings), provider event names, or
    provider keys in `providerData`. If core needs to branch on it, it becomes
@@ -145,12 +147,15 @@ fold over signals shared by live projection and reconcile.
 
 ## Status Interpretation Today
 
+- Run discovery returns a `HarnessRunObservation` whose `status` is already
+  normalized at the provider boundary. `observedAt` timestamps the inventory
+  observation; `status.updatedAt` timestamps the status evidence it carries.
 - Live path: `projectHarnessEventReportOntoSnapshot`
   (`apps/observer/src/reconcile/statusProjection.ts`) applies a report to the
   current snapshot.
 - Reconcile path: `applyHarnessEventStatusOverlays`
   (`apps/observer/src/reconcile/harnessEventStatus.ts`) rebuilds from persisted
-  observations; the latest correlated overlay wins over the classified run
+  observations; the latest correlated overlay wins over the discovered run
   status unless the run is confidently exited.
 - These are two implementations of one policy; collapsing them into a single
   fold is planned (see invariant 6's spirit: status must be a deterministic

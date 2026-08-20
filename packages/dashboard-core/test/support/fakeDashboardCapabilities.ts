@@ -9,12 +9,14 @@ import type {
   ForkManagedSessionRequest,
 } from "../../src/state/capabilities/managedSessions.js";
 import type { OpenDashboardShellRequest } from "../../src/state/capabilities/shell.js";
+import type { RemoveWorktreeRequest } from "../../src/state/capabilities/worktreeRemoval.js";
 
 export class FakeDashboardCapabilities implements DashboardCapabilities {
   readonly activationRequests: SessionActivationRequest[] = [];
   readonly createRequests: CreateManagedSessionRequest[] = [];
   readonly quickCreateRequests: CreateManagedSessionRequest[] = [];
   readonly forkRequests: ForkManagedSessionRequest[] = [];
+  readonly removeWorktreeRequests: RemoveWorktreeRequest[] = [];
   readonly shellRequests: OpenDashboardShellRequest[] = [];
   readonly rendererExitCodes: number[] = [];
   dashboardDismissals = 0;
@@ -27,6 +29,8 @@ export class FakeDashboardCapabilities implements DashboardCapabilities {
     dashboardExecution({ kind: "success" }, { optimistic: "pending-create" });
   forkHandle: (request: ForkManagedSessionRequest) => DashboardExecutionHandle = () =>
     dashboardExecution({ kind: "success" });
+  removeWorktreeHandle: (request: RemoveWorktreeRequest) => DashboardExecutionHandle = () =>
+    dashboardExecution({ kind: "success" }, { successDisposition: "wait-for-canonical" });
   shellHandle: (request: OpenDashboardShellRequest) => DashboardExecutionHandle = () =>
     dashboardExecution({ kind: "success" });
   dismissHandle: () => DashboardExecutionHandle = () => dashboardExecution({ kind: "success" });
@@ -52,6 +56,13 @@ export class FakeDashboardCapabilities implements DashboardCapabilities {
     fork: (request: ForkManagedSessionRequest): DashboardExecutionHandle => {
       this.forkRequests.push(request);
       return this.forkHandle(request);
+    },
+  };
+
+  readonly worktreeRemoval = {
+    remove: (request: RemoveWorktreeRequest): DashboardExecutionHandle => {
+      this.removeWorktreeRequests.push(request);
+      return this.removeWorktreeHandle(request);
     },
   };
 

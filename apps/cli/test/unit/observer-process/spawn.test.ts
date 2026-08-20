@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { observerSpawnArgv } from "../../../src/observerProcess/spawn.js";
+import { observerSpawnArgv, observerSpawnEnvironment } from "../../../src/observerProcess/spawn.js";
 import { selfExecArgv } from "../../../src/selfExec.js";
 
 const paths = {
@@ -69,6 +69,19 @@ describe("observer spawn argv", () => {
         execPath: "/opt/station/stn",
       }),
     ).toEqual(["/opt/station/stn", "__observer"]);
+  });
+
+  it("keeps generic startup fail-closed and opts only exact activation into preservation", () => {
+    const inherited = {
+      PATH: "/usr/bin",
+      STATION_OBSERVER_STARTUP_POLICY: "preserve-incumbent",
+    };
+
+    expect(observerSpawnEnvironment({}, inherited)).toEqual({ PATH: "/usr/bin" });
+    expect(observerSpawnEnvironment({ incumbentPolicy: "preserve" }, inherited)).toEqual({
+      PATH: "/usr/bin",
+      STATION_OBSERVER_STARTUP_POLICY: "preserve-incumbent",
+    });
   });
 
   it("keeps real Worktrunk hook auto-start on the CLI observer entry", async () => {

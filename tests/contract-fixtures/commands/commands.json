@@ -20,7 +20,12 @@
       "branch": "feature/auth-fork",
       "launchHarness": "codex",
       "base": "main",
-      "copyDirty": true
+      "copyDirty": true,
+      "group": {
+        "kind": "source",
+        "sourceSessionId": "ses_web_main",
+        "groupId": "grp_active"
+      }
     }
   },
   "worktreeRemove": {
@@ -127,6 +132,11 @@
       "branch": "feature/cache-fork",
       "base": "feature/cache",
       "copyDirty": true,
+      "group": {
+        "kind": "source",
+        "sourceSessionId": "ses_api_cache",
+        "groupId": "grp_cache"
+      },
       "harness": {
         "provider": "codex",
         "mode": "interactive",

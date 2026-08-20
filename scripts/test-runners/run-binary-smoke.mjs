@@ -362,8 +362,14 @@ async function runBinarySmoke() {
       );
       assertEqual(fullHookCheck?.status, "ok", "compiled full hook doctor");
       const hookObserverClient = createObserverClient({ socketPath, timeoutMs: 5000 });
+      const hookObserverPid = (await hookObserverClient.health()).pid;
       await hookObserverClient.stop();
       await waitForMissing(socketPath);
+      assertEqual(
+        await waitForProcessExit(hookObserverPid, 10_000),
+        true,
+        "worktrunk hook Observer exits before Codex hook setup",
+      );
 
       const codexHome = join(root, "codex-home");
       const codexHookEnv = { ...childEnv, CODEX_HOME: codexHome };
@@ -409,8 +415,14 @@ async function runBinarySmoke() {
       );
       assertEqual(codexFullHookCheck?.status, "ok", "compiled full Codex hook doctor");
       const codexObserverClient = createObserverClient({ socketPath, timeoutMs: 5000 });
+      const codexObserverPid = (await codexObserverClient.health()).pid;
       await codexObserverClient.stop();
       await waitForMissing(socketPath);
+      assertEqual(
+        await waitForProcessExit(codexObserverPid, 10_000),
+        true,
+        "Codex hook Observer exits before compiled observer start",
+      );
       await writeSmokeConfig(configPath, stateDir, socketPath);
 
       observerClient = createObserverClient({ socketPath, timeoutMs: 5000 });

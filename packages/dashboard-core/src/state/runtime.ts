@@ -40,8 +40,8 @@ export type DashboardStateSource = {
  * Required construction boundary for a dashboard-local projection.
  *
  * Every renderer supplies canonical client state, a convergence-safe service, and
- * all four semantic capability groups; dashboard-core never infers native or
- * standalone execution from mutable UI state.
+ * every semantic capability group; dashboard-core never infers native or standalone
+ * execution from mutable UI state.
  */
 export type DashboardRuntimeOptions = {
   service: ObserverService;

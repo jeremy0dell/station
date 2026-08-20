@@ -1,31 +1,16 @@
-import type { SafeError } from "@station/contracts";
+import type {
+  UpdateCommandArgv,
+  UpdateCommandReport,
+  UpdateCommandStep,
+  UpdateCommandStepStatus,
+} from "@station/contracts";
 import { publicSafeErrorFromUnknown, shellQuote } from "@station/runtime";
 import type { CliRunResult } from "../../cliTypes.js";
 import type { PlannedUpdateChannel } from "../../update/channelDetection.js";
-import type { UpdateChannelId, UpdateCommandArgv } from "../../update/updateChannel.js";
 import type { UpdateRequest } from "./args.js";
 import type { HostHandoffScenario, UpdateScenario } from "./scenario.js";
 
-type UpdateStepStatus = "completed" | "planned" | "deferred" | "skipped" | "failed";
-
-export type UpdateCommandStep = {
-  id: "detect" | "plan" | "apply" | "observer-restart" | "host-handoff";
-  status: UpdateStepStatus;
-  detail: string;
-  command?: UpdateCommandArgv;
-};
-
-export type UpdateCommandReport = {
-  schemaVersion: 1;
-  channel: UpdateChannelId;
-  status: "current" | "planned" | "updated" | "deferred" | "failed";
-  current: { version: string; revision?: string };
-  target: { version: string; revision?: string };
-  steps: UpdateCommandStep[];
-  warnings: SafeError[];
-  recoveryCommands: UpdateCommandArgv[];
-  error?: SafeError;
-};
+export type { UpdateCommandReport, UpdateCommandStep } from "@station/contracts";
 
 const updateFailureFallback = {
   tag: "UpdateError",
@@ -202,7 +187,7 @@ export function failedUpdateResult(
 
 export function updateStep(
   id: UpdateCommandStep["id"],
-  status: UpdateStepStatus,
+  status: UpdateCommandStepStatus,
   detail: string,
   command?: UpdateCommandArgv,
 ): UpdateCommandStep {
@@ -221,7 +206,7 @@ export function updateCommandResult(
   };
 }
 
-export function renderUpdateReport(report: UpdateCommandReport): string {
+function renderUpdateReport(report: UpdateCommandReport): string {
   const lines = [
     `channel: ${report.channel}`,
     `status: ${report.status}`,

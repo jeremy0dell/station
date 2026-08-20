@@ -5,9 +5,8 @@ import type {
   SessionGroupId,
   SessionGroupPlacementIntent,
   SessionId,
-  SessionView,
+  SourceSessionGroupPlacementIntent,
   StationCommand,
-  TerminalFocusOrigin,
   WorktreeId,
   WorktreeRow,
 } from "@station/contracts";
@@ -44,6 +43,7 @@ export type ForkSessionCommandInput = {
   branch: string;
   base?: string;
   copyDirty?: boolean;
+  group?: SourceSessionGroupPlacementIntent;
   // Omit to let the observer inherit the source worktree's harness.
   harnessProvider?: ProviderId;
   initialPrompt?: string;
@@ -63,48 +63,41 @@ export type CreateSessionGroupCommandInput = {
   name: string;
 };
 
+export type RenameSessionGroupCommandInput = {
+  projectId: ProjectView["id"];
+  groupId: SessionGroupId;
+  expectedVersion: number;
+  name: string;
+};
+
 export type UpdateSessionGroupMembershipCommandInput = {
   projectId: ProjectView["id"];
   groupId: SessionGroupId;
   expectedVersion: number;
   sessionId: SessionId;
+  expectedGroupId?: SessionGroupId | null;
 };
 
-export type BuildFocusCommandOptions = {
-  origin?: TerminalFocusOrigin;
+export type UpdateSessionGroupMembershipDeltaCommandInput = {
+  projectId: ProjectView["id"];
+  groupId: SessionGroupId;
+  expectedVersion: number;
+  add: readonly { sessionId: SessionId; expectedGroupId: SessionGroupId | null }[];
+  remove: readonly { sessionId: SessionId; expectedGroupId: SessionGroupId | null }[];
 };
 
-export function buildFocusCommand(
-  row: WorktreeRow,
-  options: BuildFocusCommandOptions = {},
-): Extract<StationCommand, { type: "terminal.focus" }> {
-  const payload: Extract<StationCommand, { type: "terminal.focus" }>["payload"] = {};
-  if (row.agent?.sessionId !== undefined) {
-    payload.sessionId = row.agent.sessionId;
-  } else {
-    payload.worktreeId = row.id;
-  }
-  if (options.origin !== undefined) {
-    payload.origin = options.origin;
-  }
-  return {
-    type: "terminal.focus",
-    payload,
-  };
-}
+export type DeleteSessionGroupCommandInput = {
+  projectId: ProjectView["id"];
+  groupId: SessionGroupId;
+  expectedVersion: number;
+};
 
-export function buildSessionFocusCommand(
-  session: Pick<SessionView, "id">,
-  options: BuildFocusCommandOptions = {},
-): Extract<StationCommand, { type: "terminal.focus" }> {
-  const payload: Extract<StationCommand, { type: "terminal.focus" }>["payload"] = {
-    sessionId: session.id,
-  };
-  if (options.origin !== undefined) {
-    payload.origin = options.origin;
-  }
-  return { type: "terminal.focus", payload };
-}
+export type MoveSessionToGroupCommandInput = {
+  projectId: ProjectView["id"];
+  sessionId: SessionId;
+  currentGroup: { id: SessionGroupId; version: number } | undefined;
+  destinationGroup: { id: SessionGroupId; version: number } | undefined;
+};
 
 export function buildStartAgentCommand(
   row: WorktreeRow,
@@ -227,6 +220,9 @@ export function buildForkSessionCommand(input: ForkSessionCommandInput): Station
   if (input.copyDirty !== undefined) {
     payload.copyDirty = input.copyDirty;
   }
+  if (input.group !== undefined) {
+    payload.group = input.group;
+  }
   if (input.harnessProvider !== undefined) {
     payload.harness = { provider: input.harnessProvider };
   }
@@ -284,6 +280,20 @@ export function buildCreateSessionGroupCommand(
   };
 }
 
+export function buildRenameSessionGroupCommand(
+  input: RenameSessionGroupCommandInput,
+): Extract<StationCommand, { type: "sessionGroup.rename" }> {
+  return {
+    type: "sessionGroup.rename",
+    payload: {
+      projectId: input.projectId,
+      groupId: input.groupId,
+      expectedVersion: input.expectedVersion,
+      name: input.name.trim(),
+    },
+  };
+}
+
 export function buildUpdateSessionGroupMembershipCommand(
   input: UpdateSessionGroupMembershipCommandInput,
 ): Extract<StationCommand, { type: "sessionGroup.updateMembership" }> {
@@ -293,7 +303,60 @@ export function buildUpdateSessionGroupMembershipCommand(
       projectId: input.projectId,
       groupId: input.groupId,
       expectedVersion: input.expectedVersion,
-      add: [{ sessionId: input.sessionId, expectedGroupId: null }],
+      add: [{ sessionId: input.sessionId, expectedGroupId: input.expectedGroupId ?? null }],
+    },
+  };
+}
+
+/** Builds one atomic add/remove delta without emitting empty payload collections. */
+export function buildUpdateSessionGroupMembershipDeltaCommand(
+  input: UpdateSessionGroupMembershipDeltaCommandInput,
+): Extract<StationCommand, { type: "sessionGroup.updateMembership" }> {
+  const payload: Extract<StationCommand, { type: "sessionGroup.updateMembership" }>["payload"] = {
+    projectId: input.projectId,
+    groupId: input.groupId,
+    expectedVersion: input.expectedVersion,
+  };
+  if (input.add.length > 0) payload.add = [...input.add];
+  if (input.remove.length > 0) payload.remove = [...input.remove];
+  return { type: "sessionGroup.updateMembership", payload };
+}
+
+export function buildDeleteSessionGroupCommand(
+  input: DeleteSessionGroupCommandInput,
+): Extract<StationCommand, { type: "sessionGroup.delete" }> {
+  return {
+    type: "sessionGroup.delete",
+    payload: {
+      projectId: input.projectId,
+      groupId: input.groupId,
+      expectedVersion: input.expectedVersion,
+    },
+  };
+}
+
+/** Builds the single optimistic-concurrency command for Group reassignment or ungrouping. */
+export function buildMoveSessionToGroupCommand(
+  input: MoveSessionToGroupCommandInput,
+): Extract<StationCommand, { type: "sessionGroup.updateMembership" }> | undefined {
+  if (input.currentGroup?.id === input.destinationGroup?.id) return undefined;
+  if (input.destinationGroup !== undefined) {
+    return buildUpdateSessionGroupMembershipCommand({
+      projectId: input.projectId,
+      groupId: input.destinationGroup.id,
+      expectedVersion: input.destinationGroup.version,
+      sessionId: input.sessionId,
+      expectedGroupId: input.currentGroup?.id ?? null,
+    });
+  }
+  if (input.currentGroup === undefined) return undefined;
+  return {
+    type: "sessionGroup.updateMembership",
+    payload: {
+      projectId: input.projectId,
+      groupId: input.currentGroup.id,
+      expectedVersion: input.currentGroup.version,
+      remove: [{ sessionId: input.sessionId, expectedGroupId: input.currentGroup.id }],
     },
   };
 }

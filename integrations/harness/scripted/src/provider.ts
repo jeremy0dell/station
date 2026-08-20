@@ -1,22 +1,15 @@
 import type {
   BuildHarnessLaunchRequest,
   HarnessCapabilities,
-  HarnessClassificationContext,
   HarnessDiscoveryContext,
-  HarnessEventContext,
-  HarnessEventObservation,
   HarnessLaunchPlan,
   HarnessProvider,
   HarnessRunObservation,
-  HarnessStatusObservation,
   ProviderHealth,
-  RawHarnessEvent,
 } from "@station/contracts";
-import { type RuntimeClock, runRuntimeBoundary, toIsoTimestamp } from "@station/runtime";
-import { normalizeScriptedRawEvent } from "./events.js";
+import { type RuntimeClock, toIsoTimestamp } from "@station/runtime";
 import { buildScriptedAgentLaunchPlan } from "./launch.js";
 import { discoverScriptedRuns } from "./stateStore.js";
-import { classifyScriptedRunStatus } from "./statusPolicy.js";
 
 export type ScriptedAgentHarnessProviderOptions = {
   stateDir: string;
@@ -33,7 +26,6 @@ const capabilities: HarnessCapabilities = {
   canLaunch: true,
   canDiscoverRuns: true,
   canEmitEvents: true,
-  canClassifyStatus: true,
   canReceivePrompt: false,
   canResume: false,
   canStop: false,
@@ -93,38 +85,5 @@ export class ScriptedAgentHarnessProvider implements HarnessProvider {
       clock: this.#clock,
       ...(this.#options.timeoutMs === undefined ? {} : { timeoutMs: this.#options.timeoutMs }),
     });
-  }
-
-  async classifyRun(
-    run: HarnessRunObservation,
-    _context: HarnessClassificationContext,
-  ): Promise<HarnessStatusObservation> {
-    return classifyScriptedRunStatus(run, {
-      now: toIsoTimestamp(this.#clock.now()),
-    });
-  }
-
-  async ingestEvent(
-    event: RawHarnessEvent,
-    _context: HarnessEventContext,
-  ): Promise<HarnessEventObservation[]> {
-    const result = await runRuntimeBoundary(
-      {
-        operation: "provider.scripted.ingestEvent",
-        clock: this.#clock,
-        error: {
-          tag: "HarnessProviderError",
-          code: "HARNESS_SCRIPTED_EVENT_INGEST_FAILED",
-          message: "The scripted harness provider failed to ingest an event.",
-          provider: this.id,
-        },
-      },
-      async () => normalizeScriptedRawEvent(event),
-    );
-
-    if (!result.ok) {
-      throw result.error;
-    }
-    return result.value;
   }
 }

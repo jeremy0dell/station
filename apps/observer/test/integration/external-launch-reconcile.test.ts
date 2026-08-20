@@ -7,6 +7,8 @@ import type {
   HarnessHooksStatus,
   HarnessLaunchPlan,
   HarnessRunObservation,
+  ProviderProjectConfig,
+  WorktreeObservation,
 } from "@station/contracts";
 import { StationTerminalProvider } from "@station/terminal";
 import {
@@ -104,6 +106,119 @@ describe("observer external-launch reconcile", () => {
     fixture.sqlite.close();
   });
 
+  it("seeds a native fork into the source's current Group before canonical publication", async () => {
+    const stateDir = await mkdtemp(join(tmpdir(), "station-observer-ext-"));
+    const source = createFakeWorktree({
+      id: "wt_web_source",
+      projectId: "web",
+      branch: "source",
+      path: "/tmp/station/web/source",
+      now,
+    });
+    const target = createFakeWorktree({
+      id: "wt_web_fork",
+      projectId: "web",
+      branch: "fork",
+      path: "/tmp/station/web/fork",
+      now,
+    });
+    const fixture = createFixture(providerIngressSpoolDir(stateDir), {
+      worktrees: [source, target],
+    });
+    await fixture.persistence.seedSession({
+      sessionId: "ses_web_source",
+      projectId: "web",
+      worktreeId: source.id,
+      initialTitle: "Source",
+      harness: "fake-harness",
+      terminalProvider: "fake-terminal",
+      createdAt: now,
+      lastSeenAt: now,
+      group: { kind: "create", groupId: "group_source", name: "Source Group" },
+    });
+    await fixture.api.reconcile("seed-grouped-source");
+
+    const result = await fixture.api.prepareExternalLaunch({
+      projectId: "web",
+      worktreeId: target.id,
+      group: {
+        kind: "source",
+        sourceSessionId: "ses_web_source",
+        groupId: "group_source",
+      },
+    });
+    if (result.kind !== "prepared") throw new Error("expected prepared fork launch");
+    await fixture.api.reconcile("verify-grouped-fork");
+
+    const snapshot = await fixture.api.getSnapshot();
+    const inheritedGroup = snapshot.sessionGroups.find((group) => group.id === "group_source");
+    expect(inheritedGroup).toBeDefined();
+    expect(new Set(inheritedGroup?.sessionIds)).toEqual(
+      new Set(["ses_web_source", result.sessionId]),
+    );
+    fixture.sqlite.close();
+  });
+
+  it("succeeds Ungrouped when the source Group disappears before native seed commit", async () => {
+    const stateDir = await mkdtemp(join(tmpdir(), "station-observer-ext-"));
+    const source = createFakeWorktree({
+      id: "wt_web_stale_source",
+      projectId: "web",
+      branch: "stale-source",
+      path: "/tmp/station/web/stale-source",
+      now,
+    });
+    const target = createFakeWorktree({
+      id: "wt_web_stale_fork",
+      projectId: "web",
+      branch: "stale-fork",
+      path: "/tmp/station/web/stale-fork",
+      now,
+    });
+    const fixture = createFixture(providerIngressSpoolDir(stateDir), {
+      worktrees: [source, target],
+    });
+    await fixture.persistence.seedSession({
+      sessionId: "ses_web_stale_source",
+      projectId: "web",
+      worktreeId: source.id,
+      initialTitle: "Stale source",
+      harness: "fake-harness",
+      terminalProvider: "fake-terminal",
+      createdAt: now,
+      lastSeenAt: now,
+      group: { kind: "create", groupId: "group_stale_source", name: "Stale" },
+    });
+    await fixture.api.reconcile("seed-stale-source");
+    const sourceGroup = (await fixture.persistence.listSessionGroups()).find(
+      (group) => group.id === "group_stale_source",
+    );
+    if (sourceGroup === undefined) throw new Error("expected source Group");
+    await fixture.persistence.deleteSessionGroup({
+      id: sourceGroup.id,
+      expectedVersion: sourceGroup.version,
+      updatedAt: now,
+    });
+
+    const result = await fixture.api.prepareExternalLaunch({
+      projectId: "web",
+      worktreeId: target.id,
+      group: {
+        kind: "source",
+        sourceSessionId: "ses_web_stale_source",
+        groupId: "group_stale_source",
+      },
+    });
+    if (result.kind !== "prepared") throw new Error("expected prepared stale fork launch");
+    await fixture.api.reconcile("verify-stale-fork");
+    const snapshot = await fixture.api.getSnapshot();
+    expect(snapshot.sessions).toContainEqual(
+      expect.objectContaining({ id: result.sessionId, worktreeId: target.id }),
+    );
+    expect(snapshot.sessionGroups).toEqual([]);
+    fixture.sqlite.close();
+  });
+
   it("logs hook readiness rejections with their diagnostic code", async () => {
     const stateDir = await mkdtemp(join(tmpdir(), "station-observer-ext-"));
     const records: Array<{ message: string; attributes?: Record<string, unknown> }> = [];
@@ -135,6 +250,70 @@ describe("observer external-launch reconcile", () => {
     fixture.sqlite.close();
   });
 
+  it("coalesces successful prepare and exit lifecycle hints into one provider scan", async () => {
+    const stateDir = await mkdtemp(join(tmpdir(), "station-observer-ext-"));
+    const fixture = createFixture(providerIngressSpoolDir(stateDir), {
+      hookReconcileDebounceMs: 0,
+    });
+    await fixture.api.reconcile("seed");
+    const scansBeforeLifecycle = fixture.worktree.listCalls;
+
+    const prepared = await fixture.api.prepareExternalLaunch({
+      projectId: "web",
+      worktreeId: "wt_web_feature",
+    });
+    expect(prepared.kind).toBe("prepared");
+    if (prepared.kind !== "prepared") throw new Error("expected prepared launch");
+    await expect(
+      fixture.api.reportExternalExit({
+        terminalTargetId: prepared.terminalTargetId,
+        expectedSessionId: prepared.sessionId,
+        expectedBindingToken: prepared.terminalBindingToken,
+      }),
+    ).resolves.toEqual({
+      acknowledged: true,
+      terminalTargetId: prepared.terminalTargetId,
+    });
+
+    await waitFor(() => fixture.worktree.listCalls > scansBeforeLifecycle);
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    expect(fixture.worktree.listCalls - scansBeforeLifecycle).toBe(1);
+
+    fixture.sqlite.close();
+  });
+
+  it("blocks a replacement launch while validated worktree removal is reserved", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-external-remove-reservation-"));
+    const fixture = createFixture(providerIngressSpoolDir(root));
+    await fixture.api.reconcile("seed-removal-reservation");
+    const row = (await fixture.api.getSnapshot()).rows[0];
+    if (row?.registrationIdentity === undefined) {
+      throw new Error("Expected a registered worktree row.");
+    }
+
+    const reservation = await fixture.api.prepareWorktreeRemoval({
+      projectId: row.projectId,
+      worktreeId: row.id,
+      expectedPath: row.path,
+      expectedBranch: row.branch,
+      expectedRegistrationIdentity: row.registrationIdentity,
+      force: true,
+    });
+    let launchSettled = false;
+    const launch = fixture.api
+      .prepareExternalLaunch({ projectId: row.projectId, worktreeId: row.id })
+      .then((result) => {
+        launchSettled = true;
+        return result;
+      });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(launchSettled).toBe(false);
+
+    await fixture.api.cancelWorktreeRemoval({ reservationId: reservation.reservationId });
+    await expect(launch).resolves.toMatchObject({ kind: "prepared" });
+    fixture.sqlite.close();
+  });
+
   it("recovers one canonical session with its title, idle evidence, and readiness", async () => {
     const stateDir = await mkdtemp(join(tmpdir(), "station-observer-ext-"));
     const previousRun = createFakeHarnessRun({
@@ -159,6 +338,8 @@ describe("observer external-launch reconcile", () => {
       projectId: "web",
       worktreeId: "wt_web_feature",
       initialTitle: "feature",
+      harness: "fake-harness",
+      terminalProvider: "fake-terminal",
       createdAt: now,
       lastSeenAt: now,
     });
@@ -274,6 +455,8 @@ function createFixture(
     harness?: FakeHarnessProvider;
     logger?: StationLogger;
     config?: StationConfig;
+    hookReconcileDebounceMs?: number;
+    worktrees?: WorktreeObservation[];
   } = {},
 ) {
   const clock = { now: () => new Date(now) };
@@ -283,21 +466,22 @@ function createFixture(
   const eventBus = createObserverEventBus();
   const station = new StationTerminalProvider({ clock });
   const harness = options.harness ?? new FakeHarnessProvider({ now });
+  const worktree = new CountingWorktreeProvider({
+    now,
+    worktrees: options.worktrees ?? [
+      createFakeWorktree({
+        id: "wt_web_feature",
+        projectId: "web",
+        branch: "feature",
+        path: "/tmp/station/web/feature",
+        remote: { host: "github.com", owner: "example", repo: "web" },
+        headSha: "2222222222222222222222222222222222222222",
+        now,
+      }),
+    ],
+  });
   const providers = new ProviderRegistry({
-    worktree: new FakeWorktreeProvider({
-      now,
-      worktrees: [
-        createFakeWorktree({
-          id: "wt_web_feature",
-          projectId: "web",
-          branch: "feature",
-          path: "/tmp/station/web/feature",
-          remote: { host: "github.com", owner: "example", repo: "web" },
-          headSha: "2222222222222222222222222222222222222222",
-          now,
-        }),
-      ],
-    }),
+    worktree,
     terminal: new FakeTerminalProvider({ now }),
     managedTerminal: station,
     harnesses: [harness],
@@ -315,9 +499,21 @@ function createFixture(
     hookSpoolDir: spoolDir,
     config: fixtureConfig,
     clock,
+    ...(options.hookReconcileDebounceMs === undefined
+      ? {}
+      : { hookReconcileDebounceMs: options.hookReconcileDebounceMs }),
     ...(options.logger === undefined ? {} : { logger: options.logger }),
   });
-  return { api, harness, persistence, sqlite };
+  return { api, harness, persistence, sqlite, worktree };
+}
+
+class CountingWorktreeProvider extends FakeWorktreeProvider {
+  listCalls = 0;
+
+  override async listWorktrees(project: ProviderProjectConfig): Promise<WorktreeObservation[]> {
+    this.listCalls += 1;
+    return super.listWorktrees(project);
+  }
 }
 
 class MissingHooksHarness extends FakeHarnessProvider {

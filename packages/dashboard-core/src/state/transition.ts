@@ -4,7 +4,10 @@ import { handleAddProjectKey } from "./screens/addProjectScreen.js";
 import { handleDashboardKey } from "./screens/dashboard.js";
 import { handleForkKey } from "./screens/fork.js";
 import { handleFreshStartKey } from "./screens/freshStart.js";
+import { handleGroupMenuKey } from "./screens/groupMenu.js";
+import { handleGroupSettingsKey } from "./screens/groupSettings.js";
 import { handleHelpKey } from "./screens/help.js";
+import { handleMoveToGroupKey } from "./screens/moveToGroup.js";
 import { handleNewSessionKey } from "./screens/newSession.js";
 import { handleDashboardPersistentFilterKey } from "./screens/persistentFilter.js";
 import { handleProjectCollapseKey } from "./screens/projectCollapse.js";
@@ -70,6 +73,8 @@ export function handleTuiKey(
       return handleHelpKey(state, key);
     case "projectMenu":
       return handleProjectMenuKey(state, key);
+    case "groupMenu":
+      return handleGroupMenuKey(state, key);
     case "createGroup":
       return handleCreateGroupKey(state, key);
     case "persistentFilter":
@@ -84,6 +89,8 @@ export function handleTuiKey(
       return handleRemoveWorktreeKey(state, key);
     case "renameSession":
       return handleRenameSessionKey(state, key);
+    case "moveToGroup":
+      return handleMoveToGroupKey(state, key);
     case "fork":
       return handleForkKey(state, key);
     case "newSession":
@@ -92,6 +99,8 @@ export function handleTuiKey(
       return handleProjectDefaultAgentKey(state, key);
     case "projectSettings":
       return handleProjectSettingsKey(state, key);
+    case "groupSettings":
+      return handleGroupSettingsKey(state, key);
     case "addProject":
       return handleAddProjectKey(state, key);
     case "widgetSettings":

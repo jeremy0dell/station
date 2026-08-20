@@ -1,118 +1,98 @@
-import type { HarnessRunObservation } from "@station/contracts";
+import { HarnessRunObservationSchema } from "@station/contracts";
 import { describe, expect, it } from "vitest";
-import { classifyHarnessRunStatus } from "../../src/classify";
 
 const now = "2026-06-11T12:00:00.000Z";
 
-describe("classifyHarnessRunStatus", () => {
-  it("classifies high-confidence needs_attention as a harness event", () => {
-    const status = classifyHarnessRunStatus(
-      run({ state: "needs_attention", confidence: "high", reason: "blocked" }),
-      { provider: "claude", fallbackReason: "fallback" },
-    );
+describe("discovered harness status", () => {
+  it("keeps a current typed attention status", () => {
+    expect(
+      current({ value: "needs_attention", confidence: "high", reason: "blocked" }).status,
+    ).toMatchObject({ value: "needs_attention", confidence: "high", reason: "blocked" });
+  });
 
-    expect(status).toMatchObject({
-      provider: "claude",
-      runId: "run-1",
-      status: {
-        value: "needs_attention",
-        confidence: "high",
-        reason: "blocked",
-        source: "harness_event",
-      },
+  it("normalizes a legacy high-confidence attention state", () => {
+    expect(legacy("needs_attention", "high", "blocked").status).toMatchObject({
+      value: "needs_attention",
+      confidence: "high",
+      reason: "blocked",
+      source: "unknown",
     });
   });
 
-  it("classifies high-confidence exited with the default process source", () => {
-    const status = classifyHarnessRunStatus(
-      run({ state: "exited", confidence: "high", reason: "done" }),
-      { provider: "codex", fallbackReason: "fallback" },
-    );
-
-    expect(status.status).toMatchObject({
+  it("normalizes a legacy exited state without inventing a source", () => {
+    expect(legacy("exited", "high", "done").status).toMatchObject({
       value: "exited",
       confidence: "high",
       reason: "done",
-      source: "harness_process",
+      source: "unknown",
     });
   });
 
-  it("can override the exited source", () => {
-    const status = classifyHarnessRunStatus(
-      run({ state: "exited", confidence: "high", reason: "done" }),
-      { provider: "cursor", fallbackReason: "fallback", exitedSource: "harness_event" },
+  it("preserves explicit status sources", () => {
+    expect(current({ value: "exited", confidence: "high", reason: "done" }).status.source).toBe(
+      "harness_event",
     );
-
-    expect(status.status.source).toBe("harness_event");
   });
 
-  it("can skip needs_attention classification", () => {
-    const status = classifyHarnessRunStatus(
-      run({ state: "needs_attention", confidence: "high", reason: "blocked" }),
-      { provider: "pi", fallbackReason: "no signal", needsAttention: false },
-    );
-
-    expect(status.status.value).toBe("unknown");
-    expect(status.status.reason).toBe("no signal");
-  });
-
-  it("falls back to unknown with the provider-specific reason", () => {
-    const status = classifyHarnessRunStatus(run(), {
-      provider: "opencode",
-      fallbackReason: "no reliable signal",
-    });
-
-    expect(status.status).toMatchObject({
+  it("keeps unknown discovery status provider-owned", () => {
+    expect(current().status).toMatchObject({
       value: "unknown",
       confidence: "low",
       reason: "no reliable signal",
-      source: "harness_process",
+      source: "harness_event",
     });
   });
 
-  it("copies optional identity fields and providerData when present", () => {
-    const status = classifyHarnessRunStatus(
-      run({
-        projectId: "web",
-        worktreeId: "wt_web_task",
-        sessionId: "ses_web_task",
-        providerData: { terminalTargetId: "tmux:1" },
-      }),
-      { provider: "claude", fallbackReason: "fallback" },
-    );
-
-    expect(status.projectId).toBe("web");
-    expect(status.worktreeId).toBe("wt_web_task");
-    expect(status.sessionId).toBe("ses_web_task");
-    expect(status.providerData).toEqual({ terminalTargetId: "tmux:1" });
+  it("keeps optional identity and provider data on legacy normalization", () => {
+    const run = HarnessRunObservationSchema.parse({
+      id: "run-1",
+      provider: "claude",
+      projectId: "web",
+      worktreeId: "wt_web_task",
+      sessionId: "ses_web_task",
+      state: "unknown",
+      confidence: "low",
+      reason: "fallback",
+      observedAt: now,
+      providerData: { terminalTargetId: "tmux:1" },
+    });
+    expect(run).toMatchObject({
+      projectId: "web",
+      worktreeId: "wt_web_task",
+      sessionId: "ses_web_task",
+      providerData: { terminalTargetId: "tmux:1" },
+    });
   });
 
-  it("omits optional fields when they are absent", () => {
-    const status = classifyHarnessRunStatus(
-      run({
-        projectId: undefined,
-        worktreeId: undefined,
-        sessionId: undefined,
-        providerData: undefined,
-      }),
-      { provider: "claude", fallbackReason: "fallback" },
+  it("rejects fields outside both strict run formats", () => {
+    expect(HarnessRunObservationSchema.safeParse({ ...current(), extra: true }).success).toBe(
+      false,
     );
-
-    expect(status).not.toHaveProperty("projectId");
-    expect(status).not.toHaveProperty("worktreeId");
-    expect(status).not.toHaveProperty("sessionId");
-    expect(status).not.toHaveProperty("providerData");
   });
 });
 
-function run(overrides: Partial<HarnessRunObservation> = {}): HarnessRunObservation {
-  return {
+function current(
+  status = { value: "unknown" as const, confidence: "low" as const, reason: "no reliable signal" },
+) {
+  return HarnessRunObservationSchema.parse({
     id: "run-1",
     provider: "claude",
-    state: "unknown",
-    confidence: "low",
-    reason: "no signal yet",
     observedAt: now,
-    ...overrides,
-  };
+    status: {
+      ...status,
+      source: "harness_event",
+      updatedAt: now,
+    },
+  });
+}
+
+function legacy(value: string, confidence: string, reason: string) {
+  return HarnessRunObservationSchema.parse({
+    id: "run-1",
+    provider: "claude",
+    state: value,
+    confidence,
+    reason,
+    observedAt: now,
+  });
 }

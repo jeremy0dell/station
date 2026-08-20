@@ -165,7 +165,7 @@ describe("CLI setup command", () => {
       schemaVersion: 1 as const,
       launcher: join(root, "source", "bin", "stn-ingress"),
       runtimeKind: "source" as const,
-      version: "0.0.0-pre-alpha.5.2",
+      version: "0.0.0-pre-alpha.5.16",
       buildIdentity: "a".repeat(64),
     };
     const current = {

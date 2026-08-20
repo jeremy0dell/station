@@ -88,7 +88,7 @@ describe("fake providers", () => {
       expect.objectContaining({
         id: "run_web_main",
         provider: "fake-harness",
-        state: "working",
+        status: expect.objectContaining({ value: "working" }),
         observedAt: now,
       }),
     ]);
@@ -215,7 +215,7 @@ describe("fake providers", () => {
     await expect(terminal.closeTarget("term_web_cleanup")).resolves.toBeUndefined();
     await expect(
       worktree.removeWorktree({
-        projectId: "web",
+        project,
         worktreeId: "wt_web_cleanup",
         expectedPath: "/tmp/station/web/cleanup",
         expectedBranch: "cleanup",
@@ -230,7 +230,7 @@ describe("fake providers", () => {
     expect(harness.snapshot().runs).toEqual([
       expect.objectContaining({
         id: "run_web_cleanup",
-        state: "exited",
+        status: expect.objectContaining({ value: "exited" }),
       }),
     ]);
     expect(terminal.snapshot().closed).toEqual(["term_web_cleanup"]);

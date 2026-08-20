@@ -12,10 +12,18 @@ import {
 } from "./addProject.js";
 import { createDashboardCapabilityOperationRunner } from "./capabilityOperation.js";
 import { runQuickSessionInGroupOperation } from "./groupQuickSession.js";
+import {
+  runDeleteSessionGroupOperation,
+  runRenameSessionGroupOperation,
+  runUpdateSessionGroupMembershipOperation,
+} from "./groupSettings.js";
 import { projectCommandOperations } from "./projectCommands.js";
-import { runRemoveWorktreeOperation } from "./removeWorktree.js";
 import { runRenameSessionOperation } from "./renameSession.js";
-import { runCreateSessionGroupOperation } from "./sessionGroups.js";
+import {
+  runCreateSessionGroupForMoveOperation,
+  runCreateSessionGroupOperation,
+  runMoveSessionToGroupOperation,
+} from "./sessionGroups.js";
 import type { DashboardCapabilityOperation, TuiOperation } from "./types.js";
 
 type OperationHandlers = {
@@ -62,17 +70,7 @@ export function createTuiLocalOperationRunner(input: {
     openDashboardShell: runCapabilityOperation,
     dismissDashboard: runCapabilityOperation,
     exitDashboardRenderer: runCapabilityOperation,
-    removeWorktree: (operation) => {
-      input.scope.run(() =>
-        runRemoveWorktreeOperation({
-          store: store(),
-          service: input.service,
-          operation,
-          clientLabel: input.clientLabel,
-          scope: input.scope,
-        }),
-      );
-    },
+    removeWorktree: runCapabilityOperation,
     renameSession: (operation) => {
       input.scope.run(() =>
         runRenameSessionOperation({
@@ -168,6 +166,61 @@ export function createTuiLocalOperationRunner(input: {
           store: store(),
           service: input.service,
           capabilities: capabilityOperations,
+          operation,
+          clientLabel: input.clientLabel,
+          scope: input.scope,
+        }),
+      );
+    },
+    moveSessionToGroup: (operation) => {
+      input.scope.run(() =>
+        runMoveSessionToGroupOperation({
+          store: store(),
+          service: input.service,
+          operation,
+          clientLabel: input.clientLabel,
+          scope: input.scope,
+        }),
+      );
+    },
+    createSessionGroupForMove: (operation) => {
+      input.scope.run(() =>
+        runCreateSessionGroupForMoveOperation({
+          store: store(),
+          service: input.service,
+          operation,
+          clientLabel: input.clientLabel,
+          scope: input.scope,
+        }),
+      );
+    },
+    renameSessionGroup: (operation) => {
+      input.scope.run(() =>
+        runRenameSessionGroupOperation({
+          store: store(),
+          service: input.service,
+          operation,
+          clientLabel: input.clientLabel,
+          scope: input.scope,
+        }),
+      );
+    },
+    updateSessionGroupMembership: (operation) => {
+      input.scope.run(() =>
+        runUpdateSessionGroupMembershipOperation({
+          store: store(),
+          service: input.service,
+          operation,
+          clientLabel: input.clientLabel,
+          scope: input.scope,
+        }),
+      );
+    },
+    deleteSessionGroup: (operation) => {
+      input.scope.run(() =>
+        runDeleteSessionGroupOperation({
+          store: store(),
+          service: input.service,
           operation,
           clientLabel: input.clientLabel,
           scope: input.scope,

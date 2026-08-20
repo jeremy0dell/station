@@ -208,7 +208,7 @@ describe("binary smoke failure evidence", () => {
         rootRemoved: true,
       },
       expectedRunId: captured.runId,
-      processes: [{ role: "incumbent", pid: process.pid, exists: true }],
+      processes: [{ role: "incumbent", pid: process.pid, exists: false }],
       warnings: [],
       lifecycleEvents: [
         ...captured.lifecycleEvents,
@@ -227,6 +227,7 @@ describe("binary smoke failure evidence", () => {
     });
     const finalized = JSON.parse(await readFile(join(input.evidenceDir, "manifest.json"), "utf8"));
     expect(finalized.rounds[0].cleanup.status).toBe("complete");
+    expect(finalized.schemaVersion).toBe(2);
     expect(finalized.runId).toBe(captured.runId);
     expect(
       finalized.rounds[0].runtime.lifecycle.map((event: { message: string }) => event.message),
@@ -319,5 +320,14 @@ describe("binary smoke failure evidence", () => {
         warnings: [],
       }),
     ).rejects.toThrow("Complete binary smoke cleanup requires zero owned residue");
+    await expect(
+      module.finalizeBinarySmokeEvidence({
+        evidenceDir: input.evidenceDir,
+        expectedRunId: captured.runId,
+        cleanup,
+        processes: [{ role: "incumbent", pid: process.pid, exists: true }],
+        warnings: [],
+      }),
+    ).rejects.toThrow("every recorded process to exit");
   });
 });

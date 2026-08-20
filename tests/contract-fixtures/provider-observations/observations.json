@@ -21,7 +21,6 @@
     "canLaunch": true,
     "canDiscoverRuns": true,
     "canEmitEvents": true,
-    "canClassifyStatus": true,
     "canReceivePrompt": false,
     "canResume": true,
     "canStop": true,
@@ -44,8 +43,7 @@
     },
     "latencyMs": 22,
     "capabilities": {
-      "canDiscoverRuns": true,
-      "canClassifyStatus": true
+      "canDiscoverRuns": true
     }
   },
   "harnessLaunchPlan": {
@@ -151,10 +149,10 @@
       }
     }
   ],
-  "harnessStatusObservations": [
+  "currentHarnessRunObservations": [
     {
       "provider": "codex",
-      "runId": "run_web_feature_auth",
+      "id": "run_web_feature_auth",
       "projectId": "web",
       "worktreeId": "wt_web_feature_auth",
       "sessionId": "ses_web_feature_auth",

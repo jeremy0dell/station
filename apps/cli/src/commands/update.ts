@@ -33,9 +33,6 @@ import {
   type UpdateScenario,
 } from "./update/scenario.js";
 
-export type { UpdateCommandReport, UpdateCommandStep } from "./update/report.js";
-export { renderUpdateReport } from "./update/report.js";
-
 export type UpdateCommandOptions = {
   config: StationConfig;
   configPath?: string;
@@ -55,6 +52,8 @@ type ExecutableUpdateScenario = Extract<
   UpdateScenario,
   { kind: "defer-to-package-manager" | "apply-update" }
 >;
+
+const OBSERVER_CROSSOVER_TIMEOUT_MS = 20_000;
 
 /**
  * ADAPTER
@@ -155,7 +154,12 @@ async function crossOverRuntime(
   commandRunner: ExternalCommandRunner | undefined,
 ): Promise<CliRunResult> {
   // Crossover must use the successor launcher: Observer first, then any planned Host handoff.
-  const observerCommand = stationCommand(successorCli, options.configPath, ["observer", "restart"]);
+  const observerCommand = stationCommand(successorCli, options.configPath, [
+    "observer",
+    "restart",
+    "--timeout-ms",
+    String(OBSERVER_CROSSOVER_TIMEOUT_MS),
+  ]);
   try {
     await runCrossover(observerCommand, commandRunner);
     report.steps.push(

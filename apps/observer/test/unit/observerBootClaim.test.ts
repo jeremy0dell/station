@@ -11,11 +11,12 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { listenUnixSocket } from "@station/protocol";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createObserverStartupGate, runObserverMain } from "../../src/runtime/main.js";
 import {
   acquireObserverBootClaim,
-  createObserverBootClaimCleanupExclusion,
+  createObserverReapExclusion,
   observerBootClaimPath,
 } from "../../src/runtime/observerBootClaim.js";
 import type { SqlDatabase } from "../../src/sqlite/driver.js";
@@ -281,7 +282,7 @@ describe("observer boot claim", () => {
   it("runs cleanup under a non-waiting claim and releases after callback success", async () => {
     const root = await tempRoot();
     const socketPath = join(root, "run", "observer.sock");
-    const exclusion = createObserverBootClaimCleanupExclusion({ socketPath });
+    const exclusion = createObserverReapExclusion({ socketPath });
     const callback = vi.fn(async () => "done");
 
     await expect(exclusion.runExclusive(callback)).resolves.toEqual({
@@ -303,7 +304,7 @@ describe("observer boot claim", () => {
     if (owner.status !== "acquired") return;
     const callback = vi.fn(async () => "must not run");
     try {
-      const exclusion = createObserverBootClaimCleanupExclusion({ socketPath });
+      const exclusion = createObserverReapExclusion({ socketPath });
       await expect(exclusion.runExclusive(callback)).resolves.toEqual({ status: "busy" });
       expect(callback).not.toHaveBeenCalled();
     } finally {
@@ -314,7 +315,7 @@ describe("observer boot claim", () => {
   it("releases cleanup exclusion after a callback failure", async () => {
     const root = await tempRoot();
     const socketPath = join(root, "run", "observer.sock");
-    const exclusion = createObserverBootClaimCleanupExclusion({ socketPath });
+    const exclusion = createObserverReapExclusion({ socketPath });
 
     await expect(
       exclusion.runExclusive(async () => {
@@ -349,6 +350,83 @@ describe("observer boot claim", () => {
       code: "ENOENT",
     });
     expect((await lstat(path)).isDirectory()).toBe(true);
+  });
+
+  it("preserves a non-exact owner when exact activation loses the post-stop race", async () => {
+    const root = await tempRoot();
+    const stateDir = join(root, "state");
+    const socketPath = join(root, "run", "observer.sock");
+    const server = await listenUnixSocket({ socketPath, onConnection: () => undefined });
+    const providerRegistryFactory = vi.fn();
+    const stop = vi.fn();
+    const signal = vi.fn();
+
+    try {
+      await expect(
+        runObserverMain(
+          ["--state-dir", stateDir, "--socket", socketPath, "--startup-timeout-ms", "500"],
+          {
+            providerRegistryFactory,
+            buildVersion: "1.0.0+station.candidate",
+            startupPolicy: "preserve-incumbent",
+            incumbentLifecycle: {
+              health: vi.fn(async () => ({
+                schemaVersion: "0.11.0",
+                status: "healthy",
+                pid: 4321,
+                startedAt: "2026-08-19T12:00:00.000Z",
+                version: "0.9.0+station.new-owner",
+                socketPath,
+              })),
+              stop,
+            },
+            processEvidence: { socketHolders: vi.fn(), signal } as never,
+          },
+        ),
+      ).rejects.toMatchObject({ code: "OBSERVER_EXACT_BUILD_ACTIVATION_FAILED" });
+      expect(stop).not.toHaveBeenCalled();
+      expect(signal).not.toHaveBeenCalled();
+      expect(providerRegistryFactory).not.toHaveBeenCalled();
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("accepts an exact successor without constructing a competing runtime", async () => {
+    const root = await tempRoot();
+    const stateDir = join(root, "state");
+    const socketPath = join(root, "run", "observer.sock");
+    const buildVersion = "1.0.0+station.exact-owner";
+    const server = await listenUnixSocket({ socketPath, onConnection: () => undefined });
+    const providerRegistryFactory = vi.fn();
+
+    try {
+      await expect(
+        runObserverMain(
+          ["--state-dir", stateDir, "--socket", socketPath, "--startup-timeout-ms", "500"],
+          {
+            providerRegistryFactory,
+            buildVersion,
+            startupPolicy: "preserve-incumbent",
+            incumbentLifecycle: {
+              health: vi.fn(async () => ({
+                schemaVersion: "0.11.0",
+                status: "healthy",
+                pid: 4321,
+                startedAt: "2026-08-19T12:00:00.000Z",
+                version: buildVersion,
+                socketPath,
+              })),
+              stop: vi.fn(),
+            },
+            processEvidence: { socketHolders: vi.fn() } as never,
+          },
+        ),
+      ).resolves.toBe(0);
+      expect(providerRegistryFactory).not.toHaveBeenCalled();
+    } finally {
+      await server.close();
+    }
   });
 });
 

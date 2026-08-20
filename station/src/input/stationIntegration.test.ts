@@ -54,6 +54,7 @@ function makeViewStore(
             quickCreate: () => dashboardExecution({ kind: "success" }),
             fork: () => dashboardExecution({ kind: "success" }),
           },
+          worktreeRemoval: { remove: () => dashboardExecution({ kind: "success" }) },
           shell: { open: () => dashboardExecution({ kind: "success" }) },
           dismissal: {
             dismissDashboard: () => {
@@ -122,7 +123,7 @@ describe("station overlay layer in the keymap stack", () => {
     expect(view.state.getState().screen).toEqual({ name: "dashboard" });
   });
 
-  it("routes Group arrows, Enter, and letter slots through the native keymap", () => {
+  it("routes Group header and menu keys through the native keymap", () => {
     const snapshot = groupedManyProjectsSnapshot();
     const station = makeStationStore(true);
     const activatedSessionIds: string[] = [];
@@ -146,7 +147,21 @@ describe("station overlay layer in the keymap stack", () => {
     routeKey("\r", station.getState(), keymap);
     expect(view.state.getState().dashboardFocus).toEqual({ rowId: groupId, cellId: "menu" });
     expect([...view.state.getState().collapsedGroupIds]).toEqual([]);
+    expect(view.state.getState().screen).toEqual({
+      name: "groupMenu",
+      projectId: "station",
+      groupId: "group_design_refresh",
+      focus: "quickSession",
+    });
 
+    routeKey("S", station.getState(), keymap);
+    expect(view.state.getState().screen).toMatchObject({
+      name: "groupSettings",
+      groupId: "group_design_refresh",
+      section: "general",
+    });
+    routeKey("\x1b", station.getState(), keymap);
+    expect(view.state.getState().screen).toEqual({ name: "dashboard" });
     routeKey("a", station.getState(), keymap);
     expect(activatedSessionIds).toEqual(["ses_wt_runtime_cleanup"]);
 

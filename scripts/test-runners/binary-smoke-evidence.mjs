@@ -100,6 +100,8 @@ const runtimeProcessSchema = z
   .object({
     role: z.string().min(1),
     pid: z.number().int().positive(),
+    pgid: z.number().int().positive().optional(),
+    osStartTime: z.string().min(1).optional(),
     exists: z.boolean(),
   })
   .strict();
@@ -119,7 +121,7 @@ const runtimePidfileSchema = z
 const lifecycleSchema = z.array(RuntimeLifecycleEventSchema);
 const BinarySmokeEvidenceManifestSchema = z
   .object({
-    schemaVersion: z.literal(1),
+    schemaVersion: z.literal(2),
     kind: z.literal("station-binary-smoke-failure"),
     runId: runIdSchema,
     status: outputStatusSchema,
@@ -171,7 +173,18 @@ const BinarySmokeEvidenceManifestSchema = z
           files: z.array(capturedFileSchema),
           cleanup: cleanupSchema,
         })
-        .strict(),
+        .strict()
+        .superRefine((round, context) => {
+          if (
+            round.cleanup.status === "complete" &&
+            round.runtime.processes.some((process) => process.exists)
+          ) {
+            context.addIssue({
+              code: "custom",
+              message: "Complete binary smoke cleanup requires every recorded process to exit.",
+            });
+          }
+        }),
     ),
     redaction: z
       .object({
@@ -251,12 +264,13 @@ export async function captureBinarySmokeEvidence(input) {
     await captureBootLog(state, roundRoot);
     await captureLog(state, roundRoot, "observer.jsonl");
     await captureLog(state, roundRoot, "cli.jsonl");
+    await captureLog(state, roundRoot, "station-host.jsonl");
     await captureDiagnostics(state, roundRoot);
   }
 
   const redaction = mergeRedactionReports(state.redactionReports, capturedAt);
   const manifest = BinarySmokeEvidenceManifestSchema.parse({
-    schemaVersion: 1,
+    schemaVersion: 2,
     kind: "station-binary-smoke-failure",
     runId: runIdSchema.parse(input.runId),
     status: input.status,
@@ -307,10 +321,9 @@ export async function captureBinarySmokeEvidence(input) {
 
 function validateEvidenceSources(stateDir, socketPath, smokeRoot) {
   const root = resolve(smokeRoot);
-  if (resolve(stateDir) !== resolve(root, "state")) {
-    throw new Error(
-      "Binary smoke evidence state directory must be the smoke root's state directory.",
-    );
+  const state = resolve(stateDir);
+  if (state === root || !state.startsWith(`${root}${sep}`)) {
+    throw new Error("Binary smoke evidence state directory must be beneath the smoke root.");
   }
   const socket = resolve(socketPath);
   if (socket === root || !socket.startsWith(`${root}${sep}`)) {
@@ -471,9 +484,11 @@ function failureRecord(input, state) {
 async function runtimeRecord(input, state) {
   const socket = await socketSummary(input.socketPath, input.smokeRoot);
   const pidfile = await pidfileSummary(`${input.socketPath}.pid`, input.smokeRoot);
-  const processes = input.knownProcesses.map(({ role, pid }) => ({
+  const processes = input.knownProcesses.map(({ role, pid, pgid, osStartTime }) => ({
     role,
     pid,
+    ...(pgid === undefined ? {} : { pgid }),
+    ...(osStartTime === undefined ? {} : { osStartTime }),
     exists: processExists(pid),
   }));
   const lifecycle = await captureLifecycle(input, state);

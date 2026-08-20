@@ -1,6 +1,11 @@
-import type { ObservedStatus, RawHarnessEvent } from "@station/contracts";
-import { HarnessEventObservationSchema, STATION_SCHEMA_VERSION } from "@station/contracts";
+import type { HarnessEventReport, ObservedStatus } from "@station/contracts";
+import {
+  HarnessEventObservationSchema,
+  HarnessEventReportSchema,
+  STATION_SCHEMA_VERSION,
+} from "@station/contracts";
 import { describe, expect, it } from "vitest";
+import { codexAppServerEventToHarnessEventObservation } from "../../src/appServer/observations";
 import { compactCodexHookPayload } from "../../src/compaction";
 import { CodexHarnessProviderError } from "../../src/errors";
 import {
@@ -9,7 +14,6 @@ import {
   CodexHookEventSchema,
   codexHookPayloadReportId,
   codexHookPayloadToHarnessEventReport,
-  normalizeCodexRawEvent,
   parseCodexHookEvent,
 } from "../../src/events";
 import { codexHookAdapter } from "../../src/hookAdapter";
@@ -95,11 +99,15 @@ describe("Codex hook event parsing", () => {
     expect(new Set(codexForwardedEventTypes)).toEqual(new Set(Object.keys(CODEX_HOOK_FIXTURES)));
     expect(CodexHookEventSchema.safeParse(subagentStop).success).toBe(false);
     expect(
-      normalizeCodexRawEvent(
-        { provider: "codex", observedAt: now, event: subagentStop },
-        context(),
-      ),
-    ).toEqual([]);
+      codexHookAdapter.decideScope?.({
+        schemaVersion: STATION_SCHEMA_VERSION,
+        provider: "codex",
+        kind: "harness",
+        event: "SubagentStop",
+        receivedAt: now,
+        payload: subagentStop,
+      }),
+    ).toEqual({ action: "ignore", reason: "event-not-forwarded" });
     expect(() => parseCodexHookEvent(subagentStop)).toThrowError(CodexHarnessProviderError);
     expect(() =>
       codexHookPayloadToHarnessEventReport({
@@ -111,34 +119,31 @@ describe("Codex hook event parsing", () => {
   });
 
   it("strictly parses documented SessionStart events and normalizes them", () => {
-    const raw: RawHarnessEvent = {
-      provider: "codex",
-      observedAt: now,
-      event: {
-        session_id: "codex_session_123",
-        transcript_path: null,
-        cwd: "/tmp/station/web/task",
-        hook_event_name: "SessionStart",
-        model: "gpt-5.4-codex",
-        permission_mode: "default",
-        source: "startup",
-      },
+    const payload = {
+      session_id: "codex_session_123",
+      transcript_path: null,
+      cwd: "/tmp/station/web/task",
+      hook_event_name: "SessionStart",
+      model: "gpt-5.4-codex",
+      permission_mode: "default",
+      source: "startup",
     };
 
-    expect(parseCodexHookEvent(raw.event)).toMatchObject({
+    expect(parseCodexHookEvent(payload)).toMatchObject({
       hook_event_name: "SessionStart",
       source: "startup",
     });
 
-    const observations = normalizeCodexRawEvent(raw, context());
+    const report = reportForCodexPayload(payload);
 
-    expect(observations).toHaveLength(1);
-    expect(HarnessEventObservationSchema.parse(observations[0])).toEqual(observations[0]);
-    expect(observations[0]).toMatchObject({
+    expect(HarnessEventReportSchema.parse(report)).toEqual(report);
+    expect(report).toMatchObject({
       provider: "codex",
-      sessionId: "ses_web_task",
-      worktreeId: "wt_web_task",
-      rawEventType: "SessionStart",
+      eventType: "SessionStart",
+      correlation: {
+        cwd: "/tmp/station/web/task",
+        nativeSessionId: "codex_session_123",
+      },
       status: {
         value: "starting",
         confidence: "high",
@@ -152,30 +157,23 @@ describe("Codex hook event parsing", () => {
   });
 
   it("maps PermissionRequest to needs_attention without leaking tool input", () => {
-    const observations = normalizeCodexRawEvent(
-      {
-        provider: "codex",
-        observedAt: now,
-        event: {
-          session_id: "codex_session_123",
-          transcript_path: null,
-          cwd: "/tmp/station/web/task",
-          hook_event_name: "PermissionRequest",
-          model: "gpt-5.4-codex",
-          permission_mode: "default",
-          turn_id: "turn_1",
-          tool_name: "Bash",
-          tool_input: {
-            command: "rm -rf /tmp/example",
-            description: "Delete temp files",
-          },
-        },
+    const report = reportForCodexPayload({
+      session_id: "codex_session_123",
+      transcript_path: null,
+      cwd: "/tmp/station/web/task",
+      hook_event_name: "PermissionRequest",
+      model: "gpt-5.4-codex",
+      permission_mode: "default",
+      turn_id: "turn_1",
+      tool_name: "Bash",
+      tool_input: {
+        command: "rm -rf /tmp/example",
+        description: "Delete temp files",
       },
-      context(),
-    );
+    });
 
-    expect(observations[0]).toMatchObject({
-      rawEventType: "PermissionRequest",
+    expect(report).toMatchObject({
+      eventType: "PermissionRequest",
       status: {
         value: "needs_attention",
         confidence: "high",
@@ -183,7 +181,7 @@ describe("Codex hook event parsing", () => {
         attention: "tool_approval",
       },
     });
-    expect(JSON.stringify(observations[0]?.providerData)).not.toContain("rm -rf");
+    expect(JSON.stringify(report.providerData)).not.toContain("rm -rf");
   });
 
   it("maps request_user_input tool hooks to an attention question and back", () => {
@@ -205,8 +203,8 @@ describe("Codex hook event parsing", () => {
       },
     });
 
-    const opened = normalizeCodexRawEvent(hookEvent("PreToolUse"), context());
-    expect(opened[0]).toMatchObject({
+    const opened = reportForCodexPayload(hookEvent("PreToolUse").event);
+    expect(opened).toMatchObject({
       status: {
         value: "needs_attention",
         confidence: "high",
@@ -214,37 +212,33 @@ describe("Codex hook event parsing", () => {
         attention: "question",
       },
     });
-    expectStatusAllowedByCodexIngressRule("PreToolUse", opened[0]?.status);
+    expectStatusAllowedByCodexIngressRule("PreToolUse", opened.status);
 
-    const resolved = normalizeCodexRawEvent(hookEvent("PostToolUse"), context());
-    expect(resolved[0]).toMatchObject({
+    const resolved = reportForCodexPayload(hookEvent("PostToolUse").event);
+    expect(resolved).toMatchObject({
       status: {
         value: "working",
         confidence: "high",
         reason: "Codex received user input.",
       },
     });
-    expect(resolved[0]?.status?.attention).toBeUndefined();
-    expectStatusAllowedByCodexIngressRule("PostToolUse", resolved[0]?.status);
+    expect(resolved.status?.attention).toBeUndefined();
+    expectStatusAllowedByCodexIngressRule("PostToolUse", resolved.status);
   });
 
-  it("normalizes Codex app-server input requests through the harness ingest path", () => {
-    const observations = normalizeCodexRawEvent(
+  it("normalizes Codex app-server input requests through its native event path", () => {
+    const observations = codexAppServerEventToHarnessEventObservation(
       {
-        provider: "codex",
-        observedAt: now,
-        event: {
-          method: "item/tool/requestUserInput",
-          id: 7,
-          params: {
-            threadId: "thr_input",
-            turnId: "turn_1",
-            itemId: "item_tool_1",
-            questions: [],
-          },
+        method: "item/tool/requestUserInput",
+        id: 7,
+        params: {
+          threadId: "thr_input",
+          turnId: "turn_1",
+          itemId: "item_tool_1",
+          questions: [],
         },
       },
-      context(),
+      { observedAt: now },
     );
 
     expect(observations).toHaveLength(1);
@@ -306,22 +300,13 @@ describe("Codex hook event parsing", () => {
       ...CODEX_HOOK_FIXTURES.PreToolUse,
       cwd: "/tmp/station/web/task/src",
     };
-    const observations = normalizeCodexRawEvent(
-      { provider: "codex", observedAt: now, event: payload },
-      context(),
-    );
     const report = codexHookPayloadToHarnessEventReport({
       reportId: "report_descendant_cwd",
       observedAt: now,
       payload,
     });
 
-    expect(observations[0]).toMatchObject({
-      sessionId: "ses_web_task",
-      worktreeId: "wt_web_task",
-      harnessRunId: "codex:tmux:station:@1:%2",
-      status: { value: "working" },
-    });
+    expect(report.status).toMatchObject({ value: "working" });
     expect(report.correlation).toMatchObject({
       projectId: "web",
       worktreeId: "wt_web_task",
@@ -341,35 +326,22 @@ describe("Codex hook event parsing", () => {
       station_worktree_managed_root: "/tmp/station/web/.worktrees",
     };
     const compacted = compactCodexHookPayload(payload);
-    const observations = normalizeCodexRawEvent(
-      { provider: "codex", observedAt: now, event: compacted.payload },
-      context(),
-    );
     const report = codexHookPayloadToHarnessEventReport({
       reportId: "report_nested_managed_worktree",
       observedAt: now,
       payload: compacted.payload,
     });
 
-    expect(observations[0]).toMatchObject({
-      nativeSessionId: "codex_session_123",
-      cwd: "/tmp/station/web/.worktrees/feature/src",
-      diagnostics: {
-        correlationIssue: "station_identity_cwd_mismatch",
-      },
-      providerData: {
-        stationWorktreePath: "/tmp/station/web",
-        stationWorktreeManagedRoot: "/tmp/station/web/.worktrees",
-      },
-    });
-    expect(observations[0]).not.toHaveProperty("worktreeId");
-    expect(observations[0]).not.toHaveProperty("sessionId");
     expect(report.correlation).toEqual({
       nativeSessionId: "codex_session_123",
       cwd: "/tmp/station/web/.worktrees/feature/src",
     });
     expect(report.diagnostics).toMatchObject({
       correlationIssue: "station_identity_cwd_mismatch",
+    });
+    expect(report.providerData).toMatchObject({
+      stationWorktreePath: "/tmp/station/web",
+      stationWorktreeManagedRoot: "/tmp/station/web/.worktrees",
     });
   });
 
@@ -378,33 +350,12 @@ describe("Codex hook event parsing", () => {
       ...CODEX_HOOK_FIXTURES.PreToolUse,
       cwd: "/tmp/codex-home/.codex/memories",
     };
-    const observations = normalizeCodexRawEvent(
-      { provider: "codex", observedAt: now, event: payload },
-      context(),
-    );
     const report = codexHookPayloadToHarnessEventReport({
       reportId: "report_mismatched_cwd",
       observedAt: now,
       payload,
     });
 
-    expect(observations[0]).toMatchObject({
-      nativeSessionId: "codex_session_123",
-      cwd: "/tmp/codex-home/.codex/memories",
-      diagnostics: {
-        correlationIssue: "station_identity_cwd_mismatch",
-      },
-      providerData: {
-        cwd: "/tmp/codex-home/.codex/memories",
-        stationWorktreePath: "/tmp/station/web/task",
-        stationSessionId: "ses_web_task",
-      },
-    });
-    expect(observations[0]).not.toHaveProperty("projectId");
-    expect(observations[0]).not.toHaveProperty("worktreeId");
-    expect(observations[0]).not.toHaveProperty("sessionId");
-    expect(observations[0]).not.toHaveProperty("terminalTargetId");
-    expect(observations[0]).not.toHaveProperty("harnessRunId");
     expect(report.correlation).toEqual({
       nativeSessionId: "codex_session_123",
       cwd: "/tmp/codex-home/.codex/memories",
@@ -413,6 +364,11 @@ describe("Codex hook event parsing", () => {
       rawEventType: "PreToolUse",
       correlationIssue: "station_identity_cwd_mismatch",
     });
+    expect(report.providerData).toMatchObject({
+      cwd: "/tmp/codex-home/.codex/memories",
+      stationWorktreePath: "/tmp/station/web/task",
+      stationSessionId: "ses_web_task",
+    });
   });
 
   it("keeps legacy STATION hook identity when no stamped worktree path is available", () => {
@@ -420,21 +376,12 @@ describe("Codex hook event parsing", () => {
       ...CODEX_HOOK_FIXTURES.PreToolUse,
       cwd: "/tmp/not-the-worktree",
     };
-    const observations = normalizeCodexRawEvent(
-      { provider: "codex", observedAt: now, event: payload },
-      context(),
-    );
     const report = codexHookPayloadToHarnessEventReport({
       reportId: "report_without_stamped_path",
       observedAt: now,
       payload,
     });
 
-    expect(observations[0]).toMatchObject({
-      sessionId: "ses_web_task",
-      worktreeId: "wt_web_task",
-      harnessRunId: "codex:tmux:station:@1:%2",
-    });
     expect(report.correlation).toMatchObject({
       projectId: "web",
       worktreeId: "wt_web_task",
@@ -447,46 +394,26 @@ describe("Codex hook event parsing", () => {
   });
 
   it("rejects only recognizable persisted Codex hook observations with contradictory paths", () => {
-    const valid = HarnessEventObservationSchema.parse(
-      normalizeCodexRawEvent(
-        {
-          provider: "codex",
-          observedAt: now,
-          event: CODEX_HOOK_FIXTURES.PreToolUse,
-        },
-        context(),
-      )[0],
-    );
-    const mismatched = HarnessEventObservationSchema.parse(
-      normalizeCodexRawEvent(
-        {
-          provider: "codex",
-          observedAt: now,
-          event: {
-            ...CODEX_HOOK_FIXTURES.PreToolUse,
-            cwd: "/tmp/codex-home/.codex/memories",
-          },
-        },
-        context(),
-      )[0],
+    const valid = observationForCodexReport(reportForCodexPayload(CODEX_HOOK_FIXTURES.PreToolUse));
+    const mismatched = observationForCodexReport(
+      reportForCodexPayload({
+        ...CODEX_HOOK_FIXTURES.PreToolUse,
+        cwd: "/tmp/codex-home/.codex/memories",
+      }),
     );
     const appServer = HarnessEventObservationSchema.parse(
-      normalizeCodexRawEvent(
+      codexAppServerEventToHarnessEventObservation(
         {
-          provider: "codex",
-          observedAt: now,
-          event: {
-            method: "item/tool/requestUserInput",
-            id: 7,
-            params: {
-              threadId: "thr_input",
-              turnId: "turn_1",
-              itemId: "item_tool_1",
-              questions: [],
-            },
+          method: "item/tool/requestUserInput",
+          id: 7,
+          params: {
+            threadId: "thr_input",
+            turnId: "turn_1",
+            itemId: "item_tool_1",
+            questions: [],
           },
         },
-        context(),
+        { observedAt: now },
       )[0],
     );
 
@@ -531,32 +458,26 @@ describe("Codex hook event parsing", () => {
     ).toEqual({ action: "accept", reason: "cwd" });
   });
 
-  it("correlates hook cwd values inside an observed worktree", () => {
-    const observations = normalizeCodexRawEvent(
-      {
-        provider: "codex",
-        observedAt: now,
-        event: {
-          session_id: "codex_session_123",
-          transcript_path: null,
-          cwd: "/tmp/station/web/task/src/components",
-          hook_event_name: "PostToolUse",
-          model: "gpt-5.4-codex",
-          permission_mode: "default",
-          turn_id: "turn_1",
-          tool_name: "Read",
-          tool_input: { file_path: "Button.tsx" },
-          tool_response: { ok: true },
-          tool_use_id: "call_read",
-        },
-      },
-      context(),
-    );
+  it("defers cwd-only worktree correlation to Observer projection", () => {
+    const report = reportForCodexPayload({
+      session_id: "codex_session_123",
+      transcript_path: null,
+      cwd: "/tmp/station/web/task/src/components",
+      hook_event_name: "PostToolUse",
+      model: "gpt-5.4-codex",
+      permission_mode: "default",
+      turn_id: "turn_1",
+      tool_name: "Read",
+      tool_input: { file_path: "Button.tsx" },
+      tool_response: { ok: true },
+      tool_use_id: "call_read",
+    });
 
-    expect(observations[0]).toMatchObject({
-      sessionId: "ses_web_task",
-      worktreeId: "wt_web_task",
-      harnessRunId: "codex:tmux:station:@1:%2",
+    expect(report.correlation).toEqual({
+      cwd: "/tmp/station/web/task/src/components",
+      nativeSessionId: "codex_session_123",
+    });
+    expect(report).toMatchObject({
       status: {
         value: "working",
       },
@@ -564,30 +485,24 @@ describe("Codex hook event parsing", () => {
   });
 
   it("leaves unmatched hook events uncorrelated", () => {
-    const observations = normalizeCodexRawEvent(
-      {
-        provider: "codex",
-        observedAt: now,
-        event: {
-          session_id: "codex_session_123",
-          transcript_path: null,
-          cwd: "/tmp/other",
-          hook_event_name: "PostToolUse",
-          model: "gpt-5.4-codex",
-          permission_mode: "default",
-          turn_id: "turn_1",
-          tool_name: "Read",
-          tool_input: { file_path: "Button.tsx" },
-          tool_response: { ok: true },
-          tool_use_id: "call_read",
-        },
-      },
-      context(),
-    );
+    const report = reportForCodexPayload({
+      session_id: "codex_session_123",
+      transcript_path: null,
+      cwd: "/tmp/other",
+      hook_event_name: "PostToolUse",
+      model: "gpt-5.4-codex",
+      permission_mode: "default",
+      turn_id: "turn_1",
+      tool_name: "Read",
+      tool_input: { file_path: "Button.tsx" },
+      tool_response: { ok: true },
+      tool_use_id: "call_read",
+    });
 
-    expect(observations[0]?.sessionId).toBeUndefined();
-    expect(observations[0]?.worktreeId).toBeUndefined();
-    expect(observations[0]?.harnessRunId).toBeUndefined();
+    expect(report.correlation).toEqual({
+      cwd: "/tmp/other",
+      nativeSessionId: "codex_session_123",
+    });
   });
 
   it("accepts current Codex lifecycle hook input shapes", () => {
@@ -819,35 +734,28 @@ describe("Codex hook event parsing", () => {
   });
 
   it("keeps Codex working and does not complete the turn when stop_hook_active is true", () => {
-    const observations = normalizeCodexRawEvent(
-      {
-        provider: "codex",
-        observedAt: now,
-        event: {
-          session_id: "codex_session_123",
-          transcript_path: null,
-          cwd: "/tmp/station/web/task",
-          hook_event_name: "Stop",
-          model: "gpt-5.4-codex",
-          permission_mode: "default",
-          turn_id: "turn_1",
-          stop_hook_active: true,
-          last_assistant_message: "Done.",
-        },
-      },
-      context(),
-    );
+    const report = reportForCodexPayload({
+      session_id: "codex_session_123",
+      transcript_path: null,
+      cwd: "/tmp/station/web/task",
+      hook_event_name: "Stop",
+      model: "gpt-5.4-codex",
+      permission_mode: "default",
+      turn_id: "turn_1",
+      stop_hook_active: true,
+      last_assistant_message: "Done.",
+    });
 
-    expect(observations[0]).toMatchObject({
-      rawEventType: "Stop",
+    expect(report).toMatchObject({
+      eventType: "Stop",
       status: {
         value: "working",
         confidence: "medium",
       },
     });
-    expectStatusAllowedByCodexIngressRule("Stop", observations[0]?.status);
+    expectStatusAllowedByCodexIngressRule("Stop", report.status);
     // A Stop hook forcing continuation must not mark the turn complete (no ready marker).
-    expect(observations[0]?.turn).toBeUndefined();
+    expect(report.turn).toBeUndefined();
   });
 
   it("maps every supported Codex hook event to a provider-neutral report status", () => {
@@ -922,40 +830,24 @@ describe("Codex hook event parsing", () => {
   });
 });
 
-function context() {
-  return {
-    projects: [],
-    worktrees: [
-      {
-        id: "wt_web_task",
-        provider: "worktrunk",
-        projectId: "web",
-        branch: "task",
-        path: "/tmp/station/web/task",
-        state: "exists" as const,
-        source: "worktrunk" as const,
-        observedAt: now,
-      },
-    ],
-    terminalTargets: [
-      {
-        id: "tmux:station:@1:%2",
-        provider: "tmux",
-        projectId: "web",
-        worktreeId: "wt_web_task",
-        sessionId: "ses_web_task",
-        state: "open" as const,
-        cwd: "/tmp/station/web/task",
-        confidence: "high" as const,
-        reason: "tmux pane has station identity binding.",
-        observedAt: now,
-        harnessBinding: {
-          role: "main-agent",
-          harnessProvider: "codex",
-        },
-      },
-    ],
-  };
+function reportForCodexPayload(payload: unknown): HarnessEventReport {
+  return codexHookPayloadToHarnessEventReport({
+    reportId: "report_test",
+    observedAt: now,
+    payload,
+  });
+}
+
+function observationForCodexReport(report: HarnessEventReport) {
+  return HarnessEventObservationSchema.parse({
+    provider: report.provider,
+    reportId: report.reportId,
+    eventType: report.eventType,
+    observedAt: report.observedAt,
+    rawEventType: report.diagnostics?.rawEventType,
+    diagnostics: report.diagnostics,
+    providerData: report.providerData,
+  });
 }
 
 type CodexHookFixtures = {

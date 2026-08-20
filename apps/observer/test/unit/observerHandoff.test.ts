@@ -90,7 +90,7 @@ describe("classifyObserverIncumbent", () => {
   });
 
   it("orders the public pre-alpha after the internal preview version line", () => {
-    const publicPreAlpha = observerBuildVersion("0.0.0-pre-alpha.5.2", higherBuildIdentity);
+    const publicPreAlpha = observerBuildVersion("0.0.0-pre-alpha.5.16", higherBuildIdentity);
     const internalPreview = observerBuildVersion("0.7.1-rc.8", lowerBuildIdentity);
 
     expect(decisionFor(publicPreAlpha, internalPreview)).toEqual({
@@ -211,7 +211,7 @@ describe("negotiateObserverIncumbent", () => {
       fixture.listening = false;
       fixture.startToken = undefined;
       return {
-        schemaVersion: "0.10.0" as const,
+        schemaVersion: "0.11.0" as const,
         stopped: true,
         at: "2026-07-12T12:00:00.000Z",
       };
@@ -219,9 +219,9 @@ describe("negotiateObserverIncumbent", () => {
 
     await expect(runNegotiation(fixture)).resolves.toMatchObject({ action: "replaced" });
     expect(healthTimeouts).toEqual([40, 35]);
-    expect(stopTimeouts).toEqual([30]);
+    expect(stopTimeouts).toEqual([10]);
     expect(fixture.stop).toHaveBeenCalledWith(socketPath, {
-      timeoutMs: 30,
+      timeoutMs: 10,
       expectedObserver: {
         pid: fixture.incumbentHealth.pid,
         startedAt: fixture.incumbentHealth.startedAt,
@@ -246,6 +246,23 @@ describe("negotiateObserverIncumbent", () => {
     expect(healthTimeouts).toEqual([40, 20]);
     expect(fixture.stop).not.toHaveBeenCalled();
     expect(fixture.signal).not.toHaveBeenCalled();
+  });
+
+  it("bounds the stop acknowledgement wait so exact-exit fallback keeps the handoff budget", async () => {
+    const fixture = handoffFixture();
+
+    await expect(runNegotiation(fixture, 4_000)).rejects.toMatchObject({
+      code: "OBSERVER_HANDOFF_REFUSED",
+    });
+    expect(fixture.stop).toHaveBeenCalledWith(socketPath, {
+      timeoutMs: 1_000,
+      expectedObserver: {
+        pid: fixture.incumbentHealth.pid,
+        startedAt: fixture.incumbentHealth.startedAt,
+        version: fixture.incumbentHealth.version,
+        socketPath,
+      },
+    });
   });
 
   it("refuses when the exact process changes between verification and stop", async () => {
@@ -317,6 +334,21 @@ describe("negotiateObserverIncumbent", () => {
     expect(fixture.signal).not.toHaveBeenCalledWith(100, "SIGTERM");
   });
 
+  it("recovers from a timed-out stop acknowledgement through verified SIGTERM", async () => {
+    const fixture = handoffFixture();
+    fixture.stop.mockRejectedValue(new Error("stop acknowledgement timed out"));
+    fixture.signal.mockImplementation((_pid, signal) => {
+      if (signal === "SIGTERM") {
+        fixture.listening = false;
+        fixture.startToken = undefined;
+      }
+      return signal === 0 && fixture.startToken === undefined ? "absent" : "sent";
+    });
+
+    await expect(runNegotiation(fixture)).resolves.toMatchObject({ action: "replaced" });
+    expect(fixture.signal).toHaveBeenCalledWith(100, "SIGTERM");
+  });
+
   it("revalidates complete ownership before one SIGTERM and never sends SIGKILL", async () => {
     const fixture = handoffFixture();
     fixture.signal.mockImplementation((_pid, signal) => {
@@ -339,7 +371,7 @@ describe("negotiateObserverIncumbent", () => {
     fixture.stop.mockImplementation(async () => {
       fixture.listening = false;
       return {
-        schemaVersion: "0.10.0" as const,
+        schemaVersion: "0.11.0" as const,
         stopped: true,
         at: "2026-07-12T12:00:00.000Z",
       };
@@ -353,12 +385,36 @@ describe("negotiateObserverIncumbent", () => {
     expect(fixture.signal).toHaveBeenCalledWith(100, "SIGTERM");
   });
 
+  it("waits passively when shutdown removes signal evidence before exact process exit", async () => {
+    const fixture = handoffFixture();
+    let identityReads = 0;
+    fixture.evidence.readProcessIdentity = async () => {
+      identityReads += 1;
+      return identityReads > 4 ? undefined : { ...fixture.identity };
+    };
+    fixture.stop.mockImplementation(async () => {
+      fixture.listening = false;
+      return {
+        schemaVersion: "0.11.0" as const,
+        stopped: true,
+        at: "2026-07-12T12:00:00.000Z",
+      };
+    });
+    fixture.sleep.mockImplementation(async (ms) => {
+      fixture.time += ms;
+      if (fixture.time >= 30) fixture.startToken = undefined;
+    });
+
+    await expect(runNegotiation(fixture)).resolves.toMatchObject({ action: "replaced" });
+    expect(fixture.signal).not.toHaveBeenCalledWith(100, "SIGTERM");
+  });
+
   it("does not treat exact process death as socket closure", async () => {
     const fixture = handoffFixture();
     fixture.stop.mockImplementation(async () => {
       fixture.startToken = undefined;
       return {
-        schemaVersion: "0.10.0" as const,
+        schemaVersion: "0.11.0" as const,
         stopped: true,
         at: "2026-07-12T12:00:00.000Z",
       };
@@ -387,11 +443,11 @@ describe("negotiateObserverIncumbent", () => {
     fixture.stop.mockImplementation(async () => {
       fixture.listening = false;
       fixture.startToken = undefined;
-      fixture.evidence.listObserverProcesses = () => {
+      fixture.evidence.readObserverProcess = () => {
         throw new Error("successor process evidence is unavailable");
       };
       return {
-        schemaVersion: "0.10.0" as const,
+        schemaVersion: "0.11.0" as const,
         stopped: true,
         at: "2026-07-12T12:00:00.000Z",
       };
@@ -408,7 +464,7 @@ describe("negotiateObserverIncumbent", () => {
       fixture.listening = false;
       fixture.startToken = undefined;
       return {
-        schemaVersion: "0.10.0" as const,
+        schemaVersion: "0.11.0" as const,
         stopped: true,
         at: "2026-07-12T12:00:00.000Z",
       };
@@ -450,7 +506,7 @@ function observerBuildVersion(version: string, buildIdentity: string): string {
 
 function handoffFixture() {
   const incumbentHealth: ObserverHealth = {
-    schemaVersion: "0.10.0",
+    schemaVersion: "0.11.0",
     status: "healthy",
     pid: 100,
     startedAt: "2026-07-12T11:00:00.000Z",
@@ -472,7 +528,7 @@ function handoffFixture() {
     incumbentHealth,
     health: vi.fn(async (_socketPath: string, _request: { timeoutMs: number }) => incumbentHealth),
     stop: vi.fn(async (_socketPath: string, _request: { timeoutMs: number }) => ({
-      schemaVersion: "0.10.0" as const,
+      schemaVersion: "0.11.0" as const,
       stopped: true,
       at: "2026-07-12T12:00:00.000Z",
     })),
@@ -490,17 +546,18 @@ function handoffFixture() {
     socketListening: async () => fixture.listening,
   };
   const evidence: ObserverProcessEvidenceSource = {
-    listObserverProcesses: () => [
-      {
-        pid: identity.pid,
-        argv: ["/opt/station/stn", "__observer", "--socket", socketPath],
-        executablePath: "/opt/station/stn",
-        startToken: identity.osStartTime,
-        processToken: identity.processToken,
-        buildVersion: identity.version,
-        socketPath,
-      },
-    ],
+    readObserverProcess: (pid) =>
+      pid === identity.pid
+        ? {
+            pid: identity.pid,
+            argv: ["/opt/station/stn", "__observer", "--socket", socketPath],
+            executablePath: "/opt/station/stn",
+            startToken: identity.osStartTime,
+            processToken: identity.processToken,
+            buildVersion: identity.version,
+            socketPath,
+          }
+        : undefined,
     socketHolders: () => fixture.holders,
     processStartToken: () => fixture.startToken,
     readProcessIdentity: async () => ({ ...identity }),
@@ -509,9 +566,9 @@ function handoffFixture() {
   return Object.assign(fixture, { lifecycle, evidence, identity });
 }
 
-function runNegotiation(fixture: ReturnType<typeof handoffFixture>) {
+function runNegotiation(fixture: ReturnType<typeof handoffFixture>, timeoutMs = 40) {
   return negotiateObserverIncumbent(
-    { socketPath, candidate, timeoutMs: 40 },
+    { socketPath, candidate, timeoutMs },
     {
       lifecycle: fixture.lifecycle,
       evidence: fixture.evidence,

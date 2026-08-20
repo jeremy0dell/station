@@ -11,7 +11,6 @@ import {
   createObserverCore,
   createTerminalCloseHandler,
   createTerminalFocusHandler,
-  createTerminalIntentRunner,
   ProviderRegistry,
 } from "../../src/internal";
 
@@ -81,7 +80,6 @@ describe("observer terminal commands", () => {
     const handler = createTerminalFocusHandler({
       core,
       providers,
-      terminalIntentRunner: terminalIntentRunnerFor(providers),
     });
 
     await handler({
@@ -130,7 +128,6 @@ describe("observer terminal commands", () => {
     const handler = createTerminalFocusHandler({
       core,
       providers,
-      terminalIntentRunner: terminalIntentRunnerFor(providers),
     });
 
     await expect(
@@ -211,7 +208,6 @@ describe("observer terminal commands", () => {
     const handler = createTerminalCloseHandler({
       core,
       providers,
-      terminalIntentRunner: terminalIntentRunnerFor(providers),
     });
 
     await handler({
@@ -278,7 +274,6 @@ describe("observer terminal commands", () => {
     const handler = createTerminalCloseHandler({
       core,
       providers,
-      terminalIntentRunner: terminalIntentRunnerFor(providers),
     });
 
     await expect(
@@ -300,16 +295,6 @@ describe("observer terminal commands", () => {
     });
   });
 });
-
-function terminalIntentRunnerFor(providers: ProviderRegistry) {
-  return createTerminalIntentRunner({
-    providers: {
-      terminals: providers.terminals,
-      harnesses: providers.harnesses,
-    },
-    launchPreflight: async () => undefined,
-  });
-}
 
 class RecordingTerminalProvider extends FakeTerminalProvider implements TerminalProvider {
   readonly #focused: string[];

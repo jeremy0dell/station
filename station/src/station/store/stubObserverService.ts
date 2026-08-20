@@ -50,6 +50,12 @@ export function createStationStubObserverService(
     reportExternalExit: async () => {
       throw stubError("agent.reportExternalExit");
     },
+    prepareWorktreeRemoval: async () => {
+      throw stubError("worktree.prepareRemoval");
+    },
+    cancelWorktreeRemoval: async () => {
+      throw stubError("worktree.cancelRemoval");
+    },
   };
 }
 

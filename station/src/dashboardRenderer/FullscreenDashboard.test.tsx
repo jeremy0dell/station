@@ -344,7 +344,7 @@ describe("FullscreenDashboard mouse composition", () => {
       return { row, line: lines[row] ?? "" };
     };
 
-    expect(setup.captureCharFrame()).toContain("╭▼ Design refresh 2 sessions");
+    expect(setup.captureCharFrame()).toContain("╭ ▼ Design refresh 2 sessions");
     expect(setup.captureCharFrame()).toContain("│ [1]");
     const member = cellFor(setup.captureCharFrame(), "group-contracts");
     await actOn(async () => {
@@ -366,12 +366,13 @@ describe("FullscreenDashboard mouse composition", () => {
     ).toHaveLength(1);
     let group = groupLine();
     await actOn(() =>
-      setup.mockMouse.click(group.line.indexOf("[qs]"), group.row, MouseButtons.LEFT),
+      setup.mockMouse.click(group.line.indexOf("[quick session]"), group.row, MouseButtons.LEFT),
     );
     expect(fixture.runtime.state.getState().dashboardFocus).toEqual({
       rowId: groupId,
       cellId: "quickSession",
     });
+    expect(groupLine().line).toContain("▸[quick session]");
     expect([...fixture.runtime.state.getState().collapsedGroupIds]).toEqual([]);
 
     group = groupLine();
@@ -383,6 +384,21 @@ describe("FullscreenDashboard mouse composition", () => {
       cellId: "menu",
     });
     expect([...fixture.runtime.state.getState().collapsedGroupIds]).toEqual([]);
+    expect(fixture.runtime.state.getState().screen).toEqual({
+      name: "groupMenu",
+      projectId: "station",
+      groupId: "group_design_refresh",
+      focus: "quickSession",
+    });
+    expect(setup.captureCharFrame()).toContain("Group settings…");
+    const settings = cellFor(setup.captureCharFrame(), "Group settings…");
+    await actOn(() => setup.mockMouse.click(settings.col, settings.row, MouseButtons.LEFT));
+    expect(fixture.runtime.state.getState().screen).toMatchObject({
+      name: "groupSettings",
+      groupId: "group_design_refresh",
+      section: "general",
+    });
+    await actOn(() => fixture.runtime.actions.dispatch({ type: "groupSettings.back" }));
 
     group = groupLine();
     await actOn(() =>
@@ -568,6 +584,32 @@ describe("FullscreenDashboard mouse composition", () => {
       step: "details",
       focus: "name",
       copyDirty: false,
+    });
+  });
+
+  it("routes the grouped Fork placement row through standalone pointer input", async () => {
+    const fixture = makeStationTestRuntime({
+      terminalRows: SURFACE.height,
+      snapshot: groupedManyProjectsSnapshot(),
+    });
+    const setup = await render(fixture.runtime);
+    await actOn(async () => {
+      fixture.runtime.actions.dispatch({
+        type: "forkSession.openDetails",
+        rowId: "ses_wt_group_contracts",
+        returnTo: "dashboard",
+      });
+      await setup.flush();
+    });
+    const group = cellFor(setup.captureCharFrame(), "[x] create in");
+
+    await actOn(() => setup.mockMouse.click(group.col, group.row, MouseButtons.LEFT));
+    expect(fixture.runtime.state.getState().screen).toMatchObject({
+      name: "fork",
+      step: "details",
+      focus: "group",
+      sourceGroup: { id: "group_design_refresh", name: "Design refresh" },
+      inheritSourceGroup: false,
     });
   });
 

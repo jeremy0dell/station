@@ -6,7 +6,7 @@ import {
 } from "../../theme/index.js";
 import { DecMode } from "../protocol/decset.js";
 import { CsiCommand } from "../protocol/identifiers.js";
-import { KittyFlagUpdateMode, KittySequence } from "../protocol/kitty.js";
+import { KittyFlagUpdateMode } from "../protocol/kitty.js";
 import { VtPrefix } from "../protocol/syntax.js";
 import { waitFor } from "../testing/waitFor.js";
 import type { VtRow } from "./rows.js";
@@ -622,12 +622,12 @@ describe("createStationVtScreen", () => {
       `${VtPrefix.Csi}${CsiCommand.KittyUpdateFlags.prefix}1${CsiCommand.KittyUpdateFlags.final}` +
         `${VtPrefix.Csi}${CsiCommand.KittyUpdateFlags.prefix}2;${KittyFlagUpdateMode.SetBits}${CsiCommand.KittyUpdateFlags.final}` +
         `${VtPrefix.Csi}${CsiCommand.KittyUpdateFlags.prefix}1;${KittyFlagUpdateMode.ClearBits}${CsiCommand.KittyUpdateFlags.final}` +
-        KittySequence.QueryFlags +
+        `${VtPrefix.Csi}${CsiCommand.KittyQueryFlags.prefix}${CsiCommand.KittyQueryFlags.final}` +
         `${VtPrefix.Csi}${CsiCommand.SetDecPrivateMode.prefix}${DecMode.SaveCursorAndAlternate}${CsiCommand.SetDecPrivateMode.final}` +
         `${VtPrefix.Csi}${CsiCommand.KittyUpdateFlags.prefix}4${CsiCommand.KittyUpdateFlags.final}` +
-        KittySequence.QueryFlags +
+        `${VtPrefix.Csi}${CsiCommand.KittyQueryFlags.prefix}${CsiCommand.KittyQueryFlags.final}` +
         `${VtPrefix.Csi}${CsiCommand.ResetDecPrivateMode.prefix}${DecMode.SaveCursorAndAlternate}${CsiCommand.ResetDecPrivateMode.final}` +
-        KittySequence.QueryFlags,
+        `${VtPrefix.Csi}${CsiCommand.KittyQueryFlags.prefix}${CsiCommand.KittyQueryFlags.final}`,
     );
     await screen.whenIdle();
 

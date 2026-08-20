@@ -3,14 +3,7 @@ import { z } from "zod";
 import type { TerminalFocusOrigin } from "./commands.js";
 import type { SafeError } from "./errors.js";
 import { SafeErrorSchema } from "./errors.js";
-import type {
-  HarnessRunId,
-  ProjectId,
-  ProviderId,
-  SessionId,
-  TerminalTargetId,
-  WorktreeId,
-} from "./ids.js";
+import type { HarnessRunId, ProviderId, SessionId, TerminalTargetId, WorktreeId } from "./ids.js";
 import {
   ProjectIdSchema,
   ProviderIdSchema,
@@ -21,7 +14,6 @@ import {
 import type {
   HarnessEventObservation,
   HarnessRunObservation,
-  HarnessStatusObservation,
   RepositoryRemote,
   TerminalIdentityBinding,
   TerminalTargetObservation,
@@ -84,7 +76,6 @@ export const HarnessCapabilitiesSchema = z
     canLaunch: z.boolean(),
     canDiscoverRuns: z.boolean(),
     canEmitEvents: z.boolean(),
-    canClassifyStatus: z.boolean(),
     canReceivePrompt: z.boolean(),
     canResume: z.boolean(),
     canStop: z.boolean(),
@@ -162,11 +153,11 @@ export type CreateWorktreeRequest = {
 };
 
 export type RemoveWorktreeRequest = {
+  project: ProviderProjectConfig;
   worktreeId: WorktreeId;
   expectedPath: string;
   expectedBranch: string;
   expectedRegistrationIdentity: string;
-  projectId?: ProjectId;
   force?: boolean;
 };
 
@@ -174,22 +165,6 @@ export type RemoveWorktreeResult = {
   worktreeId: WorktreeId;
   removed: boolean;
   reason?: string;
-};
-
-export type GetWorktreeRequest = {
-  worktreeId?: WorktreeId;
-  projectId?: ProjectId;
-  path?: string;
-};
-
-export type RawWorktreeEvent = {
-  provider: ProviderId;
-  event: unknown;
-  observedAt?: string;
-};
-
-export type WorktreeEventContext = {
-  projects: ProviderProjectConfig[];
 };
 
 export type ProviderDoctorCheck = {
@@ -295,18 +270,6 @@ export type OpenWorkspaceRequest = {
 export type OpenWorkspaceResult = {
   target: TerminalIdentityBinding;
   agentEndpointId: string;
-  providerData?: unknown;
-};
-
-export type RawTerminalEvent = {
-  provider: ProviderId;
-  event: unknown;
-  observedAt?: string;
-};
-
-export type TerminalEventContext = {
-  projects: ProviderProjectConfig[];
-  worktrees: WorktreeObservation[];
 };
 
 export type TerminalCapture = {
@@ -387,24 +350,6 @@ export type HarnessDiscoveryContext = {
   terminalTargets: TerminalTargetObservation[];
 };
 
-export type HarnessClassificationContext = {
-  projects: ProviderProjectConfig[];
-  worktrees: WorktreeObservation[];
-  terminalTargets: TerminalTargetObservation[];
-};
-
-export type RawHarnessEvent = {
-  provider: ProviderId;
-  event: unknown;
-  observedAt?: string;
-};
-
-export type HarnessEventContext = {
-  projects: ProviderProjectConfig[];
-  worktrees: WorktreeObservation[];
-  terminalTargets: TerminalTargetObservation[];
-};
-
 export type HarnessStopRequest = {
   runId: HarnessRunId;
   sessionId?: SessionId;
@@ -455,22 +400,18 @@ export type RepositoryChecksRequest = z.infer<typeof RepositoryChecksRequestSche
 /**
  * DRIVEN PORT
  *
- * Supplies worktree lifecycle evidence and mutations without exposing provider mechanics.
- * Removal adapters must revalidate opaque registration identity, path, and branch immediately before mutation.
+ * Supplies fresh worktree lifecycle evidence and mutations without exposing provider mechanics.
+ * Callers provide project context for mutations; removal adapters must revalidate opaque registration identity,
+ * path, and branch immediately before mutation.
  */
 export interface WorktreeProvider {
   id: ProviderId;
   capabilities(): WorktreeCapabilities;
   health(): Promise<ProviderHealth>;
   doctorChecks?(context?: ProviderDoctorContext): Promise<ProviderDoctorCheck[]>;
-  ingestEvent?(
-    event: RawWorktreeEvent,
-    context: WorktreeEventContext,
-  ): Promise<WorktreeObservation[]>;
   listWorktrees(project: ProviderProjectConfig): Promise<WorktreeObservation[]>;
   createWorktree(request: CreateWorktreeRequest): Promise<WorktreeObservation>;
   removeWorktree(request: RemoveWorktreeRequest): Promise<RemoveWorktreeResult>;
-  getWorktree?(request: GetWorktreeRequest): Promise<WorktreeObservation | null>;
 }
 
 /**
@@ -483,10 +424,6 @@ export interface TerminalProvider {
   capabilities(): TerminalCapabilities;
   health(): Promise<ProviderHealth>;
   doctorChecks?(context?: ProviderDoctorContext): Promise<ProviderDoctorCheck[]>;
-  ingestEvent?(
-    event: RawTerminalEvent,
-    context: TerminalEventContext,
-  ): Promise<TerminalTargetObservation[]>;
   listTargets(): Promise<TerminalTargetObservation[]>;
   openWorkspace(request: OpenWorkspaceRequest): Promise<OpenWorkspaceResult>;
   launchProcess?(request: TerminalLaunchProcessRequest): Promise<TerminalLaunchProcessResult>;
@@ -556,7 +493,7 @@ export type HarnessVersionInfo = {
 /**
  * DRIVEN PORT
  *
- * Supplies harness launch, discovery, status, ingress, and persisted-event compatibility policy
+ * Supplies harness launch, discovery with present-tense status, and persisted-event compatibility policy
  * without exposing provider-native payloads to Observer application code.
  */
 export interface HarnessProvider {
@@ -579,14 +516,6 @@ export interface HarnessProvider {
   hooksStatus?(context?: ProviderDoctorContext): Promise<HarnessHooksStatus>;
   buildLaunch(request: BuildHarnessLaunchRequest): Promise<HarnessLaunchPlan>;
   discoverRuns(context: HarnessDiscoveryContext): Promise<HarnessRunObservation[]>;
-  classifyRun(
-    run: HarnessRunObservation,
-    context: HarnessClassificationContext,
-  ): Promise<HarnessStatusObservation>;
-  ingestEvent?(
-    event: RawHarnessEvent,
-    context: HarnessEventContext,
-  ): Promise<HarnessEventObservation[]>;
   /**
    * Pure compatibility policy for durable event observations written by earlier builds.
    * Omit when every previously accepted observation remains valid.

@@ -11,6 +11,7 @@ import {
   addPendingStartAgentRow,
   failPendingCreateSessionRow,
   removeCreateSessionLocalRow,
+  removePendingRemoveWorktreeRow,
   removePendingStartAgentRow,
 } from "../localRows.js";
 import type { DashboardRuntimeEffectScope } from "../runtimeEffectScope.js";
@@ -123,9 +124,16 @@ async function runDashboardCapabilityOperation(input: {
           title: operation.title,
           hiddenBranch: operation.hiddenBranch,
           copyDirty: operation.copyDirty,
+          ...(operation.group === undefined ? {} : { group: operation.group }),
           ...(operation.inheritedHarness === undefined
             ? {}
             : { inheritedHarness: operation.inheritedHarness }),
+        });
+        break;
+      case "removeWorktree":
+        handle = capabilities.worktreeRemoval.remove({
+          worktreeId: operation.worktreeId,
+          command: operation.command,
         });
         break;
       case "openDashboardShell":
@@ -217,6 +225,9 @@ function applyCapabilityOptimisticState(
       if (operation.inheritedHarness !== undefined) {
         pendingRow.harnessProvider = operation.inheritedHarness;
       }
+      if (operation.group !== undefined) {
+        pendingRow.targetGroupId = operation.group.groupId;
+      }
     } else {
       pendingRow.harnessProvider = operation.harness;
       if (operation.targetGroupId !== undefined) {
@@ -302,6 +313,10 @@ function removeCapabilityOptimisticRow(
     if (operation.localId !== undefined) {
       markStartAgentRowFailed(store, operation.localId);
     }
+    return;
+  }
+  if (operation.type === "removeWorktree") {
+    store.setState(removePendingRemoveWorktreeRow(store.getState(), operation.localId));
     return;
   }
   if (

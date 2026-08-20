@@ -482,7 +482,8 @@ export class StationTerminalProvider implements ManagedTerminalLifecycle {
   async #requirePtyId(targetId: TerminalTargetId): Promise<string> {
     const entry = await this.#liveEntry(targetId);
     if (entry === undefined) {
-      const worktreeId = targetIdWorktree(targetId);
+      const prefix = `${STATION_TERMINAL_PROVIDER_ID}:`;
+      const worktreeId = targetId.startsWith(prefix) ? targetId.slice(prefix.length) : undefined;
       throw new StationTerminalProviderError(
         "TERMINAL_TARGET_MISSING",
         "No live host PTY for this station target.",
@@ -541,11 +542,6 @@ export class StationTerminalProvider implements ManagedTerminalLifecycle {
 
 export function stationTargetId(worktreeId: string): TerminalTargetId {
   return `${STATION_TERMINAL_PROVIDER_ID}:${worktreeId}`;
-}
-
-function targetIdWorktree(targetId: string): string | undefined {
-  const prefix = `${STATION_TERMINAL_PROVIDER_ID}:`;
-  return targetId.startsWith(prefix) ? targetId.slice(prefix.length) : undefined;
 }
 
 function buildSpawnParams(request: ManagedTerminalLaunchProcessRequest): HostSpawnParamsInput {

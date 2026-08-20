@@ -101,9 +101,13 @@ export function terminalBoundHarnessRunObservation(input: {
       input.target.harnessRunId ??
       harnessRunIdForTerminalTarget(input.harnessProvider, input.target.id),
     provider: input.harnessProvider,
-    state: "unknown",
-    confidence: "low",
-    reason: input.reason,
+    status: {
+      value: "unknown",
+      confidence: "low",
+      reason: input.reason,
+      source: "harness_process",
+      updatedAt: input.target.observedAt,
+    },
     observedAt: input.target.observedAt,
     providerData: terminalHarnessRunProviderData(
       input.target.provider,
@@ -135,6 +139,7 @@ export function discoverTerminalBoundHarnessRuns(
     harnessProvider: string;
     displayName: string;
     role?: string | undefined;
+    reason?: string | undefined;
   },
 ): HarnessRunObservation[] {
   const runs: HarnessRunObservation[] = [];
@@ -159,7 +164,9 @@ export function discoverTerminalBoundHarnessRuns(
         harnessProvider: options.harnessProvider,
         target,
         currentCommand: binding.currentCommand,
-        reason: `terminal target is bound to ${options.displayName}; no reliable lifecycle signal yet.`,
+        reason:
+          options.reason ??
+          `terminal target is bound to ${options.displayName}; no reliable lifecycle signal yet.`,
       }),
     );
   }

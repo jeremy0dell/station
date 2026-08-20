@@ -100,6 +100,7 @@ const welcomeLayer: KeymapLayer<RouteOutcome> = {
   bindings: [
     {
       keys: [C0.CarriageReturn, SPACE_LEGACY],
+      help: { order: 70, key: "Enter/Sp", description: "open project view on welcome" },
       action: (state) =>
         state.workspace.panes.length > 0
           ? { kind: "welcome-dismiss" }
@@ -124,6 +125,7 @@ const contextMenuLayer: KeymapLayer<RouteOutcome> = {
   bindings: [
     {
       keys: [C0.Escape, OVERLAY_TOGGLE_LEGACY],
+      help: { order: 80, key: "Esc/↑↓", description: "context menu close/move" },
       action: () => ({ kind: "context-menu-close" }),
     },
     {
@@ -136,10 +138,11 @@ const contextMenuLayer: KeymapLayer<RouteOutcome> = {
     },
     {
       keys: [C0.CarriageReturn, SPACE_LEGACY],
+      help: { order: 90, key: "Enter/Sp", description: "context menu select" },
       action: () => ({ kind: "context-menu-select" }),
     },
   ],
-  catchAll: () => ({ kind: "swallowed" }),
+  catchAll: (key) => ({ kind: "context-menu-shortcut", key }),
 };
 
 /**
@@ -206,11 +209,13 @@ const workspaceLayer: KeymapLayer<RouteOutcome> = {
     {
       keys: [STATION_EXIT_LEGACY],
       reserved: true,
+      help: { order: 20, key: "Ctrl-Q", description: "quit Station" },
       action: () => ({ kind: "command", commandId: "station.exit" }),
     },
     {
       keys: [OVERLAY_TOGGLE_LEGACY],
       reserved: true,
+      help: { order: 10, key: "Ctrl-O", description: "open/close project view" },
       action: stationOverlayToggleOutcome,
     },
     // Pane chords stay reserved to bypass terminal passthrough, but the dashboard
@@ -218,21 +223,25 @@ const workspaceLayer: KeymapLayer<RouteOutcome> = {
     {
       keys: [SPLIT_RIGHT_LEGACY],
       reserved: true,
+      help: { order: 30, key: "Ctrl-\\", description: "split pane right" },
       action: (state) => paneManagementCommandOutcome(state, "station.splitRight"),
     },
     {
       keys: [SPLIT_BELOW_LEGACY],
       reserved: true,
+      help: { order: 40, key: "Ctrl-^", description: "split pane below (Ctrl-6)" },
       action: (state) => paneManagementCommandOutcome(state, "station.splitBelow"),
     },
     {
       keys: [FOCUS_NEXT_LEGACY],
       reserved: true,
+      help: { order: 50, key: "Ctrl-]", description: "focus next pane" },
       action: (state) => paneManagementCommandOutcome(state, "station.focusNextPane"),
     },
     {
       keys: [CLOSE_PANE_LEGACY],
       reserved: true,
+      help: { order: 60, key: "Ctrl-/", description: "close split pane (Ctrl-_)" },
       action: (state) => paneManagementCommandOutcome(state, "station.closeActivePane"),
     },
   ],
@@ -255,6 +264,13 @@ export function createStationKeymap(
     layers.push(createStationButtonLayer(dashboardRuntime.clientState));
   }
   return createKeymapStack(layers);
+}
+
+export function stationKeymapHelp() {
+  return [workspaceLayer, welcomeLayer, contextMenuLayer]
+    .flatMap((layer) => layer.bindings.flatMap((binding) => binding.help ?? []))
+    .sort((left, right) => left.order - right.order)
+    .map(({ key, description }) => ({ key, description }));
 }
 
 /**

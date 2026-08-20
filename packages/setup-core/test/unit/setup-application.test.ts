@@ -54,7 +54,7 @@ describe("createSetupSessionApplication", () => {
       "write-config",
       "activate-observer-config",
     ]);
-    expect(state.checkpoints.map((checkpoint) => checkpoint.operationId)).toEqual([
+    expect(state.operationOutcomes.map((outcome) => outcome.operationId)).toEqual([
       "write-config",
       "activate-observer-config",
     ]);
@@ -273,7 +273,10 @@ describe("createSetupSessionApplication", () => {
 
     expect(application.getState()).toMatchObject({
       status: "completed",
-      checkpoints: [{ operationId: "write-config" }, { operationId: "activate-observer-config" }],
+      operationOutcomes: [
+        { operationId: "write-config" },
+        { operationId: "activate-observer-config" },
+      ],
     });
     expect(executeOperation).toHaveBeenCalledTimes(2);
     expect(report).toHaveBeenCalledTimes(2);

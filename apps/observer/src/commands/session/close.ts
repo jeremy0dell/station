@@ -18,17 +18,14 @@ import {
 } from "../cleanup/index.js";
 import type { CommandHandler } from "../queue.js";
 import { reconcileAndPublish } from "../reconcile.js";
-import type { TerminalIntentRunner } from "../terminalIntentRunner.js";
 import { throwIfAborted } from "./shared.js";
 
 export type CreateSessionCloseHandlerOptions = {
   providers: ProviderRegistry;
-  terminalIntentRunner: TerminalIntentRunner;
   core: ObserverCore;
   persistence: EventJournal & SessionStore;
   eventBus?: ObserverEventBus | undefined;
   clock?: RuntimeClock | undefined;
-  commandTimeoutMs?: number | undefined;
   worktreeMutations?: WorktreeMutationCoordinator | undefined;
 };
 
@@ -57,7 +54,6 @@ export function createSessionCloseHandler(
       assertSessionCloseAllowed(session, row, payload.force === true);
       await closeSessionResources({
         providers: options.providers,
-        terminalIntentRunner: options.terminalIntentRunner,
         session,
         row,
         mode: payload.mode,
@@ -65,7 +61,6 @@ export function createSessionCloseHandler(
         context,
         requireTerminalClose: payload.mode === "terminal" || payload.mode === "all",
         clock: options.clock,
-        commandTimeoutMs: options.commandTimeoutMs,
       });
       throwIfAborted(context.signal);
       if (session.origin === "station" && payload.mode !== "harness") {

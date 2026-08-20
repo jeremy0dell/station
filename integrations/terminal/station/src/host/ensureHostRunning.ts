@@ -47,7 +47,11 @@ export type StationHostCommand = readonly [command: string, ...prefixArgs: strin
 
 export type SpawnStationHostInput = {
   argv: StationHostCommand;
-  spawnOptions: { detached: true; stdio: "ignore" };
+  /**
+   * `unref()` releases the caller's event-loop reference; `detached` separately
+   * controls whether the Host leaves the physical process group.
+   */
+  spawnOptions: { detached: boolean; stdio: "ignore" };
 };
 
 export type ChildProcessLike = Pick<ChildProcess, "pid" | "unref"> & {
@@ -152,9 +156,10 @@ export async function ensureStationHostRunning(
 
   try {
     await mkdir(dirname(socketPath), { recursive: true, mode: 0o700 });
+    const detached = process.env.STATION_RUNTIME_OWNER_FOREGROUND !== "1";
     const child = (deps.spawnHost ?? defaultSpawnHost)({
       argv: [...options.hostCommand, "--socket", socketPath, "--state-dir", options.stateDir],
-      spawnOptions: { detached: true, stdio: "ignore" },
+      spawnOptions: { detached, stdio: "ignore" },
     });
     child.unref?.();
 
@@ -449,7 +454,7 @@ function defaultClientFactory(socketPath: string, expectedBuildVersion: string):
 }
 
 function defaultSpawnHost(input: SpawnStationHostInput): ChildProcessLike {
-  // The HOST daemon is spawned detached+ignore (it owns the socket, not a pipe).
+  // The Host is spawned with ignored stdio; the composition decides process-group ownership.
   // NB: the host in turn spawns the node-pty BRIDGE with piped stdio — never copy
   // this detached/ignore shape onto the bridge or its PTYs die at spawn.
   const [command, ...args] = input.argv;

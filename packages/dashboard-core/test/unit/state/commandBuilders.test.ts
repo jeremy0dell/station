@@ -2,51 +2,19 @@ import { describe, expect, it } from "vitest";
 import {
   buildCreateSessionCommand,
   buildCreateSessionGroupCommand,
-  buildFocusCommand,
+  buildDeleteSessionGroupCommand,
   buildForkSessionCommand,
   buildRenameSessionCommand,
+  buildRenameSessionGroupCommand,
   buildResumeAgentCommand,
   buildStartAgentCommand,
   buildUpdateSessionGroupMembershipCommand,
+  buildUpdateSessionGroupMembershipDeltaCommand,
   cleanupForceRequired,
 } from "../../../src/state/commandBuilders.js";
 import { createCommandSnapshot, createDashboardSnapshot } from "../../fixtures/snapshots.js";
 
 describe("TUI command builders", () => {
-  it("maps focusable rows to terminal.focus using the agent session", () => {
-    const snapshot = createCommandSnapshot("idle");
-    const row = snapshot.rows[0];
-
-    expect(row).toBeDefined();
-    expect(buildFocusCommand(row)).toEqual({
-      type: "terminal.focus",
-      payload: { sessionId: "ses_wt_web_idle" },
-    });
-  });
-
-  it("adds focus origin only when transient navigation provides one", () => {
-    const snapshot = createCommandSnapshot("idle");
-    const row = snapshot.rows[0];
-
-    expect(
-      buildFocusCommand(row, {
-        origin: {
-          provider: "tmux",
-          clientId: "client_1",
-        },
-      }),
-    ).toEqual({
-      type: "terminal.focus",
-      payload: {
-        sessionId: "ses_wt_web_idle",
-        origin: {
-          provider: "tmux",
-          clientId: "client_1",
-        },
-      },
-    });
-  });
-
   it("maps no-agent rows to session.startAgent without forcing a harness provider", () => {
     const snapshot = createCommandSnapshot("none");
     const row = snapshot.rows[0];
@@ -146,6 +114,11 @@ describe("TUI command builders", () => {
         title: "Hexagonal PT 12",
         branch: "fix-nav-mobile-fork",
         copyDirty: true,
+        group: {
+          kind: "source",
+          sourceSessionId: "ses_wt_web_idle",
+          groupId: "group_active",
+        },
       }),
     ).toMatchObject({
       type: "session.fork",
@@ -155,6 +128,11 @@ describe("TUI command builders", () => {
         title: "Hexagonal PT 12",
         branch: "fix-nav-mobile-fork",
         copyDirty: true,
+        group: {
+          kind: "source",
+          sourceSessionId: "ses_wt_web_idle",
+          groupId: "group_active",
+        },
       },
     });
   });
@@ -194,6 +172,53 @@ describe("TUI command builders", () => {
         expectedVersion: 4,
         add: [{ sessionId: "ses_launches", expectedGroupId: null }],
       },
+    });
+  });
+
+  it("builds Group Settings rename, bulk membership, and delete commands", () => {
+    expect(
+      buildRenameSessionGroupCommand({
+        projectId: "web",
+        groupId: "group_launches",
+        expectedVersion: 4,
+        name: "  Shipped  ",
+      }),
+    ).toEqual({
+      type: "sessionGroup.rename",
+      payload: {
+        projectId: "web",
+        groupId: "group_launches",
+        expectedVersion: 4,
+        name: "Shipped",
+      },
+    });
+    expect(
+      buildUpdateSessionGroupMembershipDeltaCommand({
+        projectId: "web",
+        groupId: "group_launches",
+        expectedVersion: 4,
+        add: [{ sessionId: "ses_add", expectedGroupId: "group_other" }],
+        remove: [{ sessionId: "ses_remove", expectedGroupId: "group_launches" }],
+      }),
+    ).toEqual({
+      type: "sessionGroup.updateMembership",
+      payload: {
+        projectId: "web",
+        groupId: "group_launches",
+        expectedVersion: 4,
+        add: [{ sessionId: "ses_add", expectedGroupId: "group_other" }],
+        remove: [{ sessionId: "ses_remove", expectedGroupId: "group_launches" }],
+      },
+    });
+    expect(
+      buildDeleteSessionGroupCommand({
+        projectId: "web",
+        groupId: "group_launches",
+        expectedVersion: 4,
+      }),
+    ).toEqual({
+      type: "sessionGroup.delete",
+      payload: { projectId: "web", groupId: "group_launches", expectedVersion: 4 },
     });
   });
 

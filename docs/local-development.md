@@ -20,7 +20,11 @@ pnpm station:devbox dev
 The command builds this checkout and gives it a private `.dev-state`, Observer,
 Station Host, socket, provider homes, and hook configuration. Another checkout's
 devbox and hosted sessions keep running. Quitting the UI also leaves this
-checkout's runtime and hosted sessions available for the next start.
+checkout's runtime and hosted sessions available for the next start. Reopening
+an exact build reuses its Observer; when the checkout build changes, the same
+command cooperatively recycles only this checkout's Observer, refreshes and
+validates its private provider hooks, and then opens the UI. The persistent Host
+and its agents remain running through that Observer replacement.
 
 Do not run `pnpm station:link`, `pnpm station:reset`, or a globally installed
 `stn` while comparing worktrees. Those commands can select or mutate a different
@@ -32,7 +36,7 @@ checkout.
 | --- | --- |
 | Isolated Station | `pnpm station:devbox` |
 | Isolated Station with UI HMR | `pnpm station:devbox dev` |
-| Rebuild and recycle the isolated Observer | `pnpm station:devbox restart` |
+| Force a rebuild and isolated Observer recycle | `pnpm station:devbox restart` |
 | Isolated real tmux popup | `pnpm station:devbox tmux dev` |
 | Node CLI watcher with generated isolation | `pnpm dev` |
 | Headless command against the devbox | `pnpm stn --config .dev-state/config.toml <command>` |
@@ -53,10 +57,13 @@ pnpm station:devbox stop
 pnpm station:devbox reset -- --yes
 ```
 
-- `start` builds and opens the isolated Station workspace.
-- `dev` adds Bun hot reload for changes under `station/src/**`.
+- `start` builds, ensures the isolated Observer exactly matches the checkout,
+  prepares private hooks, and opens the isolated Station workspace.
+- `dev` performs the same exact-build preparation and adds Bun hot reload for
+  changes under `station/src/**`.
 - `restart` rebuilds and recycles the Observer while the persistent Host and its
-  agents survive and reconnect.
+  agents survive and reconnect. It remains useful when an exact build needs a
+  deliberate recycle; ordinary build changes do not require it.
 - Changes to Station Host code require `stop` followed by `start`; `restart`
   intentionally preserves the current Host.
 - `status` inspects this checkout's Observer and Host and reports the separate
@@ -71,10 +78,13 @@ Use reset only when this checkout's runtime and sessions are disposable.
 ## Isolation and safety
 
 The devbox generates `.dev-state/config.toml`, places Observer state under
-`.dev-state`, and uses a short checkout-keyed socket directory. Its default
-terminal is `noop-terminal`, so the isolated Observer does not enumerate agents
-from the machine-global tmux server. Native Host-backed Station panes remain
-available.
+`.dev-state`, uses a short checkout-keyed socket directory, and pins the native
+Host socket and layout snapshot to that same checkout. It clears inherited
+Station build, source, Host-handoff, UI, session, worktree, and hook-routing
+selectors before refreshing hooks or opening the renderer, so launching from a
+Station-owned pane cannot select the outer Station runtime. Its default terminal
+is `noop-terminal`, so the isolated Observer does not enumerate agents from the
+machine-global tmux server. Native Host-backed Station panes remain available.
 
 Codex, Claude, Cursor, and OpenCode receive checkout-local provider homes and
 Station hook configuration. This protects global configuration and hook files,
@@ -85,6 +95,16 @@ The devbox refuses unsafe socket ownership or an inaccessible incumbent socket
 rather than unlinking it. When it reports `OBSERVER_SOCKET_INACCESSIBLE`, keep
 the existing process and state, follow the printed permission or `lsof` recovery
 instructions, inspect `station:devbox status`, and retry the same start command.
+
+Exact-build activation is scoped to the checkout-keyed socket in the generated
+config. It uses the Observer's identity-pinned cooperative stop, never the
+devbox `stop` teardown, and never signals, reaps, or unlinks an incumbent. A
+replacement child also preserves any non-exact owner that wins the socket after
+the admitted incumbent exits. Failure output names the activation phase and the
+admitted incumbent's last proven disposition. The Host and hosted agents are not
+targeted and `.dev-state` is not reset. If the old Observer is reported
+`stopped`, retry the same `start` or `dev` command; if its disposition is
+`unknown`, inspect `status` first. Do not reset the lane for routine recovery.
 
 There is no `STATION_STATE_DIR` environment variable. Manual isolation uses
 `[observer] state_dir` and `socket_path` in a config file. `--config` is a global
@@ -153,7 +173,9 @@ Observer. Use the private tmux devbox for popup work.
 - **Station connects to the wrong Observer:** check the printed socket and use
   the devbox's config for every headless command.
 - **A launch reports missing status hooks:** use the devbox-generated provider
-  home and hook configuration; do not install test hooks into global homes.
+  home and hook configuration; `start` and `dev` repair and validate those
+  private artifacts before opening the UI. Do not install test hooks into global
+  homes.
 - **`status` reports a Host build mismatch:** use `stop` followed by `start` to
   recycle the source Host after accounting for its sessions.
 - **Cleanup or socket ownership is uncertain:** stop and follow

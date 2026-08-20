@@ -58,15 +58,29 @@ describe("observer singleton Doctor check", () => {
 
       const reportOnly = await runDoctor({
         ...deps,
-        duplicateCleanupStatus: () => ({
+        duplicateInspection: async () => ({
           socketPath: join(stateDir, "observer.sock"),
-          status: "would-terminate",
-          eligiblePids: [200],
-          refusalCodes: [],
+          keeper: 100,
+          duplicates: 1,
           refusals: [],
-          terminatedPids: [],
-          exitedPids: [],
-          survivedPids: [],
+          targets: [
+            {
+              pid: 200,
+              startToken: "candidate-start",
+              process: {
+                pid: 200,
+                argv: [],
+                executablePath: "/opt/station/stn",
+                startToken: "candidate-start",
+                socketPath: join(stateDir, "observer.sock"),
+              },
+              automaticEligibility: {
+                eligible: true,
+                quarantineMs: 10_000,
+                refusalReasons: [],
+              },
+            },
+          ],
         }),
       });
       expect(reportOnly).toMatchObject({ status: "degraded" });
@@ -83,7 +97,7 @@ describe("observer singleton Doctor check", () => {
     }
   });
 
-  it("reports a preserved graceful cleanup as healthy and a survivor with a force hint", async () => {
+  it("warns when duplicate evidence cannot authorize an action", async () => {
     const stateDir = await mkdtemp(join(tmpdir(), "station-singleton-outcomes-"));
     const clock = { now: () => new Date(now) };
     const providers = new ProviderRegistry({
@@ -107,51 +121,24 @@ describe("observer singleton Doctor check", () => {
       providers,
       clock,
     };
-    const baseOutcome = {
-      socketPath: join(stateDir, "observer.sock"),
-      eligiblePids: [200],
-      refusalCodes: [],
-      refusals: [],
-      exitedPids: [],
-      keeperPreservation: {
-        pid: true,
-        socketIdentity: true,
-        pidfile: true,
-        preserved: true,
-      },
-      claimReleased: true,
-    };
-
     try {
       await providers.healthCache.refreshAll();
       await core.reconcile("singleton-outcomes-test");
-      const terminated = await runDoctor({
+      const refused = await runDoctor({
         ...deps,
-        duplicateCleanupStatus: () => ({
-          ...baseOutcome,
-          status: "terminated",
-          terminatedPids: [200],
-          survivedPids: [],
+        duplicateInspection: async () => ({
+          socketPath: join(stateDir, "observer.sock"),
+          keeper: 100,
+          duplicates: 1,
+          refusals: [{ pid: 200, reason: "unconfirmed socket holder" }],
+          targets: [],
         }),
       });
-      expect(terminated.checks).toContainEqual(
-        expect.objectContaining({ name: "observer-singleton", status: "ok" }),
-      );
-
-      const survived = await runDoctor({
-        ...deps,
-        duplicateCleanupStatus: () => ({
-          ...baseOutcome,
-          status: "survived",
-          terminatedPids: [],
-          survivedPids: [200],
-        }),
-      });
-      expect(survived.checks).toContainEqual(
+      expect(refused.checks).toContainEqual(
         expect.objectContaining({
           name: "observer-singleton",
           status: "warn",
-          message: expect.stringContaining("stn observer reap --force"),
+          message: expect.stringContaining("refusal evidence"),
         }),
       );
     } finally {

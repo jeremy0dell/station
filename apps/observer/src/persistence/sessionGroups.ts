@@ -28,10 +28,6 @@ export type SessionGroupMutation<TResult = SessionGroupStoreResult> = {
 
 type VersionedInput = { id: SessionGroupId; expectedVersion: number };
 
-export function emptySessionGroupState(): SessionGroupPersistenceState {
-  return { groups: new Map(), assignments: new Map() };
-}
-
 export function cloneSessionGroupState(
   state: SessionGroupPersistenceState,
 ): SessionGroupPersistenceState {
@@ -162,6 +158,31 @@ export function placeSessionSeed(
     };
   }
 
+  if (input.placement.kind === "source") {
+    if (current !== undefined) return seedConflict(state, "unexpected_assignment");
+    // Resolve membership inside the seed transaction so a concurrent source move wins over
+    // the Group displayed when Fork was submitted. Missing source placement is Ungrouped.
+    const sourceAssignment = state.assignments.get(input.placement.sourceSessionId);
+    if (sourceAssignment === undefined) {
+      return { state, changed: false, result: { ok: true } };
+    }
+    const group = state.groups.get(sourceAssignment.groupId);
+    if (group === undefined) {
+      return { state, changed: false, result: { ok: true } };
+    }
+    if (sourceAssignment.projectId !== input.projectId || group.projectId !== input.projectId) {
+      return seedConflict(state, "group_project_mismatch");
+    }
+    const draft = cloneSessionGroupState(state);
+    draft.assignments.set(input.sessionId, { groupId: group.id, projectId: input.projectId });
+    touchGroups(draft, new Set([group.id]), input.updatedAt);
+    return {
+      state: draft,
+      changed: true,
+      result: { ok: true, groupProvenance: { kind: "source", groupId: group.id } },
+    };
+  }
+
   if (state.groups.has(input.placement.groupId)) {
     return seedConflict(state, "group_id_collision");
   }
@@ -207,6 +228,13 @@ export function discardSessionSeedPlacement(
 ): SessionGroupMutation<{ discardedMemberships: number; discardedGroups: number }> {
   const current = state.assignments.get(input.sessionId);
   const provenance = input.groupProvenance;
+  if (provenance?.kind === "source" && current === undefined) {
+    return {
+      state,
+      changed: false,
+      result: { discardedMemberships: 0, discardedGroups: 0 },
+    };
+  }
   if (provenance === undefined) {
     if (current !== undefined) {
       throw new Error("Session seed Group assignment no longer matches cleanup provenance.");

@@ -360,20 +360,22 @@ reattach; pane borders and neighboring panes must remain unlinked.
 - OpenTUI/React components should stay plain and readable. Runtime orchestration belongs in services or the dashboard runtime, not presentation components.
 - Selectors, screen transitions, command builders, event reducers, and fixtures should stay pure TypeScript. The render-framework-free dashboard logic lives in `@station/dashboard-core` and is consumed by the OpenTUI render layer.
 - Dashboard key/behavior is shared, not feature-gated: reducers and render/input leaves never select filter behavior or inspect feature flags; session and optimistic-row matching remains centralized in the pure persistent-filter projection.
-- Each renderer composition owns one `DashboardRuntime`: `state` exposes only Zustand-compatible `getState`, `getInitialState`, and `subscribe`; `actions` is the sole external dashboard mutation authority; `start` is one-shot/idempotent and `dispose` is asynchronous and repeat-safe. Disposal closes actions and effect admission immediately, detaches canonical-source and directory-polling subscriptions once, clears owned timers, blocks late async state writes, and returns one promise that drains all already-started bounded work with settled outcomes. Construction requires the composition's `StationClientStateSource`, convergence-safe `ObserverService`, and all four `DashboardCapabilities` groups: session activation, managed session execution, shell opening, and dashboard dismissal. Dashboard-core never creates fallback capabilities, a fallback client runtime, or an independent runtime snapshot. The private Zustand store and reducers use mutable `DashboardState`; neither that model nor `setState` crosses the dashboard-core boundary.
+- Each renderer composition owns one `DashboardRuntime`: `state` exposes only Zustand-compatible `getState`, `getInitialState`, and `subscribe`; `actions` is the sole external dashboard mutation authority; `start` is one-shot/idempotent and `dispose` is asynchronous and repeat-safe. Disposal closes actions and effect admission immediately, detaches canonical-source and directory-polling subscriptions once, clears owned timers, blocks late async state writes, and returns one promise that drains all already-started bounded work with settled outcomes. Construction requires the composition's `StationClientStateSource`, convergence-safe `ObserverService`, and every `DashboardCapabilities` group: session activation, managed session execution, worktree removal, shell opening, and dashboard dismissal. Dashboard-core never creates fallback capabilities, a fallback client runtime, or an independent runtime snapshot. The private Zustand store and reducers use mutable `DashboardState`; neither that model nor `setState` crosses the dashboard-core boundary.
 - `@station/client` owns canonical in-process snapshot and connection truth. Its runtime-backed service commits snapshot loads and reconcile results to that same state source before resolving. Snapshot-only native and standalone consumers read `StationClientStateSource`; dashboard-core mirrors the exact snapshot identity only to combine it with screens, filter, focus, collapse, scrolling, widgets, optimistic rows, and toasts.
 - `DashboardStateSource` returns `DashboardStateView`, a recursively readonly type projection that includes snapshots, screens, local rows, widgets, arrays, maps, and sets. The projection preserves the store's exact object and notification identities: it performs no runtime copying, freezing, or proxying. Dashboard readers and Station consumers must accept the exported readonly view types rather than importing private mutable state models.
-- Presentation receives the readonly `DashboardStateSource` for dashboard projection and the canonical client source where snapshot-only rendering requires it. Input adapters receive only their explicit dashboard state and action capabilities, while native and standalone composition roots alone own full runtime lifecycle and inject terminal-specific implementations of the four semantic capability groups. Config persistence receives only the dashboard subscription and `pushToast` capability it needs.
+- Presentation receives the readonly `DashboardStateSource` for dashboard projection and the canonical client source where snapshot-only rendering requires it. Input adapters receive only their explicit dashboard state and action capabilities, while native and standalone composition roots alone own full runtime lifecycle and inject terminal-specific implementations of the semantic capability groups. Config persistence receives only the dashboard subscription and `pushToast` capability it needs.
 - Native and standalone input adapters dispatch the closed dashboard action contract rather than importing reducers, replacing runtime state, or returning renderer-control intents. Dashboard-core invokes the injected semantic capability and owns optimistic rows, success/failure dispositions, notices, toasts, and expiry; capability implementations receive stable product requests and canonical client state, never dashboard state or mutation methods. Failed Quick Session rows retain the four-second `expiresAt` authority but share one runtime-owned timer targeting the earliest deadline; each firing removes every expired row and schedules the next deadline. Deliberate New Session has no optimistic or failed root row: its retained sheet is the progress and retry surface. Native successful-but-unconfirmed creation closes that sheet with a refresh-before-retry warning instead of reopening a duplicate submission path.
-- New Session and Fork Session expose **Name** as the editable product concept. New Session initially names itself after its generated branch; Fork Session uses `<source>-fork` while its hidden branch carries a collision-resistant token that changes on each fresh open, so an unobserved Git-ref collision is recoverable by retrying. Later name edits may contain spaces and punctuation and never mutate that hidden branch identity. Quick Session uses its generated branch as the default name. New Session also exposes **Group** between Agent and Create: `G` opens a root-only chooser with `U` Ungrouped, normal slots, and `N` inline Create. Project changes and invalid snapshot replacements reset placement to Ungrouped; Group renames preserve selection by ID.
+- New Session and Fork Session expose **Name** as the editable product concept. New Session initially names itself after its generated branch; Fork Session uses `<source>-fork` while its hidden branch carries a collision-resistant token that changes on each fresh open, so an unobserved Git-ref collision is recoverable by retrying. Later name edits may contain spaces and punctuation and never mutate that hidden branch identity. Quick Session uses its generated branch as the default name. New Session also exposes **Group** between Agent and Create: `G` opens a root-only chooser with `U` Ungrouped, normal slots, and `N` inline Create. Project changes and invalid snapshot replacements reset placement to Ungrouped; Group renames preserve selection by ID. Fork Details has no picker: a grouped source gets a checked **create in Group** control, while an ungrouped source shows read-only `(Ungrouped)`.
 - Station service code may use `@station/runtime` (and the shared `@station/client`) for observer IO, subscriptions, command dispatch, timeout, retry, cancellation, and cleanup boundaries. Prefer Effect in boundary code when a single path must coordinate async iterators, cancellation/interruption, cleanup, retry/reconnect, timeouts, and typed error conversion. Keep that Effect usage behind Promise/AsyncIterable facades for React callers.
 - The UI may filter, group, sort, label, and decorate snapshot rows. It must not infer agent truth from provider-specific details.
 - Treat `snapshot.sessions` as session-membership and session/activity-count truth. Dashboard rows,
   filtering, selection, and actions project those sessions and join `snapshot.rows` only for checkout
   metadata; bare worktrees remain inventory and do not appear in the primary session list.
   `snapshot.sessionGroups` exclusively organizes those sessions under their Project; the current
-  dashboard flattens optional parent links and leaves Quick Session/Fork optimistic creates at the
-  Project root. Deliberate grouped creation first appears from a canonical snapshot with membership.
+  dashboard flattens optional parent links. Quick Session and explicitly Ungrouped Fork optimistic
+  creates stay at the Project root, while a Group-inheriting Fork targets its pending row at the
+  source Group until canonical membership replaces it. Deliberate grouped creation first appears
+  from a canonical snapshot with membership.
 - `terminal.focusable` describes external dashboard control, not native Station
   interaction. Native row activation resolves an advertised managed attachment
   and creates or reveals the local pane without dispatching `terminal.focus`;
@@ -382,14 +384,22 @@ reattach; pane borders and neighboring panes must remain unlinked.
   authorization to relaunch a proven-exited managed pane. Pane clicks, pane
   cycling, overlay close, PTY exit, reconcile, restore, and HMR never relaunch;
   they may continue to expose the retained exit transcript.
+- Native worktree deletion begins only after Observer validation reserves that
+  worktree against replacement launch. UI-owned agent and child PTYs retain their
+  registry subscriptions until a real exit event, exact binding release and
+  canonical reconcile fail closed, Host `close` acknowledges only after process
+  exit, and pane records retain worktree ownership until successful command
+  completion removes the complete tree. Provider-wide health and provider IDs
+  never decide per-target ownership.
 
 ## Surface Rules
 
 - Treat the active UI as the full terminal canvas. Layout code should account for the terminal viewport, not a decorative parent container.
 - Native Station owns its opaque Station canvas. The standalone dashboard uses opaque terminal-default background intent for its unaccented canvas, panels, prompts, Help surface, and toasts; this behavior is provider-neutral and does not use transparency.
 - Keep header, body, footer, overlays, prompts, and toasts from overlapping at narrow or short terminal sizes.
-- Render canonical Groups as contiguous blocks in the projected row order. An expanded Group uses its header as the top edge, inert side rails around direct members, and one inert closing-frame row; an empty expanded Group therefore has a header and closing edge only. A collapsed Group keeps the bounded identity and any enabled optional actions but omits its members and closing edge. `[qs]` and `[▾]` are visible by default; runtime composition may independently suppress either action, with no user-facing config key yet. Identity toggles collapse, `[qs]` expands the Group and launches a Quick Session into it, and `[▾]` remains a focusable no-op until the complete Group menu lands.
-- Group rings use the quiet hairline role by default, bright working color while the header is focused, and dim working color while a direct member has focus. Exact target focus uses compact focus; member focus and hover keep the ordinary dashboard fills. Borders, separators, whitespace, and closing rows are inert, and viewport clipping may show any ordinary edge of the projected block without renderer-owned regrouping.
+- Render canonical Groups as contiguous blocks in the projected row order. An expanded Group uses its header as the top edge, inert side rails around direct members, and one inert closing-frame row; that row is the visible frame edge, not a synthetic blank spacer before or after the block. An empty expanded Group therefore has a header and closing edge only. A collapsed Group keeps the bounded identity and any enabled optional actions but omits its members and closing edge. The responsive `[qs]`/`[quick session]` action and `[▾]` are visible by default; runtime composition may independently suppress either action, with no user-facing config key yet. Identity toggles collapse, Quick Session expands the Group and launches into it, and `[▾]` opens the anchored Q/N/S/R Group menu.
+- Group ordering is the renderer-local union `"groups-first" | "alphabetical-interleaved"`. Groups-first is the default and places alphabetized Group blocks before project-root sessions. Alphabetical interleaving compares Group names with root-session display titles while keeping every Group block intact. Both modes retain canonical arrays, collapse and filter state, and continuous slots assigned only to rendered sessions; no user-facing config key selects the mode.
+- Group rings use the quiet hairline role by default, bright working color while the header is focused, and dim working color while a direct member has focus. Disclosure remains explicit through `▼` and `▶`. A focused dashboard session row carries `▏`, while the exact focused Project or Group header target carries `▸` in addition to compact focus fill. Member focus and hover keep the ordinary dashboard fills. Borders, separators, whitespace, and closing rows are inert, and viewport clipping may show any ordinary edge of the projected block without renderer-owned regrouping.
 - The tmux popup runs the same interactive observer-backed dashboard without
   native Station panes. Its close behavior and footer copy must match popup
   semantics, such as `q/esc:close` when a warm dismissal is expected. `Ctrl-O`
@@ -497,6 +507,9 @@ dispatches `dashboard.cell.activate`, the same activation used by focused Enter.
 filtered, pending, or stale cells remain inert. Wheel events over child rows use
 dashboard scrolling, and active modal surfaces intercept background clicks and scrolling.
 
+These pointer, keyboard, and non-color marker contracts provide practical input usability. This
+milestone does not claim screen-reader or accessibility-tree support.
+
 Dashboard focus follows rendered order through each Project header, its direct Group blocks and
 project-root sessions, or the stable Add Session action rendered when that Project is empty. The cursor is one branded
 `{ rowId, cellId }` identity. Entering a header vertically always selects `identity`; Left/Right then
@@ -504,13 +517,26 @@ moves without wrapping through `identity` → `shell` → `quickSession` → `me
 and `identity` → `quickSession` → `menu` for Groups, skipping optional Group actions omitted by
 runtime composition. Omitted actions have no rendered target and are invalid semantic cells. Group
 identity toggles collapse; Group quick session launches through the same pointer/focused activation
-contract and the Group menu remains a focus-preserving no-op until its workflow slice lands. Up/Down leaves any header segment immediately, and Left/Right on a
-session row or empty-project action is inert. Remove, rename, and fork row choosers retain a separate
-visible, selectable canonical-session traversal; slots and Enter resolve through that same chooser
-policy. Next-needs-me uses its own canonical-session policy. `N` continues to open the session flow
+contract, and the Group menu control opens its anchored action menu while preserving the cell for
+safe return. Up/Down leaves any header segment immediately, and Left/Right on a
+session row or empty-project action is inert. Remove, rename, move-to-Group, and fork row choosers retain a separate
+visible, selectable canonical-session traversal with `▸` as its keyboard cursor; slots and Enter
+resolve through that same chooser policy. Next-needs-me uses its own canonical-session policy. `N` continues to open the session flow
 without changing dashboard focus, while uppercase `G` creates a Quick Group for the focused row's
 owning Project (or the first canonical Project when nothing valid is focused). Lowercase `g` remains
 a visible-session slot. Gaps and optimistic create rows remain non-focusable.
+
+Uppercase `M` opens the shared session chooser, then a Move to Group sheet. Native right-click on a
+session opens the same destination step directly. The sheet marks canonical current membership with
+`✓`, while its independent `▸` keyboard cursor selects Ungrouped, same-Project root Groups, or Create
+new Group; the two markers may appear on different rows, and externally nested membership is read-only. Slots, arrows plus Enter, pointer rows, `U`, and
+`N` converge on one dashboard-core reassignment operation. Moving to a Group submits one
+`sessionGroup.updateMembership` command with the current membership expectation and destination
+version; ungrouping removes through that same contract, and selecting the current destination is a
+no-op. The sheet stays visible and inert during submission. Success follows the session to its
+canonical destination; ordinary failure retains the picker, while membership/version conflicts
+close and focus canonical truth. Create new Group persists the Group first and never rolls it back
+if the subsequent move fails. Wide footers advertise `M — move to group`; compact footers may omit it.
 
 Focused compact controls use the canonical theme's stronger bounded
 `interaction.compactFocus` fill. A project header's primary segment covers the rendered
@@ -519,7 +545,8 @@ control owns exactly its label cells and separator spaces remain inert. An empty
 pointer target cover only `[ + add session ]`; its explanatory text and surrounding whitespace
 remain inert and unpainted. Wide and compact labels preserve the same control identity. Hover stays
 component-local, temporarily supersedes the focus background, and reveals persistent keyboard focus
-again when the pointer leaves; no focus glyph is added.
+again when the pointer leaves; the persistent `▏` row or `▸` target marker remains the non-color
+focus cue.
 
 Group collapse moves a hidden direct member to that Group's identity; Project collapse remains the
 outer ancestor and moves any hidden descendant to the Project identity. A focused Group identity
@@ -531,8 +558,11 @@ and scrolls it into view. The Default Agent picker retains its header focus bene
 Escape, click-away, unchanged selection, and a successful change return to `menu`; project
 removal while open uses the same deterministic focus fallback. The dashboard footer describes Enter
 as `activate` because it may activate a session row, project-header control, or empty-project action.
+Ordering mode, collapse sets, and the applied filter remain renderer-local across Observer restart,
+snapshot replacement, and warm popup dismissal/reopen. Filtering never mutates collapse; scrolling
+and resize retain or deterministically reconcile focus and viewport position.
 
-Activating a Group's `[qs]` launches an ordinary Quick Session without embedding Group placement in
+Activating a Group's responsive `[qs]`/`[quick session]` action launches an ordinary Quick Session without embedding Group placement in
 the create request. While pending, its targeted local row is rendered inside the expanded Group. On
 successful launch, dashboard-core reloads canonical truth, correlates the new session by Project and
 generated branch, reads the latest Group version, and records one expected membership addition. It
@@ -543,7 +573,38 @@ Activating a Project's `[▾]` opens a right-edge anchored menu with Quick Group
 default agent, and Project settings… in that order. Up/Down wraps, Enter activates, `G` selects Quick
 Group, and Escape or click-away returns to the same Project `menu` cell. The overlay opens above its
 Project row when it would overflow and clamps in narrow or short terminals without reflowing the
-dashboard. Native right-click exposes the same four actions through the shared core transitions.
+dashboard. The focused action carries `▸`; native right-click exposes the same four actions, marker,
+and shared core transitions.
+
+Activating a Group's `[▾]` opens a right-edge menu with visible Q/N/S/R keyboard shortcuts for
+Quick session, New session…, Group settings…, and Remove Group…. Separators precede Settings and
+Remove, and Remove uses danger styling. Up/Down wraps; Enter, Q/N/S/R, pointer rows, Escape, and
+click-away share dashboard-core transitions. The menu flips above its Group row when needed and
+clamps at compact sizes. New Session preselects only a current same-Project root Group and fails
+closed for a stale, moved, or nested target. Remove Group… opens the typed Remove section and never
+deletes directly. Native right-click on any Group-header cell exposes the same ordered actions,
+shortcuts, `▸` focused-action marker, validation, and destinations.
+
+One responsive settings shell contains General, Sessions, and Remove Group; `G`, `S`, and `R`, arrows plus Enter, and
+semantic pointer targets reach every section and control. General shows read-only Project identity and saves one versioned Group rename. Sessions
+lists only canonical sessions in the Group's Project with an independent non-color cursor and
+checkbox marker. `[✓]` means the session will belong to this Group after Save; unchecking a current
+member is labeled `ungroup on Save`, while checking another Group's member is labeled as a move.
+Save emits one atomic expected-assignment add/remove delta. An empty Project and an empty desired
+Group remain usable.
+Remove Group states that member sessions remain open and become ungrouped, requires the exact
+`delete <Group name>` phrase, and dispatches only Group deletion—never session, agent, terminal,
+worktree, or provider lifecycle.
+
+Switching Group Settings sections discards the abandoned section draft and reseeds from the latest
+canonical snapshot. Save success retains the settings shell for rename and membership; failure
+retains edited/staged state and Save focus. Pending submission leaves the complete surface visible
+and inert. Explicit Cancel/Back returns to the invoking Group menu cell; successful deletion focuses
+the owning Project header. Canonical Group, Project, or session removal while settings is open uses
+ordinary screen reconciliation and deterministic dashboard focus fallback without a Group-specific
+notice or failure screen. Project and Group Settings share one responsive shell that stays within
+the terminal frame, uses two panes when space permits, and presents the active list or detail pane
+at compact widths.
 
 Bounded screens use one active-screen overlay layer. Dashboard-core exposes the narrow
 `TuiScreenBehavior` contract, and the owning screen module supplies its safe `clickAway`
@@ -615,11 +676,17 @@ Yes/No controls. Keep is the safe initial focus; Left/Right moves without wrappi
 activates the current choice, and Y/N retain their direct meanings. Both controls dispatch stable
 semantic actions, use the shared bounded button treatment, and keep trailing sheet cells inert.
 
-Fork Session renders Name and Copy through the same bounded field-control grammar as Create Session.
-Clicking Name focuses its editor, clicking Copy focuses and toggles it once, and the Fork button
-submits through a shared semantic action. Copy-focused Enter toggles rather than submitting; Enter
-on Name or Fork submits. The managed-session capability hosts native forks in a Station pane and
-routes standalone/tmux forks through the shared Observer-backed implementation.
+Fork Session renders Name, Group, and Copy through the same bounded field-control grammar as Create
+Session. For a grouped source, Group is a focusable checkbox that defaults to `[x] create in
+<Group>`; Space, focused Enter, and pointer activation toggle it to `[ ] (Ungrouped)` through one
+semantic action. For an ungrouped source it is read-only `(Ungrouped)` with no inert checkbox or
+focus stop. The displayed name follows canonical source membership and uses ordinary sheet
+truncation. Group renames or moves update by stable identity while the sheet is open; an explicit
+opt-out remains Ungrouped, and deletion before seed commit lets the fork succeed Ungrouped. Clicking
+Name focuses its editor, clicking Copy focuses and toggles it once, and the Fork button submits
+through a shared semantic action. Copy-focused Enter toggles rather than submitting; Enter on Name
+or Fork submits. The managed-session capability hosts native forks in a Station pane and routes
+standalone/tmux forks through the shared Observer-backed implementation.
 
 Create Session review renders Project, Name, Agent, and Group as compact field controls, followed by a
 compact Create button. Labels, bold yellow accelerators (`P`, `N`, `A`, `G`, and `C`), values, and inline

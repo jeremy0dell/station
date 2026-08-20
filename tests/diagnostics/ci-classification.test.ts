@@ -89,6 +89,17 @@ describe("standard CI path classification", () => {
       },
     },
     {
+      name: "composed update smoke runner",
+      paths: ["scripts/test-runners/run-update-smoke.mjs"],
+      expected: {
+        docs_only: false,
+        installer: false,
+        binary: true,
+        claim_stress: false,
+        shell_matrix: false,
+      },
+    },
+    {
       name: "tests only",
       paths: [
         "station/src/station/input/stationMouse.test.ts",

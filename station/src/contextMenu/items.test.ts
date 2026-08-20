@@ -160,6 +160,11 @@ describe("buildContextMenuItems", () => {
         action: { kind: "renameSession", rowId: STATION_IDLE_SESSION_ID },
       },
       {
+        id: "station.moveToGroup",
+        label: "Move to Group…",
+        action: { kind: "moveToGroup", rowId: STATION_IDLE_SESSION_ID },
+      },
+      {
         id: "station.forkSession",
         label: "Fork Session",
         action: { kind: "forkSession", rowId: STATION_IDLE_SESSION_ID },
@@ -274,6 +279,11 @@ describe("buildContextMenuItems", () => {
         action: { kind: "renameSession", rowId: "ses_wt_station_none" },
       },
       {
+        id: "station.moveToGroup",
+        label: "Move to Group…",
+        action: { kind: "moveToGroup", rowId: "ses_wt_station_none" },
+      },
+      {
         id: "station.forkSession",
         label: "Fork Session",
         action: { kind: "forkSession", rowId: "ses_wt_station_none" },
@@ -319,6 +329,11 @@ describe("buildContextMenuItems", () => {
 
     expect(items).toEqual([
       {
+        id: "station.moveToGroup",
+        label: "Move to Group…",
+        action: { kind: "moveToGroup", rowId: "run_wt_station_idle" },
+      },
+      {
         id: "station.forkSession",
         label: "Fork Session",
         action: { kind: "forkSession", rowId: "run_wt_station_idle" },
@@ -356,10 +371,12 @@ describe("buildContextMenuItems", () => {
 
     expect(stationItems.map((item) => item.label)).toEqual([
       "Rename Session",
+      "Move to Group…",
       "Fork Session",
       "Delete Worktree…",
     ]);
     expect(externalItems.map((item) => item.label)).toEqual([
+      "Move to Group…",
       "Fork Session",
       "Delete Worktree…",
     ]);
@@ -390,6 +407,11 @@ describe("buildContextMenuItems", () => {
         id: "station.renameSession",
         label: "Rename Session",
         action: { kind: "renameSession", rowId: STATION_IDLE_SESSION_ID },
+      },
+      {
+        id: "station.moveToGroup",
+        label: "Move to Group…",
+        action: { kind: "moveToGroup", rowId: STATION_IDLE_SESSION_ID },
       },
       {
         id: "station.forkSession",
@@ -448,7 +470,7 @@ describe("buildContextMenuItems", () => {
     });
   });
 
-  it("keeps every Group-header target inert", () => {
+  it("builds the same Q/N/S/R actions for every Group-header target", () => {
     const store = createStationStore();
     const snapshot = manyProjectsSnapshot();
     const session = snapshot.sessions.find(({ id }) => id === STATION_IDLE_SESSION_ID);
@@ -484,8 +506,27 @@ describe("buildContextMenuItems", () => {
         stationState,
       );
 
-      expect(items.map(({ id }) => id)).toEqual(["station.noActions"]);
-      expect(resolveContextMenuAction(items[0])).toBeUndefined();
+      expect(items.map(({ id }) => id)).toEqual([
+        "group.quickSession",
+        "group.newSession",
+        "group.openSettings",
+        "group.remove",
+      ]);
+      expect(items.map(({ label }) => label)).toEqual([
+        "Quick session",
+        "New session…",
+        "Group settings…",
+        "Remove Group…",
+      ]);
+      expect(items.map(({ shortcut }) => shortcut)).toEqual(["Q", "N", "S", "R"]);
+      expect(items[2]?.separatorBefore).toBe(true);
+      expect(items[3]).toMatchObject({ separatorBefore: true, danger: true });
+      expect(resolveContextMenuAction(items[3])).toEqual({
+        kind: "groupMenuAction",
+        projectId: "station",
+        groupId: "grp_station_active",
+        actionId: "remove",
+      });
     }
 
     const frameItems = buildContextMenuItems(

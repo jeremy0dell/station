@@ -237,6 +237,19 @@ attach to different code. Compare `lsof -t <socket>` with the strict pidfile and
 `ps -ww -p <pid> -o lstart=,command=`, then retry only after resolving missing
 or conflicting evidence. Automatic handoff never uses SIGKILL.
 
+`OBSERVER_EXACT_BUILD_ACTIVATION_FAILED` means an explicit configured-runtime
+activation could not finish with the caller's exact immutable selector. The
+result's `phase` is `inspection`, `stop`, `start`, or `verification`, and
+`incumbentDisposition` reports `none`, `preserved`, `stopped`, or `unknown` for
+the Observer admitted at operation start. The hint retains the underlying safe
+cause code. In a checkout devbox, exact activation does not target the Station
+Host or hosted agents and does not reset `.dev-state`. Resolve inaccessible
+ownership before retrying a `preserved` result. Inspect status first for
+`unknown`. For `stopped`, the isolated Observer may be down while Host-owned
+PTYs remain live; rerun the same `pnpm station:devbox start` or `dev` command.
+Do not use reset as routine build recovery. Exact activation never signals,
+reaps, invokes devbox Host teardown, or hands off a later non-exact owner.
+
 ## Preserve Sessions Before Runtime Surgery
 
 When an Observer or Host handoff is blocked and live agent work must survive,
@@ -323,11 +336,11 @@ of merging different nonempty provider databases. Override provider locations wi
 `--target-codex-home`, `--target-opencode-db`, and
 `--target-claude-projects` when the target uses isolated homes.
 
-After startup reconcile, the Observer performs one report-only duplicate
+After startup reconcile, the Observer performs one read-only duplicate
 inspection. `stn doctor` reports this as `observer-singleton`: an eligible
 candidate or evidence refusal is a warning, while a clear result is healthy.
-The structured Observer log records `would-terminate`, candidate PIDs, refusal
-codes, keeper preservation, and claim release. Report-only mode sends no signal.
+The structured Observer log records candidate PIDs and refusal evidence. The
+inspection has no signal or boot-claim authority.
 Use `stn observer reap` to compare the current process, holder, pidfile,
 socket-identity, start-token, launch-token, build, executable, argv, and complete
 Unix-socket-FD evidence.
@@ -335,9 +348,8 @@ Unix-socket-FD evidence.
 `stn observer reap --force` remains the explicit operator path for a confirmed
 duplicate. It holds the boot claim, refreshes health and strict process/FD evidence,
 sends SIGTERM, and may send SIGKILL after the manual grace period only after another
-fresh revalidation. Automatic cleanup has no SIGKILL path: terminate mode, when
-promoted separately after field evidence, sends one SIGTERM and reports a
-survivor for manual inspection. Do not use forced reap as a generic response to
+fresh revalidation. Station has no automatic duplicate-process signal path. Do not
+use forced reap as a generic response to
 an inaccessible socket or a live wedged owner.
 
 `OBSERVER_BUILD_MISMATCH` means a client outlived the exact Observer selector

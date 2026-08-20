@@ -107,6 +107,29 @@ describe("ensureStationHostRunning", () => {
     });
   });
 
+  it("keeps a disposable runtime owner's Host in the foreground process group", async () => {
+    vi.stubEnv("STATION_RUNTIME_OWNER_FOREGROUND", "1");
+    const spawnHost = vi.fn(
+      (_input: SpawnStationHostInput): ChildProcessLike => ({ pid: 999, unref: () => undefined }),
+    );
+
+    const handle = await ensureStationHostRunning(
+      {
+        socketPath: absentSocketPath(),
+        stateDir: tmpdir(),
+        hostCommand: ["bun", "/tmp/hostMain.ts"],
+        expectedBuildVersion,
+      },
+      { clientFactory: () => fakeClient(), spawnHost },
+    );
+
+    expect(handle).toMatchObject({ status: "running", ensuredBy: "start" });
+    expect(spawnHost.mock.calls[0]?.[0].spawnOptions).toEqual({
+      detached: false,
+      stdio: "ignore",
+    });
+  });
+
   it("kills the spawned child and reports unavailable when it never gets healthy", async () => {
     const kill = vi.fn();
     const spawnHost = (_input: SpawnStationHostInput): ChildProcessLike => ({

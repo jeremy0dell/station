@@ -1,14 +1,13 @@
 import { randomUUID } from "node:crypto";
 import {
-  type EnsureAgentWorkspaceIntent,
-  type HarnessResumeOptions,
+  type FreshSessionGroupPlacementIntent,
   type ProviderId,
   type ProviderProjectConfig,
   type SafeError,
   type SessionGroupId,
-  type SessionGroupPlacementIntent,
   type SessionId,
   type SessionView,
+  type SourceSessionGroupPlacementIntent,
   type StationSnapshot,
   type TerminalLaunchProcessRequest,
   type TerminalLaunchProcessResult,
@@ -20,7 +19,7 @@ import {
 import {
   type RuntimeClock,
   type RuntimeSafeErrorFallback,
-  runRuntimeBoundaryWithTimeout,
+  runRuntimeBoundary,
   systemClock,
   toIsoTimestamp,
 } from "@station/runtime";
@@ -44,7 +43,6 @@ import {
   sessionGroupNotRootError,
   sessionGroupPlacementAssignmentConflictError,
   sessionGroupProjectMismatchError,
-  worktreeMissingError,
 } from "../errors.js";
 import type { CommandHandlerContext } from "../queue.js";
 
@@ -57,7 +55,6 @@ export type SessionCommandIdFactory = {
 
 export type SessionCommandRuntime = {
   clock?: RuntimeClock | undefined;
-  commandTimeoutMs?: number | undefined;
 };
 
 type ProviderMutationTrace = {
@@ -69,7 +66,6 @@ type ProviderMutationTrace = {
 type RunProviderMutationInput = {
   operation: string;
   fallback: RuntimeSafeErrorFallback;
-  timeoutFallback?: RuntimeSafeErrorFallback | undefined;
   trace?: ProviderMutationTrace | undefined;
   signal?: AbortSignal | undefined;
 } & SessionCommandRuntime;
@@ -81,11 +77,47 @@ export const defaultSessionCommandIdFactory: SessionCommandIdFactory = {
 
 /** Converts boundary placement intent into the exact placement owned by SessionStore. */
 export function sessionSeedGroupPlacement(
-  intent: SessionGroupPlacementIntent | undefined,
+  intent: FreshSessionGroupPlacementIntent | undefined,
   sessionGroupId: SessionCommandIdFactory["sessionGroupId"],
 ): SessionSeedGroupPlacement | undefined {
   if (intent === undefined || intent.kind === "existing") return intent;
+  if (intent.kind === "source") {
+    return { kind: "source", sourceSessionId: intent.sourceSessionId };
+  }
   return { kind: "create", groupId: sessionGroupId(), name: intent.name };
+}
+
+/** Re-resolves a submitted fork inheritance intent from current canonical source membership. */
+export function resolveForkSessionGroupPlacement(input: {
+  snapshot: StationSnapshot;
+  intent: SourceSessionGroupPlacementIntent | undefined;
+  projectId: string;
+  sourceWorktreeId?: string;
+}): SourceSessionGroupPlacementIntent | undefined {
+  const intent = input.intent;
+  if (intent === undefined) return undefined;
+  const sourceSession = input.snapshot.sessions.find(
+    (candidate) => candidate.id === intent.sourceSessionId,
+  );
+  if (sourceSession === undefined) return undefined;
+  if (
+    sourceSession.projectId !== input.projectId ||
+    (input.sourceWorktreeId !== undefined && sourceSession.worktreeId !== input.sourceWorktreeId)
+  ) {
+    throw commandValidationError({
+      code: "FORK_GROUP_SOURCE_MISMATCH",
+      message: "The source session Group intent no longer matches the selected worktree.",
+      projectId: input.projectId,
+      worktreeId: input.sourceWorktreeId,
+      sessionId: sourceSession.id,
+    });
+  }
+  const group = input.snapshot.sessionGroups.find(
+    (candidate) =>
+      candidate.projectId === input.projectId && candidate.sessionIds.includes(sourceSession.id),
+  );
+  if (group === undefined) return undefined;
+  return { kind: "source", sourceSessionId: sourceSession.id, groupId: group.id };
 }
 
 export function findProjectOrThrow(
@@ -151,13 +183,6 @@ export function worktreeObservationFromRow(
   return observation;
 }
 
-export type SessionCommandLookupRuntime = {
-  clock?: RuntimeClock | undefined;
-  commandTimeoutMs?: number | undefined;
-  signal?: AbortSignal | undefined;
-  trace?: ProviderMutationTrace | undefined;
-};
-
 export function commandValidationError(input: {
   code: string;
   message: string;
@@ -190,115 +215,6 @@ export function validateSnapshotRow(row: WorktreeRow | undefined, projectId: str
   });
 }
 
-export async function lookupWorktree(input: {
-  providers: ProviderRegistry;
-  projectId: string;
-  worktreeId: string;
-  runtime: SessionCommandLookupRuntime;
-}): Promise<WorktreeObservation> {
-  if (input.providers.worktree.getWorktree === undefined) {
-    throw worktreeMissingError({
-      projectId: input.projectId,
-      worktreeId: input.worktreeId,
-      message: "The requested worktree is not visible to the worktree provider.",
-    });
-  }
-
-  const worktree = await runProviderMutation(
-    {
-      ...input.runtime,
-      operation: `provider.${input.providers.worktree.id}.getWorktree`,
-      fallback: {
-        tag: "WorktreeProviderError",
-        code: "WORKTREE_LOOKUP_FAILED",
-        message: "The worktree provider failed to look up the worktree.",
-        provider: input.providers.worktree.id,
-      },
-    },
-    () =>
-      input.providers.worktree.getWorktree?.({
-        projectId: input.projectId,
-        worktreeId: input.worktreeId,
-      }) as Promise<WorktreeObservation | null>,
-  );
-  if (worktree === null) {
-    throw worktreeMissingError({
-      projectId: input.projectId,
-      worktreeId: input.worktreeId,
-      message: "The requested worktree is not visible to the worktree provider.",
-    });
-  }
-  if (worktree.projectId !== input.projectId) {
-    throw commandValidationError({
-      code: "WORKTREE_PROJECT_MISMATCH",
-      message: "The requested worktree belongs to a different configured project.",
-      projectId: input.projectId,
-      worktreeId: input.worktreeId,
-    });
-  }
-  if (worktree.state !== "exists") {
-    throw worktreeMissingError({
-      projectId: input.projectId,
-      worktreeId: input.worktreeId,
-      message: "The requested worktree no longer has a working directory.",
-    });
-  }
-  return worktree;
-}
-
-/**
- * One workspace-intent envelope for session.create, startAgent, and resumeAgent.
- * Each caller supplies only the harness fields and resume target it knows about;
- * absent optional fields stay absent to satisfy exactOptionalPropertyTypes.
- */
-export function buildEnsureAgentWorkspaceIntent(input: {
-  commandId: string;
-  project: ProviderProjectConfig;
-  worktree: WorktreeObservation;
-  sessionId: string;
-  terminalProvider: string;
-  harnessProvider: string;
-  harness?:
-    | {
-        mode?: "interactive" | "exec" | undefined;
-        profile?: string | undefined;
-        approvalPolicy?: string | undefined;
-        sandboxMode?: string | undefined;
-      }
-    | undefined;
-  layout: string;
-  focus?: boolean | undefined;
-  origin?: EnsureAgentWorkspaceIntent["origin"] | undefined;
-  initialPrompt?: string | undefined;
-  resume?: HarnessResumeOptions | undefined;
-}): EnsureAgentWorkspaceIntent {
-  const intent: EnsureAgentWorkspaceIntent = {
-    type: "session.ensureAgentWorkspace",
-    commandId: input.commandId,
-    terminalProvider: input.terminalProvider,
-    project: input.project,
-    worktree: input.worktree,
-    sessionId: input.sessionId,
-    harness: {
-      provider: input.harnessProvider,
-    },
-    layout: input.layout,
-  };
-  if (input.harness?.mode !== undefined) intent.harness.mode = input.harness.mode;
-  if (input.harness?.profile !== undefined) intent.harness.profile = input.harness.profile;
-  if (input.harness?.approvalPolicy !== undefined) {
-    intent.harness.approvalPolicy = input.harness.approvalPolicy;
-  }
-  if (input.harness?.sandboxMode !== undefined) {
-    intent.harness.sandboxMode = input.harness.sandboxMode;
-  }
-  if (input.resume !== undefined) intent.resume = input.resume;
-  if (input.focus !== undefined) intent.focus = input.focus;
-  if (input.origin !== undefined) intent.origin = input.origin;
-  if (input.initialPrompt !== undefined) intent.initialPrompt = input.initialPrompt;
-  return intent;
-}
-
 /**
  * Reuse the worktree's last observed harness before project default; shared by
  * session.startAgent and external launch so both choose identically.
@@ -322,6 +238,8 @@ export async function seedSession(input: {
   projectId: string;
   worktreeId: string;
   initialTitle: string;
+  harness: ProviderId;
+  terminalProvider: ProviderId;
   group?: SessionSeedGroupPlacement;
   clock?: RuntimeClock | undefined;
 }): Promise<Extract<SessionSeedResult, { ok: true }>> {
@@ -331,13 +249,16 @@ export async function seedSession(input: {
     projectId: input.projectId,
     worktreeId: input.worktreeId,
     initialTitle: input.initialTitle.trim(),
+    harness: input.harness,
+    terminalProvider: input.terminalProvider,
     createdAt: seededAt,
     lastSeenAt: seededAt,
     ...(input.group === undefined ? {} : { group: input.group }),
   });
   if (result.ok) return result;
 
-  const groupId = input.group?.groupId ?? "generated";
+  const groupId =
+    input.group?.kind === "source" ? "source-group" : (input.group?.groupId ?? "generated");
   switch (result.reason) {
     case "group_not_found":
       throw sessionGroupMissingError(groupId, input.projectId);
@@ -378,24 +299,21 @@ export async function discardSessionSeedBestEffort(input: {
   }
 }
 
+/** Normalizes one provider call while its concrete adapter owns bounded external settlement. */
 export async function runProviderMutation<T>(
   input: RunProviderMutationInput,
   task: (signal: AbortSignal) => Promise<T>,
 ): Promise<T> {
   const clock = input.clock ?? systemClock;
-  const boundaryInput: Parameters<typeof runRuntimeBoundaryWithTimeout<T>>[0] = {
+  const boundaryInput: Parameters<typeof runRuntimeBoundary<T>>[0] = {
     operation: input.operation,
     clock,
-    timeoutMs: input.commandTimeoutMs ?? 30_000,
     error: input.fallback,
   };
-  if (input.timeoutFallback !== undefined) {
-    boundaryInput.timeoutError = input.timeoutFallback;
-  }
   if (input.trace !== undefined) {
     boundaryInput.trace = input.trace;
   }
-  const result = await runRuntimeBoundaryWithTimeout(boundaryInput, async ({ signal }) => {
+  const result = await runRuntimeBoundary(boundaryInput, async ({ signal }) => {
     const linked = linkAbortSignals(signal, input.signal);
     try {
       throwIfAborted(linked.signal);
@@ -443,15 +361,8 @@ export async function launchHarnessInTerminal(
       message: "The terminal provider failed to launch the harness process.",
       provider: input.terminal.id,
     },
-    timeoutFallback: {
-      tag: "TimeoutError",
-      code: "TERMINAL_LAUNCH_TIMEOUT",
-      message: "The terminal provider timed out while launching the harness process.",
-      provider: input.terminal.id,
-    },
   };
   if (input.clock !== undefined) mutationInput.clock = input.clock;
-  if (input.commandTimeoutMs !== undefined) mutationInput.commandTimeoutMs = input.commandTimeoutMs;
   if (input.signal !== undefined) mutationInput.signal = input.signal;
   if (input.trace !== undefined) mutationInput.trace = input.trace;
 
@@ -482,7 +393,7 @@ export async function launchHarnessInTerminal(
 
 export async function removeWorktreeBestEffort(input: {
   providers: ProviderRegistry;
-  projectId: string;
+  project: ProviderProjectConfig;
   worktreeId: string;
   expectedPath: string;
   expectedBranch: string;
@@ -490,7 +401,6 @@ export async function removeWorktreeBestEffort(input: {
   context: CommandHandlerContext;
   logger?: StationLogger | undefined;
   clock?: RuntimeClock | undefined;
-  commandTimeoutMs?: number | undefined;
 }): Promise<boolean> {
   if (input.expectedRegistrationIdentity === undefined) {
     await input.logger?.warn("Session cleanup skipped an unverified worktree removal.", {
@@ -498,7 +408,7 @@ export async function removeWorktreeBestEffort(input: {
       traceId: input.context.trace.traceId,
       provider: input.providers.worktree.id,
       operation: "removeWorktree",
-      projectId: input.projectId,
+      projectId: input.project.id,
       worktreeId: input.worktreeId,
       refusalReason: "registration_unverified",
     });
@@ -510,7 +420,6 @@ export async function removeWorktreeBestEffort(input: {
       {
         operation: `provider.${input.providers.worktree.id}.removeWorktree.cleanup`,
         clock: input.clock,
-        commandTimeoutMs: cleanupTimeoutMs(input.commandTimeoutMs),
         trace: input.context.trace,
         fallback: {
           tag: "WorktreeProviderError",
@@ -521,7 +430,7 @@ export async function removeWorktreeBestEffort(input: {
       },
       () =>
         input.providers.worktree.removeWorktree({
-          projectId: input.projectId,
+          project: input.project,
           worktreeId: input.worktreeId,
           expectedPath: input.expectedPath,
           expectedBranch: input.expectedBranch,
@@ -536,7 +445,7 @@ export async function removeWorktreeBestEffort(input: {
       traceId: input.context.trace.traceId,
       provider: input.providers.worktree.id,
       operation: "removeWorktree",
-      projectId: input.projectId,
+      projectId: input.project.id,
       worktreeId: input.worktreeId,
       error,
     });
@@ -570,8 +479,4 @@ export async function publishSessionCreated(input: {
 
 function safeError(input: SafeError): SafeError {
   return input;
-}
-
-function cleanupTimeoutMs(commandTimeoutMs: number | undefined): number {
-  return Math.min(commandTimeoutMs ?? 30_000, 5_000);
 }

@@ -19,9 +19,7 @@ import {
 } from "@station/harness-shared";
 import { runExternalCommand, safeErrorFromUnknown } from "@station/runtime";
 import { z } from "zod";
-import { classifyClaudeRunStatus } from "./classify.js";
 import { claudeProviderErrorFromUnknown } from "./errors.js";
-import { normalizeClaudeRawEvent } from "./events.js";
 import { doctorClaudeHooks, resolveClaudeSettingsArtifactPath } from "./hooks.js";
 import {
   buildClaudeLaunchPlan,
@@ -48,7 +46,6 @@ const baseCapabilities: HarnessCapabilities = {
   canLaunch: true,
   canDiscoverRuns: true,
   canEmitEvents: true,
-  canClassifyStatus: true,
   canReceivePrompt: false,
   canResume: false,
   canStop: false,
@@ -90,13 +87,7 @@ const claudeSpec: TerminalBoundHarnessProviderSpec<ClaudeHarnessProviderOptions>
       }),
   },
   buildLaunch,
-  classifyRun: (run) => classifyClaudeRunStatus(run),
-  ingestEvent: {
-    operation: "provider.claude.ingestEvent",
-    errorCode: "HARNESS_CLAUDE_EVENT_INGEST_FAILED",
-    errorMessage: "The Claude Code harness provider failed to ingest an event.",
-    normalize: (event, context) => normalizeClaudeRawEvent(event, context),
-  },
+  unknownStatusReason: "Claude Code run has no reliable Claude status signal yet.",
   doctorChecks,
   hooksStatus,
   version: { latestPackage: "@anthropic-ai/claude-code" },

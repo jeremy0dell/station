@@ -68,9 +68,14 @@ client-owned source; dashboard queries are reserved for reads where local
 filter, focus, screen, or optimistic state participates.
 
 Semantic execution enters through capabilities selected at composition
-(activation, managed sessions, dismissal, shell), never through state
-replacement or synthetic key replay. The runtime owns subscriptions, timers,
-operation bookkeeping, and cancellation; disposal is idempotent and testable.
+(activation, managed sessions, worktree removal, dismissal, shell), never through state
+replacement or synthetic key replay. Observer-backed worktree removal first
+obtains authoritative validation and an opaque worktree reservation, then invokes
+optional renderer PTY settlement, dispatches the reservation-qualified command,
+and finalizes renderer layout only after command success; preparation or renderer
+failure performs no command mutation and cancels the unused reservation. The
+runtime owns subscriptions, timers, operation bookkeeping, and cancellation;
+disposal is idempotent and testable.
 
 New Session owns one bounded review flow shared by native and standalone
 renderers. Its Group field selects Ungrouped, a current same-project root Group
@@ -84,6 +89,28 @@ requested Group relationship and performs one explicit load after timeout. If
 launch succeeded but visibility remains uncertain—or safe cleanup retained the
 fresh worktree—the operation closes with a warning instead of permitting a
 duplicate branch submission.
+
+Group Settings is one stable-ID screen per canonical Group, with General,
+Sessions, and Remove Group sections. Activating the Group `[▾]` control opens a
+stable-ID Group menu anchored to that cell. Quick Session and preselected New
+Session reuse their existing workflows; Group Settings… opens General and
+Remove Group… opens Remove without the menu owning settings state. General
+captures the Group version for one `sessionGroup.rename`. Sessions captures that version plus each Project
+session's expected current Group, stages desired membership locally, and emits
+one atomic `sessionGroup.updateMembership` add/remove delta; selecting a member
+of another Group is an expected move, and an empty desired set is valid. Remove
+requires `delete <Group name>` and emits only `sessionGroup.delete`, so member
+sessions and runtime resources remain open and become ungrouped.
+
+Completed rename and membership commands reseed their editor from canonical
+client state while retaining the settings screen and Group identity. Ordinary
+failure retains the draft or staged intent and returns focus to the initiating
+Save control; assignment/version conflicts are never retried. Snapshot
+replacement preserves the active draft, prunes sessions that cease to be
+canonical, and uses ordinary screen/focus reconciliation when the Group or
+Project disappears. Successful deletion closes settings and focuses the owning
+Project header. Pending settings mutations intercept keys and pointer input and
+add no generic pending, disconnected, failure, or disappearance screen.
 
 ## Dashboard hierarchy, cursor, and viewport
 
@@ -109,27 +136,36 @@ Station renderers
 `selectors/dashboardTree.ts` is the sole dashboard hierarchy adapter. It joins
 canonical sessions to worktree metadata, merges optimistic creates, applies
 filter and collapse state, and projects Project roots, direct Group blocks,
-project-root sessions, inert Group closing-frame rows, and inert gaps. Every
+project-root sessions, inert Group closing-frame rows, and inert inter-project gaps. Every
 expanded Group ends with one cell-less frame row, including an empty Group, so
 the visible ring has truthful viewport height without gaining focus, a slot, or
-an action. `snapshot.sessionGroups` is the exclusive membership authority;
+an action. That closing edge is part of the frame, not a synthetic spacer before
+or after the Group block. `snapshot.sessionGroups` is the exclusive membership authority;
 optional parent links are deliberately flattened. Ordinary optimistic create
 rows remain at the project root. A Quick Group launch may temporarily target
 one pending row at its new Group and suppress the exact matching ungrouped
 canonical row while the expected membership command converges. That placement
 is renderer-local intent, never inferred or durable membership, and is pruned
 as soon as canonical truth places the session or removes its target.
-Quick Session and Fork otherwise place optimistic create rows at the project
-root until canonical replacement; deliberate New Session retains its sheet and
-never creates such a row.
-The renderer-local `GroupOrderingMode` chooses Groups-first or whole-block
-alphabetical interleaving without changing canonical arrays.
+Quick Session and explicitly Ungrouped Fork place optimistic create rows at the project root until
+canonical replacement. A Group-inheriting Fork targets its optimistic row at the source Group ID;
+a source move, deletion, or canonical replacement prunes that hint without synthesizing membership
+or exposing a duplicate root row. Deliberate New Session retains its sheet and never creates such a
+row.
+The renderer-local `GroupOrderingMode` is `"groups-first" | "alphabetical-interleaved"`.
+Groups-first is the default and places alphabetized Group blocks before project-root sessions.
+Alphabetical interleaving compares Group names with root-session display titles while keeping each
+Group header, direct members, and closing edge together as one block. Neither mode changes canonical
+arrays, collapse state, filtering, or the continuous slots assigned only to rendered sessions; no
+public config currently selects the mode.
 The internal `treeGrid.ts` controller knows only immutable nodes, ordered cells,
 visibility, and a supplied eligibility policy; it has no dashboard or terminal
 knowledge and is not a package entrypoint.
 
 Project and Group collapse sets remain renderer-local and survive snapshot
-replacement even when an ID is temporarily absent. Persistent filtering admits
+replacement, Observer restart, and warm popup dismissal/reopen even when an ID is temporarily
+absent. Filtering and ordering never mutate either collapse set; resize and scroll changes retain or
+deterministically reconcile the stable cursor and viewport. Persistent filtering admits
 session rows through one candidate projection while retaining durable Project
 and Group containers; Group-name matches provide member text context, member
 matches retain their Group header, and container match ranges remain semantic
@@ -146,9 +182,9 @@ menu owns Quick Group, New Group, default-agent, and settings transitions.
 Group rows always use `identity` and show `quickSession` and `menu` by default.
 Runtime composition may independently omit either optional action; omitted cells
 are not rendered, focusable, or activatable. This visibility seam has no public
-config key yet. Identity toggles collapse, `[qs]` launches an ordinary Quick
-Session followed by one expected membership update, and `[▾]` remains a
-focusable no-op until the complete Group menu lands. Group Quick Session expands
+config key yet. Identity toggles collapse, the responsive `[qs]`/`[quick session]` action launches
+an ordinary Quick Session followed by one expected membership update, and `[▾]` opens the
+Q/N/S/R Group menu. Group Quick Session expands
 a collapsed Group for its optimistic row.
 The row remains Group-framed only as a convergence bridge; canonical placement
 still comes exclusively from `snapshot.sessionGroups`. A focused direct visible member decorates its Group with
@@ -169,9 +205,11 @@ scroll as ordinary projected rows.
 
 Pointer targets identify one `dashboardCell`. In dashboard mode both pointer
 activation and focused Enter resolve that cell through the current visible tree
-and dispatch the same `dashboard.cell.activate` transition. Invalid, hidden,
-filtered, or stale cell targets are inert. Chooser modes accept only canonical
-session identity cells and retain their existing slot semantics.
+and dispatch the same `dashboard.cell.activate` transition. The anchored Group
+menu and native Group-header context menu resolve Q/N/S/R through one validated
+stable-ID action path; native presentation does not own workflow behavior.
+Invalid, hidden, filtered, or stale cell targets are inert. Chooser modes accept
+only canonical session identity cells and retain their existing slot semantics.
 
 ## Package surface
 
@@ -193,8 +231,10 @@ projection, `state/runtimeEffectScope.ts` for private effect admission and
 settlement, `state/capabilities/*` for semantic renderer authority,
 `state/operations/*` for scope-bound command flow (including durable Group
 creation before optional Quick Session launch and expected membership), and
-`components/`/`widgets/` for shared layout and content logic. The `[tui]` config shapes live in
-`@station/contracts`; `@station/config` retains load/persist authority.
+`components/`/`widgets/` for shared layout and content logic. Dashboard-core owns responsive
+settings geometry; Station owns one OpenTUI settings shell, while each settings screen retains its
+navigation policy, detail controls, drafts, and mutation lifecycle. The `[tui]` config shapes
+live in `@station/contracts`; `@station/config` retains load/persist authority.
 
 ## Dependency direction and enforcement
 

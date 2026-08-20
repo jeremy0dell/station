@@ -1,15 +1,14 @@
 import { readFileSync } from "node:fs";
-import type { HarnessEventContext } from "@station/contracts";
-import { HarnessEventReportSchema } from "@station/contracts";
+import { HarnessEventReportSchema, STATION_SCHEMA_VERSION } from "@station/contracts";
 import { describe, expect, it } from "vitest";
 import { compactClaudeHookPayload } from "../../src/compaction";
 import {
   claudeHookPayloadReportId,
   claudeHookPayloadToHarnessEventReport,
-  normalizeClaudeRawEvent,
   parseClaudeHookEvent,
   statusFromClaudeHookEvent,
 } from "../../src/events";
+import { claudeHookAdapter } from "../../src/hookAdapter";
 import {
   claudeForwardedEventTypes,
   claudeIngressRuleForEventType,
@@ -150,66 +149,67 @@ describe("statusFromClaudeHookEvent", () => {
   });
 });
 
-describe("normalizeClaudeRawEvent", () => {
+describe("Claude hook report normalization", () => {
   it("drops unlisted-but-real claude events instead of erroring", () => {
-    const observations = normalizeClaudeRawEvent(
-      { provider: "claude", event: fixture("subagent-stop"), observedAt: now },
-      emptyContext(),
-    );
+    const decision = claudeHookAdapter.decideScope?.({
+      schemaVersion: STATION_SCHEMA_VERSION,
+      provider: "claude",
+      kind: "harness",
+      event: "SubagentStop",
+      receivedAt: now,
+      payload: fixture("subagent-stop") as Record<string, unknown>,
+    });
 
-    expect(observations).toEqual([]);
+    expect(decision).toEqual({ action: "ignore", reason: "event-not-forwarded" });
   });
 
-  it("prefers station identity fields over cwd correlation", () => {
+  it("carries station identity fields without historical context lookup", () => {
     const payload = {
       ...fixture("stop"),
       station_session_id: "ses_env",
       station_worktree_id: "wt_env",
       station_terminal_target_id: "tmux:station:@1:%2",
     };
-    const observations = normalizeClaudeRawEvent(
-      { provider: "claude", event: payload, observedAt: now },
-      contextWith({
-        terminalCwd: "/somewhere/else",
-        worktreePath: "/somewhere/else",
-      }),
-    );
+    const report = claudeHookPayloadToHarnessEventReport({
+      reportId: "report_stop",
+      observedAt: now,
+      payload,
+    });
 
-    expect(observations[0]).toMatchObject({
+    expect(report).toMatchObject({
       provider: "claude",
-      rawEventType: "Stop",
-      sessionId: "ses_env",
-      worktreeId: "wt_env",
-      harnessRunId: "claude:tmux:station:@1:%2",
+      eventType: "Stop",
+      correlation: {
+        sessionId: "ses_env",
+        worktreeId: "wt_env",
+        harnessRunId: "claude:tmux:station:@1:%2",
+      },
       status: { value: "idle" },
     });
   });
 
-  it("falls back to cwd correlation when identity fields are absent", () => {
-    const observations = normalizeClaudeRawEvent(
-      { provider: "claude", event: fixture("stop"), observedAt: now },
-      contextWith({
-        terminalCwd: "/work/project",
-        worktreePath: "/work/project",
-      }),
-    );
+  it("defers cwd-only identity resolution to Observer projection", () => {
+    const report = claudeHookPayloadToHarnessEventReport({
+      reportId: "report_stop",
+      observedAt: now,
+      payload: fixture("stop"),
+    });
 
-    expect(observations[0]).toMatchObject({
-      sessionId: "ses_ctx",
-      worktreeId: "wt_ctx",
-      harnessRunId: "claude:tmux:station:@1:%2",
+    expect(report.correlation).toEqual({
+      cwd: "/work/project",
+      nativeSessionId: "0b43511f-e55e-40c7-b2f7-5a733cf7cfd0",
     });
   });
 
-  it("emits telemetry-only observations for SessionEnd(clear)", () => {
-    const observations = normalizeClaudeRawEvent(
-      { provider: "claude", event: fixture("session-end-clear"), observedAt: now },
-      emptyContext(),
-    );
+  it("emits telemetry-only reports for SessionEnd(clear)", () => {
+    const report = claudeHookPayloadToHarnessEventReport({
+      reportId: "report_clear",
+      observedAt: now,
+      payload: fixture("session-end-clear"),
+    });
 
-    expect(observations).toHaveLength(1);
-    expect(observations[0]?.status).toBeUndefined();
-    expect(observations[0]?.providerData).toMatchObject({ reason: "clear" });
+    expect(report.status).toBeUndefined();
+    expect(report.providerData).toMatchObject({ reason: "clear" });
   });
 });
 
@@ -358,41 +358,4 @@ function fixture(name: string): unknown {
 
 function statusFor(name: string) {
   return statusFromClaudeHookEvent(parseClaudeHookEvent(fixture(name)), now);
-}
-
-function emptyContext(): HarnessEventContext {
-  return { projects: [], worktrees: [], terminalTargets: [] };
-}
-
-function contextWith(input: { terminalCwd: string; worktreePath: string }): HarnessEventContext {
-  return {
-    projects: [],
-    worktrees: [
-      {
-        id: "wt_ctx",
-        provider: "worktrunk",
-        projectId: "web",
-        branch: "task",
-        path: input.worktreePath,
-        state: "exists",
-        source: "worktrunk",
-        observedAt: now,
-      },
-    ],
-    terminalTargets: [
-      {
-        id: "tmux:station:@1:%2",
-        provider: "tmux",
-        projectId: "web",
-        worktreeId: "wt_ctx",
-        sessionId: "ses_ctx",
-        state: "open",
-        cwd: input.terminalCwd,
-        pid: 1234,
-        confidence: "high",
-        reason: "tmux pane has station identity binding.",
-        observedAt: now,
-      },
-    ],
-  };
 }

@@ -57,6 +57,7 @@ describe("buildBootRestorePlan (warm-vs-cold fork)", () => {
     expect(plan.workspace.panes[0]?.agentIdentity).toEqual({
       sessionId: "ses-1",
       terminalTargetId: "native:wt-42",
+      processOwner: "host",
       harnessProvider: "claude",
     });
   });

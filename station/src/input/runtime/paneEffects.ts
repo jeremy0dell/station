@@ -16,6 +16,10 @@ import type { Automation } from "../../config/stationConfig.js";
 import type { StationClientStateSource } from "@station/client";
 import type { WorktreeRow } from "@station/contracts";
 import { paneInputBytes } from "./sequenceNormalize.js";
+import {
+  closePaneWithTerminal,
+  type ManagedAgentPaneCleanupDeps,
+} from "./managedAgentPaneCleanup.js";
 import type { OpenPaneSpawn } from "../stationInput.js";
 
 /** Lines of scrollback per wheel tick, and arrow repeats per tick when a
@@ -74,6 +78,7 @@ type PaneEffectsDeps = {
   automations: readonly Automation[];
   writeToTerminal: ((paneId: PaneId, bytes: string) => boolean) | undefined;
   pasteToTerminal: ((paneId: PaneId, text: string) => boolean) | undefined;
+  reportExternalExit?: ManagedAgentPaneCleanupDeps["reportExternalExit"];
 };
 
 export function createPaneEffects(deps: PaneEffectsDeps): PaneEffects {
@@ -172,12 +177,13 @@ export function createPaneEffects(deps: PaneEffectsDeps): PaneEffects {
     let current: PaneId | undefined = paneId;
     while (current !== undefined && !visited.has(current)) {
       visited.add(current);
+      const pane = store.getState().workspace.panes.find((candidate) => candidate.id === current);
+      if (pane?.worktreeId !== undefined) return pane.worktreeId;
       for (const row of rows) {
         if (agentWorktreePaneId(row.id) === current || worktreePaneId(row.id) === current) {
           return row.id;
         }
       }
-      const pane = store.getState().workspace.panes.find((candidate) => candidate.id === current);
       current = pane?.split?.anchorPaneId;
     }
     return undefined;
@@ -246,6 +252,7 @@ export function createPaneEffects(deps: PaneEffectsDeps): PaneEffects {
         command === undefined && role === "shell" ? resolveAuxShellPlacement?.(paneId) : undefined;
       registry?.ensure(paneId, spawnOptions, createTerminal);
       const createOptions: CreatePaneOptions = { role };
+      if (spawn.worktreeId !== undefined) createOptions.worktreeId = spawn.worktreeId;
       // Tile the shell beside the worktree's agent pane when it exists, else split off the active
       // pane; rooting its own session stacked a full-screen pane over the current one.
       const split = shellSplitForWorktree(spawn, role) ?? activeShellSplit(role);
@@ -267,7 +274,11 @@ export function createPaneEffects(deps: PaneEffectsDeps): PaneEffects {
     // Host-placed when the daemon is up (survives a UI restart), else local.
     const createTerminal = resolveAuxShellPlacement?.(newId);
     registry?.ensure(newId, cwd === undefined ? undefined : { cwd }, createTerminal);
-    store.actions.createPane(newId, { split: { anchorPaneId, direction } });
+    const owner = selectPaneRecord(store.getState(), anchorPaneId)?.worktreeId;
+    store.actions.createPane(newId, {
+      split: { anchorPaneId, direction },
+      ...(owner === undefined ? {} : { worktreeId: owner }),
+    });
   }
 
   function runAutomation(automationId: string, anchorPaneId: PaneId): void {
@@ -285,7 +296,11 @@ export function createPaneEffects(deps: PaneEffectsDeps): PaneEffects {
       const newId: PaneId = `${SPLIT_PANE_ID_PREFIX}${splitSeq++}`;
       const createTerminal = resolveAuxShellPlacement?.(newId);
       registry?.ensure(newId, cwd === undefined ? undefined : { cwd }, createTerminal);
-      store.actions.createPane(newId, { split: { anchorPaneId: stepAnchor, direction: step.split } });
+      const owner = selectPaneRecord(store.getState(), anchorPaneId)?.worktreeId;
+      store.actions.createPane(newId, {
+        split: { anchorPaneId: stepAnchor, direction: step.split },
+        ...(owner === undefined ? {} : { worktreeId: owner }),
+      });
       // Execute appends CR (the shell's line terminator) to auto-submit; write leaves the command typed.
       sendWhenReady(newId, step.run === "execute" ? `${step.command}\r` : step.command);
       previousPaneId = newId;
@@ -297,11 +312,11 @@ export function createPaneEffects(deps: PaneEffectsDeps): PaneEffects {
   }
 
   function closePane(paneId: PaneId): void {
-    // Destroy the process before dropping the record. kill() closes a host-owned aux PTY on the
-    // host (so a closed pane never lingers as a reattachable orphan), kills a local shell's bridge,
-    // and is a no-op for an attached agent (the observer owns it — the pane then detaches on dispose).
-    registry?.get(paneId)?.terminal?.kill();
-    store.actions.closePane(paneId);
+    // Capture managed-agent identity before the pane record disappears; the exit event can arrive after reconcile disposes the registry entry.
+    closePaneWithTerminal(
+      { store, registry, reportExternalExit: deps.reportExternalExit },
+      paneId,
+    );
   }
 
   return {

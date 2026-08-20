@@ -5,9 +5,11 @@ import {
   type StationClientStateSource,
 } from "@station/client";
 import type {
+  FreshSessionGroupPlacementIntent,
   ProviderId,
   SafeError,
   SessionGroupPlacementIntent,
+  SourceSessionGroupPlacementIntent,
   StationCommand,
   WorktreeRow,
 } from "@station/contracts";
@@ -36,6 +38,7 @@ export type ManagedHostedSessionRequest = {
 export type ManagedHostedForkRequest = Omit<ManagedHostedSessionRequest, "group"> & {
   sourceWorktreeId: string;
   copyDirty: boolean;
+  group?: SourceSessionGroupPlacementIntent;
 };
 
 export type ManagedLaunchResult =
@@ -62,7 +65,7 @@ type HostedWorktreeLaunch = {
   title: string;
   branch: string;
   harness: ProviderId;
-  group?: SessionGroupPlacementIntent;
+  group?: FreshSessionGroupPlacementIntent;
   command: Extract<StationCommand, { type: "worktree.create" | "worktree.fork" }>;
   verb: "create" | "fork";
 };
@@ -70,8 +73,8 @@ type HostedWorktreeLaunch = {
 /**
  * Create native managed-launch execution without receiving dashboard state or actions.
  *
- * Worktree dispatch/completion failures remain distinguishable from launch preparation
- * failures; pre-launch Group rejection rolls back only the exact fresh worktree without force.
+ * Worktree dispatch/completion failures remain distinguishable from launch preparation failures;
+ * explicit New Session Group rejection rolls back only the exact fresh worktree without force.
  */
 export function createManagedLaunch(deps: ManagedLaunchDeps): ManagedLaunch {
   const runManagedLaunchAttempt = createManagedLaunchAttempt(deps);
@@ -171,6 +174,7 @@ export function createManagedLaunch(deps: ManagedLaunchDeps): ManagedLaunch {
             branch: request.branch,
             copyDirty: request.copyDirty,
             launchHarness: request.harness,
+            ...(request.group === undefined ? {} : { group: request.group }),
           },
         },
         verb: "fork",

@@ -252,6 +252,13 @@ function createFakeObserverService(initialSnapshot: StationSnapshot) {
       acknowledged: true,
       terminalTargetId: params.terminalTargetId,
     }),
+    prepareWorktreeRemoval: async (params) => ({
+      reservationId: "reservation_station_test",
+      projectId: params.projectId ?? "project",
+      worktreeId: params.worktreeId,
+      externalTerminalExitRequired: false,
+    }),
+    cancelWorktreeRemoval: async () => ({ cancelled: true }),
   };
 
   return {

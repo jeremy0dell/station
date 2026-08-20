@@ -81,6 +81,55 @@ function workflowJob(document: string, name: string): string {
   return lines.slice(start, end === -1 ? undefined : end).join("\n");
 }
 
+function predecessorSelector(document: string): string {
+  const selectors = [...document.matchAll(/node -e '\n([\s\S]*?)\n\s+' "\$[^"]+"/gu)]
+    .map((match) => match[1] ?? "")
+    .filter((script) => script.includes("No complete immutable published Station predecessor"));
+  expect(selectors).toHaveLength(1);
+  return selectors[0] ?? "";
+}
+
+function releaseFixture(
+  tag: string,
+  id: number,
+  publishedAt: string,
+): {
+  id: number;
+  tag_name: string;
+  draft: boolean;
+  immutable: boolean;
+  published_at: string;
+  assets: Array<{ id: number; name: string }>;
+} {
+  const version = tag.slice(1);
+  const names = [
+    "SHA256SUMS",
+    "install.sh",
+    ...["darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64"].map(
+      (target) => `stn-v${version}-${target}.tar.gz`,
+    ),
+  ];
+  return {
+    id,
+    tag_name: tag,
+    draft: false,
+    immutable: true,
+    published_at: publishedAt,
+    assets: names.map((name, index) => ({ id: id * 10 + index + 1, name })),
+  };
+}
+
+function selectPredecessor(
+  selector: string,
+  releases: readonly ReturnType<typeof releaseFixture>[],
+  excludedTag = "v9.9.9",
+): ReturnType<typeof spawnSync> {
+  return spawnSync(process.execPath, ["-e", selector, excludedTag], {
+    encoding: "utf8",
+    input: JSON.stringify([releases]),
+  });
+}
+
 const successfulCiEnvironment = {
   DOCS_ONLY: "false",
   INSTALLER_SELECTED: "true",
@@ -316,6 +365,7 @@ describe("hosted CI policy", () => {
     const aggregate = workflowJob(standardCi, "standard-ci");
 
     expect(binary).toContain("id: binary_smoke_run");
+    expect(binary).toContain("timeout-minutes: 15");
     expect(binary).toContain(
       `STATION_BINARY_SMOKE_EVIDENCE_DIR: ${actionsExpression("runner.temp")}/station-binary-smoke-evidence`,
     );
@@ -338,6 +388,102 @@ describe("hosted CI policy", () => {
       binary.indexOf("uses: actions/upload-artifact@"),
     );
     expect(aggregate).toContain(`BINARY_SMOKE: ${actionsExpression("needs.binary_smoke.result")}`);
+  });
+
+  it("executes each inline immutable-predecessor selector against hostile release fixtures", () => {
+    const selectors = [
+      predecessorSelector(read(".github/workflows/release.yml")),
+      predecessorSelector(read(".github/workflows/promote-release.yml")),
+    ];
+    const valid = releaseFixture("v1.2.3", 123, "2026-08-01T00:00:00Z");
+    const newer = releaseFixture("v1.2.4", 124, "2026-08-02T00:00:00Z");
+    const firstAsset = newer.assets[0];
+    if (firstAsset === undefined) throw new Error("Release fixture omitted its first asset.");
+    const invalid = [
+      { ...newer, draft: true },
+      { ...newer, immutable: false },
+      { ...newer, assets: newer.assets.slice(0, -1) },
+      { ...newer, assets: [...newer.assets.slice(0, -1), firstAsset] },
+      { ...newer, published_at: "not-a-date" },
+      { ...newer, tag_name: "v01.2.4" },
+      { ...newer, id: 0 },
+      { ...newer, assets: newer.assets.map((asset, index) => ({ ...asset, id: index })) },
+      {
+        ...newer,
+        assets: newer.assets.map((asset, index) => ({
+          ...asset,
+          id: index < 2 ? 999 : asset.id,
+        })),
+      },
+    ];
+
+    for (const selector of selectors) {
+      for (const malformed of invalid) {
+        const result = selectPredecessor(selector, [malformed, valid]);
+        expect(result.status, result.stderr).toBe(0);
+        expect(result.stdout).toBe(valid.tag_name);
+      }
+
+      const excluded = selectPredecessor(selector, [newer, valid], newer.tag_name);
+      expect(excluded.status, excluded.stderr).toBe(0);
+      expect(excluded.stdout).toBe(valid.tag_name);
+
+      const sameDateLowerId = releaseFixture("v1.2.5", 125, "2026-08-03T00:00:00Z");
+      const sameDateHigherId = releaseFixture("v1.2.6", 126, "2026-08-03T00:00:00Z");
+      const selected = selectPredecessor(selector, [valid, sameDateLowerId, sameDateHigherId]);
+      expect(selected.status, selected.stderr).toBe(0);
+      expect(selected.stdout).toBe(sameDateHigherId.tag_name);
+
+      const noCandidate = selectPredecessor(selector, invalid);
+      expect(noCandidate.status).not.toBe(0);
+    }
+  });
+
+  it("binds staged and public update acceptance to one exact predecessor", () => {
+    const release = read(".github/workflows/release.yml");
+    const promotion = read(".github/workflows/promote-release.yml");
+    const installDraft = workflowJob(release, "install-draft");
+    const createDraft = workflowJob(release, "create-draft");
+    const accepted = workflowJob(release, "record-accepted-candidate");
+    const promote = workflowJob(promotion, "promote");
+    const publicInstall = workflowJob(promotion, "verify-public-install");
+
+    expect(release).toContain(
+      `previous_tag: ${actionsExpression("steps.release.outputs.previous_tag")}`,
+    );
+    expect(release).toContain("previousTag: $previousTag");
+    expect(release).toContain(".previousTag == $previousTag");
+    expect(createDraft.indexOf("candidate/asset-ids.txt")).toBeLessThan(
+      createDraft.indexOf("release-candidate-input-"),
+    );
+    expect(createDraft).toContain("targetBuildIdentity: $targetBuildIdentity");
+    expect(installDraft).toContain("Fetch staged update assets and exact predecessor");
+    expect(installDraft).toContain("actions/download-artifact@");
+    expect(installDraft).toContain('awk -F= -v name="$name"');
+    expect(installDraft).toContain('cmp candidate/SHA256SUMS "$release_dir/SHA256SUMS"');
+    expect(installDraft).not.toContain("select(.name == $name)");
+    expect(installDraft).toContain('--target-release-dir "$RUNNER_TEMP/update-release"');
+    expect(installDraft).toContain('--target-build-identity "$target_build_identity"');
+    expect(installDraft).toContain("--scenarios full");
+    expect(installDraft).toContain("--busy-host-outcome preserved-refusal");
+    expect(accepted).toContain('test "$current_ids" = "$(cat candidate/asset-ids.txt)"');
+    expect(accepted).not.toContain(": > candidate/asset-ids.txt");
+
+    expect(promote).toContain('previous_tag="$(jq -er .previousTag candidate/manifest.json)"');
+    expect(promote).toContain(".previousTag == $previousTag");
+    expect(promote).toContain(".immutable");
+    expect(promotion).toContain("group: station-release-publication");
+    expect(promote).toContain('test "$freshest_previous" = "$previous_tag"');
+    expect(promote.indexOf('test "$freshest_previous" = "$previous_tag"')).toBeLessThan(
+      promote.indexOf("-F draft=false"),
+    );
+    expect(publicInstall).toContain("Install exact public predecessor");
+    expect(publicInstall).toContain('--public-target-tag "$TAG"');
+    expect(publicInstall).toContain('--target-build-identity "$TARGET_BUILD_IDENTITY"');
+    expect(publicInstall).toContain("--scenarios no-host");
+    expect(promotion).toContain(
+      "Confirm macOS partial crossover preserved old Host output and the target native UI visibly refused it",
+    );
   });
 
   it("keeps binary handoff stress manual, capped, and failure-artifact-only", () => {
@@ -395,6 +541,12 @@ describe("hosted CI policy", () => {
       "STATION_SETUP_E2E_ALL_SHELLS=true",
     );
     expect(packageJson.scripts["test:ci:binary"]).toContain("pnpm smoke:binary");
+    expect(packageJson.scripts["smoke:update"]).toBe(
+      "node scripts/test-runners/run-update-smoke.mjs",
+    );
+    expect(packageJson.scripts["test:ci:binary"]).toContain(
+      "pnpm smoke:update -- --incumbent-binary station/dist/bin/stn",
+    );
     expect(packageJson.scripts["test:ci:station"]).toContain("test:pty:bun");
     expect(lefthook).toContain("run: node scripts/run-without-git-locals.mjs pnpm test:pre-push");
     expect(testing).toContain("The pre-push hook is intentionally lint-only");

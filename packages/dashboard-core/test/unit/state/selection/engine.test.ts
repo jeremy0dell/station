@@ -196,6 +196,7 @@ describe("list registry — migrated modes", () => {
       "addProjectChoose",
       "addProjectFilter",
       "addProjectStart",
+      "moveToGroupDestination",
       "newSessionPickAgent",
       "newSessionPickGroup",
       "newSessionPickProject",

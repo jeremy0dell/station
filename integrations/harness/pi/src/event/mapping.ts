@@ -1,20 +1,9 @@
 // Pi events -> STATION HarnessEventObservation, normalized at the provider boundary.
 // Contract: STATION-native (first-party Pi harness, no external upstream) — see packages/contracts (HarnessEventReport).
 // STATION ingress flow: docs/harness-ingress.md.
-import type {
-  HarnessEventContext,
-  HarnessEventObservation,
-  HarnessEventReport,
-  ObservedStatus,
-  RawHarnessEvent,
-} from "@station/contracts";
+import type { HarnessEventReport, ObservedStatus } from "@station/contracts";
 import { HarnessEventReportSchema, STATION_SCHEMA_VERSION } from "@station/contracts";
-import {
-  applyCorrelation,
-  correlateTerminalBoundHarnessEvent,
-  harnessEventDiagnostics,
-  reportCorrelation,
-} from "@station/harness-shared";
+import { harnessEventDiagnostics, reportCorrelation } from "@station/harness-shared";
 import { piHarnessError } from "../errors.js";
 import { normalizePiEventType, type PiCompactEvent, parsePiCompactEvent } from "./compactEvent.js";
 
@@ -146,36 +135,6 @@ function assignProviderData(target: Record<string, unknown>, key: string, value:
 
 function assertNever(value: never): never {
   throw piHarnessError("HARNESS_PI_EVENT_INVALID", `Unhandled Pi event: ${String(value)}.`);
-}
-
-export function normalizePiRawEvent(
-  raw: RawHarnessEvent,
-  context: HarnessEventContext,
-): HarnessEventObservation[] {
-  const event = parsePiCompactEvent(raw.event);
-  const observedAt = raw.observedAt ?? new Date().toISOString();
-  const correlation = correlateTerminalBoundHarnessEvent({
-    provider: "pi",
-    identity: event,
-    context,
-    cwd: event.cwd,
-    nativeSessionFile: event.pi_session_file,
-    nativeSessionId: event.pi_session_file === undefined ? event.pi_session_id : undefined,
-    includeTerminalTargetId: true,
-  });
-  const observation: HarnessEventObservation = {
-    provider: "pi",
-    rawEventType: event.event_type,
-    status: statusFromPiEvent(event, observedAt),
-    observedAt,
-    providerData: providerDataFromPiEvent(event),
-  };
-  const turn = turnFromPiEvent(event);
-  if (turn !== undefined) {
-    observation.turn = turn;
-  }
-  applyCorrelation(observation, correlation);
-  return [observation];
 }
 
 export function piHookPayloadToHarnessEventReport(

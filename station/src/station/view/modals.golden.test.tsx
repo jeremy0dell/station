@@ -29,11 +29,15 @@ import {
   applyAddProjectFolderReviewFailed,
   applyAddProjectFolderReviewed,
   applyAddProjectSubmitted,
+  activateSessionGroupMenuAction,
   createInitialTuiState,
   handleTuiKey,
   openRemoveWorktreeConfirmForRow,
   openProjectDefaultAgentPicker,
   openCreateGroup,
+  openGroupMenu,
+  openGroupSettings,
+  openMoveToGroupForRow,
   openProjectMenu,
   openProjectSettings,
  } from "@station/dashboard-core/state";
@@ -114,6 +118,8 @@ const CASES: ModalCase[] = [
       "open visible session",
       "G",
       "quick group",
+      "M",
+      "move to group",
       "edit/apply/cancel-clear/retain-close filter",
       "╭",
       "╰",
@@ -133,6 +139,27 @@ const CASES: ModalCase[] = [
     expect: ["Quick Group", "New Group…", "Set default agent", "Project settings…"],
   },
   {
+    name: "Group menu",
+    keys: [],
+    snapshot: groupedManyProjectsSnapshot,
+    prepare: (state) => openGroupMenu(state, "group_design_refresh"),
+    expect: [
+      "Design refresh",
+      "Quick session",
+      "New session…",
+      "Group settings…",
+      "Remove Group…",
+    ],
+  },
+  {
+    name: "Group menu above a short viewport",
+    keys: [],
+    size: { width: 30, height: 9 },
+    snapshot: groupedManyProjectsSnapshot,
+    prepare: (state) => openGroupMenu(state, "group_design_refresh"),
+    expect: ["Quick session", "New session…", "Group settings…", "Remove Group…"],
+  },
+  {
     name: "create group sheet",
     keys: [],
     prepare: (state) => {
@@ -149,6 +176,31 @@ const CASES: ModalCase[] = [
       "Create Group (C)",
       "Cancel (Esc)",
     ],
+  },
+  {
+    name: "move to group destination sheet",
+    keys: [],
+    snapshot: groupedManyProjectsSnapshot,
+    prepare: (state) => openMoveToGroupForRow(state, "ses_wt_group_contracts"),
+    expect: [
+      "Move to Group",
+      "Session    group-contracts",
+      "Current    Design refresh",
+      "U Ungrouped",
+      "1 Design refresh",
+      "N Create new Group…",
+    ],
+  },
+  {
+    name: "move to group create sheet",
+    keys: [],
+    snapshot: groupedManyProjectsSnapshot,
+    prepare: (state) => {
+      const opened = openMoveToGroupForRow(state, "ses_wt_group_contracts");
+      const creating = handleTuiKey(opened, { input: "N" }).state;
+      return handleTuiKey(creating, { input: "Release" }).state;
+    },
+    expect: ["Create Group", "Session    group-contracts", "Group", "Release", "Create and Move"],
   },
   {
     name: "persistent filter header editor",
@@ -239,9 +291,69 @@ const CASES: ModalCase[] = [
     expect: ["Project Settings", "↑↓ move   ↵ select   1-9/a-z jump   Esc cancel", "station"],
   },
   {
+    name: "group settings general",
+    keys: [{ input: "", rightArrow: true }],
+    snapshot: groupedManyProjectsSnapshot,
+    prepare: (state) => openGroupSettings(state, "group_design_refresh", "general"),
+    expect: [
+      "Group settings · Design refresh",
+      "General",
+      "Sessions",
+      "Remove Group",
+      "Project station (read-only)",
+      "Save",
+      "Cancel",
+    ],
+  },
+  {
+    name: "group settings sessions compact",
+    keys: [],
+    snapshot: groupedManyProjectsSnapshot,
+    size: { width: 40, height: 12 },
+    prepare: (state) =>
+      handleTuiKey(
+        openGroupSettings(state, "group_design_refresh", "sessions"),
+        { input: "", rightArrow: true },
+      ).state,
+    expect: ["Sessions · Design refresh", "[✓]", "Save", "Back"],
+  },
+  {
+    name: "group settings remove short",
+    keys: [],
+    snapshot: groupedManyProjectsSnapshot,
+    size: { width: 40, height: 12 },
+    prepare: (state) =>
+      activateSessionGroupMenuAction(state, {
+        projectId: "station",
+        groupId: "group_design_refresh",
+        actionId: "remove",
+      }).state,
+    expect: ["Remove Group", "remain open", "delete Design refresh", "Remove", "Back"],
+  },
+  {
     name: "project settings panel",
     keys: [{ input: "P" }, { input: "1" }],
     expect: ["Project settings", "Default agent", "Remove project", "✓ current"],
+  },
+  {
+    name: "project settings compact list",
+    keys: [],
+    size: { width: 40, height: 12 },
+    prepare: (state) => openProjectSettings(state, "station"),
+    expect: ["Project settings", "Default agent", "Remove project"],
+    reject: ["✓ current"],
+  },
+  {
+    name: "project settings compact detail",
+    keys: [],
+    size: { width: 40, height: 12 },
+    prepare: (state) =>
+      handleTuiKey(openProjectSettings(state, "station"), {
+        input: "",
+        rightArrow: true,
+      }).state,
+    expect: ["Default agent · station", "✓ current"],
+    reject: ["Remove project"],
   },
   {
     name: "project settings remove pane",
@@ -360,6 +472,17 @@ const CASES: ModalCase[] = [
       "↑↓ focus · Enter fork · Esc back",
     ],
     reject: ["Branch"],
+  },
+  {
+    name: "fork details grouped source",
+    keys: [{ input: "F" }, { input: "1" }, { input: "", downArrow: true }],
+    snapshot: groupedManyProjectsSnapshot,
+    expect: [
+      "Fork Session",
+      "▸ Group",
+      "[x] create in Design refresh",
+      "Space/Enter toggle · ↑↓ focus · Esc back",
+    ],
   },
   {
     name: "fork details copy focus",

@@ -24,6 +24,7 @@ const paneRecordSchema = z
     id: paneIdSchema,
     split: paneSplitSchema.nullable(),
     role: z.enum(["primary-agent", "shell"]),
+    worktreeId: z.string().min(1).optional(),
     // A host-attached pane's PTY identity, used on the next boot to reattach it to
     // its live host PTY (and re-validated against the live host, never trusted blindly).
     terminalTargetId: z.string().min(1).optional(),
@@ -65,6 +66,7 @@ export function buildLayoutSnapshot(
         id: pane.id,
         split: pane.split,
         role: pane.role,
+        ...(pane.worktreeId === undefined ? {} : { worktreeId: pane.worktreeId }),
         ...(target === undefined ? {} : { terminalTargetId: target }),
       };
     }),

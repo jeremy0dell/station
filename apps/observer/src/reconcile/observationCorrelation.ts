@@ -5,7 +5,6 @@ import type {
 } from "@station/contracts";
 import { pathIsSameOrInside } from "@station/runtime";
 import type { PersistedSession } from "../persistence/index.js";
-import type { ObserverHarnessRun } from "./harnessEventStatus.js";
 
 /**
  * Reattaches terminal targets to the current worktree identity, preferring an unambiguous cwd match.
@@ -30,25 +29,22 @@ export function normalizeTerminalTargetsForCurrentWorktrees(input: {
  * Reattaches discovered harness runs to current worktree identities after terminal correlation.
  */
 export function normalizeHarnessRunsForCurrentWorktrees(input: {
-  harnessRuns: ObserverHarnessRun[];
+  harnessRuns: HarnessRunObservation[];
   worktrees: WorktreeObservation[];
   terminalTargets: TerminalTargetObservation[];
-}): ObserverHarnessRun[] {
+}): HarnessRunObservation[] {
   return input.harnessRuns.map((harnessRun) => {
     const worktree = resolveHarnessRunWorktree({
-      run: harnessRun.run,
+      run: harnessRun,
       worktrees: input.worktrees,
       terminalTargets: input.terminalTargets,
     });
-    if (worktree === undefined || harnessRun.run.worktreeId === worktree.id) {
+    if (worktree === undefined || harnessRun.worktreeId === worktree.id) {
       return harnessRun;
     }
     return {
       ...harnessRun,
-      run: {
-        ...harnessRun.run,
-        worktreeId: worktree.id,
-      },
+      worktreeId: worktree.id,
     };
   });
 }
@@ -58,18 +54,18 @@ export function normalizeHarnessRunsForCurrentWorktrees(input: {
  */
 export function reattachSessionTitleEvidence(input: {
   sessions: PersistedSession[];
-  harnessRuns: readonly ObserverHarnessRun[];
+  harnessRuns: readonly HarnessRunObservation[];
   terminalTargets: readonly TerminalTargetObservation[];
 }): PersistedSession[] {
   return input.sessions.map((session) => {
     const currentWorktreeIds = new Set<string>();
     for (const harnessRun of input.harnessRuns) {
       if (
-        harnessRun.run.sessionId === session.id &&
-        harnessRun.run.projectId === session.projectId &&
-        harnessRun.run.worktreeId !== undefined
+        harnessRun.sessionId === session.id &&
+        harnessRun.projectId === session.projectId &&
+        harnessRun.worktreeId !== undefined
       ) {
-        currentWorktreeIds.add(harnessRun.run.worktreeId);
+        currentWorktreeIds.add(harnessRun.worktreeId);
       }
     }
     for (const terminal of input.terminalTargets) {

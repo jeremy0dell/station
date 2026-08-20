@@ -33,7 +33,7 @@ export async function defaultSpawnObserver(
     const [command, ...args] = argv;
     child = spawn(command, args, {
       detached: process.env.STATION_RUNTIME_OWNER_FOREGROUND !== "1",
-      env: environmentWithoutGitLocals(),
+      env: observerSpawnEnvironment(input),
       stdio: ["ignore", bootLog.fd, bootLog.fd],
     });
     const startedChild = Object.assign(
@@ -53,12 +53,29 @@ export async function defaultSpawnObserver(
   }
 }
 
+/**
+ * Builds a child environment that defaults to generic singleton ordering and only
+ * opts into preserve-incumbent admission for an explicit exact-build activation.
+ */
+export function observerSpawnEnvironment(
+  input: Pick<DefaultSpawnObserverInput, "incumbentPolicy">,
+  inheritedEnvironment: NodeJS.ProcessEnv = process.env,
+): NodeJS.ProcessEnv {
+  const env = environmentWithoutGitLocals(inheritedEnvironment);
+  delete env.STATION_OBSERVER_STARTUP_POLICY;
+  if (input.incumbentPolicy === "preserve") {
+    env.STATION_OBSERVER_STARTUP_POLICY = "preserve-incumbent";
+  }
+  return env;
+}
+
 export function observerSpawnArgv(input: DefaultSpawnObserverInput): [string, ...string[]] {
   // Compiled dist/observerProcess/spawn.js must resolve ../observerMain.js; source-alias tests launch the built entry instead.
   const observerEntry = import.meta.url.endsWith(".ts")
     ? new URL("../../dist/observerMain.js", import.meta.url)
     : new URL("../observerMain.js", import.meta.url);
-  const observerCommand = selfExecArgv("observer", [process.execPath, observerEntry.pathname]);
+  const observerCommand =
+    input.observerCommand ?? selfExecArgv("observer", [process.execPath, observerEntry.pathname]);
   return [
     ...observerCommand,
     "--socket",

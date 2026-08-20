@@ -1,3 +1,4 @@
+import type { SessionId } from "@station/contracts";
 import type { DashboardActions, DashboardStateSource } from "@station/dashboard-core/runtime";
 import type {
   CreateGroupActionId,
@@ -10,6 +11,9 @@ import type {
   DashboardFilterConditionField,
   ForkSessionActionId,
   FreshStartActionId,
+  GroupMenuActionId,
+  GroupSettingsDetailFocus,
+  GroupSettingsSection,
   NewSessionActionId,
   PersistentFilterActionId,
   ProjectSettingsItemId,
@@ -55,6 +59,10 @@ export type StationMouseTarget =
   | { kind: "freshStartAction"; actionId: FreshStartActionId }
   | { kind: "projectSettingsItem"; itemId: ProjectSettingsItemId }
   | { kind: "projectSettingsConfirmRemove" }
+  | { kind: "groupSettingsSection"; section: GroupSettingsSection }
+  | { kind: "groupSettingsControl"; control: GroupSettingsDetailFocus }
+  | { kind: "groupSettingsSession"; sessionId: SessionId }
+  | { kind: "groupSettingsAction"; actionId: "save" | "back" }
   | { kind: "widgetSettingsOpen" }
   | { kind: "widgetSettingsRow"; index: number }
   | { kind: "widgetSettingsRemove"; index: number }
@@ -64,7 +72,9 @@ export type StationMouseTarget =
   | { kind: "addProjectAction"; actionId: AddProjectActionId }
   | { kind: "newSessionAction"; actionId: NewSessionActionId }
   | { kind: "projectMenuAction"; actionId: ProjectMenuInputActionId }
+  | { kind: "groupMenuAction"; actionId: GroupMenuActionId }
   | { kind: "createGroupAction"; actionId: CreateGroupActionId }
+  | { kind: "moveToGroupCreateSubmit" }
   | { kind: "renameSessionSubmit" }
   | { kind: "forkSessionAction"; actionId: ForkSessionActionId }
   | { kind: "screenBackdrop" }
@@ -188,6 +198,37 @@ export function routeStationMouse(
     case "projectSettingsConfirmRemove":
       confirmProjectRemoval(runtime, mode);
       return { kind: "handled" };
+    case "groupSettingsSection":
+      if (mode === "groupSettings") {
+        runtime.actions.dispatch({
+          type: "groupSettings.section.select",
+          section: target.section,
+        });
+      }
+      return { kind: "handled" };
+    case "groupSettingsControl":
+      if (mode === "groupSettings") {
+        runtime.actions.dispatch({
+          type: "groupSettings.control.focus",
+          control: target.control,
+        });
+      }
+      return { kind: "handled" };
+    case "groupSettingsSession":
+      if (mode === "groupSettings") {
+        runtime.actions.dispatch({
+          type: "groupSettings.session.toggle",
+          sessionId: target.sessionId,
+        });
+      }
+      return { kind: "handled" };
+    case "groupSettingsAction":
+      if (mode === "groupSettings") {
+        runtime.actions.dispatch({
+          type: target.actionId === "save" ? "groupSettings.save" : "groupSettings.back",
+        });
+      }
+      return { kind: "handled" };
     case "widgetSettingsOpen":
       if (mode === "dashboard") runtime.actions.dispatch({ type: "widgetSettings.open" });
       return { kind: "handled" };
@@ -223,8 +264,14 @@ export function routeStationMouse(
     case "projectMenuAction":
       dispatchStationAction(runtime, { type: "projectMenu.activate", actionId: target.actionId });
       return { kind: "handled" };
+    case "groupMenuAction":
+      dispatchStationAction(runtime, { type: "groupMenu.activate", actionId: target.actionId });
+      return { kind: "handled" };
     case "createGroupAction":
       dispatchStationAction(runtime, { type: "createGroup.activate", actionId: target.actionId });
+      return { kind: "handled" };
+    case "moveToGroupCreateSubmit":
+      dispatchStationAction(runtime, { type: "moveToGroup.create.submit" });
       return { kind: "handled" };
     case "renameSessionSubmit":
       dispatchStationAction(runtime, { type: "renameSession.submit" });

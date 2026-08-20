@@ -495,6 +495,15 @@ function fakeApi(
     reportExternalExit:
       overrides.reportExternalExit ??
       (async (params) => ({ acknowledged: true, terminalTargetId: params.terminalTargetId })),
+    prepareWorktreeRemoval:
+      overrides.prepareWorktreeRemoval ??
+      (async (params) => ({
+        reservationId: "reservation_client_1",
+        projectId: params.projectId ?? "project",
+        worktreeId: params.worktreeId,
+        externalTerminalExitRequired: false,
+      })),
+    cancelWorktreeRemoval: overrides.cancelWorktreeRemoval ?? (async () => ({ cancelled: true })),
     runDoctor: overrides.runDoctor ?? (async () => fakeDoctor()),
     collectDiagnostics: overrides.collectDiagnostics ?? (async () => fakeDiagnostics()),
   };
@@ -621,6 +630,13 @@ function fakeClient(overrides: Partial<ObserverClient>): ObserverClient {
       acknowledged: true,
       terminalTargetId: params.terminalTargetId,
     }),
+    prepareWorktreeRemoval: async (params) => ({
+      reservationId: "reservation_client_1",
+      projectId: params.projectId ?? "project",
+      worktreeId: params.worktreeId,
+      externalTerminalExitRequired: false,
+    }),
+    cancelWorktreeRemoval: async () => ({ cancelled: true }),
     runDoctor: async () => fakeDoctor(),
     collectDiagnostics: async () => fakeDiagnostics(),
     subscribe: () => stream([]),

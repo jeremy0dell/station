@@ -1,10 +1,13 @@
-import type { SafeError } from "@station/contracts";
+import type { SafeError, SessionGroupId, SessionId } from "@station/contracts";
 import type { StoreApi } from "zustand/vanilla";
 import { dashboardRowIds, selectDashboardTree } from "../../selectors/dashboardTree.js";
+import { selectMoveToGroupSessionContext } from "../../selectors/selectors.js";
 import { safeErrorToToast, toSafeError } from "../../services/errors/errors.js";
 import type { ObserverService } from "../../services/types.js";
+import { buildMoveSessionToGroupCommand } from "../commandBuilders.js";
 import {
   focusDashboardGroup,
+  focusDashboardSession,
   focusResolvedDashboardCursor,
   reconcileDashboardFocus,
 } from "../dashboardFocus.js";
@@ -15,7 +18,172 @@ import type { DashboardState } from "../types.js";
 import type { DashboardCapabilityOperationRunner } from "./capabilityOperation.js";
 import { executeDashboardCommandError } from "./commandExecutionError.js";
 import { runQuickSessionInGroupOperation } from "./groupQuickSession.js";
-import type { CreateSessionGroupOperation } from "./types.js";
+import type {
+  CreateSessionGroupForMoveOperation,
+  CreateSessionGroupOperation,
+  MoveSessionToGroupOperation,
+} from "./types.js";
+
+export type MoveSessionToGroupResolution =
+  | { kind: "submit"; operation: MoveSessionToGroupOperation }
+  | { kind: "noop" }
+  | { kind: "failure"; error: SafeError };
+
+/** Resolves one canonical reassignment operation for every current and future Group surface. */
+export function resolveMoveSessionToGroupOperation(
+  state: DashboardState,
+  sessionId: SessionId,
+  destinationGroupId: SessionGroupId | null,
+): MoveSessionToGroupResolution {
+  const snapshot = state.snapshot;
+  const context =
+    snapshot === undefined ? undefined : selectMoveToGroupSessionContext(snapshot, sessionId);
+  if (snapshot === undefined || context === undefined) {
+    return { kind: "failure", error: staleMoveError("The session is no longer available.") };
+  }
+  const destination =
+    destinationGroupId === null
+      ? undefined
+      : snapshot.sessionGroups.find(
+          (group) =>
+            group.id === destinationGroupId &&
+            group.projectId === context.project.id &&
+            group.parentGroupId === undefined,
+        );
+  if (destinationGroupId !== null && destination === undefined) {
+    return {
+      kind: "failure",
+      error: staleMoveError("The destination Group is no longer available."),
+    };
+  }
+  const command = buildMoveSessionToGroupCommand({
+    projectId: context.project.id,
+    sessionId,
+    currentGroup: context.currentGroup,
+    destinationGroup: destination,
+  });
+  if (command === undefined) return { kind: "noop" };
+  return {
+    kind: "submit",
+    operation: {
+      type: "moveSessionToGroup",
+      sessionId,
+      projectId: context.project.id,
+      expectedCurrentGroupId: context.currentGroup?.id ?? null,
+      destinationGroupId,
+      command,
+    },
+  };
+}
+
+export async function runMoveSessionToGroupOperation(input: {
+  store: StoreApi<DashboardState>;
+  service: ObserverService;
+  operation: MoveSessionToGroupOperation;
+  clientLabel: string;
+  scope: DashboardRuntimeEffectScope;
+}): Promise<void> {
+  const stale = validatePreparedMove(input.store.getState(), input.operation);
+  if (stale !== undefined) {
+    input.scope.commit(() => closeMoveOnConflict(input.store, input.operation.sessionId, stale));
+    return;
+  }
+  let failure: SafeError | undefined;
+  try {
+    failure = await executeDashboardCommandError({
+      service: input.service,
+      command: input.operation.command,
+      clientLabel: input.clientLabel,
+    });
+  } catch (error: unknown) {
+    failure = toSafeError(error, { clientLabel: input.clientLabel });
+  }
+  if (!input.scope.isOpen()) return;
+  if (failure === undefined) {
+    input.scope.commit(() => {
+      const state = input.store.getState();
+      input.store.setState(focusDashboardSession(state, input.operation.sessionId));
+    });
+    return;
+  }
+  input.scope.commit(() => {
+    if (isMembershipConflict(failure)) {
+      closeMoveOnConflict(input.store, input.operation.sessionId, failure);
+    } else {
+      retainMoveFailure(input.store, input.operation, failure);
+    }
+  });
+}
+
+export async function runCreateSessionGroupForMoveOperation(input: {
+  store: StoreApi<DashboardState>;
+  service: ObserverService;
+  operation: CreateSessionGroupForMoveOperation;
+  clientLabel: string;
+  scope: DashboardRuntimeEffectScope;
+}): Promise<void> {
+  let createFailure: SafeError | undefined;
+  try {
+    createFailure = await executeDashboardCommandError({
+      service: input.service,
+      command: input.operation.command,
+      clientLabel: input.clientLabel,
+    });
+  } catch (error: unknown) {
+    createFailure = toSafeError(error, { clientLabel: input.clientLabel });
+  }
+  if (!input.scope.isOpen()) return;
+  if (createFailure !== undefined) {
+    input.scope.commit(() => retainMoveCreateFailure(input.store, input.operation, createFailure));
+    return;
+  }
+  const created = resolveCreatedGroup(input.store.getState(), input.operation);
+  if (created.kind === "failure") {
+    input.scope.commit(() =>
+      closeMoveOnConflict(input.store, input.operation.sessionId, created.error),
+    );
+    return;
+  }
+  const resolution = resolveMoveSessionToGroupOperation(
+    input.store.getState(),
+    input.operation.sessionId,
+    created.group.id,
+  );
+  if (resolution.kind !== "submit") {
+    const error =
+      resolution.kind === "failure"
+        ? resolution.error
+        : convergenceError("The created Group could not receive the session.");
+    input.scope.commit(() => closeMoveOnConflict(input.store, input.operation.sessionId, error));
+    return;
+  }
+  input.scope.commit(() => {
+    const state = input.store.getState();
+    if (
+      state.screen.name === "moveToGroup" &&
+      state.screen.step === "createGroup" &&
+      state.screen.sessionId === input.operation.sessionId
+    ) {
+      input.store.setState({
+        ...state,
+        screen: {
+          name: "moveToGroup",
+          step: "chooseDestination",
+          sessionId: state.screen.sessionId,
+          sessionTitle: state.screen.sessionTitle,
+          submitting: true,
+        },
+      });
+    }
+  });
+  await runMoveSessionToGroupOperation({
+    store: input.store,
+    service: input.service,
+    operation: resolution.operation,
+    clientLabel: input.clientLabel,
+    scope: input.scope,
+  });
+}
 
 /**
  * Runs durable Group creation before ordinary Quick Session execution, expected membership, and
@@ -85,7 +253,7 @@ export async function runCreateSessionGroupOperation(input: {
 
 function resolveCreatedGroup(
   state: DashboardState,
-  operation: CreateSessionGroupOperation,
+  operation: CreateSessionGroupOperation | CreateSessionGroupForMoveOperation,
 ):
   | { kind: "success"; group: NonNullable<DashboardState["snapshot"]>["sessionGroups"][number] }
   | { kind: "failure"; error: SafeError } {
@@ -104,6 +272,115 @@ function resolveCreatedGroup(
         kind: "failure",
         error: convergenceError("The created Group could not be identified uniquely."),
       };
+}
+
+function validatePreparedMove(
+  state: DashboardState,
+  operation: MoveSessionToGroupOperation,
+): SafeError | undefined {
+  const snapshot = state.snapshot;
+  const context =
+    snapshot === undefined
+      ? undefined
+      : selectMoveToGroupSessionContext(snapshot, operation.sessionId);
+  if (context === undefined || context.project.id !== operation.projectId) {
+    return staleMoveError("The session is no longer available.");
+  }
+  if ((context.currentGroup?.id ?? null) !== operation.expectedCurrentGroupId) {
+    return assignmentConflictError();
+  }
+  const target = snapshot?.sessionGroups.find(
+    (group) => group.id === operation.command.payload.groupId,
+  );
+  if (
+    target === undefined ||
+    target.projectId !== operation.projectId ||
+    target.version !== operation.command.payload.expectedVersion
+  ) {
+    return versionConflictError();
+  }
+  if (operation.destinationGroupId !== null) {
+    const destination = snapshot?.sessionGroups.find(
+      (group) => group.id === operation.destinationGroupId,
+    );
+    if (destination?.parentGroupId !== undefined) {
+      return staleMoveError("The destination Group is no longer at the Project root.");
+    }
+  }
+  return undefined;
+}
+
+function retainMoveFailure(
+  store: StoreApi<DashboardState>,
+  operation: MoveSessionToGroupOperation,
+  error: SafeError,
+): void {
+  const state = store.getState();
+  const screen = state.screen;
+  const next =
+    screen.name === "moveToGroup" &&
+    screen.step === "chooseDestination" &&
+    screen.sessionId === operation.sessionId
+      ? { ...state, screen: { ...screen, submitting: false } }
+      : state;
+  store.setState(addTuiToast(next, safeErrorToToast(error)));
+}
+
+function retainMoveCreateFailure(
+  store: StoreApi<DashboardState>,
+  operation: CreateSessionGroupForMoveOperation,
+  error: SafeError,
+): void {
+  const state = store.getState();
+  const screen = state.screen;
+  const next =
+    screen.name === "moveToGroup" &&
+    screen.step === "createGroup" &&
+    screen.sessionId === operation.sessionId
+      ? { ...state, screen: { ...screen, submitting: false } }
+      : state;
+  store.setState(addTuiToast(next, safeErrorToToast(error)));
+}
+
+function closeMoveOnConflict(
+  store: StoreApi<DashboardState>,
+  sessionId: SessionId,
+  error: SafeError,
+): void {
+  const focused = focusDashboardSession(
+    { ...store.getState(), screen: { name: "dashboard" } },
+    sessionId,
+  );
+  store.setState(addTuiToast(focused, safeErrorToToast(error)));
+}
+
+function isMembershipConflict(error: SafeError): boolean {
+  return (
+    error.code === "SESSION_GROUP_VERSION_CONFLICT" ||
+    error.code === "SESSION_GROUP_ASSIGNMENT_CONFLICT"
+  );
+}
+
+function staleMoveError(message: string): SafeError {
+  return {
+    tag: "CommandConflictError",
+    code: "SESSION_GROUP_ASSIGNMENT_CONFLICT",
+    message,
+    hint: "Review the session's current Group before trying again.",
+  };
+}
+
+function assignmentConflictError(): SafeError {
+  return staleMoveError("The session's Group changed before the move could start.");
+}
+
+function versionConflictError(): SafeError {
+  return {
+    tag: "CommandConflictError",
+    code: "SESSION_GROUP_VERSION_CONFLICT",
+    message: "The destination Group changed before the move could start.",
+    hint: "Review the current Group state before trying again.",
+  };
 }
 
 function retainCreateGroupFailure(

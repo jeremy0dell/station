@@ -3,8 +3,6 @@ import { mkdir, readdir, readFile, rename, unlink, writeFile } from "node:fs/pro
 import net from "node:net";
 import path from "node:path";
 import {
-  PtyBridgeParkStateSchema,
-  type PtyBridgeParkState,
   PtyScreenSnapshotSchema,
   type PtyScreenSnapshot,
   PtyScrollbackExportSchema,
@@ -225,21 +223,6 @@ export async function removeBridgeFiles(directory: string, ptyId: string): Promi
     } catch {
       // Already gone.
     }
-  }
-}
-
-/** Strictly parse durable park state; unreadable or invalid files read as absent. */
-export async function readBridgeParkState(
-  parkStatePath: string,
-): Promise<PtyBridgeParkState | undefined> {
-  const raw = await readFileQuiet(parkStatePath);
-  if (raw === undefined) {
-    return undefined;
-  }
-  try {
-    return PtyBridgeParkStateSchema.parse(JSON.parse(raw));
-  } catch {
-    return undefined;
   }
 }
 

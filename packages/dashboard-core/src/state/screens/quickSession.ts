@@ -111,12 +111,13 @@ export function resolveQuickSessionInGroupOperation(
   };
 }
 
-/** Validates and submits the Quick Session action owned by an existing Group header. */
+/** Validates a Group Quick Session and preserves the caller's header-cell fallback. */
 export function submitQuickSessionInGroup(
   state: DashboardState,
   groupId: SessionGroupId,
+  fallbackCell: CreateQuickSessionInGroupOperation["fallbackCell"] = "quickSession",
 ): TuiTransition {
-  const resolution = resolveQuickSessionInGroupOperation(state, groupId, "quickSession");
+  const resolution = resolveQuickSessionInGroupOperation(state, groupId, fallbackCell);
   if (resolution.kind === "missing") return { state };
   if (resolution.kind === "blocked") {
     return { state: addTuiToast(state, safeErrorToToast(resolution.error)) };

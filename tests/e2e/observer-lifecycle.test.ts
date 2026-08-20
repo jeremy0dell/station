@@ -17,7 +17,13 @@ import {
 import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { promisify } from "node:util";
-import { getObserverStatus, restartObserver, runCli, startObserver } from "@station/cli";
+import {
+  ensureExactObserverBuild,
+  getObserverStatus,
+  restartObserver,
+  runCli,
+  startObserver,
+} from "@station/cli";
 import { emptyConfig } from "@station/config";
 import { ObserverProcessIdentitySchema, ObserverProcessTokenSchema } from "@station/contracts";
 import { acquireObserverBootClaim, observerBootClaimPath } from "@station/observer/internal";
@@ -86,7 +92,7 @@ describe("observer lifecycle e2e", () => {
         code: "ENOENT",
       });
       await expect(client.getSnapshot()).resolves.toMatchObject({
-        schemaVersion: "0.10.0",
+        schemaVersion: "0.11.0",
         observer: { version: build.version },
         counts: { projects: 0 },
       });
@@ -336,7 +342,7 @@ describe("observer lifecycle e2e", () => {
     }
   });
 
-  it("refuses a losing same-version build until the incumbent is explicitly stopped", async () => {
+  it("keeps ordinary losing-build refusal but explicitly activates an exact build", async () => {
     const fixture = await createTempState();
     const build = stationBuildInfo();
     const incumbentVersion = stationObserverBuildVersion({
@@ -378,18 +384,20 @@ describe("observer lifecycle e2e", () => {
         version: incumbentVersion,
       });
 
-      await incumbent.client.stop();
-      await waitForSocketClosed(fixture.socketPath);
-      await expectProcessExit(incumbent.child.pid);
-      const restarted = await startObserver({
-        config: observerConfig(fixture.stateDir, fixture.socketPath),
-        timeoutMs: 10_000,
-      });
-      expect(restarted).toMatchObject({
+      const activated = await ensureExactObserverBuild(
+        {
+          config: observerConfig(fixture.stateDir, fixture.socketPath),
+          timeoutMs: 10_000,
+        },
+        { buildVersion: candidateVersion },
+      );
+      expect(activated).toMatchObject({
         status: "running",
+        lifecycle: "replaced",
         health: { version: candidateVersion },
       });
-      successorStarted = restarted.status === "running";
+      successorStarted = activated.status === "running";
+      await expectProcessExit(incumbent.child.pid);
     } finally {
       if (successorStarted) {
         await successorClient.stop().catch(() => undefined);
@@ -873,7 +881,7 @@ describe("observer lifecycle e2e", () => {
         stateDir: fixture.stateDir,
       });
       await expect(client.getSnapshot()).resolves.toMatchObject({
-        schemaVersion: "0.10.0",
+        schemaVersion: "0.11.0",
         counts: { projects: 0 },
       });
     } finally {

@@ -172,6 +172,38 @@ describe("createPtyRegistry", () => {
     expect(notifications).toBeGreaterThan(afterSpawn);
   });
 
+  it("terminate waits for proven exit and keeps the entry subscribed", async () => {
+    const { registry, scripted } = harness();
+    registry.resize(PANE_A, SIZE);
+    let settled = false;
+    const termination = registry.terminate(PANE_A, { timeoutMs: 100 }).then(() => {
+      settled = true;
+    });
+
+    await sleep(0);
+    expect(settled).toBe(false);
+    expect(registry.get(PANE_A)?.terminal).toBe(scripted[0].terminal);
+    scripted[0].helpers.emitExit({ exitCode: 0 });
+    await termination;
+    expect(settled).toBe(true);
+    expect(registry.get(PANE_A)?.exited).toBe(true);
+  });
+
+  it("terminate fails closed when no exit event arrives", async () => {
+    const { registry } = harness();
+    registry.resize(PANE_A, SIZE);
+
+    let failure: unknown;
+    try {
+      await registry.terminate(PANE_A, { timeoutMs: 1 });
+    } catch (error) {
+      failure = error;
+    }
+    expect(failure instanceof Error).toBe(true);
+    expect((failure as Error).message).toContain("Timed out waiting for PTY pane-a to exit");
+    expect(registry.get(PANE_A)?.exited).toBe(false);
+  });
+
   it("notifies onPaneExit with the pane id when a spawned process exits", () => {
     const scripted = createScriptedTerminal();
     const exited: string[] = [];

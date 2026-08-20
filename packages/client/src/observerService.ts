@@ -8,6 +8,10 @@ import type {
   StationCommand,
   StationEvent,
   StationSnapshot,
+  WorktreeCancelRemovalParams,
+  WorktreeCancelRemovalResult,
+  WorktreePrepareRemovalParams,
+  WorktreePrepareRemovalResult,
 } from "@station/contracts";
 import { createObserverClient, type ObserverClient } from "@station/protocol";
 import {
@@ -62,6 +66,10 @@ export function createObserverService(options: CreateObserverServiceOptions): Ob
       prepareExternalLaunch(client, params, timeoutMs, copy),
     reportExternalExit: (params: AgentReportExternalExitParams) =>
       reportExternalExit(client, params, timeoutMs, copy),
+    prepareWorktreeRemoval: (params: WorktreePrepareRemovalParams) =>
+      prepareWorktreeRemoval(client, params, timeoutMs, copy),
+    cancelWorktreeRemoval: (params: WorktreeCancelRemovalParams) =>
+      cancelWorktreeRemoval(client, params, timeoutMs, copy),
   };
 }
 
@@ -78,6 +86,10 @@ type ObserverServiceCopy = {
   prepareExternalLaunchTimeout: string;
   reportExternalExitFailed: string;
   reportExternalExitTimeout: string;
+  prepareWorktreeRemovalFailed: string;
+  prepareWorktreeRemovalTimeout: string;
+  cancelWorktreeRemovalFailed: string;
+  cancelWorktreeRemovalTimeout: string;
 };
 
 function createObserverServiceCopy(clientLabel: string | undefined): ObserverServiceCopy {
@@ -96,6 +108,10 @@ function createObserverServiceCopy(clientLabel: string | undefined): ObserverSer
     prepareExternalLaunchTimeout: `${subject} timed out while preparing the external agent launch.`,
     reportExternalExitFailed: `${subject} could not report the external agent exit.`,
     reportExternalExitTimeout: `${subject} timed out while reporting the external agent exit.`,
+    prepareWorktreeRemovalFailed: `${subject} could not prepare worktree removal.`,
+    prepareWorktreeRemovalTimeout: `${subject} timed out while preparing worktree removal.`,
+    cancelWorktreeRemovalFailed: `${subject} could not cancel worktree removal.`,
+    cancelWorktreeRemovalTimeout: `${subject} timed out while cancelling worktree removal.`,
   };
 }
 
@@ -217,6 +233,52 @@ async function reportExternalExit(
       ),
     },
     () => client.reportExternalExit(params),
+  );
+}
+
+async function prepareWorktreeRemoval(
+  client: ObserverApi,
+  params: WorktreePrepareRemovalParams,
+  timeoutMs: number,
+  copy: ObserverServiceCopy,
+): Promise<WorktreePrepareRemovalResult> {
+  return runClientRequest(
+    {
+      operation: "client.observer.worktree.prepareRemoval",
+      timeoutMs,
+      error: observerErrorFallback(
+        "CLIENT_PREPARE_WORKTREE_REMOVAL_FAILED",
+        copy.prepareWorktreeRemovalFailed,
+      ),
+      timeoutError: timeoutErrorFallback(
+        "CLIENT_PREPARE_WORKTREE_REMOVAL_TIMEOUT",
+        copy.prepareWorktreeRemovalTimeout,
+      ),
+    },
+    () => client.prepareWorktreeRemoval(params),
+  );
+}
+
+async function cancelWorktreeRemoval(
+  client: ObserverApi,
+  params: WorktreeCancelRemovalParams,
+  timeoutMs: number,
+  copy: ObserverServiceCopy,
+): Promise<WorktreeCancelRemovalResult> {
+  return runClientRequest(
+    {
+      operation: "client.observer.worktree.cancelRemoval",
+      timeoutMs,
+      error: observerErrorFallback(
+        "CLIENT_CANCEL_WORKTREE_REMOVAL_FAILED",
+        copy.cancelWorktreeRemovalFailed,
+      ),
+      timeoutError: timeoutErrorFallback(
+        "CLIENT_CANCEL_WORKTREE_REMOVAL_TIMEOUT",
+        copy.cancelWorktreeRemovalTimeout,
+      ),
+    },
+    () => client.cancelWorktreeRemoval(params),
   );
 }
 

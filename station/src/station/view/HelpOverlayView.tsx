@@ -2,37 +2,79 @@
 // dashboard (absolute + zIndex; the dashboard must never reflow for it).
 // Lines come from the shared panel generator over Station's visible help copy.
 import { DASHBOARD_FILTER_CONDITION_KEYS, helpPanelLayout, helpPanelLines } from "@station/dashboard-core/selectors";
+import {
+  dashboardBindingHelp,
+  type TuiDashboardBindingId,
+} from "@station/dashboard-core/state";
+import { stationKeymapHelp } from "../../input/keymap/stationBindings.js";
 import { toOpenTuiColor, toOpenTuiOpaqueColor, useStationTheme } from "../../theme/index.js";
 import { useStationMouse, stationMouseProps } from "./stationMouseContext.js";
 
 const FILTER_CONDITION_KEY_HINT = DASHBOARD_FILTER_CONDITION_KEYS.join("/");
 
+function dashboardHelp(id: TuiDashboardBindingId): { key: string; description: string } {
+  const help = dashboardBindingHelp(id);
+  if (help === undefined) throw new Error(`Dashboard binding ${id} has no Help metadata.`);
+  return {
+    key: help.panelKeys ?? help.keys,
+    description: help.panelLabel ?? help.label,
+  };
+}
+
+function dashboardHelpGroup(
+  ids: readonly TuiDashboardBindingId[],
+): { key: string; description: string } {
+  const entries = ids.map(dashboardHelp);
+  return {
+    key: entries.map(({ key }) => key).join("/"),
+    description: [...new Set(entries.map(({ description }) => description))].join("/"),
+  };
+}
+
+function dashboardKeys(ids: readonly TuiDashboardBindingId[]): string {
+  return ids.map((id) => dashboardHelp(id).key).join(" ");
+}
+
+const navigation = dashboardHelpGroup(["tui.dashboard.focusUp", "tui.dashboard.focusDown"]);
+const helpAliases = dashboardHelpGroup(["tui.dashboard.help", "tui.dashboard.helpAlias"]);
+const refresh = dashboardHelp("tui.dashboard.refresh");
+
 const STATION_HELP_CONTENT = [
   { text: "station help", align: "center" as const },
-  { key: "Ctrl-O", description: "open/close project view" },
-  { key: "Ctrl-Q", description: "quit Station" },
-  { key: "Ctrl-\\", description: "split pane right" },
-  { key: "Ctrl-^", description: "split pane below (Ctrl-6)" },
-  { key: "Ctrl-]", description: "focus next pane" },
-  { key: "Ctrl-/", description: "close split pane (Ctrl-_)" },
-  { key: "Enter/Sp", description: "open project view on welcome" },
-  { key: "Esc/↑↓", description: "context menu close/move" },
-  { key: "Enter/Sp", description: "context menu select" },
+  ...stationKeymapHelp(),
   { text: "station project view", align: "center" as const },
-  { key: "↑/↓", description: "move cursor · wheel scroll" },
-  { key: "↵", description: "open focused session" },
-  { key: "tab", description: "next session needing you" },
-  { key: "G", description: "quick group" },
-  { key: "/ ↵ Esc Q", description: "edit/apply/cancel-clear/retain-close filter" },
+  { key: navigation.key, description: `${navigation.description} · wheel scroll` },
+  dashboardHelp("tui.dashboard.focusActivate"),
+  dashboardHelp("tui.dashboard.nextNeedsMe"),
+  dashboardHelpGroup(["tui.dashboard.quickGroup", "tui.dashboard.moveToGroup"]),
+  {
+    key: dashboardKeys([
+      "tui.dashboard.filter",
+      "tui.dashboard.focusActivate",
+      "tui.dashboard.dismissEsc",
+      "tui.dashboard.quit",
+    ]),
+    description: "edit/apply/cancel-clear/retain-close filter",
+  },
   {
     key: `Tab ${FILTER_CONDITION_KEY_HINT}`,
     description: "build filter conditions · F applies builder",
   },
-  { key: "1-9/a-z", description: "open visible session or toggle condition" },
-  { key: "N/A/R/C/F/P", description: "new/add/rename/fold/fork/settings" },
-  { key: "W", description: "widgets" },
-  { key: "X", description: "delete session" },
-  { key: "H/?", description: "help · Z refresh" },
+  dashboardHelp("tui.dashboard.slotActivate"),
+  dashboardHelpGroup([
+    "tui.dashboard.newSession",
+    "tui.dashboard.addProject",
+    "tui.dashboard.rename",
+    "tui.dashboard.collapse",
+    "tui.dashboard.fork",
+    "tui.dashboard.projectSettings",
+  ]),
+  dashboardHelp("tui.dashboard.widgetSettings"),
+  dashboardHelp("tui.dashboard.remove"),
+  {
+    key: helpAliases.key,
+    description: `${helpAliases.description} · ${refresh.key} ${refresh.description}`,
+  },
 ] as const;
 
 export function HelpOverlayView({ columns, rows }: { columns: number; rows: number }) {

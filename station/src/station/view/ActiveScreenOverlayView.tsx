@@ -10,7 +10,9 @@ import { HelpOverlayView } from "./HelpOverlayView.js";
 import { NewSessionSheetView } from "./sheets/NewSessionSheetView.js";
 import { ProjectChoiceSheetView } from "./sheets/ProjectChoiceSheetView.js";
 import { ProjectDefaultAgentSheetView } from "./sheets/ProjectDefaultAgentSheetView.js";
+import { GroupSettingsPanelView } from "./settings/GroupSettingsPanelView.js";
 import { ProjectSettingsPanelView } from "./settings/ProjectSettingsPanelView.js";
+import { GroupMenuView } from "./GroupMenuView.js";
 import { ProjectMenuView } from "./ProjectMenuView.js";
 import { WidgetSettingsPanelView } from "./settings/WidgetSettingsPanelView.js";
 import { RenameSessionSheetView } from "./sheets/RenameSessionSheetView.js";
@@ -18,6 +20,7 @@ import { RemoveSessionSheetView } from "./sheets/RemoveSessionSheetView.js";
 import { ForkSessionSheetView } from "./sheets/ForkSessionSheetView.js";
 import { FreshStartSheetView } from "./sheets/FreshStartSheetView.js";
 import { CreateGroupSheetView } from "./sheets/CreateGroupSheetView.js";
+import { MoveToGroupSheetView } from "./sheets/MoveToGroupSheetView.js";
 import { stationMouseProps, useStationMouse } from "./stationMouseContext.js";
 
 export type ActiveScreenOverlayViewProps = {
@@ -31,8 +34,8 @@ export type ActiveScreenOverlayViewProps = {
   widgets?: DashboardStateView["widgets"];
   /** False when widget edits cannot be written back to config.toml. */
   widgetsPersisted?: boolean;
-  /** Absolute row containing the visible Project header that owns an open menu. */
-  projectMenuAnchorTop?: number;
+  /** Absolute row containing the visible dashboard header that owns an open menu. */
+  menuAnchorTop?: number;
 };
 
 export function ActiveScreenOverlayView(props: ActiveScreenOverlayViewProps) {
@@ -86,8 +89,9 @@ function renderActiveScreenOverlay({
   localRows,
   widgets = [],
   widgetsPersisted = true,
-  projectMenuAnchorTop = 0,
+  menuAnchorTop = 0,
 }: ActiveScreenOverlayViewProps): ReactNode {
+  const menuViewport = { columns, rows, anchorTop: menuAnchorTop };
   switch (screen.name) {
     case "dashboard":
       return null;
@@ -106,16 +110,21 @@ function renderActiveScreenOverlay({
     case "help":
       return <HelpOverlayView columns={columns} rows={rows} />;
     case "projectMenu":
-      return (
-        <ProjectMenuView
-          screen={screen}
-          columns={columns}
-          rows={rows}
-          anchorTop={projectMenuAnchorTop}
-        />
-      );
+      return <ProjectMenuView screen={screen} viewport={menuViewport} />;
+    case "groupMenu":
+      return <GroupMenuView snapshot={snapshot} screen={screen} viewport={menuViewport} />;
     case "createGroup":
       return <CreateGroupSheetView screen={screen} columns={columns} rows={rows} />;
+    case "moveToGroup":
+      return screen.step === "chooseSlot" ? null : (
+        <MoveToGroupSheetView
+          screen={screen}
+          snapshot={snapshot}
+          selection={selection}
+          columns={columns}
+          rows={rows}
+        />
+      );
     case "widgetSettings":
       return (
         <WidgetSettingsPanelView
@@ -187,6 +196,15 @@ function renderActiveScreenOverlay({
           screen={screen}
           selection={selection}
           localRows={localRows}
+        />
+      );
+    case "groupSettings":
+      return (
+        <GroupSettingsPanelView
+          columns={columns}
+          rows={rows}
+          snapshot={snapshot}
+          screen={screen}
         />
       );
     case "fork":

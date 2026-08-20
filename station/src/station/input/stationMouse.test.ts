@@ -328,6 +328,28 @@ describe("routeStationMouse", () => {
     });
   });
 
+  it("toggles grouped Fork placement through the shared pointer action", () => {
+    const store = makeStore(groupedManyProjectsSnapshot());
+    const rowId = "ses_wt_group_contracts";
+    store.actions.handleKey({ input: "F" });
+    store.actions.handleKey({ input: slotForRow(store, rowId) });
+
+    expect(
+      routeStationMouse(
+        { kind: "forkSessionAction", actionId: "details.group" },
+        LEFT_DOWN,
+        store,
+      ),
+    ).toEqual({ kind: "handled" });
+    expect(store.state.getState().screen).toMatchObject({
+      name: "fork",
+      step: "details",
+      focus: "group",
+      sourceGroup: { id: "group_design_refresh", name: "Design refresh" },
+      inheritSourceGroup: false,
+    });
+  });
+
   it("dispatches fork submit through the semantic capability path", () => {
     const store = makeStore();
     const worktreeId = "wt_station_working";
@@ -587,6 +609,29 @@ describe("routeStationMouse", () => {
     routeStationMouse({ kind: "dashboardCell", rowId: groupId, cellId: "menu" }, LEFT_DOWN, store);
     expect([...store.state.getState().collapsedGroupIds]).toEqual([]);
     expect(store.state.getState().dashboardFocus).toEqual({ rowId: groupId, cellId: "menu" });
+    expect(store.state.getState().screen).toEqual({
+      name: "groupMenu",
+      projectId: "station",
+      groupId: "group_design_refresh",
+      focus: "quickSession",
+    });
+
+    routeStationMouse(
+      { kind: "groupMenuAction", actionId: "settings" },
+      LEFT_DOWN,
+      store,
+    );
+    expect(store.state.getState().screen).toMatchObject({
+      name: "groupSettings",
+      groupId: "group_design_refresh",
+      section: "general",
+    });
+
+    routeStationMouse(
+      { kind: "groupSettingsAction", actionId: "back" },
+      LEFT_DOWN,
+      store,
+    );
     expect(store.state.getState().screen).toEqual({ name: "dashboard" });
 
     const beforeFrame = store.state.getState();
@@ -780,6 +825,20 @@ describe("routeStationMouse", () => {
       store,
     );
     expect(store.state.getState().screen).toMatchObject({ flow: { mode: "pickGroup" } });
+  });
+
+  it("routes Move-to-Group destination rows through the registered picker", async () => {
+    const store = makeStore(groupedManyProjectsSnapshot());
+    store.actions.dispatch({ type: "moveToGroup.open", rowId: "ses_wt_group_contracts" });
+
+    routeStationMouse({ kind: "sheetChoice", choiceKey: "2" }, LEFT_DOWN, store);
+    expect(store.state.getState().screen).toMatchObject({
+      name: "moveToGroup",
+      step: "chooseDestination",
+      submitting: true,
+    });
+
+    await store.dispose();
   });
 
   it("treats right-click as inert at the STATION router layer", () => {
@@ -1092,6 +1151,128 @@ describe("routeStationMouse", () => {
       store,
     );
     expect(store.state.getState().screen?.name).not.toBe("projectDefaultAgent");
+  });
+
+  it("routes Group Settings sections, session toggles, and Back through core actions", () => {
+    const store = makeStore(groupedManyProjectsSnapshot());
+    store.actions.dispatch({
+      type: "groupSettings.open",
+      groupId: "group_design_refresh",
+      section: "general",
+    });
+
+    routeStationMouse(
+      { kind: "groupSettingsSection", section: "sessions" },
+      LEFT_DOWN,
+      store,
+    );
+    expect(store.state.getState().screen).toMatchObject({
+      name: "groupSettings",
+      section: "sessions",
+      focus: "detail",
+    });
+
+    routeStationMouse(
+      { kind: "groupSettingsSession", sessionId: "ses_wt_group_contracts" },
+      LEFT_DOWN,
+      store,
+    );
+    const staged = store.state.getState().screen;
+    expect(
+      staged.name === "groupSettings" &&
+        staged.desiredSessionIds.has("ses_wt_group_contracts"),
+    ).toBe(false);
+
+    routeStationMouse(
+      { kind: "groupSettingsAction", actionId: "back" },
+      LEFT_DOWN,
+      store,
+    );
+    expect(store.state.getState().screen).toEqual({ name: "dashboard" });
+    expect(store.state.getState().dashboardFocus).toEqual({
+      rowId: "group:group_design_refresh",
+      cellId: "menu",
+    });
+  });
+
+  it("unchecks a current member and dispatches one ungroup membership delta", async () => {
+    const snapshot = groupedManyProjectsSnapshot();
+    const fixture = makeStationTestRuntime({ terminalRows: 14, snapshot });
+    const store = fixture.runtime;
+
+    routeStationMouse(
+      {
+        kind: "dashboardCell",
+        rowId: dashboardRowIds.group("group_design_refresh"),
+        cellId: "menu",
+      },
+      LEFT_DOWN,
+      store,
+    );
+    routeStationMouse(
+      { kind: "groupMenuAction", actionId: "settings" },
+      LEFT_DOWN,
+      store,
+    );
+    routeStationMouse(
+      { kind: "groupSettingsSection", section: "sessions" },
+      LEFT_DOWN,
+      store,
+    );
+    routeStationMouse(
+      { kind: "groupSettingsSession", sessionId: "ses_wt_group_contracts" },
+      LEFT_DOWN,
+      store,
+    );
+    routeStationMouse(
+      { kind: "groupSettingsAction", actionId: "save" },
+      LEFT_DOWN,
+      store,
+    );
+
+    await waitFor(() =>
+      fixture.service.dispatched.some(
+        (command) => command.type === "sessionGroup.updateMembership",
+      ),
+    );
+    expect(
+      fixture.service.dispatched.find(
+        (command) => command.type === "sessionGroup.updateMembership",
+      ),
+    ).toMatchObject({
+      payload: {
+        groupId: "group_design_refresh",
+        remove: [
+          {
+            sessionId: "ses_wt_group_contracts",
+            expectedGroupId: "group_design_refresh",
+          },
+        ],
+      },
+    });
+  });
+
+  it("keeps Group Settings targets inert outside its mode", () => {
+    const store = makeStore(groupedManyProjectsSnapshot());
+    const before = store.state.getState().screen;
+
+    routeStationMouse(
+      { kind: "groupSettingsSection", section: "remove" },
+      LEFT_DOWN,
+      store,
+    );
+    routeStationMouse(
+      { kind: "groupSettingsAction", actionId: "save" },
+      LEFT_DOWN,
+      store,
+    );
+    routeStationMouse(
+      { kind: "groupSettingsSession", sessionId: "ses_wt_group_contracts" },
+      LEFT_DOWN,
+      store,
+    );
+
+    expect(store.state.getState().screen).toEqual(before);
   });
 
   it("focuses a settings item on click and leaves an unarmed remove click inert", () => {

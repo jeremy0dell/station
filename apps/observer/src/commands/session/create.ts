@@ -11,18 +11,16 @@ import type { ObserverEventBus } from "../../runtime/eventBus.js";
 import type { StationLogger } from "../../stationLogger.js";
 import { assertCommandType } from "../assertCommand.js";
 import type { HarnessLaunchPreflight } from "../harnessLaunchPreflight.js";
+import { resolveHarnessProviderOrThrow, resolveTerminalProviderOrThrow } from "../providers.js";
 import type { CommandHandler } from "../queue.js";
 import { reconcileAndPublish } from "../reconcile.js";
-import type { TerminalIntentRunner } from "../terminalIntentRunner.js";
+import { ensureAgentWorkspace } from "../terminalOperations.js";
 import {
-  buildEnsureAgentWorkspaceIntent,
   defaultSessionCommandIdFactory,
   discardSessionSeedBestEffort,
   findProjectOrThrow,
   publishSessionCreated,
   removeWorktreeBestEffort,
-  resolveHarnessProviderOrThrow,
-  resolveTerminalProviderOrThrow,
   runProviderMutation,
   type SessionCommandIdFactory,
   seedSession,
@@ -33,7 +31,6 @@ import {
 export type CreateSessionCreateHandlerOptions = {
   getProjects: () => readonly ProviderProjectConfig[];
   providers: ProviderRegistry;
-  terminalIntentRunner: TerminalIntentRunner;
   launchPreflight: HarnessLaunchPreflight;
   core: ObserverCore;
   persistence: SessionStore & EventJournal;
@@ -41,7 +38,6 @@ export type CreateSessionCreateHandlerOptions = {
   clock?: RuntimeClock | undefined;
   idFactory?: Partial<SessionCommandIdFactory> | undefined;
   logger?: StationLogger | undefined;
-  commandTimeoutMs?: number | undefined;
 };
 
 /**
@@ -65,14 +61,13 @@ export function createSessionCreateHandler(
 
     const payload = context.command.payload;
     const project = findProjectOrThrow(options.getProjects(), payload.projectId);
-    resolveTerminalProviderOrThrow(options.providers, payload.terminal.provider);
-    resolveHarnessProviderOrThrow(options.providers, payload.harness.provider);
+    const terminal = resolveTerminalProviderOrThrow(options.providers, payload.terminal.provider);
+    const harness = resolveHarnessProviderOrThrow(options.providers, payload.harness.provider);
     await options.launchPreflight(payload.harness.provider, context.signal);
     const sessionId = idFactory.sessionId();
     const group = sessionSeedGroupPlacement(payload.group, idFactory.sessionGroupId);
     const runtime = {
       clock: options.clock,
-      commandTimeoutMs: options.commandTimeoutMs,
       signal: context.signal,
       trace: context.trace,
     };
@@ -108,6 +103,8 @@ export function createSessionCreateHandler(
         projectId: project.id,
         worktreeId: worktree.id,
         initialTitle: payload.title ?? payload.branch,
+        harness: payload.harness.provider,
+        terminalProvider: payload.terminal.provider,
         ...(group === undefined ? {} : { group }),
         clock: options.clock,
       });
@@ -115,29 +112,22 @@ export function createSessionCreateHandler(
       groupProvenance = seed.groupProvenance;
       throwIfAborted(context.signal);
 
-      const receipt = await options.terminalIntentRunner.submitIntent(
-        buildEnsureAgentWorkspaceIntent({
-          commandId: context.commandId,
-          project,
-          worktree,
-          sessionId,
-          terminalProvider: payload.terminal.provider,
-          harnessProvider: payload.harness.provider,
-          harness: payload.harness,
-          layout: payload.terminal.layout ?? project.defaults.layout,
-          focus: payload.terminal.focus,
-          origin: payload.terminal.origin,
-          initialPrompt: payload.initialPrompt,
-        }),
-        {
-          trace: context.trace,
-          signal: context.signal,
-          commandTimeoutMs: options.commandTimeoutMs,
-        },
-      );
-      if (receipt.status === "rejected") {
-        throw receipt.error;
-      }
+      await ensureAgentWorkspace({
+        terminal,
+        harness,
+        launchPreflight: options.launchPreflight,
+        project,
+        worktree,
+        sessionId,
+        harnessOptions: payload.harness,
+        layout: payload.terminal.layout ?? project.defaults.layout,
+        focus: payload.terminal.focus,
+        origin: payload.terminal.origin,
+        initialPrompt: payload.initialPrompt,
+        context,
+        clock: options.clock,
+        logger: options.logger,
+      });
       throwIfAborted(context.signal);
     } catch (error) {
       const worktreeRemoved =
@@ -145,7 +135,7 @@ export function createSessionCreateHandler(
           ? false
           : await removeWorktreeBestEffort({
               providers: options.providers,
-              projectId: project.id,
+              project,
               worktreeId: createdWorktree.id,
               expectedPath: createdWorktree.path,
               expectedBranch: createdWorktree.branch,
@@ -153,7 +143,6 @@ export function createSessionCreateHandler(
               context,
               logger: options.logger,
               clock: options.clock,
-              commandTimeoutMs: options.commandTimeoutMs,
             });
       if (sessionSeeded) {
         await discardSessionSeedBestEffort({

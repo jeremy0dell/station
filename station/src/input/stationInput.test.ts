@@ -17,6 +17,7 @@ import { createScriptedTerminal } from "../terminal/testing/scriptedTerminal.js"
 import { waitFor } from "../terminal/testing/waitFor.js";
 import {
   externalAgentSnapshot,
+  groupedManyProjectsSnapshot,
   manyProjectsSnapshot,
 } from "../station/fixtures/scenarios.js";
 import type { StationSnapshot } from "@station/contracts";
@@ -772,6 +773,7 @@ describe("createStationInputRuntime open-pane wiring", () => {
         observerService: service,
         store,
         paneEffects,
+        registry,
         managedLaunch,
       }),
       initialState: { terminalRows: 12 },
@@ -948,6 +950,7 @@ describe("createStationInputRuntime open-pane wiring", () => {
         observerService: service,
         store,
         paneEffects,
+        registry,
         managedLaunch,
       }),
     });
@@ -1031,11 +1034,28 @@ describe("createStationInputRuntime STATION context-menu actions", () => {
     });
   });
 
+  it("opens Move to Group directly for a row context-menu session", () => {
+    const { runtime, store, dashboardRuntime, rightClickRow } = contextMenuHarness();
+
+    rightClickRow();
+    runtime.handleSequence("\x1b[B");
+    runtime.handleSequence("\r");
+
+    expect(store.getState().input.contextMenu).toBeNull();
+    expect(dashboardRuntime.state.getState().screen).toMatchObject({
+      name: "moveToGroup",
+      step: "chooseDestination",
+      sessionId: "ses_wt_station_idle",
+      submitting: false,
+    });
+  });
+
   it("opens the fork details sheet from a row context menu", () => {
     const { runtime, store, dashboardRuntime, rightClickRow } = contextMenuHarness();
 
     rightClickRow();
-    // Menu order: Rename, Fork, Delete Session — one down reaches the fork.
+    // Menu order: Rename, Move, Fork, Delete Session — two downs reach the fork.
+    expect(runtime.handleSequence("\x1b[B")).toBe(true);
     expect(runtime.handleSequence("\x1b[B")).toBe(true);
     expect(runtime.handleSequence("\r")).toBe(true);
 
@@ -1052,7 +1072,8 @@ describe("createStationInputRuntime STATION context-menu actions", () => {
     const { runtime, store, dashboardRuntime, rightClickRow } = contextMenuHarness();
 
     rightClickRow();
-    // Menu order: Rename, Fork, Delete Session — two downs reach the delete.
+    // Menu order: Rename, Move, Fork, Delete Session — three downs reach delete.
+    expect(runtime.handleSequence("\x1b[B")).toBe(true);
     expect(runtime.handleSequence("\x1b[B")).toBe(true);
     expect(runtime.handleSequence("\x1b[B")).toBe(true);
     expect(runtime.handleSequence("\r")).toBe(true);
@@ -1074,7 +1095,8 @@ describe("createStationInputRuntime STATION context-menu actions", () => {
     );
 
     rightClickRow("run_wt_station_idle");
-    // Menu order: Fork, Delete Worktree… — one down reaches the informational action.
+    // Menu order: Move, Fork, Delete Worktree… — two downs reach the informational action.
+    runtime.handleSequence("\x1b[B");
     runtime.handleSequence("\x1b[B");
     runtime.handleSequence("\r");
 
@@ -1090,6 +1112,7 @@ describe("createStationInputRuntime STATION context-menu actions", () => {
     const { runtime, dashboardRuntime, rightClickRow } = contextMenuHarness();
 
     rightClickRow();
+    runtime.handleSequence("\x1b[B");
     runtime.handleSequence("\x1b[B");
     runtime.handleSequence("\x1b[B");
     runtime.handleSequence("\r");
@@ -1108,6 +1131,7 @@ describe("createStationInputRuntime STATION context-menu actions", () => {
     const { runtime, dashboardRuntime, rightClickRow } = contextMenuHarness();
 
     rightClickRow();
+    runtime.handleSequence("\x1b[B");
     runtime.handleSequence("\x1b[B");
     runtime.handleSequence("\x1b[B");
     runtime.handleSequence("\r");
@@ -1129,6 +1153,73 @@ describe("createStationInputRuntime STATION context-menu actions", () => {
       draft: { value: "pty", cursor: 3 },
     });
   });
+
+  it("dispatches Group Quick Session with the Q context-menu shortcut", async () => {
+    const { runtime, store, dashboardRuntime, service } = contextMenuHarness(
+      groupedManyProjectsSnapshot(),
+    );
+
+    runtime.dispatchMouse(
+      {
+        kind: "station",
+        target: {
+          kind: "dashboardCell",
+          rowId: dashboardRowIds.group("group_design_refresh"),
+          cellId: "identity",
+        },
+      },
+      RIGHT_DOWN,
+    );
+    expect(runtime.handleSequence("Q")).toBe(true);
+    expect(store.getState().input.contextMenu).toBeNull();
+    expect(dashboardRuntime.state.getState().dashboardFocus).toEqual({
+      rowId: dashboardRowIds.group("group_design_refresh"),
+      cellId: "menu",
+    });
+    await waitFor(() => service.dispatched.some((command) => command.type === "session.create"));
+    await dashboardRuntime.dispose();
+  });
+
+  for (const [key, screenName, section] of [
+    ["N", "newSession", undefined],
+    ["S", "groupSettings", "general"],
+    ["R", "groupSettings", "remove"],
+  ] as const) {
+    it(`routes the ${key} Group context-menu shortcut`, () => {
+      const { runtime, store, dashboardRuntime } = contextMenuHarness(
+        groupedManyProjectsSnapshot(),
+      );
+
+      runtime.dispatchMouse(
+        {
+          kind: "station",
+          target: {
+            kind: "dashboardCell",
+            rowId: dashboardRowIds.group("group_design_refresh"),
+            cellId: "menu",
+          },
+        },
+        RIGHT_DOWN,
+      );
+      expect(runtime.handleSequence(key)).toBe(true);
+
+      expect(store.getState().input.contextMenu).toBeNull();
+      const screen = dashboardRuntime.state.getState().screen;
+      expect(screen.name).toBe(screenName);
+      if (screen.name === "newSession") {
+        expect(screen.flow).toMatchObject({
+          selectedProjectId: "station",
+          groupSelection: { kind: "existing", groupId: "group_design_refresh" },
+        });
+      } else {
+        expect(screen).toMatchObject({
+          name: "groupSettings",
+          groupId: "group_design_refresh",
+          section,
+        });
+      }
+    });
+  }
 
   it("dispatches Quick Group from a project-header context menu", async () => {
     const { runtime, dashboardRuntime, service } = contextMenuHarness();

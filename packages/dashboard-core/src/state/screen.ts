@@ -1,7 +1,10 @@
 import type { StationSnapshot } from "@station/contracts";
 import { reconcileNewSessionFlow } from "../flows/newSession.js";
+import { selectMoveToGroupSessionContext } from "../selectors/selectors.js";
 import { reconcileDashboardFocus } from "./dashboardFocus.js";
 import { createEmptyTuiLocalRows, pruneLocalRowsForSnapshot } from "./localRows.js";
+import { reconcileForkDetailsScreen } from "./screens/fork.js";
+import { reconcileGroupSettingsScreen } from "./screens/groupSettings.js";
 import { seedNewSessionPickerCursor } from "./selection/specs/newSession.js";
 import type { CreateInitialTuiStateOptions, DashboardState } from "./types.js";
 
@@ -38,14 +41,28 @@ export function createInitialTuiState(options: CreateInitialTuiStateOptions = {}
 }
 
 export function replaceSnapshot(state: DashboardState, snapshot: StationSnapshot): DashboardState {
-  const projectSurface = reconcileProjectSurface(state, snapshot);
-  const screen =
-    projectSurface.name === "newSession"
+  const transientSurface = reconcileTransientSurface(state, snapshot);
+  const forkScreen =
+    transientSurface.name === "fork" && transientSurface.step === "details"
+      ? reconcileForkDetailsScreen(transientSurface, snapshot)
+      : transientSurface;
+  const flowScreen =
+    forkScreen.name === "newSession"
       ? {
           name: "newSession" as const,
-          flow: reconcileNewSessionFlow(projectSurface.flow, snapshot),
+          flow: reconcileNewSessionFlow(forkScreen.flow, snapshot),
         }
-      : projectSurface;
+      : forkScreen;
+  const groupSettingsScreen =
+    flowScreen.name === "groupSettings"
+      ? (reconcileGroupSettingsScreen(flowScreen, snapshot) ?? { name: "dashboard" as const })
+      : flowScreen;
+  const screen =
+    groupSettingsScreen.name === "moveToGroup" &&
+    groupSettingsScreen.step !== "chooseSlot" &&
+    selectMoveToGroupSessionContext(snapshot, groupSettingsScreen.sessionId) === undefined
+      ? { name: "dashboard" as const }
+      : groupSettingsScreen;
   const next: DashboardState = {
     ...state,
     screen,
@@ -56,11 +73,15 @@ export function replaceSnapshot(state: DashboardState, snapshot: StationSnapshot
   return seedNewSessionPickerCursor(reconcileDashboardFocus(state, next));
 }
 
-function reconcileProjectSurface(
+function reconcileTransientSurface(
   state: DashboardState,
   snapshot: StationSnapshot,
 ): DashboardState["screen"] {
   const screen = state.screen;
+  if (screen.name === "groupMenu") {
+    const group = snapshot.sessionGroups.find((candidate) => candidate.id === screen.groupId);
+    return group?.projectId === screen.projectId ? screen : { name: "dashboard" };
+  }
   if (screen.name !== "projectMenu" && screen.name !== "createGroup") return screen;
   return snapshot.projects.some((project) => project.id === screen.projectId)
     ? screen

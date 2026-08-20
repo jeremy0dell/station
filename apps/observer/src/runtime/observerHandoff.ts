@@ -14,6 +14,7 @@ import { z } from "zod";
 import { observerProcessIdentitiesMatch } from "./observerPidfile.js";
 
 const GRACEFUL_HANDOFF_BUDGET_RATIO = 0.5;
+const MAX_STOP_ACKNOWLEDGEMENT_MS = 1_000;
 const DEFAULT_HANDOFF_POLL_INTERVAL_MS = 50;
 const MIN_HANDOFF_TIMEOUT_MS = 1;
 const INTERNAL_PREVIEW_VERSION_PATTERN = /^0\.7\.1-rc\.(?:0|[1-9]\d*)$/u;
@@ -103,11 +104,11 @@ export type ObserverStopRequest = ObserverLifecycleRequest & {
 /**
  * DRIVEN PORT
  *
- * Supplies exact local-process evidence without exposing operating-system
+ * Supplies exact incumbent-process evidence without exposing operating-system
  * commands; unavailable socket-holder evidence throws and never means zero.
  */
 export interface ObserverProcessEvidenceSource {
-  listObserverProcesses(): ObserverProcessEntry[];
+  readObserverProcess(pid: number): ObserverProcessEntry | undefined;
   socketHolders(socketPath: string): number[];
   processStartToken(pid: number): string | undefined;
   readProcessIdentity(socketPath: string): Promise<ObserverProcessIdentity | undefined>;
@@ -302,10 +303,15 @@ export async function negotiateObserverIncumbent(
     if (!observerProcessIdentitiesMatch(incumbent, revalidatedIncumbent.processIdentity)) {
       throw handoffRefused("The incumbent Observer process changed during handoff.");
     }
-    await deps.lifecycle.stop(input.socketPath, {
-      timeoutMs: remainingHandoffMs(deadline, now),
-      expectedObserver: revalidatedIncumbent.health,
-    });
+    try {
+      await deps.lifecycle.stop(input.socketPath, {
+        timeoutMs: Math.min(MAX_STOP_ACKNOWLEDGEMENT_MS, remainingHandoffMs(gracefulDeadline, now)),
+        expectedObserver: revalidatedIncumbent.health,
+      });
+    } catch {
+      // A timed-out acknowledgement may still have initiated shutdown; exact
+      // process evidence below decides whether fallback signaling is safe.
+    }
 
     if (await waitForExactExit(input.socketPath, incumbent, gracefulDeadline, deps, now, sleep)) {
       return { action: "replaced", health };
@@ -319,7 +325,16 @@ export async function negotiateObserverIncumbent(
     }
     // Health is gated once stop begins, so signal revalidation uses the
     // previously verified identity plus fresh lsof, pidfile, argv, and OS evidence.
-    await requireVerifiedProcessEvidence(input.socketPath, incumbent, deps);
+    try {
+      await requireVerifiedProcessEvidence(input.socketPath, incumbent, deps);
+    } catch (error) {
+      // Shutdown may remove signal evidence before the exact process exits.
+      // Passive identity checks remain safe for the rest of the handoff deadline.
+      if (await waitForExactExit(input.socketPath, incumbent, deadline, deps, now, sleep)) {
+        return { action: "replaced", health };
+      }
+      throw error;
+    }
     if (now() >= deadline) {
       throw handoffRefused("The incumbent Observer could not be revalidated within the deadline.");
     }
@@ -396,9 +411,7 @@ async function requireVerifiedProcessEvidence(
   if (currentIdentity === undefined || !observerProcessIdentitiesMatch(currentIdentity, identity)) {
     throw handoffRefused("The incumbent Observer pidfile changed during handoff.");
   }
-  const processEntry = deps.evidence
-    .listObserverProcesses()
-    .find((entry) => entry.pid === identity.pid);
+  const processEntry = deps.evidence.readObserverProcess(identity.pid);
   if (
     processEntry === undefined ||
     processEntry.socketPath !== socketPath ||

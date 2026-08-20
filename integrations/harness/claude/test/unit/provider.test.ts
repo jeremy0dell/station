@@ -17,7 +17,6 @@ describe("ClaudeHarnessProvider", () => {
       canLaunch: true,
       canDiscoverRuns: true,
       canEmitEvents: true,
-      canClassifyStatus: true,
       canReceivePrompt: false,
       canResume: false,
       canStop: false,
@@ -279,74 +278,25 @@ describe("ClaudeHarnessProvider", () => {
       {
         id: "claude:tmux:station:@1:%2",
         provider: "claude",
-        state: "unknown",
-        confidence: "low",
+        status: expect.objectContaining({ value: "unknown", confidence: "low" }),
       },
     ]);
   });
 
-  it("classifies discovered runs conservatively", async () => {
+  it("returns conservative status as part of discovery", async () => {
     const provider = createClaudeHarnessProvider({ now: () => new Date(now) });
-
-    const status = await provider.classifyRun(
-      {
-        id: "claude:tmux:station:@1:%2",
-        provider: "claude",
-        state: "unknown",
-        confidence: "low",
-        reason: "terminal target is bound to Claude Code.",
-        observedAt: now,
-      },
-      { projects: [], worktrees: [], terminalTargets: [] },
-    );
-
-    expect(status.status).toMatchObject({
-      value: "unknown",
-      confidence: "low",
-    });
+    expect("classifyRun" in provider).toBe(false);
   });
 
-  it("ingests forwarded hook events through provider-local parsing", async () => {
+  it("keeps raw hook normalization out of provider operations", () => {
     const provider = createClaudeHarnessProvider();
-
-    const observations = await provider.ingestEvent?.(
-      {
-        provider: "claude",
-        event: {
-          hook_event_name: "Stop",
-          session_id: "b97830b1-155a-4eb1-be06-8c497fcbb2a9",
-          cwd: "/tmp/station/web/task",
-          stop_hook_active: false,
-          station_session_id: "ses_web_task",
-          station_worktree_id: "wt_web_task",
-        },
-        observedAt: now,
-      },
-      { projects: [], worktrees: [], terminalTargets: [] },
-    );
-
-    expect(observations?.[0]).toMatchObject({
-      provider: "claude",
-      rawEventType: "Stop",
-      sessionId: "ses_web_task",
-      worktreeId: "wt_web_task",
-      status: { value: "idle", confidence: "high" },
-    });
+    expect("ingestEvent" in provider).toBe(false);
   });
 
-  it("rejects malformed events with a typed ingest error", async () => {
+  it("keeps provider construction independent of raw hook payload validity", () => {
     const provider = createClaudeHarnessProvider();
-
-    await expect(
-      provider.ingestEvent?.(
-        { provider: "claude", event: { hook_event_name: "Stop" } },
-        { projects: [], worktrees: [], terminalTargets: [] },
-      ),
-    ).rejects.toMatchObject({
-      tag: "HarnessProviderError",
-      code: "HARNESS_CLAUDE_EVENT_INVALID",
-      provider: "claude",
-    });
+    expect(provider.id).toBe("claude");
+    expect(Object.keys(provider)).not.toContain("ingestEvent");
   });
 });
 

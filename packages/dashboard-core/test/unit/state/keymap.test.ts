@@ -1,14 +1,20 @@
 import { describe, expect, it } from "vitest";
 import { SELECTION_KEYS } from "../../../src/selectors/selectors.js";
 import {
+  type DashboardFooterWidth,
   dashboardBindingHelp,
+  dashboardFooterShortcuts,
   deriveTuiInputMode,
   isSlotKey,
   matchDashboardBinding,
 } from "../../../src/state/keymap.js";
 import { createInitialTuiState } from "../../../src/state/screen.js";
+import { openGroupSettings } from "../../../src/state/screens/groupSettings.js";
 import { handleTuiKey } from "../../../src/state/transition.js";
-import { createDashboardSnapshot } from "../../fixtures/snapshots.js";
+import {
+  createDashboardSnapshot,
+  createGroupedDashboardSnapshot,
+} from "../../fixtures/snapshots.js";
 
 const KEY_CONTEXT = { cwd: "/Users/example/Developer/station", homeDir: "/Users/example" };
 
@@ -21,6 +27,7 @@ describe("dashboard key bindings", () => {
     expect(matchDashboardBinding({ input: "\r", return: true })?.action).toBe("tui.focus.activate");
     expect(matchDashboardBinding({ input: "N" })?.action).toBe("tui.newSession.open");
     expect(matchDashboardBinding({ input: "G" })?.action).toBe("tui.quickGroup.create");
+    expect(matchDashboardBinding({ input: "M" })?.action).toBe("tui.moveToGroup.open");
     expect(matchDashboardBinding({ input: "?" })?.action).toBe("tui.help.open");
   });
 
@@ -36,6 +43,29 @@ describe("dashboard key bindings", () => {
         },
       }),
     ).toBe("persistentFilter");
+  });
+
+  it("derives the dedicated Group menu input mode", () => {
+    const base = createInitialTuiState({ initialSnapshot: createGroupedDashboardSnapshot() });
+    expect(
+      deriveTuiInputMode({
+        ...base,
+        screen: {
+          name: "groupMenu",
+          projectId: "web",
+          groupId: "group_active",
+          focus: "quickSession",
+        },
+      }),
+    ).toBe("groupMenu");
+  });
+
+  it("derives the dedicated Group Settings input mode", () => {
+    const state = openGroupSettings(
+      createInitialTuiState({ initialSnapshot: createGroupedDashboardSnapshot() }),
+      "group_active",
+    );
+    expect(deriveTuiInputMode(state)).toBe("groupSettings");
   });
 
   it("gives the global Ctrl-C exit precedence over slot matching", () => {
@@ -59,6 +89,11 @@ describe("dashboard key bindings", () => {
     expect(isSlotKey({ input: "g" })).toBe(true);
     expect(matchDashboardBinding({ input: "g" })?.action).toBe("tui.row.activateSlot");
   });
+
+  it("keeps lowercase m as a session slot", () => {
+    expect(isSlotKey({ input: "m" })).toBe(true);
+    expect(matchDashboardBinding({ input: "m" })?.action).toBe("tui.row.activateSlot");
+  });
 });
 
 describe("dashboard lifecycle keys", () => {
@@ -75,8 +110,22 @@ describe("dashboard lifecycle keys", () => {
 });
 
 describe("dashboard footer binding metadata", () => {
-  it("exposes stable keys and labels without contextual layout policy", () => {
-    expect(dashboardBindingHelp("tui.dashboard.filter")).toEqual({
+  const footerText = (width: DashboardFooterWidth) =>
+    dashboardFooterShortcuts(width)
+      .map(({ keys, label }) => `${keys} ${label}`)
+      .join("  ");
+
+  it("derives full and compact shortcut membership from binding metadata", () => {
+    expect(footerText("full")).toBe(
+      "↵ activate  N new  M move to group  A add  ⇥ next-needs-me  / filter  X delete  ? help",
+    );
+    expect(footerText("compact")).toBe(
+      "↵ activate  N new  ⇥ next-needs-me  / filter  X delete  ? help",
+    );
+  });
+
+  it("exposes stable and Help-panel keyboard language from the same binding", () => {
+    expect(dashboardBindingHelp("tui.dashboard.filter")).toMatchObject({
       keys: "/",
       label: "filter",
     });
@@ -91,6 +140,23 @@ describe("dashboard footer binding metadata", () => {
     expect(dashboardBindingHelp("tui.dashboard.quickGroup")).toEqual({
       keys: "G",
       label: "quick group",
+    });
+    expect(dashboardBindingHelp("tui.dashboard.moveToGroup")).toEqual({
+      keys: "M",
+      label: "move to group",
+      footerOrder: 25,
+    });
+    expect(dashboardBindingHelp("tui.dashboard.nextNeedsMe")).toMatchObject({
+      keys: "⇥",
+      label: "next-needs-me",
+      panelKeys: "tab",
+      panelLabel: "next session needing you",
+    });
+    expect(dashboardBindingHelp("tui.dashboard.slotActivate")).toMatchObject({
+      keys: "1-9 a-z",
+      label: "open visible session",
+      panelKeys: "1-9/a-z",
+      panelLabel: "open visible session or toggle condition",
     });
   });
 });

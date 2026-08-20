@@ -43,7 +43,9 @@ auto-start and offline spooling, and rejects known build, schema, or handoff
 incompatibility without putting the event into a spool that mismatched code can
 drain. Raw hook payloads normalize exactly once through the selected
 Observer-side provider adapter; an already-normalized `HarnessEventReport`
-bypasses that adapter.
+bypasses that adapter. There is no secondary `HarnessProvider` raw-ingestion
+path: an accepted hook without a report-producing adapter is durable evidence
+to schedule reconcile, not a source of synthesized harness observations.
 
 Station-generated Codex, Claude, and Cursor scripts, the OpenCode plugin, and
 Worktrunk lifecycle commands carry a strict artifact-owner marker. The canonical

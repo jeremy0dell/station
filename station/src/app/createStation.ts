@@ -11,6 +11,7 @@ import {
 } from "../copy/clipboard.js";
 import { createStationInputRuntime, type StationInputRuntime } from "../input/stationInput.js";
 import { createManagedLaunch } from "../input/runtime/managedLaunch.js";
+import { reportManagedAgentPaneExit } from "../input/runtime/managedAgentPaneCleanup.js";
 import { createPaneEffects, type PaneEffects } from "../input/runtime/paneEffects.js";
 import {
   invokeCleanup,
@@ -61,6 +62,7 @@ export function createStation(options: CreateStationOptions): Station {
     automations,
     writeToTerminal: undefined,
     pasteToTerminal: undefined,
+    reportExternalExit: (params) => stationClient.service.reportExternalExit(params),
   });
   const managedLaunch = createManagedLaunch({
     store,
@@ -74,6 +76,7 @@ export function createStation(options: CreateStationOptions): Station {
     observerService: stationClient.service,
     store,
     paneEffects,
+    registry,
     managedLaunch,
   });
   const dashboardRuntime = createStationDashboardRuntime(
@@ -160,23 +163,16 @@ function setupRegistry(
   store: StationStore,
   stationClient: StationClient,
 ): PtyRegistry {
-  // When a managed primary agent's PTY exits, tell the observer to drop the
-  // session (the local pane record stays until the user closes it). Best-effort:
-  // a failed report falls to a staleness sweep. Shells (no identity) are ignored.
+  // Only a UI-owned binding generation may be forgotten from a pane exit.
+  // Host-backed liveness remains provider truth and converges through reconcile.
   const reportPaneExit = (paneId: PaneId): void => {
-    const identity = selectPaneRecord(store.getState(), paneId)?.agentIdentity;
-    if (identity === undefined) {
-      return;
-    }
-    void stationClient.service
-      .reportExternalExit({
-        terminalTargetId: identity.terminalTargetId,
-        expectedSessionId: identity.sessionId,
-        ...(identity.terminalBindingToken === undefined
-          ? {}
-          : { expectedBindingToken: identity.terminalBindingToken }),
-      })
-      .catch(() => {});
+    void reportManagedAgentPaneExit(
+      {
+        store,
+        reportExternalExit: (params) => stationClient.service.reportExternalExit(params),
+      },
+      paneId,
+    ).catch(() => undefined);
   };
   const registry =
     options.registry ??

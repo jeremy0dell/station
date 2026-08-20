@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import type { ManagedLaunch, ManagedLaunchResult } from "../input/runtime/managedLaunch.js";
 import type { PaneEffects } from "../input/runtime/paneEffects.js";
 import { createStationStore } from "../state/store.js";
+import type { PtyRegistry } from "../terminal/registry/ptyRegistry.js";
 import { STATION_OVERLAY_ID } from "../state/types.js";
 import { manyProjectsSnapshot } from "../station/fixtures/scenarios.js";
 import { FakeStationSource } from "../station/test/support/fakeStationSource.js";
@@ -27,6 +28,7 @@ function harness() {
   let createResult: ManagedLaunchResult = { kind: "success", landed: false };
   const activateRequests: Parameters<ManagedLaunch["activate"]>[] = [];
   const createRequests: Parameters<ManagedLaunch["create"]>[0][] = [];
+  const forkRequests: Parameters<ManagedLaunch["fork"]>[0][] = [];
   const managedLaunch: ManagedLaunch = {
     activate: async (...request) => {
       activateRequests.push(request);
@@ -36,13 +38,17 @@ function harness() {
       createRequests.push(request);
       return createResult;
     },
-    fork: async () => createResult,
+    fork: async (request) => {
+      forkRequests.push(request);
+      return createResult;
+    },
   };
   const capabilities = createDashboardCapabilities({
     clientState: source,
     observerService: service,
     store,
     paneEffects,
+    registry: {} as PtyRegistry,
     managedLaunch,
   });
   return {
@@ -53,6 +59,7 @@ function harness() {
     opened,
     activateRequests,
     createRequests,
+    forkRequests,
     setActivationResult: (result: ManagedLaunchResult) => (activationResult = result),
     setCreateResult: (result: ManagedLaunchResult) => (createResult = result),
   };
@@ -186,6 +193,44 @@ describe("native dashboard capabilities", () => {
         branch: "station-new-123",
         harness: "codex",
         group: { kind: "existing", groupId: "grp_release" },
+      },
+    ]);
+  });
+
+  it("carries source Group inheritance into native Fork execution", async () => {
+    const fixture = harness();
+    const project = manyProjectsSnapshot().projects.find((candidate) => candidate.id === "station");
+    if (project === undefined) throw new Error("project fixture missing");
+
+    const handle = fixture.capabilities.managedSessions.fork({
+      project,
+      sourceWorktreeId: "wt_station_working",
+      title: "Forked session",
+      hiddenBranch: "forked-session-123",
+      copyDirty: true,
+      inheritedHarness: "codex",
+      group: {
+        kind: "source",
+        sourceSessionId: "ses_wt_station_working",
+        groupId: "group_active",
+      },
+    });
+
+    expect(handle.optimistic).toBe("pending-create");
+    await expect(handle.completion).resolves.toEqual({ kind: "success" });
+    expect(fixture.forkRequests).toEqual([
+      {
+        projectId: "station",
+        sourceWorktreeId: "wt_station_working",
+        title: "Forked session",
+        branch: "forked-session-123",
+        copyDirty: true,
+        harness: "codex",
+        group: {
+          kind: "source",
+          sourceSessionId: "ses_wt_station_working",
+          groupId: "group_active",
+        },
       },
     ]);
   });

@@ -72,6 +72,11 @@ describe("createManagedLaunch", () => {
         ...CREATE_REQUEST,
         sourceWorktreeId: "wt_station_working",
         copyDirty: true,
+        group: {
+          kind: "source",
+          sourceSessionId: "ses_wt_station_working",
+          groupId: "group_active",
+        },
       }),
     ).toMatchObject({ kind: "failure", stage: "worktree" });
     expect(service.dispatched).toEqual([
@@ -83,7 +88,42 @@ describe("createManagedLaunch", () => {
           branch: "pty-buffer",
           copyDirty: true,
           launchHarness: "codex",
+          group: {
+            kind: "source",
+            sourceSessionId: "ses_wt_station_working",
+            groupId: "group_active",
+          },
         },
+      },
+    ]);
+  });
+
+  it("carries fork inheritance from worktree dispatch through external preparation", async () => {
+    const { launch, service } = launchHarness(withoutIdleAgent());
+    const group = {
+      kind: "source" as const,
+      sourceSessionId: "ses_wt_station_working" as const,
+      groupId: "group_active" as const,
+    };
+
+    await launch.fork({
+      ...CREATE_REQUEST,
+      sourceWorktreeId: "wt_station_working",
+      copyDirty: true,
+      group,
+    });
+
+    expect(service.dispatched[0]).toMatchObject({
+      type: "worktree.fork",
+      payload: { group },
+    });
+    expect(service.preparedLaunches).toEqual([
+      {
+        projectId: "station",
+        worktreeId: "wt_station_idle",
+        title: "Pty buffer",
+        harness: "codex",
+        group,
       },
     ]);
   });

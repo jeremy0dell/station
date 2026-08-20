@@ -7,7 +7,6 @@ import {
 } from "./observationParser.js";
 import { providerObservationFromRow, type SqliteProviderObservationRow } from "./rows.js";
 import type {
-  CurrentProviderObservationKind,
   PersistedProviderObservation,
   ProviderObservationKind,
   ProviderObservationType,
@@ -86,20 +85,6 @@ export function listProviderObservations(
   );
 }
 
-export function listCurrentProviderEntityObservations(
-  database: SqlDatabase,
-  options: {
-    entityKind?: CurrentProviderObservationKind | readonly CurrentProviderObservationKind[];
-    includeExpired?: boolean;
-    referenceTime: string;
-  },
-): PersistedProviderObservation[] {
-  const query = buildCurrentProviderEntityObservationQuery(options);
-  return (database.prepare(query.sql).all(...query.params) as SqliteProviderObservationRow[]).map(
-    (row) => providerObservationFromRow(row, options.referenceTime),
-  );
-}
-
 export function pruneExpiredProviderObservations(
   database: SqlDatabase,
   expiresBefore: string,
@@ -108,61 +93,6 @@ export function pruneExpiredProviderObservations(
     .prepare("DELETE FROM provider_observations WHERE expires_at IS NOT NULL AND expires_at <= ?")
     .run(expiresBefore);
   return Number(expiredResult.changes);
-}
-
-function buildCurrentProviderEntityObservationQuery(options: {
-  entityKind?: CurrentProviderObservationKind | readonly CurrentProviderObservationKind[];
-  includeExpired?: boolean;
-  referenceTime: string;
-}): { sql: string; params: SqlParam[] } {
-  const kinds =
-    options.entityKind === undefined
-      ? (["worktree", "terminal_target"] satisfies CurrentProviderObservationKind[])
-      : typeof options.entityKind === "string"
-        ? [options.entityKind]
-        : [...options.entityKind];
-  if (kinds.length === 0) {
-    return {
-      sql: "SELECT * FROM provider_observations WHERE 1 = 0 ORDER BY observed_at, id",
-      params: [],
-    };
-  }
-
-  const keySelects: string[] = [];
-  if (kinds.includes("worktree")) {
-    keySelects.push(
-      "SELECT provider, 'worktree' AS provider_type, 'worktree' AS entity_kind, id AS entity_key FROM worktrees",
-    );
-  }
-  if (kinds.includes("terminal_target")) {
-    keySelects.push(
-      "SELECT provider, 'terminal' AS provider_type, 'terminal_target' AS entity_kind, id AS entity_key FROM terminal_targets",
-    );
-  }
-  const latestExpiryClause =
-    options.includeExpired === true ? "" : " AND (i.expires_at IS NULL OR i.expires_at > ?)";
-  const params: SqlParam[] = options.includeExpired === true ? [] : [options.referenceTime];
-  return {
-    sql: `
-      WITH keys AS (
-        ${keySelects.join("\n        UNION ALL\n        ")}
-      )
-      SELECT po.*
-      FROM keys
-      JOIN provider_observations po ON po.id = (
-        SELECT i.id
-        FROM provider_observations i
-        WHERE i.provider = keys.provider
-          AND i.provider_type = keys.provider_type
-          AND i.entity_kind = keys.entity_kind
-          AND i.entity_key = keys.entity_key${latestExpiryClause}
-        ORDER BY i.observed_at DESC, i.id DESC
-        LIMIT 1
-      )
-      ORDER BY po.observed_at, po.id
-    `,
-    params,
-  };
 }
 
 function buildProviderObservationQuery(options: {

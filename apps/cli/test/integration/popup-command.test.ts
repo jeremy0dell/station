@@ -15,7 +15,7 @@ import { createTempState, writeConfigToml } from "../../../../tests/support/temp
 const now = "2026-05-20T12:00:00.000Z";
 const buildIdentity = "a".repeat(64);
 const observerBuildVersion = `0.0.0-local+station.${buildIdentity}`;
-const higherObserverBuildVersion = `0.0.0-pre-alpha.5.2+station.${buildIdentity}`;
+const higherObserverBuildVersion = `0.0.0-pre-alpha.5.16+station.${buildIdentity}`;
 const tuiObserverBuildMismatchError = {
   tag: "TuiCommandError",
   code: "TUI_OBSERVER_BUILD_MISMATCH",
@@ -46,7 +46,7 @@ describe("CLI popup command", () => {
           health: async () => {
             if (!running) throw new Error("stopped");
             return {
-              schemaVersion: "0.10.0",
+              schemaVersion: "0.11.0",
               status: "healthy",
               pid: 1234,
               startedAt: now,
@@ -119,7 +119,7 @@ describe("CLI popup command", () => {
                   if (!spawned) throw new Error("stopped");
                   await healthReady;
                   return {
-                    schemaVersion: "0.10.0",
+                    schemaVersion: "0.11.0",
                     status: "healthy",
                     pid: 1234,
                     startedAt: now,
@@ -189,7 +189,7 @@ describe("CLI popup command", () => {
               clientFactory: () =>
                 ({
                   health: async () => ({
-                    schemaVersion: "0.10.0",
+                    schemaVersion: "0.11.0",
                     status: "healthy",
                     pid: 1234,
                     startedAt: now,
@@ -218,7 +218,7 @@ describe("CLI popup command", () => {
       () =>
         ({
           health: async () => ({
-            schemaVersion: "0.10.0",
+            schemaVersion: "0.11.0",
             status: "healthy",
             pid: 1234,
             startedAt: now,
@@ -702,7 +702,7 @@ function runningObserverDeps(reconciles: string[]): ObserverProcessDeps {
     clientFactory: () =>
       ({
         health: async () => ({
-          schemaVersion: "0.10.0",
+          schemaVersion: "0.11.0",
           status: "healthy",
           pid: 1234,
           startedAt: now,
@@ -719,11 +719,11 @@ function runningObserverDeps(reconciles: string[]): ObserverProcessDeps {
 
 function emptySnapshot(reason: string) {
   return {
-    schemaVersion: "0.10.0",
+    schemaVersion: "0.11.0",
     reason,
     reconciledAt: now,
     snapshot: {
-      schemaVersion: "0.10.0",
+      schemaVersion: "0.11.0",
       generatedAt: now,
       observer: { pid: 1234, startedAt: now, version: "0.7.0", healthy: true },
       providerHealth: {},
@@ -767,7 +767,7 @@ function nonCompletingReconcileObserverDeps(reconciles: string[]): ObserverProce
     clientFactory: () =>
       ({
         health: async () => ({
-          schemaVersion: "0.10.0",
+          schemaVersion: "0.11.0",
           status: "healthy",
           pid: 1234,
           startedAt: now,

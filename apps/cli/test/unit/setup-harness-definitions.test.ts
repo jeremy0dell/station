@@ -97,11 +97,10 @@ describe("setup harness definitions", () => {
     const checks = source("../../src/commands/setup/checks/harnesses.ts");
     const inspection = source("../../src/commands/setup/adapters/inspection.ts");
     const guided = source("../../src/commands/setup/session/runGuidedSetupSession.ts");
-    const result = source("../../src/commands/setup/presentation/projectSetupResult.ts");
+    const text = source("../../src/commands/setup/presenters/text.ts");
     const json = source("../../src/commands/setup/presenters/json.ts");
     const definitions = source("../../src/commands/setup/harnessDefinitions.ts");
     const operations = source("../../src/commands/setup/adapters/operations.ts");
-    const actions = source("../../src/commands/setup/presentation/projectSetupActions.ts");
     const hookAdapters = source("../../src/commands/providerHookAdapters.ts");
 
     expect(checks).not.toContain("STATION_CURSOR_AGENT_BIN");
@@ -109,11 +108,11 @@ describe("setup harness definitions", () => {
     expect(inspection).not.toContain('harnessId !== "pi"');
     expect(checks).not.toContain('id === "opencode"');
     expect(guided).not.toContain('["claude", "codex", "cursor", "opencode", "pi"]');
-    expect(result).not.toContain('harnessId === "claude"');
+    expect(text).not.toContain('harnessId === "claude"');
     expect(json).not.toContain('harness === "claude"');
     expect(definitions).not.toContain("STATION_CODEX_BIN");
     expect(operations).not.toContain("homebrew/cask/codex");
-    expect(actions).not.toContain("installer.codex-brew");
+    expect(text).not.toContain("installer.codex-brew");
     expect(hookAdapters).not.toContain("supportsHookBin: true");
   });
 });

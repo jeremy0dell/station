@@ -483,6 +483,7 @@ describe("startStationHost", () => {
 
   it("host.close drops the PTY; attaching to a missing PTY is HOST_ATTACH_GONE", async () => {
     const scripted = createScriptedTerminal({ cols: 80, rows: 24 });
+    scripted.terminal.kill = () => scripted.helpers.emitExit({ exitCode: 0 });
     const socketPath = await startOnTempSocket({ createTerminal: () => scripted.terminal });
     const client = testClient(socketPath);
     try {

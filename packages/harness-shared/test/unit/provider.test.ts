@@ -1,9 +1,4 @@
-import type {
-  HarnessEventObservation,
-  HarnessLaunchPlan,
-  HarnessStatusObservation,
-  ProviderDoctorContext,
-} from "@station/contracts";
+import type { HarnessLaunchPlan, ProviderDoctorContext } from "@station/contracts";
 import { describe, expect, it } from "vitest";
 import {
   type CommonHarnessProviderOptions,
@@ -29,7 +24,6 @@ function baseSpec(
       canLaunch: true,
       canDiscoverRuns: true,
       canEmitEvents: true,
-      canClassifyStatus: true,
       canReceivePrompt: false,
       canResume: false,
       canStop: false,
@@ -54,18 +48,7 @@ function baseSpec(
       args: [],
       mode: "interactive",
     }),
-    classifyRun: (run): HarnessStatusObservation => ({
-      provider: "test",
-      runId: run.id,
-      status: {
-        value: "unknown",
-        confidence: "low",
-        reason: "n/a",
-        source: "harness_process",
-        updatedAt: run.observedAt,
-      },
-      observedAt: run.observedAt,
-    }),
+    unknownStatusReason: "Test run has no reliable status signal.",
     ...overrides,
   };
 }
@@ -119,34 +102,21 @@ describe("createTerminalBoundHarnessProvider", () => {
     });
   });
 
-  it("ingests events through the runtime boundary when a spec supplies normalize", async () => {
-    const observation = { provider: "test", observedAt: now } as unknown as HarnessEventObservation;
-    const provider = createTerminalBoundHarnessProvider(
-      baseSpec({
-        ingestEvent: {
-          operation: "provider.test.ingestEvent",
-          errorCode: "HARNESS_TEST_EVENT_INGEST_FAILED",
-          errorMessage: "ingest failed",
-          normalize: () => [observation],
-        },
-      }),
-      {},
-    );
-
-    expect(provider.ingestEvent).toBeDefined();
-    await expect(
-      provider.ingestEvent?.(
-        { provider: "test", event: {} },
-        { projects: [], worktrees: [], terminalTargets: [] },
-      ),
-    ).resolves.toEqual([observation]);
+  it("keeps raw hook ingestion out of the provider operation surface", () => {
+    const provider = createTerminalBoundHarnessProvider(baseSpec(), {});
+    expect(Object.keys(provider)).toEqual([
+      "id",
+      "capabilities",
+      "health",
+      "discoverRuns",
+      "buildLaunch",
+    ]);
   });
 
   it("omits optional interface methods the spec does not supply", () => {
     const provider = createTerminalBoundHarnessProvider(baseSpec(), {});
     expect("doctorChecks" in provider).toBe(false);
     expect("hooksStatus" in provider).toBe(false);
-    expect("ingestEvent" in provider).toBe(false);
     expect("acceptsPersistedEvent" in provider).toBe(false);
   });
 
@@ -175,7 +145,7 @@ describe("createTerminalBoundHarnessProvider", () => {
       schemaVersion: 1 as const,
       launcher: "/source/bin/stn-ingress",
       runtimeKind: "source" as const,
-      version: "0.0.0-pre-alpha.5.2",
+      version: "0.0.0-pre-alpha.5.16",
       buildIdentity: "a".repeat(64),
     };
 

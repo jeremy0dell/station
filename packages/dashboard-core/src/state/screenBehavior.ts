@@ -2,7 +2,10 @@ import { addProjectScreenBehavior } from "./screens/addProjectScreen.js";
 import { dashboardScreenBehavior } from "./screens/dashboard.js";
 import { forkScreenBehavior } from "./screens/fork.js";
 import { freshStartScreenBehavior } from "./screens/freshStart.js";
+import { groupMenuScreenBehavior } from "./screens/groupMenu.js";
+import { groupSettingsScreenBehavior } from "./screens/groupSettings.js";
 import { helpScreenBehavior } from "./screens/help.js";
+import { moveToGroupScreenBehavior } from "./screens/moveToGroup.js";
 import { newSessionScreenBehavior } from "./screens/newSession.js";
 import { persistentFilterScreenBehavior } from "./screens/persistentFilter.js";
 import { projectCollapseScreenBehavior } from "./screens/projectCollapse.js";
@@ -35,6 +38,8 @@ export function tuiScreenBehavior(screen: DashboardScreenView): TuiScreenBehavio
       return helpScreenBehavior;
     case "projectMenu":
       return projectMenuScreenBehavior;
+    case "groupMenu":
+      return groupMenuScreenBehavior;
     case "createGroup":
       return createGroupScreenBehavior;
     case "persistentFilter":
@@ -49,6 +54,8 @@ export function tuiScreenBehavior(screen: DashboardScreenView): TuiScreenBehavio
       return removeWorktreeScreenBehavior(screen);
     case "renameSession":
       return renameSessionScreenBehavior(screen);
+    case "moveToGroup":
+      return moveToGroupScreenBehavior(screen);
     case "fork":
       return forkScreenBehavior(screen);
     case "addProject":
@@ -59,6 +66,8 @@ export function tuiScreenBehavior(screen: DashboardScreenView): TuiScreenBehavio
       return projectDefaultAgentScreenBehavior;
     case "projectSettings":
       return projectSettingsScreenBehavior;
+    case "groupSettings":
+      return groupSettingsScreenBehavior;
     case "widgetSettings":
       return widgetSettingsScreenBehavior;
   }

@@ -17,6 +17,7 @@ import {
   defaultSessionCommandIdFactory,
   findProjectOrThrow,
   rememberedHarnessProviderForWorktree,
+  resolveForkSessionGroupPlacement,
   type SessionCommandIdFactory,
   seedSession,
   sessionSeedGroupPlacement,
@@ -46,7 +47,7 @@ type ExternalExitDeps = Pick<ExternalLaunchDeps, "providers">;
 
 export type ExternalLaunchOutcome<T> = {
   outcome: T;
-  /** Whether the caller should reconcile so the change reaches the snapshot. */
+  /** Whether the caller should request a shared scheduled reconcile for this lifecycle change. */
   reconcile: boolean;
 };
 
@@ -55,9 +56,11 @@ export type ExternalLaunchOutcome<T> = {
  *
  * Returns a live or attachable managed identity first, then exactly recovers the canonical open
  * Station session unless explicit, identity-bound user consent requests a fresh provider execution.
- * Both launch paths preflight only the selected provider. A fresh Station identity is atomically
- * seeded into its optional root Group before target publication, and confirmed failed launch cleanup
- * removes its membership and owned inline Group without touching retained recovery state.
+ * Both launch paths preflight only the selected provider and pass provider-neutral resume options to
+ * the harness. A fresh Station identity is atomically seeded with explicit root placement or the
+ * requested source session's current Group before target publication, and confirmed failed launch
+ * cleanup removes only its membership and owned inline Group without touching source or retained
+ * recovery state.
  */
 export async function prepareExternalLaunch(
   deps: ExternalLaunchDeps,
@@ -217,8 +220,16 @@ async function prepareExternalLaunchForWorktree(
   const freshSession = retainedSession === undefined;
   const idFactory = { ...defaultSessionCommandIdFactory, ...deps.idFactory };
   const sessionId = retainedSession?.id ?? idFactory.sessionId();
+  const acceptedGroupIntent =
+    params.group?.kind === "source"
+      ? resolveForkSessionGroupPlacement({
+          snapshot,
+          intent: params.group,
+          projectId: project.id,
+        })
+      : params.group;
   const group = freshSession
-    ? sessionSeedGroupPlacement(params.group, idFactory.sessionGroupId)
+    ? sessionSeedGroupPlacement(acceptedGroupIntent, idFactory.sessionGroupId)
     : undefined;
   const seededAt = nowIso(deps.clock);
   let opened: ManagedOpenWorkspaceResult | undefined;
@@ -232,6 +243,8 @@ async function prepareExternalLaunchForWorktree(
         projectId: project.id,
         worktreeId: worktree.id,
         initialTitle: params.title ?? row.title,
+        harness: harnessProviderId,
+        terminalProvider: managedTerminal.id,
         ...(group === undefined ? {} : { group }),
         clock: deps.clock,
       });
@@ -386,15 +399,15 @@ async function resolveAutomaticRecovery(
 /**
  * USE CASE
  *
- * Forgets only the matching managed target/session and, when reported, generation.
- * A missing expected session or superseded binding fails closed without reconcile;
+ * Forgets only the matching managed target, session, and binding generation.
+ * Missing exact identity or a superseded binding fails closed without reconcile;
  * reconciliation may retain the durable Station session as `No Agent`.
  */
 export async function reportExternalExit(
   deps: ExternalExitDeps,
   params: AgentReportExternalExitParams,
 ): Promise<ExternalLaunchOutcome<AgentReportExternalExitResult>> {
-  if (params.expectedSessionId === undefined) {
+  if (params.expectedSessionId === undefined || params.expectedBindingToken === undefined) {
     return {
       outcome: { acknowledged: false, terminalTargetId: params.terminalTargetId },
       reconcile: false,
@@ -404,9 +417,7 @@ export async function reportExternalExit(
     (await deps.providers.managedTerminal?.releaseTarget({
       targetId: params.terminalTargetId,
       expectedSessionId: params.expectedSessionId,
-      ...(params.expectedBindingToken === undefined
-        ? {}
-        : { expectedBindingToken: params.expectedBindingToken }),
+      expectedBindingToken: params.expectedBindingToken,
     })) ?? false;
   return {
     outcome: { acknowledged, terminalTargetId: params.terminalTargetId },

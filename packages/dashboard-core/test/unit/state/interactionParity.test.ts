@@ -355,6 +355,77 @@ describe("primary workflow interaction parity", () => {
     }
   });
 
+  it("converges Group-menu pointer, focused Enter, and shortcut paths", () => {
+    const rowId = dashboardRowIds.group("group_active");
+    const base = createInitialTuiState({
+      initialSnapshot: createGroupedDashboardSnapshot(),
+      dashboardFocus: { rowId, cellId: "menu" },
+    });
+    const menu = handleTuiAction(
+      base,
+      { type: "dashboard.cell.activate", rowId, cellId: "menu" },
+      context,
+    ).state;
+    const cases = [
+      { actionId: "quickSession", shortcut: "Q", down: 0 },
+      { actionId: "newSession", shortcut: "N", down: 1 },
+      { actionId: "settings", shortcut: "S", down: 2 },
+      { actionId: "remove", shortcut: "R", down: 3 },
+    ] as const;
+
+    for (const testCase of cases) {
+      let focusedMenu = menu;
+      for (let index = 0; index < testCase.down; index += 1) {
+        focusedMenu = handleTuiKey(focusedMenu, { input: "", downArrow: true }, context).state;
+      }
+      const transitions = [
+        handleTuiAction(menu, { type: "groupMenu.activate", actionId: testCase.actionId }, context),
+        handleTuiKey(focusedMenu, { input: "\r", return: true }, context),
+        handleTuiKey(menu, { input: testCase.shortcut }, context),
+      ];
+
+      for (const transition of transitions) {
+        expect(transition.state.dashboardFocus).toEqual({ rowId, cellId: "menu" });
+        switch (testCase.actionId) {
+          case "quickSession":
+            expect(transition.state.screen).toEqual({ name: "dashboard" });
+            expect(transition.operations).toEqual([
+              expect.objectContaining({
+                type: "quickCreateSessionInGroup",
+                groupId: "group_active",
+                fallbackCell: "menu",
+              }),
+            ]);
+            break;
+          case "newSession":
+            expect(transition.state.screen).toMatchObject({
+              name: "newSession",
+              flow: {
+                mode: "review",
+                selectedProjectId: "web",
+                groupSelection: { kind: "existing", groupId: "group_active" },
+              },
+            });
+            expect(transition.operations).toBeUndefined();
+            break;
+          case "settings":
+          case "remove":
+            expect(transition.state.screen).toMatchObject({
+              name: "groupSettings",
+              projectId: "web",
+              groupId: "group_active",
+              section: testCase.actionId === "settings" ? "general" : "remove",
+              ...(testCase.actionId === "remove"
+                ? { focus: "detail", detailFocus: "removeConfirm" }
+                : { focus: "list" }),
+            });
+            expect(transition.operations).toBeUndefined();
+            break;
+        }
+      }
+    }
+  });
+
   it("converges direct, pointer, and focused Project paths on one Quick Group operation", () => {
     const rowId = dashboardRowIds.project("web");
     const base = createInitialTuiState({

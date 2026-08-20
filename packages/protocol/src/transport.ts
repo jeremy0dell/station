@@ -66,9 +66,12 @@ export type UnixSocketProbeOptions = {
 };
 
 type UnixSocketHolderReaderOptions = {
+  /** Bounds the holder-evidence subprocess; defaults to the socket probe timeout. */
+  timeoutMs?: number;
   runLsof?: (
     file: string,
     args: readonly string[],
+    timeoutMs: number,
   ) => Pick<SpawnSyncReturns<string>, "error" | "signal" | "status" | "stderr" | "stdout">;
 };
 
@@ -109,6 +112,7 @@ export async function probeUnixSocket(
     MIN_SOCKET_PROBE_TIMEOUT_MS,
     options.timeoutMs ?? DEFAULT_SOCKET_PROBE_TIMEOUT_MS,
   );
+  const deadlineMs = Date.now() + timeoutMs;
   const connect = options.connect ?? probeUnixSocketConnection;
 
   try {
@@ -144,7 +148,11 @@ export async function probeUnixSocket(
       return inaccessibleSocket("unclassified", error, initialIdentity);
     }
     try {
-      const holders = await (options.socketHolders ?? readUnixSocketHolderPids)(socketPath);
+      const holderTimeoutMs = Math.max(MIN_SOCKET_PROBE_TIMEOUT_MS, deadlineMs - Date.now());
+      const holders = await (
+        options.socketHolders ??
+        ((path: string) => readUnixSocketHolderPids(path, { timeoutMs: holderTimeoutMs }))
+      )(socketPath);
       return holders.length === 0
         ? { status: "stale", identity: initialIdentity }
         : inaccessibleSocket("live-holder", error, initialIdentity);
@@ -164,7 +172,15 @@ export function readUnixSocketHolderPids(
   socketPath: string,
   options: UnixSocketHolderReaderOptions = {},
 ): number[] {
-  const result = (options.runLsof ?? runLsof)(unixSocketHolderEvidencePath(), ["-t", socketPath]);
+  const timeoutMs = Math.max(
+    MIN_SOCKET_PROBE_TIMEOUT_MS,
+    options.timeoutMs ?? DEFAULT_SOCKET_PROBE_TIMEOUT_MS,
+  );
+  const result = (options.runLsof ?? runLsof)(
+    unixSocketHolderEvidencePath(),
+    ["-t", socketPath],
+    timeoutMs,
+  );
   const stdout = result.stdout;
   const stderr = result.stderr;
   if (
@@ -670,11 +686,13 @@ function errorCode(error: unknown): string | undefined {
   return parsed.success ? parsed.data.code : undefined;
 }
 
-function runLsof(file: string, args: readonly string[]) {
+function runLsof(file: string, args: readonly string[], timeoutMs: number) {
   return spawnSync(file, [...args], {
     encoding: "utf8",
     env: { ...process.env, LC_ALL: "C" },
     maxBuffer: 8 * 1024 * 1024,
+    timeout: timeoutMs,
+    killSignal: "SIGKILL",
   });
 }
 

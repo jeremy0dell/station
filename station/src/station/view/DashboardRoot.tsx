@@ -143,16 +143,22 @@ export function DashboardRoot({ state, actions, columns, rows, onCopyNotice }: D
     ...(persistentFilter === undefined ? {} : { persistentFilter }),
     ...(dashboardFocus === undefined ? {} : { dashboardFocus }),
   };
-  const projectMenuAnchorTop =
+  const menuRowId =
     screen.name === "projectMenu"
-      ? dashboardBodyTop() +
+      ? dashboardRowIds.project(screen.projectId)
+      : screen.name === "groupMenu"
+        ? dashboardRowIds.group(screen.groupId)
+        : undefined;
+  const menuAnchorTop =
+    menuRowId === undefined
+      ? undefined
+      : dashboardBodyTop() +
         Math.max(
           0,
           selectDashboardViewport(snapshot, viewState, screen).rows.findIndex(
-            (row) => row.id === dashboardRowIds.project(screen.projectId),
+            (row) => row.id === menuRowId,
           ),
-        )
-      : undefined;
+        );
 
   return (
     <box width="100%" flexGrow={1} flexDirection="column">
@@ -176,7 +182,7 @@ export function DashboardRoot({ state, actions, columns, rows, onCopyNotice }: D
         localRows={localRows}
         widgets={liveWidgets}
         widgetsPersisted={widgetsPersisted}
-        {...(projectMenuAnchorTop === undefined ? {} : { projectMenuAnchorTop })}
+        {...(menuAnchorTop === undefined ? {} : { menuAnchorTop })}
       />
     </box>
   );

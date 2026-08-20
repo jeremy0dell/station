@@ -7,6 +7,7 @@ import {
   type PaneRole,
   type PaneSplitDirection,
   type StationState,
+  worktreeIdFromAgentPaneId,
 } from "./types.js";
 import type { ContextMenuAnchor, ContextMenuTarget } from "../contextMenu/types.js";
 import { resolveInitialState, type StationStoreOptions } from "./initialState.js";
@@ -25,6 +26,8 @@ export type CreatePaneOptions = {
   };
   /** Defaults to `"shell"`; the agent open-pane path passes `"primary-agent"`. */
   role?: PaneRole;
+  /** Stable owner copied to every pane created within a worktree tree. */
+  worktreeId?: string;
 };
 
 export type StationStoreActions = {
@@ -88,6 +91,10 @@ export type StationStore = {
   /** Process-local coordination that must survive compatible Bun hot reloads. */
   transient: {
     managedLaunchesInFlight: Set<PaneId>;
+    managedExitReports: Map<
+      string,
+      { worktreeId: string | undefined; promise: Promise<boolean> }
+    >;
   };
 };
 
@@ -142,6 +149,7 @@ export function createStationStore(options?: StationStoreOptions): StationStore 
           split: explicitSplit ?? null,
           role: options?.role ?? "shell",
         };
+        if (options?.worktreeId !== undefined) record.worktreeId = options.worktreeId;
         const appended: StationState = {
           ...state,
           workspace: { ...state.workspace, panes: [...state.workspace.panes, record] },
@@ -173,12 +181,19 @@ export function createStationStore(options?: StationStoreOptions): StationStore 
           ) {
             nextIdentity.terminalBindingToken = previousIdentity.terminalBindingToken;
           }
+          if (
+            nextIdentity.processOwner === undefined &&
+            previousIdentity.processOwner !== undefined
+          ) {
+            nextIdentity.processOwner = previousIdentity.processOwner;
+          }
         }
         if (
           record.role === "primary-agent" &&
           record.agentIdentity?.sessionId === nextIdentity.sessionId &&
           record.agentIdentity.terminalTargetId === nextIdentity.terminalTargetId &&
           record.agentIdentity.terminalBindingToken === nextIdentity.terminalBindingToken &&
+          record.agentIdentity.processOwner === nextIdentity.processOwner &&
           record.agentIdentity.harnessProvider === nextIdentity.harnessProvider
         ) {
           return;
@@ -187,11 +202,16 @@ export function createStationStore(options?: StationStoreOptions): StationStore 
           ...state,
           workspace: {
             ...state.workspace,
-            panes: state.workspace.panes.map((pane) =>
-              pane.id === paneId
-                ? { ...pane, role: "primary-agent", agentIdentity: nextIdentity }
-                : pane,
-            ),
+            panes: state.workspace.panes.map((pane) => {
+              if (pane.id !== paneId) return pane;
+              const worktreeId = pane.worktreeId ?? worktreeIdFromAgentPaneId(pane.id);
+              return {
+                ...pane,
+                role: "primary-agent",
+                agentIdentity: nextIdentity,
+                ...(worktreeId === undefined ? {} : { worktreeId }),
+              };
+            }),
           },
         });
       },
@@ -376,6 +396,7 @@ export function createStationStore(options?: StationStoreOptions): StationStore 
     },
     transient: {
       managedLaunchesInFlight: new Set<PaneId>(),
+      managedExitReports: new Map(),
     },
   };
 }

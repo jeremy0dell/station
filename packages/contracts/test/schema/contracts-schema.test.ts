@@ -22,7 +22,6 @@ import {
   HarnessLaunchPlanSchema,
   HarnessResumeTargetSchema,
   HarnessRunObservationSchema,
-  HarnessStatusObservationSchema,
   ManagedTerminalAttachmentSchema,
   ObservedStatusSchema,
   type ObserverApi,
@@ -102,7 +101,7 @@ describe("contract schemas", () => {
       schemaVersion: 1,
       launcher: "/source/bin/stn-ingress",
       runtimeKind: "source",
-      version: "0.0.0-pre-alpha.5.2",
+      version: "0.0.0-pre-alpha.5.16",
       buildIdentity: "a".repeat(64),
     } as const;
     const current = {
@@ -165,7 +164,7 @@ describe("contract schemas", () => {
   });
 
   it("exports the shared schema version used by snapshot fixtures", async () => {
-    expect(STATION_SCHEMA_VERSION).toBe("0.10.0");
+    expect(STATION_SCHEMA_VERSION).toBe("0.11.0");
 
     const snapshots = (await loadJson("snapshots/snapshot-scenarios.json")) as Record<
       string,
@@ -321,6 +320,28 @@ describe("contract schemas", () => {
         group: { kind: "existing", groupId: "grp_active" },
       },
       "external launch params without optional title",
+    );
+    expectParses(
+      AgentPrepareExternalLaunchParamsSchema,
+      {
+        projectId: "project_api",
+        worktreeId: "wt_api_fork",
+        group: {
+          kind: "source",
+          sourceSessionId: "ses_api_source",
+          groupId: "grp_active",
+        },
+      },
+      "external fork launch params with source Group inheritance",
+    );
+    expectFails(
+      AgentPrepareExternalLaunchParamsSchema,
+      {
+        projectId: "project_api",
+        worktreeId: "wt_api_fork",
+        group: { kind: "source", sourceSessionId: "ses_api_source", name: "Active" },
+      },
+      "external source Group inheritance without a stable Group id",
     );
     expectFails(
       AgentPrepareExternalLaunchParamsSchema,
@@ -1172,6 +1193,11 @@ describe("contract schemas", () => {
           projectId: "web",
           sourceWorktreeId: "wt_web_main",
           branch: "feature/fork",
+          group: {
+            kind: "source",
+            sourceSessionId: "ses_web_main",
+            groupId: "grp_active",
+          },
         },
       },
       "worktree-only fork without launch harness",
@@ -1193,6 +1219,11 @@ describe("contract schemas", () => {
           sourceWorktreeId: "wt_web_main",
           branch: "feature/fork",
           launchHarness: "codex",
+          group: {
+            kind: "source",
+            sourceSessionId: "ses_web_main",
+            groupId: "grp_active",
+          },
           readiness: true,
         },
       },
@@ -1580,6 +1611,11 @@ describe("contract schemas", () => {
           sourceWorktreeId: "wt_source",
           branch: "station-fork-e91f2b",
           title: "Hexagonal PT 12",
+          group: {
+            kind: "source",
+            sourceSessionId: "ses_source",
+            groupId: "grp_active",
+          },
         },
       },
       "session fork with title containing spaces",
@@ -2336,12 +2372,12 @@ describe("contract schemas", () => {
     }
 
     for (const [index, observation] of (
-      observations.harnessStatusObservations as unknown[]
+      observations.currentHarnessRunObservations as unknown[]
     ).entries()) {
       expectParses(
-        HarnessStatusObservationSchema,
+        HarnessRunObservationSchema,
         observation,
-        `harness status observation ${index}`,
+        `current harness run observation ${index}`,
       );
     }
 

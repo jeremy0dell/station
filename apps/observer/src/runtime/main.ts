@@ -50,15 +50,8 @@ import { createObserverLogger } from "./logging.js";
 import {
   type AcquiredObserverBootClaim,
   acquireObserverBootClaim,
-  createObserverBootClaimCleanupExclusion,
   type ObserverBootClaimReleaseResult,
 } from "./observerBootClaim.js";
-import {
-  createObserverDuplicateCleanup,
-  type ObserverDuplicateCleanup,
-  type ObserverDuplicateCleanupOutcome,
-  type ObserverDuplicateProcessEvidenceSource,
-} from "./observerDuplicateCleanup.js";
 import {
   negotiateObserverIncumbent,
   type ObserverIncumbentLifecycle,
@@ -70,6 +63,11 @@ import {
   removeObserverProcessIdentity,
 } from "./observerPidfile.js";
 import { createLocalObserverProcessEvidence } from "./observerProcessEvidence.js";
+import {
+  inspectObserverDuplicates,
+  type ObserverDuplicateProcessEvidenceSource,
+  type ObserverReapPlan,
+} from "./observerReap.js";
 import { createProjectConfigWriter } from "./projectConfigWriter.js";
 import {
   createObserverLifecycleClient,
@@ -112,6 +110,8 @@ export type RunObserverMainDeps = {
   duplicateProcessEvidence?: ObserverDuplicateProcessEvidenceSource;
   handoffNow?: () => number;
   handoffSleep?: (ms: number) => Promise<void>;
+  /** Test/composition override for the child-side incumbent admission policy. */
+  startupPolicy?: "generic" | "preserve-incumbent";
   exit?: (code: number) => void;
 };
 
@@ -120,7 +120,7 @@ export type RunObserverMainDeps = {
  *
  * Claims boot ownership, branches on four-state socket evidence, selects
  * Observer-private infrastructure from resolved runtime identity, and owns bind,
- * pidfile, one-shot duplicate cleanup, ownership-aware shutdown, and exact build
+ * pidfile, read-only duplicate inspection, ownership-aware shutdown, and exact build
  * health publication.
  */
 export async function runObserverMain(
@@ -149,6 +149,9 @@ export async function runObserverMain(
     throw new Error("--build-version must match the running Observer build selector.");
   }
   const handoffNow = deps.handoffNow ?? Date.now;
+  const startupPolicy = deps.startupPolicy ?? observerStartupPolicy(process.env);
+  // This is one-child admission authority, not launch context for providers or hosted agents.
+  delete process.env.STATION_OBSERVER_STARTUP_POLICY;
   const startupDeadline = handoffNow() + options.startupTimeoutMs;
   await mkdir(stateDir, { recursive: true, mode: 0o700 });
   const claimResult = await acquireObserverBootClaim({
@@ -162,14 +165,37 @@ export async function runObserverMain(
   // This outer lifetime keeps the claim through any pre-ready socket and
   // pidfile cleanup; the ready gate performs the normal early release.
   try {
-    const processEvidence = deps.processEvidence ?? createLocalObserverProcessEvidence();
+    const probeTimeoutMs = Math.max(MIN_STARTUP_BUDGET_MS, startupDeadline - handoffNow());
+    const processEvidence =
+      startupPolicy === "generic"
+        ? (deps.processEvidence ?? createLocalObserverProcessEvidence())
+        : undefined;
     const socketProbe = await probeObserverSocket(socketPath, {
-      timeoutMs: DEFAULT_STARTUP_TIMEOUT_MS,
-      socketHolders: (path: string) => processEvidence.socketHolders(path),
+      timeoutMs: probeTimeoutMs,
+      ...(processEvidence === undefined
+        ? {}
+        : { socketHolders: (path: string) => processEvidence.socketHolders(path) }),
     });
     if (socketProbe.status === "inaccessible") throw socketProbe.error;
     if (socketProbe.status === "listening") {
       const remainingStartupMs = Math.max(MIN_STARTUP_BUDGET_MS, startupDeadline - handoffNow());
+      if (startupPolicy === "preserve-incumbent") {
+        const lifecycle =
+          deps.incumbentLifecycle ??
+          createObserverLifecycleClient({ timeoutMs: remainingStartupMs });
+        const incumbent = await lifecycle.health(socketPath, {
+          timeoutMs: remainingStartupMs,
+        });
+        if (incumbent.version === buildVersion) return 0;
+        throw preserveIncumbentRefusal(
+          socketPath,
+          incumbent.version ?? "legacy/unknown build",
+          buildVersion,
+        );
+      }
+      if (processEvidence === undefined) {
+        throw new Error("Generic Observer startup requires process evidence.");
+      }
       const parentReserveMs = Math.min(
         HANDOFF_PARENT_RESERVE_MAX_MS,
         Math.max(
@@ -217,6 +243,30 @@ export async function runObserverMain(
   } finally {
     releaseObserverBootClaim(claimResult);
   }
+}
+
+/** Reads the internal child policy strictly so inherited or misspelled values fail closed. */
+function observerStartupPolicy(
+  env: Readonly<Record<string, string | undefined>>,
+): "generic" | "preserve-incumbent" {
+  const value = env.STATION_OBSERVER_STARTUP_POLICY;
+  if (value === undefined || value === "") return "generic";
+  if (value === "preserve-incumbent") return value;
+  throw new Error("STATION_OBSERVER_STARTUP_POLICY must be empty or preserve-incumbent.");
+}
+
+function preserveIncumbentRefusal(
+  socketPath: string,
+  incumbentVersion: string,
+  requestedVersion: string,
+): Error & SafeError {
+  const safeError: SafeError = {
+    tag: "ObserverStartupError",
+    code: "OBSERVER_EXACT_BUILD_ACTIVATION_FAILED",
+    message: "The exact Observer build could not claim the configured socket safely.",
+    hint: `A different Observer (${incumbentVersion}) claimed ${socketPath} before ${requestedVersion} could start. That new owner was preserved.`,
+  };
+  return Object.assign(new Error(safeError.message), safeError);
 }
 
 async function runClaimedObserverRuntime(input: {
@@ -307,8 +357,7 @@ async function runClaimedObserverRuntime(input: {
   let ownsSocket = false;
   let boundSocketIdentity: SocketIdentity | undefined;
   let processIdentity: ObserverProcessIdentity | undefined;
-  let duplicateCleanup: ObserverDuplicateCleanup | undefined;
-  let duplicateCleanupFlight: Promise<ObserverDuplicateCleanupOutcome> | undefined;
+  let duplicateInspectionFlight: Promise<ObserverReapPlan> | undefined;
   const startupGate = createObserverStartupGate();
   let stopResolve: () => void = () => undefined;
   const stopped = new Promise<void>((resolve) => {
@@ -319,6 +368,9 @@ async function runClaimedObserverRuntime(input: {
   let observerApi: ObserverApi;
   let shutdownExitCode = 0;
   let displaced = false;
+  const stopFromSignal = () => {
+    void api.stop();
+  };
   const stopObserver = async (exitCode = 0) => {
     shutdownExitCode = Math.max(shutdownExitCode, exitCode);
     stopping ??= runShutdownWithBackstop(
@@ -423,11 +475,7 @@ async function runClaimedObserverRuntime(input: {
     configDiagnostics: loadedConfig.diagnostics,
     clock: systemClock,
     logger,
-    duplicateCleanupStatus: () => duplicateCleanup?.status(),
-    onShutdownStarted: async () => {
-      duplicateCleanup?.abort();
-      await duplicateCleanupFlight?.catch(() => undefined);
-    },
+    duplicateInspection: () => duplicateInspectionFlight,
   });
   // Register health publication before boot probes so every completed result reaches the snapshot.
   void providers.healthCache.refreshAll();
@@ -469,18 +517,6 @@ async function runClaimedObserverRuntime(input: {
       socketPath,
     });
     await publishObserverProcessIdentity(processIdentity);
-    duplicateCleanup = createObserverDuplicateCleanup(
-      {
-        socketPath,
-        keeperIdentity: processIdentity,
-        boundSocketIdentity: boundIdentity,
-        mode: "report",
-      },
-      {
-        evidence: duplicateProcessEvidence,
-        exclusion: createObserverBootClaimCleanupExclusion({ socketPath }),
-      },
-    );
     // Seed the watcher with the just-bound socket identity so it never adopts a
     // rival's socket as its baseline (the failure that let displaced observers linger).
     ownership = watchSocketOwnership({
@@ -498,6 +534,10 @@ async function runClaimedObserverRuntime(input: {
         void api.stop();
       },
     });
+    process.once("SIGINT", stopFromSignal);
+    process.once("SIGTERM", stopFromSignal);
+    // Current provider context is part of readiness; hook correlation must never see the empty seed.
+    await api.reconcile("observer.startup");
     const startupCommit = startupGate.settleReady(() => claim.release());
     shouldReconcile = startupCommit.status === "ready";
     if (startupCommit.status === "ready" && startupCommit.claimRelease.status === "failed") {
@@ -511,6 +551,8 @@ async function runClaimedObserverRuntime(input: {
         .catch(() => undefined);
     }
   } catch (error) {
+    process.off("SIGINT", stopFromSignal);
+    process.off("SIGTERM", stopFromSignal);
     startupGate.settleFailed();
     shutdownExitCode = 1;
     await logger.error("Observer startup failed; shutting down runtime services.", {
@@ -533,22 +575,24 @@ async function runClaimedObserverRuntime(input: {
     return 1;
   }
   if (shouldReconcile) {
-    const stopFromSignal = () => {
-      void api.stop();
-    };
-    process.once("SIGINT", stopFromSignal);
-    process.once("SIGTERM", stopFromSignal);
-
-    // Startup reconcile now that the ownership watch is live.
-    await api.reconcile("observer.startup");
-    if (duplicateCleanup !== undefined) {
-      duplicateCleanupFlight = duplicateCleanup.run();
-      void duplicateCleanupFlight
-        .then((cleanupOutcome) => logDuplicateCleanupOutcome(logger, cleanupOutcome))
-        .catch((error) =>
-          logger.warn("Observer duplicate cleanup failed unexpectedly.", { socketPath, error }),
-        );
-    }
+    duplicateInspectionFlight = inspectObserverDuplicates(socketPath, {
+      evidence: duplicateProcessEvidence,
+      healthPid: async () => process.pid,
+    }).catch((error) => {
+      void logger.warn("Observer duplicate inspection failed unexpectedly.", {
+        socketPath,
+        error,
+      });
+      return {
+        socketPath,
+        duplicates: 0,
+        targets: [],
+        refusals: [{ pid: process.pid, reason: "Strict process evidence was unavailable." }],
+      };
+    });
+    void duplicateInspectionFlight
+      .then((plan) => logDuplicateInspection(logger, plan))
+      .catch(() => undefined);
   }
 
   await stopped;
@@ -562,32 +606,24 @@ async function runClaimedObserverRuntime(input: {
   return 0;
 }
 
-async function logDuplicateCleanupOutcome(
+async function logDuplicateInspection(
   logger: StationLogger,
-  cleanup: ObserverDuplicateCleanupOutcome,
+  plan: ObserverReapPlan,
 ): Promise<void> {
+  const eligiblePids = plan.targets
+    .filter((target) => target.automaticEligibility.eligible)
+    .map((target) => target.pid);
   const attributes: Record<string, unknown> = {
-    socketPath: cleanup.socketPath,
-    outcome: cleanup.status,
-    eligiblePids: cleanup.eligiblePids,
-    terminatedPids: cleanup.terminatedPids,
-    exitedPids: cleanup.exitedPids,
-    survivedPids: cleanup.survivedPids,
-    refusalCodes: cleanup.refusalCodes,
+    socketPath: plan.socketPath,
+    duplicates: plan.duplicates,
+    eligiblePids,
+    refusals: plan.refusals,
   };
-  if (cleanup.keeperPreservation !== undefined) {
-    attributes.keeperPreserved = cleanup.keeperPreservation.preserved;
-  }
-  if (cleanup.claimReleased !== undefined) attributes.claimReleased = cleanup.claimReleased;
-  if (
-    cleanup.status === "clear" ||
-    cleanup.status === "cancelled" ||
-    (cleanup.status === "terminated" && cleanup.claimReleased !== false)
-  ) {
-    await logger.info(`Observer duplicate cleanup ${cleanup.status}.`, attributes);
+  if (plan.duplicates === 0 && plan.refusals.length === 0) {
+    await logger.info("Observer duplicate inspection clear.", attributes);
     return;
   }
-  await logger.warn(`Observer duplicate cleanup ${cleanup.status}.`, attributes);
+  await logger.warn("Observer duplicate inspection requires operator review.", attributes);
 }
 
 function createConfiguredEventHooks(

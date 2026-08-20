@@ -1,5 +1,5 @@
 import { DEFAULT_WORKSPACE_CONFIG, type StationConfig } from "@station/config";
-import type { HarnessProvider, TerminalIntent, TerminalIntentReceipt } from "@station/contracts";
+import type { HarnessProvider } from "@station/contracts";
 import {
   createFakeHarnessRun,
   createFakeTerminalTarget,
@@ -17,7 +17,6 @@ import {
   openObserverSqlite,
   ProviderRegistry,
   registerObserverCommandHandlers,
-  type TerminalIntentRunner,
 } from "../../src/internal";
 import { createUnexpectedProjectConfigWriter } from "../support/projectConfigWriter.js";
 
@@ -25,7 +24,7 @@ const now = "2026-05-21T12:00:00.000Z";
 
 describe("cleanup command handlers", () => {
   it("closes an active harness only after force and leaves the terminal open", async () => {
-    const fixture = createFixture({ state: "working" });
+    const fixture = await createFixture({ state: "working" });
     await fixture.core.reconcile("pre-cleanup");
 
     const receipt = await fixture.queue.dispatch({
@@ -63,7 +62,7 @@ describe("cleanup command handlers", () => {
   });
 
   it("errors honestly on force close-harness when the provider cannot stop runs", async () => {
-    const fixture = createFixture({ state: "working", harnessStopSupported: false });
+    const fixture = await createFixture({ state: "working", harnessStopSupported: false });
     await fixture.core.reconcile("pre-cleanup");
 
     const receipt = await fixture.queue.dispatch({
@@ -89,7 +88,7 @@ describe("cleanup command handlers", () => {
   });
 
   it("rejects terminal close for an active agent without force", async () => {
-    const fixture = createFixture({ state: "working" });
+    const fixture = await createFixture({ state: "working" });
     await fixture.core.reconcile("pre-cleanup");
 
     const receipt = await fixture.queue.dispatch({
@@ -114,7 +113,7 @@ describe("cleanup command handlers", () => {
   });
 
   it("closes a forced terminal target and records session removal evidence", async () => {
-    const fixture = createFixture({ state: "working" });
+    const fixture = await createFixture({ state: "working" });
     await fixture.core.reconcile("pre-cleanup");
 
     const receipt = await fixture.queue.dispatch({
@@ -149,9 +148,8 @@ describe("cleanup command handlers", () => {
   });
 
   it("ends a retained Station session when terminal.close targets its worktree", async () => {
-    const fixture = createFixture({ state: "terminal" });
+    const fixture = await createFixture({ state: "terminal" });
     await fixture.persistence.persistReconcileResult({
-      projects: config.projects,
       worktrees: [fixture.worktreeObservation],
       terminalTargets: [],
       harnessRuns: [
@@ -193,9 +191,8 @@ describe("cleanup command handlers", () => {
     fixture.sqlite.close();
   });
 
-  it("routes terminal focus and close through the command composition runner", async () => {
-    const terminalIntentRunner = new CapturingTerminalIntentRunner();
-    const fixture = createFixture({ state: "working", terminalIntentRunner });
+  it("routes terminal focus and close directly through the registered provider", async () => {
+    const fixture = await createFixture({ state: "working" });
     await fixture.core.reconcile("pre-cleanup");
 
     const focusReceipt = await fixture.queue.dispatch({
@@ -209,21 +206,9 @@ describe("cleanup command handlers", () => {
     });
     await fixture.queue.drain();
 
-    expect(terminalIntentRunner.intents).toEqual([
-      expect.objectContaining({
-        type: "terminal.focus",
-        commandId: focusReceipt.commandId,
-        terminalProvider: "fake-terminal",
-        subject: expect.objectContaining({ worktreeId: "wt_web_cleanup" }),
-      }),
-      expect.objectContaining({
-        type: "terminal.close",
-        commandId: closeReceipt.commandId,
-        terminalProvider: "fake-terminal",
-        subject: expect.objectContaining({ worktreeId: "wt_web_cleanup" }),
-      }),
-    ]);
-    expect(fixture.terminal.snapshot().closed).toEqual([]);
+    expect(focusReceipt.commandId).not.toBe(closeReceipt.commandId);
+    expect(fixture.terminal.snapshot().focused).toEqual(["term_web_cleanup"]);
+    expect(fixture.terminal.snapshot().closed).toEqual(["term_web_cleanup"]);
     expect(fixture.core.getSnapshot().sessions).toEqual([]);
     await expect(fixture.persistence.listSessions()).resolves.toEqual(
       expect.arrayContaining([
@@ -234,7 +219,7 @@ describe("cleanup command handlers", () => {
   });
 
   it("ends Station membership after session.close all succeeds", async () => {
-    const fixture = createFixture({ state: "working" });
+    const fixture = await createFixture({ state: "working" });
     await fixture.core.reconcile("pre-session-close-all");
 
     const receipt = await fixture.queue.dispatch({
@@ -259,9 +244,8 @@ describe("cleanup command handlers", () => {
     fixture.sqlite.close();
   });
 
-  it("routes session terminal cleanup through the command composition runner", async () => {
-    const terminalIntentRunner = new CapturingTerminalIntentRunner();
-    const fixture = createFixture({ state: "working", terminalIntentRunner });
+  it("routes session terminal cleanup directly through the registered provider", async () => {
+    const fixture = await createFixture({ state: "working" });
     await fixture.core.reconcile("pre-cleanup");
 
     const receipt = await fixture.queue.dispatch({
@@ -270,20 +254,15 @@ describe("cleanup command handlers", () => {
     });
     await fixture.queue.drain();
 
-    expect(terminalIntentRunner.intents).toEqual([
-      expect.objectContaining({
-        type: "terminal.close",
-        commandId: receipt.commandId,
-        terminalProvider: "fake-terminal",
-        subject: expect.objectContaining({ sessionId: "ses_web_cleanup" }),
-      }),
-    ]);
-    expect(fixture.terminal.snapshot().closed).toEqual([]);
+    await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
+      status: "succeeded",
+    });
+    expect(fixture.terminal.snapshot().closed).toEqual(["term_web_cleanup"]);
     fixture.sqlite.close();
   });
 
   it("rejects dirty worktree removal without force", async () => {
-    const fixture = createFixture({ dirty: true, state: "none" });
+    const fixture = await createFixture({ dirty: true, state: "none" });
     await fixture.core.reconcile("pre-cleanup");
 
     const receipt = await fixture.queue.dispatch({
@@ -311,7 +290,7 @@ describe("cleanup command handlers", () => {
   });
 
   it("rejects project root removal before calling the worktree provider", async () => {
-    const fixture = createFixture({ state: "none", projectRootPath: true });
+    const fixture = await createFixture({ state: "none", projectRootPath: true });
     await fixture.core.reconcile("pre-cleanup");
 
     const receipt = await fixture.queue.dispatch({
@@ -340,7 +319,7 @@ describe("cleanup command handlers", () => {
   });
 
   it("refuses a stale feature selection that now owns the default branch before cleanup", async () => {
-    const fixture = createFixture({ state: "working" });
+    const fixture = await createFixture({ state: "working" });
     await fixture.core.reconcile("pre-cleanup");
     fixture.worktreeObservation.branch = "main";
 
@@ -371,13 +350,41 @@ describe("cleanup command handlers", () => {
     fixture.sqlite.close();
   });
 
+  it("refuses unreserved removal while a Station renderer owns the active terminal", async () => {
+    const fixture = await createFixture({ state: "working", terminalCloseable: false });
+    await fixture.core.reconcile("pre-cleanup");
+
+    const receipt = await fixture.queue.dispatch({
+      type: "worktree.remove",
+      payload: {
+        worktreeId: "wt_web_cleanup",
+        projectId: "web",
+        expectedPath: "/tmp/station/web/cleanup",
+        expectedBranch: "cleanup",
+        expectedRegistrationIdentity: "git-registration:cleanup",
+        force: true,
+      },
+    });
+    await fixture.queue.drain();
+
+    await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
+      status: "failed",
+      error: { code: "EXTERNAL_TERMINAL_EXIT_REQUIRED" },
+    });
+    expect(fixture.harness.snapshot().stopped).toEqual([]);
+    expect(fixture.worktree.snapshot().removed).toEqual([]);
+    fixture.sqlite.close();
+  });
+
   it("force-removes an active worktree after stopping harness and closing terminal", async () => {
-    const fixture = createFixture({ dirty: true, state: "working" });
+    const fixture = await createFixture({ dirty: true, state: "working" });
     await fixture.persistence.seedSession({
       sessionId: "ses_web_cleanup_older",
       projectId: "web",
       worktreeId: "wt_web_cleanup",
       initialTitle: "older cleanup session",
+      harness: "fake-harness",
+      terminalProvider: "fake-terminal",
       createdAt: "2026-05-21T11:00:00.000Z",
       lastSeenAt: "2026-05-21T11:00:00.000Z",
     });
@@ -439,9 +446,8 @@ describe("cleanup command handlers", () => {
     fixture.sqlite.close();
   });
 
-  it("routes worktree terminal cleanup through the command composition runner", async () => {
-    const terminalIntentRunner = new CapturingTerminalIntentRunner();
-    const fixture = createFixture({ dirty: true, state: "working", terminalIntentRunner });
+  it("routes worktree terminal cleanup directly through the registered provider", async () => {
+    const fixture = await createFixture({ dirty: true, state: "working" });
     await fixture.core.reconcile("pre-cleanup");
 
     const receipt = await fixture.queue.dispatch({
@@ -457,15 +463,10 @@ describe("cleanup command handlers", () => {
     });
     await fixture.queue.drain();
 
-    expect(terminalIntentRunner.intents).toEqual([
-      expect.objectContaining({
-        type: "terminal.close",
-        commandId: receipt.commandId,
-        terminalProvider: "fake-terminal",
-        subject: expect.objectContaining({ worktreeId: "wt_web_cleanup" }),
-      }),
-    ]);
-    expect(fixture.terminal.snapshot().closed).toEqual([]);
+    await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
+      status: "succeeded",
+    });
+    expect(fixture.terminal.snapshot().closed).toEqual(["term_web_cleanup"]);
     expect(fixture.worktree.snapshot().removed).toEqual([
       {
         projectId: "web",
@@ -480,7 +481,7 @@ describe("cleanup command handlers", () => {
   });
 
   it("removes a clean exited worktree when terminal cleanup finds an already-missing target", async () => {
-    const fixture = createFixture({
+    const fixture = await createFixture({
       state: "exited",
       terminalCloseTargetMissing: true,
     });
@@ -528,7 +529,7 @@ describe("cleanup command handlers", () => {
   });
 
   it("force-removes a worktree when terminal cleanup finds an already-missing target", async () => {
-    const fixture = createFixture({
+    const fixture = await createFixture({
       dirty: true,
       state: "working",
       terminalCloseTargetMissing: true,
@@ -570,7 +571,7 @@ describe("cleanup command handlers", () => {
   });
 
   it("force-removes an active worktree when the terminal-owned harness cannot stop natively", async () => {
-    const fixture = createFixture({
+    const fixture = await createFixture({
       dirty: true,
       state: "working",
       harnessStopSupported: false,
@@ -609,8 +610,8 @@ describe("cleanup command handlers", () => {
     fixture.sqlite.close();
   });
 
-  it("refuses active worktree removal when neither harness nor terminal can stop it", async () => {
-    const fixture = createFixture({
+  it("refuses active worktree removal before probing a renderer-owned terminal", async () => {
+    const fixture = await createFixture({
       dirty: true,
       state: "working",
       harnessStopSupported: false,
@@ -633,7 +634,7 @@ describe("cleanup command handlers", () => {
 
     await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
       status: "failed",
-      error: { code: "HARNESS_STOP_UNSUPPORTED" },
+      error: { code: "EXTERNAL_TERMINAL_EXIT_REQUIRED" },
     });
     expect(fixture.harness.snapshot().stopped).toEqual([]);
     expect(fixture.terminal.snapshot().closed).toEqual([]);
@@ -642,19 +643,28 @@ describe("cleanup command handlers", () => {
   });
 });
 
-function createFixture(input: {
+async function createFixture(input: {
   dirty?: boolean;
   state: "none" | "terminal" | "working" | "exited";
   harnessStopSupported?: boolean;
   terminalCloseable?: boolean;
   terminalCloseTargetMissing?: boolean;
   projectRootPath?: boolean;
-  terminalIntentRunner?: TerminalIntentRunner;
 }) {
   const clock = { now: () => new Date(now) };
   const sqlite = openObserverSqlite({ clock });
   const ids = observerIds();
   const persistence = createSqliteObserverPersistence({ sqlite, clock, idFactory: ids });
+  await persistence.seedSession({
+    sessionId: "ses_web_cleanup",
+    projectId: "web",
+    worktreeId: "wt_web_cleanup",
+    initialTitle: "cleanup",
+    harness: "fake-harness",
+    terminalProvider: "fake-terminal",
+    createdAt: now,
+    lastSeenAt: now,
+  });
   const eventBus = createObserverEventBus();
   const queue = createCommandQueue({ persistence, clock, idFactory: ids, eventBus });
   const worktreeObservation = createFakeWorktree({
@@ -734,9 +744,6 @@ function createFixture(input: {
     persistence,
     eventBus,
     clock,
-    ...(input.terminalIntentRunner === undefined
-      ? {}
-      : { terminalIntentRunner: input.terminalIntentRunner }),
   });
   return {
     sqlite,
@@ -750,22 +757,6 @@ function createFixture(input: {
     terminal,
     harness,
   };
-}
-
-class CapturingTerminalIntentRunner implements TerminalIntentRunner {
-  readonly intents: TerminalIntent[] = [];
-
-  async submitIntent(intent: TerminalIntent): Promise<TerminalIntentReceipt> {
-    this.intents.push(intent);
-    return {
-      status: "accepted",
-      accepted: true,
-      commandId: intent.commandId,
-      type: intent.type,
-      terminalProvider: intent.terminalProvider,
-      timestamp: now,
-    };
-  }
 }
 
 function withoutNativeStop(provider: FakeHarnessProvider): HarnessProvider {

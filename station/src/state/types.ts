@@ -7,9 +7,18 @@ export type OverlayId = string;
 export const MAIN_PANE_ID: PaneId = "pane-main";
 export const STATION_OVERLAY_ID: OverlayId = "station";
 
+const WORKTREE_PANE_PREFIX = "pane-wt-";
+
 /** Deterministic ids make repeated "open shell here" actions reveal, not spawn. */
 export function worktreePaneId(worktreeId: string): PaneId {
-  return `pane-wt-${worktreeId}`;
+  return `${WORKTREE_PANE_PREFIX}${worktreeId}`;
+}
+
+/** Recover the worktree owner encoded by a deterministic row-shell pane id. */
+export function worktreeIdFromWorktreePaneId(paneId: PaneId): string | undefined {
+  return paneId.startsWith(WORKTREE_PANE_PREFIX)
+    ? paneId.slice(WORKTREE_PANE_PREFIX.length)
+    : undefined;
 }
 
 const AGENT_WORKTREE_PANE_PREFIX = "pane-agent-wt-";
@@ -77,6 +86,8 @@ export type AgentIdentity = {
   sessionId: string;
   terminalTargetId: string;
   terminalBindingToken?: string;
+  /** Process authority is independent from binding-release authority. */
+  processOwner?: "ui" | "host";
   harnessProvider?: ProviderId;
 };
 
@@ -87,6 +98,8 @@ export type PaneRecord = {
     direction: PaneSplitDirection;
   };
   role: PaneRole;
+  /** Stable Station-local ownership retained even when an agent root is closed first. */
+  worktreeId?: string;
   /** Present only on a `"primary-agent"` pane: the observer-minted STATION identity. */
   agentIdentity?: AgentIdentity;
 };

@@ -49,6 +49,7 @@ const renameEdit: Extract<TuiScreen, { name: "renameSession"; step: "editName" }
 const forkDetails: Extract<TuiScreen, { name: "fork"; step: "details" }> = {
   name: "fork",
   step: "details",
+  sourceSessionId: "ses_wt_web_idle",
   sourceWorktreeId: "wt_web_idle",
   projectId: "web",
   projectLabel: "Web",
@@ -57,6 +58,7 @@ const forkDetails: Extract<TuiScreen, { name: "fork"; step: "details" }> = {
   sourceAgentRunning: false,
   branch: "main-fork-abcdef",
   draftTitle: createEditableTextInputState("main-fork"),
+  inheritSourceGroup: true,
   copyDirty: true,
   focus: "name",
 };
@@ -88,6 +90,16 @@ const screenBehaviorCases: readonly [
   ],
   ["help", { name: "help" }, "present"],
   ["project menu", { name: "projectMenu", projectId: "web", focus: "quickGroup" }, "present"],
+  [
+    "Group menu",
+    {
+      name: "groupMenu",
+      projectId: "web",
+      groupId: "group_active",
+      focus: "quickSession",
+    },
+    "present",
+  ],
   [
     "create group",
     {
@@ -154,6 +166,24 @@ const screenBehaviorCases: readonly [
     "present",
   ],
   [
+    "Group settings",
+    {
+      name: "groupSettings",
+      projectId: "web",
+      groupId: "group_active",
+      section: "general",
+      focus: "list",
+      detailFocus: "name",
+      expectedVersion: 1,
+      baselineName: "Active",
+      nameDraft: createEditableTextInputState("Active"),
+      baselineAssignments: new Map(),
+      desiredSessionIds: new Set(),
+      removeDraft: createEditableTextInputState(),
+    },
+    "present",
+  ],
+  [
     "widget settings list",
     { name: "widgetSettings", focus: "list", cursor: 0, pickerCursor: 0 },
     "present",
@@ -212,6 +242,12 @@ describe("TUI screen behavior", () => {
 
   it("returns Project surfaces to their invocation focus and keeps a pending sheet inert", () => {
     const menu = withScreen({ name: "projectMenu", projectId: "web", focus: "settings" });
+    const groupMenu = withScreen({
+      name: "groupMenu",
+      projectId: "web",
+      groupId: "group_active",
+      focus: "remove",
+    });
     const createGroup = withScreen({
       name: "createGroup",
       projectId: "web",
@@ -225,6 +261,10 @@ describe("TUI screen behavior", () => {
     expect(clickAway(menu)).toMatchObject({
       screen: { name: "dashboard" },
       dashboardFocus: { rowId: "project:web", cellId: "menu" },
+    });
+    expect(clickAway(groupMenu)).toMatchObject({
+      screen: { name: "dashboard" },
+      dashboardFocus: { rowId: "group:group_active", cellId: "menu" },
     });
     expect(clickAway(createGroup).screen).toEqual({
       name: "projectMenu",

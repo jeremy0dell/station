@@ -1,7 +1,7 @@
 # Install Station
 
 Station is experimental pre-alpha software. The current public version is
-`v0.0.0-pre-alpha.5.2`.
+`v0.0.0-pre-alpha.5.16`.
 
 ## Binary Requirements
 
@@ -33,11 +33,11 @@ If you prefer an agent-led install, paste this prompt into a coding agent on the
 target machine:
 
 ```text
-Install experimental Station v0.0.0-pre-alpha.5.2 and validate setup on this machine.
+Install experimental Station v0.0.0-pre-alpha.5.16 and validate setup on this machine.
 
 Safety and scope:
 - Do not clone the repository or build from source. Use only
-  `https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.5.2/install.sh`.
+  `https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.5.16/install.sh`.
 - Install to `~/.local/bin` unless I approve another location. Do not edit any
   shell startup file. If the installer reports a PATH mismatch, do not assume
   an export persists across agent tool calls or reaches my Terminal. Use the
@@ -71,10 +71,10 @@ choices.
 From any directory, run:
 
 ```bash
-curl --disable -fsSL https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.5.2/install.sh | sh
+curl --disable -fsSL https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.5.16/install.sh | sh
 ```
 
-The released `install.sh` is stamped with `v0.0.0-pre-alpha.5.2`. With no
+The released `install.sh` is stamped with `v0.0.0-pre-alpha.5.16`. With no
 arguments it downloads only that tag's matching native archive and
 `SHA256SUMS` over unauthenticated HTTPS. The old `v0.7.1-rc.*` releases were
 internal previews, not predecessors in the public version line.
@@ -138,7 +138,7 @@ it separately.
 Pass an absolute or home-relative path through the exact installer:
 
 ```bash
-curl --disable -fsSL https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.5.2/install.sh | \
+curl --disable -fsSL https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.5.16/install.sh | \
   sh -s -- --install-dir "$HOME/bin"
 ```
 
@@ -322,17 +322,25 @@ handoff. Failures report completed phases, sanitized evidence, and exact
 recovery commands; a verified install or Git fast-forward is not rolled back
 after a later preparation or runtime-crossover failure.
 
+Current compiled binaries, including immutable `.5.2`, use in-process Bun PTYs
+and cannot preserve a live PTY across Host replacement. If handoff fails after
+installation and Observer crossover, Station leaves the old Host and PTY alive;
+the target native UI visibly refuses that old Host. The pane-free tmux dashboard
+may still render against the target Observer, while Host-producing work remains
+guarded. This bounded partial crossover is not transparent runtime continuity.
+Source mode alone has the parkable Node/node-pty bridge.
+
 The `installer-binary` channel may own only compiled installations carrying the
 receipt. Detection is local and network-free. Before release discovery and
 again at the installer's locked commit boundary, it binds the physical `stn`
 hash, device, and inode plus the device and inode of both launchers and the
 receipt. A missing or changed path is refused before mutation.
 
-The current public `v0.0.0-pre-alpha.5.2` installer is immutable and predates
-this receipt, so existing installations continue to work but are not enrolled
-for automatic updates. After a later release includes this contract, run that
-exact-tag installer manually once to create the receipt. A malformed,
-nonregular, or symlinked receipt is never replaced automatically.
+The immutable public `v0.0.0-pre-alpha.5.2` installer already creates this
+receipt, and `.5.2` installations are enrolled in the `installer-binary`
+channel. It is the first incumbent capable of attempting the next self-update;
+no later manual receipt bootstrap is required. A malformed, nonregular, or
+symlinked receipt is never replaced automatically.
 
 ### Concurrent and interrupted installs
 

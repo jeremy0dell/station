@@ -36,7 +36,6 @@ import {
   type SessionGroupCommandIdFactory,
 } from "./sessionGroups.js";
 import { createTerminalCloseHandler, createTerminalFocusHandler } from "./terminal.js";
-import { createTerminalIntentRunner, type TerminalIntentRunner } from "./terminalIntentRunner.js";
 import { createWorktreeCreateHandler } from "./worktree/create.js";
 import { createWorktreeForkHandler } from "./worktree/fork.js";
 import { createWorktreeRemoveHandler } from "./worktree/remove.js";
@@ -53,9 +52,7 @@ export type RegisterObserverCommandHandlersOptions = {
   clock?: RuntimeClock | undefined;
   logger?: StationLogger | undefined;
   idFactory?: Partial<SessionCommandIdFactory & SessionGroupCommandIdFactory> | undefined;
-  commandTimeoutMs?: number | undefined;
   launchPreflight?: HarnessLaunchPreflight | undefined;
-  terminalIntentRunner?: TerminalIntentRunner | undefined;
   projectConfigWriter: ProjectConfigWriter;
   worktreeMutations?: WorktreeMutationCoordinator | undefined;
 };
@@ -66,8 +63,8 @@ export type RegisterObserverCommandHandlersOptions = {
  * Constructs process-lifetime Observer command use cases and registers their
  * handlers with the command queue.
  *
- * Terminal intent orchestration, runtime-prebound config-aware launch preflight, and
- * ProjectConfigWriter are composed here; handlers never receive configuration or home paths.
+ * Runtime-prebound config-aware launch preflight and ProjectConfigWriter are composed here;
+ * handlers coordinate provider-neutral operations without receiving configuration or home paths.
  */
 export function registerObserverCommandHandlers(
   options: RegisterObserverCommandHandlersOptions,
@@ -83,18 +80,6 @@ export function registerObserverCommandHandlers(
         providerId,
         ...(signal === undefined ? {} : { signal }),
       }));
-  const terminalIntentRunner =
-    options.terminalIntentRunner ??
-    createTerminalIntentRunner({
-      providers: {
-        terminals: options.providers.terminals,
-        harnesses: options.providers.harnesses,
-      },
-      launchPreflight,
-      clock: options.clock,
-      logger: options.logger,
-      commandTimeoutMs: options.commandTimeoutMs,
-    });
   const sessionGroupHandlers = createSessionGroupCommandHandlers({
     core: options.core,
     persistence: options.persistence,
@@ -110,7 +95,6 @@ export function registerObserverCommandHandlers(
       core: options.core,
       eventBus: options.eventBus,
       clock: options.clock,
-      commandTimeoutMs: options.commandTimeoutMs,
       logger: options.logger,
     }),
     "worktree.fork": createWorktreeForkHandler({
@@ -120,24 +104,21 @@ export function registerObserverCommandHandlers(
       launchPreflight,
       eventBus: options.eventBus,
       clock: options.clock,
-      commandTimeoutMs: options.commandTimeoutMs,
       logger: options.logger,
     }),
     "worktree.remove": createWorktreeRemoveHandler({
       getProjects,
       providers: options.providers,
-      terminalIntentRunner,
       core: options.core,
       persistence: options.persistence,
+      worktreeMutations,
       eventBus: options.eventBus,
       clock: options.clock,
-      commandTimeoutMs: options.commandTimeoutMs,
       logger: options.logger,
     }),
     "session.create": createSessionCreateHandler({
       getProjects,
       providers: options.providers,
-      terminalIntentRunner,
       launchPreflight,
       core: options.core,
       persistence: options.persistence,
@@ -145,12 +126,10 @@ export function registerObserverCommandHandlers(
       clock: options.clock,
       idFactory: options.idFactory,
       logger: options.logger,
-      commandTimeoutMs: options.commandTimeoutMs,
     }),
     "session.startAgent": createSessionStartAgentHandler({
       getProjects,
       providers: options.providers,
-      terminalIntentRunner,
       launchPreflight,
       core: options.core,
       persistence: options.persistence,
@@ -158,12 +137,10 @@ export function registerObserverCommandHandlers(
       clock: options.clock,
       idFactory: options.idFactory,
       logger: options.logger,
-      commandTimeoutMs: options.commandTimeoutMs,
     }),
     "session.resumeAgent": createSessionResumeAgentHandler({
       getProjects,
       providers: options.providers,
-      terminalIntentRunner,
       launchPreflight,
       core: options.core,
       persistence: options.persistence,
@@ -171,7 +148,7 @@ export function registerObserverCommandHandlers(
       eventBus: options.eventBus,
       clock: options.clock,
       idFactory: options.idFactory,
-      commandTimeoutMs: options.commandTimeoutMs,
+      logger: options.logger,
     }),
     "session.importRecoveryHandle": createSessionImportRecoveryHandleHandler({
       getProjects,
@@ -185,7 +162,6 @@ export function registerObserverCommandHandlers(
     "session.fork": createSessionForkHandler({
       getProjects,
       providers: options.providers,
-      terminalIntentRunner,
       launchPreflight,
       core: options.core,
       persistence: options.persistence,
@@ -193,31 +169,25 @@ export function registerObserverCommandHandlers(
       clock: options.clock,
       idFactory: options.idFactory,
       logger: options.logger,
-      commandTimeoutMs: options.commandTimeoutMs,
     }),
     "terminal.focus": createTerminalFocusHandler({
       core: options.core,
       providers: options.providers,
-      terminalIntentRunner,
-      commandTimeoutMs: options.commandTimeoutMs,
+      clock: options.clock,
     }),
     "terminal.close": createTerminalCloseHandler({
       providers: options.providers,
-      terminalIntentRunner,
       core: options.core,
       persistence: options.persistence,
       eventBus: options.eventBus,
       clock: options.clock,
-      commandTimeoutMs: options.commandTimeoutMs,
     }),
     "session.close": createSessionCloseHandler({
       providers: options.providers,
-      terminalIntentRunner,
       core: options.core,
       persistence: options.persistence,
       eventBus: options.eventBus,
       clock: options.clock,
-      commandTimeoutMs: options.commandTimeoutMs,
       worktreeMutations,
     }),
     "session.rename": createSessionRenameHandler({

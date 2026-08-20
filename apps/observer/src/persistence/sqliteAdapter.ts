@@ -9,7 +9,6 @@ import { defaultIdFactory } from "./idFactory.js";
 import * as ingressDedupeStore from "./ingressDedupe.js";
 import {
   insertProviderObservation,
-  listCurrentProviderEntityObservations,
   listProviderObservations,
   pruneExpiredProviderObservations,
 } from "./observations.js";
@@ -233,17 +232,6 @@ export function createSqliteObserverPersistence(
             ? {}
             : { includeExpired: listOptions.includeExpired }),
           ...(listOptions.latestOnly === undefined ? {} : { latestOnly: listOptions.latestOnly }),
-          referenceTime: listOptions.now ?? now(),
-        }),
-      ),
-
-    listCurrentProviderEntityObservations: (listOptions = {}) =>
-      readTransaction((database) =>
-        listCurrentProviderEntityObservations(database, {
-          ...(listOptions.entityKind === undefined ? {} : { entityKind: listOptions.entityKind }),
-          ...(listOptions.includeExpired === undefined
-            ? {}
-            : { includeExpired: listOptions.includeExpired }),
           referenceTime: listOptions.now ?? now(),
         }),
       ),

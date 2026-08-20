@@ -40,6 +40,7 @@ export type RouteOutcome =
    */
   | { kind: "context-menu-set-active"; index: number }
   | { kind: "context-menu-select"; itemIndex?: number }
+  | { kind: "context-menu-shortcut"; key: string }
   | { kind: "open-url"; url: string }
   | { kind: "swallowed" }
   | { kind: "ignored" };

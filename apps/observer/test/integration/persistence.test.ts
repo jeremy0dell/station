@@ -1,7 +1,7 @@
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ProviderProjectConfig, StationCommand } from "@station/contracts";
+import type { StationCommand } from "@station/contracts";
 import {
   createFakeHarnessRun,
   createFakeTerminalTarget,
@@ -20,20 +20,6 @@ const command: StationCommand = {
   type: "observer.reconcile",
   payload: {
     reason: "persistence-test",
-  },
-};
-
-const project: ProviderProjectConfig = {
-  id: "web",
-  label: "web",
-  root: "/tmp/station/web",
-  defaults: {
-    harness: "fake-harness",
-    terminal: "fake-terminal",
-    layout: "agent-shell",
-  },
-  worktrunk: {
-    enabled: true,
   },
 };
 
@@ -656,7 +642,7 @@ describe("observer persistence", () => {
     sqlite.close();
   });
 
-  it("seeds session titles from branches and preserves custom titles across reconcile persistence", async () => {
+  it("does not admit sessions from reconcile and preserves explicitly seeded custom titles", async () => {
     const sqlite = openObserverSqlite({ clock: { now: () => new Date(now) } });
     const persistence = createSqliteObserverPersistence({
       sqlite,
@@ -685,19 +671,23 @@ describe("observer persistence", () => {
     });
 
     await persistence.persistReconcileResult({
-      projects: [project],
       worktrees: [initialWorktree],
       terminalTargets: [terminalTarget],
       harnessRuns: [harnessRun],
       observedAt: now,
     });
 
-    expect(await persistence.listSessions()).toEqual([
-      expect.objectContaining({
-        id: "ses_web_feature",
-        title: "feature/auth",
-      }),
-    ]);
+    await expect(persistence.listSessions()).resolves.toEqual([]);
+    await persistence.seedSession({
+      sessionId: "ses_web_feature",
+      projectId: "web",
+      worktreeId: "wt_web_feature",
+      initialTitle: "feature/auth",
+      harness: "fake-harness",
+      terminalProvider: "fake-terminal",
+      createdAt: now,
+      lastSeenAt: now,
+    });
 
     await persistence.renameSession({
       sessionId: "ses_web_feature",
@@ -705,7 +695,6 @@ describe("observer persistence", () => {
       renamedAt: now,
     });
     await persistence.persistReconcileResult({
-      projects: [project],
       worktrees: [
         {
           ...initialWorktree,
@@ -760,6 +749,8 @@ describe("observer persistence", () => {
       projectId: "web",
       worktreeId: "wt_web_seeded",
       initialTitle: "original-session-title",
+      harness: "fake-harness",
+      terminalProvider: "fake-terminal",
       createdAt: now,
       lastSeenAt: now,
     });
@@ -768,6 +759,8 @@ describe("observer persistence", () => {
       projectId: "web",
       worktreeId: "wt_web_seeded",
       initialTitle: "agent-created-branch",
+      harness: "fake-harness",
+      terminalProvider: "fake-terminal",
       createdAt: later,
       lastSeenAt: later,
     });
@@ -782,7 +775,6 @@ describe("observer persistence", () => {
     ]);
 
     await persistence.persistReconcileResult({
-      projects: [project],
       worktrees: [worktree],
       terminalTargets: [terminalTarget],
       harnessRuns: [harnessRun],
@@ -806,6 +798,8 @@ describe("observer persistence", () => {
       projectId: "web",
       worktreeId: "wt_web_seeded",
       initialTitle: "ignored later seed",
+      harness: "fake-harness",
+      terminalProvider: "fake-terminal",
       createdAt: later,
       lastSeenAt: later,
     });
@@ -832,6 +826,8 @@ describe("observer persistence", () => {
       projectId: "web",
       worktreeId: "wt_web_cleanup_seed",
       initialTitle: "cleanup-seed",
+      harness: "fake-harness",
+      terminalProvider: "fake-terminal",
       createdAt: now,
       lastSeenAt: now,
     });
@@ -849,7 +845,7 @@ describe("observer persistence", () => {
     sqlite.close();
   });
 
-  it("persists correlation records across observer restart", async () => {
+  it("persists recovery identity and sessions across observer restart", async () => {
     const dbPath = await tempDbPath();
     const sqlite = openObserverSqlite({ path: dbPath, clock: { now: () => new Date(now) } });
     const persistence = createSqliteObserverPersistence({
@@ -874,34 +870,42 @@ describe("observer persistence", () => {
       now,
     });
 
+    await persistence.seedSession({
+      sessionId: "ses_web_main",
+      projectId: "web",
+      worktreeId: "wt_web_main",
+      initialTitle: worktree.branch,
+      harness: "fake-harness",
+      terminalProvider: "fake-terminal",
+      createdAt: now,
+      lastSeenAt: now,
+    });
+
     await persistence.persistReconcileResult({
-      projects: [project],
       worktrees: [worktree],
       terminalTargets: [terminal],
       harnessRuns: [run],
       observedAt: now,
     });
-    expect(
-      (
-        await persistence.listCurrentProviderEntityObservations({
-          entityKind: ["worktree", "terminal_target"],
-          now,
-        })
-      ).map((item) => `${item.entityKind}:${item.entityKey}`),
-    ).toEqual(["worktree:wt_web_main", "terminal_target:term_web_main"]);
+    expect(sqlite.database.prepare("SELECT id FROM worktrees ORDER BY id").all()).toEqual([
+      { id: "wt_web_main" },
+    ]);
+    expect(sqlite.database.prepare("SELECT id FROM terminal_targets ORDER BY id").all()).toEqual(
+      [],
+    );
+    expect(sqlite.database.prepare("SELECT id FROM harness_runs ORDER BY id").all()).toEqual([]);
     sqlite.close();
 
     const reopened = openObserverSqlite({ path: dbPath, clock: { now: () => new Date(later) } });
     const reloaded = createSqliteObserverPersistence({ sqlite: reopened, idFactory: ids() });
 
-    expect(
-      (
-        await reloaded.listCurrentProviderEntityObservations({
-          entityKind: ["worktree", "terminal_target"],
-          now: later,
-        })
-      ).map((item) => `${item.entityKind}:${item.entityKey}`),
-    ).toEqual(["worktree:wt_web_main", "terminal_target:term_web_main"]);
+    expect(reopened.database.prepare("SELECT id FROM worktrees ORDER BY id").all()).toEqual([
+      { id: "wt_web_main" },
+    ]);
+    expect(reopened.database.prepare("SELECT id FROM terminal_targets ORDER BY id").all()).toEqual(
+      [],
+    );
+    expect(reopened.database.prepare("SELECT id FROM harness_runs ORDER BY id").all()).toEqual([]);
     expect(await reloaded.listSessions()).toEqual([
       expect.objectContaining({
         id: "ses_web_main",

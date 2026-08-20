@@ -11,6 +11,7 @@ import {
 import type { DashboardCapabilities } from "../../src/state/capabilities/execution.js";
 import { dashboardExecution } from "../../src/state/capabilities/execution.js";
 import { createObserverManagedSessionCapabilities } from "../../src/state/capabilities/managedSessions.js";
+import { createObserverWorktreeRemovalCapabilities } from "../../src/state/capabilities/worktreeRemoval.js";
 import {
   createDashboardRuntime,
   type DashboardRuntime,
@@ -102,6 +103,10 @@ function createLegacyTestCapabilities(options: {
   return {
     activation: createObserverActivationCapabilities(activationOptions),
     managedSessions: createObserverManagedSessionCapabilities(managedOptions),
+    worktreeRemoval: createObserverWorktreeRemovalCapabilities({
+      service: options.service,
+      clientLabel: "TUI test",
+    }),
     shell: createFakeDashboardCapabilities().shell,
     dismissal: {
       dismissDashboard: () =>

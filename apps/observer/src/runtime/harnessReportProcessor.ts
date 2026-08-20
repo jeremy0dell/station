@@ -15,13 +15,9 @@ export type HarnessReportProcessorDeps = {
   core: ObserverCore;
   eventBus: ObserverEventBus;
   clock: RuntimeClock;
+  requestReconcile: (reason: string) => void;
   refreshProviderHealth?: (providerId: string) => Promise<void>;
   logger?: StationLogger;
-};
-
-export type HarnessReportProcessResult = {
-  receipt: HarnessEventReportReceipt;
-  reconcileReason?: string;
 };
 
 function reportDecisionFields(report: HarnessEventReport): Record<string, unknown> {
@@ -49,12 +45,12 @@ function reportDecisionFields(report: HarnessEventReport): Record<string, unknow
  * USE CASE
  *
  * Persists one normalized report, projects authorized live status, publishes derived events,
- * revalidates contradictory provider health, and returns the required reconcile reason.
+ * revalidates contradictory provider health, and requests canonical convergence.
  */
 export async function processHarnessIngressReport(
   deps: HarnessReportProcessorDeps,
   rawReport: HarnessEventReport,
-): Promise<HarnessReportProcessResult> {
+): Promise<HarnessEventReportReceipt> {
   // Resolve cwd-only correlation before ingest so the persisted observation
   // carries the worktreeId too, not just this projection pass.
   const snapshot = deps.core.getSnapshot();
@@ -62,17 +58,16 @@ export async function processHarnessIngressReport(
     withWorktreeCorrelationFromCwd(rawReport, snapshot),
     snapshot,
   );
-  const receipt = await deps.harnessEventReportIngestion.ingest(report, {
-    triggerReconcile: false,
-  });
+  const receipt = await deps.harnessEventReportIngestion.ingest(report);
   if (!receipt.accepted || receipt.deduped === true) {
     await deps.logger?.info("Harness event report skipped.", {
       ...reportDecisionFields(report),
       accepted: receipt.accepted,
       deduped: receipt.deduped === true,
     });
-    return { receipt };
+    return receipt;
   }
+  const reconcileReason = `harness-report:${report.provider}:${report.eventType}`;
   const projection = await runRuntimeBoundary(
     {
       operation: "observer.harnessEventReport.projectStatus",
@@ -92,15 +87,14 @@ export async function processHarnessIngressReport(
       reportId: report.reportId,
       error: projection.error,
     });
-    return {
-      receipt: HarnessEventReportReceiptSchema.parse({
-        ...receipt,
-        projected: false,
-        scheduledReconcile: true,
-        error: projection.error,
-      }),
-      reconcileReason: `harness-report:${report.provider}:${report.eventType}`,
-    };
+    const projectedReceipt = HarnessEventReportReceiptSchema.parse({
+      ...receipt,
+      projected: false,
+      scheduledReconcile: true,
+      error: projection.error,
+    });
+    deps.requestReconcile(reconcileReason);
+    return projectedReceipt;
   }
   // Census/debug trail: one line per report with the projection decision, so
   // unprojected (correlation-failed) reports are visible instead of vanishing.
@@ -131,12 +125,11 @@ export async function processHarnessIngressReport(
         .catch(() => undefined),
     );
   }
-  return {
-    receipt: HarnessEventReportReceiptSchema.parse({
-      ...receipt,
-      projected: projection.value.projected,
-      scheduledReconcile: true,
-    }),
-    reconcileReason: `harness-report:${report.provider}:${report.eventType}`,
-  };
+  const projectedReceipt = HarnessEventReportReceiptSchema.parse({
+    ...receipt,
+    projected: projection.value.projected,
+    scheduledReconcile: true,
+  });
+  deps.requestReconcile(reconcileReason);
+  return projectedReceipt;
 }

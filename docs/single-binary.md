@@ -42,8 +42,11 @@ Each release archive is named
 - `LICENSE`.
 
 The release workflow creates a release **draft** with six assets: four native
-archives, `install.sh`, and `SHA256SUMS`. Promotion publishes only the accepted
-draft whose commit, release, asset identities, and checksums still match.
+archives, `install.sh`, and `SHA256SUMS`. It records the exact numeric asset IDs
+and the target build identity shared by all native artifacts. Promotion serializes
+publication repository-wide, reselects the newest complete immutable predecessor,
+and publishes only the accepted draft whose commit, release, asset identities,
+build identity, and checksums still match.
 
 ## Build and dispatch
 
@@ -91,14 +94,18 @@ as ownership roots.
   mode. Both implement the same Station database contract and preserve database
   compatibility across runtimes.
 - Observer attach, handoff, stale-socket recovery, and replacement follow the
-  [singleton lifecycle](observer-singleton.md). Compiled clients do not add a
-  second eviction path.
+  [singleton lifecycle](observer-singleton.md). A higher-build explicit restart
+  cooperatively stops an identity-pinned older Observer before spawning its
+  successor; lower-build callers still refuse.
 - Station Host reuse requires compatible protocol and exact Station build
-  version. Busy incompatible hosts are preserved unless an explicit supported
-  handoff succeeds.
+  version. Source-mode bridge PTYs support negotiated handoff. Compiled PTYs are
+  in-process Bun and cannot cross Host replacement; a failed handoff preserves
+  the old Host and PTYs, and target launches refuse it visibly.
 - `stn update` composes installer-binary ownership with dev-checkout, Homebrew,
   npm-global, and mise adapters. Manager-owned channels defer unless the user
-  explicitly asks Station to drive their native update command.
+  explicitly asks Station to drive their native update command. After apply,
+  the successor launcher restarts Observer before attempting Host handoff; a
+  later crossover failure never rolls back a verified installation.
 
 ## Packaged runtime assets
 
@@ -188,6 +195,17 @@ pnpm smoke:install
 pnpm smoke:release
 ```
 
+The composed update smoke has two explicit busy-Host outcomes. `full-handoff`
+requires PTY continuity through replacement; `preserved-refusal` requires a
+completed install and Observer crossover while the old Host and PTYs remain
+usable and the target native UI refuses that Host. The pane-free tmux dashboard
+may still render against the matching target Observer; Host-producing work stays
+guarded by the terminal provider boundary. Release staging requires full
+scenario coverage: compiled predecessor busy Hosts must take the
+`preserved-refusal` path, and the no-Host scenario must complete discovery,
+download, installation, and crossover. Post-promotion public checks repeat the
+no-Host path.
+
 Native release CI builds and tests `darwin-arm64`, `darwin-x64`, `linux-arm64`,
 and `linux-x64`. The manual release gate covers real TTY rendering, shell job
 control, first-run setup, popup behavior, Host preservation, and installation on
@@ -197,6 +215,7 @@ clean machines without Node.js or Bun on the runtime `PATH`.
 
 - `scripts/build-binary.mjs`: native target selection and compiled output.
 - `scripts/release/package-archive.sh`: archive names and manifest.
+- `scripts/test-runners/run-update-smoke.mjs`: composed update acceptance.
 - `station/src/bin/stnMain.ts`: compiled composition.
 - `apps/cli/src/selfExec.ts`: raw dispatch and self-exec mapping.
 - `station/src/bin/packagedAssets.ts`: runtime asset extraction and leases.

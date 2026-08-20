@@ -137,10 +137,35 @@ export type TuiObserverConnectionStatus =
   | { state: "reconnecting"; since: number; lastError?: SafeError }
   | { state: "displayOnly"; since: number; lastError?: SafeError };
 
+export type GroupSettingsSection = "general" | "sessions" | "remove";
+
+/** Which pane of a responsive settings panel owns keyboard input. */
+export type SettingsPanelFocus = "list" | "detail";
+
+/** Section-local control focus in Group Settings detail panes. */
+export type GroupSettingsDetailFocus =
+  | "name"
+  | "generalSave"
+  | "generalCancel"
+  | "sessionList"
+  | "membershipSave"
+  | "sessionsBack"
+  | "removeConfirm"
+  | "removeSubmit"
+  | "removeBack";
+
+export type GroupSettingsPendingMutation = "rename" | "membership" | "delete";
+
 export type TuiScreen =
   | { name: "dashboard" }
   | { name: "help" }
   | { name: "projectMenu"; projectId: ProjectId; focus: ProjectMenuActionId }
+  | {
+      name: "groupMenu";
+      projectId: ProjectId;
+      groupId: SessionGroupId;
+      focus: GroupMenuActionId;
+    }
   | {
       name: "createGroup";
       projectId: ProjectId;
@@ -188,10 +213,27 @@ export type TuiScreen =
       returnTo?: "dashboard";
       validationError?: string;
     }
+  | { name: "moveToGroup"; step: "chooseSlot" }
+  | {
+      name: "moveToGroup";
+      step: "chooseDestination";
+      sessionId: SessionId;
+      sessionTitle: string;
+      submitting: boolean;
+    }
+  | {
+      name: "moveToGroup";
+      step: "createGroup";
+      sessionId: SessionId;
+      sessionTitle: string;
+      draftName: EditableTextInputState;
+      submitting: boolean;
+    }
   | { name: "fork"; step: "chooseSlot" }
   | {
       name: "fork";
       step: "details";
+      sourceSessionId: SessionId;
       sourceWorktreeId: WorktreeId;
       projectId: ProjectId;
       projectLabel: string;
@@ -200,8 +242,10 @@ export type TuiScreen =
       sourceAgentRunning: boolean;
       branch: string;
       draftTitle: EditableTextInputState;
+      sourceGroup?: { id: SessionGroupId; name: string };
+      inheritSourceGroup: boolean;
       copyDirty: boolean;
-      focus: "name" | "copyDirty" | "submit";
+      focus: "name" | "group" | "copyDirty" | "submit";
       returnTo?: "dashboard";
       validationError?: string;
     }
@@ -211,22 +255,39 @@ export type TuiScreen =
   | {
       name: "projectSettings";
       projectId: ProjectId;
-      focus: ProjectSettingsFocus;
+      focus: SettingsPanelFocus;
       activeId: ProjectSettingsItemId;
       removeDraft: EditableTextInputState;
+    }
+  | {
+      name: "groupSettings";
+      projectId: ProjectId;
+      groupId: SessionGroupId;
+      section: GroupSettingsSection;
+      focus: SettingsPanelFocus;
+      detailFocus: GroupSettingsDetailFocus;
+      expectedVersion: number;
+      baselineName: string;
+      nameDraft: EditableTextInputState;
+      baselineAssignments: ReadonlyMap<SessionId, SessionGroupId | null>;
+      desiredSessionIds: ReadonlySet<SessionId>;
+      sessionCursor?: SessionId;
+      removeDraft: EditableTextInputState;
+      pending?: GroupSettingsPendingMutation;
     }
   | { name: "widgetSettings"; focus: WidgetSettingsFocus; cursor: number; pickerCursor: number };
 
 /** Whether the widget list or the add-widget picker owns keyboard input. */
 export type WidgetSettingsFocus = "list" | "picker";
 
-/** Which pane of the two-pane settings panel owns keyboard input. */
-export type ProjectSettingsFocus = "list" | "detail";
 /** Left-list item ids; extend alongside the registry in screens/projectSettings.ts. */
 export type ProjectSettingsItemId = "agent" | "remove";
 
 /** Actionable Project-menu rows in their rendered traversal order. */
 export type ProjectMenuActionId = "quickGroup" | "newGroup" | "defaultAgent" | "settings";
+
+/** Actionable Group-menu rows in their rendered traversal order. */
+export type GroupMenuActionId = "quickSession" | "newSession" | "settings" | "remove";
 
 /** Create Group control focus in rendered traversal order. */
 export type CreateGroupFocus = "name" | "quickSession" | "create" | "cancel";
@@ -236,6 +297,9 @@ export type CreateGroupReturnTarget = "projectMenu" | "projectHeader";
 
 /** Readonly Project-menu state consumed by shared presentation. */
 export type ProjectMenuScreenView = Extract<DashboardScreenView, { name: "projectMenu" }>;
+
+/** Readonly Group-menu state consumed by shared presentation. */
+export type GroupMenuScreenView = Extract<DashboardScreenView, { name: "groupMenu" }>;
 
 /** Readonly Create-Group state consumed by shared presentation and content selectors. */
 export type CreateGroupScreenView = Extract<DashboardScreenView, { name: "createGroup" }>;

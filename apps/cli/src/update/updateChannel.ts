@@ -1,17 +1,10 @@
+import type { UpdateChannelId, UpdateCommandArgv } from "@station/contracts";
+import { UpdateChannelIdSchema } from "@station/contracts";
 import type { RuntimeSafeError } from "@station/runtime";
 import type { ExecutableArgv } from "../selfExec.js";
 
-export const updateChannelIds = [
-  "installer-binary",
-  "dev-checkout",
-  "homebrew",
-  "npm-global",
-  "mise",
-] as const;
-
-export type UpdateChannelId = (typeof updateChannelIds)[number];
-
-export type UpdateCommandArgv = readonly [command: string, ...args: string[]];
+export const updateChannelIds = UpdateChannelIdSchema.options;
+export type { UpdateChannelId, UpdateCommandArgv } from "@station/contracts";
 
 export type UpdateDetectionBase = {
   channel: UpdateChannelId;

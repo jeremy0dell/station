@@ -1,185 +1,143 @@
 import {
-  createSetupSessionState,
+  createSetupSessionApplication,
+  type SetupInspection,
+  type SetupOperationExecutor,
   type SetupPlanningFacts,
   type SetupPlanningIntent,
-  transitionSetupSession,
 } from "@station/setup-core";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-describe("transitionSetupSession", () => {
-  it("rejects stale events and moves a reviewed session into its explicit apply phases", () => {
-    const initial = createSetupSessionState(intent());
-    const inspecting = transitionSetupSession(initial, {
-      type: "inspection-requested",
-      revision: initial.revision,
-    });
-    expect(inspecting.effects).toEqual([{ kind: "inspect", phase: "initial" }]);
-
-    const editing = transitionSetupSession(inspecting.state, {
-      type: "inspection-completed",
-      revision: inspecting.state.revision,
-      facts: facts(),
-    });
-    expect(editing.state.status).toBe("editing");
-
-    const stale = transitionSetupSession(editing.state, {
-      type: "review-requested",
-      revision: editing.state.revision - 1,
-    });
-    expect(stale).toEqual({ state: editing.state, effects: [] });
-
-    const reviewing = transitionSetupSession(editing.state, {
-      type: "review-requested",
-      revision: editing.state.revision,
-    });
-    const applying = transitionSetupSession(reviewing.state, {
-      type: "apply-requested",
-      revision: reviewing.state.revision,
-    });
-    expect(applying.state).toMatchObject({
-      status: "inspecting",
-      inspectionPhase: "after-preflight",
-    });
-    expect(applying.effects).toEqual([{ kind: "inspect", phase: "after-preflight" }]);
-  });
-
-  it("replaces intent revision-safely and returns staged preparation to editing", () => {
-    const initial = createSetupSessionState(intent());
-    const inspecting = transitionSetupSession(initial, {
-      type: "inspection-requested",
-      revision: initial.revision,
-    });
-    const editing = transitionSetupSession(inspecting.state, {
-      type: "inspection-completed",
-      revision: inspecting.state.revision,
-      facts: missingWorktrunkFacts(),
-    });
-    const desired = { ...intent(), linkStationLaunchers: true };
-
-    const stale = transitionSetupSession(editing.state, {
-      type: "intent-replaced",
-      revision: editing.state.revision - 1,
-      intent: desired,
-    });
-    expect(stale).toEqual({ state: editing.state, effects: [] });
-
-    const replacing = transitionSetupSession(editing.state, {
-      type: "intent-replaced",
-      revision: editing.state.revision,
-      intent: desired,
-    });
-    expect(replacing.effects).toEqual([{ kind: "inspect", phase: "initial" }]);
-    const refreshed = transitionSetupSession(replacing.state, {
-      type: "inspection-completed",
-      revision: replacing.state.revision,
-      facts: missingWorktrunkFacts(),
-    });
-    expect(refreshed.state).toMatchObject({ status: "editing", intent: desired });
-
-    const preparing = transitionSetupSession(refreshed.state, {
-      type: "prepare-requested",
-      revision: refreshed.state.revision,
-    });
-    const effect = preparing.effects[0];
-    if (effect?.kind !== "perform-operation") throw new Error("expected preparation effect");
-    const completed = transitionSetupSession(preparing.state, {
-      type: "operation-completed",
-      revision: preparing.state.revision,
-      outcome: {
-        status: "completed",
-        operationId: effect.operation.id,
-        operation: effect.operation,
-        commit: { kind: "package-installer", target: { kind: "tool", id: "worktrunk" } },
+describe("setup session transitions", () => {
+  it("moves a reviewed session through the explicit inspection phases without public event dispatch", async () => {
+    const phases: string[] = [];
+    const application = createSetupSessionApplication({
+      intent: intent(),
+      inspection: async (request) => {
+        phases.push(request.phase);
+        return { status: "completed", facts: facts() };
       },
-    });
-    expect(completed.state).toMatchObject({
-      status: "inspecting",
-      inspectionPhase: "after-preparation",
-    });
-    const prepared = transitionSetupSession(completed.state, {
-      type: "inspection-completed",
-      revision: completed.state.revision,
-      facts: facts(),
-    });
-    expect(prepared.state).toMatchObject({
-      status: "editing",
-      checkpoints: [{ operationId: "install:worktrunk" }],
-    });
-  });
-
-  it("rejects stale asynchronous operation outcomes without recording a checkpoint", () => {
-    const initial = createSetupSessionState(intent());
-    const inspecting = transitionSetupSession(initial, {
-      type: "inspection-requested",
-      revision: initial.revision,
-    });
-    const editing = transitionSetupSession(inspecting.state, {
-      type: "inspection-completed",
-      revision: inspecting.state.revision,
-      facts: missingWorktrunkFacts(),
-    });
-    const reviewing = transitionSetupSession(editing.state, {
-      type: "review-requested",
-      revision: editing.state.revision,
-    });
-    const applying = transitionSetupSession(reviewing.state, {
-      type: "apply-requested",
-      revision: reviewing.state.revision,
-    });
-    const effect = applying.effects[0];
-    if (effect?.kind !== "perform-operation") throw new Error("expected operation effect");
-
-    const stale = transitionSetupSession(applying.state, {
-      type: "operation-completed",
-      revision: applying.state.revision - 1,
-      outcome: {
-        status: "completed",
-        operationId: effect.operation.id,
-        operation: effect.operation,
-        commit: {
-          kind: "package-installer",
-          target: { kind: "tool", id: "worktrunk" },
+      executeOperation: async (operation) => ({
+        status: "failed",
+        operationId: operation.id,
+        error: {
+          tag: "UnexpectedOperationError",
+          code: "UNEXPECTED_OPERATION",
+          message: "The ready fixture has no selected operations.",
         },
-      },
+      }),
     });
 
-    expect(stale).toEqual({ state: applying.state, effects: [] });
-    expect(stale.state.checkpoints).toEqual([]);
+    expect((await application.review()).status).toBe("reviewing");
+    expect((await application.apply()).status).toBe("completed");
+    expect(phases).toEqual(["initial", "after-preflight", "after-activation", "final"]);
+    expect(Reflect.get(application, "dispatch")).toBeUndefined();
   });
 
-  it("accepts cancellation independently of revision and preserves blocked diagnostics", () => {
+  it("keeps the invocation mode while replacement and staged preparation return to editing", async () => {
+    let worktrunkAvailable = false;
+    const requests: Parameters<SetupInspection>[0][] = [];
+    const executeOperation = vi.fn<SetupOperationExecutor>(async (operation) => {
+      worktrunkAvailable = true;
+      return {
+        status: "completed",
+        operationId: operation.id,
+        commit: { kind: "package-installer", target: { kind: "tool", id: "worktrunk" } },
+      };
+    });
+    const application = createSetupSessionApplication({
+      intent: intent(),
+      inspection: async (request) => {
+        requests.push(request);
+        return {
+          status: "completed",
+          facts: worktrunkAvailable ? facts() : missingWorktrunkFacts(),
+        };
+      },
+      executeOperation,
+    });
+
+    await application.start();
+    await application.replaceIntent({ ...intent(), mode: "check", linkStationLaunchers: true });
+    const prepared = await application.prepare();
+
+    expect(prepared).toMatchObject({
+      status: "editing",
+      intent: { mode: "apply", linkStationLaunchers: true },
+    });
+    expect(requests.slice(1).map((request) => request.intent.mode)).toEqual(["apply", "apply"]);
+    expect(executeOperation.mock.calls.map(([operation]) => operation.id)).toEqual([
+      "install:worktrunk",
+    ]);
+  });
+
+  it("serializes duplicate apply requests so one asynchronous outcome is recorded once", async () => {
+    let available = false;
+    let releaseOperation: (() => void) | undefined;
+    let markStarted: (() => void) | undefined;
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    const blocked = new Promise<void>((resolve) => {
+      releaseOperation = resolve;
+    });
+    const executeOperation = vi.fn<SetupOperationExecutor>(async (operation) => {
+      markStarted?.();
+      await blocked;
+      available = true;
+      return {
+        status: "completed",
+        operationId: operation.id,
+        commit: { kind: "package-installer", target: { kind: "tool", id: "worktrunk" } },
+      };
+    });
+    const application = createSetupSessionApplication({
+      intent: intent(),
+      inspection: async () => ({
+        status: "completed",
+        facts: available ? facts() : missingWorktrunkFacts(),
+      }),
+      executeOperation,
+    });
+
+    const first = application.apply();
+    await started;
+    const second = application.apply();
+    releaseOperation?.();
+    const states = await Promise.all([first, second]);
+
+    expect(states.map((state) => state.status)).toEqual(["completed", "completed"]);
+    expect(executeOperation).toHaveBeenCalledTimes(1);
+    expect(states[1]?.operationOutcomes).toHaveLength(1);
+  });
+
+  it("preserves blocked inspection diagnostics when the session is cancelled", async () => {
     const error = {
       tag: "SyntheticInspectionError",
       code: "SYNTHETIC_INSPECTION_FAILED",
       message: "Synthetic inspection failed.",
       hint: "Repair the synthetic fixture.",
     };
-    const initial = createSetupSessionState(intent());
-    const inspecting = transitionSetupSession(initial, {
-      type: "inspection-requested",
-      revision: initial.revision,
+    const application = createSetupSessionApplication({
+      intent: intent(),
+      inspection: async () => ({ status: "failed", error }),
+      executeOperation: async () => {
+        throw new Error("operation must not run");
+      },
     });
-    const blocked = transitionSetupSession(inspecting.state, {
-      type: "inspection-failed",
-      revision: inspecting.state.revision,
+
+    expect(await application.review()).toMatchObject({
+      status: "blocked",
+      reason: "inspection-failed",
       error,
     });
-
-    const cancelled = transitionSetupSession(blocked.state, {
-      type: "cancel-requested",
-    });
-
-    expect(cancelled).toMatchObject({
-      state: { status: "cancelled", error },
-      effects: [],
-    });
+    expect(await application.cancel()).toMatchObject({ status: "cancelled", error });
   });
 });
 
 function intent(): SetupPlanningIntent {
   return {
-    mode: "apply" as const,
-    harnessSelection: { kind: "automatic" as const },
+    mode: "apply",
+    harnessSelection: { kind: "automatic" },
     installBootstrap: false,
     installHarnesses: [],
     linkStationLaunchers: false,

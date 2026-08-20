@@ -5,7 +5,7 @@ import { basename, dirname, join } from "node:path";
 import type { SafeError } from "@station/contracts";
 import { safeErrorFromUnknown } from "@station/runtime";
 import { isSqliteBusyError, openSqlDatabase, type SqlDatabase } from "../sqlite/driver.js";
-import type { ObserverDuplicateCleanupExclusion } from "./observerDuplicateCleanup.js";
+import type { ObserverReapExclusion } from "./observerReap.js";
 
 const claimFileName = "observer.claim.sqlite";
 const claimSidecarSuffixes = ["", "-journal", "-wal", "-shm"] as const;
@@ -42,7 +42,7 @@ export function observerBootClaimPath(socketPath: string): string {
 /**
  * ADAPTER
  *
- * Excludes cross-runtime startup and duplicate-cleanup mutation through a
+ * Excludes cross-runtime startup and explicit reap mutation through a
  * SQLite transaction whose ownership comes from the OS lock, never the
  * persistent claim file.
  */
@@ -124,13 +124,13 @@ export async function acquireObserverBootClaim(
 /**
  * ADAPTER
  *
- * Gives duplicate cleanup a fail-fast startup exclusion and releases the claim
+ * Gives explicit reap a fail-fast startup exclusion and releases the claim
  * after every callback outcome, including failures.
  */
-export function createObserverBootClaimCleanupExclusion(
+export function createObserverReapExclusion(
   options: { socketPath: string },
   deps: ObserverBootClaimCleanupExclusionDeps = {},
-): ObserverDuplicateCleanupExclusion {
+): ObserverReapExclusion {
   return {
     runExclusive: async <T>(operation: () => Promise<T>) => {
       const claim = await (deps.acquire ?? acquireObserverBootClaim)({

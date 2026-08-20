@@ -1,7 +1,7 @@
 # Observer singleton lifecycle
 
 This document is authoritative for Observer process ownership, startup exclusion,
-build-aware handoff, socket displacement, duplicate discovery, and duplicate cleanup.
+build-aware handoff, socket displacement, duplicate discovery, and explicit reap.
 [Observer Architecture](observer-architecture.md) remains authoritative for dependency
 direction, application roles, and composition ownership.
 
@@ -76,6 +76,10 @@ when all fields still match the process's published identity.
 
 ## Attach versus coordinated handoff
 
+Handoff reads process evidence only for the incumbent PID named by the corroborated socket and
+pidfile identity. Unrelated Observer-looking processes cannot participate in that decision;
+duplicate discovery remains global and fail-closed.
+
 A listening exact-selector Observer is reused. A higher valid SemVer incumbent is also
 reused by a lower candidate. The declared public version-line reset orders
 `0.0.0-pre-alpha.*` after the internal `0.7.1-rc.*` previews despite ordinary SemVer
@@ -87,6 +91,23 @@ Station UI composition applies a stricter exact caller/accepted-selector admissi
 after this singleton decision. That UI-only check is not another ordering, attachment, or
 handoff rule; non-UI commands, hooks, ingress, and generic clients continue to use the
 winner selected here.
+
+An explicit `stn observer ensure-exact-build` request is a separate CLI lifecycle
+operation for a caller that intentionally owns the configured runtime, such as a
+checkout-local devbox. Exact health is reused. A different healthy selector is
+stopped only through the existing identity-pinned cooperative stop connection;
+the operation waits for endpoint closure, starts the caller build, and requires
+that exact selector as its final postcondition. Its inspection, socket-holder
+evidence, health, stop convergence, child startup, and verification share one
+deadline. The replacement child uses preserve-incumbent admission: it may accept
+an exact successor or claim an absent/proven-stale endpoint, but it cannot invoke
+ordinary automatic handoff against a later non-exact owner. An owner change is re-probed only
+to accept an already-established exact successor or stopped endpoint; the
+operation does not repeatedly stop moving non-exact owners. It never uses reap,
+signals, forced cleanup, or a weaker socket probe. Ordinary `start`, automatic
+handoff, and deterministic winner selection retain the policy above. Failure
+results name the activation phase and the last proven disposition of the
+incumbent admitted at the beginning of the operation.
 
 A winning replacement candidate may coordinate handoff only while holding the boot claim.
 It revalidates holder, health, pidfile, argv, socket, and OS start token before controlled
@@ -129,38 +150,24 @@ the displaced process active.
 
 Future displacement is handled by this watcher; duplicate inspection is not periodic.
 
-## Duplicate discovery and cleanup
+## Duplicate discovery
 
-After successful startup reconcile, the healthy Observer runs one single-flight background
-inspection. Shutdown aborts and awaits its quarantine. The result is cached in memory for
-Doctor and recorded in structured Observer logs.
+After successful startup reconcile, the healthy Observer runs the same force-false plan used
+by explicit reap. The promise is cached for Doctor and its result is recorded in structured
+Observer logs. This inspection has no quarantine timer, retry, boot claim, cancellation
+protocol, or signal authority.
 
-Automatic eligibility requires all of the following:
+The plan marks a candidate eligible only when the keeper is the sole socket holder; its
+strict pidfile, OS start token, build selector, resolved socket, and exact process entry
+agree; the candidate is an exact source or compiled Observer process for the same socket;
+and a complete per-process `lsof -F0pft` inventory reports zero Unix-domain socket
+descriptors. Missing or conflicting evidence produces a warning and never authorizes a
+signal.
 
-1. the running Observer still owns the exact socket inode and birth identity captured at
-   bind;
-2. its PID is the sole socket holder;
-3. its strict pidfile, PID, OS start token, build selector, resolved socket, and exact process
-   entry agree;
-4. each candidate is an exact source or compiled Observer process resolving to the same
-   socket;
-5. each candidate remains byte-for-byte stable across a quarantine at least as long as its
-   advertised startup budget, with a conservative ten-second fallback for legacy argv;
-6. a complete per-process `lsof -F0pft` inventory reports zero Unix-domain socket descriptors
-   for the candidate before and after exact process revalidation;
-7. the boot claim is acquired without waiting;
-8. keeper and candidate evidence agrees again while the claim is held, immediately before
-   any proposed signal.
-
-The current production mode is **report-only**. An eligible duplicate produces the structured
-`would-terminate` outcome and an `observer-singleton` Doctor warning but receives no signal.
-Evidence refusal, ambiguity, or change also warns and never signals. The job does not retry
-or become periodic.
-
-Promotion to automatic cleanup is an operational release decision outside this canonical
-runtime contract. When production composition is deliberately changed to terminate mode,
-the same use case sends one SIGTERM, waits a bounded grace period, verifies keeper ownership,
-and reports survivors. It never sends automatic SIGKILL.
+The `automaticEligibility` and `quarantineMs` fields remain in `stn observer reap` output as
+compatibility diagnostics describing whether the current evidence meets the conservative
+checklist and how long an operator should observe a legacy candidate. Station has no
+automatic duplicate signaling mode.
 
 ## Explicit operator reap
 
@@ -185,16 +192,15 @@ response to inaccessible ownership or a wedged live binder.
 Once stop begins, health is gated and application operations are rejected before API routing.
 Shutdown proceeds in this order:
 
-1. abort and await duplicate quarantine or cleanup;
-2. drain harness ingress and stop metadata watchers;
-3. stop command admission and cooperatively abort handlers;
-4. stop configured event hooks;
-5. revalidate socket and pidfile ownership;
-6. remove only the exact owned pidfile;
-7. close the server only while the captured socket identity still matches, otherwise abandon
+1. drain harness ingress and stop metadata watchers;
+2. stop command admission and cooperatively abort handlers;
+3. stop configured event hooks;
+4. revalidate socket and pidfile ownership;
+5. remove only the exact owned pidfile;
+6. close the server only while the captured socket identity still matches, otherwise abandon
    it;
-8. close Observer SQLite;
-9. exit explicitly when displacement requires it.
+7. close Observer SQLite;
+8. exit explicitly when displacement requires it.
 
 Pidfile cleanup failure is warned but does not hang shutdown. Leaving stale corroborating
 evidence is safer than deleting another process's identity.
@@ -209,12 +215,14 @@ Station fails closed for singleton mutation:
   descriptors;
 - missing `ps`, executable, exact argv, launch-token, build, pidfile, socket-identity, or
   OS-start-token evidence never means safe;
-- multiple socket holders are never automatic cleanup targets;
-- any candidate Unix-domain socket descriptor refuses automatic cleanup, including a
+- multiple socket holders are never reap targets;
+- any candidate Unix-domain socket descriptor refuses reap, including a
   descriptor for an unrelated socket;
-- process, socket, holder, pidfile, or argv change during quarantine refuses signaling;
-- startup claim contention refuses duplicate cleanup without waiting;
-- automatic handoff and duplicate cleanup never send SIGKILL;
+- process, socket, holder, pidfile, or argv change before or after grace refuses further signaling;
+- startup claim contention refuses explicit reap without waiting;
+- automatic handoff never sends SIGKILL; only explicit force may escalate after revalidation;
+- exact-build activation uses only identity-pinned cooperative stop and preserves
+  a changed or unpinnable incumbent;
 - an inaccessible socket is preserved for operator diagnosis.
 
 The actionable operator surfaces are `stn doctor`, `stn observer status`,
@@ -227,8 +235,8 @@ The actionable operator surfaces are `stn doctor`, `stn observer status`,
 - No Windows named-pipe singleton path; Observer transport is AF_UNIX.
 - No thin proxy that lets an older or different build execute through incompatible code.
 - No periodic duplicate killer.
-- No automatic SIGKILL.
-- No telemetry requirement for singleton cleanup evidence.
+- No automatic duplicate-process signal.
+- No telemetry requirement for singleton inspection evidence.
 
 ## Verification
 

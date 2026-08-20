@@ -2,11 +2,9 @@ import { createHash } from "node:crypto";
 import type {
   CommandId,
   DiagnosticDetail,
-  HarnessRunObservation,
   ProviderId,
   SessionRecoveryHandle,
   StationEvent,
-  TerminalTargetObservation,
   WorktreeObservation,
 } from "@station/contracts";
 import {
@@ -50,9 +48,7 @@ import {
   sessionTurnReadinessEqual,
   turnReadinessWasAcknowledged,
 } from "../../src/persistence/sessionHarnessDerivedState.js";
-import { stripTerminalProviderData } from "../../src/persistence/terminalObservations.js";
 import type {
-  CurrentProviderObservationKind,
   EventRecordOptions,
   HarnessExecutionIngress,
   IngressDedupeKey,
@@ -76,22 +72,11 @@ import type {
   WorktreeMetadataCurrentKind,
   WorktreeMetadataCurrentPayloadByKind,
 } from "../../src/persistence/types.js";
-import {
-  harnessRunCanActivateSession,
-  terminalCanActivateSession,
-} from "../../src/sessionActivation.js";
 import { resolveWorktreeDisplayTitle } from "../../src/worktreeDisplayTitle.js";
 
 type CreateInMemoryObserverPersistenceOptions = {
   clock?: RuntimeClock;
   idFactory?: Partial<ObserverIdFactory>;
-};
-
-type ProjectState = {
-  id: string;
-  label: string;
-  root: string;
-  lastSeenAt: string;
 };
 
 type InMemoryObserverPersistenceState = {
@@ -100,10 +85,7 @@ type InMemoryObserverPersistenceState = {
   events: Map<string, PersistedEvent>;
   ingressDedupe: Set<string>;
   observations: Map<string, PersistedProviderObservation>;
-  projects: Map<string, ProjectState>;
   worktrees: Map<string, WorktreeObservation>;
-  terminalTargets: Map<string, TerminalTargetObservation>;
-  harnessRuns: Map<string, HarnessRunObservation>;
   sessions: Map<string, PersistedSession>;
   sessionGroups: sessionGroupStore.SessionGroupPersistenceState;
   worktreeDisplayTitles: Map<string, PersistedWorktreeDisplayTitle>;
@@ -321,14 +303,6 @@ export function createInMemoryObserverPersistence(
         }),
       ),
 
-    listCurrentProviderEntityObservations: (listOptions = {}) =>
-      transaction((draft) =>
-        listCurrentProviderEntityObservations(draft, {
-          ...listOptions,
-          referenceTime: listOptions.now ?? now(),
-        }),
-      ),
-
     pruneExpiredProviderObservations: (expiresBefore) =>
       transaction((draft) => {
         let deleted = 0;
@@ -468,6 +442,8 @@ export function createInMemoryObserverPersistence(
             worktreeId: input.worktreeId,
             lifecycle: "open",
             title: canonical.title,
+            harness: input.harness,
+            terminalProvider: input.terminalProvider,
             createdAt: input.createdAt,
             lastSeenAt: input.lastSeenAt,
           };
@@ -484,6 +460,8 @@ export function createInMemoryObserverPersistence(
         existing.projectId = input.projectId;
         existing.worktreeId = input.worktreeId;
         existing.title = canonical.title;
+        existing.harness = input.harness;
+        existing.terminalProvider = input.terminalProvider;
         existing.lastSeenAt = input.lastSeenAt;
         if (existing.lifecycle !== "ended") existing.lifecycle = "open";
         draft.sessionGroups = placement.state;
@@ -775,12 +753,9 @@ function emptyState(): InMemoryObserverPersistenceState {
     events: new Map(),
     ingressDedupe: new Set(),
     observations: new Map(),
-    projects: new Map(),
     worktrees: new Map(),
-    terminalTargets: new Map(),
-    harnessRuns: new Map(),
     sessions: new Map(),
-    sessionGroups: sessionGroupStore.emptySessionGroupState(),
+    sessionGroups: { groups: new Map(), assignments: new Map() },
     worktreeDisplayTitles: new Map(),
     sessionHarnessExecutions: new Map(),
     recoveryHandles: new Map(),
@@ -995,69 +970,6 @@ function listProviderObservations(
     .map((observation) => observationAtReferenceTime(observation, options.referenceTime));
 }
 
-function listCurrentProviderEntityObservations(
-  state: InMemoryObserverPersistenceState,
-  options: {
-    entityKind?: CurrentProviderObservationKind | readonly CurrentProviderObservationKind[];
-    includeExpired?: boolean;
-    referenceTime: string;
-  },
-): PersistedProviderObservation[] {
-  const kinds =
-    options.entityKind === undefined
-      ? (["worktree", "terminal_target"] satisfies CurrentProviderObservationKind[])
-      : normalizeKinds(options.entityKind);
-  if (kinds.length === 0) return [];
-
-  const entityKeys = new Map<
-    string,
-    {
-      provider: ProviderId;
-      providerType: ProviderObservationType;
-      entityKind: CurrentProviderObservationKind;
-      entityKey: string;
-    }
-  >();
-  if (kinds.includes("worktree")) {
-    for (const worktree of state.worktrees.values()) {
-      const key = observationEntityKey(worktree.provider, "worktree", "worktree", worktree.id);
-      entityKeys.set(key, {
-        provider: worktree.provider,
-        providerType: "worktree",
-        entityKind: "worktree",
-        entityKey: worktree.id,
-      });
-    }
-  }
-  if (kinds.includes("terminal_target")) {
-    for (const target of state.terminalTargets.values()) {
-      const key = observationEntityKey(target.provider, "terminal", "terminal_target", target.id);
-      entityKeys.set(key, {
-        provider: target.provider,
-        providerType: "terminal",
-        entityKind: "terminal_target",
-        entityKey: target.id,
-      });
-    }
-  }
-
-  const observations: PersistedProviderObservation[] = [];
-  for (const key of entityKeys.values()) {
-    const expiry: { includeExpired?: boolean; referenceTime: string } = {
-      referenceTime: options.referenceTime,
-    };
-    if (options.includeExpired !== undefined) expiry.includeExpired = options.includeExpired;
-    const latest = latestProviderObservation(state, key, expiry);
-    if (latest !== undefined) observations.push(latest);
-  }
-  return observations
-    .sort(
-      (left, right) =>
-        compareAsc(left.observedAt, right.observedAt) || compareAsc(left.id, right.id),
-    )
-    .map((observation) => observationAtReferenceTime(observation, options.referenceTime));
-}
-
 function latestObservationsByEntity(
   observations: readonly PersistedProviderObservation[],
 ): PersistedProviderObservation[] {
@@ -1143,63 +1055,11 @@ function persistReconcileResult(
   input: PersistReconcileResultInput,
   options: { observedAt: string; idFactory: ObserverIdFactory },
 ): void {
-  for (const project of input.projects) {
-    state.projects.set(project.id, {
-      id: project.id,
-      label: project.label,
-      root: project.root,
-      lastSeenAt: options.observedAt,
-    });
-  }
-
   const worktrees = input.worktrees.map((value) => WorktreeObservationSchema.parse(value));
+  for (const value of input.terminalTargets) TerminalTargetObservationSchema.parse(value);
+  for (const value of input.harnessRuns) HarnessRunObservationSchema.parse(value);
   for (const worktree of worktrees) {
-    state.worktrees.set(worktree.id, worktree);
-    insertProviderObservation(state, {
-      id: options.idFactory.observationId(),
-      provider: worktree.provider,
-      providerType: "worktree",
-      entityKind: "worktree",
-      entityKey: worktree.id,
-      payload: worktree,
-      observedAt: worktree.observedAt,
-      expiresAt: reconcileObservationExpiresAt(input, worktree.observedAt),
-      coalesceUnchanged: true,
-    });
-  }
-
-  const terminalTargets = input.terminalTargets.map((value) =>
-    stripTerminalProviderData(TerminalTargetObservationSchema.parse(value)),
-  );
-  for (const target of terminalTargets) {
-    state.terminalTargets.set(target.id, target);
-    insertProviderObservation(state, {
-      id: options.idFactory.observationId(),
-      provider: target.provider,
-      providerType: "terminal",
-      entityKind: "terminal_target",
-      entityKey: target.id,
-      payload: target,
-      observedAt: target.observedAt,
-      expiresAt: reconcileObservationExpiresAt(input, target.observedAt),
-      coalesceUnchanged: true,
-    });
-  }
-
-  const harnessRuns = input.harnessRuns.map((value) => HarnessRunObservationSchema.parse(value));
-  for (const run of harnessRuns) {
-    state.harnessRuns.set(run.id, run);
-    insertProviderObservation(state, {
-      id: options.idFactory.observationId(),
-      provider: run.provider,
-      providerType: "harness",
-      entityKind: "harness_run",
-      entityKey: run.id,
-      payload: run,
-      observedAt: run.observedAt,
-      expiresAt: reconcileObservationExpiresAt(input, run.observedAt),
-      coalesceUnchanged: true,
-    });
+    if (!state.worktrees.has(worktree.id)) state.worktrees.set(worktree.id, worktree);
   }
 
   if (input.providerHealth !== undefined) {
@@ -1247,17 +1107,6 @@ function persistReconcileResult(
       state.worktreeDisplayTitles.set(key, title);
     }
   }
-  const persistedTitles = worktreeDisplayTitles.map((title) => {
-    const persisted = state.worktreeDisplayTitles.get(
-      worktreeDisplayTitleKey(title.projectId, title.worktreeId),
-    );
-    if (persisted === undefined) {
-      throw new Error(`Failed to initialize worktree display title for ${title.worktreeId}.`);
-    }
-    synchronizeInMemorySessionTitleProjections(state, persisted);
-    return persisted;
-  });
-  upsertSessions(state, terminalTargets, harnessRuns, persistedTitles);
 }
 
 function reconcileObservationExpiresAt(
@@ -1268,105 +1117,6 @@ function reconcileObservationExpiresAt(
     return providerObservationExpiresAt(observedAt, input.providerObservationRetentionDays);
   }
   return input.expiresAt;
-}
-
-function upsertSessions(
-  state: InMemoryObserverPersistenceState,
-  terminalTargets: readonly TerminalTargetObservation[],
-  harnessRuns: readonly HarnessRunObservation[],
-  worktreeDisplayTitles: readonly PersistedWorktreeDisplayTitle[],
-): void {
-  const titlesByWorktree = new Map(
-    worktreeDisplayTitles.map((title) => [
-      worktreeDisplayTitleKey(title.projectId, title.worktreeId),
-      title,
-    ]),
-  );
-  const sessions = new Map<string, PersistedSession>();
-
-  for (const target of terminalTargets) {
-    if (
-      target.sessionId === undefined ||
-      target.projectId === undefined ||
-      target.worktreeId === undefined
-    ) {
-      continue;
-    }
-    const existing = sessions.get(target.sessionId);
-    const activates = terminalCanActivateSession({ target, runs: harnessRuns });
-    const session: PersistedSession = {
-      id: target.sessionId,
-      projectId: target.projectId,
-      worktreeId: target.worktreeId,
-      lifecycle: activates || existing?.lifecycle === "open" ? "open" : "legacy",
-      terminalProvider: target.provider,
-      state: target.state,
-      createdAt: existing?.createdAt ?? target.observedAt,
-      lastSeenAt: maxIso(existing?.lastSeenAt, target.observedAt),
-    };
-    const title = titlesByWorktree.get(
-      worktreeDisplayTitleKey(target.projectId, target.worktreeId),
-    );
-    if (title !== undefined) session.title = title.title;
-    else if (existing?.title !== undefined) session.title = existing.title;
-    if (existing?.harness !== undefined) session.harness = existing.harness;
-    sessions.set(target.sessionId, session);
-  }
-
-  for (const run of harnessRuns) {
-    if (
-      run.sessionId === undefined ||
-      run.projectId === undefined ||
-      run.worktreeId === undefined
-    ) {
-      continue;
-    }
-    const existing = sessions.get(run.sessionId);
-    const activates = harnessRunCanActivateSession({
-      run,
-      terminals: terminalTargets,
-      runs: harnessRuns,
-    });
-    const session: PersistedSession = {
-      id: run.sessionId,
-      projectId: run.projectId,
-      worktreeId: run.worktreeId,
-      lifecycle: activates || existing?.lifecycle === "open" ? "open" : "legacy",
-      harness: run.provider,
-      state: run.state,
-      createdAt: existing?.createdAt ?? run.observedAt,
-      lastSeenAt: maxIso(existing?.lastSeenAt, run.observedAt),
-    };
-    const title = titlesByWorktree.get(worktreeDisplayTitleKey(run.projectId, run.worktreeId));
-    if (title !== undefined) session.title = title.title;
-    else if (existing?.title !== undefined) session.title = existing.title;
-    if (existing?.terminalProvider !== undefined) {
-      session.terminalProvider = existing.terminalProvider;
-    }
-    sessions.set(run.sessionId, session);
-  }
-
-  for (const session of sessions.values()) {
-    const existing = state.sessions.get(session.id);
-    if (existing === undefined) {
-      state.sessions.set(session.id, session);
-      continue;
-    }
-    existing.projectId = session.projectId;
-    existing.worktreeId = session.worktreeId;
-    if (session.title !== undefined) existing.title = session.title;
-    if (session.harness !== undefined) existing.harness = session.harness;
-    if (session.terminalProvider !== undefined) {
-      existing.terminalProvider = session.terminalProvider;
-    }
-    if (session.state === undefined) delete existing.state;
-    else existing.state = session.state;
-    existing.lastSeenAt = session.lastSeenAt;
-    if (existing.lifecycle !== "ended") {
-      existing.lifecycle =
-        existing.lifecycle === "open" || session.lifecycle === "open" ? "open" : "legacy";
-    }
-  }
 }
 
 function findRememberedHarnessProviderForWorktree(
@@ -1584,10 +1334,6 @@ function metadataPayloadSchema(kind: WorktreeMetadataCurrentKind) {
 
 function normalizeKinds<TKind extends string>(kind: TKind | readonly TKind[]): TKind[] {
   return Array.isArray(kind) ? [...kind] : [kind as TKind];
-}
-
-function maxIso(left: string | undefined, right: string): string {
-  return left === undefined || Date.parse(left) < Date.parse(right) ? right : left;
 }
 
 function compareAsc(left: string, right: string): number {

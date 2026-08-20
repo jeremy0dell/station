@@ -152,7 +152,7 @@ describe("StationOverlay", () => {
     const groupId = dashboardRowIds.group("group_design_refresh");
     const header = cellFor(setup.captureCharFrame(), "Design refresh");
 
-    expect(setup.captureCharFrame()).toContain("╭▼ Design refresh 2 sessions");
+    expect(setup.captureCharFrame()).toContain("╭ ▼ Design refresh 2 sessions");
     await setup.mockMouse.click(header.col, header.row, MouseButtons.LEFT);
 
     expect(calls.at(-1)).toEqual({
@@ -160,7 +160,7 @@ describe("StationOverlay", () => {
       target: { kind: "dashboardCell", rowId: groupId, cellId: "identity" },
     });
     expect([...store.state.getState().collapsedGroupIds]).toEqual(["group_design_refresh"]);
-    expect(setup.captureCharFrame()).toContain("▶ Design refresh 2 sessions");
+    expect(setup.captureCharFrame()).toContain("▸▶ Design refresh 2 sessions");
   });
 
   it("lets an inner screen consume popup click-away before the outer overlay", async () => {

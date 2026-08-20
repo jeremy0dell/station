@@ -1,4 +1,3 @@
-export { classifyHarnessRunStatus } from "./classify.js";
 export {
   compactPayloadByFieldNames,
   jsonByteCount,
@@ -11,8 +10,6 @@ export {
   harnessProviderErrorFromUnknown,
 } from "./errors.js";
 export {
-  applyCorrelation,
-  correlateTerminalBoundHarnessEvent,
   harnessEventDiagnostics,
   reportCorrelation,
 } from "./events.js";

@@ -185,12 +185,12 @@ ownership even where current ownership is still a deviation.
 | Observer operations | Driving | `ObserverApi` | NDJSON/Unix-socket server, direct tests | Conforming application-owned driving port; protocol adapts transport messages while direct tests can invoke it without transport. Recovery readiness is a read-only query over loaded feature policy, canonical-title import support, and injected provider capabilities. |
 | Observer reap | Driving | `ObserverReap` | CLI observer-reap adapter, direct tests | Observer-owned local-process operation; dry-run and explicit force share one selection and revalidation use case while CLI composition supplies boundary evidence. |
 | Recorded mutations | Driving | `StationCommand`, `dispatch`, command handlers | CLI, Station client, protocol client | Commands persist acceptance and completion; the production handler map is compile-time exhaustive over the command union. |
-| Provider hook delivery | Driving | provider hook ingress | `stn-ingress`, protocol method, offline spool, provider hook adapters | Raw input is validated once and provider vocabulary is normalized at the adapter boundary. |
+| Provider hook delivery | Driving | provider hook ingress | `stn-ingress`, protocol method, offline spool, provider hook adapters | Raw input is validated and persisted once. Adapter-backed harness hooks normalize into reports; other hooks schedule reconcile without invoking provider operations. |
 | Harness status delivery | Driving | harness event report ingress | harness hooks, provider hook adapters, protocol clients | Reports are deduplicated, queued, projected, persisted, and followed by reconcile. |
-| Worktree operations | Driven | `WorktreeProvider` | Worktrunk and test adapters | Strong purpose-owned port. |
+| Worktree operations | Driven | `WorktreeProvider` | Worktrunk and test adapters | Fresh list evidence and mutations only; Observer snapshots own current session selection, callers supply project context for mutation, and adapters retain no second worktree inventory. |
 | Terminal operations | Driven | `TerminalProvider` | tmux, Station terminal, and test adapters | General topology and operations are provider-owned. |
 | Managed terminal lifecycle | Driven | `ManagedTerminalLifecycle` | Station terminal adapter, optionally backed by Station Host | Explicit injected role returning only an opaque target identity and declaring whether launched processes persist beyond the caller; Host backing may add spawn/list/close/attachment lifecycle, while Station retains native presentation and host-backed targets remain externally non-focusable. |
-| Harness operations | Driven | `HarnessProvider`, `SessionRecoveryArtifactLocator` | Claude, Codex, Cursor, OpenCode, Pi, scripted, and test adapters | Strong purpose-owned ports with provider-local parsing, compatibility admission, and exact recovery-artifact location; unsupported artifact providers make migration ineligible. |
+| Harness operations | Driven | `HarnessProvider`, `SessionRecoveryArtifactLocator` | Claude, Codex, Cursor, OpenCode, Pi, scripted, and test adapters | Strong purpose-owned ports: discovery returns provider-normalized current run status, while separate hook adapters own event parsing and harness providers retain compatibility admission and exact recovery-artifact location; unsupported artifact providers make migration ineligible. |
 | Repository metadata | Driven | `RepositoryProvider` | GitHub and test repository adapters | Adapters declare deterministic remote support; provider-neutral metadata policy selects zero or one match and rejects overlaps. |
 | Durable observer memory | Driven | `CommandJournal`, `EventJournal`, `IngressJournal`, `ObservationStore`, `ReconcileStore`, `SessionStore`, `SessionGroupStore`, `WorktreeMetadataStore` | Production SQLite adapter and test-only in-memory adapter | Observer-private, application-purpose ports separate current conversations from storage representation. Consumers receive only the named ports they use; the unmarked `ObserverPersistenceBundle` intersection exists only at adapter and composition seams. |
 | Persistence health | Driven | `PersistenceHealthSource` | SQLite adapter created by `createSqliteObserverPersistence` | Runtime health and diagnostics read the public SQLite health projection without receiving the concrete database handle. |
@@ -198,9 +198,9 @@ ownership even where current ownership is still a deviation.
 | Worktree metadata evidence | Driven | `WorktreeChangeSource` and `WorktreeMetadataInvalidationSource` | local Git reader and ref-watcher adapters | Conforming path-free roles: one reads typed checkout-local change evidence; the other owns full-set watcher replacement and terminal shutdown. |
 | Diagnostic evidence | Driven | `DiagnosticEvidenceSource` | `createLocalDiagnosticEvidenceSource` | Conforming read-only role: the adapter captures resolved local state, log, diagnostics, socket, and hook-spool locations while only typed measurements and bounded evidence cross the port; command/event journals, providers, core, and SQLite remain separate inputs. |
 | Observer incumbent lifecycle | Driven | `ObserverIncumbentLifecycle` | local protocol client adapter | Handoff may read health and request controlled stop without importing transport mechanics into policy or orchestration. |
-| Observer process evidence | Driven | `ObserverProcessEvidenceSource` | local `lsof`/`ps`/`/proc`/pidfile/signal adapter | `lsof` is primary socket ownership; health, strict pidfile, executable provenance, exact argv, per-launch token, build selector, and second-resolution OS start token must corroborate before replacement or signaling. |
-| Duplicate-process evidence | Driven | `ObserverDuplicateProcessEvidenceSource` | local process-evidence adapter | Extends handoff evidence with bound-socket identity and strict per-process Unix-socket-FD counts; unavailable evidence always refuses. |
-| Duplicate-cleanup exclusion | Driven | `ObserverDuplicateCleanupExclusion` | boot-claim cleanup exclusion adapter | Automatic final revalidation and explicit force both run under a fail-fast boot claim and release it after every callback outcome. |
+| Observer process evidence | Driven | `ObserverProcessEvidenceSource` | local `lsof`/`ps`/`/proc`/pidfile/signal adapter | `lsof` is primary socket ownership; health, strict pidfile, executable provenance, exact argv, per-launch token, build selector, and second-resolution OS start token must corroborate before replacement or signaling. Handoff reads only the requested incumbent PID. |
+| Duplicate-process evidence | Driven | `ObserverDuplicateProcessEvidenceSource` | local process-evidence adapter | Extends targeted handoff evidence with fail-closed global process inventory, bound-socket identity, and strict per-process Unix-socket-FD counts; unavailable evidence always refuses. |
+| Observer-reap exclusion | Driven | `ObserverReapExclusion` | boot-claim reap exclusion adapter | Explicit force runs under a fail-fast boot claim and releases it after every callback outcome; read-only inspection never acquires the claim. |
 
 `packages/contracts` owns shared Station schemas, application values, and
 provider port contracts. Observer-private ports remain in `apps/observer`.
@@ -216,9 +216,9 @@ areas contain the following responsibilities:
 
 | Area | Current responsibility | Adopted ownership |
 | --- | --- | --- |
-| `commands/` | command queue, routing, scopes, cancellation, launch preflight, terminal-intent execution, Group mutation, and command use cases | Driving application behavior; launch preflight, terminal-intent execution, and Group mutation coordinate their narrow ports as use cases. |
+| `commands/` | command queue, routing, scopes, cancellation, launch preflight, direct terminal operations, Group mutation, and command use cases | Driving application behavior; command handlers coordinate launch preflight and provider-neutral terminal operations directly through their narrow ports, while Group mutation remains a dedicated use case. |
 | `reconcile/` | provider reads, correlation, graph construction, Group projection, and core state | Reconcile-owned Group repair, command-local Group projection, and deterministic policies; provider I/O remains at its driven edges. `reconcileResult.ts` owns the `ReconcileTiming` result record returned by `runReconcileOnce`, while `core.ts` re-exports it for compatibility. |
-| `hooks/` | hook/report ingestion, dedupe, readiness, spool I/O, and ingress queue | Ingress use cases and queue orchestration separated from filesystem spool adapters. |
+| `hooks/` | raw hook persistence and adapter handoff, report ingestion, dedupe, readiness, spool I/O, and ingress queue | One adapter-to-report normalization path; non-report hooks are reconcile hints, and queue orchestration stays separate from filesystem spool adapters. |
 | `runtime/` | API assembly, process lifecycle, scheduling, event delivery, server bridge, and external launch | Observer composition plus application operations; transport and infrastructure stay at the edge. |
 | `stationLogger.ts`, `commands/projectConfigWriter.ts` | Observer-private logging and authoritative project-configuration capabilities | Driven application ports free of JSONL records and configuration/home-path plumbing. |
 | `runtime/logging.ts`, `runtime/projectConfigWriter.ts` | Redacted JSONL writes and `@station/config` project mutation translation | Outbound adapters retaining log, config, and home paths at composition. |
@@ -248,12 +248,13 @@ No single layer owns all truth.
 | Provider observations | Each provider is authoritative only for external facts it can prove. Live reads and normalized ingress observations may be persisted with retention, but cached evidence does not outrank a newer provider read. |
 | Provider-owned identity | Worktree, target, harness-run, native execution, and external endpoint identity stays owned by the provider that minted it. Application code may carry opaque IDs but must not reconstruct their format. |
 | Observer-minted state | Command, event, error, report, session, Session Group, correlation, readiness, and recovery identities are legitimate internal facts minted by the observer. The observer does not invent external facts. |
-| Observer SQLite | Durable observer memory for commands, events, ingress dedupe, observations, correlations, sessions, project-local Session Groups, canonical worktree display titles, native-execution bindings, metadata caches, recovery handles, and readiness. Group membership is exclusive per session, while Group deletion changes only organizational rows. Display-title authority is keyed by `(projectId, worktreeId)` and survives transient provider observation gaps; it is not branch or provider identity. |
+| Observer SQLite | Durable observer memory for commands, events, ingress dedupe, observations, correlations, explicitly admitted Station sessions, project-local Session Groups, canonical worktree display titles, native-execution bindings, metadata caches, recovery handles, and readiness. Group membership is exclusive per session, while Group deletion changes only organizational rows. Display-title authority is keyed by `(projectId, worktreeId)` and survives transient provider observation gaps; it is not branch or provider identity. Raw provider observations remain live graph evidence and do not mint durable Station sessions. |
 | Local Git metadata evidence | Local Git is authoritative only for checkout-local `HEAD`, refs, merge-base, and numstat at read time. Command failures retain cached evidence through the TTL and mark it stale, while a matching checkout reported unavailable clears its local-change row; superseded identities cannot mutate either row. Ref-watch notifications are hints that request reconcile, never metadata or UI mutations themselves. |
 | Observer boot claim | `dirname(resolvedSocket)/observer.claim.sqlite` is a persistent private transport-lifecycle file. Only its active SQLite write transaction owns boot exclusion; file or sidecar existence is never authority. It has no Observer migrations or application persistence role. |
 | Observer process identity | `<resolved socketPath>.pid` is the strict, socket-specific `{pid, osStartTime, processToken, version, socketPath}` identity published by the process that successfully bound the socket. The UUID v4 `processToken` identifies one launch and `version` is the Observer selector: display SemVer plus reserved `station.<sha256>` build metadata. They corroborate process and immutable-build identity for later handoff and diagnostics; `lsof` remains primary socket-ownership evidence, and the file alone is never liveness authority. |
 | In-memory persistence adapter | Process-local test state that preserves the eight persistence ports' observable transaction semantics. It is neither restart-durable nor selectable by production runtime composition. |
 | `StationSnapshot` | Current normalized graph held in memory. `rows` is configured worktree inventory; `sessions` is canonical session membership; and required `sessionGroups` carries normalized organizational state for configured projects. Reconcile replaces the base projection; recorded Group mutations refresh only their project through the same serialized writer, and accepted harness reports can project status and readiness between reconciles. It is derived and not a durable replay log. |
+| Current provider context | The exact correlated worktree and terminal arrays from the last committed reconcile generation, held only in Observer core for harness-hook normalization. It commits with the snapshot, is never reconstructed from durable observation history, and strips terminal-private provider data before crossing the provider boundary. |
 | Live event bus | Future-only, process-local delivery. Subscriber queues are currently unbounded, events have no sequence numbers, and reconnects cannot request replay. |
 | Persisted event rows | Historical and diagnostic observer memory. They are not currently the source for live subscription replay. |
 | Hook spool | Durable delivery fallback while ingress cannot reach the observer. A queued record is pending evidence, not current graph truth. Its stable spool identity drives replay completion after primary dedupe, and the filesystem record remains until all derived durable work finishes. |
@@ -277,7 +278,8 @@ runtime.
 
 ### Startup
 
-Normal CLI and provider-hook startup is attach-or-spawn. Runtime composition
+Normal CLI and provider-hook startup is attach-or-spawn through one CLI lifecycle;
+provider-hook delivery adds only its cross-process spawn throttle and shared deadline. Runtime composition
 owns the singleton lifecycle through the process-evidence and incumbent-lifecycle
 ports plus local socket, pidfile, boot-claim, and ownership-watcher adapters. The
 complete ownership, four-state probe, handoff, bind, readiness, displacement,
@@ -308,17 +310,27 @@ Application composition proceeds around that boundary in this order:
    arm lazily on the first metadata refresh, and each refresh replaces the
    complete watched identity set before cache or metadata reads so a later ref
    move cannot be missed.
-6. After singleton readiness commits, startup reconcile establishes the first
-   provider-backed snapshot. Provider-health probes commit into the current
-   snapshot as they land, while harness-version probes fill their cache in the
-   background.
-7. Runtime composition then starts one single-flight duplicate-cleanup use case,
-   records its cached result for logging and Doctor, and owns its cancellation
-   and join during shutdown. Production selects report-only mode; terminate mode
-   remains the same application use case and sends SIGTERM only.
+6. Startup reconcile establishes the first provider-backed snapshot while
+   application operations remain behind the readiness gate. Singleton readiness
+   commits only after the snapshot is available. Harness discovery returns run
+   identity and current status in one observation; Observer overlays newer event
+   evidence without a second per-run provider callback. Provider-health probes
+   commit into the current snapshot as they land, while harness-version probes
+   fill their cache in the background.
+7. Runtime composition starts the same force-false duplicate inspection used by
+   explicit reap and caches its promise for logging and Doctor. The inspection
+   has no timer, claim, cancellation protocol, or signal authority.
 
 Station Host is outside the Observer singleton lifecycle and continues to own
 live PTYs independently.
+
+Checkout-local devbox composition may explicitly request exact-build activation
+for its configured socket. The CLI process adapter reuses exact health or
+cooperatively stops the identity-pinned non-exact incumbent before starting the
+caller build, then requires exact health as the postcondition. This orchestration
+does not address the Station Host socket, so the Host and its PTYs remain outside
+the replacement. It is an explicit configured-runtime operation rather than a
+change to singleton ordering or automatic handoff authority.
 
 Singleton startup may hand commands, hooks, ingress, and generic protocol clients
 the healthy winner selected by the existing attach-versus-handoff policy. After
@@ -386,15 +398,26 @@ project. Inside the snapshot-writer turn they validate configured-project and
 canonical-session identity plus requested parent ancestry, enter a non-cancellable commit
 immediately before calling `SessionGroupStore`, and project only the command project without
 reconcile repair.
+Reparenting accepts only an existing parent in the same project; a missing or cross-project parent,
+self-parenting, and every direct or transitive cycle fail atomically before commit. Deletion ungroups
+only the deleted Group's direct members and reparents its direct children to its parent or the project
+root. Neither operation closes or removes a session, agent, terminal, worktree, or provider resource.
 Changed Group events derive from the mutation result and are persisted and published in
 canonical order before command success; validated no-ops emit no Group event. This path
 does not read providers or publish `observer.reconciled`.
 
 `worktree.remove` carries the selected worktree ID, canonical path, branch, and
-opaque Git registration identity. Its use case refreshes provider evidence and
+opaque Git registration identity plus the configured project context. Its use case refreshes provider evidence and
 uniquely re-resolves that identity before terminal or worktree cleanup, refusing
-primary, default-branch, stale, missing, or ambiguous targets. The worktree
-adapter rechecks the expected registration identity, path, and branch immediately
+primary, default-branch, stale, missing, or ambiguous targets. A renderer that
+must settle externally owned PTYs first requests an opaque removal reservation:
+the Observer validates under the worktree mutation coordinator, blocks launch and
+session-close mutations for that worktree, and lets only the command carrying the
+exact reservation consume the slot. Renderer failure cancels the reservation and
+a bounded expiry releases an abandoned client without authorizing removal;
+unreserved commands fail whenever an external Station renderer still owns the
+active terminal. The command refreshes canonical runtime state after renderer settlement, while the
+worktree adapter retains no earlier list as authority and freshly rechecks the expected registration identity, path, and branch immediately
 before mutation so an external checkout replacement cannot reuse the selected
 path and branch as removal identity. Adapter race refusals retain provider-neutral,
 trace-correlated diagnostic evidence.
@@ -431,8 +454,8 @@ Reconcile reads worktree and terminal actors, derives the worktree context for
 harness reads, applies cached metadata and durable overlays, resolves one effective display title
 per current worktree, and correlates canonical sessions. It then atomically repairs durable Group
 membership and parent relationships, excludes but retains definitions for unconfigured projects,
-projects configured Groups as a flat deterministic parent-before-child array, persists the same
-title records with the result, and replaces the in-memory snapshot. Reason-specific relationship
+projects configured Groups as a flat deterministic parent-before-child array, insert-initializes
+missing canonical title records with the result, and replaces the in-memory snapshot. Reason-specific relationship
 repair and excluded definitions contribute provider-neutral errors to the reconcile timing record.
 Existing canonical titles win; missing authority initializes from
 the best non-ended custom session evidence before branch fallback, using insert-only reconcile
@@ -448,8 +471,9 @@ to the same Station session, activates them as open. A run correlated to a termi
 by run ID, or by session ID when no terminal run ID exists, also requires a reachable
 matching terminal; an uncorrelated active run may stand alone. When a terminal's
 run binding resolves, that run must claim the same session. Weak or conflicting
-evidence may refresh legacy correlation metadata, including the remembered harness,
-without activating membership.
+evidence remains current-only and cannot mint or refresh durable session memory.
+Fresh Station launch paths seed the selected harness and terminal identities before
+publishing a target or process, so remembered-harness lookup follows explicit Station intent.
 Cleanup records both `ended` lifecycle and `endedAt`, and generic terminal or run
 evidence cannot reopen that record. An explicit resume can reopen the same
 session. External sessions are derived independently and exist only from current,
@@ -465,7 +489,10 @@ projection on one non-poisoning writer chain. A Group mutation projects only its
 project, performs no reconcile repair, and never invokes providers. A health commit persists one observation, coherently updates the
 current health projection, and then publishes `provider.healthChanged` without a
 full provider scan. Readiness persistence and application happen after its base
-commit and revalidate the live snapshot.
+commit and revalidate the live snapshot. A successful reconcile commits its exact
+correlated worktree and terminal context in the same synchronous writer step as
+the snapshot; harness-hook normalization reads that generation directly rather
+than querying expiring observation history.
 The scheduler debounces and coalesces reasons while ensuring only one scheduled
 run is active. Startup-compatible requests may join the startup flight; other
 direct requests retain the rule that their scan starts at or after the request.
@@ -507,6 +534,10 @@ Pi and OpenCode transports invoke `stn-ingress`; hooks delivered as raw
 `ProviderHookEvent`s are normalized Observer-side through the selected injected
 provider adapter exactly once. Integrations that submit an already-normalized
 `HarnessEventReport` bypass provider normalization in the Observer.
+Harness adapters receive the exact worktree and terminal context from the last
+committed reconcile generation. The handoff is process-local, and terminal
+`providerData` is stripped before the adapter is called; reconcile does not copy
+those current entities into provider-observation history for routing.
 
 The harness queue acknowledges accepted online work before durable processing
 or reconcile. Queue acceptance is process-memory acceptance, not a durability
@@ -596,7 +627,7 @@ focus returns before any health or hook probe.
 `prepareExternalLaunch` and `reportExternalExit` are latency-sensitive
 handshakes rather than recorded commands. Their use cases depend on the
 composition-supplied `ManagedTerminalLifecycle`, carry provider-owned target IDs
-opaquely, and request reconcile after relevant lifecycle changes. Returning an
+opaquely, and request the shared coalesced reconcile scheduler after relevant lifecycle changes. Returning an
 attachable managed target or an existing live session precedes launch preflight.
 Target discovery includes Station Host reconstruction, so negotiated handoff and
 orphan-bridge adoption retain their existing PTY instead of entering provider
@@ -633,11 +664,14 @@ recoverable. Launch failure does not restore the retired provider identity.
 A new managed session repeats the full selected-harness preflight immediately
 before title, target, or process mutation, then durably seeds the session from
 canonical worktree title authority before target registration and process launch.
-Optional New Session Group placement is part of that transaction: an existing ID
-must still be a same-project root, while inline creation uses an Observer-minted ID.
-Failed fresh launch cleanup conditionally releases only the target still bound to
-that fresh session and atomically discards the seed, membership, and owned inline
-Group only after release is confirmed absent or complete.
+Optional Group placement is part of that transaction. New Session existing placement must still
+be a same-project root, while inline creation uses an Observer-minted ID. Fork inheritance resolves
+the source session's transaction-current same-project assignment by stable Group identity, including
+backend-nested Groups; a moved source follows its new Group, while missing assignment or definition
+commits the fork Ungrouped. Failed fresh launch cleanup conditionally releases only the target still
+bound to that fresh session and atomically discards the seed, its membership, and any owned inline
+Group only after release is confirmed absent or complete; source membership and definitions remain
+unchanged.
 
 When preparation mints a fresh session and receives a title, it persists that
 title before registering the managed target so reconcile cannot publish the new
@@ -647,10 +681,12 @@ seed and coherent Group placement remain so a dangling target cannot lose its
 title or organizational identity. A title or Group placement supplied while
 returning an existing session is ignored.
 
-External exit reports carry the target plus the Station session expected to own
-it. The managed-terminal adapter atomically forgets only that exact binding;
-missing identity, unknown targets, and superseded sessions are no-ops that do not
-request reconcile. Release never terminates the process.
+External exit reports carry the target, Station session, and opaque binding
+generation expected to own it. The managed-terminal adapter atomically forgets
+only that exact binding; missing identity, unknown targets, and superseded
+sessions or generations are no-ops that do not request reconcile. Tokenless Host
+pane exits never release a target; Host inventory and reconcile remain liveness
+authority. Release never terminates the process.
 
 A managed launch result may include an opaque attachment that Station resolves
 to its host mechanics. An absent attachment permits Station's local launch path;
@@ -691,16 +727,16 @@ expires.
 | --- | --- |
 | Observer boot ownership | The resolved socket defines singleton identity. One persistent claim per socket directory serializes probe, incumbent handoff, stale reclaim, bind, pidfile publication, and ready commitment; different sockets in that directory wait on the same transaction but retain separate listeners and pidfiles. Claim existence is not ownership, process death releases the OS lock, and the claim path is never stale-reclaimed. |
 | Socket ownership evidence | Connect success proves listening. Only `ECONNREFUSED`, or Bun's existing-path `ENOENT`, plus strict zero-holder `lsof` evidence proves stale. Permission failures, timeouts, live holders, evidence failure, path replacement, and non-socket collisions are inaccessible and authorize no spawn, unlink, stop, or signal. |
-| Observer build ordering | Health and pidfile `version` carry display SemVer plus reserved `station.<sha256>` build metadata derived from both repository inputs and production package outputs. Exact identified selectors attach. At one display version, the lexicographically greater immutable build identity is the only candidate allowed to replace; the loser and any missing legacy identity refuse, so neither silently delegates to different code. Each source process verifies the published identity once before adopting it and reuses that selector without further Git or hash I/O for its lifetime. Different display versions retain SemVer precedence and the existing exact-string equal-precedence tiebreak, except that the declared public reset orders `0.0.0-pre-alpha.*` after internal `0.7.1-rc.*` previews. Missing, invalid, or stale identities refuse. Replacement requires complete corroborating identity and never uses automatic SIGKILL. |
+| Observer build ordering | Health and pidfile `version` carry display SemVer plus reserved `station.<sha256>` build metadata derived from both repository inputs and production package outputs. Exact identified selectors attach. At one display version, the lexicographically greater immutable build identity is the only candidate allowed to replace; the loser and any missing legacy identity refuse, so neither silently delegates to different code. Each source process verifies the published identity once before adopting it and reuses that selector without further Git or hash I/O for its lifetime. Different display versions retain SemVer precedence and the existing exact-string equal-precedence tiebreak, except that the declared public reset orders `0.0.0-pre-alpha.*` after internal `0.7.1-rc.*` previews. An explicit restart from a higher build cooperatively stops the health-pinned incumbent before spawning its successor, which lets an already installed launcher replace the Observer even when the old process executable names the now-replaced installation path. Lower-build restarts still refuse. Automatic handoff and signal recovery continue to require complete executable-provenance evidence, and replacement never uses automatic SIGKILL. |
 | Command ordering | Commands serialize by session, worktree, project, terminal target, or command-specific fallback scope. Different scopes can execute concurrently. |
-| Managed target release | Station target IDs are deterministic per worktree, so release is compare-and-delete on target plus expected Station session. A delayed old exit or failed-launch cleanup cannot remove a replacement binding; `false` proves absence or supersession, while rejection leaves cleanup uncertain. |
-| Command timeout and cancellation | Handlers receive a signal combining the runtime timeout and queue shutdown. A handler with a non-cancellable durable section calls `beginCommit` after read-only validation and immediately before its first write; cancellation may prevent entry, but the queue drains a begun commit to one completion. Other cancellation remains cooperative, and the process shutdown backstop handles ignored signals. |
+| Managed target release | Station target IDs are deterministic per worktree, so external release is compare-and-delete on target, expected Station session, and binding generation. Tokenless Host exits reconcile instead of releasing. A delayed old exit or failed-launch cleanup cannot remove a replacement binding; `false` proves absence or supersession, while rejection leaves cleanup uncertain. |
+| Command timeout and cancellation | Handlers receive a signal combining the runtime timeout and queue shutdown. Concrete provider adapters own bounded external settlement; command use cases pass cancellation and normalize failures without starting another provider-operation timer. A handler with a non-cancellable durable section calls `beginCommit` after read-only validation and immediately before its first write; cancellation may prevent entry, but the queue drains a begun commit to one completion. Other cancellation remains cooperative, and the process shutdown backstop handles ignored signals. |
 | Snapshot writer ordering | Full reconciles, Group mutation commits, and harness-report authorization plus base projection share a non-poisoning promise chain. A Group mutation projects only its command project and never scans providers, repairs other durable state, or publishes a reconcile event. Readiness persistence revalidates the live snapshot after its write. Scheduled reconcile requests coalesce; queued work after a run receives a later flush. |
 | Persisted harness compatibility | A harness adapter may use a provider-local strict schema to reject recognizable observations accepted by an earlier build. Unparseable legacy data remains admitted. Reconcile excludes only provider-rejected observations, then atomically replaces the affected session's derived native binding and readiness from the remaining admitted history; a succeeded acknowledgement remains authoritative. |
 | Provider reads | Reads are timeboxed, retried at the runtime boundary, and concurrency-limited. Failures become provider health and reconcile errors. |
 | Harness ingress | First-party hook transports delegate delivery and spooling to `stn-ingress`. Known build/schema/handoff incompatibility rejects without spooling. One Observer worker processes a bounded pending map; new reports can replace pending work for the same key, and a full map rejects unrelated work with a backpressure error. |
 | Spool drain | One configured drain runs at a time and processes stable filename order through direct durable ingress. Stable spool IDs survive legacy records without hook IDs; completion is idempotent after primary dedupe, and failed records remain on disk with attempt/error evidence. |
-| Hook auto-start throttle | `hook-autostart.lock` limits provider-hook spawn attempts only. It is never Observer ownership; each child still enters the socket-relative SQLite boot claim. |
+| Hook auto-start throttle | `hook-autostart.lock` limits provider-hook spawn attempts only around the canonical CLI Observer lifecycle. It is never Observer ownership; each child still enters the socket-relative SQLite boot claim. |
 | Event delivery | Each subscriber currently has an unbounded in-memory queue. There is no replay or publisher backpressure; slow-subscriber growth is therefore a known operating characteristic. |
 | Background refresh | Each unique provider probe publishes its completed result through the serialized snapshot writer before its in-flight slot clears. Joined refresh callers do not duplicate publication; shutdown unsubscribes first and drains commits already in progress. Probe and metadata-refresh failures remain best-effort and do not block the primary reconcile result. Duplicate cleanup is one-shot after startup reconcile, single-flight, claim-authorized, and shutdown-cancellable rather than periodic. |
 
@@ -739,16 +775,22 @@ when it changes several tables:
 - `IngressJournal` owns atomic dedupe plus event, atomic report acceptance
   across diagnostic observation/native binding/recovery/readiness, and atomic
   hook-processing completion across observations/native bindings/readiness.
-- `ObservationStore` owns typed provider observations, current-observation
-  queries, and expiry.
-- `ReconcileStore` owns the complete atomic `persistReconcileResult` operation, including
-  insert-only initialization of missing canonical worktree titles before session projection sync.
-- `SessionStore` owns explicit session lifecycle, canonical worktree-scoped title authority,
-  synchronized per-session title projections, durable provider-native execution bindings,
-  recovery handles, turn readiness, and purpose-specific remembered-harness lookup. A fresh-session
-  seed may atomically validate and place the session in an existing root Group or create its first
-  root Group. Discard consumes the seed result's placement provenance: existing placement removes
-  only the still-matching membership, while inline placement deletes the Group only when its full
+- `ObservationStore` owns typed provider-observation history, queries, and expiry.
+- `ReconcileStore` atomically records reconcile-owned provider evidence and insert-only
+  initialization of missing canonical worktree titles. Configured projects and current
+  terminal/run identities remain source-owned instead of being copied into unread relational state;
+  reconcile never admits or refreshes durable sessions. The legacy worktrees relation retains only insert-once
+  ID/project/path/provider recovery identity; mutable worktree facts remain
+  provider/observation-owned.
+- `SessionStore` owns explicit durable Station-session admission with selected harness and terminal
+  identity, lifecycle, canonical worktree-scoped title authority and projection, durable
+  provider-native execution bindings, recovery handles, turn readiness, and purpose-specific
+  remembered-harness lookup. A fresh-session seed may atomically validate and place the session in
+  an existing root Group, create its first root Group, or inherit a source session's transaction-
+  current Group. Missing source placement succeeds Ungrouped. Discard consumes the seed result's
+  placement provenance: existing placement removes only the still-matching membership, source
+  inheritance also permits cleanup after Group deletion already removed that membership, while
+  inline placement deletes the Group only when its full
   definition, root parentage, sole membership, and absence of children remain unchanged. Any drift
   aborts session, title, membership, and Group cleanup together. Rename, seed/discard, confirmed
   worktree retirement, and canonical-title/recovery import keep their multi-table changes atomic.
@@ -915,7 +957,7 @@ participate. Nonliteral dynamic module edges fail because their ownership cannot
 be resolved. External literal dynamics such as `bun:sqlite` and `node:sqlite`
 remain recorded external edges rather than source-cycle members.
 
-The current Observer graph contains 147 production modules and no strongly
+The current Observer graph contains 146 production modules and no strongly
 connected component. `migrations/migration.ts` now owns
 `ObserverSqliteMigration`, so numbered migration declarations do not depend on
 their ordered aggregator. `reconcile/reconcileResult.ts` owns
@@ -1012,7 +1054,7 @@ active register.
 - [Harness authoring](harness-authoring.md): provider integration requirements.
 - [Debugging](debugging.md): runtime evidence and diagnostic workflow.
 - [Observer singleton lifecycle](observer-singleton.md): authoritative process
-  ownership, handoff, displacement, duplicate cleanup, and explicit reap rules.
+  ownership, handoff, displacement, duplicate inspection, and explicit reap rules.
 
 For ordinary work, current code, tests, runtime evidence, and these living docs
 supersede historical planning material. When they disagree, verify the live path

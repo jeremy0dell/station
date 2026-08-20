@@ -275,7 +275,7 @@ function openOverlay(harness: ReturnType<typeof attemptHarness>): void {
 }
 
 describe("createManagedLaunchAttempt", () => {
-  it("passes fresh-session Group placement only to Observer preparation", async () => {
+  it("passes explicit and source Group placement only to Observer preparation", async () => {
     const harness = attemptHarness();
 
     await harness.runManagedLaunchAttempt(PANE_ID, {
@@ -286,6 +286,18 @@ describe("createManagedLaunchAttempt", () => {
       freshStart: { expectedSessionId: "ses_interrupted" },
     });
 
+    const sourceHarness = attemptHarness();
+    await sourceHarness.runManagedLaunchAttempt(PANE_ID, {
+      ...TARGET,
+      title: "Forked work",
+      harness: "codex",
+      group: {
+        kind: "source",
+        sourceSessionId: "ses_wt_station_source",
+        groupId: "grp_source",
+      },
+    });
+
     expect(harness.prepareCalls).toEqual([
       {
         projectId: "station",
@@ -294,6 +306,19 @@ describe("createManagedLaunchAttempt", () => {
         harness: "codex",
         group: { kind: "existing", groupId: "grp_release" },
         freshStart: { expectedSessionId: "ses_interrupted" },
+      },
+    ]);
+    expect(sourceHarness.prepareCalls).toEqual([
+      {
+        projectId: "station",
+        worktreeId: WORKTREE_ID,
+        title: "Forked work",
+        harness: "codex",
+        group: {
+          kind: "source",
+          sourceSessionId: "ses_wt_station_source",
+          groupId: "grp_source",
+        },
       },
     ]);
   });
@@ -364,6 +389,7 @@ describe("createManagedLaunchAttempt", () => {
       sessionId: "ses_old",
       terminalTargetId: TERMINAL_TARGET_ID,
       terminalBindingToken: TERMINAL_BINDING_TOKEN,
+      processOwner: "ui",
       harnessProvider: "codex",
     });
     expect(selectStationOverlayVisible(harness.store.getState())).toBe(true);
@@ -735,6 +761,10 @@ describe("createManagedLaunchAttempt", () => {
     ]);
     expect(harness.ensured).toEqual([{ cwd: CWD }]);
     expect(harness.terminalFactories).toEqual([factory]);
+    expect(selectPaneRecord(harness.store.getState(), PANE_ID)?.agentIdentity).toMatchObject({
+      terminalBindingToken: TERMINAL_BINDING_TOKEN,
+      processOwner: "host",
+    });
   });
 
   it("never falls back to local ensure when an advertised attachment is missing or fails", async () => {

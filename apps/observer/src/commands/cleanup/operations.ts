@@ -1,6 +1,7 @@
 import type {
   HarnessProvider,
   HarnessRunId,
+  ProviderProjectConfig,
   SafeError,
   SessionView,
   WorktreeRow,
@@ -8,27 +9,24 @@ import type {
 import { isRunningAgentState, SafeErrorSchema } from "@station/contracts";
 import type { RuntimeClock } from "@station/runtime";
 import type { ProviderRegistry } from "../../providers/registry.js";
-import { resolveHarnessProviderOrThrow } from "../providers.js";
+import { resolveHarnessProviderOrThrow, resolveTerminalProviderOrThrow } from "../providers.js";
 import type { CommandHandlerContext } from "../queue.js";
 import { runProviderMutation, throwIfAborted } from "../session/shared.js";
-import type { TerminalIntentRunner } from "../terminalIntentRunner.js";
 import {
+  closeTerminal,
   hasCloseableTerminalAttachment,
-  submitTerminalIntentOrThrow,
-  terminalCloseIntentForSession,
-  terminalCloseIntentForWorktree,
-} from "../terminalIntents.js";
+  terminalTargetSubjectForSession,
+  terminalTargetSubjectForWorktree,
+} from "../terminalOperations.js";
 import type { VerifiedWorktreeRemovalTarget } from "./guards.js";
 
 export type CleanupRuntime = {
   clock?: RuntimeClock | undefined;
-  commandTimeoutMs?: number | undefined;
 };
 
 export async function closeSessionResources(
   input: {
     providers: ProviderRegistry;
-    terminalIntentRunner: TerminalIntentRunner;
     session: SessionView;
     row?: WorktreeRow | undefined;
     mode: "harness" | "terminal" | "all";
@@ -69,17 +67,15 @@ export async function closeSessionResources(
       };
       throw error;
     }
-    await submitTerminalIntentOrThrow({
-      terminalIntentRunner: input.terminalIntentRunner,
-      intent: terminalCloseIntentForSession({
-        defaultTerminalId: input.providers.defaultTerminalId,
-        commandId: input.context.commandId,
-        session: input.session,
-        row: input.row,
-        force: input.force,
-      }),
+    const terminalProvider =
+      input.session.terminal?.provider ??
+      input.row?.terminal?.provider ??
+      input.providers.defaultTerminalId;
+    await closeTerminal({
+      terminal: resolveTerminalProviderOrThrow(input.providers, terminalProvider),
+      subject: terminalTargetSubjectForSession(input.session, input.row),
       context: input.context,
-      commandTimeoutMs: input.commandTimeoutMs,
+      clock: input.clock,
     });
   }
 }
@@ -106,14 +102,12 @@ export async function stopHarnessForWorktree(
     allowUnsupportedStop: input.allowUnsupportedStop === true,
     context: input.context,
     clock: input.clock,
-    commandTimeoutMs: input.commandTimeoutMs,
   });
 }
 
 export async function closeTerminalForWorktree(
   input: {
     providers: ProviderRegistry;
-    terminalIntentRunner: TerminalIntentRunner;
     row: WorktreeRow;
     force: boolean;
     context: CommandHandlerContext;
@@ -123,16 +117,14 @@ export async function closeTerminalForWorktree(
     return;
   }
   try {
-    await submitTerminalIntentOrThrow({
-      terminalIntentRunner: input.terminalIntentRunner,
-      intent: terminalCloseIntentForWorktree({
-        defaultTerminalId: input.providers.defaultTerminalId,
-        commandId: input.context.commandId,
-        row: input.row,
-        force: input.force,
-      }),
+    await closeTerminal({
+      terminal: resolveTerminalProviderOrThrow(
+        input.providers,
+        input.row.terminal?.provider ?? input.providers.defaultTerminalId,
+      ),
+      subject: terminalTargetSubjectForWorktree(input.row),
       context: input.context,
-      commandTimeoutMs: input.commandTimeoutMs,
+      clock: input.clock,
     });
   } catch (error) {
     // A missing target already satisfies cleanup; force only governs destructive worktree guards.
@@ -146,6 +138,7 @@ export async function closeTerminalForWorktree(
 export async function removeWorktreeThroughProvider(
   input: {
     providers: ProviderRegistry;
+    project: ProviderProjectConfig;
     row: WorktreeRow;
     target: VerifiedWorktreeRemovalTarget;
     force: boolean;
@@ -153,8 +146,8 @@ export async function removeWorktreeThroughProvider(
   } & CleanupRuntime,
 ): Promise<void> {
   const request = {
+    project: input.project,
     worktreeId: input.row.id,
-    projectId: input.row.projectId,
     expectedPath: input.target.path,
     expectedBranch: input.target.branch,
     expectedRegistrationIdentity: input.target.registrationIdentity,
@@ -167,19 +160,12 @@ export async function removeWorktreeThroughProvider(
     {
       operation: `provider.${input.providers.worktree.id}.removeWorktree`,
       clock: input.clock,
-      commandTimeoutMs: input.commandTimeoutMs,
       signal: input.context.signal,
       trace: input.context.trace,
       fallback: {
         tag: "WorktreeProviderError",
         code: "WORKTREE_REMOVE_FAILED",
         message: "The worktree provider failed to remove the worktree.",
-        provider: input.providers.worktree.id,
-      },
-      timeoutFallback: {
-        tag: "TimeoutError",
-        code: "WORKTREE_REMOVE_TIMEOUT",
-        message: "The worktree provider timed out while removing the worktree.",
         provider: input.providers.worktree.id,
       },
     },
@@ -224,7 +210,6 @@ async function stopHarnessForSession(
     allowUnsupportedStop: input.allowUnsupportedStop === true,
     context: input.context,
     clock: input.clock,
-    commandTimeoutMs: input.commandTimeoutMs,
   });
 }
 
@@ -272,19 +257,12 @@ async function stopHarnessRun(
     {
       operation: `provider.${input.provider.id}.stop`,
       clock: input.clock,
-      commandTimeoutMs: input.commandTimeoutMs,
       signal: input.context.signal,
       trace: input.context.trace,
       fallback: {
         tag: "HarnessProviderError",
         code: "HARNESS_STOP_FAILED",
         message: "The harness provider failed to stop the run.",
-        provider: input.provider.id,
-      },
-      timeoutFallback: {
-        tag: "TimeoutError",
-        code: "HARNESS_STOP_TIMEOUT",
-        message: "The harness provider timed out while stopping the run.",
         provider: input.provider.id,
       },
     },

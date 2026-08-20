@@ -14,6 +14,7 @@ import {
   startProtocolServer,
 } from "@station/protocol";
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 import { createTempSocketPath } from "../../../../tests/support/sockets";
 import { createFakeObserverApi, emptySnapshot, ids, protocolTestNow } from "../support/fixtures.js";
 
@@ -248,6 +249,86 @@ describe("protocol client/server", () => {
     }
   });
 
+  it("retries the previous lifecycle schema for an identity-pinned stop", async () => {
+    const { socketPath } = await createTempSocketPath();
+    const expectedObserverIdentity = {
+      pid: 42,
+      startedAt: protocolTestNow,
+      version: "0.0.0-pre-alpha.5.2",
+      socketPath,
+    };
+    const previousLifecycleRequestSchema = z
+      .object({
+        schemaVersion: z.literal("0.10.0"),
+        jsonrpc: z.literal("2.0"),
+        id: z.string().min(1),
+        method: z.enum(["observer.health", "observer.stop"]),
+      })
+      .strict();
+    let connectionCount = 0;
+    const server = await listenUnixSocket({
+      socketPath,
+      onConnection: async (connection) => {
+        connectionCount += 1;
+        const iterator = connection.messages()[Symbol.asyncIterator]();
+        const firstRequest = (await iterator.next()).value;
+        if (connectionCount === 1) {
+          const currentRequest = ProtocolRequestSchema.parse(firstRequest);
+          connection.send({
+            schemaVersion: "0.10.0",
+            jsonrpc: "2.0",
+            id: currentRequest.id,
+            error: {
+              tag: "ProtocolError",
+              code: "PROTOCOL_ERROR",
+              message: "Invalid protocol request.",
+            },
+          });
+          return;
+        }
+
+        const healthRequest = previousLifecycleRequestSchema.parse(firstRequest);
+        expect(healthRequest.method).toBe("observer.health");
+        connection.send({
+          schemaVersion: "0.10.0",
+          jsonrpc: "2.0",
+          id: healthRequest.id,
+          result: {
+            schemaVersion: "0.10.0",
+            status: "healthy",
+            ...expectedObserverIdentity,
+          },
+        });
+
+        const stopRequest = previousLifecycleRequestSchema.parse((await iterator.next()).value);
+        expect(stopRequest.method).toBe("observer.stop");
+        connection.send({
+          schemaVersion: "0.10.0",
+          jsonrpc: "2.0",
+          id: stopRequest.id,
+          result: { schemaVersion: "0.10.0", stopped: true, at: protocolTestNow },
+        });
+      },
+    });
+    const client = createObserverClient({
+      socketPath,
+      expectedObserverIdentity,
+      acceptPreviousLifecycleSchema: true,
+      requestId: ids("previous-stop"),
+    });
+
+    try {
+      await expect(client.stop()).resolves.toEqual({
+        schemaVersion: STATION_SCHEMA_VERSION,
+        stopped: true,
+        at: protocolTestNow,
+      });
+      expect(connectionCount).toBe(2);
+    } finally {
+      await server.close();
+    }
+  });
+
   it("checks legacy process health and stops it on one connection", async () => {
     const { socketPath } = await createTempSocketPath();
     const expectedObserverIdentity = {
@@ -459,6 +540,24 @@ describe("protocol client/server", () => {
         worktreeId: "wt_web_inline",
         group: { kind: "create", name: "Inline work" },
       });
+      await client.prepareExternalLaunch({
+        projectId: "web",
+        worktreeId: "wt_web_fork",
+        group: {
+          kind: "source",
+          sourceSessionId: "ses_web_source",
+          groupId: "grp_active",
+        },
+      });
+      expect(preparedParams[2]).toEqual({
+        projectId: "web",
+        worktreeId: "wt_web_fork",
+        group: {
+          kind: "source",
+          sourceSessionId: "ses_web_source",
+          groupId: "grp_active",
+        },
+      });
       const rejected = await sendRawRequest(socketPath, {
         schemaVersion: STATION_SCHEMA_VERSION,
         jsonrpc: "2.0",
@@ -483,6 +582,54 @@ describe("protocol client/server", () => {
           expectedSessionId: "ses_round_trip",
         },
       ]);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("round-trips worktree removal reservation lifecycle", async () => {
+    const { socketPath } = await createTempSocketPath();
+    const prepared: unknown[] = [];
+    const cancelled: unknown[] = [];
+    const api = createFakeObserverApi({
+      prepareWorktreeRemoval: async (params) => {
+        prepared.push(params);
+        return {
+          reservationId: "reservation_round_trip",
+          projectId: params.projectId ?? "web",
+          worktreeId: params.worktreeId,
+          externalTerminalExitRequired: false,
+        };
+      },
+      cancelWorktreeRemoval: async (params) => {
+        cancelled.push(params);
+        return { cancelled: true };
+      },
+    });
+    const server = await startProtocolServer({ socketPath, api });
+    const client = createObserverClient({ socketPath, requestId: ids("removal") });
+
+    try {
+      await expect(
+        client.prepareWorktreeRemoval({
+          projectId: "web",
+          worktreeId: "wt_web_feature",
+          expectedPath: "/tmp/station/web/feature",
+          expectedBranch: "feature",
+          expectedRegistrationIdentity: "registration_1",
+          force: true,
+        }),
+      ).resolves.toEqual({
+        reservationId: "reservation_round_trip",
+        projectId: "web",
+        worktreeId: "wt_web_feature",
+        externalTerminalExitRequired: false,
+      });
+      await expect(
+        client.cancelWorktreeRemoval({ reservationId: "reservation_round_trip" }),
+      ).resolves.toEqual({ cancelled: true });
+      expect(prepared).toHaveLength(1);
+      expect(cancelled).toEqual([{ reservationId: "reservation_round_trip" }]);
     } finally {
       await server.close();
     }
@@ -610,7 +757,7 @@ describe("protocol client/server", () => {
         tag: "ProtocolError",
         code: "PROTOCOL_SCHEMA_MISMATCH",
         message:
-          "Observer protocol schema mismatch: the observer responded with schema 9.9.9, but this CLI expects schema 0.10.0.",
+          "Observer protocol schema mismatch: the observer responded with schema 9.9.9, but this CLI expects schema 0.11.0.",
         hint: expect.stringContaining("A different STATION checkout"),
       });
     } finally {

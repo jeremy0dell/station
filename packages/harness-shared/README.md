@@ -9,11 +9,11 @@ package supplies the uniform machinery so the adapters stay short and read top-t
 | Module          | Responsibility                                                            |
 | --------------- | ------------------------------------------------------------------------- |
 | `provider.ts`   | `createTerminalBoundHarnessProvider(spec, options)` → `HarnessProvider`   |
-| `events.ts`     | correlate a raw harness event's identity to terminal/worktree truth       |
+| `hookAdapter.ts`| admit, compact, and map raw hooks to `HarnessEventReport`                 |
+| `events.ts`     | build provider-neutral report diagnostics and correlation evidence        |
 | `launch.ts`     | shared launch env + provider-data builders                                |
 | `compaction.ts` | shrink large provider payloads to byte-bounded summaries                  |
 | `errors.ts`     | `HarnessProviderError` + typed wrappers                                    |
-| `classify.ts`   | map a harness run observation to a status                                 |
 
 ## Provider assembly
 
@@ -25,25 +25,30 @@ to the factory, which assembles the uniform interface methods.
                                                        │ spec (data + callbacks)
                                                        ▼
                        createTerminalBoundHarnessProvider(spec, options)
-                       └─ capabilities · health · discoverRuns · classifyRun
-                          · ingestEvent · buildLaunch    (uniform, from this package)
+                       └─ capabilities · health · discoverRuns
+                          · buildLaunch    (uniform, from this package)
 ```
 
 The spec carries only what differs between harnesses: the command (env var + fallback),
-`baseCapabilities`, the health probe args + diagnostics, `buildLaunch`/`classifyRun`/`normalize`,
-and optional `doctorChecks`/`hooksStatus`/`acceptsPersistedEvent` callbacks. Optional interface
-methods are attached only when the spec supplies them, so callers can feature-detect them.
+`baseCapabilities`, the health probe args + diagnostics, `buildLaunch`, the provider-specific
+unknown-status reason used during terminal-bound discovery, and optional
+`doctorChecks`/`hooksStatus`/`acceptsPersistedEvent` callbacks. Optional interface methods
+are attached only when the spec supplies them, so callers can feature-detect them.
 
 ## Runtime event flow
 
 ```
-  raw harness event
-     │  adapter.normalize()                         (provider-specific parsing)
+  raw ProviderHookEvent
+     │  ProviderHookAdapter admission + compaction  (provider-specific)
      ▼
-  correlateTerminalBoundHarnessEvent(identity, context)   events.ts
-     │  resolve terminal/worktree from hook identity + observed graph
+  provider report mapper
+     │  preserve explicit Station/native identity and cwd evidence
      ▼
-  applyCorrelation(observation, correlation)  +  compactPayloadByFieldNames()
+  HarnessEventReport
+     │  Observer report ingestion + graph projection
      ▼
-  HarnessEventObservation ──► observer
+  HarnessEventObservation / current snapshot
 ```
+
+`HarnessProvider` has no raw-event ingestion method. Raw hooks normalize only through the
+registered hook adapter; already-typed reports enter Observer report ingestion directly.

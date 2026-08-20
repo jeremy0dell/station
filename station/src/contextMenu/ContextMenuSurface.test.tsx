@@ -33,6 +33,9 @@ describe("ContextMenuSurface", () => {
       expect(frame).toContain("Split Right");
       expect(frame).toContain("Split Below");
       expect(frame).toContain("Close Pane");
+      expect(frame.split("\n").find((line) => line.includes("Close Pane"))).toContain(
+        "|▸Close Pane",
+      );
     } finally {
       setup.renderer.destroy();
     }
@@ -94,6 +97,72 @@ describe("ContextMenuSurface", () => {
       expect(selected?.bg.slot).toBe(1);
       expect(selected?.bg === undefined ? undefined : rgbToHex(selected.bg)).toBe("#cd3131");
       expect(selected?.fg.intent).toBe("default");
+    } finally {
+      setup.renderer.destroy();
+    }
+  });
+
+  it("renders Group keyboard shortcuts and separators without changing item indices", async () => {
+    const calls: MouseTargetRef[] = [];
+    const items: readonly ContextMenuItem[] = [
+      {
+        id: "group.quickSession",
+        label: "Quick session",
+        shortcut: "Q",
+        action: { kind: "noop" },
+      },
+      {
+        id: "group.newSession",
+        label: "New session…",
+        shortcut: "N",
+        action: { kind: "noop" },
+      },
+      {
+        id: "group.openSettings",
+        label: "Group settings…",
+        shortcut: "S",
+        separatorBefore: true,
+        action: { kind: "noop" },
+      },
+      {
+        id: "group.remove",
+        label: "Remove Group…",
+        shortcut: "R",
+        separatorBefore: true,
+        danger: true,
+        action: { kind: "noop" },
+      },
+    ];
+    const setup = await testRender(
+      <StationThemeProvider theme={nativeStationTheme}>
+        <ContextMenuSurface
+          items={items}
+          activeIndex={0}
+          width={22}
+          height={8}
+          dispatchMouse={(target) => {
+            calls.push(target);
+            return true;
+          }}
+        />
+      </StationThemeProvider>,
+      { width: 24, height: 9 },
+    );
+    await setup.flush();
+    try {
+      const frame = setup.captureCharFrame();
+      const spans = setup.captureSpans();
+      const lines = frame.split("\n");
+      expect(lines[1]).toMatch(/\|▸Quick session\s+Q\|/);
+      expect(lines[2]).toMatch(/\| New session…\s+N\|/);
+      expect(lines[3]).toContain("+--------------------+");
+      expect(lines[4]).toMatch(/\| Group settings…\s+S\|/);
+      expect(lines[5]).toContain("+--------------------+");
+      expect(lines[6]).toMatch(/\| Remove Group…\s+R\|/);
+      expect(lines.filter((line) => line.includes("▸"))).toHaveLength(1);
+      expect(spanAtFrameCell(spans, 6, 2)?.fg).not.toEqual(spanAtFrameCell(spans, 1, 2)?.fg);
+      await setup.mockMouse.click(2, 6, MouseButtons.LEFT);
+      expect(calls.at(-1)).toEqual({ kind: "contextMenuItem", itemIndex: 3 });
     } finally {
       setup.renderer.destroy();
     }

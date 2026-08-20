@@ -4,6 +4,7 @@ import type {
   SessionGroupId,
   SessionGroupPlacementIntent,
   SessionId,
+  SourceSessionGroupPlacementIntent,
   StationCommand,
   WorktreeId,
 } from "@station/contracts";
@@ -37,6 +38,7 @@ export type ForkManagedSessionOperation = {
   title: string;
   hiddenBranch: string;
   copyDirty: boolean;
+  group?: SourceSessionGroupPlacementIntent;
   inheritedHarness?: ProviderId;
 };
 
@@ -110,20 +112,59 @@ export type CreateQuickSessionInGroupOperation = {
   title: string;
   hiddenBranch: string;
   harness: ProviderId;
-  fallbackCell: "identity" | "quickSession";
+  fallbackCell: "identity" | "quickSession" | "menu";
+};
+
+export type MoveSessionToGroupOperation = {
+  type: "moveSessionToGroup";
+  sessionId: SessionId;
+  projectId: ProjectView["id"];
+  expectedCurrentGroupId: SessionGroupId | null;
+  destinationGroupId: SessionGroupId | null;
+  command: Extract<StationCommand, { type: "sessionGroup.updateMembership" }>;
+};
+
+export type CreateSessionGroupForMoveOperation = {
+  type: "createSessionGroupForMove";
+  sessionId: SessionId;
+  projectId: ProjectView["id"];
+  name: string;
+  previousGroupIds: readonly SessionGroupId[];
+  command: Extract<StationCommand, { type: "sessionGroup.create" }>;
+};
+
+export type RenameSessionGroupOperation = {
+  type: "renameSessionGroup";
+  projectId: ProjectView["id"];
+  groupId: SessionGroupId;
+  command: Extract<StationCommand, { type: "sessionGroup.rename" }>;
+};
+
+export type UpdateSessionGroupMembershipOperation = {
+  type: "updateSessionGroupMembership";
+  projectId: ProjectView["id"];
+  groupId: SessionGroupId;
+  command: Extract<StationCommand, { type: "sessionGroup.updateMembership" }>;
+};
+
+export type DeleteSessionGroupOperation = {
+  type: "deleteSessionGroup";
+  projectId: ProjectView["id"];
+  groupId: SessionGroupId;
+  command: Extract<StationCommand, { type: "sessionGroup.delete" }>;
 };
 
 export type DashboardCapabilityOperation =
   | ActivateSessionOperation
   | CreateManagedSessionOperation
   | ForkManagedSessionOperation
+  | RemoveWorktreeOperation
   | OpenDashboardShellOperation
   | DismissDashboardOperation
   | ExitDashboardRendererOperation;
 
 export type TuiOperation =
   | DashboardCapabilityOperation
-  | RemoveWorktreeOperation
   | RenameSessionOperation
   | LoadProjectDirectoryOperation
   | ReviewProjectFolderOperation
@@ -132,4 +173,9 @@ export type TuiOperation =
   | SetProjectDefaultHarnessOperation
   | RemoveProjectOperation
   | CreateSessionGroupOperation
-  | CreateQuickSessionInGroupOperation;
+  | CreateQuickSessionInGroupOperation
+  | MoveSessionToGroupOperation
+  | CreateSessionGroupForMoveOperation
+  | RenameSessionGroupOperation
+  | UpdateSessionGroupMembershipOperation
+  | DeleteSessionGroupOperation;

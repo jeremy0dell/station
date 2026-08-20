@@ -1,8 +1,25 @@
 import { readFileSync } from "node:fs";
+import type { SetupConfigMutationPlan } from "@station/config";
+import type { CliSetupHarnessId } from "@station/contracts";
+import {
+  type HarnessSelectionFacts,
+  planSetup,
+  resolveHarnessSelection,
+  type SetupPlanningIntent,
+  type SetupSessionOperationOutcome,
+} from "@station/setup-core";
 import { setupMessageRef } from "@station/setup-messages";
 import { describe, expect, it } from "vitest";
-import type { ProjectSetupView } from "../../src/commands/setup/presentation/projectSetupView.js";
-import { createTextSetupPresenter } from "../../src/commands/setup/presenters/text.js";
+import { normalizeSetupPlanningFacts } from "../../src/commands/setup/adapters/inspection.js";
+import type {
+  SetupFacts,
+  SetupHarnessFact,
+} from "../../src/commands/setup/adapters/inspectionTypes.js";
+import { createJsonSetupPresenter } from "../../src/commands/setup/presenters/json.js";
+import {
+  createTextSetupPresenter,
+  type TextSetupProjection,
+} from "../../src/commands/setup/presenters/text.js";
 
 describe("text setup presenter", () => {
   it("does not derive semantics by slicing check or action IDs", () => {
@@ -11,34 +28,30 @@ describe("text setup presenter", () => {
       "utf8",
     );
 
-    expect(source).not.toContain(".id.startsWith");
-    expect(source).not.toContain(".id.slice");
-    expect(source).not.toContain("actions.find");
-    expect(source).not.toContain("checks.find");
+    expect(source).not.toContain("ProjectSetupView");
+    expect(source).not.toContain("projectSetupActions");
+    expect(source).not.toContain("setupViewTypes");
+    expect(source).toContain("TextSetupProjection");
   });
 
   it("renders the semantic plan without machine-only keys or command payloads", () => {
-    const presenter = createTextSetupPresenter();
-    const view = readyView({
-      checks: [
-        check({
-          id: "worktrunk-hooks",
-          label: setupMessageRef("label.worktrunk-hooks"),
-          explanation: setupMessageRef("check.worktrunk-hooks-defaults"),
-          details: [
-            {
-              label: setupMessageRef("detail.worktrunk-policy"),
-              value: "worktrunk-default",
-            },
-          ],
-        }),
-      ],
-      actions: [trackingAction()],
-    });
+    const projection = buildProjection(
+      {
+        harnessTracking: [
+          {
+            harnessId: "codex",
+            capability: "supported",
+            requested: true,
+            installed: false,
+            detail: "Codex hooks are missing.",
+          },
+        ],
+      },
+      { harnessTrackingSelection: { kind: "explicit", harnessIds: ["codex"] } },
+    );
+    const output = createTextSetupPresenter().renderPlan(projection);
 
-    const output = presenter.renderPlan(view);
-
-    expect(output).toContain("Worktrunk automation: worktrunk-default");
+    expect(output).toContain("Worktrunk automation: preapprove-hooks");
     expect(output).toContain("Install Codex tracking");
     expect(output).not.toContain("automationMode");
     expect(output).not.toContain("selectionSource");
@@ -48,20 +61,15 @@ describe("text setup presenter", () => {
   });
 
   it("renders a compact successful transcript with prepared agents and runnable next commands", () => {
-    const presenter = createTextSetupPresenter();
-    const view = readyView({
-      result: readyResult({
-        kind: "complete",
-        preparedHarnesses: [
-          { id: "codex", label: "Codex" },
-          { id: "opencode", label: "OpenCode" },
-        ],
-        showCodexReview: true,
-        nextCommands: [["stn", "doctor"], ["stn"]],
+    const projection = buildProjection({
+      harnesses: harnesses(["codex", "opencode"]),
+      harnessTracking: [preparedTracking("codex"), preparedTracking("opencode")],
+      config: validConfigFact({
+        configuredHarnesses: ["codex", "opencode"],
+        configuredHookHarnesses: ["codex", "opencode"],
       }),
     });
-
-    const output = presenter.renderApplyResult(view);
+    const output = createTextSetupPresenter().renderApplyResult(projection);
 
     expect(output).toContain("Core setup complete. Tracking is prepared for Codex and OpenCode.");
     expect(output).toContain("Codex may require review");
@@ -84,12 +92,16 @@ describe("text setup presenter", () => {
     );
     const laterSuccess = presenter.renderProgressComplete({ label: "Install OpenCode tracking" });
     const final = presenter.renderApplyResult(
-      readyView({
-        result: blockedResult(
-          setupMessageRef("check.tracking-missing", { harnessId: "codex" }),
-          setupMessageRef("recovery.tracking"),
-          [["/tmp/bin/stn", "--config", "/tmp/config.toml", "hooks", "install", "codex", "--yes"]],
-        ),
+      buildProjection({
+        harnessTracking: [
+          {
+            harnessId: "codex",
+            capability: "supported",
+            requested: true,
+            installed: false,
+            detail: "Codex hooks are missing.",
+          },
+        ],
       }),
     );
     const transcript = `${failure}\n${laterSuccess}\n${final}`;
@@ -107,35 +119,15 @@ describe("text setup presenter", () => {
 
   it("preserves safely quoted launcher and PATH recovery", () => {
     const bin = "/tmp/station/bin";
-    const launcherCheck = check({
-      id: "station-launchers",
-      status: "warning",
-      label: setupMessageRef("label.launchers"),
-      explanation: setupMessageRef("check.launchers-installed-path", {
-        launchers: "stn, stn-ingress, stn-tmux-popup",
-      }),
-      details: [
-        { label: setupMessageRef("detail.station-launcher"), value: `${bin}/stn` },
-        { label: setupMessageRef("detail.ingress-launcher"), value: `${bin}/stn-ingress` },
-        { label: setupMessageRef("detail.tmux-popup-launcher"), value: `${bin}/stn-tmux-popup` },
-      ],
+    const projection = buildProjection({
+      launchers: {
+        packageRoot: "/tmp/station",
+        station: installedLauncher(`${bin}/stn`),
+        ingress: installedLauncher(`${bin}/stn-ingress`),
+        tmuxPopup: installedLauncher(`${bin}/stn-tmux-popup`),
+      },
     });
-    const output = createTextSetupPresenter().renderApplyResult(
-      readyView({
-        checks: [launcherCheck],
-        result: readyResult({
-          kind: "complete",
-          preparedHarnesses: [],
-          showCodexReview: false,
-          launcherWarning: {
-            check: launcherCheck,
-            stationExecutable: `${bin}/stn`,
-            pathDirectory: bin,
-          },
-          nextCommands: [[`${bin}/stn`, "doctor"], [`${bin}/stn`]],
-        }),
-      }),
-    );
+    const output = createTextSetupPresenter().renderApplyResult(projection);
 
     expect(output).toContain(`PATH='/tmp/station/bin'\${PATH:+":$PATH"}`);
     expect(output).toContain("'/tmp/station/bin/stn' doctor");
@@ -144,21 +136,26 @@ describe("text setup presenter", () => {
   });
 
   it("styles statuses while preserving visual alignment and disables ANSI on request", () => {
+    const projection = buildProjection();
     const checks = [
-      check({
-        id: "one",
-        label: setupMessageRef("label.git"),
-        explanation: setupMessageRef("check.git-repository-ready"),
-      }),
-      check({
-        id: "two",
-        status: "warning",
-        label: setupMessageRef("label.launchers"),
-        explanation: setupMessageRef("check.launchers-missing", { launchers: "stn" }),
-      }),
+      {
+        id: "git-project",
+        tier: "recommended" as const,
+        status: "ok" as const,
+        label: "Git",
+        message: "Git is available.",
+      },
+      {
+        id: "station-launchers",
+        tier: "recommended" as const,
+        status: "warning" as const,
+        label: "STATION launchers",
+        message: "These Station launchers are missing: stn.",
+      },
     ];
-    const colored = createTextSetupPresenter({ color: true }).renderPlan(readyView({ checks }));
-    const plain = createTextSetupPresenter({ color: false }).renderPlan(readyView({ checks }));
+    const focused = { ...projection, plan: { ...projection.plan, checks } };
+    const colored = createTextSetupPresenter({ color: true }).renderPlan(focused);
+    const plain = createTextSetupPresenter({ color: false }).renderPlan(focused);
 
     expect(colored).toContain("\u001b[32mOK\u001b[0m");
     expect(colored).toContain("\u001b[33mWARN\u001b[0m");
@@ -200,132 +197,238 @@ describe("text setup presenter", () => {
   it("renders Git-specific and generic blocked results without inspecting check IDs", () => {
     const presenter = createTextSetupPresenter();
     const git = presenter.renderApplyResult(
-      readyView({
-        result: {
-          ...notReadyResult(),
-          apply: {
-            kind: "message",
-            message: setupMessageRef("check.evidence", { message: "Repair Git ownership." }),
-          },
+      buildProjection({
+        git: {
+          status: "missing",
+          reason: "dubious-ownership",
+          defaultBranch: "main",
+          message: "Repair Git ownership.",
         },
       }),
     );
     const generic = presenter.renderApplyResult(
-      readyView({
-        result: blockedResult(
-          setupMessageRef("recovery.core-incomplete"),
-          setupMessageRef("recovery.then-run"),
-          [["stn", "setup", "check"]],
-        ),
+      buildProjection({
+        worktrunk: { status: "missing", command: "wt", message: "Worktrunk missing." },
       }),
     );
 
     expect(git).toBe("Repair Git ownership.\n");
-    expect(generic).toContain("Core setup is incomplete.");
+    expect(generic).toContain("Worktrunk is still missing.");
     expect(generic).toContain("stn setup check");
   });
 
   it("renders dry-run SKIP statuses and config-write failure results", () => {
     const presenter = createTextSetupPresenter();
-    const dryRun = presenter.renderPlan(
-      readyView({ actions: [{ ...trackingAction(), status: "skipped" }] }),
-    );
-    const failed = presenter.renderApplyResult(
-      readyView({
-        result: {
-          ...notReadyResult(),
-          apply: {
-            kind: "config-write-failed",
-            message: setupMessageRef("guided.config-write-failed"),
+    const dryRunProjection = buildProjection(
+      {
+        harnessTracking: [
+          {
+            harnessId: "codex",
+            capability: "supported",
+            requested: true,
+            installed: false,
+            detail: "Codex hooks are missing.",
           },
-        },
-      }),
+        ],
+      },
+      { harnessTrackingSelection: { kind: "explicit", harnessIds: ["codex"] } },
     );
+    const dryRun = presenter.renderPlan(dryRunProjection, { skipSelectedActions: true });
+    const configWrite: SetupConfigMutationPlan = {
+      operation: "create",
+      path: "/tmp/config.toml",
+      content: "schema_version = 1\n",
+    };
+    const failedProjection = buildProjection(
+      {
+        config: { status: "missing", path: "/tmp/config.toml", message: "Config missing." },
+      },
+      {},
+      configWrite,
+    );
+    const operation = failedProjection.semanticPlan.operations.find(
+      (candidate) => candidate.kind === "write-config",
+    );
+    if (operation === undefined) throw new Error("Expected a config write operation.");
+    const operationOutcomes: readonly SetupSessionOperationOutcome[] = [
+      {
+        status: "failed",
+        operationId: operation.id,
+        operation,
+        error: {
+          tag: "SetupConfigWriteError",
+          code: "CONFIG_WRITE_FAILED",
+          message: "Config write failed.",
+        },
+      },
+    ];
+    const failed = presenter.renderApplyResult({ ...failedProjection, operationOutcomes });
 
     expect(dryRun).toContain("SKIP      Install Codex tracking");
     expect(failed).toContain("Config write failed. Run: stn setup plan");
   });
 });
 
-function readyView(overrides: Partial<ProjectSetupView> = {}): ProjectSetupView {
+function buildProjection(
+  overrides: Partial<SetupFacts> = {},
+  intentOverrides: Partial<SetupPlanningIntent> = {},
+  configMutation?: SetupConfigMutationPlan,
+): TextSetupProjection {
+  const facts = setupFacts(overrides);
+  const selection = resolveHarnessSelection(selectionFacts(facts), { kind: "automatic" });
+  const semanticPlan = planSetup(normalizeSetupPlanningFacts(facts, selection, configMutation), {
+    mode: facts.mode,
+    harnessSelection: { kind: "automatic" },
+    installBootstrap: false,
+    installHarnesses: [],
+    linkStationLaunchers: false,
+    harnessTrackingSelection: { kind: "automatic" },
+    installWorktrunkHooks: false,
+    installWorktrunkShell: false,
+    configureTmuxPopup: false,
+    ...intentOverrides,
+  });
+  const projectionInput =
+    configMutation === undefined
+      ? { plan: semanticPlan, facts }
+      : { plan: semanticPlan, facts, configMutation };
+  return {
+    plan: createJsonSetupPresenter().project(projectionInput),
+    semanticPlan,
+    facts,
+    operationOutcomes: [],
+  };
+}
+
+function selectionFacts(facts: SetupFacts): HarnessSelectionFacts {
+  return {
+    config:
+      facts.config.status === "valid"
+        ? { status: "valid", defaultHarness: "codex" }
+        : { status: facts.config.status },
+    harnesses: facts.harnesses.map((harness) => ({
+      id: harness.id,
+      availability: harness.status === "ok" ? "available" : "unavailable",
+    })),
+  };
+}
+
+function setupFacts(overrides: Partial<SetupFacts> = {}): SetupFacts {
   return {
     generatedAt: "2026-07-31T12:00:00.000Z",
     mode: "apply",
-    title: setupMessageRef("setup.heading", { mode: "apply" }),
-    selection: {
-      source: "configured",
-      summary: setupMessageRef("setup.selection-summary", { source: "configured" }),
-      defaultHarness: "codex",
-    },
-    checks: [],
-    actions: [],
-    result: readyResult({
-      kind: "complete",
-      preparedHarnesses: [],
-      showCodexReview: false,
-      nextCommands: [["stn", "doctor"], ["stn"]],
-    }),
     configPath: "/tmp/config.toml",
-    recovery: [
-      { kind: "command", command: ["stn", "doctor"] },
-      { kind: "command", command: ["stn"] },
-    ],
+    homeDir: "/tmp/home",
+    compiled: false,
+    stateDir: { status: "ok", path: "/tmp/home/.local/state/station" },
+    socketEvidence: { status: "ok", command: "/usr/bin/lsof" },
+    worktrunk: { status: "ok", command: "wt", version: "1.0.0" },
+    worktrunkAutomation: {
+      status: "ok",
+      automationMode: "preapprove-hooks",
+      flag: "--yes",
+      message: "Lifecycle hooks are enabled.",
+    },
+    worktrunkShellIntegration: {
+      status: "warning",
+      shell: "zsh",
+      rcPath: "/tmp/home/.zshrc",
+      message: "Worktrunk shell integration is not installed for zsh.",
+    },
+    tmux: { status: "ok", command: "tmux", version: "3.5a" },
+    bun: { status: "ok", command: "bun", resolvedPath: "/tmp/bin/bun" },
+    stationUi: { status: "installed" },
+    diffViewer: { status: "ok", command: "hunk", resolvedPath: "/tmp/bin/hunk" },
+    brew: { status: "ok", command: "brew", version: "4.0.0" },
+    xcode: { status: "ok", applicable: true, path: "/Library/Developer/CommandLineTools" },
+    launchers: {
+      packageRoot: "/tmp/station",
+      station: pathLauncher("stn", "/tmp/bin/stn", "/tmp/station/bin/stn"),
+      ingress: pathLauncher("stn-ingress", "/tmp/bin/stn-ingress", "/tmp/station/bin/stn-ingress"),
+      tmuxPopup: pathLauncher(
+        "stn-tmux-popup",
+        "/tmp/bin/stn-tmux-popup",
+        "/tmp/station/integrations/terminal/tmux/bin/stn-popup",
+      ),
+    },
+    git: {
+      status: "ok",
+      repository: "present",
+      root: "/tmp/repo",
+      defaultBranch: "main",
+      repoName: "repo",
+    },
+    harnesses: harnesses(["codex"]),
+    harnessTracking: [preparedTracking("codex")],
+    config: validConfigFact(),
+    tmuxBinding: {
+      status: "missing",
+      path: "/tmp/home/.tmux.conf",
+      marker: "# >>> station popup binding >>>",
+      launcherCommand: "/tmp/bin/stn-tmux-popup",
+      runShellCommand: "'/tmp/bin/stn-tmux-popup'",
+      bindingKey: "Space",
+      insideTmux: false,
+      liveStatus: "unknown",
+      message: "Optional tmux popup binding is not installed.",
+    },
     ...overrides,
   };
 }
 
-function check(
-  overrides: Partial<ProjectSetupView["checks"][number]> & {
-    id: string;
-    label: ProjectSetupView["checks"][number]["label"];
-    explanation: ProjectSetupView["checks"][number]["explanation"];
-  },
-): ProjectSetupView["checks"][number] {
+function validConfigFact(
+  overrides: Partial<Extract<SetupFacts["config"], { status: "valid" }>> = {},
+): Extract<SetupFacts["config"], { status: "valid" }> {
   return {
-    tier: "recommended",
-    status: "ok",
-    details: [],
+    status: "valid",
+    path: "/tmp/config.toml",
+    source: "schema_version = 1\n",
+    observerStateDir: "/tmp/home/.local/state/station",
+    hasProjectForRoot: true,
+    configuredHarnesses: ["codex"],
+    configuredHookHarnesses: ["codex"],
+    defaults: { worktreeProvider: "worktrunk", terminal: "tmux", harness: "codex" },
+    worktrunkUseLifecycleHooks: true,
+    matchedProject: {
+      id: "repo",
+      worktreeProvider: "worktrunk",
+      worktrunkEnabled: true,
+      terminal: "tmux",
+      harness: "codex",
+    },
     ...overrides,
   };
 }
 
-function trackingAction(): ProjectSetupView["actions"][number] {
+function harnesses(available: readonly CliSetupHarnessId[]): SetupHarnessFact[] {
+  return (["codex", "cursor", "opencode", "pi", "claude"] as const).map((id) => ({
+    id,
+    label: id === "opencode" ? "OpenCode" : `${id[0]?.toUpperCase()}${id.slice(1)}`,
+    status: available.includes(id) ? "ok" : "missing",
+    command: id === "cursor" ? "agent" : id,
+  }));
+}
+
+function preparedTracking(harnessId: CliSetupHarnessId) {
   return {
-    id: "codex-hooks",
-    kind: "prepare-harness-tracking",
-    tier: "required",
-    selected: true,
-    label: setupMessageRef("action.harness-tracking-label", { harness: "Codex" }),
-    explanation: setupMessageRef("action.harness-tracking-message", { harness: "Codex" }),
+    harnessId,
+    capability: "supported" as const,
+    requested: true,
+    installed: true,
+    detail: `${harnessId} hooks are installed.`,
   };
 }
 
-function readyResult(
-  apply: Extract<ProjectSetupView["result"]["apply"], { kind: "complete" }>,
-): ProjectSetupView["result"] {
-  return {
-    readiness: { launchReady: true, workflowReady: true, requiredMissing: 0 },
-    requiredIssueCount: 0,
-    selectedOperationCount: 0,
-    apply,
-  };
+function pathLauncher(command: string, resolvedPath: string, checkoutPath: string) {
+  return { status: "ok" as const, source: "path" as const, command, resolvedPath, checkoutPath };
 }
 
-function notReadyResult(): Omit<ProjectSetupView["result"], "apply"> {
+function installedLauncher(resolvedPath: string) {
   return {
-    readiness: { launchReady: true, workflowReady: false, requiredMissing: 1 },
-    requiredIssueCount: 1,
-    selectedOperationCount: 1,
-  };
-}
-
-function blockedResult(
-  title: Extract<ProjectSetupView["result"]["apply"], { kind: "blocked" }>["title"],
-  detail: Extract<ProjectSetupView["result"]["apply"], { kind: "blocked" }>["detail"],
-  commands: readonly (readonly string[])[],
-): ProjectSetupView["result"] {
-  return {
-    ...notReadyResult(),
-    apply: { kind: "blocked", title, detail, commands },
+    status: "ok" as const,
+    source: "installed" as const,
+    command: resolvedPath,
+    resolvedPath,
+    checkoutPath: resolvedPath,
   };
 }

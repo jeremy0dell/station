@@ -27,6 +27,11 @@ export { dashboardExecution } from "../state/capabilities/execution.js";
 
 export { createObserverManagedSessionCapabilities } from "../state/capabilities/managedSessions.js";
 export type { OpenDashboardShellRequest } from "../state/capabilities/shell.js";
+export type {
+  RemoveWorktreeRequest,
+  WorktreeRemovalCapabilities,
+} from "../state/capabilities/worktreeRemoval.js";
+export { createObserverWorktreeRemovalCapabilities } from "../state/capabilities/worktreeRemoval.js";
 export { buildRemoveWorktreeCommand } from "../state/commandBuilders.js";
 export type {
   DashboardRuntime,

@@ -1,5 +1,5 @@
 import { DEFAULT_WORKSPACE_CONFIG, type StationConfig } from "@station/config";
-import { type HarnessEventObservation, STATION_SCHEMA_VERSION } from "@station/contracts";
+import { STATION_SCHEMA_VERSION } from "@station/contracts";
 import {
   createFakeHarnessRun,
   createFakeTerminalTarget,
@@ -170,13 +170,7 @@ describe("Observer API composition with in-memory persistence", () => {
     );
     await expect(
       persistence.listProviderObservations({ entityKind: "harness_event" }),
-    ).resolves.toEqual([
-      expect.objectContaining({
-        provider: "fake-harness",
-        entityKind: "harness_event",
-        entityKey: "run_web_task",
-      }),
-    ]);
+    ).resolves.toEqual([]);
     await hookEvents.return?.();
 
     await expect(api.health()).resolves.toMatchObject({
@@ -361,7 +355,7 @@ function fakeProviders(): ProviderRegistry {
       ],
     }),
     harnesses: [
-      new NoSqliteHarnessProvider({
+      new FakeHarnessProvider({
         now,
         runs: [
           createFakeHarnessRun({
@@ -377,28 +371,6 @@ function fakeProviders(): ProviderRegistry {
       }),
     ],
   });
-}
-
-class NoSqliteHarnessProvider extends FakeHarnessProvider {
-  override async ingestEvent(): Promise<HarnessEventObservation[]> {
-    return [
-      {
-        provider: this.id,
-        projectId: "web",
-        worktreeId: "wt_web_task",
-        sessionId: "ses_web_task",
-        harnessRunId: "run_web_task",
-        status: {
-          value: "idle",
-          confidence: "high",
-          reason: "Fake harness hook reported idle.",
-          source: "harness_event",
-          updatedAt: now,
-        },
-        observedAt: now,
-      },
-    ];
-  }
 }
 
 function observerIds() {

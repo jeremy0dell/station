@@ -29,7 +29,7 @@ import {
   FakeWorktreeProvider,
 } from "@station/testing";
 import { describe, expect, it } from "vitest";
-import type { SessionStore } from "../../src/persistence/index";
+import type { SessionSeedGroupProvenance, SessionStore } from "../../src/persistence/index";
 import { ProviderRegistry } from "../../src/providers/registry";
 import type { ObserverCore } from "../../src/reconcile/core";
 import { prepareExternalLaunch, reportExternalExit } from "../../src/runtime/externalLaunch";
@@ -285,7 +285,6 @@ function retainedSession(
         canLaunch: true,
         canDiscoverRuns: true,
         canEmitEvents: true,
-        canClassifyStatus: true,
         canReceivePrompt: false,
         canResume: true,
         canStop: true,
@@ -349,20 +348,22 @@ function trackingPersistence() {
     findRememberedHarnessProviderForWorktree: async () => undefined,
     seedSession: async (input: Parameters<SessionStore["seedSession"]>[0]) => {
       seeded.push(input);
-      const groupProvenance =
-        input.group === undefined
-          ? undefined
-          : input.group.kind === "existing"
-            ? { kind: "existing" as const, groupId: input.group.groupId }
-            : {
-                kind: "created" as const,
-                groupId: input.group.groupId,
-                projectId: input.projectId,
-                name: input.group.name,
-                version: 1,
-                createdAt: input.createdAt,
-                updatedAt: input.createdAt,
-              };
+      let groupProvenance: SessionSeedGroupProvenance | undefined;
+      if (input.group?.kind === "existing") {
+        groupProvenance = { kind: "existing", groupId: input.group.groupId };
+      } else if (input.group?.kind === "source") {
+        groupProvenance = { kind: "source", groupId: "group_source" };
+      } else if (input.group?.kind === "create") {
+        groupProvenance = {
+          kind: "created",
+          groupId: input.group.groupId,
+          projectId: input.projectId,
+          name: input.group.name,
+          version: 1,
+          createdAt: input.createdAt,
+          updatedAt: input.createdAt,
+        };
+      }
       return {
         ok: true,
         session: {
@@ -832,6 +833,8 @@ describe("prepareExternalLaunch", () => {
       projectId: "web",
       worktreeId: "wt_web_feature",
       initialTitle: "Readable login task",
+      harness: "fake-harness",
+      terminalProvider: "fake-terminal",
       createdAt: now,
       lastSeenAt: now,
     });
@@ -1003,6 +1006,8 @@ describe("prepareExternalLaunch", () => {
       projectId: "web",
       worktreeId: "wt_web_feature",
       initialTitle: "Readable login task",
+      harness: "fake-harness",
+      terminalProvider: "fake-terminal",
       createdAt: now,
       lastSeenAt: now,
     });
@@ -1089,6 +1094,8 @@ describe("prepareExternalLaunch", () => {
       projectId: "web",
       worktreeId: "wt_web_feature",
       initialTitle: "Readable login task",
+      harness: "fake-harness",
+      terminalProvider: "fake-terminal",
       createdAt: now,
       lastSeenAt: now,
     });
@@ -1509,6 +1516,44 @@ describe("reportExternalExit", () => {
       reconcile: false,
     });
     expect(await station.listTargets()).toMatchObject([{ sessionId: "ses_replacement" }]);
+  });
+
+  it("does not let a tokenless Host exit release a same-session replacement", async () => {
+    const station = new FakeManagedTerminalLifecycle();
+    const observedWorktree = {
+      id: "wt_web_feature",
+      provider: "fake-worktree",
+      projectId: "web",
+      branch: "feature/login",
+      path: "/tmp/station/web/feature",
+      state: "exists" as const,
+      source: "worktrunk" as const,
+      observedAt: now,
+    };
+    await station.openManagedWorkspace({
+      project,
+      worktree: observedWorktree,
+      harness: "fake-harness",
+      layout: "agent-shell",
+      sessionId: "ses_recoverable",
+    });
+    await station.openManagedWorkspace({
+      project,
+      worktree: observedWorktree,
+      harness: "fake-harness",
+      layout: "agent-shell",
+      sessionId: "ses_recoverable",
+    });
+
+    const staleExit = await reportExternalExit(deps([row()], station), {
+      terminalTargetId: managedTargetId("wt_web_feature"),
+      expectedSessionId: "ses_recoverable",
+    });
+
+    expect(staleExit.reconcile).toBe(false);
+    expect(staleExit.outcome.acknowledged).toBe(false);
+    expect(station.released).toEqual([]);
+    expect(await station.listTargets()).toMatchObject([{ sessionId: "ses_recoverable" }]);
   });
 
   it("does not let a stale same-session exit release a newer binding generation", async () => {

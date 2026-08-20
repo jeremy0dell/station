@@ -17,7 +17,6 @@ export type CreateWorktreeCreateHandlerOptions = {
   core: ObserverCore;
   eventBus?: ObserverEventBus | undefined;
   clock?: RuntimeClock | undefined;
-  commandTimeoutMs?: number | undefined;
   logger?: StationLogger | undefined;
 };
 
@@ -52,7 +51,6 @@ export function createWorktreeCreateHandler(
     await runProviderMutation(
       {
         clock: options.clock,
-        commandTimeoutMs: options.commandTimeoutMs,
         signal: context.signal,
         trace: context.trace,
         operation: `provider.${options.providers.worktree.id}.createWorktree`,

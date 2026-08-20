@@ -1,23 +1,11 @@
 // Claude Code hook events -> STATION HarnessEventObservation, normalized at the provider boundary.
 // Upstream hook contract: https://code.claude.com/docs/en/hooks-guide
 // STATION ingress flow: docs/harness-ingress.md. Keep the parsed payload shape in sync with upstream.
-import type {
-  HarnessEventContext,
-  HarnessEventObservation,
-  HarnessEventReport,
-  ObservedStatus,
-  RawHarnessEvent,
-} from "@station/contracts";
+import type { HarnessEventReport, ObservedStatus } from "@station/contracts";
 import { HarnessEventReportSchema, STATION_SCHEMA_VERSION } from "@station/contracts";
-import {
-  applyCorrelation,
-  correlateTerminalBoundHarnessEvent,
-  harnessEventDiagnostics,
-  reportCorrelation,
-} from "@station/harness-shared";
+import { harnessEventDiagnostics, reportCorrelation } from "@station/harness-shared";
 import { z } from "zod";
 import { claudeHarnessError } from "./errors.js";
-import { isClaudeForwardedEventType } from "./ingressRules.js";
 
 export type ClaudeHarnessEventReportInput = {
   reportId: string;
@@ -344,41 +332,6 @@ export function statusFromClaudeHookEvent(
   };
 }
 
-export function normalizeClaudeRawEvent(
-  raw: RawHarnessEvent,
-  context: HarnessEventContext,
-): HarnessEventObservation[] {
-  const eventName = hookEventNameOf(raw.event);
-  if (eventName !== undefined && !isClaudeForwardedEventType(eventName)) {
-    return [];
-  }
-  const event = parseClaudeHookEvent(raw.event);
-  const observedAt = raw.observedAt ?? new Date().toISOString();
-  const correlation = correlateTerminalBoundHarnessEvent({
-    provider: "claude",
-    identity: event,
-    context,
-    cwd: event.cwd,
-  });
-  const observation: HarnessEventObservation = {
-    provider: "claude",
-    rawEventType: event.hook_event_name,
-    observedAt,
-    providerData: providerDataFromClaudeEvent(event),
-  };
-  const status = statusFromClaudeHookEvent(event, observedAt);
-  if (status !== undefined) {
-    observation.status = status;
-  }
-  const turn = turnFromClaudeHookEvent(event);
-  if (turn !== undefined) {
-    observation.turn = turn;
-  }
-  applyCorrelation(observation, correlation);
-  observation.nativeSessionId = event.session_id;
-  return [observation];
-}
-
 export function claudeHookPayloadToHarnessEventReport(
   input: ClaudeHarnessEventReportInput,
 ): HarnessEventReport {
@@ -430,12 +383,4 @@ export function claudeHookPayloadReportId(payload: unknown, observedAt: string):
   }
   parts.push(observedAt);
   return parts.map((part) => encodeURIComponent(part)).join(":");
-}
-
-export function hookEventNameOf(payload: unknown): string | undefined {
-  if (typeof payload !== "object" || payload === null || Array.isArray(payload)) {
-    return undefined;
-  }
-  const name = (payload as Record<string, unknown>).hook_event_name;
-  return typeof name === "string" && name.length > 0 ? name : undefined;
 }

@@ -2,16 +2,11 @@ import type {
   BuildHarnessLaunchRequest,
   Confidence,
   CreateWorktreeRequest,
-  GetWorktreeRequest,
   HarnessCapabilities,
-  HarnessClassificationContext,
   HarnessDiscoveryContext,
-  HarnessEventContext,
-  HarnessEventObservation,
   HarnessLaunchPlan,
   HarnessProvider,
   HarnessRunObservation,
-  HarnessStatusObservation,
   HarnessStopRequest,
   HarnessStopResult,
   OpenWorkspaceRequest,
@@ -19,7 +14,6 @@ import type {
   ProviderHealth,
   ProviderId,
   ProviderProjectConfig,
-  RawHarnessEvent,
   RemoveWorktreeRequest,
   RemoveWorktreeResult,
   RepositoryRemote,
@@ -42,12 +36,11 @@ import type {
 
 export type FakeProviderClock = string | (() => Date | string);
 
-type FakeWorktreeProviderMethod =
-  | "health"
-  | "listWorktrees"
-  | "createWorktree"
-  | "removeWorktree"
-  | "getWorktree";
+type FakeWorktreeProviderMethod = "health" | "listWorktrees" | "createWorktree" | "removeWorktree";
+
+type RecordedRemoveWorktreeRequest = Omit<RemoveWorktreeRequest, "project"> & {
+  projectId: string;
+};
 
 type FakeTerminalProviderMethod =
   | "health"
@@ -59,13 +52,7 @@ type FakeTerminalProviderMethod =
   | "captureTarget"
   | "sendInput";
 
-type FakeHarnessProviderMethod =
-  | "health"
-  | "buildLaunch"
-  | "discoverRuns"
-  | "classifyRun"
-  | "ingestEvent"
-  | "stop";
+type FakeHarnessProviderMethod = "health" | "buildLaunch" | "discoverRuns" | "stop";
 
 export type FakeProviderFailures<TMethod extends string> = Partial<Record<TMethod, SafeError>>;
 
@@ -111,7 +98,7 @@ export type CreateFakeHarnessRunInput = {
   worktreeId?: WorktreeId;
   sessionId?: string;
   cwd?: string;
-  state?: HarnessRunObservation["state"];
+  state?: HarnessRunObservation["status"]["value"];
   confidence?: Confidence;
   reason?: string;
   pid?: number;
@@ -172,7 +159,6 @@ const defaultHarnessCapabilities: HarnessCapabilities = {
   canLaunch: true,
   canDiscoverRuns: true,
   canEmitEvents: true,
-  canClassifyStatus: true,
   canReceivePrompt: false,
   canResume: true,
   canStop: true,
@@ -290,9 +276,13 @@ export function createFakeHarnessRun(input: CreateFakeHarnessRunInput = {}): Har
     ...(input.sessionId === undefined ? {} : { sessionId: input.sessionId }),
     ...(input.cwd === undefined ? {} : { cwd: input.cwd }),
     ...(pid === undefined ? {} : { pid }),
-    state,
-    confidence: input.confidence ?? (state === "unknown" ? "low" : "high"),
-    reason: input.reason ?? `Fake harness run is ${state}.`,
+    status: {
+      value: state,
+      confidence: input.confidence ?? (state === "unknown" ? "low" : "high"),
+      reason: input.reason ?? `Fake harness run is ${state}.`,
+      source: "harness_process",
+      updatedAt: resolveNow(input.now),
+    },
     observedAt: resolveNow(input.now),
     ...compactProviderData(input.providerData),
   };
@@ -303,7 +293,7 @@ export class FakeWorktreeProvider implements WorktreeProvider {
 
   readonly #now: FakeProviderClock | undefined;
   readonly #worktrees: WorktreeObservation[];
-  readonly #removed: RemoveWorktreeRequest[] = [];
+  readonly #removed: RecordedRemoveWorktreeRequest[] = [];
   readonly #created: CreateWorktreeRequest[] = [];
   readonly #createPath: ((request: CreateWorktreeRequest) => string) | undefined;
   readonly #health: Partial<ProviderHealth> | undefined;
@@ -363,13 +353,13 @@ export class FakeWorktreeProvider implements WorktreeProvider {
 
   async removeWorktree(request: RemoveWorktreeRequest): Promise<RemoveWorktreeResult> {
     maybeThrow(this.#failures, "removeWorktree");
-    const recorded: RemoveWorktreeRequest = {
+    const recorded: RecordedRemoveWorktreeRequest = {
+      projectId: request.project.id,
       worktreeId: request.worktreeId,
       expectedPath: request.expectedPath,
       expectedBranch: request.expectedBranch,
       expectedRegistrationIdentity: request.expectedRegistrationIdentity,
     };
-    if (request.projectId !== undefined) recorded.projectId = request.projectId;
     if (request.force !== undefined) recorded.force = request.force;
     const index = this.#worktrees.findIndex((worktree) => worktree.id === request.worktreeId);
     const selected = this.#worktrees[index];
@@ -398,24 +388,9 @@ export class FakeWorktreeProvider implements WorktreeProvider {
     };
   }
 
-  async getWorktree(request: GetWorktreeRequest): Promise<WorktreeObservation | null> {
-    maybeThrow(this.#failures, "getWorktree");
-    return (
-      this.#worktrees.find((worktree) => {
-        if (request.worktreeId !== undefined) {
-          return worktree.id === request.worktreeId;
-        }
-        if (request.path !== undefined) {
-          return worktree.path === request.path;
-        }
-        return false;
-      }) ?? null
-    );
-  }
-
   snapshot(): {
     worktrees: WorktreeObservation[];
-    removed: RemoveWorktreeRequest[];
+    removed: RecordedRemoveWorktreeRequest[];
     created: CreateWorktreeRequest[];
   } {
     return {
@@ -642,50 +617,6 @@ export class FakeHarnessProvider implements HarnessProvider {
     return [...this.#runs];
   }
 
-  async classifyRun(
-    run: HarnessRunObservation,
-    _context: HarnessClassificationContext,
-  ): Promise<HarnessStatusObservation> {
-    maybeThrow(this.#failures, "classifyRun");
-    return {
-      provider: this.id,
-      runId: run.id,
-      ...(run.projectId === undefined ? {} : { projectId: run.projectId }),
-      ...(run.worktreeId === undefined ? {} : { worktreeId: run.worktreeId }),
-      ...(run.sessionId === undefined ? {} : { sessionId: run.sessionId }),
-      status: {
-        value: run.state,
-        confidence: run.confidence,
-        reason: run.reason,
-        source: "harness_process",
-        updatedAt: run.observedAt,
-      },
-      observedAt: resolveNow(this.#now),
-    };
-  }
-
-  async ingestEvent(
-    event: RawHarnessEvent,
-    _context: HarnessEventContext,
-  ): Promise<HarnessEventObservation[]> {
-    maybeThrow(this.#failures, "ingestEvent");
-    const observedAt = event.observedAt ?? resolveNow(this.#now);
-    return this.#runs.map((run) => ({
-      provider: this.id,
-      runId: run.id,
-      ...(run.worktreeId === undefined ? {} : { worktreeId: run.worktreeId }),
-      ...(run.sessionId === undefined ? {} : { sessionId: run.sessionId }),
-      status: {
-        value: run.state,
-        confidence: run.confidence,
-        reason: run.reason,
-        source: "harness_event",
-        updatedAt: observedAt,
-      },
-      observedAt,
-    }));
-  }
-
   async stop(request: HarnessStopRequest): Promise<HarnessStopResult> {
     maybeThrow(this.#failures, "stop");
     const recorded: HarnessStopRequest = {
@@ -700,9 +631,13 @@ export class FakeHarnessProvider implements HarnessProvider {
       const exited: HarnessRunObservation = {
         id: run.id,
         provider: run.provider,
-        state: "exited",
-        confidence: "high",
-        reason: "Fake harness run was stopped.",
+        status: {
+          value: "exited",
+          confidence: "high",
+          reason: "Fake harness run was stopped.",
+          source: "harness_process",
+          updatedAt: resolveNow(this.#now),
+        },
         observedAt: resolveNow(this.#now),
       };
       if (run.projectId !== undefined) exited.projectId = run.projectId;

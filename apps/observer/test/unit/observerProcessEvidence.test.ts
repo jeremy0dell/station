@@ -71,6 +71,34 @@ describe("local Observer process evidence", () => {
     ).toThrow("ambiguous");
   });
 
+  it("reads one requested process without validating unrelated global entries", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "stn-process-evidence-"));
+    const executable = join(dir, "stn");
+    const deletedExecutable = join(dir, "deleted", "stn");
+    await writeFile(executable, "");
+    const target = ` 42 Sat Jul  4 17:45:33 2026 ${executable} __observer --socket /tmp/observer.sock --state-dir /tmp/state --startup-timeout-ms 10000 --build-version ${BUILD} --process-token ${TOKEN}`;
+    const unrelated = ` 43 Sat Jul  4 17:45:34 2026 ${deletedExecutable} __observer --socket /tmp/unrelated.sock --state-dir /tmp/unrelated --startup-timeout-ms 10000 --build-version ${BUILD} --process-token ${TOKEN}`;
+    const execFile = vi.fn((_file: string, args: readonly string[]) =>
+      args.includes("-axww") ? `${target}\n${unrelated}\n` : `${target}\n`,
+    );
+    const evidence = createLocalObserverProcessEvidence({
+      execFile,
+      readProcessArgv: () => undefined,
+      processExecutableMatches: () => true,
+    });
+
+    try {
+      expect(evidence.readObserverProcess(42)).toMatchObject({ pid: 42 });
+      expect(execFile).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.arrayContaining(["-p", "42"]),
+      );
+      expect(() => evidence.listObserverProcesses()).toThrow("ENOENT");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("does not let a same-second PID replacement inherit a launch nonce", () => {
     const replacementToken = ["b47ac10b", "58cc", "4372", "a567", "0e02b2c3d479"].join("-");
     const output = [
