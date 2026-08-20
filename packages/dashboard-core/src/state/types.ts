@@ -183,6 +183,15 @@ export type TuiScreen =
     }
   | { name: "projectCollapse" }
   | { name: "projectSettingsPicker" }
+  | {
+      name: "freshStart";
+      sessionId: SessionId;
+      projectId: ProjectId;
+      worktreeId: WorktreeId;
+      branch: string;
+      label: string;
+      actionFocus: "startFresh" | "cancel";
+    }
   | { name: "removeWorktree"; step: "chooseSlot" }
   | { name: "removeWorktree"; step: "unavailable" }
   | {

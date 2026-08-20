@@ -1731,7 +1731,7 @@
           "name": "createSessionResumeAgentHandler",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Requires the selected worktree in the current Observer snapshot, then validates and preflights provider-native recovery, reusing a handle's Station identity or minting one when absent. Automatic native activation recovery is owned separately by external launch. Failed cleanup discards only a newly minted projection."
+          "purpose": "Serializes recovery with close for one worktree, binds to its canonical open Station session when present, then validates and preflights provider-native resume. Explicit imported handles may seed their absent session identity; ended or contradictory local lifecycle is never reopened. Failed cleanup discards only a session seeded by this command."
         },
         {
           "name": "CreateSessionResumeAgentHandlerOptions",
@@ -1852,6 +1852,18 @@
           "resolvedPath": "apps/observer/src/utils/time.ts",
           "edgeKind": "runtime",
           "bindings": ["nowIso"]
+        },
+        {
+          "specifier": "../../worktreeMutationCoordinator.js",
+          "resolvedPath": "apps/observer/src/worktreeMutationCoordinator.ts",
+          "edgeKind": "runtime",
+          "bindings": ["createWorktreeMutationCoordinator"]
+        },
+        {
+          "specifier": "../../worktreeMutationCoordinator.js",
+          "resolvedPath": "apps/observer/src/worktreeMutationCoordinator.ts",
+          "edgeKind": "type-only",
+          "bindings": ["WorktreeMutationCoordinator"]
         },
         {
           "specifier": "@station/contracts",
@@ -5290,7 +5302,7 @@
           "name": "SessionStore",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Admits Observer-owned sessions with selected provider identity and maintains their lifecycle, native execution bindings, canonical worktree-scoped titles, recovery, and readiness. Seed, explicit root Group placement or current source-Group inheritance, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles. Repair inspection reads sessions and recovery handles from one coherent transaction so one result never combines different persistence lifetimes."
+          "purpose": "Admits Observer-owned sessions with selected provider identity and maintains their lifecycle, native execution bindings, canonical worktree-scoped titles, recovery, and readiness. Seed, explicit root Group placement or current source-Group inheritance, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles. Repair inspection reads sessions and recovery handles from one coherent transaction so one result never combines different persistence lifetimes. Provider-native recovery keys permanently bind project and worktree, may fill Station session identity once, and reject contradictory identity before mutable evidence can refresh."
         },
         {
           "name": "SessionTurnReadinessMutation",
@@ -7385,7 +7397,7 @@
           "name": "SessionStore",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Admits Observer-owned sessions with selected provider identity and maintains their lifecycle, native execution bindings, canonical worktree-scoped titles, recovery, and readiness. Seed, explicit root Group placement or current source-Group inheritance, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles. Repair inspection reads sessions and recovery handles from one coherent transaction so one result never combines different persistence lifetimes."
+          "purpose": "Admits Observer-owned sessions with selected provider identity and maintains their lifecycle, native execution bindings, canonical worktree-scoped titles, recovery, and readiness. Seed, explicit root Group placement or current source-Group inheritance, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles. Repair inspection reads sessions and recovery handles from one coherent transaction so one result never combines different persistence lifetimes. Provider-native recovery keys permanently bind project and worktree, may fill Station session identity once, and reject contradictory identity before mutable evidence can refresh."
         },
         {
           "name": "SessionTurnReadinessMutation",
@@ -7688,7 +7700,7 @@
           "name": "SessionStore",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Admits Observer-owned sessions with selected provider identity and maintains their lifecycle, native execution bindings, canonical worktree-scoped titles, recovery, and readiness. Seed, explicit root Group placement or current source-Group inheritance, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles. Repair inspection reads sessions and recovery handles from one coherent transaction so one result never combines different persistence lifetimes."
+          "purpose": "Admits Observer-owned sessions with selected provider identity and maintains their lifecycle, native execution bindings, canonical worktree-scoped titles, recovery, and readiness. Seed, explicit root Group placement or current source-Group inheritance, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles. Repair inspection reads sessions and recovery handles from one coherent transaction so one result never combines different persistence lifetimes. Provider-native recovery keys permanently bind project and worktree, may fill Station session identity once, and reject contradictory identity before mutable evidence can refresh."
         },
         {
           "name": "WorktreeMetadataStore",
@@ -8205,6 +8217,12 @@
     {
       "path": "apps/observer/src/persistence/sessionRecoveryHandles.ts",
       "exports": [
+        {
+          "name": "deleteSessionRecoveryHandles",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
         {
           "name": "getSessionRecoveryHandle",
           "kind": "function",
@@ -9234,6 +9252,12 @@
           "resolvedPath": "apps/observer/src/sessionActivation.ts",
           "edgeKind": "runtime",
           "bindings": ["harnessRunCanActivateSession", "terminalCanActivateSession"]
+        },
+        {
+          "specifier": "../sessionRecoveryEligibility.js",
+          "resolvedPath": "apps/observer/src/sessionRecoveryEligibility.ts",
+          "edgeKind": "runtime",
+          "bindings": ["sessionRecoveryEligibility"]
         },
         {
           "specifier": "@station/contracts",
@@ -10427,7 +10451,7 @@
           "name": "prepareExternalLaunch",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Returns a live or attachable managed identity first, then exactly recovers the canonical open Station session before permitting a fresh identity. Both launch paths preflight only the selected provider and pass provider-neutral resume options to the harness. A fresh identity is atomically seeded with explicit root placement or the requested source session's current Group before target publication, and confirmed failed launch cleanup removes only its membership and owned inline Group without touching source or retained recovery state."
+          "purpose": "Returns a live or attachable managed identity first, then exactly recovers the canonical open Station session unless explicit, identity-bound user consent requests a fresh provider execution. Recovery retains that session's identity and durable state, passes only provider-neutral resume options, and releases only its replacement target generation on failure. Both launch paths preflight only the selected provider. A fresh Station identity is atomically seeded with explicit root placement or the requested source session's current Group before target publication, and confirmed failed launch cleanup removes only its membership and owned inline Group."
         },
         {
           "name": "reportExternalExit",
@@ -11999,7 +12023,7 @@
           "name": "resolveSessionRecovery",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Resolves one provider-native recovery handle through durable session state and provider capability, returning only typed provider-neutral resume authority."
+          "purpose": "Filters durable handles through exact lifecycle and provider-neutral eligibility before applying zero/one/many cardinality, then returns only typed resume authority for the selected provider. Explicit selection retains imported-handle compatibility only when no contradictory local Station lifecycle exists."
         }
       ],
       "imports": [
@@ -12028,16 +12052,70 @@
           "bindings": ["ProviderRegistry"]
         },
         {
+          "specifier": "./sessionRecoveryEligibility.js",
+          "resolvedPath": "apps/observer/src/sessionRecoveryEligibility.ts",
+          "edgeKind": "runtime",
+          "bindings": ["sessionRecoveryEligibility"]
+        },
+        {
+          "specifier": "./sessionRecoveryEligibility.js",
+          "resolvedPath": "apps/observer/src/sessionRecoveryEligibility.ts",
+          "edgeKind": "type-only",
+          "bindings": ["SessionRecoveryEligibility", "SessionRecoveryEligibilityInput"]
+        },
+        {
           "specifier": "@station/contracts",
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "type-only",
           "bindings": [
             "HarnessProvider",
-            "HarnessResumeOptions",
             "SafeError",
             "SessionRecoveryHandle",
             "WorktreeObservation"
           ]
+        }
+      ]
+    },
+    {
+      "path": "apps/observer/src/sessionRecoveryEligibility.ts",
+      "exports": [
+        {
+          "name": "sessionRecoveryEligibility",
+          "kind": "function",
+          "role": "POLICY",
+          "purpose": "Admits one opaque recovery handle only when its provider-neutral identity, open Station lifecycle, registered harness capability, and cwd evidence authorize the exact worktree. A deliberately selected imported handle may proceed without a local lifecycle row, but local legacy, ended, or contradictory identity always wins over that compatibility path."
+        },
+        {
+          "name": "SessionRecoveryEligibility",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "SessionRecoveryEligibilityInput",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "SessionRecoveryEligibilityReason",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "SessionRecoveryStationSession",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "type-only",
+          "bindings": ["HarnessResumeOptions", "SessionRecoveryHandle"]
         },
         {
           "specifier": "@station/runtime",
@@ -12493,7 +12571,7 @@
       "declaration": "createHarnessTrackingAdapter",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Translates harness tracking preparation into an in-process provider installer and sanitized commit evidence.",
+      "purpose": "Translates harness tracking preparation into an in-process provider installer, rejecting unverified repairs before returning sanitized commit evidence.",
       "dependencies": [
         {
           "path": "packages/setup-core/src/ports.ts",
@@ -13645,7 +13723,7 @@
       "declaration": "createSessionResumeAgentHandler",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Requires the selected worktree in the current Observer snapshot, then validates and preflights provider-native recovery, reusing a handle's Station identity or minting one when absent. Automatic native activation recovery is owned separately by external launch. Failed cleanup discards only a newly minted projection.",
+      "purpose": "Serializes recovery with close for one worktree, binds to its canonical open Station session when present, then validates and preflights provider-native resume. Explicit imported handles may seed their absent session identity; ended or contradictory local lifecycle is never reopened. Failed cleanup discards only a session seeded by this command.",
       "dependencies": [
         {
           "path": "apps/observer/src/sessionRecovery.ts",
@@ -14002,7 +14080,7 @@
       "declaration": "SessionStore",
       "kind": "interface",
       "role": "DRIVEN PORT",
-      "purpose": "Admits Observer-owned sessions with selected provider identity and maintains their lifecycle, native execution bindings, canonical worktree-scoped titles, recovery, and readiness. Seed, explicit root Group placement or current source-Group inheritance, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles. Repair inspection reads sessions and recovery handles from one coherent transaction so one result never combines different persistence lifetimes.",
+      "purpose": "Admits Observer-owned sessions with selected provider identity and maintains their lifecycle, native execution bindings, canonical worktree-scoped titles, recovery, and readiness. Seed, explicit root Group placement or current source-Group inheritance, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles. Repair inspection reads sessions and recovery handles from one coherent transaction so one result never combines different persistence lifetimes. Provider-native recovery keys permanently bind project and worktree, may fill Station session identity once, and reject contradictory identity before mutable evidence can refresh.",
       "dependencies": []
     },
     {
@@ -14047,6 +14125,13 @@
         {
           "path": "apps/observer/src/reconcile/snapshotCounts.ts",
           "declaration": "countsForSnapshot",
+          "kind": "function",
+          "role": "POLICY",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/observer/src/sessionRecoveryEligibility.ts",
+          "declaration": "sessionRecoveryEligibility",
           "kind": "function",
           "role": "POLICY",
           "edgeKind": "runtime"
@@ -14307,7 +14392,7 @@
       "declaration": "prepareExternalLaunch",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Returns a live or attachable managed identity first, then exactly recovers the canonical open Station session before permitting a fresh identity. Both launch paths preflight only the selected provider and pass provider-neutral resume options to the harness. A fresh identity is atomically seeded with explicit root placement or the requested source session's current Group before target publication, and confirmed failed launch cleanup removes only its membership and owned inline Group without touching source or retained recovery state.",
+      "purpose": "Returns a live or attachable managed identity first, then exactly recovers the canonical open Station session unless explicit, identity-bound user consent requests a fresh provider execution. Recovery retains that session's identity and durable state, passes only provider-neutral resume options, and releases only its replacement target generation on failure. Both launch paths preflight only the selected provider. A fresh Station identity is atomically seeded with explicit root placement or the requested source session's current Group before target publication, and confirmed failed launch cleanup removes only its membership and owned inline Group.",
       "dependencies": [
         {
           "path": "apps/observer/src/commands/harnessLaunchPreflight.ts",
@@ -14779,7 +14864,7 @@
       "declaration": "resolveSessionRecovery",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Resolves one provider-native recovery handle through durable session state and provider capability, returning only typed provider-neutral resume authority.",
+      "purpose": "Filters durable handles through exact lifecycle and provider-neutral eligibility before applying zero/one/many cardinality, then returns only typed resume authority for the selected provider. Explicit selection retains imported-handle compatibility only when no contradictory local Station lifecycle exists.",
       "dependencies": [
         {
           "path": "apps/observer/src/persistence/ports.ts",
@@ -14789,6 +14874,13 @@
           "edgeKind": "type-only"
         },
         {
+          "path": "apps/observer/src/sessionRecoveryEligibility.ts",
+          "declaration": "sessionRecoveryEligibility",
+          "kind": "function",
+          "role": "POLICY",
+          "edgeKind": "runtime"
+        },
+        {
           "path": "packages/contracts/src/providers.ts",
           "declaration": "HarnessProvider",
           "kind": "interface",
@@ -14796,6 +14888,14 @@
           "edgeKind": "type-only"
         }
       ]
+    },
+    {
+      "path": "apps/observer/src/sessionRecoveryEligibility.ts",
+      "declaration": "sessionRecoveryEligibility",
+      "kind": "function",
+      "role": "POLICY",
+      "purpose": "Admits one opaque recovery handle only when its provider-neutral identity, open Station lifecycle, registered harness capability, and cwd evidence authorize the exact worktree. A deliberately selected imported handle may proceed without a local lifecycle row, but local legacy, ended, or contradictory identity always wins over that compatibility path.",
+      "dependencies": []
     },
     {
       "path": "apps/observer/src/stationLogger.ts",

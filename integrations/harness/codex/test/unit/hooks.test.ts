@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { access, mkdir, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { providerHookScriptRoutesByStationEnv } from "@station/runtime";
@@ -9,6 +9,7 @@ import {
   installCodexHooks,
   planCodexHooks,
   uninstallCodexHooks,
+  verifyCodexHookInstall,
 } from "../../src/hooks";
 import {
   enableCodexHooksFeature,
@@ -114,22 +115,19 @@ describe("Codex hook setup", () => {
     await writeFile(configPath, codexConfigWithObsoleteHook(hookScriptPath), "utf8");
     await writeFile(baseConfigPath, generatedGlobalCodexConfig(hookScriptPath, true), "utf8");
 
-    const installed = await installCodexHooks({
+    const installOptions = {
       hookScriptPath,
       stationConfigPath: "/tmp/station/config.toml",
       observerSocketPath: "/tmp/station/run/observer.sock",
       stateDir: "/tmp/station/state",
       hookSpoolDir: "/tmp/station/state/spool/hooks",
       env,
-    });
-    const second = await installCodexHooks({
-      hookScriptPath,
-      stationConfigPath: "/tmp/station/config.toml",
-      observerSocketPath: "/tmp/station/run/observer.sock",
-      stateDir: "/tmp/station/state",
-      hookSpoolDir: "/tmp/station/state/spool/hooks",
-      env,
-    });
+    };
+    const installed = await installCodexHooks(installOptions);
+    const verified = await verifyCodexHookInstall(installed, installOptions, true);
+    const backupEntries = (await readdir(codexHome)).filter((entry) => entry.includes(".bak."));
+    const second = await installCodexHooks(installOptions);
+    const secondVerified = await verifyCodexHookInstall(second, installOptions, true);
     const config = await readFile(configPath, "utf8");
     const baseConfig = await readFile(baseConfigPath, "utf8");
     const script = await readFile(hookScriptPath, "utf8");
@@ -140,7 +138,23 @@ describe("Codex hook setup", () => {
     expect(installed.baseBackupPath).toBeDefined();
     expect(installed.backupPaths).toHaveLength(2);
     expect(installed.generatedGlobalCleanup.stale).toEqual(["PreToolUse", "SubagentStop"]);
+    expect(verified).toMatchObject({
+      status: "ok",
+      verified: true,
+      doctor: {
+        status: "ok",
+        installed: true,
+        profileConfigPath: configPath,
+        baseConfigPath,
+        hookScriptPath,
+      },
+    });
     expect(second.changed).toBe(false);
+    expect(second.backupPaths).toBeUndefined();
+    expect(secondVerified).toMatchObject({ status: "ok", verified: true, changed: false });
+    expect((await readdir(codexHome)).filter((entry) => entry.includes(".bak."))).toEqual(
+      backupEntries,
+    );
     expect(config).toContain("echo existing");
     expect(config).toContain("echo user subagent stop");
     expect(config).toContain(hookScriptPath);
@@ -166,22 +180,111 @@ describe("Codex hook setup", () => {
     expect(script).not.toContain("payload_file=");
     expect(script).toContain("codex > /dev/null");
     expect(scriptMode).toBe(0o700);
-    await expect(
-      doctorCodexHooks({
-        hookScriptPath,
-        stationConfigPath: "/tmp/station/config.toml",
-        observerSocketPath: "/tmp/station/run/observer.sock",
-        stateDir: "/tmp/station/state",
-        hookSpoolDir: "/tmp/station/state/spool/hooks",
-        enabled: true,
-        env,
-      }),
-    ).resolves.toMatchObject({
-      status: "ok",
+  });
+
+  it("retains completed writes and backups when post-install doctor finds script drift", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-codex-hooks-"));
+    const codexHome = join(root, "codex-home");
+    const configPath = join(codexHome, "station.config.toml");
+    const baseConfigPath = join(codexHome, "config.toml");
+    const hookScriptPath = join(root, "state", "hooks", "station-codex-hook.sh");
+    const env = { CODEX_HOME: codexHome };
+    const installOptions = {
+      hookScriptPath,
+      hookBin: "/opt/custom-stn-ingress",
+      stationConfigPath: "/tmp/station/config.toml",
+      observerSocketPath: "/tmp/station/run/observer.sock",
+      stateDir: "/tmp/station/state",
+      hookSpoolDir: "/tmp/station/state/spool/hooks",
+      env,
+    };
+    await mkdir(codexHome, { recursive: true });
+    const profileBefore = codexConfigWithObsoleteHook(hookScriptPath);
+    const baseBefore = generatedGlobalCodexConfig(hookScriptPath, true);
+    await writeFile(configPath, profileBefore, "utf8");
+    await writeFile(baseConfigPath, baseBefore, "utf8");
+
+    const installed = await installCodexHooks(installOptions);
+    await writeFile(hookScriptPath, "post-write drift\n", "utf8");
+    const verification = await verifyCodexHookInstall(installed, installOptions, true);
+
+    expect(verification).toMatchObject({
+      status: "warn",
+      verified: false,
       installed: true,
-      profileConfigPath: configPath,
-      baseConfigPath,
+      changed: true,
+      profileBackupPath: installed.profileBackupPath,
+      baseBackupPath: installed.baseBackupPath,
+      doctor: {
+        status: "warn",
+        installed: false,
+        profileConfigPath: configPath,
+        baseConfigPath,
+        hookScriptPath,
+        message: expect.stringContaining("script is missing or stale"),
+      },
+      message: expect.stringContaining("provider verification requires manual follow-up"),
     });
+    if (!("doctor" in verification)) {
+      throw new Error("Expected post-write drift to return the complete Codex doctor result.");
+    }
+    expect(verification.message).toContain(verification.doctor.message);
+    expect(verification.message).toContain(
+      "stn --config /tmp/station/config.toml hooks doctor codex",
+    );
+    expect(verification.message).toContain(
+      "stn --config /tmp/station/config.toml hooks install codex --yes",
+    );
+    expect(verification.message).toContain("repair the same resolved artifacts");
+    expect(verification.message).toContain(`--codex-config ${configPath}`);
+    expect(verification.message).toContain(`--hook-script ${hookScriptPath}`);
+    expect(verification.message).toContain("--hook-bin /opt/custom-stn-ingress");
+    await expect(readFile(hookScriptPath, "utf8")).resolves.toBe("post-write drift\n");
+    await expect(readFile(configPath, "utf8")).resolves.toContain(hookScriptPath);
+    await expect(readFile(baseConfigPath, "utf8")).resolves.not.toContain("Notify station");
+    if (installed.profileBackupPath === undefined || installed.baseBackupPath === undefined) {
+      throw new Error("Expected changed Codex configs to retain both backups.");
+    }
+    await expect(readFile(installed.profileBackupPath, "utf8")).resolves.toBe(profileBefore);
+    await expect(readFile(installed.baseBackupPath, "utf8")).resolves.toBe(baseBefore);
+  });
+
+  it("normalizes a post-install doctor exception without rolling back completed writes", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-codex-hooks-"));
+    const codexHome = join(root, "codex-home");
+    const configPath = join(codexHome, "station.config.toml");
+    const hookScriptPath = join(root, "state", "hooks", "station-codex-hook.sh");
+    const installOptions = {
+      hookScriptPath,
+      stationConfigPath: "/tmp/station/config.toml",
+      env: { CODEX_HOME: codexHome },
+    };
+    const installed = await installCodexHooks(installOptions);
+    await writeFile(configPath, "not = [valid", "utf8");
+
+    const verification = await verifyCodexHookInstall(installed, installOptions, true);
+
+    expect(verification).toMatchObject({
+      status: "warn",
+      verified: false,
+      installed: true,
+      error: {
+        tag: "CodexHookSetupError",
+        code: "CODEX_HOOK_INVALID_TOML",
+        provider: "codex",
+      },
+      message: expect.stringContaining("provider verification requires manual follow-up"),
+    });
+    expect("doctor" in verification).toBe(false);
+    expect(verification.message).toContain(
+      `--codex-config ${configPath} --hook-script ${hookScriptPath}`,
+    );
+    expect(verification.message).toContain(
+      "stn --config /tmp/station/config.toml hooks install codex --yes",
+    );
+    expect(verification.message).toContain("Correct invalid configuration or ownership first");
+    await expect(readFile(configPath, "utf8")).resolves.toBe("not = [valid");
+    await expect(readFile(hookScriptPath, "utf8")).resolves.toContain("codex > /dev/null");
   });
 
   it("generated script delivers to stn-ingress even without ownership env", async () => {

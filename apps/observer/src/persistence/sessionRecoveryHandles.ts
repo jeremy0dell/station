@@ -31,10 +31,23 @@ export function upsertSessionRecoveryHandle(
     id: recoveryHandleId(input),
   });
   const targetValue = recoveryTargetValue(handle);
+  const existingRow = database
+    .prepare(
+      `
+        SELECT * FROM session_recovery_handles
+        WHERE provider = ? AND target_kind = ? AND target_value = ?
+      `,
+    )
+    .get(handle.provider, handle.target.kind, targetValue) as
+    | SqliteSessionRecoveryHandleRow
+    | undefined;
+  if (existingRow !== undefined) {
+    assertRecoveryIdentityAgrees(handleFromRow(existingRow), handle);
+  }
 
   // Providers may omit different correlation fields on repeated reports. Keep
-  // previously observed metadata unless a newer report supplies a replacement,
-  // while always refreshing the handle's owning worktree and liveness.
+  // previously observed mutable evidence unless a report supplies a replacement.
+  // Identity agreement is checked before any of these fields can refresh.
   database
     .prepare(
       `
@@ -43,8 +56,6 @@ export function upsertSessionRecoveryHandle(
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(provider, target_kind, target_value) DO UPDATE SET
           id = excluded.id,
-          project_id = excluded.project_id,
-          worktree_id = excluded.worktree_id,
           session_id = COALESCE(excluded.session_id, session_recovery_handles.session_id),
           cwd = COALESCE(excluded.cwd, session_recovery_handles.cwd),
           terminal_target_id = COALESCE(excluded.terminal_target_id, session_recovery_handles.terminal_target_id),
@@ -79,6 +90,15 @@ export function upsertSessionRecoveryHandle(
     throw new Error(`Failed to upsert session recovery handle ${handle.id}.`);
   }
   return handleFromRow(row);
+}
+
+export function deleteSessionRecoveryHandles(
+  database: SqlDatabase,
+  input: { provider: string; sessionId: string },
+): number {
+  return database
+    .prepare("DELETE FROM session_recovery_handles WHERE provider = ? AND session_id = ?")
+    .run(input.provider, input.sessionId).changes;
 }
 
 export function getSessionRecoveryHandle(
@@ -150,5 +170,20 @@ function recoveryTargetValue(handle: SessionRecoveryHandle): string {
       return handle.target.id;
     case "session-file":
       return handle.target.path;
+  }
+}
+
+function assertRecoveryIdentityAgrees(
+  existing: SessionRecoveryHandle,
+  incoming: SessionRecoveryHandle,
+): void {
+  if (
+    existing.projectId !== incoming.projectId ||
+    existing.worktreeId !== incoming.worktreeId ||
+    (existing.sessionId !== undefined &&
+      incoming.sessionId !== undefined &&
+      existing.sessionId !== incoming.sessionId)
+  ) {
+    throw new Error(`Session recovery handle ${existing.id} has conflicting Station identity.`);
   }
 }

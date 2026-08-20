@@ -45,6 +45,10 @@ describe("CLI Codex hook commands", () => {
         profileConfigPath: codexConfigPath,
         baseConfigPath,
         hookScriptPath,
+        generatedGlobalCleanup: {
+          configPath: baseConfigPath,
+          changed: false,
+        },
       },
     });
     await expect(readFile(codexConfigPath, "utf8")).rejects.toThrow();
@@ -139,7 +143,17 @@ describe("CLI Codex hook commands", () => {
     const customOwner = { ...defaultOwner, launcher: customHookBin };
     expect(takeover).toMatchObject({
       code: 0,
-      output: { ownership: { status: "same-owner", requested: customOwner } },
+      output: {
+        status: "ok",
+        verified: true,
+        ownership: { status: "same-owner", requested: customOwner },
+        doctor: {
+          status: "ok",
+          installed: true,
+          hookScriptPath,
+          ownership: { status: "same-owner", requested: customOwner },
+        },
+      },
     });
     await expect(readFile(hookScriptPath, "utf8")).resolves.toContain(
       providerHookOwnerMarker(customOwner),
@@ -277,7 +291,16 @@ describe("CLI Codex hook commands", () => {
     );
     expect(takeover).toMatchObject({
       code: 0,
-      output: { ownership: { status: "same-owner", requested: sourceOwner } },
+      output: {
+        status: "ok",
+        verified: true,
+        ownership: { status: "same-owner", requested: sourceOwner },
+        doctor: {
+          status: "ok",
+          installed: true,
+          ownership: { status: "same-owner", requested: sourceOwner },
+        },
+      },
     });
     const sourceScript = await readFile(hookScriptPath, "utf8");
     expect(sourceScript).toContain(sourceOwner.launcher);
@@ -339,12 +362,30 @@ describe("CLI Codex hook commands", () => {
       code: 0,
       output: {
         provider: "codex",
+        status: "ok",
         installed: true,
+        verified: true,
         profileConfigPath: codexConfigPath,
         baseConfigPath,
+        hookScriptPath,
+        profileBackupPath: expect.any(String),
+        baseBackupPath: expect.any(String),
+        backupPaths: expect.arrayContaining([expect.any(String), expect.any(String)]),
         generatedGlobalCleanup: {
           changed: true,
           stale: ["PreToolUse", "SubagentStop"],
+        },
+        doctor: {
+          provider: "codex",
+          status: "ok",
+          installed: true,
+          profileConfigPath: codexConfigPath,
+          baseConfigPath,
+          hookScriptPath,
+          generatedGlobalCleanup: {
+            configPath: baseConfigPath,
+            changed: false,
+          },
         },
       },
     });
@@ -369,8 +410,13 @@ describe("CLI Codex hook commands", () => {
       code: 0,
       output: {
         changed: false,
+        status: "ok",
+        verified: true,
+        doctor: { status: "ok", installed: true },
       },
     });
+    expect(secondInstall.output).not.toHaveProperty("backupPath");
+    expect(secondInstall.output).not.toHaveProperty("backupPaths");
     const script = await readFile(hookScriptPath, "utf8");
     expect(providerHookScriptRoutesByStationEnv(script, "codex")).toBe(true);
     expect(script).toContain(`SOCKET_ARG=(--socket ${join(root, "run", "observer.sock")})`);
@@ -608,9 +654,65 @@ describe("CLI Codex hook commands", () => {
       "--hook-bin",
       "/opt/custom-stn-ingress",
     ];
-    await runCli(["--config", configPath, "hooks", "install", "codex", "--yes", ...hookPathArgs], {
-      env,
+    const writeCompleted = await runCli(
+      ["--config", configPath, "hooks", "install", "codex", "--yes", ...hookPathArgs],
+      { env },
+    );
+    expect(writeCompleted).toMatchObject({
+      code: 1,
+      output: {
+        provider: "codex",
+        status: "warn",
+        installed: true,
+        verified: false,
+        profileConfigPath: codexConfigPath,
+        baseConfigPath,
+        hookScriptPath,
+        doctor: {
+          provider: "codex",
+          status: "ok",
+          installed: false,
+          profileConfigPath: codexConfigPath,
+          baseConfigPath,
+          hookScriptPath,
+          message: expect.stringContaining("not requested in station config"),
+        },
+        message: expect.stringContaining("provider verification requires manual follow-up"),
+      },
     });
+    expect(writeCompleted.output).toEqual(
+      expect.objectContaining({
+        message: expect.stringContaining("`install_hooks = true` under `[harness.codex]`"),
+      }),
+    );
+    const expectedFollowUpCommands = [
+      ["install", "--yes"],
+      ["uninstall", "--yes"],
+      ["doctor"],
+    ] as const;
+    for (const [action, ...confirmation] of expectedFollowUpCommands) {
+      expect(writeCompleted.output).toEqual(
+        expect.objectContaining({
+          message: expect.stringContaining(
+            commandLine([
+              "stn",
+              "--config",
+              configPath,
+              "hooks",
+              action,
+              "codex",
+              ...confirmation,
+              "--codex-config",
+              codexConfigPath,
+              "--hook-script",
+              hookScriptPath,
+              "--hook-bin",
+              "/opt/custom-stn-ingress",
+            ]),
+          ),
+        }),
+      );
+    }
     const installedProfile = await readFile(codexConfigPath, "utf8");
     await writeFile(
       codexConfigPath,

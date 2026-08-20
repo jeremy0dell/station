@@ -350,6 +350,26 @@ export function createSqliteObserverPersistence(
     listSessionHarnessExecutions: () =>
       readTransaction(sessionHarnessExecutionStore.listSessionHarnessExecutions),
 
+    resetSessionForFreshStart: (input) =>
+      transaction((database) => {
+        const execution = sessionHarnessExecutionStore.getSessionHarnessExecution(database, input);
+        const readiness = sessionTurnReadinessStore.readSessionTurnReadiness(
+          database,
+          input.sessionId,
+        );
+        const deletedHandles = sessionRecoveryHandleStore.deleteSessionRecoveryHandles(
+          database,
+          input,
+        );
+        sessionHarnessExecutionStore.replaceSessionHarnessExecution(database, input);
+        sessionTurnReadinessStore.deleteSessionTurnReadiness(database, {
+          sessionId: input.sessionId,
+        });
+        return {
+          changed: execution !== undefined || readiness !== undefined || deletedHandles > 0,
+        };
+      }),
+
     repairSessionHarnessDerivedState: (input) =>
       transaction((database) => {
         const currentExecution = sessionHarnessExecutionStore.getSessionHarnessExecution(

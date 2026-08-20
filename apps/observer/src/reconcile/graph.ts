@@ -26,6 +26,7 @@ import {
 } from "@station/contracts";
 import { pathIsSameOrInside } from "@station/runtime";
 import { harnessRunCanActivateSession, terminalCanActivateSession } from "../sessionActivation.js";
+import { sessionRecoveryEligibility } from "../sessionRecoveryEligibility.js";
 import { countsForSnapshot } from "./snapshotCounts.js";
 
 export type ObserverGraphInput = {
@@ -153,10 +154,15 @@ export function buildStationSnapshot(input: ObserverGraphInput): StationSnapshot
           rowInput.terminalCapabilities = terminalCapabilities;
         const row = buildWorktreeRow(rowInput);
         attachTurnReadiness(row, turnReadinessBySessionId);
+        const retainedSession = retainedSessionByWorktree.get(
+          sessionWorktreeKey(project.id, worktree.id),
+        );
         const recovery = recoveryActionForRow({
           row,
           recoveryHandles: input.recoveryHandles ?? [],
           harnessCapabilities: input.harnessCapabilities ?? {},
+          sessionMetadata: input.sessionMetadata ?? [],
+          retainedSession,
           featureFlags: input.featureFlags,
         });
         if (recovery !== undefined) {
@@ -175,9 +181,6 @@ export function buildStationSnapshot(input: ObserverGraphInput): StationSnapshot
         if (terminalCapabilities !== undefined) {
           sessionInput.terminalCapabilities = terminalCapabilities;
         }
-        const retainedSession = retainedSessionByWorktree.get(
-          sessionWorktreeKey(project.id, worktree.id),
-        );
         if (retainedSession !== undefined) {
           sessionInput.retainedSession = retainedSession;
         }
@@ -353,6 +356,8 @@ function recoveryActionForRow(input: {
   row: WorktreeRow;
   recoveryHandles: readonly SessionRecoveryHandle[];
   harnessCapabilities: Record<string, HarnessCapabilities>;
+  sessionMetadata: readonly ObserverSessionMetadata[];
+  retainedSession?: ObserverSessionMetadata | undefined;
   featureFlags?: ClientFeatureFlags | undefined;
 }): WorktreeRecoveryAction | undefined {
   // Snapshots expose a safe action hint only. The observer resolves the handle
@@ -361,17 +366,35 @@ function recoveryActionForRow(input: {
     return undefined;
   }
 
-  const matching = input.recoveryHandles.filter(
-    (handle) =>
-      handle.projectId === input.row.projectId &&
-      handle.worktreeId === input.row.id &&
-      input.harnessCapabilities[handle.provider]?.canResume === true,
-  );
-  if (matching.length !== 1) {
+  const eligible = input.recoveryHandles.flatMap((handle) => {
+    const capabilities = input.harnessCapabilities[handle.provider];
+    const eligibilityInput: Parameters<typeof sessionRecoveryEligibility>[0] = {
+      handle,
+      projectId: input.row.projectId,
+      worktreeId: input.row.id,
+      worktreePath: input.row.path,
+      stationSessions: input.sessionMetadata,
+      allowNoLocalSession: true,
+    };
+    if (input.retainedSession?.harness !== undefined) {
+      eligibilityInput.expectedSession = {
+        id: input.retainedSession.id,
+        harness: input.retainedSession.harness,
+      };
+    }
+    if (capabilities !== undefined) {
+      eligibilityInput.registeredHarness = {
+        id: handle.provider,
+        canResume: capabilities.canResume,
+      };
+    }
+    return sessionRecoveryEligibility(eligibilityInput).kind === "eligible" ? [handle] : [];
+  });
+  if (eligible.length !== 1) {
     return undefined;
   }
 
-  const handle = matching[0];
+  const handle = eligible[0];
   if (handle === undefined) {
     return undefined;
   }

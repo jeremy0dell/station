@@ -1,7 +1,7 @@
 import type { ClaudeHookInstallResult } from "@station/claude";
-import type { CodexHookInstallResult } from "@station/codex";
+import type { CodexHookInstallResult, CodexHookRepairResult } from "@station/codex";
 import { type LoadedStationConfig, loadConfig } from "@station/config";
-import type { CliSetupHarnessId, ProviderHookArtifactOwner } from "@station/contracts";
+import type { CliSetupHarnessId, ProviderHookArtifactOwner, SafeError } from "@station/contracts";
 import type { CursorHookInstallResult } from "@station/cursor";
 import type { OpenCodePluginInstallResult } from "@station/opencode";
 import { publicSafeErrorFromUnknown } from "@station/runtime";
@@ -23,7 +23,7 @@ export type SetupHarnessTrackingRunners = {
   readonly codex: (
     args: ["install", ...string[]],
     options?: ProviderHooksCommandOptions,
-  ) => Promise<CodexHookInstallResult>;
+  ) => Promise<CodexHookRepairResult>;
   readonly cursor: (
     args: ["install", ...string[]],
     options?: ProviderHooksCommandOptions,
@@ -50,7 +50,8 @@ export type SetupHarnessTrackingAdapterOptions = {
 /**
  * ADAPTER
  *
- * Translates harness tracking preparation into an in-process provider installer and sanitized commit evidence.
+ * Translates harness tracking preparation into an in-process provider installer, rejecting
+ * unverified repairs before returning sanitized commit evidence.
  */
 export function createHarnessTrackingAdapter(
   options: SetupHarnessTrackingAdapterOptions,
@@ -79,12 +80,17 @@ export function createHarnessTrackingAdapter(
             await runners.claude(["install", "--yes"], commandOptions),
             claudeBackupPaths,
           );
-        case "codex":
-          return installResultOutcome(
-            operation,
-            await runners.codex(["install", "--yes"], commandOptions),
-            codexBackupPaths,
-          );
+        case "codex": {
+          const result = await runners.codex(["install", "--yes"], commandOptions);
+          if (!result.verified) {
+            return {
+              status: "failed",
+              operationId: operation.id,
+              error: codexVerificationFailure(result),
+            };
+          }
+          return installResultOutcome(operation, result, codexBackupPaths);
+        }
         case "cursor":
           return installResultOutcome(
             operation,
@@ -173,6 +179,15 @@ function codexBackupPaths(result: CodexHookInstallResult): readonly string[] {
   return result.backupPaths ?? singleBackupPath(result.backupPath);
 }
 
+function codexVerificationFailure(
+  result: Extract<CodexHookRepairResult, { verified: false }>,
+): SafeError {
+  return {
+    ...providerTrackingError("codex"),
+    hint: result.message,
+  };
+}
+
 function cursorBackupPaths(result: CursorHookInstallResult): readonly string[] {
   return result.backupPaths ?? singleBackupPath(result.backupPath);
 }
@@ -185,7 +200,7 @@ function singleBackupPath(path: string | undefined): readonly string[] {
   return path === undefined ? [] : [path];
 }
 
-function providerTrackingError(provider: CliSetupHarnessId) {
+function providerTrackingError(provider: CliSetupHarnessId): SafeError {
   return {
     tag: "SetupProviderTrackingError",
     code: "SETUP_PROVIDER_TRACKING_FAILED",

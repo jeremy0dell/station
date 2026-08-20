@@ -507,6 +507,7 @@ describe("protocol client/server", () => {
           worktreeId: "wt_web_feature",
           title: "Hexagonal PT 12",
           group: { kind: "existing", groupId: "grp_active" },
+          freshStart: { expectedSessionId: "ses_interrupted" },
         }),
       ).resolves.toEqual({
         kind: "prepared",
@@ -531,6 +532,7 @@ describe("protocol client/server", () => {
           worktreeId: "wt_web_feature",
           title: "Hexagonal PT 12",
           group: { kind: "existing", groupId: "grp_active" },
+          freshStart: { expectedSessionId: "ses_interrupted" },
         },
       ]);
       await client.prepareExternalLaunch({

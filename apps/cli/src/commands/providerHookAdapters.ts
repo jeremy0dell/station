@@ -13,10 +13,12 @@ import {
   type CodexHookInstallResult,
   type CodexHookPlan,
   type CodexHookPlanOptions,
+  type CodexHookRepairResult,
   doctorCodexHooks,
   installCodexHooks,
   planCodexHooks,
   uninstallCodexHooks,
+  verifyCodexHookInstall,
 } from "@station/codex";
 import type { StationConfig } from "@station/config";
 import {
@@ -67,6 +69,7 @@ export type ClaudeHooksCommandResult =
 export type CodexHooksCommandResult =
   | CodexHookPlan
   | CodexHookInstallResult
+  | CodexHookRepairResult
   | CodexHookDoctorResult;
 
 export type CursorHooksCommandResult =
@@ -151,7 +154,7 @@ export function runClaudeHooksCommand(
 export function runCodexHooksCommand(
   args: ["install", ...string[]],
   options?: ProviderHooksCommandOptions,
-): Promise<CodexHookInstallResult>;
+): Promise<CodexHookRepairResult>;
 export function runCodexHooksCommand(
   args: string[],
   options?: ProviderHooksCommandOptions,
@@ -160,11 +163,16 @@ export function runCodexHooksCommand(
   args: string[],
   options: ProviderHooksCommandOptions = {},
 ): Promise<CodexHooksCommandResult> {
-  const runner = createProviderHooksRunner<CodexHookPlanOptions>(
+  const runner = createProviderHooksRunner<
+    CodexHookPlanOptions,
+    CodexHookInstallResult,
+    CodexHookRepairResult
+  >(
     {
       provider: "codex",
       plan: planCodexHooks,
       install: installCodexHooks,
+      verifyInstall: verifyCodexHookInstall,
       uninstall: uninstallCodexHooks,
       doctor: doctorCodexHooks,
       buildOptions: (flags, context) => {

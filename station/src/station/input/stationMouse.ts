@@ -10,6 +10,7 @@ import type {
   AddProjectActionId,
   DashboardFilterConditionField,
   ForkSessionActionId,
+  FreshStartActionId,
   GroupMenuActionId,
   GroupSettingsDetailFocus,
   GroupSettingsSection,
@@ -55,6 +56,7 @@ export type StationMouseTarget =
   | { kind: "toast" }
   | { kind: "sheetChoice"; choiceKey: string }
   | { kind: "removeWorktreeAction"; actionId: RemoveWorktreeActionId }
+  | { kind: "freshStartAction"; actionId: FreshStartActionId }
   | { kind: "projectSettingsItem"; itemId: ProjectSettingsItemId }
   | { kind: "projectSettingsConfirmRemove" }
   | { kind: "groupSettingsSection"; section: GroupSettingsSection }
@@ -179,6 +181,12 @@ export function routeStationMouse(
     case "removeWorktreeAction":
       dispatchStationAction(runtime, {
         type: "removeWorktree.activate",
+        actionId: target.actionId,
+      });
+      return { kind: "handled" };
+    case "freshStartAction":
+      dispatchStationAction(runtime, {
+        type: "freshStart.activate",
         actionId: target.actionId,
       });
       return { kind: "handled" };
