@@ -115,22 +115,24 @@ export function createSessionResumeAgentHandler(
       });
       await options.launchPreflight(recovery.harness.id, context.signal);
 
-      const sessionIdIsFresh = recovery.stationSession === undefined;
+      const sessionNeedsSeed = recovery.stationSession === undefined;
       const sessionId =
         recovery.stationSession?.id ?? recovery.handle.sessionId ?? idFactory.sessionId();
       let sessionSeeded = false;
       try {
-        await seedSession({
-          persistence: options.persistence,
-          sessionId,
-          projectId: project.id,
-          worktreeId: worktree.id,
-          initialTitle: row?.title ?? worktree.branch,
-          harness: recovery.harness.id,
-          terminalProvider: terminalProviderId,
-          clock: options.clock,
-        });
-        sessionSeeded = true;
+        if (sessionNeedsSeed) {
+          await seedSession({
+            persistence: options.persistence,
+            sessionId,
+            projectId: project.id,
+            worktreeId: worktree.id,
+            initialTitle: row?.title ?? worktree.branch,
+            harness: recovery.harness.id,
+            terminalProvider: terminalProviderId,
+            clock: options.clock,
+          });
+          sessionSeeded = true;
+        }
         throwIfAborted(context.signal);
 
         // The harness adapter alone translates this provider-native resume target into CLI args.
@@ -153,7 +155,7 @@ export function createSessionResumeAgentHandler(
         });
         throwIfAborted(context.signal);
       } catch (error) {
-        if (sessionIdIsFresh && sessionSeeded) {
+        if (sessionSeeded) {
           await discardSessionSeedBestEffort({
             persistence: options.persistence,
             sessionId,

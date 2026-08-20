@@ -1752,6 +1752,78 @@ describe("session command vertical slice", () => {
     fixture.sqlite.close();
   });
 
+  it("preserves retained session metadata when provider-native resume launch fails", async () => {
+    const existing = createFakeWorktree({
+      id: "wt_web_resume_failure",
+      projectId: "web",
+      branch: "resume-failure",
+      now,
+    });
+    const terminal = new FakeTerminalProvider({ now });
+    const harness = new FakeHarnessProvider({
+      now,
+      failures: {
+        buildLaunch: {
+          tag: "HarnessProviderError",
+          code: "FAKE_HARNESS_BUILD_FAILED",
+          message: "The fake harness provider could not build a resume launch plan.",
+          provider: "fake-harness",
+        },
+      },
+    });
+    const fixture = createFixture({
+      worktree: new FakeWorktreeProvider({ now, worktrees: [existing] }),
+      terminal,
+      harness,
+      featureFlags: { sessionResumeAgent: true },
+    });
+    await fixture.persistence.seedSession({
+      sessionId: "ses_resume_failure",
+      projectId: "web",
+      worktreeId: existing.id,
+      initialTitle: "Retained recovery title",
+      harness: "fake-harness",
+      terminalProvider: "prior-terminal",
+      createdAt: "2026-08-08T10:00:00.000Z",
+      lastSeenAt: "2026-08-08T11:00:00.000Z",
+    });
+    const handle = await fixture.persistence.upsertSessionRecoveryHandle({
+      id: "rec_resume_failure",
+      provider: "fake-harness",
+      projectId: "web",
+      worktreeId: existing.id,
+      sessionId: "ses_resume_failure",
+      target: { kind: "native-session", id: "native_resume_failure" },
+      cwd: existing.path,
+      observedAt: now,
+      lastSeenAt: now,
+    });
+    await fixture.core.reconcile("pre-resume-failure");
+    const sessionsBefore = await fixture.persistence.listSessions();
+
+    const receipt = await fixture.queue.dispatch({
+      type: "session.resumeAgent",
+      payload: {
+        projectId: "web",
+        worktreeId: existing.id,
+        recoveryHandleId: handle.id,
+        terminal: { provider: "fake-terminal" },
+      },
+    });
+    await fixture.queue.drain();
+
+    await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
+      status: "failed",
+      error: { code: "FAKE_HARNESS_BUILD_FAILED", provider: "fake-harness" },
+    });
+    await expect(fixture.persistence.listSessions()).resolves.toEqual(sessionsBefore);
+    expect(terminal.snapshot().closed).toEqual(["term_fake"]);
+    await expect(
+      fixture.persistence.listSessionRecoveryHandles({ worktreeId: existing.id }),
+    ).resolves.toEqual([handle]);
+    fixture.sqlite.close();
+  });
+
   it("fails session.resumeAgent before reopening or terminal mutation", async () => {
     const existing = createFakeWorktree({
       id: "wt_web_resume_gate",
