@@ -31,7 +31,23 @@ describe("provider hook ownership across Station runtimes", () => {
     };
     await mkdir(runtimeDir, { recursive: true });
 
-    await runCli(["--config", configPath, "hooks", "install", "codex", "--yes"], libraryOptions);
+    const installedRepair = await runCli(
+      ["--config", configPath, "hooks", "install", "codex", "--yes"],
+      libraryOptions,
+    );
+    expect(installedRepair).toMatchObject({
+      code: 0,
+      output: {
+        status: "ok",
+        verified: true,
+        ownership: { status: "same-owner", requested: installedOwner },
+        doctor: {
+          status: "ok",
+          installed: true,
+          ownership: { status: "same-owner", requested: installedOwner },
+        },
+      },
+    });
     const installedScript = await readFile(hookScriptPath, "utf8");
     const installedEntries = await readdir(hookDir);
 
@@ -72,6 +88,31 @@ describe("provider hook ownership across Station runtimes", () => {
       processEnv,
     );
     expect(takeover.exitCode, `${takeover.stdout}\n${takeover.stderr}`).toBe(0);
+    const sourceRepair = JSON.parse(takeover.stdout) as {
+      status: string;
+      verified: boolean;
+      ownership: { requested: ProviderHookArtifactOwner };
+      doctor: { installed: boolean; ownership: { requested: ProviderHookArtifactOwner } };
+    };
+    expect(sourceRepair).toMatchObject({
+      status: "ok",
+      verified: true,
+      ownership: {
+        requested: {
+          launcher: join(process.cwd(), "bin", "stn-ingress"),
+          runtimeKind: "source",
+        },
+      },
+      doctor: {
+        installed: true,
+        ownership: {
+          requested: {
+            launcher: join(process.cwd(), "bin", "stn-ingress"),
+            runtimeKind: "source",
+          },
+        },
+      },
+    });
     const sourceScript = await readFile(hookScriptPath, "utf8");
     expect(sourceScript).not.toBe(installedScript);
     expect(sourceScript).toContain(join(process.cwd(), "bin", "stn-ingress"));
@@ -85,13 +126,48 @@ describe("provider hook ownership across Station runtimes", () => {
     ).rejects.toMatchObject({ code: "PROVIDER_HOOK_OWNERSHIP_CONFLICT" });
     await expect(readFile(hookScriptPath, "utf8")).resolves.toBe(sourceScript);
 
-    await runCli(
+    const installedTakeover = await runCli(
       ["--config", configPath, "hooks", "install", "codex", "--yes", "--takeover"],
       libraryOptions,
     );
+    expect(installedTakeover).toMatchObject({
+      code: 0,
+      output: {
+        status: "ok",
+        verified: true,
+        ownership: { status: "same-owner", requested: installedOwner },
+        doctor: {
+          status: "ok",
+          installed: true,
+          ownership: { status: "same-owner", requested: installedOwner },
+        },
+      },
+    });
     await expect(readFile(hookScriptPath, "utf8")).resolves.toContain(
       providerHookOwnerMarker(installedOwner),
     );
+    const entriesAfterTakeover = await readdir(hookDir);
+    const repeatedRepair = await runCli(
+      ["--config", configPath, "hooks", "install", "codex", "--yes"],
+      libraryOptions,
+    );
+    expect(repeatedRepair).toMatchObject({
+      code: 0,
+      output: {
+        status: "ok",
+        verified: true,
+        changed: false,
+        ownership: { status: "same-owner", requested: installedOwner },
+        doctor: {
+          status: "ok",
+          installed: true,
+          ownership: { status: "same-owner", requested: installedOwner },
+        },
+      },
+    });
+    expect(repeatedRepair.output).not.toHaveProperty("backupPath");
+    expect(repeatedRepair.output).not.toHaveProperty("backupPaths");
+    expect(await readdir(hookDir)).toEqual(entriesAfterTakeover);
     await expect(
       runCli(["--config", configPath, "hooks", "doctor", "codex"], libraryOptions),
     ).resolves.toMatchObject({

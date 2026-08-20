@@ -1,6 +1,6 @@
 import { dirname } from "node:path";
 import type { ClaudeHookInstallResult } from "@station/claude";
-import type { CodexHookInstallResult } from "@station/codex";
+import type { CodexHookInstallResult, CodexHookRepairResult } from "@station/codex";
 import { emptyConfig } from "@station/config";
 import type { CliSetupHarnessId } from "@station/contracts";
 import type { CursorHookInstallResult } from "@station/cursor";
@@ -392,6 +392,46 @@ describe("setup operation adapters", () => {
     );
   });
 
+  it("fails Codex tracking when provider doctor does not verify completed writes", async () => {
+    const result = unverifiedCodexRepairResult("doctor-warning");
+    const adapter = harnessTrackingAdapter({ provider: "codex", fail: false, codexResult: result });
+
+    const outcome = await adapter(trackingOperation("codex"));
+
+    expect(outcome).toEqual({
+      status: "failed",
+      operationId: "prepare-harness-tracking:codex",
+      error: {
+        tag: "SetupProviderTrackingError",
+        code: "SETUP_PROVIDER_TRACKING_FAILED",
+        message: "Station tracking could not be prepared for codex.",
+        hint: result.message,
+        provider: "codex",
+      },
+    });
+    expect(result.message).toContain("stn hooks doctor codex");
+  });
+
+  it("fails Codex tracking with actionable follow-up when provider verification errors", async () => {
+    const result = unverifiedCodexRepairResult("verification-error");
+    const adapter = harnessTrackingAdapter({ provider: "codex", fail: false, codexResult: result });
+
+    const outcome = await adapter(trackingOperation("codex"));
+
+    expect(outcome).toMatchObject({
+      status: "failed",
+      operationId: "prepare-harness-tracking:codex",
+      error: {
+        code: "SETUP_PROVIDER_TRACKING_FAILED",
+        hint: result.message,
+        provider: "codex",
+      },
+    });
+    expect(result.message).toContain("Codex hook config could not be verified");
+    expect(result.message).toContain("stn hooks doctor codex");
+    expect(JSON.stringify(outcome)).not.toMatch(/native before sentinel|native after sentinel/);
+  });
+
   it.each(trackedProviders)("normalizes unknown %s failures without raw data", async (provider) => {
     const adapter = harnessTrackingAdapter({ provider, fail: true });
     const outcome = await adapter(trackingOperation(provider));
@@ -472,6 +512,7 @@ function tmuxFacts(input: {
 function harnessTrackingAdapter(input: {
   readonly provider: (typeof trackedProviders)[number];
   readonly fail: boolean;
+  readonly codexResult?: CodexHookRepairResult;
 }) {
   return createHarnessTrackingAdapter({
     configPath: () => "/station/config.toml",
@@ -489,6 +530,7 @@ function harnessTrackingAdapter(input: {
 function providerRunners(input: {
   readonly provider: (typeof trackedProviders)[number];
   readonly fail: boolean;
+  readonly codexResult?: CodexHookRepairResult;
 }): SetupHarnessTrackingRunners {
   const rejected = () => {
     throw new Error(input.fail ? "raw provider sentinel" : "unused provider runner");
@@ -500,7 +542,7 @@ function providerRunners(input: {
     },
     codex: async () => {
       if (input.provider !== "codex" || input.fail) return rejected();
-      return providerInstallResult("codex");
+      return input.codexResult ?? providerInstallResult("codex");
     },
     cursor: async () => {
       if (input.provider !== "cursor" || input.fail) return rejected();
@@ -514,14 +556,14 @@ function providerRunners(input: {
 }
 
 function providerInstallResult(provider: "claude"): ClaudeHookInstallResult;
-function providerInstallResult(provider: "codex"): CodexHookInstallResult;
+function providerInstallResult(provider: "codex"): CodexHookRepairResult;
 function providerInstallResult(provider: "cursor"): CursorHookInstallResult;
 function providerInstallResult(provider: "opencode"): OpenCodePluginInstallResult;
 function providerInstallResult(
   provider: (typeof trackedProviders)[number],
 ):
   | ClaudeHookInstallResult
-  | CodexHookInstallResult
+  | CodexHookRepairResult
   | CursorHookInstallResult
   | OpenCodePluginInstallResult {
   const shared = {
@@ -553,28 +595,7 @@ function providerInstallResult(
     };
   }
   if (provider === "codex") {
-    return {
-      ...shared,
-      provider,
-      configPath: "/provider/codex.toml",
-      profileName: "station",
-      profileConfigPath: "/provider/codex-profile.toml",
-      baseConfigPath: "/provider/codex-base.toml",
-      hookScriptPath: "/provider/codex.sh",
-      commands: {} as CodexHookInstallResult["commands"],
-      missing: [],
-      configChanged: true,
-      generatedGlobalChanged: false,
-      scriptChanged: true,
-      generatedGlobalCleanup: {
-        configPath: "/provider/codex-base.toml",
-        changed: false,
-        stale: [],
-        before: "",
-        after: "",
-      },
-      backupPaths: ["/provider/codex.bak"],
-    };
+    return verifiedCodexRepairResult();
   }
   if (provider === "cursor") {
     return {
@@ -595,6 +616,102 @@ function providerInstallResult(
     configDir: "/provider/opencode",
     pluginPath: "/provider/opencode/plugin.ts",
     backupPath: "/provider/opencode.bak",
+  };
+}
+
+function codexInstallResult(): CodexHookInstallResult {
+  return {
+    provider: "codex",
+    configPath: "/provider/codex.toml",
+    profileName: "station",
+    profileConfigPath: "/provider/codex-profile.toml",
+    baseConfigPath: "/provider/codex-base.toml",
+    hookScriptPath: "/provider/codex.sh",
+    commands: {} as CodexHookInstallResult["commands"],
+    missing: [],
+    changed: true,
+    configChanged: true,
+    generatedGlobalChanged: false,
+    scriptChanged: true,
+    generatedGlobalCleanup: {
+      configPath: "/provider/codex-base.toml",
+      changed: false,
+      stale: [],
+      before: "native before sentinel",
+      after: "native after sentinel",
+    },
+    before: "native before sentinel",
+    after: "native after sentinel",
+    installed: true,
+    backupPaths: ["/provider/codex.bak"],
+  };
+}
+
+function verifiedCodexRepairResult(): Extract<CodexHookRepairResult, { verified: true }> {
+  const install = codexInstallResult();
+  return {
+    ...install,
+    status: "ok",
+    verified: true,
+    doctor: {
+      provider: "codex",
+      configPath: install.configPath,
+      profileName: install.profileName,
+      profileConfigPath: install.profileConfigPath,
+      baseConfigPath: install.baseConfigPath,
+      hookScriptPath: install.hookScriptPath,
+      status: "ok",
+      installed: true,
+      missing: [],
+      commands: install.commands,
+      generatedGlobalCleanup: install.generatedGlobalCleanup,
+      message: "Codex hooks are installed in the station profile.",
+    },
+    message: "Codex hook writes completed and provider doctor verified the installed artifacts.",
+  };
+}
+
+function unverifiedCodexRepairResult(
+  failure: "doctor-warning" | "verification-error",
+): Extract<CodexHookRepairResult, { verified: false }> {
+  const install = codexInstallResult();
+  const message =
+    failure === "doctor-warning"
+      ? "Codex hook writes completed, but provider verification requires manual follow-up. Codex hook script is stale. Run `stn hooks doctor codex`."
+      : "Codex hook writes completed, but provider verification requires manual follow-up. Codex hook config could not be verified. Run `stn hooks doctor codex`.";
+  if (failure === "doctor-warning") {
+    return {
+      ...install,
+      status: "warn",
+      verified: false,
+      doctor: {
+        provider: "codex",
+        configPath: install.configPath,
+        profileName: install.profileName,
+        profileConfigPath: install.profileConfigPath,
+        baseConfigPath: install.baseConfigPath,
+        hookScriptPath: install.hookScriptPath,
+        status: "warn",
+        installed: false,
+        missing: [],
+        commands: install.commands,
+        generatedGlobalCleanup: install.generatedGlobalCleanup,
+        message: "Codex hook script is stale.",
+      },
+      message,
+    };
+  }
+  return {
+    ...install,
+    status: "warn",
+    verified: false,
+    error: {
+      tag: "CodexHookSetupError",
+      code: "CODEX_HOOK_VERIFICATION_FAILED",
+      message: "Codex hook config could not be verified.",
+      provider: "codex",
+    },
+    message,
   };
 }
 

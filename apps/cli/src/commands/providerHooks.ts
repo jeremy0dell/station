@@ -21,10 +21,19 @@ type CommonHookOptions = {
   takeover?: boolean;
 };
 
-type ProviderHooksAdapter<PlanOptions extends CommonHookOptions> = {
+type ProviderHooksAdapter<
+  PlanOptions extends CommonHookOptions,
+  InstallResult = unknown,
+  VerifiedInstallResult = unknown,
+> = {
   provider: ProviderId;
   plan: (options: PlanOptions) => Promise<unknown>;
-  install: (options: PlanOptions) => Promise<unknown>;
+  install: (options: PlanOptions) => Promise<InstallResult>;
+  verifyInstall?: (
+    installResult: InstallResult,
+    options: PlanOptions,
+    enabled: boolean,
+  ) => Promise<VerifiedInstallResult>;
   uninstall: (options: PlanOptions) => Promise<unknown>;
   doctor: (options: PlanOptions & { enabled?: boolean }) => Promise<unknown>;
   buildOptions: (flags: ParsedHookFlags, context: HookCommandContext) => PlanOptions;
@@ -147,8 +156,16 @@ export function assertHookConfirmed(
   }
 }
 
-export function createProviderHooksRunner<PlanOptions extends CommonHookOptions>(
-  adapter: ProviderHooksAdapter<PlanOptions>,
+/**
+ * Runs the shared provider-hook command flow. Adapters that opt into install verification report
+ * success only after their provider doctor checks the exact resolved inputs used by installation.
+ */
+export function createProviderHooksRunner<
+  PlanOptions extends CommonHookOptions,
+  InstallResult = unknown,
+  VerifiedInstallResult = unknown,
+>(
+  adapter: ProviderHooksAdapter<PlanOptions, InstallResult, VerifiedInstallResult>,
   flagSpec: ProviderHookFlagSpec,
 ) {
   return async function runProviderHooksCommand(
@@ -167,7 +184,15 @@ export function createProviderHooksRunner<PlanOptions extends CommonHookOptions>
       }
       if (action === "install") {
         assertHookConfirmed(flags.yes, adapter.provider, "install");
-        return await adapter.install(hookOptions);
+        const installResult = await adapter.install(hookOptions);
+        if (adapter.verifyInstall === undefined) {
+          return installResult;
+        }
+        return await adapter.verifyInstall(
+          installResult,
+          hookOptions,
+          adapter.isEnabled(options.config),
+        );
       }
       if (action === "uninstall") {
         assertHookConfirmed(flags.yes, adapter.provider, "uninstall");
