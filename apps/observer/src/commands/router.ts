@@ -149,6 +149,7 @@ export function registerObserverCommandHandlers(
       clock: options.clock,
       idFactory: options.idFactory,
       logger: options.logger,
+      worktreeMutations,
     }),
     "session.importRecoveryHandle": createSessionImportRecoveryHandleHandler({
       getProjects,

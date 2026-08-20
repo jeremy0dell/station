@@ -9,6 +9,10 @@ import type { ObserverEventBus } from "../../runtime/eventBus.js";
 import { resolveSessionRecovery } from "../../sessionRecovery.js";
 import type { StationLogger } from "../../stationLogger.js";
 import { nowIso } from "../../utils/time.js";
+import {
+  createWorktreeMutationCoordinator,
+  type WorktreeMutationCoordinator,
+} from "../../worktreeMutationCoordinator.js";
 import { assertCommandType } from "../assertCommand.js";
 import { worktreeMissingError } from "../errors.js";
 import type { HarnessLaunchPreflight } from "../harnessLaunchPreflight.js";
@@ -40,14 +44,16 @@ export type CreateSessionResumeAgentHandlerOptions = {
   clock?: RuntimeClock | undefined;
   idFactory?: Partial<SessionCommandIdFactory> | undefined;
   logger?: StationLogger | undefined;
+  worktreeMutations?: WorktreeMutationCoordinator | undefined;
 };
 
 /**
  * USE CASE
  *
- * Requires the selected worktree in the current Observer snapshot, then validates and preflights
- * provider-native recovery, reusing a handle's Station identity or minting one when absent. Automatic
- * native activation recovery is owned separately by external launch. Failed cleanup discards only a newly minted projection.
+ * Serializes recovery with close for one worktree, binds to its canonical open Station session when
+ * present, then validates and preflights provider-native resume. Explicit imported handles may seed
+ * their absent session identity; ended or contradictory local lifecycle is never reopened. Failed
+ * cleanup discards only a session seeded by this command.
  */
 export function createSessionResumeAgentHandler(
   options: CreateSessionResumeAgentHandlerOptions,
@@ -56,6 +62,7 @@ export function createSessionResumeAgentHandler(
     ...defaultSessionCommandIdFactory,
     ...options.idFactory,
   };
+  const worktreeMutations = options.worktreeMutations ?? createWorktreeMutationCoordinator();
 
   return async (context) => {
     assertCommandType(context, "session.resumeAgent");
@@ -72,103 +79,106 @@ export function createSessionResumeAgentHandler(
     }
 
     const payload = context.command.payload;
-    const project = findProjectOrThrow(options.getProjects(), payload.projectId);
-    const terminalProviderId = payload.terminal?.provider ?? project.defaults.terminal;
-    const terminal = resolveTerminalProviderOrThrow(options.providers, terminalProviderId);
-    const snapshot = options.core.getSnapshot();
-    const row = snapshot.rows.find((candidate) => candidate.id === payload.worktreeId);
-    validateSnapshotRow(row, payload.projectId);
-    // Resume is recovery for a lost primary agent, not a second way to launch
-    // another provider process next to a healthy row.
-    assertResumeAllowed(row);
-
-    if (row === undefined) {
-      throw worktreeMissingError({
-        projectId: payload.projectId,
-        worktreeId: payload.worktreeId,
-        message: "The requested worktree is not visible in the current snapshot.",
-      });
-    }
-    const worktree = worktreeObservationFromRow(
-      row,
-      options.providers.worktree.id,
-      nowIso(options.clock),
-    );
-    throwIfAborted(context.signal);
-
-    const recovery = await resolveSessionRecovery({
-      persistence: options.persistence,
-      providers: options.providers,
-      projectId: payload.projectId,
-      worktreeId: payload.worktreeId,
-      worktree,
-      recoveryHandleId: payload.recoveryHandleId,
-    });
-    await options.launchPreflight(recovery.harness.id, context.signal);
-
-    const sessionIdIsFresh = recovery.handle.sessionId === undefined;
-    const sessionId = recovery.handle.sessionId ?? idFactory.sessionId();
-    let sessionSeeded = false;
-    try {
-      await seedSession({
-        persistence: options.persistence,
-        sessionId,
-        projectId: project.id,
-        worktreeId: worktree.id,
-        initialTitle: row?.title ?? worktree.branch,
-        harness: recovery.harness.id,
-        terminalProvider: terminalProviderId,
-        clock: options.clock,
-      });
-      sessionSeeded = true;
+    await worktreeMutations.run(payload.projectId, payload.worktreeId, async () => {
       throwIfAborted(context.signal);
+      const project = findProjectOrThrow(options.getProjects(), payload.projectId);
+      const terminalProviderId = payload.terminal?.provider ?? project.defaults.terminal;
+      const terminal = resolveTerminalProviderOrThrow(options.providers, terminalProviderId);
+      const snapshot = options.core.getSnapshot();
+      const row = snapshot.rows.find((candidate) => candidate.id === payload.worktreeId);
+      validateSnapshotRow(row, payload.projectId);
+      // Resume is recovery for a lost primary agent, not a second way to launch
+      // another provider process next to a healthy row.
+      assertResumeAllowed(row);
 
-      // The harness adapter alone translates this provider-native resume target into CLI args.
-      await ensureAgentWorkspace({
-        terminal,
-        harness: recovery.harness,
-        launchPreflight: options.launchPreflight,
-        project,
-        worktree,
-        sessionId,
-        harnessOptions: { mode: "interactive" },
-        layout: payload.terminal?.layout ?? project.defaults.layout,
-        focus: payload.terminal?.focus,
-        origin: payload.terminal?.origin,
-        initialPrompt: payload.initialPrompt,
-        resume: recovery.resume,
-        context,
-        clock: options.clock,
-        logger: options.logger,
-      });
-      throwIfAborted(context.signal);
-      await options.persistence.reopenSession(sessionId);
-    } catch (error) {
-      if (sessionIdIsFresh && sessionSeeded) {
-        await discardSessionSeedBestEffort({
-          persistence: options.persistence,
-          sessionId,
-          context,
-          logger: options.logger,
+      if (row === undefined) {
+        throw worktreeMissingError({
+          projectId: payload.projectId,
+          worktreeId: payload.worktreeId,
+          message: "The requested worktree is not visible in the current snapshot.",
         });
       }
-      throw error;
-    }
+      const worktree = worktreeObservationFromRow(
+        row,
+        options.providers.worktree.id,
+        nowIso(options.clock),
+      );
+      throwIfAborted(context.signal);
 
-    const nextSnapshot = await reconcileAndPublish({
-      core: options.core,
-      eventBus: options.eventBus,
-      clock: options.clock,
-      reason: "command:session.resumeAgent",
-      trace: context.trace,
-    });
-    await publishSessionCreated({
-      snapshot: nextSnapshot,
-      sessionId,
-      persistence: options.persistence,
-      eventBus: options.eventBus,
-      context,
-      clock: options.clock,
+      const recovery = await resolveSessionRecovery({
+        persistence: options.persistence,
+        providers: options.providers,
+        projectId: payload.projectId,
+        worktreeId: payload.worktreeId,
+        worktree,
+        recoveryHandleId: payload.recoveryHandleId,
+      });
+      await options.launchPreflight(recovery.harness.id, context.signal);
+
+      const sessionIdIsFresh = recovery.stationSession === undefined;
+      const sessionId =
+        recovery.stationSession?.id ?? recovery.handle.sessionId ?? idFactory.sessionId();
+      let sessionSeeded = false;
+      try {
+        await seedSession({
+          persistence: options.persistence,
+          sessionId,
+          projectId: project.id,
+          worktreeId: worktree.id,
+          initialTitle: row?.title ?? worktree.branch,
+          harness: recovery.harness.id,
+          terminalProvider: terminalProviderId,
+          clock: options.clock,
+        });
+        sessionSeeded = true;
+        throwIfAborted(context.signal);
+
+        // The harness adapter alone translates this provider-native resume target into CLI args.
+        await ensureAgentWorkspace({
+          terminal,
+          harness: recovery.harness,
+          launchPreflight: options.launchPreflight,
+          project,
+          worktree,
+          sessionId,
+          harnessOptions: { mode: "interactive" },
+          layout: payload.terminal?.layout ?? project.defaults.layout,
+          focus: payload.terminal?.focus,
+          origin: payload.terminal?.origin,
+          initialPrompt: payload.initialPrompt,
+          resume: recovery.resume,
+          context,
+          clock: options.clock,
+          logger: options.logger,
+        });
+        throwIfAborted(context.signal);
+      } catch (error) {
+        if (sessionIdIsFresh && sessionSeeded) {
+          await discardSessionSeedBestEffort({
+            persistence: options.persistence,
+            sessionId,
+            context,
+            logger: options.logger,
+          });
+        }
+        throw error;
+      }
+
+      const nextSnapshot = await reconcileAndPublish({
+        core: options.core,
+        eventBus: options.eventBus,
+        clock: options.clock,
+        reason: "command:session.resumeAgent",
+        trace: context.trace,
+      });
+      await publishSessionCreated({
+        snapshot: nextSnapshot,
+        sessionId,
+        persistence: options.persistence,
+        eventBus: options.eventBus,
+        context,
+        clock: options.clock,
+      });
     });
   };
 }

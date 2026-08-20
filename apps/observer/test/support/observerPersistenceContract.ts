@@ -1946,6 +1946,14 @@ export function observerPersistenceContract(
           ).resolves.toEqual(imported);
           await expect(persistence.listSessionRecoveryHandles()).resolves.toEqual([imported]);
 
+          await expectPersistenceFailure(
+            persistence.importSessionRecoveryHandle({
+              handle: { ...handle, sessionId: "ses_conflicting_import" },
+              title: "Must roll back identity conflict",
+              importedAt: latest,
+            }),
+          );
+
           const invalidHandle = {
             ...handle,
             target: { kind: "native-session", id: "" },
@@ -2164,14 +2172,13 @@ export function observerPersistenceContract(
         });
       });
 
-      it("keeps stable recovery identity, merges optional correlation, and filters handles", async () => {
+      it("fills recovery session identity once, rejects conflicts atomically, and refreshes evidence", async () => {
         await withPersistence(createFixture, async ({ persistence }) => {
           const firstInput: SessionRecoveryHandle = {
             id: "report_first",
             provider: "codex",
             projectId: "web",
             worktreeId: "wt_recovery",
-            sessionId: "ses_recovery",
             target: { kind: "native-session", id: "native_123" },
             cwd: "/tmp/station/web/recovery",
             terminalTargetId: "term_recovery",
@@ -2185,7 +2192,11 @@ export function observerPersistenceContract(
             provider: "codex",
             projectId: "web",
             worktreeId: "wt_recovery",
+            sessionId: "ses_recovery",
             target: { kind: "native-session", id: "native_123" },
+            cwd: "/tmp/station/web/recovery-refreshed",
+            terminalTargetId: "term_recovery_refreshed",
+            harnessRunId: "run_recovery_refreshed",
             observedAt: earlier,
             lastSeenAt: later,
           });
@@ -2198,9 +2209,9 @@ export function observerPersistenceContract(
             worktreeId: "wt_recovery",
             sessionId: "ses_recovery",
             target: { kind: "native-session", id: "native_123" },
-            cwd: "/tmp/station/web/recovery",
-            terminalTargetId: "term_recovery",
-            harnessRunId: "run_recovery",
+            cwd: "/tmp/station/web/recovery-refreshed",
+            terminalTargetId: "term_recovery_refreshed",
+            harnessRunId: "run_recovery_refreshed",
             observedAt: earlier,
             lastSeenAt: later,
           });
@@ -2208,6 +2219,22 @@ export function observerPersistenceContract(
           await expect(
             persistence.getSessionRecoveryHandle("rec_missing"),
           ).resolves.toBeUndefined();
+
+          for (const conflictingIdentity of [
+            { projectId: "other", worktreeId: "wt_recovery", sessionId: "ses_recovery" },
+            { projectId: "web", worktreeId: "wt_other", sessionId: "ses_recovery" },
+            { projectId: "web", worktreeId: "wt_recovery", sessionId: "ses_other" },
+          ]) {
+            await expectPersistenceFailure(
+              persistence.upsertSessionRecoveryHandle({
+                ...merged,
+                ...conflictingIdentity,
+                cwd: "/tmp/station/must-not-commit",
+                lastSeenAt: latest,
+              }),
+            );
+            await expect(persistence.getSessionRecoveryHandle(first.id)).resolves.toEqual(merged);
+          }
 
           const other = await persistence.upsertSessionRecoveryHandle({
             id: "report_other",

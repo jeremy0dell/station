@@ -1165,8 +1165,15 @@ function upsertSessionRecoveryHandle(
     return handle;
   }
 
-  existing.projectId = handle.projectId;
-  existing.worktreeId = handle.worktreeId;
+  if (
+    existing.projectId !== handle.projectId ||
+    existing.worktreeId !== handle.worktreeId ||
+    (existing.sessionId !== undefined &&
+      handle.sessionId !== undefined &&
+      existing.sessionId !== handle.sessionId)
+  ) {
+    throw new Error(`Session recovery handle ${handle.id} has conflicting Station identity.`);
+  }
   if (handle.sessionId !== undefined) existing.sessionId = handle.sessionId;
   if (handle.cwd !== undefined) existing.cwd = handle.cwd;
   if (handle.terminalTargetId !== undefined) existing.terminalTargetId = handle.terminalTargetId;

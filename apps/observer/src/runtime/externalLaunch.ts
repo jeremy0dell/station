@@ -56,11 +56,11 @@ export type ExternalLaunchOutcome<T> = {
  *
  * Returns a live or attachable managed identity first, then exactly recovers the canonical open
  * Station session unless explicit, identity-bound user consent requests a fresh provider execution.
- * Both launch paths preflight only the selected provider and pass provider-neutral resume options to
- * the harness. A fresh Station identity is atomically seeded with explicit root placement or the
- * requested source session's current Group before target publication, and confirmed failed launch
- * cleanup removes only its membership and owned inline Group without touching source or retained
- * recovery state.
+ * Recovery retains that session's identity and durable state, passes only provider-neutral resume
+ * options, and releases only its replacement target generation on failure. Both launch paths
+ * preflight only the selected provider. A fresh Station identity is atomically seeded with explicit
+ * root placement or the requested source session's current Group before target publication, and
+ * confirmed failed launch cleanup removes only its membership and owned inline Group.
  */
 export async function prepareExternalLaunch(
   deps: ExternalLaunchDeps,
