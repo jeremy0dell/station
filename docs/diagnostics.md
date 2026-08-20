@@ -349,6 +349,32 @@ station --config /path/to/config.toml hooks uninstall opencode --yes
 station --config /path/to/config.toml event-hooks doctor
 ```
 
+For Codex, `hooks install codex --yes` is also the explicit bounded repair for
+Station's profile declarations, generated hook script, and planned cleanup of
+stale Station-generated declarations in the base config. After the writes
+complete, the command immediately runs the Codex-owned doctor with the same
+resolved profile, script, base-path environment, ingress launcher, Station
+config and runtime paths, and artifact owner. A successful result has
+`status: "ok"` and `verified: true`, includes the complete doctor result, and
+exits zero. If doctor still finds missing, stale, or conflicting artifacts—or
+cannot complete—the write evidence remains `installed: true`, but the result
+has `status: "warn"` and `verified: false`, retains the provider remediation or
+normalized error, names a same-path doctor command, and exits nonzero.
+
+Codex repair does not roll back completed writes after a verification warning.
+Existing write-triggered profile and base-config backups remain available for
+recovery. A verified no-op reports `changed: false` and creates no new backup.
+Artifact ownership remains fail-closed: transfer requires the separate explicit
+`--takeover` flag, and verification never transfers ownership. For manual
+follow-up, preview the same paths with `hooks plan codex`, rerun the confirmed
+`hooks install codex --yes` repair after addressing the reported condition, and
+finish with the exact `hooks doctor codex` command returned in the warning.
+
+This verification proves only the current Station-owned Codex artifacts. It
+does not prove provider-hook delivery, Codex `/hooks` trust or approval, Codex
+authentication, or current Observer graph state. It does not start or restart
+Observer and does not restart existing Codex sessions.
+
 Hook `plan` and `doctor` commands are diagnostic/planning surfaces. Hook
 `install` and `uninstall` mutate external tool configuration and require
 explicit `--yes`.
