@@ -106,6 +106,7 @@ describe("CLI manual-smoke commands", () => {
     expect(text).toContain("Commands:");
     expect(text).toContain("debug");
     expect(text).toContain("project");
+    expect(text).toContain("repair");
     expect(text).toContain("setup");
   });
 

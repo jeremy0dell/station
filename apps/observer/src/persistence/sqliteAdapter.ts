@@ -69,6 +69,12 @@ export function createSqliteObserverPersistence(
   return {
     health: () => options.sqlite.health(),
 
+    readRepairInventory: () =>
+      readTransaction((database) => ({
+        sessions: correlationStore.listSessions(database),
+        recoveryHandles: sessionRecoveryHandleStore.listSessionRecoveryHandles(database, {}),
+      })),
+
     recordCommandAccepted: (input) =>
       transaction((database) =>
         commandStore.recordCommandAccepted(database, {

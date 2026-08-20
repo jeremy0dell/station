@@ -129,6 +129,14 @@ export function createInMemoryObserverPersistence(
     );
 
   return {
+    readRepairInventory: () =>
+      transaction((draft) => ({
+        sessions: [...draft.sessions.values()].sort((left, right) => compareAsc(left.id, right.id)),
+        recoveryHandles: [...draft.recoveryHandles.values()].sort((left, right) =>
+          compareAsc(left.id, right.id),
+        ),
+      })),
+
     recordCommandAccepted: (input) =>
       transaction((draft) => {
         const command = StationCommandSchema.parse(input.command);

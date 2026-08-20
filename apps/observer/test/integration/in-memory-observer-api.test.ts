@@ -84,6 +84,11 @@ describe("Observer API composition with in-memory persistence", () => {
       canonicalTitleImport: true,
       harnesses: [{ provider: "fake-harness", canResume: true }],
     });
+    await expect(api.inspectRepairInventory()).resolves.toEqual({
+      schemaVersion: 1,
+      sessions: [],
+      recoveryHandles: [],
+    });
 
     const initialEvents = api.subscribe({ type: "observer.reconciled" })[Symbol.asyncIterator]();
     const initialEvent = initialEvents.next();

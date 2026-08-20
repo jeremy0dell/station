@@ -159,6 +159,9 @@ async function routeSingleResponseRequest(
       case "session.recoveryReadiness": {
         return await api.getSessionRecoveryReadiness();
       }
+      case "repair.inventory": {
+        return await api.inspectRepairInventory();
+      }
       case "command.dispatch": {
         const params = CommandDispatchParamsSchema.parse(request.params);
         return await api.dispatch(params.command);

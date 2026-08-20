@@ -11,6 +11,7 @@ import type {
   HarnessEventReportReceipt,
   ObserverApi,
   ObserverHealth,
+  ObserverRepairInventory,
   ObserverStopReceipt,
   ProviderHealth,
   ProviderHookEvent,
@@ -52,6 +53,7 @@ import {
   createFilesystemProviderIngressSpoolStore,
   providerIngressSpoolDepth,
 } from "../hooks/spool.js";
+import { inspectObserverRepairInventory } from "../maintenance/repairInventory.js";
 import { createLocalGitWorktreeMetadataInvalidationSource } from "../metadata/gitRefInvalidation.js";
 import { createLocalGitWorktreeChangeSource } from "../metadata/localGitChangeSummary.js";
 import type { ResolveLocalGitMetadataWorktree } from "../metadata/localGitWorktree.js";
@@ -124,7 +126,7 @@ export type CreateObserverApiOptions = {
  *
  * Wires Observer use cases with supplied durable, local-metadata, and diagnostic-
  * evidence roles, ingress workers, provider-health publication, scheduling, exact
- * build publication, recovery-readiness queries, read-only singleton diagnostics,
+ * build publication, recovery-readiness and repair-inventory queries, read-only singleton diagnostics,
  * and adapter shutdown behind the application API.
  */
 export function createObserverApi(options: CreateObserverApiOptions): ObserverApi {
@@ -277,6 +279,11 @@ export function createObserverApi(options: CreateObserverApiOptions): ObserverAp
       ),
     getSnapshot: async () => options.core.getSnapshot(),
     getSessionRecoveryReadiness: async () => sessionRecoveryReadiness(options),
+    inspectRepairInventory: (): Promise<ObserverRepairInventory> =>
+      inspectObserverRepairInventory({
+        persistence: options.persistence,
+        ...(options.providers === undefined ? {} : { providers: options.providers }),
+      }),
     subscribe: (filter?: EventFilter): AsyncIterable<StationEvent> =>
       options.eventBus.subscribe(filter),
     dispatch: (command: StationCommand) => options.commandQueue.dispatch(command),

@@ -3,6 +3,7 @@ import type { HostCommandDeps } from "./commands/host/index.js";
 import type { NotifyCommandDeps } from "./commands/notify.js";
 import type { ObserveCommandDeps } from "./commands/observe/index.js";
 import type { PopupCommandDeps } from "./commands/popup.js";
+import type { RepairCommandDeps } from "./commands/repair/index.js";
 import type { SetupCommandDeps } from "./commands/setup/types.js";
 import type { TuiCommandDeps } from "./commands/tui.js";
 import type { UpdateCommandDeps } from "./commands/update.js";
@@ -21,6 +22,7 @@ export type CliRunOptions = {
   observerDeps?: ObserverProcessDeps;
   hostDeps?: HostCommandDeps;
   popupDeps?: PopupCommandDeps;
+  repairDeps?: RepairCommandDeps;
   tuiDeps?: TuiCommandDeps;
   notifyDeps?: NotifyCommandDeps;
   observeDeps?: ObserveCommandDeps;

@@ -1863,6 +1863,37 @@ export function observerPersistenceContract(
         });
       });
 
+      it("reads sessions and recovery handles through one coherent repair inventory", async () => {
+        await withPersistence(createFixture, async ({ persistence }) => {
+          await persistence.seedSession({
+            sessionId: "ses_repair_inventory",
+            projectId: "web",
+            worktreeId: "wt_repair_inventory",
+            initialTitle: "repair-inventory",
+            harness: "codex",
+            terminalProvider: "station",
+            createdAt: earlier,
+            lastSeenAt: now,
+          });
+          const handle: SessionRecoveryHandle = {
+            id: "handle_repair_inventory",
+            provider: "codex",
+            projectId: "web",
+            worktreeId: "wt_repair_inventory",
+            sessionId: "ses_repair_inventory",
+            target: { kind: "native-session", id: "native_repair_inventory" },
+            observedAt: now,
+            lastSeenAt: now,
+          };
+          const persistedHandle = await persistence.upsertSessionRecoveryHandle(handle);
+
+          await expect(persistence.readRepairInventory()).resolves.toEqual({
+            sessions: [expect.objectContaining({ id: "ses_repair_inventory" })],
+            recoveryHandles: [persistedHandle],
+          });
+        });
+      });
+
       it("ends open sessions without generic evidence reviving them and reopens explicitly", async () => {
         await withPersistence(createFixture, async ({ persistence }) => {
           for (const sessionId of ["ses_lifecycle_a", "ses_lifecycle_b"]) {

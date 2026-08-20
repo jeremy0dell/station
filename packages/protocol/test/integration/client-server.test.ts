@@ -52,6 +52,11 @@ describe("protocol client/server", () => {
       managedTerminal: { provider: "native", canLaunchProcessPersistently: true },
       harnesses: [],
     });
+    await expect(client.inspectRepairInventory()).resolves.toEqual({
+      schemaVersion: 1,
+      sessions: [],
+      recoveryHandles: [],
+    });
 
     const command: StationCommand = {
       type: "worktree.create",
