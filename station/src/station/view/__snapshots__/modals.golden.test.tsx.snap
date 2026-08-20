@@ -553,6 +553,34 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 "
 `;
 
+exports[`modal flow golden frames renders the fresh start confirmation 1`] = `
+"                                                                                
+FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
+─────────────────────────────────────────────────────────────────────────────── 
+       SESSION                            AGENT     STATUS            DIFF · PR 
+ ▼ station  5 sessions · 4 agents                                 [sh] [qs] [▾] 
+ [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
+ [2] - docs-cleanup                       codex     no agent                    
+ [3] ○ pty-buffer                         codex     idle                  #73 ✓ 
+ [4] + session-resume                     codex     starting                    
+ [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 … 
+                                                                                
+ ▼ observer  3 sessions · 3 agents                                [sh] [qs] [▾] 
+ [6] x batch-export                       opencode  exited                 #8 ✓ 
+ [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 … 
+┌────────────────────────────────────────────┐code  idle             +1 -1 #4 ✓ 
+│ Start fresh?                               │                                  
+│ Session  docs-cleanup                      │                    [sh] [qs] [▾] 
+│ Resume is unavailable for this agent.      │code  idle           +14 -6 #5 x1 
+│ Starts a new agent conversation.           │code  unknown           +3 -1 #10 
+│ Keeps this worktree and its panes.         │                                  
+│                                            │                    [sh] [qs] [▾] 
+│  Start fresh (Y)  ▸ Cancel (N)             │                                  
+│ ←→ choose · Enter activate · Esc cancel    │───────────────────────────────── 
+└────────────────────────────────────────────┘ ? help  Q/esc:close              
+"
+`;
+
 exports[`modal flow golden frames renders the remove slot sheet 1`] = `
 "                                                                                
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 

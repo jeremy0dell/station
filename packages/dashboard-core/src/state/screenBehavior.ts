@@ -1,6 +1,7 @@
 import { addProjectScreenBehavior } from "./screens/addProjectScreen.js";
 import { dashboardScreenBehavior } from "./screens/dashboard.js";
 import { forkScreenBehavior } from "./screens/fork.js";
+import { freshStartScreenBehavior } from "./screens/freshStart.js";
 import { groupMenuScreenBehavior } from "./screens/groupMenu.js";
 import { groupSettingsScreenBehavior } from "./screens/groupSettings.js";
 import { helpScreenBehavior } from "./screens/help.js";
@@ -47,6 +48,8 @@ export function tuiScreenBehavior(screen: DashboardScreenView): TuiScreenBehavio
       return projectCollapseScreenBehavior;
     case "projectSettingsPicker":
       return projectSettingsPickerScreenBehavior;
+    case "freshStart":
+      return freshStartScreenBehavior;
     case "removeWorktree":
       return removeWorktreeScreenBehavior(screen);
     case "renameSession":

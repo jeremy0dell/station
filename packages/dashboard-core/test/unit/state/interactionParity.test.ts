@@ -15,9 +15,11 @@ import {
   openAddProject,
 } from "../../../src/state/screens/addProjectScreen.js";
 import { openForkDetailsForRow } from "../../../src/state/screens/fork.js";
+import { openFreshStartConfirm } from "../../../src/state/screens/freshStart.js";
 import { openRemoveWorktreeConfirmForRow } from "../../../src/state/screens/removeWorktree.js";
 import { handleTuiKey } from "../../../src/state/transition.js";
 import {
+  createCommandSnapshot,
   createDashboardSnapshot,
   createGroupedDashboardSnapshot,
   createZeroWorktreeSnapshot,
@@ -190,6 +192,58 @@ describe("primary workflow interaction parity", () => {
     for (const id of ["editName.name", "editName.save", "editName.back"] as const) {
       expect(newSessionIntentForAction(edit, id).type, id).not.toBe("none");
     }
+  });
+
+  it("converges Fresh Start pointer semantics with direct and focused activation", () => {
+    const base = openFreshStartConfirm(
+      createInitialTuiState({ initialSnapshot: createCommandSnapshot("none") }),
+      "ses_wt_web_no_agent",
+    );
+    const semantic = handleTuiAction(
+      base,
+      { type: "freshStart.activate", actionId: "confirm.startFresh" },
+      context,
+    );
+    const direct = handleTuiKey(base, { input: "y" }, context);
+    const focused = handleTuiKey(
+      handleTuiKey(base, { input: "", leftArrow: true }, context).state,
+      { input: "\r", return: true },
+      context,
+    );
+
+    expect(semantic.operations).toEqual(direct.operations);
+    expect(focused.operations).toEqual(direct.operations);
+    expect(semantic.state.screen).toEqual({ name: "dashboard" });
+    expect(direct.state.screen).toEqual({ name: "dashboard" });
+    expect(focused.state.screen).toEqual({ name: "dashboard" });
+  });
+
+  it.each([
+    { name: "N", keys: [{ input: "N" }] },
+    { name: "bare Enter", keys: [{ input: "\r", return: true }] },
+    { name: "Escape", keys: [{ input: "", escape: true }] },
+    {
+      name: "Right then Enter",
+      keys: [
+        { input: "", rightArrow: true },
+        { input: "\r", return: true },
+      ],
+    },
+  ])("cancels Fresh Start with $name", ({ keys }) => {
+    let state = openFreshStartConfirm(
+      createInitialTuiState({ initialSnapshot: createCommandSnapshot("none") }),
+      "ses_wt_web_no_agent",
+    );
+    let operations: ReturnType<typeof handleTuiKey>["operations"];
+
+    for (const key of keys) {
+      const transition = handleTuiKey(state, key, context);
+      state = transition.state;
+      operations = transition.operations;
+    }
+
+    expect(state.screen).toEqual({ name: "dashboard" });
+    expect(operations).toBeUndefined();
   });
 
   it("converges Remove pointer semantics with direct and focused activation", () => {

@@ -153,6 +153,12 @@ export const AgentPrepareExternalLaunchParamsSchema = z
     harness: ProviderIdSchema.optional(),
     title: userFacingTitleSchema.optional(),
     group: FreshSessionGroupPlacementIntentSchema.optional(),
+    freshStart: z
+      .object({
+        expectedSessionId: SessionIdSchema,
+      })
+      .strict()
+      .optional(),
   })
   .strict();
 

@@ -37,15 +37,17 @@ describe("createStationDashboardRuntime", () => {
     expect(store.state.getState().persistentFilter).toEqual({ query: "pty" });
   });
 
-  it("routes row activation through the stubbed command service with real pending state", async () => {
+  it("routes confirmed fresh start through the stubbed command service with real pending state", async () => {
     const store = makeStore();
     const slot = slotForRow(store, "ses_wt_station_none");
 
     store.actions.handleKey({ input: slot });
+    expect(store.state.getState().screen).toMatchObject({ name: "freshStart" });
+    store.actions.handleKey({ input: "y" });
 
     expect(store.state.getState().localRows.pendingStart).toMatchObject([
       {
-        localId: "start:wt_station_none",
+        localId: "fresh:wt_station_none",
         worktreeId: "wt_station_none",
         branch: "docs-cleanup",
       },

@@ -1,8 +1,11 @@
 import type {
+  ClientFeatureFlags,
+  HarnessCapabilities,
   HarnessRunObservation,
   ProviderHealth,
   ProviderProjectConfig,
   SessionGroupView,
+  SessionRecoveryHandle,
   TerminalTargetObservation,
   WorktreeObservation,
 } from "@station/contracts";
@@ -157,6 +160,9 @@ function build(overrides: {
   worktreeDisplayTitles?: ObserverWorktreeDisplayTitle[];
   turnReadiness?: ObserverTurnReadiness[];
   providerHealth?: Record<string, ProviderHealth>;
+  recoveryHandles?: SessionRecoveryHandle[];
+  harnessCapabilities?: Record<string, HarnessCapabilities>;
+  featureFlags?: ClientFeatureFlags;
 }) {
   return buildStationSnapshot({
     generatedAt,
@@ -172,10 +178,152 @@ function build(overrides: {
     sessionMetadata: overrides.sessionMetadata ?? [],
     worktreeDisplayTitles: overrides.worktreeDisplayTitles ?? [],
     turnReadiness: overrides.turnReadiness ?? [],
+    recoveryHandles: overrides.recoveryHandles ?? [],
+    harnessCapabilities: overrides.harnessCapabilities ?? {},
+    ...(overrides.featureFlags === undefined ? {} : { featureFlags: overrides.featureFlags }),
   });
 }
 
+const resumableHarnessCapabilities: HarnessCapabilities = {
+  canLaunch: true,
+  canDiscoverRuns: true,
+  canEmitEvents: true,
+  canReceivePrompt: false,
+  canResume: true,
+  canStop: true,
+  canRunNonInteractive: true,
+  canExposeApprovalState: false,
+  supportsModifiedEnterSoftNewline: false,
+};
+
+const recoveryFeatureFlags: ClientFeatureFlags = {
+  revision: "recovery-enabled",
+  flags: { sessionResumeAgent: true },
+};
+
+function recoveryHandle(
+  worktree: WorktreeObservation,
+  overrides: Partial<SessionRecoveryHandle> = {},
+): SessionRecoveryHandle {
+  return {
+    id: "rec_graph",
+    provider: "fake-harness",
+    projectId: worktree.projectId,
+    worktreeId: worktree.id,
+    sessionId: `ses_${worktree.id}`,
+    target: { kind: "native-session", id: "native_graph" },
+    cwd: worktree.path,
+    observedAt: generatedAt,
+    lastSeenAt: generatedAt,
+    ...overrides,
+  };
+}
+
+function recoverySession(
+  worktree: WorktreeObservation,
+  overrides: Partial<ObserverSessionMetadata> = {},
+): ObserverSessionMetadata {
+  return {
+    id: `ses_${worktree.id}`,
+    projectId: worktree.projectId,
+    worktreeId: worktree.id,
+    lifecycle: "open",
+    harness: "fake-harness",
+    createdAt: generatedAt,
+    lastSeenAt: generatedAt,
+    ...overrides,
+  };
+}
+
 describe("observer graph derivation", () => {
+  it("projects recovery only for one exact eligible open-session handle", () => {
+    const recoverable = worktree("wt_web_recoverable", "web", "recoverable");
+    const valid = recoveryHandle(recoverable);
+    const wrongSession = recoveryHandle(recoverable, {
+      id: "rec_wrong_session",
+      sessionId: "ses_other",
+      target: { kind: "native-session", id: "native_wrong_session" },
+    });
+    const snapshot = build({
+      worktrees: [recoverable],
+      recoveryHandles: [valid, wrongSession],
+      sessionMetadata: [recoverySession(recoverable)],
+      harnessCapabilities: { "fake-harness": resumableHarnessCapabilities },
+      featureFlags: recoveryFeatureFlags,
+    });
+
+    expect(snapshot.rows[0]?.recovery).toEqual({
+      kind: "agent-resume",
+      handleId: valid.id,
+      provider: "fake-harness",
+      targetKind: "native-session",
+      sessionId: valid.sessionId,
+      lastSeenAt: generatedAt,
+    });
+  });
+
+  it.each([
+    [
+      "ended lifecycle",
+      (worktree: WorktreeObservation) => ({
+        sessionMetadata: [recoverySession(worktree, { lifecycle: "ended", endedAt: generatedAt })],
+        recoveryHandles: [recoveryHandle(worktree)],
+        harnessCapabilities: { "fake-harness": resumableHarnessCapabilities },
+      }),
+    ],
+    [
+      "mismatched session identity",
+      (worktree: WorktreeObservation) => ({
+        sessionMetadata: [recoverySession(worktree)],
+        recoveryHandles: [recoveryHandle(worktree, { sessionId: "ses_other" })],
+        harnessCapabilities: { "fake-harness": resumableHarnessCapabilities },
+      }),
+    ],
+    [
+      "unsupported harness",
+      (worktree: WorktreeObservation) => ({
+        sessionMetadata: [recoverySession(worktree)],
+        recoveryHandles: [recoveryHandle(worktree)],
+        harnessCapabilities: {
+          "fake-harness": { ...resumableHarnessCapabilities, canResume: false },
+        },
+      }),
+    ],
+    [
+      "outside cwd",
+      (worktree: WorktreeObservation) => ({
+        sessionMetadata: [recoverySession(worktree)],
+        recoveryHandles: [recoveryHandle(worktree, { cwd: "/tmp/station/other" })],
+        harnessCapabilities: { "fake-harness": resumableHarnessCapabilities },
+      }),
+    ],
+  ] as const)("does not project recovery for %s", (_name, scenario) => {
+    const candidate = worktree("wt_web_ineligible", "web", "ineligible");
+    const snapshot = build({
+      worktrees: [candidate],
+      ...scenario(candidate),
+      featureFlags: recoveryFeatureFlags,
+    });
+
+    expect(snapshot.rows[0]).not.toHaveProperty("recovery");
+  });
+
+  it("projects an imported handle when no local lifecycle row exists", () => {
+    const imported = worktree("wt_web_imported", "web", "imported");
+    const handle = recoveryHandle(imported, { sessionId: "ses_imported" });
+    const snapshot = build({
+      worktrees: [imported],
+      recoveryHandles: [handle],
+      harnessCapabilities: { "fake-harness": resumableHarnessCapabilities },
+      featureFlags: recoveryFeatureFlags,
+    });
+
+    expect(snapshot.rows[0]?.recovery).toMatchObject({
+      handleId: handle.id,
+      sessionId: "ses_imported",
+    });
+  });
+
   it("projects configured Groups in deterministic parent-first order from canonical sessions", () => {
     const web = worktree("wt_web_group", "web", "group");
     const api = worktree("wt_api_group", "api", "group");

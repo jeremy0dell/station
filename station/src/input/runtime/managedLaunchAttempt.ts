@@ -5,7 +5,12 @@ import {
   type ObserverService,
   type StationClientStateSource,
 } from "@station/client";
-import type { FreshSessionGroupPlacementIntent, ProviderId, SafeError } from "@station/contracts";
+import type {
+  FreshSessionGroupPlacementIntent,
+  ProviderId,
+  SafeError,
+  SessionId,
+} from "@station/contracts";
 import { StationHostProviderError } from "@station/host";
 import { paneTreeIds } from "../../state/paneTree.js";
 import { selectPaneRecord } from "../../state/selectors.js";
@@ -34,6 +39,8 @@ export type ManagedLaunchTarget = {
   /** Harness selected for a fresh session; row activation lets Observer inherit it. */
   harness?: ProviderId;
   group?: FreshSessionGroupPlacementIntent;
+  /** Explicit consent to replace one exact interrupted provider execution. */
+  freshStart?: { expectedSessionId: SessionId };
   /** Spawn in the background without landing on the pane. */
   background?: boolean;
 };
@@ -203,6 +210,9 @@ function buildPrepareParams(
   }
   if (target.group !== undefined) {
     params.group = target.group;
+  }
+  if (target.freshStart !== undefined) {
+    params.freshStart = target.freshStart;
   }
   return params;
 }

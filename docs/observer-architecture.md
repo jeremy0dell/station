@@ -633,10 +633,15 @@ Target discovery includes Station Host reconstruction, so negotiated handoff and
 orphan-bridge adoption retain their existing PTY instead of entering provider
 recovery. A retained canonical Station session with no such target fails with
 `SESSION_RESUME_DISABLED` while recovery is disabled. When enabled, preparation
-requires one actionable handle whose Station session, harness provider, worktree,
-and present cwd match that canonical view, then preflights that provider and passes only
-typed provider-neutral resume options to its launch adapter. Missing or ambiguous
-handles and identity, capability, or cwd mismatches fail before terminal mutation.
+uses the IO-free `sessionRecoveryEligibility` policy to admit only handles whose
+Station session is explicitly open, harness provider and worktree identities match,
+registered provider can resume, and present cwd remains inside the current worktree.
+Eligibility is applied before cardinality: zero eligible handles is unavailable, one
+is exact recovery authority, and more than one remains an ambiguity with no ordering
+or selection until a separate resolution feature is implemented. An explicitly
+selected imported handle may proceed without a local lifecycle row, while legacy,
+ended, or contradictory local identity always refuses. All failures occur before
+terminal mutation, and only typed provider-neutral resume options reach the launch adapter.
 
 Automatic recovery opens and launches the replacement target under the retained
 Station session ID without seeding, reopening, renaming, discarding, or copying
@@ -650,6 +655,16 @@ a stale preflight snapshot. The retained session, handle,
 title, readiness, and prior evidence remain. An explicitly ended session is absent
 from canonical membership, so activation takes the fresh path even when an old
 handle remains.
+
+A retained Station session with no actionable recovery handle never silently
+falls back to a new provider conversation. After explicit confirmation, native
+Station may request a fresh start bound to the exact retained session ID. The
+worktree-serialized use case rejects stale consent, preflights the retained
+session's harness, atomically retires that provider's native-execution binding,
+recovery handles, and turn readiness, then launches without resume data under the
+same Station session ID. This preserves the worktree, canonical title, pane layout,
+and retained pane transcript; the discarded provider conversation is not
+recoverable. Launch failure does not restore the retired provider identity.
 
 A new managed session repeats the full selected-harness preflight immediately
 before title, target, or process mutation, then durably seeds the session from
@@ -784,6 +799,9 @@ when it changes several tables:
   definition, root parentage, sole membership, and absence of children remain unchanged. Any drift
   aborts session, title, membership, and Group cleanup together. Rename, seed/discard, confirmed
   worktree retirement, and canonical-title/recovery import keep their multi-table changes atomic.
+  Recovery persistence is keyed by provider plus opaque native target: project and worktree are
+  immutable, Station session identity may be filled once but never replaced, and conflicting
+  updates roll back before cwd, execution correlation, or liveness timestamps can refresh.
 - `SessionGroupStore` owns recorded Group definitions, exclusive direct membership, parent changes,
   deletion-to-ungroup with child reparenting, and atomic reconcile repair of parseable membership
   and parent relationships. Stale versions and expected assignments return conflicts without

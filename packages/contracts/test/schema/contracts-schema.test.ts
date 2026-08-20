@@ -297,6 +297,7 @@ describe("contract schemas", () => {
         harness: "codex",
         title: "  Hexagonal PT 12!  ",
         group: { kind: "create", name: "  Active work  " },
+        freshStart: { expectedSessionId: "ses_interrupted" },
       }),
     ).toEqual({
       projectId: "project_api",
@@ -304,11 +305,30 @@ describe("contract schemas", () => {
       harness: "codex",
       title: "Hexagonal PT 12!",
       group: { kind: "create", name: "Active work" },
+      freshStart: { expectedSessionId: "ses_interrupted" },
     });
     expectFails(
       AgentPrepareExternalLaunchParamsSchema,
       { projectId: "project_api", worktreeId: "wt_api", title: "   " },
       "external launch params with blank title",
+    );
+    expectFails(
+      AgentPrepareExternalLaunchParamsSchema,
+      {
+        projectId: "project_api",
+        worktreeId: "wt_api",
+        freshStart: { expectedSessionId: "" },
+      },
+      "external fresh-start params with a blank expected session id",
+    );
+    expectFails(
+      AgentPrepareExternalLaunchParamsSchema,
+      {
+        projectId: "project_api",
+        worktreeId: "wt_api",
+        freshStart: { expectedSessionId: "ses_interrupted", force: true },
+      },
+      "external fresh-start params with an unknown nested field",
     );
     expectParses(
       AgentPrepareExternalLaunchParamsSchema,

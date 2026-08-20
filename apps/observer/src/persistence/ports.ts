@@ -144,7 +144,9 @@ export interface ReconcileStore {
  * native execution bindings, canonical worktree-scoped titles, recovery, and readiness. Seed,
  * explicit root Group placement or current source-Group inheritance, and provenance-safe discard
  * are one atomic conversation; canonical-title handoff and recovery import also commit before
- * recovery reconciles.
+ * recovery reconciles. Provider-native recovery keys permanently bind project and worktree,
+ * may fill Station session identity once, and reject contradictory identity before mutable evidence
+ * can refresh.
  */
 export interface SessionStore {
   listSessions(): Promise<PersistedSession[]>;
@@ -154,6 +156,11 @@ export interface SessionStore {
     sessionId: string;
   }): Promise<PersistedSessionHarnessExecution | undefined>;
   listSessionHarnessExecutions(): Promise<PersistedSessionHarnessExecution[]>;
+  /** Clears superseded provider-native identity after explicit user consent to start fresh. */
+  resetSessionForFreshStart(input: {
+    provider: ProviderId;
+    sessionId: string;
+  }): Promise<{ changed: boolean }>;
   /** Idempotently replaces binding and readiness derived from superseded persisted events. */
   repairSessionHarnessDerivedState(
     input: SessionHarnessDerivedStateRepair,

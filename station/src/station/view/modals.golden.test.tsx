@@ -379,6 +379,19 @@ const CASES: ModalCase[] = [
     expect: ["Default agent", "updating…"],
   },
   {
+    name: "fresh start confirmation",
+    keys: [{ input: "2" }],
+    expect: [
+      "Start fresh?",
+      "docs-cleanup",
+      "Resume is unavailable for this agent.",
+      "Starts a new agent conversation.",
+      "Keeps this worktree and its panes.",
+      "Start fresh (Y)",
+      "▸ Cancel (N)",
+    ],
+  },
+  {
     name: "remove slot sheet",
     keys: [{ input: "X" }],
     expect: ["Select session to delete", "↑↓ move · ↵ choose · slot or click", "Esc:cancel"],

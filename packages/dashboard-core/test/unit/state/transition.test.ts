@@ -182,24 +182,104 @@ describe("TUI screen transitions", () => {
     ).toBe(0);
   });
 
-  it("starts an agent from a no-agent dashboard slot as a local operation", () => {
-    const transition = handleTuiKey(
+  it("confirms a fresh start for a retained no-agent dashboard slot", () => {
+    const opened = handleTuiKey(
       createInitialTuiState({ initialSnapshot: createCommandSnapshot("none") }),
       { input: "1" },
     );
 
-    expect(transition.state.localRows.pendingStart).toEqual([]);
-    expect(transition.operations).toEqual([
+    expect(opened.operations).toBeUndefined();
+    expect(opened.state.screen).toMatchObject({
+      name: "freshStart",
+      sessionId: "ses_wt_web_no_agent",
+      worktreeId: "wt_web_no_agent",
+      actionFocus: "cancel",
+    });
+
+    const selected = handleTuiKey(opened.state, { input: "", leftArrow: true });
+    const confirmed = handleTuiKey(selected.state, { input: "\r", return: true });
+    expect(confirmed.state.screen).toEqual({ name: "dashboard" });
+    expect(confirmed.operations).toEqual([
       {
         type: "activateSession",
         sessionId: "ses_wt_web_no_agent",
-        localId: "start:wt_web_no_agent",
-        preferredObserverAction: "start",
+        localId: "fresh:wt_web_no_agent",
+        preferredObserverAction: "fresh",
         projectId: "web",
         worktreeId: "wt_web_no_agent",
         branch: "feature-start",
       },
     ]);
+  });
+
+  it("cancels stale fresh-start consent when the selected session identity changes", () => {
+    const snapshot = createCommandSnapshot("none");
+    const opened = handleTuiKey(createInitialTuiState({ initialSnapshot: snapshot }), {
+      input: "1",
+    });
+    const replaced = replaceSnapshot(opened.state, {
+      ...snapshot,
+      sessions: snapshot.sessions.map((session) =>
+        session.id === "ses_wt_web_no_agent"
+          ? { ...session, id: "ses_wt_web_replacement" }
+          : session,
+      ),
+    });
+
+    const confirmed = handleTuiKey(replaced, { input: "y" });
+
+    expect(confirmed.state.screen).toEqual({ name: "dashboard" });
+    expect(confirmed.operations).toBeUndefined();
+  });
+
+  it("cancels fresh start when recovery becomes available during confirmation", () => {
+    const snapshot = createCommandSnapshot("none");
+    const opened = handleTuiKey(createInitialTuiState({ initialSnapshot: snapshot }), {
+      input: "1",
+    });
+    const replaced = replaceSnapshot(opened.state, {
+      ...snapshot,
+      rows: snapshot.rows.map((row) =>
+        row.id === "wt_web_no_agent"
+          ? {
+              ...row,
+              recovery: {
+                kind: "agent-resume" as const,
+                handleId: "rec_late",
+                provider: "codex",
+                targetKind: "native-session" as const,
+                sessionId: "ses_wt_web_no_agent",
+                lastSeenAt: "2026-06-01T12:01:00.000Z",
+              },
+            }
+          : row,
+      ),
+    });
+
+    const confirmed = handleTuiKey(replaced, { input: "y" });
+
+    expect(confirmed.state.screen).toEqual({ name: "dashboard" });
+    expect(confirmed.operations).toBeUndefined();
+  });
+
+  it("cancels fresh start when an agent becomes live during confirmation", () => {
+    const snapshot = createCommandSnapshot("none");
+    const liveAgent = createCommandSnapshot("idle").rows[0]?.agent;
+    if (liveAgent === undefined) throw new Error("idle fixture agent missing");
+    const opened = handleTuiKey(createInitialTuiState({ initialSnapshot: snapshot }), {
+      input: "1",
+    });
+    const replaced = replaceSnapshot(opened.state, {
+      ...snapshot,
+      rows: snapshot.rows.map((row) =>
+        row.id === "wt_web_no_agent" ? { ...row, agent: liveAgent } : row,
+      ),
+    });
+
+    const confirmed = handleTuiKey(replaced, { input: "y" });
+
+    expect(confirmed.state.screen).toEqual({ name: "dashboard" });
+    expect(confirmed.operations).toBeUndefined();
   });
 
   it("resumes a recoverable dashboard slot as a local operation", () => {

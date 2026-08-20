@@ -16,6 +16,7 @@ import {
   handleForkSessionAction,
   openForkDetailsForRow,
 } from "./screens/fork.js";
+import { type FreshStartActionId, handleFreshStartAction } from "./screens/freshStart.js";
 import {
   activateSessionGroupMenuAction,
   type GroupMenuInputActionId,
@@ -129,6 +130,7 @@ export type TuiSemanticAction =
   | { type: "addProject.activate"; actionId: AddProjectActionId }
   | { type: "newSession.activate"; actionId: NewSessionActionId }
   | { type: "removeWorktree.activate"; actionId: RemoveWorktreeActionId }
+  | { type: "freshStart.activate"; actionId: FreshStartActionId }
   | { type: "forkSession.activate"; actionId: ForkSessionActionId }
   | { type: "renameSession.submit" }
   | { type: "moveToGroup.select"; destinationGroupId: SessionGroupId | null }
@@ -215,6 +217,8 @@ export function handleTuiAction(
       return handleNewSessionAction(state, action.actionId);
     case "removeWorktree.activate":
       return handleRemoveWorktreeAction(state, action.actionId);
+    case "freshStart.activate":
+      return handleFreshStartAction(state, action.actionId);
     case "forkSession.activate":
       return handleForkSessionAction(state, action.actionId);
     case "renameSession.submit":

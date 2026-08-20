@@ -57,6 +57,7 @@ export {
 } from "../state/screens/addProjectScreen.js";
 export { openNewSession } from "../state/screens/dashboard.js";
 export type { ForkSessionActionId } from "../state/screens/fork.js";
+export type { FreshStartActionId } from "../state/screens/freshStart.js";
 export type {
   GroupMenuInputActionId,
   GroupMenuItem,

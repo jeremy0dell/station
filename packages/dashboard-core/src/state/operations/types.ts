@@ -15,7 +15,7 @@ export type ActivateSessionOperation = {
   projectId: string;
   worktreeId: WorktreeId;
   branch: string;
-  preferredObserverAction: "focus" | "start" | "resume";
+  preferredObserverAction: "focus" | "start" | "resume" | "fresh";
   localId?: string;
 };
 
