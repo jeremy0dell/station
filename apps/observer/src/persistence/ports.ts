@@ -154,6 +154,11 @@ export interface SessionStore {
     sessionId: string;
   }): Promise<PersistedSessionHarnessExecution | undefined>;
   listSessionHarnessExecutions(): Promise<PersistedSessionHarnessExecution[]>;
+  /** Clears superseded provider-native identity after explicit user consent to start fresh. */
+  resetSessionForFreshStart(input: {
+    provider: ProviderId;
+    sessionId: string;
+  }): Promise<{ changed: boolean }>;
   /** Idempotently replaces binding and readiness derived from superseded persisted events. */
   repairSessionHarnessDerivedState(
     input: SessionHarnessDerivedStateRepair,

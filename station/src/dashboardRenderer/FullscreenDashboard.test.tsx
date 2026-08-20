@@ -303,6 +303,11 @@ describe("FullscreenDashboard mouse composition", () => {
 
     await actOn(async () => {
       await setup.mockMouse.click(row.col, row.row, MouseButtons.LEFT);
+      await setup.flush();
+    });
+    const startFresh = cellFor(setup.captureCharFrame(), "Start fresh (Y)");
+    await actOn(async () => {
+      await setup.mockMouse.click(startFresh.col, startFresh.row, MouseButtons.LEFT);
       await waitFor(() =>
         fixture.service.dispatched.some(
           (command) =>
@@ -312,7 +317,7 @@ describe("FullscreenDashboard mouse composition", () => {
       );
     });
 
-    expect(fixture.service.waitedForCommandIds).toEqual(["cmd_tui_1"]);
+    expect(fixture.service.waitedForCommandIds).toEqual(["cmd_tui_1", "cmd_tui_1"]);
   });
 
   it("collapses a project once for a complete primary down/up click", async () => {
@@ -687,6 +692,11 @@ describe("FullscreenDashboard mouse composition", () => {
 
     await actOn(async () => {
       await setup.mockMouse.click(row.col, row.row, MouseButtons.LEFT);
+      await setup.flush();
+    });
+    const startFresh = cellFor(setup.captureCharFrame(), "Start fresh (Y)");
+    await actOn(async () => {
+      await setup.mockMouse.click(startFresh.col, startFresh.row, MouseButtons.LEFT);
       await waitFor(() =>
         fixture.runtime.state
           .getState()

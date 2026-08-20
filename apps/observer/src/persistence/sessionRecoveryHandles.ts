@@ -81,6 +81,15 @@ export function upsertSessionRecoveryHandle(
   return handleFromRow(row);
 }
 
+export function deleteSessionRecoveryHandles(
+  database: SqlDatabase,
+  input: { provider: string; sessionId: string },
+): number {
+  return database
+    .prepare("DELETE FROM session_recovery_handles WHERE provider = ? AND session_id = ?")
+    .run(input.provider, input.sessionId).changes;
+}
+
 export function getSessionRecoveryHandle(
   database: SqlDatabase,
   handleId: string,

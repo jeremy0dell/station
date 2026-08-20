@@ -651,6 +651,16 @@ title, readiness, and prior evidence remain. An explicitly ended session is abse
 from canonical membership, so activation takes the fresh path even when an old
 handle remains.
 
+A retained Station session with no actionable recovery handle never silently
+falls back to a new provider conversation. After explicit confirmation, native
+Station may request a fresh start bound to the exact retained session ID. The
+worktree-serialized use case rejects stale consent, preflights the retained
+session's harness, atomically retires that provider's native-execution binding,
+recovery handles, and turn readiness, then launches without resume data under the
+same Station session ID. This preserves the worktree, canonical title, pane layout,
+and retained pane transcript; the discarded provider conversation is not
+recoverable. Launch failure does not restore the retired provider identity.
+
 A new managed session repeats the full selected-harness preflight immediately
 before title, target, or process mutation, then durably seeds the session from
 canonical worktree title authority before target registration and process launch.

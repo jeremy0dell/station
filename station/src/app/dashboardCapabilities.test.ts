@@ -26,10 +26,14 @@ function harness() {
   };
   let activationResult: ManagedLaunchResult = { kind: "success", landed: true };
   let createResult: ManagedLaunchResult = { kind: "success", landed: false };
+  const activateRequests: Parameters<ManagedLaunch["activate"]>[] = [];
   const createRequests: Parameters<ManagedLaunch["create"]>[0][] = [];
   const forkRequests: Parameters<ManagedLaunch["fork"]>[0][] = [];
   const managedLaunch: ManagedLaunch = {
-    activate: async () => activationResult,
+    activate: async (...request) => {
+      activateRequests.push(request);
+      return activationResult;
+    },
     create: async (request) => {
       createRequests.push(request);
       return createResult;
@@ -53,6 +57,7 @@ function harness() {
     service,
     store,
     opened,
+    activateRequests,
     createRequests,
     forkRequests,
     setActivationResult: (result: ManagedLaunchResult) => (activationResult = result),
@@ -66,6 +71,14 @@ const ACTIVATION = {
   worktreeId: "wt_station_idle",
   branch: "pty-buffer",
   preferredObserverAction: "focus" as const,
+};
+
+const FRESH_ACTIVATION = {
+  sessionId: "ses_wt_station_none",
+  projectId: "station",
+  worktreeId: "wt_station_none",
+  branch: "docs-cleanup",
+  preferredObserverAction: "fresh" as const,
 };
 
 const FAILURE = {
@@ -105,6 +118,62 @@ describe("native dashboard capabilities", () => {
     expect(handle.optimistic).toBe("pending-start");
     expect(handle.successDisposition).toBe("wait-for-canonical");
     expect(await handle.completion).toEqual({ kind: "success" });
+  });
+
+  it("binds confirmed fresh start to the selected retained session", async () => {
+    const fixture = harness();
+    const handle = fixture.capabilities.activation.activate(FRESH_ACTIVATION);
+
+    expect(await handle.completion).toEqual({ kind: "success" });
+    expect(fixture.activateRequests[0]?.[1]).toMatchObject({
+      freshStart: { expectedSessionId: "ses_wt_station_none" },
+    });
+  });
+
+  it("rejects a stale native fresh-start operation when recovery becomes available", async () => {
+    const fixture = harness();
+    const snapshot = manyProjectsSnapshot();
+    fixture.source.setSnapshot({
+      ...snapshot,
+      rows: snapshot.rows.map((row) =>
+        row.id === "wt_station_none"
+          ? {
+              ...row,
+              recovery: {
+                kind: "agent-resume" as const,
+                handleId: "rec_late",
+                provider: "codex",
+                targetKind: "native-session" as const,
+                sessionId: "ses_wt_station_none",
+                lastSeenAt: "2026-06-12T12:01:00.000Z",
+              },
+            }
+          : row,
+      ),
+    });
+
+    const handle = fixture.capabilities.activation.activate(FRESH_ACTIVATION);
+
+    expect(await handle.completion).toEqual({
+      kind: "notice",
+      notice: { kind: "info", message: "That dashboard item is no longer available." },
+    });
+    expect(fixture.activateRequests).toEqual([]);
+  });
+
+  it("rejects a stale native fresh-start operation when the agent is already live", async () => {
+    const fixture = harness();
+
+    const handle = fixture.capabilities.activation.activate({
+      ...ACTIVATION,
+      preferredObserverAction: "fresh",
+    });
+
+    expect(await handle.completion).toEqual({
+      kind: "notice",
+      notice: { kind: "info", message: "That dashboard item is no longer available." },
+    });
+    expect(fixture.activateRequests).toEqual([]);
   });
 
   it("uses native overlay authority for dashboard dismissal and renderer exit", async () => {

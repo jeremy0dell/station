@@ -18,6 +18,7 @@ import {
   type TerminalBoundHarnessProviderSpec,
 } from "@station/harness-shared";
 import { runExternalCommand, safeErrorFromUnknown } from "@station/runtime";
+import { z } from "zod";
 import { claudeProviderErrorFromUnknown } from "./errors.js";
 import { doctorClaudeHooks, resolveClaudeSettingsArtifactPath } from "./hooks.js";
 import {
@@ -59,6 +60,15 @@ export const claudeHarnessCommandDefinition = {
   commandEnvVar: "STATION_CLAUDE_BIN",
   commandFallback: "claude",
 } as const satisfies TerminalBoundHarnessCommandDefinition;
+
+const ClaudeAuthStatusSchema = z
+  .object({
+    loggedIn: z.boolean(),
+    authMethod: z.string(),
+    apiProvider: z.string(),
+    apiKeySource: z.string().optional(),
+  })
+  .strict();
 
 const claudeSpec: TerminalBoundHarnessProviderSpec<ClaudeHarnessProviderOptions> = {
   ...claudeHarnessCommandDefinition,
@@ -106,19 +116,6 @@ function hookPathOptions(
     pathOptions.stateDir = options.stateDir;
   }
   return pathOptions;
-}
-
-function parseLoggedIn(stdout: string): boolean | undefined {
-  try {
-    const parsed: unknown = JSON.parse(stdout);
-    if (typeof parsed === "object" && parsed !== null && "loggedIn" in parsed) {
-      const loggedIn = (parsed as { loggedIn: unknown }).loggedIn;
-      return typeof loggedIn === "boolean" ? loggedIn : undefined;
-    }
-  } catch {
-    return undefined;
-  }
-  return undefined;
 }
 
 function claudeHookDoctorOptions(
@@ -181,14 +178,15 @@ async function doctorChecks(
     const result = await runExternalCommand(
       {
         command: command(options),
-        args: ["auth", "status"],
+        args: ["auth", "status", "--json"],
         timeoutMs: options.timeoutMs ?? 5000,
         maxOutputChars: 4096,
+        allowedExitCodes: [0, 1],
       },
       options.runner,
     );
-    const loggedIn = parseLoggedIn(result.stdout);
-    if (loggedIn === true) {
+    const auth = ClaudeAuthStatusSchema.parse(JSON.parse(result.stdout));
+    if (auth.loggedIn) {
       checks.push({
         name: "claude.auth",
         status: "ok",
@@ -198,8 +196,7 @@ async function doctorChecks(
       checks.push({
         name: "claude.auth",
         status: "warn",
-        message:
-          "Claude Code does not report an authenticated login. Sessions will stall at a login screen; run `claude` once to log in.",
+        message: "Claude Code is not logged in. Run `claude auth login` before launching.",
       });
     }
   } catch (cause) {
