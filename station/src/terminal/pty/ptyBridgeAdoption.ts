@@ -4,7 +4,7 @@ import {
   PtyBridgeAdoptionAckSchema,
   PtyBridgeAdoptCommandSchema,
   type PtyBridgeStatus,
-  PtyInstanceIdSchema,
+  type PtyInstanceIdSchema,
 } from "@station/contracts";
 import { z } from "zod";
 import type {

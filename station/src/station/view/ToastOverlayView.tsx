@@ -102,12 +102,12 @@ function ToastCopyControl({ text, onCopy }: { text: string; onCopy: (text: strin
   const copied = copyFeedbackToken > 0;
   const style = toastCopyControlStyle(theme, copied, hover);
   useEffect(() => {
-    if (!copied) {
+    if (copyFeedbackToken === 0) {
       return;
     }
     const timer = setTimeout(() => setCopyFeedbackToken(0), 1_500);
     return () => clearTimeout(timer);
-  }, [copied, copyFeedbackToken]);
+  }, [copyFeedbackToken]);
 
   return (
     <text

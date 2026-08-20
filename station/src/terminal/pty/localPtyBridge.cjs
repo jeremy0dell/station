@@ -344,7 +344,7 @@ function listenControlSocket() {
     try {
       fs.writeFileSync(
         `${orphan.parkStatePath}.listen-error`,
-        `${error && error.code ? error.code : "error"}: ${error instanceof Error ? error.message : String(error)}\n`,
+        `${error?.code ? error.code : "error"}: ${error instanceof Error ? error.message : String(error)}\n`,
       );
     } catch {
       // Ignore diagnostic write failures.

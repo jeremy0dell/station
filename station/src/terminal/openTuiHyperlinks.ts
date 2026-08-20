@@ -5,7 +5,7 @@ const OPEN_TUI_LINK_ID_MAX = 0xffffff;
 const ABSOLUTE_URI_STRUCTURE =
   /^[A-Za-z][A-Za-z0-9+.-]*:[^?#]*(?:\?[^#]*)?(?:#[^#]*)?$/u;
 const INVALID_URI_CHARACTER =
-  /[^A-Za-z0-9._~:/?#\[\]@!$&'()*+,;=%+\-\u00a0-\u{10ffff}]/u;
+  /[^A-Za-z0-9._~:/?#[\]@!$&'()*+,;=%+\-\u00a0-\u{10ffff}]/u;
 const INVALID_PERCENT_ESCAPE = /%(?![A-Fa-f0-9]{2})/u;
 const UTF8_ENCODER = new TextEncoder();
 

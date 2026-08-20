@@ -31,17 +31,42 @@
         "rules": {
           "recommended": false,
           "a11y": "off",
-          "complexity": "off",
-          "correctness": "off",
+          "complexity": {
+            "noUselessEscapeInRegex": "error",
+            "useOptionalChain": "error"
+          },
+          "correctness": {
+            "useExhaustiveDependencies": "error"
+          },
           "nursery": "off",
           "performance": "off",
           "security": "off",
-          "style": "off",
-          "suspicious": "off"
+          "style": {
+            "noNonNullAssertion": "error",
+            "useImportType": "error",
+            "useTemplate": "off"
+          },
+          "suspicious": {
+            "noArrayIndexKey": "off",
+            "noControlCharactersInRegex": "off",
+            "noImplicitAnyLet": "error",
+            "noTemplateCurlyInString": "off",
+            "noUselessEscapeInString": "error"
+          }
         }
       },
       "assist": {
         "enabled": false
+      }
+    },
+    {
+      "includes": ["station/**/*.test.{ts,tsx}", "station/**/test/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noNonNullAssertion": "off"
+          }
+        }
       }
     }
   ]

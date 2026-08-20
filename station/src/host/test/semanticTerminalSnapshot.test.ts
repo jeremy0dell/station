@@ -569,7 +569,7 @@ describe("SemanticTerminalSnapshot", () => {
       [
         "cell-protected",
         "Cannot restore unsupported normal attributes at row 1, column 1.",
-        `${CSI}1\"qX${CSI}0\"q`,
+        `${CSI}1"qX${CSI}0"q`,
       ],
       [
         "cell-underline-style",
@@ -621,7 +621,7 @@ describe("SemanticTerminalSnapshot", () => {
       [
         "saved-attributes",
         "Cannot restore unsupported saved normal attributes.",
-        `${CSI}1\"q\x1b7${CSI}0\"q`,
+        `${CSI}1"q\x1b7${CSI}0"q`,
       ],
       [
         "wrap-pending-cell",
