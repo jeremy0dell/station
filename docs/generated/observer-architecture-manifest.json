@@ -12425,7 +12425,7 @@
       "declaration": "createHarnessTrackingAdapter",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Translates harness tracking preparation into an in-process provider installer and sanitized commit evidence.",
+      "purpose": "Translates harness tracking preparation into an in-process provider installer, rejecting unverified repairs before returning sanitized commit evidence.",
       "dependencies": [
         {
           "path": "packages/setup-core/src/ports.ts",
