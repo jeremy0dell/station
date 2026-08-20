@@ -66,36 +66,40 @@ export function createObserverActivationCapabilities(
       if (target.kind === "notice") {
         return dashboardExecution({ kind: "notice", notice: target.notice });
       }
-      const action = worktreeHasLiveAgent(target.row)
-        ? "focus"
-        : request.preferredObserverAction === "fresh"
-          ? "fresh"
-          : target.row.recovery === undefined
-            ? "start"
-            : "resume";
-      if (action === "focus") {
-        return dashboardExecution(runFocus(options, request.sessionId));
+      if (isStaleFreshStartRequest(request, target)) {
+        return dashboardExecution({ kind: "notice", notice: STALE_DASHBOARD_TARGET_NOTICE });
       }
-      return dashboardExecution(
-        action === "fresh"
-          ? runFreshStart(options, request, target)
-          : runStartOrResume(options, request, action),
-        {
-          optimistic: "pending-start",
-          successDisposition: "wait-for-canonical",
-        },
-      );
+      const action = resolveActivationAction(request, target);
+      switch (action) {
+        case "focus":
+          return dashboardExecution(runFocus(options, request.sessionId));
+        case "fresh":
+          return dashboardExecution(runFreshStart(options, request, target), {
+            optimistic: "pending-start",
+            successDisposition: "wait-for-canonical",
+          });
+        case "start":
+        case "resume":
+          return dashboardExecution(runStartOrResume(options, request, action), {
+            optimistic: "pending-start",
+            successDisposition: "wait-for-canonical",
+          });
+      }
     },
   };
 }
 
+type ResolvedActivationAction = "focus" | "fresh" | "start" | "resume";
+
+type ResolvedCanonicalActivationTarget = {
+  kind: "target";
+  session: StationSnapshot["sessions"][number];
+  row: StationSnapshot["rows"][number];
+  project: StationSnapshot["projects"][number];
+};
+
 type CanonicalActivationTarget =
-  | {
-      kind: "target";
-      snapshot: StationSnapshot;
-      row: StationSnapshot["rows"][number];
-      project: StationSnapshot["projects"][number];
-    }
+  | ResolvedCanonicalActivationTarget
   | { kind: "notice"; notice: { kind: "info"; message: string } };
 
 function resolveCanonicalTarget(
@@ -136,13 +140,35 @@ function resolveCanonicalTarget(
       },
     };
   }
-  return { kind: "target", snapshot, row, project };
+  return { kind: "target", session, row, project };
+}
+
+function isStaleFreshStartRequest(
+  request: SessionActivationRequest,
+  target: ResolvedCanonicalActivationTarget,
+): boolean {
+  return (
+    request.preferredObserverAction === "fresh" &&
+    (target.session.origin !== "station" ||
+      worktreeHasLiveAgent(target.row) ||
+      target.row.recovery !== undefined)
+  );
+}
+
+function resolveActivationAction(
+  request: SessionActivationRequest,
+  target: ResolvedCanonicalActivationTarget,
+): ResolvedActivationAction {
+  if (worktreeHasLiveAgent(target.row)) return "focus";
+  if (request.preferredObserverAction === "fresh") return "fresh";
+  if (target.row.recovery !== undefined) return "resume";
+  return "start";
 }
 
 async function runFreshStart(
   options: ObserverActivationCapabilitiesOptions,
   request: SessionActivationRequest,
-  target: Extract<CanonicalActivationTarget, { kind: "target" }>,
+  target: ResolvedCanonicalActivationTarget,
 ): Promise<DashboardExecutionResult> {
   const closed = await dispatchAndWait(options, {
     type: "session.close",

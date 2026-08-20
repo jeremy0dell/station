@@ -907,6 +907,43 @@ describe("prepareExternalLaunch", () => {
     expect(persistedHandle.sessionId).toBe("ses_recoverable");
   });
 
+  it("uses the retained harness when fresh-start input requests a different provider", async () => {
+    const persistence = createInMemoryObserverPersistence({
+      clock: { now: () => new Date(now) },
+    });
+    const retainedHarness = new CapturingHarness({
+      id: "fake-harness",
+      now: () => new Date(now),
+    });
+    const requestedHarness = new CapturingHarness({
+      id: "requested-harness",
+      now: () => new Date(now),
+    });
+    const station = new FakeManagedTerminalLifecycle();
+
+    const result = await prepareExternalLaunch(
+      deps([row()], station, [retainedHarness, requestedHarness], persistence, {
+        sessions: [retainedSession()],
+        sessionResumeAgentEnabled: true,
+      }),
+      {
+        ...prepareParams,
+        harness: "requested-harness",
+        freshStart: { expectedSessionId: "ses_recoverable" },
+      },
+    );
+
+    expect(result.outcome).toMatchObject({
+      kind: "prepared",
+      sessionId: "ses_recoverable",
+      launchPlan: { provider: "fake-harness" },
+    });
+    expect(retainedHarness.requests).toEqual([
+      expect.objectContaining({ sessionId: "ses_recoverable" }),
+    ]);
+    expect(requestedHarness.requests).toEqual([]);
+  });
+
   it("rejects stale fresh-start consent before retiring recovery identity", async () => {
     const persistence = createInMemoryObserverPersistence({
       clock: { now: () => new Date(now) },
@@ -930,13 +967,133 @@ describe("prepareExternalLaunch", () => {
     expect(await station.listTargets()).toEqual([]);
   });
 
-  it("returns an adopted Host target before recovery or its feature gate", async () => {
+  it("rejects fresh-start consent when the retained session disappeared", async () => {
+    const persistence = createInMemoryObserverPersistence({
+      clock: { now: () => new Date(now) },
+    });
+    const persistedHandle = await persistence.upsertSessionRecoveryHandle(recoveryHandle());
+    const station = new FakeManagedTerminalLifecycle();
+
+    await expect(
+      prepareExternalLaunch(deps([row()], station, undefined, persistence), {
+        ...prepareParams,
+        freshStart: { expectedSessionId: "ses_recoverable" },
+      }),
+    ).rejects.toMatchObject({
+      code: "SESSION_FRESH_START_STALE",
+      sessionId: "ses_recoverable",
+    });
+    await expect(persistence.listSessionRecoveryHandles()).resolves.toEqual([persistedHandle]);
+    expect(await station.listTargets()).toEqual([]);
+  });
+
+  it("preserves recovery identity when retained-harness preflight rejects fresh start", async () => {
+    const persistence = createInMemoryObserverPersistence({
+      clock: { now: () => new Date(now) },
+    });
+    const persistedHandle = await persistence.upsertSessionRecoveryHandle(recoveryHandle());
+    const harness = new HookableHarness(false);
+    const station = new FakeManagedTerminalLifecycle();
+
+    await expect(
+      prepareExternalLaunch(
+        deps([row()], station, [harness], persistence, {
+          sessions: [retainedSession()],
+          sessionResumeAgentEnabled: true,
+        }),
+        {
+          ...prepareParams,
+          freshStart: { expectedSessionId: "ses_recoverable" },
+        },
+      ),
+    ).rejects.toMatchObject({ code: "HARNESS_HOOKS_NOT_INSTALLED" });
+    await expect(persistence.listSessionRecoveryHandles()).resolves.toEqual([persistedHandle]);
+    expect(await station.listTargets()).toEqual([]);
+  });
+
+  it("does not restore retired recovery identity after a fresh launch-plan failure", async () => {
+    const persistence = createInMemoryObserverPersistence({
+      clock: { now: () => new Date(now) },
+    });
+    await persistence.upsertSessionRecoveryHandle(recoveryHandle());
+    const harness = new FakeHarnessProvider({
+      id: "fake-harness",
+      now: () => new Date(now),
+      failures: {
+        buildLaunch: {
+          tag: "HarnessProviderError",
+          code: "HARNESS_BUILD_LAUNCH_FAILED",
+          message: "boom",
+        },
+      },
+    });
+    const station = new FakeManagedTerminalLifecycle();
+
+    await expect(
+      prepareExternalLaunch(
+        deps([row()], station, [harness], persistence, {
+          sessions: [retainedSession()],
+          sessionResumeAgentEnabled: true,
+        }),
+        {
+          ...prepareParams,
+          freshStart: { expectedSessionId: "ses_recoverable" },
+        },
+      ),
+    ).rejects.toMatchObject({ code: "HARNESS_BUILD_LAUNCH_FAILED" });
+    await expect(persistence.listSessionRecoveryHandles()).resolves.toEqual([]);
+    expect(await station.listTargets()).toEqual([]);
+    expect(station.released).toEqual([
+      {
+        targetId: managedTargetId("wt_web_feature"),
+        expectedSessionId: "ses_recoverable",
+        expectedBindingToken: "binding_1",
+      },
+    ]);
+  });
+
+  it("returns a live replacement before evaluating stale fresh-start consent", async () => {
+    const persistence = createInMemoryObserverPersistence({
+      clock: { now: () => new Date(now) },
+    });
+    const persistedHandle = await persistence.upsertSessionRecoveryHandle(recoveryHandle());
+    const harness = new HookableHarness(false);
+    const station = new FakeManagedTerminalLifecycle();
+
+    const result = await prepareExternalLaunch(
+      deps(
+        [row({ agentSessionId: "ses_replacement", agentState: "working" })],
+        station,
+        [harness],
+        persistence,
+        { sessions: [retainedSession()] },
+      ),
+      {
+        ...prepareParams,
+        freshStart: { expectedSessionId: "ses_recoverable" },
+      },
+    );
+
+    expect(result).toEqual({
+      outcome: {
+        kind: "existing-session",
+        sessionId: "ses_replacement",
+        harnessProvider: "fake-harness",
+      },
+      reconcile: false,
+    });
+    await expect(persistence.listSessionRecoveryHandles()).resolves.toEqual([persistedHandle]);
+    expect(harness.healthCalls).toBe(0);
+    expect(harness.hooksCalls).toBe(0);
+  });
+
+  it("returns an adopted replacement Host target before stale fresh-start consent", async () => {
     const attachment: ManagedTerminalAttachment = {
       kind: "managed-terminal",
       terminalTargetId: managedTargetId("wt_web_feature"),
     };
     const station = new FakeManagedTerminalLifecycle({ started: true, attachment });
-    station.seedTarget({ worktreeId: "wt_web_feature", sessionId: "ses_recoverable" });
+    station.seedTarget({ worktreeId: "wt_web_feature", sessionId: "ses_replacement" });
     const harness = new HookableHarness(false);
 
     const result = await prepareExternalLaunch(
@@ -947,13 +1104,16 @@ describe("prepareExternalLaunch", () => {
         fakePersistence,
         { sessions: [retainedSession()] },
       ),
-      prepareParams,
+      {
+        ...prepareParams,
+        freshStart: { expectedSessionId: "ses_recoverable" },
+      },
     );
 
     expect(result).toEqual({
       outcome: {
         kind: "existing-session",
-        sessionId: "ses_recoverable",
+        sessionId: "ses_replacement",
         harnessProvider: "fake-harness",
         attachment,
       },

@@ -1,4 +1,4 @@
-import type { SessionId } from "@station/contracts";
+import { type SessionId, worktreeHasLiveAgent } from "@station/contracts";
 import {
   selectDashboardSessionRow,
   sessionRowDisplayTitle,
@@ -78,19 +78,24 @@ export function handleFreshStartAction(
 }
 
 function freshStart(state: DashboardState, screen: FreshStartScreenView): TuiTransition {
-  const session = state.snapshot?.sessions.find(
-    (candidate) =>
-      candidate.id === screen.sessionId &&
-      candidate.projectId === screen.projectId &&
-      candidate.worktreeId === screen.worktreeId,
-  );
-  const row = state.snapshot?.rows.find(
-    (candidate) =>
-      candidate.id === screen.worktreeId &&
-      candidate.projectId === screen.projectId &&
-      candidate.branch === screen.branch,
-  );
-  if (session === undefined || row === undefined || session.origin !== "station") {
+  const sessionRow =
+    state.snapshot === undefined
+      ? undefined
+      : selectDashboardSessionRow(state.snapshot, screen.sessionId);
+  const session = sessionRow?.session;
+  const row = sessionRow?.worktree;
+  if (
+    session === undefined ||
+    row === undefined ||
+    session.origin !== "station" ||
+    session.projectId !== screen.projectId ||
+    session.worktreeId !== screen.worktreeId ||
+    row.projectId !== screen.projectId ||
+    row.id !== screen.worktreeId ||
+    row.branch !== screen.branch ||
+    worktreeHasLiveAgent(row) ||
+    row.recovery !== undefined
+  ) {
     return { state: cancelFreshStart(state) };
   }
   return {

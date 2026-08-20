@@ -212,6 +212,76 @@ describe("TUI screen transitions", () => {
     ]);
   });
 
+  it("cancels stale fresh-start consent when the selected session identity changes", () => {
+    const snapshot = createCommandSnapshot("none");
+    const opened = handleTuiKey(createInitialTuiState({ initialSnapshot: snapshot }), {
+      input: "1",
+    });
+    const replaced = replaceSnapshot(opened.state, {
+      ...snapshot,
+      sessions: snapshot.sessions.map((session) =>
+        session.id === "ses_wt_web_no_agent"
+          ? { ...session, id: "ses_wt_web_replacement" }
+          : session,
+      ),
+    });
+
+    const confirmed = handleTuiKey(replaced, { input: "y" });
+
+    expect(confirmed.state.screen).toEqual({ name: "dashboard" });
+    expect(confirmed.operations).toBeUndefined();
+  });
+
+  it("cancels fresh start when recovery becomes available during confirmation", () => {
+    const snapshot = createCommandSnapshot("none");
+    const opened = handleTuiKey(createInitialTuiState({ initialSnapshot: snapshot }), {
+      input: "1",
+    });
+    const replaced = replaceSnapshot(opened.state, {
+      ...snapshot,
+      rows: snapshot.rows.map((row) =>
+        row.id === "wt_web_no_agent"
+          ? {
+              ...row,
+              recovery: {
+                kind: "agent-resume" as const,
+                handleId: "rec_late",
+                provider: "codex",
+                targetKind: "native-session" as const,
+                sessionId: "ses_wt_web_no_agent",
+                lastSeenAt: "2026-06-01T12:01:00.000Z",
+              },
+            }
+          : row,
+      ),
+    });
+
+    const confirmed = handleTuiKey(replaced, { input: "y" });
+
+    expect(confirmed.state.screen).toEqual({ name: "dashboard" });
+    expect(confirmed.operations).toBeUndefined();
+  });
+
+  it("cancels fresh start when an agent becomes live during confirmation", () => {
+    const snapshot = createCommandSnapshot("none");
+    const liveAgent = createCommandSnapshot("idle").rows[0]?.agent;
+    if (liveAgent === undefined) throw new Error("idle fixture agent missing");
+    const opened = handleTuiKey(createInitialTuiState({ initialSnapshot: snapshot }), {
+      input: "1",
+    });
+    const replaced = replaceSnapshot(opened.state, {
+      ...snapshot,
+      rows: snapshot.rows.map((row) =>
+        row.id === "wt_web_no_agent" ? { ...row, agent: liveAgent } : row,
+      ),
+    });
+
+    const confirmed = handleTuiKey(replaced, { input: "y" });
+
+    expect(confirmed.state.screen).toEqual({ name: "dashboard" });
+    expect(confirmed.operations).toBeUndefined();
+  });
+
   it("resumes a recoverable dashboard slot as a local operation", () => {
     const snapshot = createCommandSnapshot("none");
     const row = {

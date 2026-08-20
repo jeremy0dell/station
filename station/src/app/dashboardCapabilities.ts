@@ -1,5 +1,5 @@
 import type { ClientNotice, ObserverService, StationClientStateSource } from "@station/client";
-import type { SafeError } from "@station/contracts";
+import { type SafeError, worktreeHasLiveAgent } from "@station/contracts";
 import {
   createObserverActivationCapabilities,
   createObserverWorktreeRemovalCapabilities,
@@ -138,7 +138,14 @@ export function createDashboardCapabilities(
             candidate.projectId === request.projectId &&
             candidate.branch === request.branch,
         );
-        if (session === undefined || row === undefined) {
+        if (
+          session === undefined ||
+          row === undefined ||
+          (request.preferredObserverAction === "fresh" &&
+            (session.origin !== "station" ||
+              worktreeHasLiveAgent(row) ||
+              row.recovery !== undefined))
+        ) {
           return dashboardExecution(staleTargetResult());
         }
         if (session.origin === "external") {

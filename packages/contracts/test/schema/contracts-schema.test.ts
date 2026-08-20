@@ -312,6 +312,24 @@ describe("contract schemas", () => {
       { projectId: "project_api", worktreeId: "wt_api", title: "   " },
       "external launch params with blank title",
     );
+    expectFails(
+      AgentPrepareExternalLaunchParamsSchema,
+      {
+        projectId: "project_api",
+        worktreeId: "wt_api",
+        freshStart: { expectedSessionId: "" },
+      },
+      "external fresh-start params with a blank expected session id",
+    );
+    expectFails(
+      AgentPrepareExternalLaunchParamsSchema,
+      {
+        projectId: "project_api",
+        worktreeId: "wt_api",
+        freshStart: { expectedSessionId: "ses_interrupted", force: true },
+      },
+      "external fresh-start params with an unknown nested field",
+    );
     expectParses(
       AgentPrepareExternalLaunchParamsSchema,
       {
