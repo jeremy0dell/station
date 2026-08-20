@@ -145,7 +145,7 @@ function readLines(socket: net.Socket): LineCollector {
       lines.push(line);
       for (let i = waiters.length - 1; i >= 0; i -= 1) {
         const waiter = waiters[i];
-        if (waiter !== undefined && waiter.predicate(line)) {
+        if (waiter?.predicate(line)) {
           waiters.splice(i, 1);
           waiter.resolve(line);
         }
