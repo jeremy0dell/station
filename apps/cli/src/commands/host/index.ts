@@ -328,7 +328,7 @@ function resolveStationHostEntry(): string {
   return join(repoRoot, "station/src/host/hostMain.ts");
 }
 
-export function resolveStationHostCommand(): readonly [string, ...string[]] {
+function resolveStationHostCommand(): readonly [string, ...string[]] {
   return selfExecArgv("station-host", [
     process.env.STATION_BUN ?? "bun",
     resolveStationHostEntry(),

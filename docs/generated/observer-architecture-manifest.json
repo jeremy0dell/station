@@ -4657,12 +4657,6 @@
           "purpose": "Supplies exact incumbent-process evidence without exposing operating-system commands; unavailable socket-holder evidence throws and never means zero."
         },
         {
-          "name": "observerProcessIdentitiesMatch",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
           "name": "ObserverProcessSignalResult",
           "kind": "type",
           "role": null,
@@ -5296,7 +5290,7 @@
           "name": "SessionStore",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Admits Observer-owned sessions with selected provider identity and maintains their lifecycle, native execution bindings, canonical worktree-scoped titles, recovery, and readiness. Seed, explicit root Group placement or current source-Group inheritance, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles. Repair inspection reads sessions and recovery handles from one coherent transaction so a preview never combines different persistence lifetimes."
+          "purpose": "Admits Observer-owned sessions with selected provider identity and maintains their lifecycle, native execution bindings, canonical worktree-scoped titles, recovery, and readiness. Seed, explicit root Group placement or current source-Group inheritance, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles. Repair inspection reads sessions and recovery handles from one coherent transaction so one result never combines different persistence lifetimes."
         },
         {
           "name": "SessionTurnReadinessMutation",
@@ -5607,12 +5601,6 @@
           "bindings": ["*"]
         },
         {
-          "specifier": "./runtime/observerPidfile.js",
-          "resolvedPath": "apps/observer/src/runtime/observerPidfile.ts",
-          "edgeKind": "runtime",
-          "bindings": ["observerProcessIdentitiesMatch"]
-        },
-        {
           "specifier": "./runtime/observerProcessEvidence.js",
           "resolvedPath": "apps/observer/src/runtime/observerProcessEvidence.ts",
           "edgeKind": "runtime",
@@ -5666,12 +5654,6 @@
           "resolvedPath": "apps/observer/src/persistence/types.ts",
           "edgeKind": "type-only",
           "bindings": ["PersistedSession"]
-        },
-        {
-          "specifier": "../providers/registry.js",
-          "resolvedPath": "apps/observer/src/providers/registry.ts",
-          "edgeKind": "type-only",
-          "bindings": ["ProviderRegistry"]
         },
         {
           "specifier": "@station/contracts",
@@ -7403,7 +7385,7 @@
           "name": "SessionStore",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Admits Observer-owned sessions with selected provider identity and maintains their lifecycle, native execution bindings, canonical worktree-scoped titles, recovery, and readiness. Seed, explicit root Group placement or current source-Group inheritance, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles. Repair inspection reads sessions and recovery handles from one coherent transaction so a preview never combines different persistence lifetimes."
+          "purpose": "Admits Observer-owned sessions with selected provider identity and maintains their lifecycle, native execution bindings, canonical worktree-scoped titles, recovery, and readiness. Seed, explicit root Group placement or current source-Group inheritance, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles. Repair inspection reads sessions and recovery handles from one coherent transaction so one result never combines different persistence lifetimes."
         },
         {
           "name": "SessionTurnReadinessMutation",
@@ -7706,7 +7688,7 @@
           "name": "SessionStore",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Admits Observer-owned sessions with selected provider identity and maintains their lifecycle, native execution bindings, canonical worktree-scoped titles, recovery, and readiness. Seed, explicit root Group placement or current source-Group inheritance, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles. Repair inspection reads sessions and recovery handles from one coherent transaction so a preview never combines different persistence lifetimes."
+          "purpose": "Admits Observer-owned sessions with selected provider identity and maintains their lifecycle, native execution bindings, canonical worktree-scoped titles, recovery, and readiness. Seed, explicit root Group placement or current source-Group inheritance, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles. Repair inspection reads sessions and recovery handles from one coherent transaction so one result never combines different persistence lifetimes."
         },
         {
           "name": "WorktreeMetadataStore",
@@ -12491,88 +12473,6 @@
       ]
     },
     {
-      "path": "apps/cli/src/commands/repair/inventory.ts",
-      "declaration": "captureRepairInventory",
-      "kind": "function",
-      "role": "ADAPTER",
-      "purpose": "Aggregates one non-starting Observer query with read-only local Observer/Host/process evidence. The result is evidence only; a future executor must re-inventory and exactly revalidate it.",
-      "dependencies": [
-        {
-          "path": "apps/cli/src/commands/repair/localRuntimeEvidence.ts",
-          "declaration": "createLocalRepairRuntimeEvidence",
-          "kind": "function",
-          "role": "ADAPTER",
-          "edgeKind": "runtime"
-        },
-        {
-          "path": "apps/cli/src/observerProcess.ts",
-          "declaration": "getObserverStatus",
-          "kind": "function",
-          "role": "ADAPTER",
-          "edgeKind": "runtime"
-        },
-        {
-          "path": "packages/protocol/src/client.ts",
-          "declaration": "createObserverClient",
-          "kind": "function",
-          "role": "ADAPTER",
-          "edgeKind": "runtime"
-        }
-      ]
-    },
-    {
-      "path": "apps/cli/src/commands/repair/localRuntimeEvidence.ts",
-      "declaration": "createLocalRepairRuntimeEvidence",
-      "kind": "function",
-      "role": "ADAPTER",
-      "purpose": "Correlates fail-closed local socket ownership, exact daemon argv, Host list responses, and two OS topology reads. Every returned verified terminal group remains tied to one socket lifetime.",
-      "dependencies": [
-        {
-          "path": "apps/cli/src/commands/repair/localRuntimeEvidence.ts",
-          "declaration": "RepairLocalRuntimeEvidence",
-          "kind": "interface",
-          "role": "DRIVEN PORT",
-          "edgeKind": "type-only"
-        },
-        {
-          "path": "apps/observer/src/runtime/observerProcessEvidence.ts",
-          "declaration": "createLocalObserverProcessEvidence",
-          "kind": "function",
-          "role": "ADAPTER",
-          "edgeKind": "runtime"
-        },
-        {
-          "path": "apps/observer/src/runtime/observerReap.ts",
-          "declaration": "ObserverDuplicateProcessEvidenceSource",
-          "kind": "interface",
-          "role": "DRIVEN PORT",
-          "edgeKind": "type-only"
-        },
-        {
-          "path": "packages/protocol/src/transport.ts",
-          "declaration": "probeUnixSocket",
-          "kind": "function",
-          "role": "ADAPTER",
-          "edgeKind": "runtime"
-        },
-        {
-          "path": "packages/protocol/src/transport.ts",
-          "declaration": "readUnixSocketHolderPids",
-          "kind": "function",
-          "role": "ADAPTER",
-          "edgeKind": "runtime"
-        }
-      ]
-    },
-    {
-      "path": "apps/cli/src/commands/repair/localRuntimeEvidence.ts",
-      "declaration": "RepairLocalRuntimeEvidence",
-      "kind": "interface",
-      "role": "DRIVEN PORT",
-      "purpose": "Supplies read-only process, socket, Host, and terminal-topology evidence to repair inventory. Evidence can describe candidates but never grants signal or close authority.",
-      "dependencies": []
-    },
-    {
       "path": "apps/cli/src/commands/setup/adapters/config.ts",
       "declaration": "createSetupConfigAdapter",
       "kind": "function",
@@ -14102,7 +14002,7 @@
       "declaration": "SessionStore",
       "kind": "interface",
       "role": "DRIVEN PORT",
-      "purpose": "Admits Observer-owned sessions with selected provider identity and maintains their lifecycle, native execution bindings, canonical worktree-scoped titles, recovery, and readiness. Seed, explicit root Group placement or current source-Group inheritance, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles. Repair inspection reads sessions and recovery handles from one coherent transaction so a preview never combines different persistence lifetimes.",
+      "purpose": "Admits Observer-owned sessions with selected provider identity and maintains their lifecycle, native execution bindings, canonical worktree-scoped titles, recovery, and readiness. Seed, explicit root Group placement or current source-Group inheritance, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles. Repair inspection reads sessions and recovery handles from one coherent transaction so one result never combines different persistence lifetimes.",
       "dependencies": []
     },
     {

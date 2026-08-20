@@ -12,7 +12,6 @@ import { observerCliCommand } from "./commands/registry/observer.js";
 import { popupCliCommand } from "./commands/registry/popup.js";
 import { projectCliCommand } from "./commands/registry/project.js";
 import { reconcileCliCommand } from "./commands/registry/reconcile.js";
-import { repairCliCommand } from "./commands/registry/repair.js";
 import { setupCliCommand } from "./commands/registry/setup.js";
 import { snapshotCliCommand } from "./commands/registry/snapshot.js";
 import { tuiCliCommand } from "./commands/registry/tui.js";
@@ -54,7 +53,6 @@ export const cliCommandRegistry: CliCommandNode = {
     popupCliCommand,
     projectCliCommand,
     reconcileCliCommand,
-    repairCliCommand,
     setupCliCommand,
     snapshotCliCommand,
     tuiCliCommand,

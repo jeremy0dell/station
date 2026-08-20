@@ -282,7 +282,6 @@ export function createObserverApi(options: CreateObserverApiOptions): ObserverAp
     inspectRepairInventory: (): Promise<ObserverRepairInventory> =>
       inspectObserverRepairInventory({
         persistence: options.persistence,
-        ...(options.providers === undefined ? {} : { providers: options.providers }),
       }),
     subscribe: (filter?: EventFilter): AsyncIterable<StationEvent> =>
       options.eventBus.subscribe(filter),

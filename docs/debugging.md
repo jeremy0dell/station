@@ -43,7 +43,6 @@ Use the narrowest tool that can answer the question:
 | Provider hook setup | `stn hooks doctor <target>` for worktrunk, claude, codex, cursor, or opencode |
 | Observer event hook setup | `stn event-hooks doctor` |
 | Setup and tool readiness | `stn setup check --json`, `stn setup system --check`, or `pnpm setup:system:check` |
-| Read-only repair evidence | `stn repair inventory --json` |
 
 Use `stn debug logs [query]` for bounded historical log inspection when there is no
 trace, command, or diagnostic ID yet. It reads structured JSONL logs from the
@@ -80,35 +79,6 @@ observer or start it when needed. `debug bundle` also writes a
 new redacted bundle. `reconcile`, `command dispatch`, `project add/remove`,
 hook install/uninstall, and setup apply commands intentionally mutate runtime,
 config, hooks, or local machine state.
-
-## Repair Inventory And Preview
-
-Use `stn repair inventory [--json]` to inspect Observer/Host ownership, Host-owned
-terminal process groups, retained sessions, redacted recovery handles, and
-structured refusals. Inventory never starts or reconciles Observer, starts or
-hands off Host, closes a PTY, signals a process, dispatches a recorded command,
-backs up SQLite, or writes durable state. If current evidence cannot be read
-without one of those effects, the result is partial and reports a blocker.
-On a first install with no implicit global config yet, inventory uses the empty
-default configuration to inspect the default runtime paths and returns partial
-evidence without creating config or state. An explicitly supplied missing or
-invalid `--config` path still fails instead of silently substituting defaults.
-
-Runtime and recovery repair are preview-only in this release:
-
-```bash
-stn repair runtime --dry-run --expect-inventory <sha256> --target <target-key>
-stn repair recovery --dry-run --expect-inventory <sha256> --session <id> --keep-handle <id> --prune-handle <id>
-```
-
-`--yes`, `--force`, and `--expect-plan` are rejected. Inventory and plan digests
-exclude capture timestamps and presentation copy, but remain evidence rather
-than authority: target keys only select exact identity records. Any future apply
-path must capture a fresh inventory and revalidate the socket, sole holder,
-process start, executable/argv, Host PTY instance, leader, and process topology
-before every effect. Recovery-handle output never exposes native target IDs,
-session-file paths, working directories, raw commands, environments, or
-transcripts.
 
 ## Provider Command Failures
 

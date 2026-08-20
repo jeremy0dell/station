@@ -146,7 +146,7 @@ export interface ReconcileStore {
  * explicit root Group placement or current source-Group inheritance, and provenance-safe discard
  * are one atomic conversation; canonical-title handoff and recovery import also commit before
  * recovery reconciles. Repair inspection reads sessions and recovery handles from one coherent
- * transaction so a preview never combines different persistence lifetimes.
+ * transaction so one result never combines different persistence lifetimes.
  */
 export interface SessionStore {
   readRepairInventory(): Promise<ObserverRepairPersistenceSnapshot>;

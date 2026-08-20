@@ -201,7 +201,6 @@ ownership even where current ownership is still a deviation.
 | Observer process evidence | Driven | `ObserverProcessEvidenceSource` | local `lsof`/`ps`/`/proc`/pidfile/signal adapter | `lsof` is primary socket ownership; health, strict pidfile, executable provenance, exact argv, per-launch token, build selector, and second-resolution OS start token must corroborate before replacement or signaling. Handoff reads only the requested incumbent PID. |
 | Duplicate-process evidence | Driven | `ObserverDuplicateProcessEvidenceSource` | local process-evidence adapter | Extends targeted handoff evidence with fail-closed global process inventory, bound-socket identity, and strict per-process Unix-socket-FD counts; unavailable evidence always refuses. |
 | Observer-reap exclusion | Driven | `ObserverReapExclusion` | boot-claim reap exclusion adapter | Explicit force runs under a fail-fast boot claim and releases it after every callback outcome; read-only inspection never acquires the claim. |
-| Repair runtime evidence | Driven | `RepairLocalRuntimeEvidence` | CLI local OS and Station Host adapter | The adapter correlates exact socket lifetimes, holders, daemon provenance, Host PTY instances, and repeated OS topology reads. Its inventory is evidence only and grants no signal or PTY-close authority. |
 
 `packages/contracts` owns shared Station schemas, application values, and
 provider port contracts. Observer-private ports remain in `apps/observer`.
@@ -218,7 +217,7 @@ areas contain the following responsibilities:
 | Area | Current responsibility | Adopted ownership |
 | --- | --- | --- |
 | `commands/` | command queue, routing, scopes, cancellation, launch preflight, direct terminal operations, Group mutation, and command use cases | Driving application behavior; command handlers coordinate launch preflight and provider-neutral terminal operations directly through their narrow ports, while Group mutation remains a dedicated use case. |
-| `maintenance/` | read-only repair inspection over retained sessions and recovery handles | Application use cases that classify provider-neutral, redacted maintenance evidence without dispatching a command or mutating persistence. |
+| `maintenance/` | read-only repair inspection over retained sessions and recovery handles | Application use cases that project provider-neutral, redacted maintenance evidence without dispatching a command or mutating persistence. |
 | `reconcile/` | provider reads, correlation, graph construction, Group projection, and core state | Reconcile-owned Group repair, command-local Group projection, and deterministic policies; provider I/O remains at its driven edges. `reconcileResult.ts` owns the `ReconcileTiming` result record returned by `runReconcileOnce`, while `core.ts` re-exports it for compatibility. |
 | `hooks/` | raw hook persistence and adapter handoff, report ingestion, dedupe, readiness, spool I/O, and ingress queue | One adapter-to-report normalization path; non-report hooks are reconcile hints, and queue orchestration stays separate from filesystem spool adapters. |
 | `runtime/` | API assembly, process lifecycle, scheduling, event delivery, server bridge, and external launch | Observer composition plus application operations; transport and infrastructure stay at the edge. |
@@ -261,7 +260,7 @@ No single layer owns all truth.
 | Persisted event rows | Historical and diagnostic observer memory. They are not currently the source for live subscription replay. |
 | Hook spool | Durable delivery fallback while ingress cannot reach the observer. A queued record is pending evidence, not current graph truth. Its stable spool identity drives replay completion after primary dedupe, and the filesystem record remains until all derived durable work finishes. |
 | JSONL logs and debug bundles | Diagnostic evidence. They never outrank config, provider reads, current observer state, or command records. |
-| Repair inventory and previews | Invocation-local, deterministically digested evidence. They do not grant mutation authority; application must re-inventory and exactly revalidate the selected identities before any later destructive operation. |
+| Observer repair inventory | Point-in-time retained-session and redacted recovery-handle evidence. It does not classify recovery eligibility or grant mutation authority. |
 
 Clients must treat a subscription gap as possible event loss. The Station client
 runtime subscribes first, loads a full snapshot while that subscription is live,
