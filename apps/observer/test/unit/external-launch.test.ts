@@ -888,7 +888,7 @@ describe("prepareExternalLaunch", () => {
     expect(retainedHandles).toEqual(expect.arrayContaining([persistedHandle, ineligibleHandle]));
   });
 
-  it("keeps multiple eligible recovery handles ambiguous before terminal mutation", async () => {
+  it("recovers the newest eligible handle deterministically", async () => {
     const persistence = createInMemoryObserverPersistence({
       clock: { now: () => new Date(now) },
     });
@@ -902,25 +902,44 @@ describe("prepareExternalLaunch", () => {
       createdAt: now,
       lastSeenAt: now,
     });
-    await persistence.upsertSessionRecoveryHandle(recoveryHandle());
     await persistence.upsertSessionRecoveryHandle(
       recoveryHandle({
-        id: "rec_other",
-        target: { kind: "native-session", id: "native_other" },
+        id: "rec_older",
+        target: { kind: "native-session", id: "native_older" },
+        observedAt: "2026-05-21T10:00:00.000Z",
+        lastSeenAt: "2026-05-21T11:00:00.000Z",
       }),
     );
+    const selected = await persistence.upsertSessionRecoveryHandle(
+      recoveryHandle({
+        id: "rec_newest",
+        target: { kind: "native-session", id: "native_newest" },
+        observedAt: "2026-05-21T11:30:00.000Z",
+        lastSeenAt: "2026-05-21T11:59:00.000Z",
+      }),
+    );
+    const harness = new CapturingHarness({ id: "fake-harness", now: () => new Date(now) });
     const station = new FakeManagedTerminalLifecycle();
 
     await expect(
       prepareExternalLaunch(
-        deps([row()], station, undefined, persistence, {
+        deps([row()], station, [harness], persistence, {
           sessions: [retainedSession()],
           sessionResumeAgentEnabled: true,
         }),
         prepareParams,
       ),
-    ).rejects.toMatchObject({ code: "SESSION_RECOVERY_HANDLE_AMBIGUOUS" });
-    expect(await station.listTargets()).toEqual([]);
+    ).resolves.toMatchObject({ outcome: { kind: "prepared" } });
+    expect(harness.requests).toEqual([
+      expect.objectContaining({
+        resume: {
+          target: { kind: "native-session", id: "native_newest" },
+          previousSessionId: "ses_recoverable",
+          recoveryHandleId: selected.id,
+        },
+      }),
+    ]);
+    expect(await station.listTargets()).toHaveLength(1);
   });
 
   it.each([

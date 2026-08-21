@@ -9218,6 +9218,12 @@
           "bindings": ["sessionRecoveryEligibility"]
         },
         {
+          "specifier": "../sessionRecoverySelection.js",
+          "resolvedPath": "apps/observer/src/sessionRecoverySelection.ts",
+          "edgeKind": "runtime",
+          "bindings": ["selectNewestSessionRecoveryCandidate"]
+        },
+        {
           "specifier": "@station/contracts",
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "runtime",
@@ -11981,7 +11987,7 @@
           "name": "resolveSessionRecovery",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Filters durable handles through exact lifecycle and provider-neutral eligibility before applying zero/one/many cardinality, then returns only typed resume authority for the selected provider. Explicit selection retains imported-handle compatibility only when no contradictory local Station lifecycle exists."
+          "purpose": "Filters durable handles through exact lifecycle and provider-neutral eligibility before selecting the newest automatic candidate deterministically, then returns only typed resume authority for that provider. Explicit selection retains imported-handle compatibility only when no contradictory local Station lifecycle exists."
         }
       ],
       "imports": [
@@ -12020,6 +12026,12 @@
           "resolvedPath": "apps/observer/src/sessionRecoveryEligibility.ts",
           "edgeKind": "type-only",
           "bindings": ["SessionRecoveryEligibility", "SessionRecoveryEligibilityInput"]
+        },
+        {
+          "specifier": "./sessionRecoverySelection.js",
+          "resolvedPath": "apps/observer/src/sessionRecoverySelection.ts",
+          "edgeKind": "runtime",
+          "bindings": ["selectNewestSessionRecoveryCandidate"]
         },
         {
           "specifier": "@station/contracts",
@@ -12122,6 +12134,25 @@
             "ObserverRecoveryInventorySession",
             "SessionRecoveryHandle"
           ]
+        }
+      ]
+    },
+    {
+      "path": "apps/observer/src/sessionRecoverySelection.ts",
+      "exports": [
+        {
+          "name": "selectNewestSessionRecoveryCandidate",
+          "kind": "function",
+          "role": "POLICY",
+          "purpose": "Selects the newest already-eligible recovery candidate by last activity, observation recency, then opaque Station handle identity so automatic recovery is stable across input order and restart without exposing provider-native targets."
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "type-only",
+          "bindings": ["SessionRecoveryHandle"]
         }
       ]
     },
@@ -14121,6 +14152,13 @@
           "edgeKind": "runtime"
         },
         {
+          "path": "apps/observer/src/sessionRecoverySelection.ts",
+          "declaration": "selectNewestSessionRecoveryCandidate",
+          "kind": "function",
+          "role": "POLICY",
+          "edgeKind": "runtime"
+        },
+        {
           "path": "packages/contracts/src/agentStatus.ts",
           "declaration": "AGENT_STATUS",
           "kind": "const",
@@ -14848,7 +14886,7 @@
       "declaration": "resolveSessionRecovery",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Filters durable handles through exact lifecycle and provider-neutral eligibility before applying zero/one/many cardinality, then returns only typed resume authority for the selected provider. Explicit selection retains imported-handle compatibility only when no contradictory local Station lifecycle exists.",
+      "purpose": "Filters durable handles through exact lifecycle and provider-neutral eligibility before selecting the newest automatic candidate deterministically, then returns only typed resume authority for that provider. Explicit selection retains imported-handle compatibility only when no contradictory local Station lifecycle exists.",
       "dependencies": [
         {
           "path": "apps/observer/src/persistence/ports.ts",
@@ -14860,6 +14898,13 @@
         {
           "path": "apps/observer/src/sessionRecoveryEligibility.ts",
           "declaration": "sessionRecoveryEligibility",
+          "kind": "function",
+          "role": "POLICY",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/observer/src/sessionRecoverySelection.ts",
+          "declaration": "selectNewestSessionRecoveryCandidate",
           "kind": "function",
           "role": "POLICY",
           "edgeKind": "runtime"
@@ -14896,6 +14941,14 @@
           "edgeKind": "type-only"
         }
       ]
+    },
+    {
+      "path": "apps/observer/src/sessionRecoverySelection.ts",
+      "declaration": "selectNewestSessionRecoveryCandidate",
+      "kind": "function",
+      "role": "POLICY",
+      "purpose": "Selects the newest already-eligible recovery candidate by last activity, observation recency, then opaque Station handle identity so automatic recovery is stable across input order and restart without exposing provider-native targets.",
+      "dependencies": []
     },
     {
       "path": "apps/observer/src/stationLogger.ts",
