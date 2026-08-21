@@ -28,6 +28,54 @@ const processEntry = {
 };
 
 describe("createUpdateRecoveryPreflightPorts", () => {
+  it("keeps stopped, stale, and unhealthy Observer evidence typed without querying recovery", async () => {
+    const cases = [
+      {
+        status: { status: "stopped" as const, paths: observerPaths() },
+        expected: { status: "absent" },
+      },
+      {
+        status: { status: "stale" as const, paths: observerPaths() },
+        expected: { status: "unknown", reason: "stale-socket" },
+      },
+      {
+        status: {
+          status: "unhealthy" as const,
+          paths: observerPaths(),
+          error: {
+            tag: "ObserverConnectionError",
+            code: "OBSERVER_HEALTH_FAILED",
+            message: "Observer health is unavailable.",
+          },
+        },
+        expected: { status: "unknown", reason: "unhealthy" },
+      },
+    ];
+
+    for (const testCase of cases) {
+      const readObserverIdentity = vi.fn(async () => identity);
+      const clientFactory = vi.fn();
+      const ports = createUpdateRecoveryPreflightPorts({
+        config: testConfig(),
+        providers: providerRegistry(),
+        observerStatus: async () => testCase.status,
+        readObserverIdentity,
+        observerDeps: { clientFactory },
+        hostStatus: async () => ({
+          action: "status",
+          socketPath: "/private/runtime/host.sock",
+          probe: "absent",
+        }),
+      });
+
+      await expect(ports.inspectObserver("1.1.0+station.target")).resolves.toMatchObject(
+        testCase.expected,
+      );
+      expect(readObserverIdentity).not.toHaveBeenCalled();
+      expect(clientFactory).not.toHaveBeenCalled();
+    }
+  });
+
   it("uses the shared exact verifier, pins the Observer query, and redacts Host inventory", async () => {
     const assessment = emptyAssessment();
     const getSessionRecoveryAssessment = vi.fn(async () => assessment);
