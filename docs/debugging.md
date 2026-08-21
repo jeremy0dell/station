@@ -228,8 +228,10 @@ version (`0.7.0` in this example).
 `OBSERVER_HANDOFF_REFUSED` means automatic build or cross-version replacement
 could not proceed safely. Read the running/requested display versions and build
 IDs in the error. When a replacement child exits, the result keeps its outer
-lifecycle `error` separate from the child report's typed, redacted `cause` and
-structured `startupEvidence`. Use the outer trace ID against the same state
+lifecycle `error` as `OBSERVER_HANDOFF_REFUSED` once the parent has classified a
+replaceable incumbent; the child report remains diagnostic and contributes only
+the typed, redacted `cause` and structured `startupEvidence`. Provider ingress
+rejects this outcome without creating a retry spool record. Use the outer trace ID against the same state
 directory; `stn debug trace <traceId>` projects the causal code separately. A
 same-version legacy or losing
 identified build with stable PID/start-time health can be stopped explicitly;
@@ -237,6 +239,14 @@ missing process identity refuses rather than risking a successor. It must not
 attach to different code. Compare `lsof -t <socket>` with the strict pidfile and
 `ps -ww -p <pid> -o lstart=,command=`, then retry only after resolving missing
 or conflicting evidence. Automatic handoff never uses SIGKILL.
+
+Auto-starting `snapshot`, `doctor`, `command`, `reconcile`, `observe`, and
+`debug bundle` boundaries preserve failures as the strict `{ error, cause?,
+startupEvidence? }` lifecycle envelope instead of flattening them into prose.
+Setup activation retains the same fields in its failed operation/session
+outcome. `stn update --json` keeps `UPDATE_RUNTIME_CROSSOVER_FAILED` as its outer
+`error` and publishes the strictly parsed successor lifecycle `cause` and
+`startupEvidence` separately.
 
 `OBSERVER_EXACT_BUILD_ACTIVATION_FAILED` means an explicit configured-runtime
 activation could not finish with the caller's exact immutable selector. The
@@ -382,7 +392,7 @@ the client; a scoped `tsc` output is not an identified whole-repository build.
 
 ## Reading Evidence
 
-- `logs/observer-boot.log` is the raw, local-only record of the latest observer startup attempt. Each attempt atomically replaces it at mode `0600` with a JSON-encoded command header followed by that child's stdout/stderr. It sits outside ordinary lifecycle text. A failed start can expose its path and a redacted final 15-line, 64-KiB-bounded tail as structured `startupEvidence`; `debug logs` and `debug trace` keep that evidence separate from the outer error and typed cause.
+- `logs/observer-boot.log` is the raw, local-only record of the latest observer startup attempt. Each attempt atomically replaces it at mode `0600` with a JSON-encoded command header followed by that child's stdout/stderr. It sits outside ordinary lifecycle text. A failed start can expose its path and a redacted final 15-line, 64-KiB-bounded tail as structured `startupEvidence`; CRLF, lone CR/LF, U+2028, and U+2029 all count as line terminators. `debug logs` and `debug trace` keep that evidence separate from the outer error and typed cause, including each SafeError's `tag` and optional `hint`.
 - A failed hosted binary smoke can upload `binary-smoke-evidence-<run-id>-<attempt>` for three days. Download it with `gh run download <run-id> --name binary-smoke-evidence-<run-id>-<attempt> --dir /tmp/station-binary-smoke-evidence-<run-id>`, then read `manifest.json` before the round's `failure.json`, bounded logs, and runtime summary. The bundle is redacted, allowlisted, and capped at 1 MiB, but collaborators with Actions access can download it. Do not run `stn debug trace` against unrelated live state and treat it as evidence for the downloaded CI run.
 - Binary-smoke runtime ownership is recorded in `rounds/*/runtime/lifecycle.jsonl`. Read the owner registration and process-start events first, then the shutdown signal, any bounded escalation, refusal or rescue event, and `runtime.cleanup.completed` counts. The manifest's per-run ID must match the invocation that finalized it. A complete disposable cleanup has zero group members, private roots, Observer or Host sockets, Observer pidfiles, or active owner records; an incomplete or ambiguous cleanup retains the relevant root identity for the next ordinary start or manual inspection. Do not remove a retained root or signal a listed PID unless its executable, process group, start identity, and disposable role still match.
 - `observer.claim.sqlite` is boot-exclusion evidence only. Inspect it with

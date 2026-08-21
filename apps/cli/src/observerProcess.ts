@@ -1,9 +1,11 @@
 import type {
   ObserverHealth,
+  ObserverLifecycleFailure,
   ObserverStartupEvidence,
   ObserverStopReceipt,
   SafeError,
 } from "@station/contracts";
+import { ObserverLifecycleFailureSchema, textLineTerminatorPattern } from "@station/contracts";
 import { componentLogPath, createJsonlLogger, createTraceContext } from "@station/observability";
 import {
   createObserverClient,
@@ -141,6 +143,7 @@ async function startObserverWithPolicy(
   const clock = deps.clock ?? systemClock;
   const buildVersion = deps.buildVersion ?? stationObserverBuildVersion();
   const trace = createTraceContext({ operation: "cli.observer.start" });
+  let replaceableIncumbent: ObserverHealth | undefined;
   const statusTimeoutMs = remainingObserverStartBudget(timeoutMs, options.startupDeadlineMs);
   if (statusTimeoutMs <= 0) return observerStartTimedOut(paths);
   const existing = await getObserverStatus({ ...options, paths, timeoutMs: statusTimeoutMs }, deps);
@@ -155,6 +158,9 @@ async function startObserverWithPolicy(
         paths,
         error: observerHandoffRefusedError(existing.health, buildVersion, classification.reason),
       };
+    }
+    if (classification.action === "replace") {
+      replaceableIncumbent = existing.health;
     }
   }
   if (
@@ -174,6 +180,7 @@ async function startObserverWithPolicy(
       trace,
       clock,
       buildVersion,
+      ...(replaceableIncumbent === undefined ? {} : { replaceableIncumbent }),
       ...(options.configPath === undefined ? {} : { configPath: options.configPath }),
       ...(options.observerCommand === undefined
         ? {}
@@ -624,11 +631,43 @@ export function observerStatusErrorMessage(
   if (status.cause !== undefined) {
     lines.push(`Cause: ${status.cause.message} (${status.cause.code})`);
   }
+  if (status.cause === undefined && error.hint !== undefined) {
+    lines.push(`Next: ${error.hint.split(textLineTerminatorPattern).join(" ")}`);
+    return lines.join("\n");
+  }
   const traceId = error.traceId ?? status.cause?.traceId;
   lines.push(
     traceId === undefined ? "Next: stn observer status" : `Next: stn debug trace ${traceId}`,
   );
   return lines.join("\n");
+}
+
+/**
+ * Preserves the strict lifecycle envelope when an auto-starting command cannot obtain a running Observer.
+ */
+export function assertObserverRunning(
+  status: ObserverStatus,
+): asserts status is Extract<ObserverStatus, { status: "running" }> {
+  if (status.status === "running") return;
+  throw observerLifecycleFailure(status);
+}
+
+/** Builds the strict public lifecycle envelope from one non-running Observer status. */
+export function observerLifecycleFailure(
+  status: Exclude<ObserverStatus, { status: "running" }>,
+): ObserverLifecycleFailure {
+  const failure: ObserverLifecycleFailure = {
+    error:
+      status.error ??
+      ({
+        tag: "ObserverStartupError",
+        code: "OBSERVER_NOT_RUNNING",
+        message: "Observer is not running.",
+      } satisfies SafeError),
+  };
+  if (status.cause !== undefined) failure.cause = status.cause;
+  if (status.startupEvidence !== undefined) failure.startupEvidence = status.startupEvidence;
+  return ObserverLifecycleFailureSchema.parse(failure);
 }
 
 /**

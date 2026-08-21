@@ -317,7 +317,29 @@ describe("provider hook delivery policy", () => {
         }) as never,
       spawnObserver: async () => {
         state.spawnCount += 1;
-        return { pid: 5678, unref: () => undefined };
+        return {
+          pid: 5678,
+          unref: () => undefined,
+          exited: Promise.resolve({
+            type: "exit" as const,
+            code: 1,
+            signal: null,
+            report: {
+              kind: "observer-startup-failure" as const,
+              version: 1 as const,
+              error: {
+                tag: "ObserverStartupError",
+                code: "OBSERVER_HANDOFF_REFUSED",
+                message: "Observer handoff was refused.",
+              },
+              cause: {
+                tag: "ObserverProcessIdentityError",
+                code: "OBSERVER_PROCESS_EXECUTABLE_ARGV_MISMATCH",
+                message: "Observer executable arguments did not match.",
+              },
+            },
+          }),
+        };
       },
     };
     const input = deliveryInput(fixture, "hook_handoff_refused", state, deps);

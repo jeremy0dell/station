@@ -278,12 +278,7 @@ describe("CLI observe command", () => {
             },
           },
         ),
-      ).rejects.toThrow(
-        [
-          "Observer protocol schema mismatch: the observer responded with schema 0.3.0, but this CLI expects schema 0.11.0. (PROTOCOL_SCHEMA_MISMATCH)",
-          "Next: stn observer status",
-        ].join("\n"),
-      );
+      ).rejects.toMatchObject({ error: { code: "PROTOCOL_SCHEMA_MISMATCH" } });
     } finally {
       await server.close();
     }

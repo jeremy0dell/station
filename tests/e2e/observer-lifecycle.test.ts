@@ -1,4 +1,4 @@
-import { type ChildProcess, execFile, spawn } from "node:child_process";
+import { type ChildProcess, execFile, spawn, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import {
   access,
@@ -224,7 +224,7 @@ describe("observer lifecycle e2e", () => {
       });
       await expect(
         runCli(["--config", configPath, "doctor"], { observerDeps: deps }),
-      ).rejects.toThrow(/OBSERVER_SOCKET_INACCESSIBLE/u);
+      ).rejects.toMatchObject({ error: { code: "OBSERVER_SOCKET_INACCESSIBLE" } });
       await sleep(5500);
 
       expect(processIsAlive(originalPid)).toBe(true);
@@ -392,7 +392,7 @@ describe("observer lifecycle e2e", () => {
       expect(status, JSON.stringify(status)).toMatchObject({
         status: "unhealthy",
         error: {
-          code: "OBSERVER_EXITED_ON_START",
+          code: "OBSERVER_HANDOFF_REFUSED",
           traceId: expect.any(String),
         },
         cause: {
@@ -411,7 +411,7 @@ describe("observer lifecycle e2e", () => {
       const serialized = JSON.stringify(status);
       expect(serialized).not.toContain("[object Object]");
       const rendered = observerStatusErrorMessage(status);
-      expect(rendered).toContain("Observer exited before becoming healthy");
+      expect(rendered).toContain("Observer build handoff was refused");
       expect(rendered).toContain(
         "Cause: Observer process evidence did not match the exact executable and argv. (OBSERVER_PROCESS_EXECUTABLE_ARGV_MISMATCH)",
       );
@@ -435,6 +435,30 @@ describe("observer lifecycle e2e", () => {
           },
         },
       });
+
+      const ingress = spawnSync(
+        join(process.cwd(), "bin", "stn-ingress"),
+        [
+          "--socket",
+          fixture.socketPath,
+          "--state-dir",
+          fixture.stateDir,
+          "--startup-timeout-ms",
+          "10000",
+          "worktrunk",
+          "post-create",
+        ],
+        {
+          cwd: process.cwd(),
+          encoding: "utf8",
+          input: JSON.stringify({ branch: "station/executable-mismatch" }),
+          timeout: 20_000,
+        },
+      );
+      if (ingress.error !== undefined) throw ingress.error;
+      expect(ingress.status).toBe(1);
+      expect(ingress.stderr).toContain("OBSERVER_HANDOFF_REFUSED");
+      await expect(directoryFileCount(fixture.hookSpoolDir)).resolves.toBe(0);
 
       expect(processIsAlive(incumbent.child.pid)).toBe(true);
       await expect(incumbent.client.health()).resolves.toMatchObject({
@@ -539,8 +563,8 @@ describe("observer lifecycle e2e", () => {
       );
       expect(status.status).toBe("unhealthy");
       if (status.status === "running") throw new Error("Wedged incumbent was replaced.");
-      expect(["OBSERVER_START_FAILED", "OBSERVER_EXITED_ON_START"]).toContain(status.error?.code);
-      if (status.error?.code === "OBSERVER_EXITED_ON_START") {
+      expect(["OBSERVER_START_FAILED", "OBSERVER_HANDOFF_REFUSED"]).toContain(status.error?.code);
+      if (status.error?.code === "OBSERVER_HANDOFF_REFUSED") {
         expect(status.cause?.code).toBe("OBSERVER_HANDOFF_REFUSED");
       }
       expect(processIsAlive(incumbent.child.pid)).toBe(true);
@@ -575,7 +599,7 @@ describe("observer lifecycle e2e", () => {
       );
       expect(status).toMatchObject({
         status: "unhealthy",
-        error: { code: "OBSERVER_EXITED_ON_START" },
+        error: { code: "OBSERVER_HANDOFF_REFUSED" },
         cause: { code: "OBSERVER_HANDOFF_REFUSED" },
       });
       expect(processIsAlive(incumbent.child.pid)).toBe(true);
@@ -1240,6 +1264,15 @@ async function observerProcessesForSocket(socketPath: string): Promise<number[]>
     .map((line) => Number.parseInt(line.trimStart().split(/\s+/, 1)[0] ?? "", 10))
     .filter(Number.isFinite)
     .sort((left, right) => left - right);
+}
+
+async function directoryFileCount(path: string): Promise<number> {
+  try {
+    return (await readdir(path)).length;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return 0;
+    throw error;
+  }
 }
 
 async function waitFor(condition: () => Promise<boolean>, timeoutMs: number): Promise<void> {

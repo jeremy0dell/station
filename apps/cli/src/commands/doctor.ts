@@ -15,9 +15,8 @@ import {
 } from "@station/runtime";
 import { parseRequiredOptionValue } from "../args.js";
 import {
+  assertObserverRunning,
   type ObserverProcessDeps,
-  type ObserverStatus,
-  observerStatusErrorMessage,
   startObserver,
 } from "../observerProcess.js";
 import { resolveObserverPaths } from "../paths.js";
@@ -76,7 +75,7 @@ export async function runDoctorCommand(
     observerOptions.configPath = options.configPath;
   }
   const status = await startObserver(observerOptions, deps);
-  assertRunning(status);
+  assertObserverRunning(status);
   const client =
     deps.clientFactory?.(paths.socketPath) ??
     createObserverClient({
@@ -293,12 +292,4 @@ function doctorStatusWithCheck(report: DoctorReport, check: DoctorCheck): Doctor
     return "degraded";
   }
   return report.status;
-}
-
-function assertRunning(
-  status: ObserverStatus,
-): asserts status is Extract<ObserverStatus, { status: "running" }> {
-  if (status.status !== "running") {
-    throw new Error(observerStatusErrorMessage(status));
-  }
 }

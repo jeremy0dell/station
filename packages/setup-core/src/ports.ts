@@ -47,7 +47,8 @@ export type SetupConfigMutationPort = (
 /**
  * DRIVEN PORT
  *
- * Activates a committed setup configuration and confirms Observer health.
+ * Activates a committed setup configuration and confirms Observer health while retaining typed
+ * lifecycle cause and startup evidence in failed operation outcomes.
  */
 export type SetupObserverActivationPort = (
   operation: SetupObserverActivationOperation,

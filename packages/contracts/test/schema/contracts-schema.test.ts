@@ -31,6 +31,7 @@ import {
   ObserverLifecycleFailureSchema,
   type ObserverProcessIdentity,
   ObserverProcessIdentitySchema,
+  ObserverRestartCommandResultSchema,
   ObserverStartupEvidenceSchema,
   ObserverStartupFailureReportSchema,
   ObserverStopReceiptSchema,
@@ -2179,6 +2180,22 @@ describe("contract schemas", () => {
     });
     expect(ObserverLifecycleFailureSchema.parse({ error })).toEqual({ error });
     expect(
+      ObserverRestartCommandResultSchema.parse({
+        status: "unhealthy",
+        paths: {
+          stateDir: "/tmp/station",
+          socketPath: "/tmp/station/run/observer.sock",
+          dbPath: "/tmp/station/observer.sqlite",
+          logDir: "/tmp/station/logs",
+          diagnosticsDir: "/tmp/station/diagnostics",
+          hookSpoolDir: "/tmp/station/spool/hooks",
+        },
+        error,
+        cause,
+        startupEvidence,
+      }),
+    ).toMatchObject({ status: "unhealthy", cause, startupEvidence });
+    expect(
       ObserverStartupFailureReportSchema.parse({
         kind: "observer-startup-failure",
         version: 1,
@@ -2192,6 +2209,26 @@ describe("contract schemas", () => {
       { ...startupEvidence, bootLogTail: Array.from({ length: 16 }, () => "line").join("\n") },
       "startup evidence over the line bound",
     );
+    for (const terminator of ["\r", "\u2028", "\u2029"]) {
+      expectFails(
+        ObserverStartupEvidenceSchema,
+        {
+          ...startupEvidence,
+          bootLogTail: Array.from({ length: 16 }, () => "line").join(terminator),
+        },
+        `startup evidence over the line bound with ${JSON.stringify(terminator)}`,
+      );
+      expectFails(
+        ObserverLifecycleFailureSchema,
+        {
+          error: {
+            ...error,
+            message: `failed${terminator}    at /private/secret.ts`,
+          },
+        },
+        `lifecycle stack disclosure with ${JSON.stringify(terminator)}`,
+      );
+    }
     expectFails(
       ObserverStartupEvidenceSchema,
       { ...startupEvidence, extra: true },

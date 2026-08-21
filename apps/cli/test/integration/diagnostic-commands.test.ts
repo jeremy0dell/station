@@ -508,12 +508,14 @@ describe("CLI diagnostic commands", () => {
             tag: "ObserverStartupError",
             code: "OBSERVER_START_FAILED",
             message: "Observer did not become healthy before the startup timeout.",
+            hint: "Run stn debug trace trc_lifecycle.",
             traceId: "trc_lifecycle",
           },
           cause: {
             tag: "ObserverProcessEvidenceError",
             code: "OBSERVER_PROCESS_EXECUTABLE_ARGV_MISMATCH",
             message: "Observer process evidence did not match the exact executable and argv.",
+            hint: "Use the launcher that owns the incumbent build.",
           },
           startupEvidence: {
             bootLogPath: join(fixture.stateDir, "logs", "observer-boot.log"),
@@ -539,10 +541,14 @@ describe("CLI diagnostic commands", () => {
         traceId: "trc_lifecycle",
         spanId: "spn_lifecycle",
         error: {
+          tag: "ObserverStartupError",
           code: "OBSERVER_START_FAILED",
+          hint: "Run stn debug trace trc_lifecycle.",
         },
         cause: {
+          tag: "ObserverProcessEvidenceError",
           code: "OBSERVER_PROCESS_EXECUTABLE_ARGV_MISMATCH",
+          hint: "Use the launcher that owns the incumbent build.",
         },
         startupEvidence: {
           bootLogPath: join(fixture.stateDir, "logs", "observer-boot.log"),
@@ -592,8 +598,16 @@ describe("CLI diagnostic commands", () => {
         },
         records: [
           {
-            error: { code: "OBSERVER_START_FAILED" },
-            cause: { code: "OBSERVER_PROCESS_EXECUTABLE_ARGV_MISMATCH" },
+            error: {
+              tag: "ObserverStartupError",
+              code: "OBSERVER_START_FAILED",
+              hint: "Run stn debug trace trc_lifecycle.",
+            },
+            cause: {
+              tag: "ObserverProcessEvidenceError",
+              code: "OBSERVER_PROCESS_EXECUTABLE_ARGV_MISMATCH",
+              hint: "Use the launcher that owns the incumbent build.",
+            },
             startupEvidence: {
               bootLogTail: "startup evidence API_TOKEN=[REDACTED]",
             },

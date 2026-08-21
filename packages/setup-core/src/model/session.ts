@@ -1,4 +1,4 @@
-import type { SafeError } from "@station/contracts";
+import type { ObserverStartupEvidence, SafeError } from "@station/contracts";
 import type { SetupPlanningIntent } from "./intent.js";
 import type { SetupIssue } from "./issues.js";
 import type {
@@ -99,6 +99,8 @@ export type SetupSessionBlockedState = SetupSessionBase & {
   readonly reason: SetupSessionBlockReason;
   readonly plan?: SetupPlan;
   readonly error?: SafeError;
+  readonly cause?: SafeError;
+  readonly startupEvidence?: ObserverStartupEvidence;
 };
 
 export type SetupSessionCompletedState = SetupSessionWithPlan & {

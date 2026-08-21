@@ -1,4 +1,5 @@
 import { type StationConfig, stationHostSocketPath } from "@station/config";
+import { type ObserverLifecycleFailure, STATION_SCHEMA_VERSION } from "@station/contracts";
 import { HOST_PROTOCOL_VERSION } from "@station/host";
 import { listenUnixSocket } from "@station/protocol";
 import type { ExternalCommandInput, ExternalCommandResult } from "@station/runtime";
@@ -270,6 +271,51 @@ describe("stn update command", () => {
           "20000",
         ],
       ],
+    });
+  });
+
+  it("strictly retains a successor Observer lifecycle cause and startup evidence", async () => {
+    const fixture = probeFixture("installer-binary");
+    const lifecycleFailure: ObserverLifecycleFailure = {
+      error: {
+        tag: "ObserverStartupError",
+        code: "OBSERVER_HANDOFF_REFUSED",
+        message: "Observer build handoff was refused.",
+      },
+      cause: {
+        tag: "ObserverProcessIdentityError",
+        code: "OBSERVER_PROCESS_EXECUTABLE_ARGV_MISMATCH",
+        message: "Observer executable arguments did not match.",
+      },
+      startupEvidence: {
+        bootLogPath: "/tmp/station/logs/observer-boot.log",
+        bootLogTail: "replacement refused",
+      },
+    };
+    const result = await runUpdateCommand(["--json"], commandOptions(), {
+      probes: [fixture.probe],
+      buildInfo: testBuildInfo,
+      commandRunner: async (input) => ({
+        command: input.command,
+        args: input.args ?? [],
+        stdout: JSON.stringify({
+          status: "unhealthy",
+          paths: observerCommandPaths(),
+          ...lifecycleFailure,
+        }),
+        stderr: "",
+        exitCode: 1,
+      }),
+    });
+
+    expect(result).toMatchObject({
+      code: 1,
+      output: {
+        status: "failed",
+        error: { code: "UPDATE_RUNTIME_CROSSOVER_FAILED" },
+        cause: { code: "OBSERVER_PROCESS_EXECUTABLE_ARGV_MISMATCH" },
+        startupEvidence: lifecycleFailure.startupEvidence,
+      },
     });
   });
 
@@ -570,12 +616,35 @@ function missingProbe(channel: UpdateChannelId): UpdateChannelProbe {
 }
 
 function commandResult(input: ExternalCommandInput): ExternalCommandResult {
+  const observerRestart =
+    input.args?.includes("observer") === true && input.args.includes("restart");
   return {
     command: input.command,
     args: input.args ?? [],
-    stdout: "",
+    stdout: observerRestart
+      ? JSON.stringify({
+          status: "running",
+          socketPath: config.observer.socketPath,
+          health: {
+            schemaVersion: STATION_SCHEMA_VERSION,
+            status: "healthy",
+          },
+        })
+      : "",
     stderr: "",
     exitCode: 0,
+  };
+}
+
+function observerCommandPaths() {
+  const stateDir = "/tmp/station";
+  return {
+    stateDir,
+    socketPath: `${stateDir}/run/observer.sock`,
+    dbPath: `${stateDir}/observer.sqlite`,
+    logDir: `${stateDir}/logs`,
+    diagnosticsDir: `${stateDir}/diagnostics`,
+    hookSpoolDir: `${stateDir}/spool/hooks`,
   };
 }
 

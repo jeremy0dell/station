@@ -206,7 +206,7 @@ describe("CLI command dispatch/get", () => {
           sleep: async () => undefined,
         },
       ),
-    ).rejects.toThrow("Observer did not become healthy before the startup timeout.");
+    ).rejects.toMatchObject({ error: { code: "OBSERVER_START_FAILED" } });
   });
 
   it("never dispatches a mutation through a losing same-version Observer", async () => {
@@ -245,7 +245,7 @@ describe("CLI command dispatch/get", () => {
             }) as never,
         },
       ),
-    ).rejects.toThrow(/OBSERVER_HANDOFF_REFUSED/u);
+    ).rejects.toMatchObject({ error: { code: "OBSERVER_HANDOFF_REFUSED" } });
 
     expect(spawned).toBe(true);
     expect(dispatches).toBe(0);

@@ -12681,7 +12681,7 @@
       "declaration": "createObserverActivationAdapter",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Translates setup activation into config loading, Observer path resolution, restart, and health confirmation. Forwards Observer startup progress to the caller-supplied callback without interpreting it.",
+      "purpose": "Translates setup activation into config loading, Observer path resolution, restart, and health confirmation. Forwards startup progress and retains lifecycle cause/evidence without interpreting either.",
       "dependencies": [
         {
           "path": "apps/cli/src/observerProcess.ts",
@@ -15744,7 +15744,7 @@
       "declaration": "SetupObserverActivationPort",
       "kind": "type",
       "role": "DRIVEN PORT",
-      "purpose": "Activates a committed setup configuration and confirms Observer health.",
+      "purpose": "Activates a committed setup configuration and confirms Observer health while retaining typed lifecycle cause and startup evidence in failed operation outcomes.",
       "dependencies": []
     },
     {

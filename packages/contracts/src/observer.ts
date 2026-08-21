@@ -33,7 +33,11 @@ import {
 } from "./providers.js";
 import type { ObserverRecoveryInventory } from "./recoveryInventory.js";
 import type { SessionRecoveryReadiness } from "./sessionRecovery.js";
-import { nonEmptyStringSchema, userFacingTitleSchema } from "./shared.js";
+import {
+  nonEmptyStringSchema,
+  textLineTerminatorPattern,
+  userFacingTitleSchema,
+} from "./shared.js";
 import { type StationSnapshot, StationSnapshotSchema } from "./snapshot.js";
 
 /** Maximum encoded size of one child-to-parent Observer startup failure report. */
@@ -54,7 +58,8 @@ const ObserverStartupBootLogTailSchema = z
     "Observer boot-log tail exceeded its byte limit.",
   )
   .refine(
-    (value) => value.split(/\r?\n/u).length <= OBSERVER_STARTUP_BOOT_LOG_TAIL_MAX_LINES,
+    (value) =>
+      value.split(textLineTerminatorPattern).length <= OBSERVER_STARTUP_BOOT_LOG_TAIL_MAX_LINES,
     "Observer boot-log tail exceeded its line limit.",
   );
 
@@ -179,6 +184,35 @@ export const ObserverHealthSchema = z
   .strict();
 
 export type ObserverHealth = z.infer<typeof ObserverHealthSchema>;
+
+/** Concrete local paths emitted with a non-running Observer command result. */
+export const ObserverCommandPathsSchema = z
+  .object({
+    stateDir: nonEmptyStringSchema,
+    socketPath: nonEmptyStringSchema,
+    dbPath: nonEmptyStringSchema,
+    logDir: nonEmptyStringSchema,
+    diagnosticsDir: nonEmptyStringSchema,
+    hookSpoolDir: nonEmptyStringSchema,
+  })
+  .strict();
+
+/** Strict JSON result consumed when an update asks its successor launcher to restart Observer. */
+export const ObserverRestartCommandResultSchema = z.discriminatedUnion("status", [
+  z
+    .object({
+      status: z.literal("running"),
+      socketPath: nonEmptyStringSchema,
+      health: ObserverHealthSchema,
+    })
+    .strict(),
+  ObserverLifecycleFailureSchema.extend({
+    status: z.enum(["stopped", "stale", "unhealthy"]),
+    paths: ObserverCommandPathsSchema,
+  }).strict(),
+]);
+
+export type ObserverRestartCommandResult = z.infer<typeof ObserverRestartCommandResultSchema>;
 
 export const ObserverStopReceiptSchema = z
   .object({

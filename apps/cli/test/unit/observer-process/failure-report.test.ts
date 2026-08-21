@@ -57,9 +57,16 @@ describe("Observer startup failure reports", () => {
     });
   });
 
-  it("normalizes ordinary Errors to one redacted line without stacks", () => {
+  it.each([
+    "\n",
+    "\r",
+    "\u2028",
+    "\u2029",
+  ])("normalizes ordinary Errors to one redacted line at %j", (terminator) => {
     const report = normalizeObserverStartupFailure(
-      new Error("startup failed with API_TOKEN=super-secret-value\n    at private-frame"),
+      new Error(
+        `startup failed with API_TOKEN=super-secret-value${terminator}    at /private/frame`,
+      ),
     );
 
     expect(report.error).toEqual({
@@ -67,7 +74,7 @@ describe("Observer startup failure reports", () => {
       code: "OBSERVER_STARTUP_CAUSE_ERROR",
       message: "startup failed with API_TOKEN=[REDACTED]",
     });
-    expect(JSON.stringify(report)).not.toContain("private-frame");
+    expect(JSON.stringify(report)).not.toContain("/private/frame");
     expect(JSON.stringify(report)).not.toContain("super-secret-value");
   });
 

@@ -52,6 +52,24 @@ describe("CLI observer process lifecycle", () => {
     expect(observerStatusErrorMessage({ status: "stopped", paths: fixture })).toBe(
       "Observer is not running.",
     );
+
+    expect(
+      observerStatusErrorMessage({
+        status: "unhealthy",
+        paths: fixture,
+        error: {
+          tag: "ObserverStartupError",
+          code: "OBSERVER_HANDOFF_REFUSED",
+          message: "Observer build handoff was refused.",
+          hint: "Running build: 1.2.3 (build bbbbbbbbbbbb).\nRequested build: 1.2.3 (build aaaaaaaaaaaa). Run `stn observer stop` and retry.",
+        },
+      }),
+    ).toBe(
+      [
+        "Observer build handoff was refused. (OBSERVER_HANDOFF_REFUSED)",
+        "Next: Running build: 1.2.3 (build bbbbbbbbbbbb). Requested build: 1.2.3 (build aaaaaaaaaaaa). Run `stn observer stop` and retry.",
+      ].join("\n"),
+    );
   });
 
   it("reports an absent socket as stopped without spending the remaining deadline on health", async () => {

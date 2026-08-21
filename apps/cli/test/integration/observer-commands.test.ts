@@ -261,6 +261,84 @@ describe("CLI observer commands", () => {
     expect(JSON.stringify(result)).not.toContain("[object Object]");
   });
 
+  it.each([
+    { label: "snapshot", args: ["snapshot", "--json"] },
+    { label: "doctor", args: ["doctor"] },
+    { label: "reconcile", args: ["reconcile"] },
+    { label: "command", args: ["command", "dispatch", "--stdin"] },
+    { label: "observe", args: ["observe", "--json", "--duration", "1ms"] },
+    { label: "debug bundle", args: ["debug", "bundle"] },
+  ])("retains lifecycle fields across the $label auto-start boundary", async ({ args }) => {
+    const fixture = await createTempState();
+    const configPath = await writeConfigToml(fixture.root, fixture.config);
+    let healthCalls = 0;
+    const lifecycleAttempt = runCli(["--config", configPath, ...args], {
+      stdin: JSON.stringify({
+        type: "observer.reconcile",
+        payload: { reason: "lifecycle-boundary" },
+      }),
+      observerDeps: {
+        buildVersion: requestedBuildVersion,
+        spawnObserver: async () => ({
+          pid: 4321,
+          unref: () => undefined,
+          exited: Promise.resolve({
+            type: "exit" as const,
+            code: 1,
+            signal: null,
+            report: {
+              kind: "observer-startup-failure" as const,
+              version: 1 as const,
+              error: {
+                tag: "ObserverHandoffError",
+                code: "OBSERVER_HANDOFF_REFUSED",
+                message: "The incumbent Observer could not be replaced safely.",
+              },
+              cause: {
+                tag: "ObserverProcessEvidenceError",
+                code: "OBSERVER_PROCESS_EXECUTABLE_ARGV_MISMATCH",
+                message: "Observer process evidence did not match the exact executable and argv.",
+              },
+            },
+          }),
+          readBootLogTail: async () => "replacement refused",
+        }),
+        clientFactory: () =>
+          ({
+            health: async () => {
+              healthCalls += 1;
+              return healthCalls <= 2
+                ? {
+                    schemaVersion: "0.11.0",
+                    status: "healthy",
+                    pid: 1234,
+                    startedAt: now,
+                    version: zeroBuildVersion,
+                    socketPath: fixture.socketPath,
+                  }
+                : {
+                    schemaVersion: "0.11.0",
+                    status: "healthy",
+                    pid: 9876,
+                    startedAt: now,
+                    version: `1.2.3+station.${"f".repeat(64)}`,
+                    socketPath: fixture.socketPath,
+                  };
+            },
+          }) as never,
+      },
+    });
+
+    await expect(lifecycleAttempt).rejects.toMatchObject({
+      error: { code: "OBSERVER_HANDOFF_REFUSED" },
+      cause: { code: "OBSERVER_PROCESS_EXECUTABLE_ARGV_MISMATCH" },
+      startupEvidence: {
+        bootLogPath: join(fixture.stateDir, "logs", "observer-boot.log"),
+        bootLogTail: "replacement refused",
+      },
+    });
+  });
+
   it("reports inaccessible ownership and fails start, restart, and doctor without mutation", async () => {
     const fixture = await createTempState();
     const configPath = await writeConfigToml(fixture.root, fixture.config);
@@ -308,9 +386,9 @@ describe("CLI observer commands", () => {
           });
         }
       }
-      await expect(runCli(["--config", configPath, "doctor"], { observerDeps })).rejects.toThrow(
-        /OBSERVER_SOCKET_INACCESSIBLE/u,
-      );
+      await expect(
+        runCli(["--config", configPath, "doctor"], { observerDeps }),
+      ).rejects.toMatchObject({ error: { code: "OBSERVER_SOCKET_INACCESSIBLE" } });
       const after = await lstat(fixture.socketPath, { bigint: true });
       expect({ ino: after.ino, birthtimeNs: after.birthtimeNs }).toEqual({
         ino: before.ino,

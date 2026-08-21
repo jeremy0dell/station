@@ -56,17 +56,21 @@ export type DebugTraceResult = {
     spanId?: string;
   };
   error?: {
+    tag: string;
     id?: string;
     code?: string;
     message?: string;
+    hint?: string;
     provider?: string;
     diagnosticId?: string;
     diagnostics?: DiagnosticDetail[];
     traceId?: string;
   };
   cause?: {
+    tag: string;
     code?: string;
     message?: string;
+    hint?: string;
     provider?: string;
     diagnosticId?: string;
     traceId?: string;
@@ -529,6 +533,7 @@ function errorSummary(error: ErrorEnvelope | undefined): DebugTraceResult["error
     return undefined;
   }
   const summary: DebugTraceErrorSummary = {
+    tag: error.tag,
     id: error.id,
     code: error.code,
     message: error.message,
@@ -556,10 +561,13 @@ function commandErrorSummary(command: CommandRecord | undefined): DebugTraceResu
   if (command?.error === undefined && command?.diagnostics === undefined) {
     return undefined;
   }
-  const summary: DebugTraceErrorSummary = {};
+  const summary: DebugTraceErrorSummary = {
+    tag: command.error?.tag ?? "CommandDiagnostics",
+  };
   if (command.error !== undefined) {
     summary.code = command.error.code;
     summary.message = command.error.message;
+    if (command.error.hint !== undefined) summary.hint = command.error.hint;
     if (command.error.provider !== undefined) summary.provider = command.error.provider;
     if (command.error.diagnosticId !== undefined) summary.diagnosticId = command.error.diagnosticId;
   }

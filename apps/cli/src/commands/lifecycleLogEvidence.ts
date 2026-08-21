@@ -5,8 +5,10 @@ const LifecycleLogAttributesSchema = ObserverLifecycleFailureSchema.passthrough(
 const SafeErrorViewSchema = SafeErrorSchema.strip();
 
 export type LifecycleErrorSummary = {
+  tag: string;
   code: string;
   message: string;
+  hint?: string;
   provider?: string;
   diagnosticId?: string;
   traceId?: string;
@@ -25,7 +27,12 @@ export function parseLogSafeError(value: unknown): SafeError | undefined {
 }
 
 export function summarizeLifecycleError(error: SafeError): LifecycleErrorSummary {
-  const summary: LifecycleErrorSummary = { code: error.code, message: error.message };
+  const summary: LifecycleErrorSummary = {
+    tag: error.tag,
+    code: error.code,
+    message: error.message,
+  };
+  if (error.hint !== undefined) summary.hint = error.hint;
   if (error.provider !== undefined) summary.provider = error.provider;
   if (error.diagnosticId !== undefined) summary.diagnosticId = error.diagnosticId;
   if (error.traceId !== undefined) summary.traceId = error.traceId;

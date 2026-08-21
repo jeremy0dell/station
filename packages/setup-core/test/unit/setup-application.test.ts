@@ -60,6 +60,58 @@ describe("createSetupSessionApplication", () => {
     ]);
   });
 
+  it("retains Observer lifecycle evidence when activation blocks the session", async () => {
+    const inspections = [missingConfigFacts(), missingConfigFacts()];
+    const application = createSetupSessionApplication({
+      intent: intent(),
+      inspection: async () => {
+        const facts = inspections.shift();
+        if (facts === undefined) throw new Error("unexpected inspection");
+        return { status: "completed", facts };
+      },
+      executeOperation: async (operation) => {
+        if (operation.kind === "write-config") {
+          return {
+            status: "completed",
+            operationId: operation.id,
+            commit: { kind: "config", configPath: "/tmp/config.toml", change: "created" },
+          };
+        }
+        return {
+          status: "failed",
+          operationId: operation.id,
+          error: {
+            tag: "ObserverStartupError",
+            code: "OBSERVER_HANDOFF_REFUSED",
+            message: "Observer handoff was refused.",
+          },
+          cause: {
+            tag: "ObserverProcessEvidenceError",
+            code: "OBSERVER_PROCESS_EXECUTABLE_ARGV_MISMATCH",
+            message: "Observer executable arguments did not match.",
+          },
+          startupEvidence: { bootLogPath: "/tmp/station/logs/observer-boot.log" },
+        };
+      },
+    });
+
+    await expect(application.apply()).resolves.toMatchObject({
+      status: "blocked",
+      reason: "observer-activation-failed",
+      error: { code: "OBSERVER_HANDOFF_REFUSED" },
+      cause: { code: "OBSERVER_PROCESS_EXECUTABLE_ARGV_MISMATCH" },
+      startupEvidence: { bootLogPath: "/tmp/station/logs/observer-boot.log" },
+      operationOutcomes: [
+        { status: "completed", operationId: "write-config" },
+        {
+          status: "failed",
+          operationId: "activate-observer-config",
+          cause: { code: "OBSERVER_PROCESS_EXECUTABLE_ARGV_MISMATCH" },
+        },
+      ],
+    });
+  });
+
   it("keeps the session mode fixed, passes replaced intent to inspection, and does not replay preparation", async () => {
     const inspections = [
       missingWorktrunkFacts(),

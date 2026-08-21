@@ -119,7 +119,7 @@ describe("CLI observer process startup", () => {
     const fixture = await createTempState();
     const lines = Array.from({ length: 20 }, (_, index) => `boot-line-${index + 1}`);
     lines[19] = "API_TOKEN=super-secret-value";
-    const attemptTail = lines.slice(-15).join("\n");
+    const attemptTail = lines.join("\u2028");
     let healthCalls = 0;
     let bootLogDisposals = 0;
     let settled = false;
@@ -168,7 +168,8 @@ describe("CLI observer process startup", () => {
         },
       });
       if (result.status === "running") throw new Error("Expected startup failure.");
-      expect(result.startupEvidence?.bootLogTail).not.toContain("boot-line-5\n");
+      expect(result.startupEvidence?.bootLogTail).not.toContain("boot-line-5");
+      expect(result.startupEvidence?.bootLogTail?.split("\n")).toHaveLength(15);
       expect(result.startupEvidence?.bootLogTail).toContain("API_TOKEN=[REDACTED]");
       expect(result.startupEvidence?.bootLogTail).not.toContain("super-secret-value");
       expect(result.startupEvidence?.bootLogTail).not.toContain("winning-attempt");
@@ -314,7 +315,7 @@ describe("CLI observer process startup", () => {
       exit: { type: "exit" as const, code: null, signal: null },
       expected: "unknown exit status",
     },
-  ])("retains a replacement child's $label under early-exit classification", async ({
+  ])("keeps parent handoff refusal for a replacement child's $label", async ({
     exit,
     expected,
   }) => {
@@ -340,12 +341,12 @@ describe("CLI observer process startup", () => {
     expect(result).toMatchObject({
       status: "unhealthy",
       error: {
-        code: "OBSERVER_EXITED_ON_START",
-        message: expect.stringContaining(expected),
-        traceId: expect.any(String),
+        code: "OBSERVER_HANDOFF_REFUSED",
       },
       startupEvidence: { bootLogPath: observerBootLogPath(fixture.stateDir) },
     });
+    expect(statusError(result)?.hint).toContain("Running build:");
+    expect(statusError(result)?.hint).toContain("Requested build:");
     expect(statusError(result)?.hint).not.toContain(expected);
     expect(result).toMatchObject({
       cause:
@@ -365,7 +366,7 @@ describe("CLI observer process startup", () => {
     {
       delayMs: 1_001,
       expectedStatus: "unhealthy",
-      expectedCode: "OBSERVER_EXITED_ON_START",
+      expectedCode: "OBSERVER_HANDOFF_REFUSED",
     },
   ])("keeps the one-second convergence boundary at $delayMs ms", async ({
     delayMs,
@@ -440,7 +441,7 @@ describe("CLI observer process startup", () => {
       },
     );
 
-    expect(statusError(result)?.code).toBe("OBSERVER_EXITED_ON_START");
+    expect(statusError(result)?.code).toBe("OBSERVER_HANDOFF_REFUSED");
     expect(result).toMatchObject({
       cause: { code: "OBSERVER_HANDOFF_REFUSED" },
       startupEvidence: { bootLogTail: "startup failed with API_TOKEN=[REDACTED]" },

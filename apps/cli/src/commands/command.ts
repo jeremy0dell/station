@@ -12,9 +12,8 @@ import { createObserverClient, type ObserverClient } from "@station/protocol";
 import { isSafeError, runRuntimeBoundaryWithTimeout } from "@station/runtime";
 import { parsePositiveIntegerOption } from "../args.js";
 import {
+  assertObserverRunning,
   type ObserverProcessDeps,
-  type ObserverStatus,
-  observerStatusErrorMessage,
   startObserver,
 } from "../observerProcess.js";
 import { resolveObserverPaths } from "../paths.js";
@@ -68,7 +67,7 @@ export async function runCommandCommand(
   const timeoutMs = parsed.timeoutMs ?? options.timeoutMs ?? 30_000;
   const paths = resolveObserverPaths(options.config);
   const status = await startObserver({ ...options, paths, timeoutMs }, deps);
-  assertRunning(status);
+  assertObserverRunning(status);
   const client =
     deps.clientFactory?.(paths.socketPath) ??
     createObserverClient({
@@ -303,12 +302,4 @@ function parseCommandId(value: string): CommandId {
     throw new Error(`Invalid command id: ${parsed.error.message}`);
   }
   return parsed.data;
-}
-
-function assertRunning(
-  status: ObserverStatus,
-): asserts status is Extract<ObserverStatus, { status: "running" }> {
-  if (status.status !== "running") {
-    throw new Error(observerStatusErrorMessage(status));
-  }
 }

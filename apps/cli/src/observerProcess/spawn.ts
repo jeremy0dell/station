@@ -6,6 +6,7 @@ import { Readable } from "node:stream";
 import {
   OBSERVER_STARTUP_BOOT_LOG_TAIL_MAX_BYTES,
   OBSERVER_STARTUP_BOOT_LOG_TAIL_MAX_LINES,
+  textLineTerminatorPattern,
 } from "@station/contracts";
 import { environmentWithoutGitLocals, stationObserverBuildVersion } from "@station/runtime";
 import { selfExecArgv } from "../selfExec.js";
@@ -123,13 +124,15 @@ function childWithExit(
   failureReportReader: ObserverStartupFailureReportReader,
 ): ChildProcessLike {
   let disposeExitWait!: () => void;
+  // Report parsing can finish before the child exits, so rejection handling must exist immediately.
+  const handledReport = failureReportReader.report.catch(() => undefined);
   const exited = new Promise<ChildExitResult>((resolve) => {
     let settled = false;
     const finish = async (result: ChildExitResult) => {
       if (settled) return;
       settled = true;
       disposeExitWait();
-      const report = await failureReportReader.report.catch(() => undefined);
+      const report = await handledReport;
       resolve(report === undefined ? result : { ...result, report });
     };
     const onExit = (code: number | null, signal: NodeJS.Signals | null) => {
@@ -195,10 +198,15 @@ async function readObserverBootLogTailFromHandle(bootLog: FileHandle): Promise<s
   const { bytesRead } = await bootLog.read(buffer, 0, length, size - length);
   let content = buffer.subarray(0, bytesRead).toString("utf8");
   if (size > length) {
-    const firstNewline = content.indexOf("\n");
-    if (firstNewline !== -1) content = content.slice(firstNewline + 1);
+    const firstTerminator = textLineTerminatorPattern.exec(content);
+    if (firstTerminator !== null) {
+      content = content.slice(firstTerminator.index + firstTerminator[0].length);
+    }
   }
   content = content.trimEnd();
   if (content.trim().length === 0) return undefined;
-  return content.split(/\r?\n/).slice(-OBSERVER_STARTUP_BOOT_LOG_TAIL_MAX_LINES).join("\n");
+  return content
+    .split(textLineTerminatorPattern)
+    .slice(-OBSERVER_STARTUP_BOOT_LOG_TAIL_MAX_LINES)
+    .join("\n");
 }

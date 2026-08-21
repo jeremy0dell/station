@@ -32,7 +32,7 @@ describe("snapshot command", () => {
               }) as never,
           },
         ),
-      ).rejects.toThrow("not running");
+      ).rejects.toMatchObject({ error: { code: "OBSERVER_NOT_RUNNING" } });
       expect(spawnObserver).not.toHaveBeenCalled();
     } finally {
       await rm(root, { recursive: true, force: true });

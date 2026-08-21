@@ -1,4 +1,5 @@
 import type {
+  ObserverLifecycleFailure,
   UpdateCommandArgv,
   UpdateCommandReport,
   UpdateCommandStep,
@@ -168,10 +169,17 @@ export function failedUpdateResult(
   error: unknown,
   recoveryCommands: readonly UpdateCommandArgv[],
   output: UpdateRequest["output"],
+  lifecycleFailure?: ObserverLifecycleFailure,
 ): CliRunResult {
   const safeError = publicSafeErrorFromUnknown(error, updateFailureFallback);
   report.status = "failed";
   report.error = safeError;
+  if (lifecycleFailure !== undefined) {
+    report.cause = lifecycleFailure.cause ?? lifecycleFailure.error;
+    if (lifecycleFailure.startupEvidence !== undefined) {
+      report.startupEvidence = lifecycleFailure.startupEvidence;
+    }
+  }
   report.recoveryCommands.push(...recoveryCommands);
   report.steps.push(updateStep(phase, "failed", safeError.message, recoveryCommands[0]));
   if (phase === "apply") {
@@ -221,6 +229,11 @@ function renderUpdateReport(report: UpdateCommandReport): string {
   for (const warning of report.warnings) lines.push(`warning: ${warning.message}`);
   if (report.error !== undefined)
     lines.push(`error: ${report.error.message} (${report.error.code})`);
+  if (report.cause !== undefined)
+    lines.push(`cause: ${report.cause.message} (${report.cause.code})`);
+  if (report.startupEvidence !== undefined) {
+    lines.push(`observer boot log: ${report.startupEvidence.bootLogPath}`);
+  }
   if (report.recoveryCommands.length > 0) {
     lines.push("recovery:");
     for (const command of report.recoveryCommands) lines.push(`  ${formatCommand(command)}`);

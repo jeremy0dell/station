@@ -6,6 +6,7 @@ import {
   ObserverStartupFailureReportSchema,
   type SafeError,
   SafeErrorSchema,
+  textLineTerminatorPattern,
 } from "@station/contracts";
 import { redact } from "@station/observability";
 import type { ObserverStartupReadinessSink } from "@station/observer";
@@ -215,7 +216,7 @@ function normalizeStartupFailureNode(value: unknown): SafeError {
     return SafeErrorSchema.parse(redact(safeError).value);
   }
   if (value instanceof Error) {
-    const [firstLine] = redact(value.message).value.split(/\r?\n/u);
+    const [firstLine] = redact(value.message).value.split(textLineTerminatorPattern);
     return {
       tag: "ObserverStartupCauseError",
       code: "OBSERVER_STARTUP_CAUSE_ERROR",

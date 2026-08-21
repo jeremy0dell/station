@@ -6,6 +6,7 @@ import {
   type ObserverHealth,
   type ObserverStartupEvidence,
   type SafeError,
+  textLineTerminatorPattern,
 } from "@station/contracts";
 import { redactString } from "@station/observability";
 import {
@@ -54,6 +55,7 @@ export async function startObserverProcess(
     paths: SpawnObserverInput["paths"];
     timeoutMs: number;
     buildVersion: string;
+    replaceableIncumbent?: ObserverHealth;
     trace: RuntimeTraceContext;
     clock: RuntimeClock;
     configPath?: string;
@@ -121,6 +123,9 @@ export async function startObserverProcess(
             paths: input.paths,
             timeoutMs: input.timeoutMs,
             buildVersion: input.buildVersion,
+            ...(input.replaceableIncumbent === undefined
+              ? {}
+              : { replaceableIncumbent: input.replaceableIncumbent }),
             trace: input.trace,
             signal,
           },
@@ -170,13 +175,14 @@ async function waitForStartedObserver(
     paths: SpawnObserverInput["paths"];
     timeoutMs: number;
     buildVersion: string;
+    replaceableIncumbent?: ObserverHealth;
     trace: RuntimeTraceContext;
     signal: AbortSignal;
   },
   deps: ObserverProcessDeps,
 ): Promise<StartedObserverResult> {
   const healthController = new AbortController();
-  let replaceableIncumbent: ObserverHealth | undefined;
+  let replaceableIncumbent = input.replaceableIncumbent;
   const cancelHealth = () => healthController.abort();
   input.signal.addEventListener("abort", cancelHealth, { once: true });
   const healthPromise = waitForObserverHealth(
@@ -252,22 +258,39 @@ async function waitForStartedObserver(
       }
       convergenceError = error;
     }
-    let cause = startupCauseFromExit(outcome.exit);
-    if (cause === undefined && replaceableIncumbent !== undefined) {
-      cause = publicSafeErrorFromUnknown(convergenceError, {
-        tag: "ObserverStartupError",
-        code: "OBSERVER_HEALTH_FAILED",
-        message: "Observer health check failed during startup convergence.",
-      });
+    const reportedCause = startupCauseFromExit(outcome.exit);
+    if (replaceableIncumbent !== undefined) {
+      const cause =
+        reportedCause ??
+        publicSafeErrorFromUnknown(convergenceError, {
+          tag: "ObserverStartupError",
+          code: "OBSERVER_HEALTH_FAILED",
+          message: "Observer health check failed during startup convergence.",
+        });
+      const handoffError = observerHandoffRefusedError(
+        replaceableIncumbent,
+        input.buildVersion,
+        "The replacement process exited before publishing compatible health.",
+      );
+      handoffError.traceId = input.trace.traceId;
+      return {
+        ok: false,
+        failure: await observerExitedFailure(input.paths, input.child, handoffError, cause),
+      };
     }
     return {
       ok: false,
       failure: await observerExitedFailure(
         input.paths,
         input.child,
-        outcome.exit,
-        input.trace,
-        cause,
+        {
+          tag: "ObserverStartupError",
+          code: "OBSERVER_EXITED_ON_START",
+          message: `Observer exited before becoming healthy (${childExitDescription(outcome.exit)}).`,
+          hint: `Run stn debug trace ${input.trace.traceId}.`,
+          traceId: input.trace.traceId,
+        },
+        reportedCause,
       ),
     };
   } finally {
@@ -281,19 +304,9 @@ async function waitForStartedObserver(
 async function observerExitedFailure(
   paths: SpawnObserverInput["paths"],
   child: ChildProcessLike,
-  exit: ChildExitResult,
-  trace: RuntimeTraceContext,
+  error: SafeError,
   cause: SafeError | undefined,
 ): Promise<ObserverStartupFailureEvidence> {
-  const error: SafeError = {
-    tag: "ObserverStartupError",
-    code: "OBSERVER_EXITED_ON_START",
-    message: `Observer exited before becoming healthy (${childExitDescription(exit)}).`,
-  };
-  if (trace.traceId !== undefined) {
-    error.traceId = trace.traceId;
-    error.hint = `Run stn debug trace ${trace.traceId}.`;
-  }
   return {
     error,
     ...(cause === undefined ? {} : { cause }),
@@ -346,7 +359,7 @@ async function readObserverStartupEvidence(
 function boundedRedactedBootLogTail(tail: string | undefined): string | undefined {
   if (tail === undefined) return undefined;
   const redacted = redactString(tail)
-    .split(/\r?\n/u)
+    .split(textLineTerminatorPattern)
     .slice(-OBSERVER_STARTUP_BOOT_LOG_TAIL_MAX_LINES)
     .join("\n")
     .trimEnd();
