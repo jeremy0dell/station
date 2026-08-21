@@ -1,7 +1,11 @@
 #!/usr/bin/env node
 import type { ProviderHookArtifactOwner } from "@station/contracts";
-import { runObserverMain } from "@station/observer";
+import { type ObserverStartupReadinessSink, runObserverMain } from "@station/observer";
 import { providerHookArtifactOwner, stationBuildInfo } from "@station/runtime";
+import {
+  createObserverStartupFailureReporter,
+  type ObserverStartupFailureReporter,
+} from "./observerProcess/failureReport.js";
 import { type CreateProviderRegistryOptions, createProviderRegistry } from "./observerProviders.js";
 import { resolveDefaultIngressLauncher } from "./worktrunkHookExpectation.js";
 
@@ -9,12 +13,23 @@ export type RunCliObserverMainOptions = {
   preparePiExtension?: (stateDir: string) => string | Promise<string>;
   providerHookIngressLauncher?: string;
   providerHookArtifactOwner?: ProviderHookArtifactOwner;
+  startupReadinessSink?: ObserverStartupReadinessSink;
 };
+
+export type RunCliObserverProcessOptions = {
+  startupFailureReporter?: ObserverStartupFailureReporter;
+  startupReadinessSink?: ObserverStartupReadinessSink;
+};
+
+export type CliObserverProcessOperation = (
+  startupReadinessSink: ObserverStartupReadinessSink,
+) => Promise<number>;
 
 /**
  * COMPOSITION ROOT
  *
- * Chooses CLI-owned provider composition and joins it to the Observer runtime lifecycle.
+ * Chooses CLI-owned provider composition and joins it to the Observer runtime lifecycle,
+ * including private startup-readiness notification for the spawning CLI.
  */
 export async function runCliObserverMain(
   argv: readonly string[] = process.argv.slice(2),
@@ -40,18 +55,57 @@ export async function runCliObserverMain(
       registryOptions.providerHookArtifactOwner = artifactOwner;
       return createProviderRegistry(config, registryOptions);
     },
+    ...(options.startupReadinessSink === undefined
+      ? {}
+      : { startupReadinessSink: options.startupReadinessSink }),
   });
 }
 
-async function runCliObserverProcess(): Promise<void> {
+/**
+ * ADAPTER
+ *
+ * Applies one shared source/compiled Observer process boundary: typed startup
+ * reporting, redacted stderr, readiness closure, and exit-code translation.
+ */
+export async function runCliObserverProcess(
+  operation: CliObserverProcessOperation,
+  options: RunCliObserverProcessOptions = {},
+): Promise<number> {
+  const reporter = options.startupFailureReporter ?? createObserverStartupFailureReporter();
+  let reportChannelClosed = false;
+  const closeReportChannel = (): void => {
+    if (reportChannelClosed) return;
+    reportChannelClosed = true;
+    reporter.ready();
+  };
+  const readinessSink: ObserverStartupReadinessSink = {
+    ready: () => {
+      try {
+        options.startupReadinessSink?.ready();
+      } finally {
+        closeReportChannel();
+      }
+    },
+  };
   try {
-    process.exitCode = await runCliObserverMain();
+    const code = await operation(readinessSink);
+    closeReportChannel();
+    return code;
   } catch (error) {
-    process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
-    process.exitCode = 1;
+    const report = reporter.failure(error);
+    const lines = [`${report.error.message} (${report.error.code})`];
+    if (report.cause !== undefined) {
+      lines.push(`Cause: ${report.cause.message} (${report.cause.code})`);
+    }
+    process.stderr.write(`${lines.join("\n")}\n`);
+    return 1;
   }
 }
 
 if (import.meta.main) {
-  void runCliObserverProcess();
+  void runCliObserverProcess((startupReadinessSink) =>
+    runCliObserverMain(process.argv.slice(2), { startupReadinessSink }),
+  ).then((code) => {
+    process.exitCode = code;
+  });
 }

@@ -1,4 +1,5 @@
 import { chmod, lstat } from "node:fs/promises";
+import { join } from "node:path";
 import { runCli } from "@station/cli";
 import { runObserverCommand } from "@station/cli/internal";
 import { listenUnixSocket } from "@station/protocol";
@@ -202,6 +203,64 @@ describe("CLI observer commands", () => {
     ).resolves.toMatchObject({ code: 0, output: { status: "running" } });
   });
 
+  it("projects distinct outer, causal, and startup evidence fields in JSON", async () => {
+    const fixture = await createTempState();
+    const configPath = await writeConfigToml(fixture.root, fixture.config);
+    const result = await runCli(
+      ["--config", configPath, "observer", "start", "--timeout-ms", "1500"],
+      {
+        observerDeps: {
+          buildVersion: requestedBuildVersion,
+          spawnObserver: async () => ({
+            pid: 4321,
+            unref: () => undefined,
+            exited: Promise.resolve({
+              type: "exit" as const,
+              code: 1,
+              signal: null,
+              report: {
+                kind: "observer-startup-failure" as const,
+                version: 1 as const,
+                error: {
+                  tag: "ObserverHandoffError",
+                  code: "OBSERVER_HANDOFF_REFUSED",
+                  message: "The incumbent Observer could not be replaced safely.",
+                },
+                cause: {
+                  tag: "ObserverProcessEvidenceError",
+                  code: "OBSERVER_PROCESS_EXECUTABLE_ARGV_MISMATCH",
+                  message: "Observer process evidence did not match the exact executable and argv.",
+                },
+              },
+            }),
+            readBootLogTail: async () => "boot line API_TOKEN=super-secret-value",
+          }),
+          clientFactory: () =>
+            ({
+              health: async () => {
+                throw new Error("not running");
+              },
+            }) as never,
+        },
+      },
+    );
+
+    expect(result).toMatchObject({
+      code: 1,
+      output: {
+        status: "unhealthy",
+        error: { code: "OBSERVER_EXITED_ON_START" },
+        cause: { code: "OBSERVER_PROCESS_EXECUTABLE_ARGV_MISMATCH" },
+        startupEvidence: {
+          bootLogPath: join(fixture.stateDir, "logs", "observer-boot.log"),
+          bootLogTail: "boot line API_TOKEN=[REDACTED]",
+        },
+      },
+    });
+    expect(JSON.stringify(result)).not.toContain("super-secret-value");
+    expect(JSON.stringify(result)).not.toContain("[object Object]");
+  });
+
   it("reports inaccessible ownership and fails start, restart, and doctor without mutation", async () => {
     const fixture = await createTempState();
     const configPath = await writeConfigToml(fixture.root, fixture.config);
@@ -244,7 +303,7 @@ describe("CLI observer commands", () => {
             output: {
               phase: "inspection",
               incumbentDisposition: "preserved",
-              error: { hint: expect.stringContaining("OBSERVER_SOCKET_INACCESSIBLE") },
+              cause: { code: "OBSERVER_SOCKET_INACCESSIBLE" },
             },
           });
         }

@@ -2,6 +2,10 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import {
+  OBSERVER_STARTUP_FAILURE_FD,
+  STATION_OBSERVER_STARTUP_FAILURE_FD,
+} from "../../../src/observerProcess/failureReport.js";
 import { observerSpawnArgv, observerSpawnEnvironment } from "../../../src/observerProcess/spawn.js";
 import { selfExecArgv } from "../../../src/selfExec.js";
 
@@ -75,12 +79,17 @@ describe("observer spawn argv", () => {
     const inherited = {
       PATH: "/usr/bin",
       STATION_OBSERVER_STARTUP_POLICY: "preserve-incumbent",
+      [STATION_OBSERVER_STARTUP_FAILURE_FD]: "99",
     };
 
-    expect(observerSpawnEnvironment({}, inherited)).toEqual({ PATH: "/usr/bin" });
+    expect(observerSpawnEnvironment({}, inherited)).toEqual({
+      PATH: "/usr/bin",
+      [STATION_OBSERVER_STARTUP_FAILURE_FD]: String(OBSERVER_STARTUP_FAILURE_FD),
+    });
     expect(observerSpawnEnvironment({ incumbentPolicy: "preserve" }, inherited)).toEqual({
       PATH: "/usr/bin",
       STATION_OBSERVER_STARTUP_POLICY: "preserve-incumbent",
+      [STATION_OBSERVER_STARTUP_FAILURE_FD]: String(OBSERVER_STARTUP_FAILURE_FD),
     });
   });
 

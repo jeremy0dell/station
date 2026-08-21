@@ -17,6 +17,7 @@ describe("process entrypoints", () => {
     expect(cli.runCliMain).toBeTypeOf("function");
     expect(cli.runCli).toBeTypeOf("function");
     expect(observer.runCliObserverMain).toBeTypeOf("function");
+    expect(observer.runCliObserverProcess).toBeTypeOf("function");
     expect(ingress.runCliIngressMain).toBeTypeOf("function");
     expect(observerRuntime.runObserverMain).toBeTypeOf("function");
     expect(process.listenerCount("SIGINT")).toBe(signalListeners.sigint);

@@ -2,8 +2,19 @@ import { type ChildProcess, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { type FileHandle, mkdir, open, rename, unlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { Readable } from "node:stream";
+import {
+  OBSERVER_STARTUP_BOOT_LOG_TAIL_MAX_BYTES,
+  OBSERVER_STARTUP_BOOT_LOG_TAIL_MAX_LINES,
+} from "@station/contracts";
 import { environmentWithoutGitLocals, stationObserverBuildVersion } from "@station/runtime";
 import { selfExecArgv } from "../selfExec.js";
+import {
+  OBSERVER_STARTUP_FAILURE_FD,
+  type ObserverStartupFailureReportReader,
+  readObserverStartupFailureReport,
+  STATION_OBSERVER_STARTUP_FAILURE_FD,
+} from "./failureReport.js";
 import type { ChildExitResult, ChildProcessLike, SpawnObserverInput } from "./types.js";
 
 type DefaultSpawnObserverInput = SpawnObserverInput & {
@@ -12,6 +23,12 @@ type DefaultSpawnObserverInput = SpawnObserverInput & {
   processToken?: string;
 };
 
+/**
+ * ADAPTER
+ *
+ * Spawns one detached Observer with a private failure-report descriptor and
+ * child-owned boot log, then exposes bounded exit and diagnostic cleanup.
+ */
 export async function defaultSpawnObserver(
   input: DefaultSpawnObserverInput,
 ): Promise<ChildProcessLike> {
@@ -22,6 +39,7 @@ export async function defaultSpawnObserver(
   const bootLog = await open(pendingBootLogPath, "wx", 0o600);
   let child: ChildProcess | undefined;
   let bootLogReader: FileHandle | undefined;
+  let failureReportReader: ObserverStartupFailureReportReader | undefined;
   let published = false;
   try {
     await bootLog.chmod(0o600);
@@ -34,10 +52,15 @@ export async function defaultSpawnObserver(
     child = spawn(command, args, {
       detached: process.env.STATION_RUNTIME_OWNER_FOREGROUND !== "1",
       env: observerSpawnEnvironment(input),
-      stdio: ["ignore", bootLog.fd, bootLog.fd],
+      stdio: ["ignore", bootLog.fd, bootLog.fd, "pipe"],
     });
+    const failureReportStream = child.stdio[OBSERVER_STARTUP_FAILURE_FD];
+    if (!(failureReportStream instanceof Readable)) {
+      throw new Error("Observer startup failure report pipe was unavailable.");
+    }
+    failureReportReader = readObserverStartupFailureReport(failureReportStream);
     const startedChild = Object.assign(
-      childWithExit(child),
+      childWithExit(child, failureReportReader),
       observerBootLogDiagnostics(bootLogReader),
     );
     await bootLog.close();
@@ -46,6 +69,7 @@ export async function defaultSpawnObserver(
     child?.kill();
     await bootLog.close().catch(() => undefined);
     await bootLogReader?.close().catch(() => undefined);
+    failureReportReader?.dispose();
     if (!published) {
       await unlink(pendingBootLogPath).catch(() => undefined);
     }
@@ -63,6 +87,8 @@ export function observerSpawnEnvironment(
 ): NodeJS.ProcessEnv {
   const env = environmentWithoutGitLocals(inheritedEnvironment);
   delete env.STATION_OBSERVER_STARTUP_POLICY;
+  delete env[STATION_OBSERVER_STARTUP_FAILURE_FD];
+  env[STATION_OBSERVER_STARTUP_FAILURE_FD] = String(OBSERVER_STARTUP_FAILURE_FD);
   if (input.incumbentPolicy === "preserve") {
     env.STATION_OBSERVER_STARTUP_POLICY = "preserve-incumbent";
   }
@@ -92,21 +118,25 @@ export function observerSpawnArgv(input: DefaultSpawnObserverInput): [string, ..
   ];
 }
 
-function childWithExit(child: ChildProcess): ChildProcessLike {
+function childWithExit(
+  child: ChildProcess,
+  failureReportReader: ObserverStartupFailureReportReader,
+): ChildProcessLike {
   let disposeExitWait!: () => void;
   const exited = new Promise<ChildExitResult>((resolve) => {
     let settled = false;
-    const finish = (result: ChildExitResult) => {
+    const finish = async (result: ChildExitResult) => {
       if (settled) return;
       settled = true;
       disposeExitWait();
-      resolve(result);
+      const report = await failureReportReader.report.catch(() => undefined);
+      resolve(report === undefined ? result : { ...result, report });
     };
     const onExit = (code: number | null, signal: NodeJS.Signals | null) => {
-      finish({ type: "exit", code, signal });
+      void finish({ type: "exit", code, signal });
     };
     const onError = (error: Error) => {
-      finish({ type: "spawn_error", error });
+      void finish({ type: "spawn_error", error });
     };
     disposeExitWait = () => {
       child.off("exit", onExit);
@@ -115,7 +145,11 @@ function childWithExit(child: ChildProcess): ChildProcessLike {
     child.once("exit", onExit);
     child.once("error", onError);
   });
-  return Object.assign(child, { exited, disposeExitWait });
+  return Object.assign(child, {
+    exited,
+    disposeExitWait,
+    disposeFailureReport: failureReportReader.dispose,
+  });
 }
 
 export async function readObserverBootLogTail(path: string): Promise<string | undefined> {
@@ -154,10 +188,9 @@ function observerBootLogDiagnostics(bootLog: FileHandle): {
 }
 
 async function readObserverBootLogTailFromHandle(bootLog: FileHandle): Promise<string | undefined> {
-  const maxBytes = 64 * 1024;
   const { size } = await bootLog.stat();
   if (size === 0) return undefined;
-  const length = Math.min(size, maxBytes);
+  const length = Math.min(size, OBSERVER_STARTUP_BOOT_LOG_TAIL_MAX_BYTES);
   const buffer = Buffer.alloc(length);
   const { bytesRead } = await bootLog.read(buffer, 0, length, size - length);
   let content = buffer.subarray(0, bytesRead).toString("utf8");
@@ -167,5 +200,5 @@ async function readObserverBootLogTailFromHandle(bootLog: FileHandle): Promise<s
   }
   content = content.trimEnd();
   if (content.trim().length === 0) return undefined;
-  return content.split(/\r?\n/).slice(-15).join("\n");
+  return content.split(/\r?\n/).slice(-OBSERVER_STARTUP_BOOT_LOG_TAIL_MAX_LINES).join("\n");
 }

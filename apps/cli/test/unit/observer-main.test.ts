@@ -11,7 +11,7 @@ vi.mock("../../src/observerProviders.js", () => ({
   createProviderRegistry: mocks.createProviderRegistry,
 }));
 
-import { runCliObserverMain } from "../../src/observerMain.js";
+import { runCliObserverMain, runCliObserverProcess } from "../../src/observerMain.js";
 
 const ingressLauncher = "/source/bin/stn-ingress";
 const artifactOwner = {
@@ -82,5 +82,52 @@ describe("runCliObserverMain", () => {
       providerHookIngressLauncher: ingressLauncher,
       providerHookArtifactOwner: artifactOwner,
     });
+  });
+
+  it("reports source-process failures with redacted stderr and exit status", async () => {
+    mocks.runObserverMain.mockRejectedValue(
+      new Error("startup failed with API_TOKEN=super-secret-value\n    at private-frame"),
+    );
+    const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    try {
+      await expect(
+        runCliObserverProcess((startupReadinessSink) =>
+          runCliObserverMain([], {
+            providerHookIngressLauncher: ingressLauncher,
+            providerHookArtifactOwner: artifactOwner,
+            startupReadinessSink,
+          }),
+        ),
+      ).resolves.toBe(1);
+      expect(stderr).toHaveBeenCalledWith(
+        "startup failed with API_TOKEN=[REDACTED] (OBSERVER_STARTUP_CAUSE_ERROR)\n",
+      );
+      expect(stderr).not.toHaveBeenCalledWith(expect.stringContaining("private-frame"));
+      expect(stderr).not.toHaveBeenCalledWith(expect.stringContaining("super-secret-value"));
+    } finally {
+      stderr.mockRestore();
+    }
+  });
+
+  it("closes the common process reporter after a successful run", async () => {
+    const startupFailureReporter = {
+      ready: vi.fn(),
+      failure: vi.fn(),
+    };
+
+    await expect(
+      runCliObserverProcess(
+        async (startupReadinessSink) => {
+          startupReadinessSink.ready();
+          return 0;
+        },
+        {
+          startupFailureReporter,
+        },
+      ),
+    ).resolves.toBe(0);
+
+    expect(startupFailureReporter.ready).toHaveBeenCalledOnce();
+    expect(startupFailureReporter.failure).not.toHaveBeenCalled();
   });
 });

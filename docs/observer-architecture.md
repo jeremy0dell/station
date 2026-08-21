@@ -199,6 +199,7 @@ ownership even where current ownership is still a deviation.
 | Diagnostic evidence | Driven | `DiagnosticEvidenceSource` | `createLocalDiagnosticEvidenceSource` | Conforming read-only role: the adapter captures resolved local state, log, diagnostics, socket, and hook-spool locations while only typed measurements and bounded evidence cross the port; command/event journals, providers, core, and SQLite remain separate inputs. |
 | Observer incumbent lifecycle | Driven | `ObserverIncumbentLifecycle` | local protocol client adapter | Handoff may read health and request controlled stop without importing transport mechanics into policy or orchestration. |
 | Observer process evidence | Driven | `ObserverProcessEvidenceSource` | local `lsof`/`ps`/`/proc`/pidfile/signal adapter | `lsof` is primary socket ownership; health, strict pidfile, executable provenance, exact argv, per-launch token, build selector, and second-resolution OS start token must corroborate before replacement or signaling. Handoff reads only the requested incumbent PID. |
+| Observer startup readiness | Driven | `ObserverStartupReadinessSink` | CLI private failure-report pipe adapter | The Observer publishes only the readiness transition. CLI composition owns pipe creation, strict bounded report translation, redaction, and closure; no filesystem descriptor or child-process representation enters Observer application code. |
 | Duplicate-process evidence | Driven | `ObserverDuplicateProcessEvidenceSource` | local process-evidence adapter | Extends targeted handoff evidence with fail-closed global process inventory, bound-socket identity, and strict per-process Unix-socket-FD counts; unavailable evidence always refuses. |
 | Observer-reap exclusion | Driven | `ObserverReapExclusion` | boot-claim reap exclusion adapter | Explicit force runs under a fail-fast boot claim and releases it after every callback outcome; read-only inspection never acquires the claim. |
 
@@ -287,6 +288,14 @@ ports plus local socket, pidfile, boot-claim, and ownership-watcher adapters. Th
 complete ownership, four-state probe, handoff, bind, readiness, displacement,
 and refusal mechanics are defined only in
 [Observer singleton lifecycle](observer-singleton.md).
+
+CLI composition also owns a private child-process failure-report adapter. It supplies the
+Observer with the provider-neutral `ObserverStartupReadinessSink`; success closes the inherited
+pipe at readiness, while a pre-readiness rejection is normalized once into the shared strict,
+redacted startup-failure contract. The parent carries the outer lifecycle error, its distinct
+causal `SafeError`, and bounded startup evidence. This diagnostic dependency points inward from
+the CLI adapter to contracts and the Observer port and does not add a protocol method or expose
+provider-specific data to Observer/core.
 
 Application composition proceeds around that boundary in this order:
 

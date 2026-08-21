@@ -11,6 +11,7 @@ import {
   readlink,
   rm,
   stat,
+  symlink,
   unlink,
   writeFile,
 } from "node:fs/promises";
@@ -30,6 +31,7 @@ import { acquireObserverBootClaim, observerBootClaimPath } from "@station/observ
 import { createObserverClient, listenUnixSocket, probeUnixSocket } from "@station/protocol";
 import { stationBuildInfo, stationObserverBuildVersion } from "@station/runtime";
 import { describe, expect, it, vi } from "vitest";
+import { observerStatusErrorMessage } from "../../apps/cli/src/observerProcess.js";
 import { createRealStaleSocket, waitForSocketClosed } from "../support/sockets";
 import { createTempState, writeConfigToml } from "../support/temp-projects";
 
@@ -342,6 +344,120 @@ describe("observer lifecycle e2e", () => {
     }
   });
 
+  it("preserves a typed executable mismatch when a live incumbent symlink is retargeted", async () => {
+    const fixture = await createTempState();
+    const config = observerConfig(fixture.stateDir, fixture.socketPath);
+    const configPath = await writeConfigToml(fixture.root, config);
+    const nodeImagesRoot = join(fixture.root, "node-images");
+    const firstNode = join(nodeImagesRoot, "first", "bin", "node");
+    const secondNode = join(nodeImagesRoot, "second", "bin", "node");
+    const nodeLink = join(nodeImagesRoot, "node");
+    await copyNodeExecutableImage(firstNode);
+    await copyNodeExecutableImage(secondNode);
+    await symlink(firstNode, nodeLink);
+
+    const build = stationBuildInfo();
+    const incumbentVersion = stationObserverBuildVersion({
+      ...build,
+      buildIdentity: "0".repeat(64),
+    });
+    const candidateVersion = stationObserverBuildVersion(build);
+    const incumbent = await startIncumbentFixture({
+      stateDir: fixture.stateDir,
+      socketPath: fixture.socketPath,
+      version: incumbentVersion,
+      executablePath: nodeLink,
+    });
+    const pidfilePath = `${fixture.socketPath}.pid`;
+    const originalSocket = await stat(fixture.socketPath);
+    const originalPidfile = await stat(pidfilePath);
+    const originalPidfileBytes = await readFile(pidfilePath);
+
+    try {
+      await unlink(nodeLink);
+      await symlink(secondNode, nodeLink);
+      const status = await startObserver(
+        {
+          config,
+          configPath,
+          timeoutMs: 10_000,
+          observerCommand: [
+            nodeLink,
+            join(process.cwd(), "apps", "cli", "dist", "observerMain.js"),
+          ],
+        },
+        { buildVersion: candidateVersion },
+      );
+
+      expect(status, JSON.stringify(status)).toMatchObject({
+        status: "unhealthy",
+        error: {
+          code: "OBSERVER_EXITED_ON_START",
+          traceId: expect.any(String),
+        },
+        cause: {
+          tag: "ObserverProcessEvidenceError",
+          code: "OBSERVER_PROCESS_EXECUTABLE_ARGV_MISMATCH",
+          message: "Observer process evidence did not match the exact executable and argv.",
+        },
+        startupEvidence: {
+          bootLogPath: join(fixture.stateDir, "logs", "observer-boot.log"),
+        },
+      });
+      if (status.status === "running" || status.error === undefined) {
+        throw new Error("Executable mismatch unexpectedly started an Observer.");
+      }
+
+      const serialized = JSON.stringify(status);
+      expect(serialized).not.toContain("[object Object]");
+      const rendered = observerStatusErrorMessage(status);
+      expect(rendered).toContain("Observer exited before becoming healthy");
+      expect(rendered).toContain(
+        "Cause: Observer process evidence did not match the exact executable and argv. (OBSERVER_PROCESS_EXECUTABLE_ARGV_MISMATCH)",
+      );
+      expect(rendered).toContain(`Next: stn debug trace ${status.error.traceId}`);
+      expect(rendered).not.toContain("observer-boot.log");
+
+      const trace = await runCli([
+        "--config",
+        configPath,
+        "debug",
+        "trace",
+        status.error.traceId ?? "",
+      ]);
+      expect(trace).toMatchObject({
+        code: 0,
+        output: {
+          cause: { code: "OBSERVER_PROCESS_EXECUTABLE_ARGV_MISMATCH" },
+          causeAssessment: {
+            status: "explicit_root_cause",
+            explicitRootCauseCodes: ["OBSERVER_PROCESS_EXECUTABLE_ARGV_MISMATCH"],
+          },
+        },
+      });
+
+      expect(processIsAlive(incumbent.child.pid)).toBe(true);
+      await expect(incumbent.client.health()).resolves.toMatchObject({
+        pid: incumbent.child.pid,
+        version: incumbentVersion,
+      });
+      const currentSocket = await stat(fixture.socketPath);
+      const currentPidfile = await stat(pidfilePath);
+      expect({ ino: currentSocket.ino, birthtimeMs: currentSocket.birthtimeMs }).toEqual({
+        ino: originalSocket.ino,
+        birthtimeMs: originalSocket.birthtimeMs,
+      });
+      expect({ ino: currentPidfile.ino, birthtimeMs: currentPidfile.birthtimeMs }).toEqual({
+        ino: originalPidfile.ino,
+        birthtimeMs: originalPidfile.birthtimeMs,
+      });
+      await expect(readFile(pidfilePath)).resolves.toEqual(originalPidfileBytes);
+    } finally {
+      await terminateFixture(incumbent.child);
+      await waitForSocketClosed(fixture.socketPath).catch(() => undefined);
+    }
+  });
+
   it("keeps ordinary losing-build refusal but explicitly activates an exact build", async () => {
     const fixture = await createTempState();
     const build = stationBuildInfo();
@@ -421,10 +537,12 @@ describe("observer lifecycle e2e", () => {
         { config: observerConfig(fixture.stateDir, fixture.socketPath), timeoutMs: 10_000 },
         { buildVersion: stationObserverBuildVersion() },
       );
-      expect(status).toMatchObject({
-        status: "unhealthy",
-        error: { code: "OBSERVER_HANDOFF_REFUSED" },
-      });
+      expect(status.status).toBe("unhealthy");
+      if (status.status === "running") throw new Error("Wedged incumbent was replaced.");
+      expect(["OBSERVER_START_FAILED", "OBSERVER_EXITED_ON_START"]).toContain(status.error?.code);
+      if (status.error?.code === "OBSERVER_EXITED_ON_START") {
+        expect(status.cause?.code).toBe("OBSERVER_HANDOFF_REFUSED");
+      }
       expect(processIsAlive(incumbent.child.pid)).toBe(true);
       await expect(incumbent.client.health()).resolves.toMatchObject({
         pid: incumbent.child.pid,
@@ -457,7 +575,8 @@ describe("observer lifecycle e2e", () => {
       );
       expect(status).toMatchObject({
         status: "unhealthy",
-        error: { code: "OBSERVER_HANDOFF_REFUSED" },
+        error: { code: "OBSERVER_EXITED_ON_START" },
+        cause: { code: "OBSERVER_HANDOFF_REFUSED" },
       });
       expect(processIsAlive(incumbent.child.pid)).toBe(true);
       await expect(incumbent.client.health()).resolves.toMatchObject({ pid: incumbent.child.pid });
@@ -788,10 +907,14 @@ describe("observer lifecycle e2e", () => {
       error: {
         code: "OBSERVER_EXITED_ON_START",
         message: expect.stringContaining("exit code 1"),
-        hint: expect.stringContaining(`Latest observer boot log: ${bootLogPath}`),
+      },
+      cause: { message: "Invalid TOML document: cannot find end of structure" },
+      startupEvidence: {
+        bootLogPath,
+        bootLogTail: expect.stringContaining("Station config file is not valid TOML."),
       },
     });
-    expect(status.error?.hint).toContain("Station config file is not valid TOML.");
+    expect(status.error?.hint ?? "").not.toContain("Station config file is not valid TOML.");
     await expect(readFile(bootLogPath, "utf8")).resolves.toContain(
       "Station config file is not valid TOML.",
     );
@@ -820,15 +943,26 @@ describe("observer lifecycle e2e", () => {
     expect(malformedStatus).toMatchObject({
       status: "unhealthy",
       error: { code: "OBSERVER_EXITED_ON_START" },
+      cause: { message: "Invalid TOML document: cannot find end of structure" },
+      startupEvidence: {
+        bootLogTail: expect.stringContaining("Station config file is not valid TOML."),
+      },
     });
-    expect(malformedStatus.error?.hint).toContain("Station config file is not valid TOML.");
-    expect(malformedStatus.error?.hint).not.toContain("Station config file was not found.");
+    expect(malformedStatus.error?.hint ?? "").not.toContain(
+      "Station config file is not valid TOML.",
+    );
     expect(missingStatus).toMatchObject({
       status: "unhealthy",
       error: { code: "OBSERVER_EXITED_ON_START" },
+      cause: {
+        code: "OBSERVER_STARTUP_CAUSE_ERROR",
+        message: expect.stringContaining("ENOENT: no such file or directory"),
+      },
+      startupEvidence: {
+        bootLogTail: expect.stringContaining("Station config file was not found."),
+      },
     });
-    expect(missingStatus.error?.hint).toContain("Station config file was not found.");
-    expect(missingStatus.error?.hint).not.toContain("Station config file is not valid TOML.");
+    expect(missingStatus.error?.hint ?? "").not.toContain("Station config file was not found.");
 
     const bootLog = await readFile(bootLogPath, "utf8");
     const [header = "", ...bodyLines] = bootLog.split(/\r?\n/);
@@ -902,10 +1036,31 @@ function observerConfig(stateDir: string, socketPath: string) {
   };
 }
 
+async function copyNodeExecutableImage(targetPath: string): Promise<void> {
+  await mkdir(dirname(targetPath), { recursive: true });
+  await copyFile(process.execPath, targetPath);
+  await chmod(targetPath, 0o755);
+  if (process.platform !== "darwin") return;
+
+  const sourceLibDir = join(dirname(process.execPath), "..", "lib");
+  const targetLibDir = join(dirname(targetPath), "..", "lib");
+  const nodeLibraries = (await readdir(sourceLibDir)).filter((name) =>
+    /^libnode\..+\.dylib$/u.test(name),
+  );
+  if (nodeLibraries.length === 0) {
+    throw new Error(`Node runtime libraries were unavailable under ${sourceLibDir}.`);
+  }
+  await mkdir(targetLibDir, { recursive: true });
+  await Promise.all(
+    nodeLibraries.map((name) => copyFile(join(sourceLibDir, name), join(targetLibDir, name))),
+  );
+}
+
 async function startIncumbentFixture(input: {
   stateDir: string;
   socketPath: string;
   version: string;
+  executablePath?: string;
   pidfileVersion?: string;
   mode?: "graceful" | "wedged";
   stopDelayMs?: number;
@@ -931,7 +1086,7 @@ async function startIncumbentFixture(input: {
     "--process-token",
     randomUUID(),
   ];
-  const child = spawn(process.execPath, args, {
+  const child = spawn(input.executablePath ?? process.execPath, args, {
     cwd: process.cwd(),
     env: {
       ...process.env,

@@ -1,17 +1,21 @@
 import { mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
-import type { ObserverHealth, SafeError } from "@station/contracts";
+import {
+  OBSERVER_STARTUP_BOOT_LOG_TAIL_MAX_BYTES,
+  OBSERVER_STARTUP_BOOT_LOG_TAIL_MAX_LINES,
+  type ObserverHealth,
+  type ObserverStartupEvidence,
+  type SafeError,
+} from "@station/contracts";
 import { redactString } from "@station/observability";
 import {
   Effect,
-  isSafeError,
   publicSafeErrorFromUnknown,
-  type RuntimeBoundaryResult,
   type RuntimeClock,
-  type RuntimeSafeError,
   type RuntimeTraceContext,
   runRuntimeBoundaryWithTimeout,
 } from "@station/runtime";
+import { normalizeObserverStartupFailure } from "./failureReport.js";
 import {
   observerHandoffRefusedError,
   observerHealthWaitCancelledError,
@@ -23,15 +27,17 @@ import type {
   ChildProcessLike,
   ObserverProcessDeps,
   ObserverProcessOptions,
+  ObserverStartupProcessResult,
   SpawnObserverInput,
 } from "./types.js";
 
 const incumbentHealthGraceMs = 1_000;
 
 /**
- * Starts the Observer child and waits for exact-build health inside one timed runtime boundary.
- * Startup failures are enriched with the redacted boot reason and the child-owned boot-log tail
- * before the boot-log handle is disposed.
+ * ADAPTER
+ *
+ * Starts the Observer child and waits for exact-build health inside one timed runtime boundary,
+ * retaining a separate typed cause and bounded boot evidence before diagnostic handles close.
  */
 export async function startObserverProcess(
   input: {
@@ -46,10 +52,11 @@ export async function startObserverProcess(
     onStartupProgress?: ObserverProcessOptions["onStartupProgress"];
   },
   deps: ObserverProcessDeps,
-): Promise<RuntimeBoundaryResult<ObserverHealth>> {
+): Promise<ObserverStartupProcessResult> {
   const startupProgress = scheduleObserverStartupProgress(input.onStartupProgress, input.paths);
   let child: ChildProcessLike | undefined;
-  let startupFailureReason: string | undefined;
+  let startupCause: SafeError | undefined;
+  let startupEvidence: ObserverStartupEvidence | undefined;
   const result = await runRuntimeBoundaryWithTimeout(
     {
       operation: "cli.observer.start",
@@ -59,14 +66,14 @@ export async function startObserverProcess(
         tag: "ObserverStartupError",
         code: "OBSERVER_START_FAILED",
         message: "Observer startup failed.",
-        hint: `Run station debug trace ${input.trace.traceId}.`,
+        hint: `Run stn debug trace ${input.trace.traceId}.`,
         traceId: input.trace.traceId,
       },
       timeoutError: {
         tag: "ObserverStartupError",
         code: "OBSERVER_START_FAILED",
         message: "Observer did not become healthy before the startup timeout.",
-        hint: `Run station debug trace ${input.trace.traceId}.`,
+        hint: `Run stn debug trace ${input.trace.traceId}.`,
         traceId: input.trace.traceId,
       },
       trace: input.trace,
@@ -106,11 +113,18 @@ export async function startObserverProcess(
             buildVersion: input.buildVersion,
             trace: input.trace,
             signal,
+            onFailureEvidence: (evidence) => {
+              if (evidence.cause !== undefined) startupCause = evidence.cause;
+              startupEvidence = evidence.startupEvidence;
+            },
           },
           deps,
         );
       } catch (error) {
-        startupFailureReason = redactedStartupFailureReason(error);
+        if (startupCause === undefined) {
+          const report = normalizeObserverStartupFailure(error);
+          startupCause = report.cause ?? report.error;
+        }
         throw error;
       }
     },
@@ -124,17 +138,18 @@ export async function startObserverProcess(
     child?.kill?.();
   }
   if (result.ok) {
+    child?.disposeFailureReport?.();
     await disposeObserverBootLog(child);
     return result;
   }
-  const error = await enrichStartupFailureEvidence({
-    error: result.error,
-    reason: startupFailureReason,
-    paths: input.paths,
-    child,
-  });
+  startupEvidence ??= await readObserverStartupEvidence(input.paths, child);
+  child?.disposeFailureReport?.();
   await disposeObserverBootLog(child);
-  return { ...result, error };
+  return {
+    ...result,
+    ...(startupCause === undefined ? {} : { cause: startupCause }),
+    ...(startupEvidence === undefined ? {} : { startupEvidence }),
+  };
 }
 
 async function waitForStartedObserver(
@@ -145,6 +160,10 @@ async function waitForStartedObserver(
     buildVersion: string;
     trace: RuntimeTraceContext;
     signal: AbortSignal;
+    onFailureEvidence: (evidence: {
+      cause?: SafeError;
+      startupEvidence: ObserverStartupEvidence;
+    }) => void;
   },
   deps: ObserverProcessDeps,
 ): Promise<ObserverHealth> {
@@ -226,7 +245,7 @@ async function waitForStartedObserver(
       convergenceError = error;
     }
     if (replaceableIncumbent !== undefined) {
-      throw await observerReplacementExitedError(
+      const failure = await observerReplacementExitedFailure(
         replaceableIncumbent,
         input.buildVersion,
         input.paths,
@@ -235,8 +254,17 @@ async function waitForStartedObserver(
         convergenceError,
         input.trace,
       );
+      input.onFailureEvidence(failure);
+      throw failure.error;
     }
-    throw await observerExitedOnStartError(input.paths, input.child, outcome.exit, input.trace);
+    const failure = await observerExitedOnStartFailure(
+      input.paths,
+      input.child,
+      outcome.exit,
+      input.trace,
+    );
+    input.onFailureEvidence(failure);
+    throw failure.error;
   } finally {
     input.signal.removeEventListener("abort", cancelHealth);
     healthController.abort();
@@ -245,62 +273,71 @@ async function waitForStartedObserver(
   }
 }
 
-async function observerReplacementExitedError(
-  incumbent: ObserverHealth,
-  requestedVersion: string,
+async function observerReplacementExitedFailure(
+  _incumbent: ObserverHealth,
+  _requestedVersion: string,
   paths: SpawnObserverInput["paths"],
   child: ChildProcessLike,
   exit: ChildExitResult,
   convergenceFailure: unknown,
   trace: RuntimeTraceContext,
-): Promise<SafeError> {
+): Promise<{
+  error: SafeError;
+  cause?: SafeError;
+  startupEvidence: ObserverStartupEvidence;
+}> {
   const convergence = publicSafeErrorFromUnknown(convergenceFailure, {
     tag: "ObserverStartupError",
     code: "OBSERVER_HEALTH_FAILED",
     message: "Observer health check failed during startup convergence.",
   });
-  const convergenceDescription =
-    convergence.code === "OBSERVER_INCUMBENT_HEALTH_TIMEOUT"
-      ? `${convergence.code} after ${incumbentHealthGraceMs} ms`
-      : convergence.code;
-  const bootLogHint = await observerBootLogHint(paths, child);
-  const traceHint =
-    trace.traceId === undefined ? "" : `\nRun station debug trace ${trace.traceId}.`;
-  const error = observerHandoffRefusedError(
-    incumbent,
-    requestedVersion,
-    `Replacement child: ${childExitDescription(exit)}. Health convergence: ${convergenceDescription}.\n${bootLogHint}${traceHint}`,
-  );
-  if (trace.traceId !== undefined) {
-    error.traceId = trace.traceId;
-  }
-  return error;
+  const cause = startupCauseFromExit(exit) ?? convergence;
+  return observerExitedFailure(paths, child, exit, trace, cause);
 }
 
-async function observerExitedOnStartError(
+async function observerExitedOnStartFailure(
   paths: SpawnObserverInput["paths"],
   child: ChildProcessLike,
   exit: ChildExitResult,
   trace: RuntimeTraceContext,
-): Promise<SafeError> {
-  const bootLogHint = await observerBootLogHint(paths, child);
-  const traceHint =
-    trace.traceId === undefined ? "" : `\nRun station debug trace ${trace.traceId}.`;
+): Promise<{
+  error: SafeError;
+  cause?: SafeError;
+  startupEvidence: ObserverStartupEvidence;
+}> {
+  return observerExitedFailure(paths, child, exit, trace, startupCauseFromExit(exit));
+}
+
+async function observerExitedFailure(
+  paths: SpawnObserverInput["paths"],
+  child: ChildProcessLike,
+  exit: ChildExitResult,
+  trace: RuntimeTraceContext,
+  cause: SafeError | undefined,
+): Promise<{
+  error: SafeError;
+  cause?: SafeError;
+  startupEvidence: ObserverStartupEvidence;
+}> {
   const error: SafeError = {
     tag: "ObserverStartupError",
     code: "OBSERVER_EXITED_ON_START",
     message: `Observer exited before becoming healthy (${childExitDescription(exit)}).`,
-    hint: `${bootLogHint}${traceHint}`,
   };
   if (trace.traceId !== undefined) {
     error.traceId = trace.traceId;
+    error.hint = `Run stn debug trace ${trace.traceId}.`;
   }
-  return error;
+  return {
+    error,
+    ...(cause === undefined ? {} : { cause }),
+    startupEvidence: await readObserverStartupEvidence(paths, child),
+  };
 }
 
 function childExitDescription(exit: ChildExitResult): string {
   if (exit.type === "spawn_error") {
-    return `spawn error: ${redactString(exit.error.message)}`;
+    return "spawn error";
   }
   if (exit.signal !== null) {
     return `signal ${exit.signal}`;
@@ -311,33 +348,55 @@ function childExitDescription(exit: ChildExitResult): string {
   return "unknown exit status";
 }
 
-async function observerBootLogHint(
+function startupCauseFromExit(exit: ChildExitResult): SafeError | undefined {
+  if (exit.report !== undefined) {
+    return exit.report.cause ?? exit.report.error;
+  }
+  if (exit.type === "spawn_error") {
+    const report = normalizeObserverStartupFailure(exit.error);
+    return report.cause ?? report.error;
+  }
+  return undefined;
+}
+
+async function readObserverStartupEvidence(
   paths: SpawnObserverInput["paths"],
   child: ChildProcessLike | undefined,
-): Promise<string> {
-  const path = observerBootLogPath(paths);
+): Promise<ObserverStartupEvidence> {
+  const evidence: ObserverStartupEvidence = { bootLogPath: observerBootLogPath(paths) };
   if (child?.readBootLogTail !== undefined) {
-    const pathHint = `Latest observer boot log: ${path}`;
     try {
       const tail = await child.readBootLogTail();
-      if (tail === undefined) {
-        return `${pathHint}\nBoot-log tail unavailable (missing, empty, or unreadable).`;
-      }
-      return `${pathHint}\nThis attempt's last 15 lines (redacted):\n${redactString(tail)}`;
+      const boundedTail = boundedRedactedBootLogTail(tail);
+      if (boundedTail !== undefined) evidence.bootLogTail = boundedTail;
     } catch {
-      return `${pathHint}\nBoot-log tail unavailable (missing, empty, or unreadable).`;
+      // The path remains useful when the attempt-owned handle cannot be read.
     }
+    return evidence;
   }
-  const pathHint = `Observer boot log: ${path}`;
   try {
-    const tail = await readObserverBootLogTail(path);
-    if (tail === undefined) {
-      return `${pathHint}\nBoot-log tail unavailable (missing, empty, or unreadable).`;
-    }
-    return `${pathHint}\nLast 15 lines (redacted):\n${redactString(tail)}`;
+    const tail = await readObserverBootLogTail(evidence.bootLogPath);
+    const boundedTail = boundedRedactedBootLogTail(tail);
+    if (boundedTail !== undefined) evidence.bootLogTail = boundedTail;
   } catch {
-    return `${pathHint}\nBoot-log tail unavailable (missing, empty, or unreadable).`;
+    // An absent or unreadable tail is represented by the optional field being absent.
   }
+  return evidence;
+}
+
+function boundedRedactedBootLogTail(tail: string | undefined): string | undefined {
+  if (tail === undefined) return undefined;
+  const redacted = redactString(tail)
+    .split(/\r?\n/u)
+    .slice(-OBSERVER_STARTUP_BOOT_LOG_TAIL_MAX_LINES)
+    .join("\n")
+    .trimEnd();
+  if (redacted.length === 0) return undefined;
+  const encoded = Buffer.from(redacted, "utf8");
+  if (encoded.byteLength <= OBSERVER_STARTUP_BOOT_LOG_TAIL_MAX_BYTES) return redacted;
+  let start = encoded.byteLength - OBSERVER_STARTUP_BOOT_LOG_TAIL_MAX_BYTES;
+  while (start < encoded.byteLength && (encoded[start] ?? 0) >> 6 === 2) start += 1;
+  return encoded.subarray(start).toString("utf8");
 }
 
 function waitForIncumbentHealth(
@@ -365,40 +424,6 @@ function waitForIncumbentHealth(
       },
     );
   });
-}
-
-/**
- * Appends the redacted spawn reason and the child-owned boot-log tail to a flattened or timed-out
- * startup error. Runs after the runtime boundary so one path covers both the timeout failure and
- * non-SafeError flattening, neither of which reaches the early-exit error builders that already
- * carry this evidence.
- */
-async function enrichStartupFailureEvidence(input: {
-  error: RuntimeSafeError;
-  reason: string | undefined;
-  paths: SpawnObserverInput["paths"];
-  child: ChildProcessLike | undefined;
-}): Promise<RuntimeSafeError> {
-  if (input.error.hint?.includes(observerBootLogPath(input.paths)) === true) {
-    return input.error;
-  }
-  const evidence = [
-    ...(input.reason === undefined ? [] : [`Startup failure: ${input.reason}`]),
-    await observerBootLogHint(input.paths, input.child),
-  ].join("\n");
-  const hint = input.error.hint === undefined ? evidence : `${input.error.hint}\n${evidence}`;
-  return { ...input.error, hint };
-}
-
-/**
- * Reduces a non-SafeError startup escape to its first redacted line; typed SafeErrors already
- * carry their own sanitized shape and pass through the boundary untouched.
- */
-function redactedStartupFailureReason(error: unknown): string | undefined {
-  if (isSafeError(error)) return undefined;
-  const message = error instanceof Error ? error.message : String(error);
-  const [firstLine] = redactString(message).split("\n");
-  return firstLine === undefined || firstLine.length === 0 ? undefined : firstLine;
 }
 
 async function disposeObserverBootLog(child: ChildProcessLike | undefined): Promise<void> {

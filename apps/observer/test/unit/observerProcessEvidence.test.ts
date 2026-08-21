@@ -63,7 +63,13 @@ describe("local Observer process evidence", () => {
       processExecutableMatches: () => false,
     });
 
-    expect(() => evidence.listObserverProcesses()).toThrow("exact executable and argv");
+    expect(() => evidence.listObserverProcesses()).toThrow(
+      expect.objectContaining({
+        tag: "ObserverProcessEvidenceError",
+        code: "OBSERVER_PROCESS_EXECUTABLE_ARGV_MISMATCH",
+        message: "Observer process evidence did not match the exact executable and argv.",
+      }),
+    );
     expect(() =>
       parseObserverProcessList(
         wrapper.replace(" --state-dir /tmp/state", " --socket /spoof --state-dir /tmp/state"),

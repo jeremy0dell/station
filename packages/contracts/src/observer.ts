@@ -36,6 +36,61 @@ import type { SessionRecoveryReadiness } from "./sessionRecovery.js";
 import { nonEmptyStringSchema, userFacingTitleSchema } from "./shared.js";
 import { type StationSnapshot, StationSnapshotSchema } from "./snapshot.js";
 
+/** Maximum encoded size of one child-to-parent Observer startup failure report. */
+export const OBSERVER_STARTUP_FAILURE_REPORT_MAX_BYTES = 64 * 1024;
+
+/** Maximum encoded size retained from the end of one Observer boot log. */
+export const OBSERVER_STARTUP_BOOT_LOG_TAIL_MAX_BYTES = 64 * 1024;
+
+/** Maximum number of boot-log lines retained as startup evidence. */
+export const OBSERVER_STARTUP_BOOT_LOG_TAIL_MAX_LINES = 15;
+
+const ObserverStartupBootLogTailSchema = z
+  .string()
+  .min(1)
+  .refine(
+    (value) =>
+      new TextEncoder().encode(value).byteLength <= OBSERVER_STARTUP_BOOT_LOG_TAIL_MAX_BYTES,
+    "Observer boot-log tail exceeded its byte limit.",
+  )
+  .refine(
+    (value) => value.split(/\r?\n/u).length <= OBSERVER_STARTUP_BOOT_LOG_TAIL_MAX_LINES,
+    "Observer boot-log tail exceeded its line limit.",
+  );
+
+/** Bounded, redacted local evidence retained for one Observer startup attempt. */
+export const ObserverStartupEvidenceSchema = z
+  .object({
+    bootLogPath: nonEmptyStringSchema,
+    bootLogTail: ObserverStartupBootLogTailSchema.optional(),
+  })
+  .strict();
+
+export type ObserverStartupEvidence = z.infer<typeof ObserverStartupEvidenceSchema>;
+
+/** Public lifecycle failure fields shared by CLI results and diagnostic records. */
+export const ObserverLifecycleFailureSchema = z
+  .object({
+    error: SafeErrorSchema,
+    cause: SafeErrorSchema.optional(),
+    startupEvidence: ObserverStartupEvidenceSchema.optional(),
+  })
+  .strict();
+
+export type ObserverLifecycleFailure = z.infer<typeof ObserverLifecycleFailureSchema>;
+
+/** Strict private report written once by an Observer child before an unsuccessful exit. */
+export const ObserverStartupFailureReportSchema = z
+  .object({
+    kind: z.literal("observer-startup-failure"),
+    version: z.literal(1),
+    error: SafeErrorSchema,
+    cause: SafeErrorSchema.optional(),
+  })
+  .strict();
+
+export type ObserverStartupFailureReport = z.infer<typeof ObserverStartupFailureReportSchema>;
+
 export const ObserverHealthStatusSchema = z.enum(["healthy", "degraded", "unavailable"]);
 
 /** Opaque UUID v4 minted for one Observer launch and published in argv and its pidfile. */

@@ -94,12 +94,13 @@ stn command get <commandId>
 error envelope includes diagnostics, the trace summary can include redacted
 external-command details: command, cwd, exit code, duration, bounded
 stdout/stderr snippets, and the effective `PATH` when executable lookup fails with
-`ENOENT`. The compatibility `rootCauseCodes` field retains command, envelope, index, and
-matching-log codes. Use `causeAssessment` for causal interpretation: only a
-correlated diagnostic-index root-cause declaration produces
-`explicit_root_cause`; an error code, retained signal, or exactly matched
-warning/error record produces `observed_failure` and does not establish the
-deeper mechanism. Trace output uses the same `evidenceRoles` and
+`ENOENT`. The compatibility `rootCauseCodes` field retains command, envelope, index,
+typed lifecycle-cause, and matching-log codes. Use `causeAssessment` for causal
+interpretation: a correlated diagnostic-index root-cause declaration or a strict
+lifecycle `cause` produces `explicit_root_cause`; a generic outer error code,
+retained signal, or exactly matched warning/error record produces
+`observed_failure` and does not establish the deeper mechanism. Trace output uses
+the same `evidenceRoles` and
 `operationalBoundaryEvidence` semantics as `debug logs`.
 
 `stn command get <commandId>` asks the live observer for the command lifecycle
@@ -226,11 +227,11 @@ version (`0.7.0` in this example).
 
 `OBSERVER_HANDOFF_REFUSED` means automatic build or cross-version replacement
 could not proceed safely. Read the running/requested display versions and build
-IDs in the error. When a replacement child exits, the error also reports its
-exit code, signal, redacted spawn error, or unknown status; the health rejection
-code or unchanged one-second convergence expiry; and that child's bounded,
-redacted boot-log tail or an explicit unavailable marker. Use the included
-trace ID against the same state directory. A same-version legacy or losing
+IDs in the error. When a replacement child exits, the result keeps its outer
+lifecycle `error` separate from the child report's typed, redacted `cause` and
+structured `startupEvidence`. Use the outer trace ID against the same state
+directory; `stn debug trace <traceId>` projects the causal code separately. A
+same-version legacy or losing
 identified build with stable PID/start-time health can be stopped explicitly;
 missing process identity refuses rather than risking a successor. It must not
 attach to different code. Compare `lsof -t <socket>` with the strict pidfile and
@@ -241,8 +242,10 @@ or conflicting evidence. Automatic handoff never uses SIGKILL.
 activation could not finish with the caller's exact immutable selector. The
 result's `phase` is `inspection`, `stop`, `start`, or `verification`, and
 `incumbentDisposition` reports `none`, `preserved`, `stopped`, or `unknown` for
-the Observer admitted at operation start. The hint retains the underlying safe
-cause code. In a checkout devbox, exact activation does not target the Station
+the Observer admitted at operation start. The result's separate `cause` retains
+the underlying safe code, while `startupEvidence` retains only bounded,
+redacted child boot evidence when one was spawned. In a checkout devbox, exact
+activation does not target the Station
 Host or hosted agents and does not reset `.dev-state`. Resolve inaccessible
 ownership before retrying a `preserved` result. Inspect status first for
 `unknown`. For `stopped`, the isolated Observer may be down while Host-owned
@@ -379,7 +382,7 @@ the client; a scoped `tsc` output is not an identified whole-repository build.
 
 ## Reading Evidence
 
-- `logs/observer-boot.log` is the raw, local-only record of the latest observer startup attempt. Each attempt atomically replaces it at mode `0600` with a JSON-encoded command header followed by that child's stdout/stderr. It sits outside structured `stn debug logs`; an `OBSERVER_EXITED_ON_START` error includes the latest path and, when available, a redacted final 15-line tail captured from its own failed child.
+- `logs/observer-boot.log` is the raw, local-only record of the latest observer startup attempt. Each attempt atomically replaces it at mode `0600` with a JSON-encoded command header followed by that child's stdout/stderr. It sits outside ordinary lifecycle text. A failed start can expose its path and a redacted final 15-line, 64-KiB-bounded tail as structured `startupEvidence`; `debug logs` and `debug trace` keep that evidence separate from the outer error and typed cause.
 - A failed hosted binary smoke can upload `binary-smoke-evidence-<run-id>-<attempt>` for three days. Download it with `gh run download <run-id> --name binary-smoke-evidence-<run-id>-<attempt> --dir /tmp/station-binary-smoke-evidence-<run-id>`, then read `manifest.json` before the round's `failure.json`, bounded logs, and runtime summary. The bundle is redacted, allowlisted, and capped at 1 MiB, but collaborators with Actions access can download it. Do not run `stn debug trace` against unrelated live state and treat it as evidence for the downloaded CI run.
 - Binary-smoke runtime ownership is recorded in `rounds/*/runtime/lifecycle.jsonl`. Read the owner registration and process-start events first, then the shutdown signal, any bounded escalation, refusal or rescue event, and `runtime.cleanup.completed` counts. The manifest's per-run ID must match the invocation that finalized it. A complete disposable cleanup has zero group members, private roots, Observer or Host sockets, Observer pidfiles, or active owner records; an incomplete or ambiguous cleanup retains the relevant root identity for the next ordinary start or manual inspection. Do not remove a retained root or signal a listed PID unless its executable, process group, start identity, and disposable role still match.
 - `observer.claim.sqlite` is boot-exclusion evidence only. Inspect it with

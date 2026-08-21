@@ -2,7 +2,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { readFileSync, readlinkSync, realpathSync, statSync } from "node:fs";
 import { basename, isAbsolute } from "node:path";
 import { resolveObserverSocketForProcessArgs } from "@station/config";
-import { ObserverProcessTokenSchema } from "@station/contracts";
+import { ObserverProcessTokenSchema, type SafeError } from "@station/contracts";
 import { z } from "zod";
 import {
   type ObserverProcessEntry,
@@ -49,6 +49,8 @@ type LocalObserverProcessEvidenceDeps = {
  * Translates targeted and global exact argv, executable provenance, launch nonce,
  * OS start time, strict socket-holder and complete file-descriptor evidence,
  * pidfiles, socket identities, and signals into conservative ownership evidence.
+ * Exact executable/argv mismatch throws a stable typed refusal without weakening
+ * the fail-closed ownership decision.
  */
 export function createLocalObserverProcessEvidence(
   deps: LocalObserverProcessEvidenceDeps = {},
@@ -315,7 +317,7 @@ function requireExactLocalObserverProcess(
         exactArgv.some((value, index) => value !== entry.argv[index]))) ||
     !processExecutableMatches(entry.pid, entry.executablePath)
   ) {
-    throw new Error(`Observer process ${entry.pid} did not match its exact executable and argv.`);
+    throw observerProcessExecutableArgvMismatch();
   }
   const scriptPath = entry.argv[1];
   if (scriptPath !== "__observer") {
@@ -324,6 +326,15 @@ function requireExactLocalObserverProcess(
     }
   }
   return { ...entry, executablePath: realpathSync(entry.executablePath) };
+}
+
+function observerProcessExecutableArgvMismatch(): Error & SafeError {
+  const safeError: SafeError = {
+    tag: "ObserverProcessEvidenceError",
+    code: "OBSERVER_PROCESS_EXECUTABLE_ARGV_MISMATCH",
+    message: "Observer process evidence did not match the exact executable and argv.",
+  };
+  return Object.assign(new Error(safeError.message), safeError);
 }
 
 function processListArgs(): string[] {
