@@ -96,6 +96,7 @@ export type StationHostClient = {
   /** Lifecycle-only: adopt a parked manifest on a successor host. */
   adoptRegistry(manifest: PtyHandoffManifest): Promise<HostAdoptRegistryResult>;
   spawn(params: HostSpawnParamsInput): Promise<HostSpawnResult>;
+  /** Read exact PTY lifetimes and Host-owned handoff support without exporting or parking them. */
   list(): Promise<HostListResult["ptys"]>;
   focus(ptyId: string): Promise<void>;
   close(ptyId: string): Promise<{ closed: boolean }>;

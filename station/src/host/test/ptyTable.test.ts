@@ -128,7 +128,14 @@ describe("createPtyTable", () => {
       rawChunks: ["hello ", "world"],
       rawComplete: true,
     });
-    expect(table.list()).toMatchObject([{ ptyId, worktreeId: "wt-1", alive: true }]);
+    expect(table.list()).toMatchObject([
+      {
+        ptyId,
+        worktreeId: "wt-1",
+        alive: true,
+        handoffSupport: { kind: "non-releasable", reason: "no-bridge-transport" },
+      },
+    ]);
   });
 
   it("stores and broadcasts the same compatible output and reports only the first rewrite", async () => {
