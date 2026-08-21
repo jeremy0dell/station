@@ -7,7 +7,7 @@ import {
 import { describe, expect, it } from "vitest";
 
 const report = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   channel: "installer-binary",
   status: "updated",
   current: { version: "0.0.0-local" },
@@ -16,15 +16,26 @@ const report = {
     { id: "detect", status: "completed", detail: "Detected installer ownership." },
     { id: "plan", status: "completed", detail: "Resolved builds." },
     { id: "apply", status: "completed", detail: "Installed target." },
+    {
+      id: "hook-reconciliation",
+      status: "completed",
+      detail: "Verified provider hooks.",
+    },
     { id: "observer-restart", status: "completed", detail: "Restarted Observer." },
     { id: "host-handoff", status: "completed", detail: "Handed off Host." },
   ],
   warnings: [],
   recoveryCommands: [],
+  hookReconciliation: {
+    provider: "codex",
+    status: "healthy",
+    changed: false,
+    verified: true,
+  },
 } as const;
 
 describe("update command schemas", () => {
-  it("parses the strict schema-version-1 report contract", () => {
+  it("parses the strict schema-version-2 report contract", () => {
     expect(UpdateCommandReportSchema.parse(report)).toEqual(report);
     const failed = {
       ...report,
@@ -43,6 +54,12 @@ describe("update command schemas", () => {
   it("rejects unknown report and step fields", () => {
     expect(UpdateCommandReportSchema.safeParse({ ...report, extra: true }).success).toBe(false);
     expect(UpdateCommandStepSchema.safeParse({ ...report.steps[0], extra: true }).success).toBe(
+      false,
+    );
+  });
+
+  it("rejects the superseded schema version", () => {
+    expect(UpdateCommandReportSchema.safeParse({ ...report, schemaVersion: 1 }).success).toBe(
       false,
     );
   });

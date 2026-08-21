@@ -394,9 +394,6 @@ export async function verifyCodexHookInstall(
     hookScriptPath: installResult.hookScriptPath,
     enabled,
   };
-  const repairCommand = codexHookRemediationCommand(options, installResult, "install");
-  const uninstallCommand = codexHookRemediationCommand(options, installResult, "uninstall");
-  const doctorCommand = codexHookDoctorCommand(options, installResult);
 
   try {
     const doctor = await doctorCodexHooks(doctorOptions);
@@ -415,16 +412,7 @@ export async function verifyCodexHookInstall(
       status: "warn",
       verified: false,
       doctor,
-      message: codexHookVerificationFollowUp({
-        detail: doctor.message,
-        doctorCommand,
-        repairCommand,
-        uninstallCommand,
-        enabled,
-        ...(options.stationConfigPath === undefined
-          ? {}
-          : { stationConfigPath: options.stationConfigPath }),
-      }),
+      message: codexHookVerificationFollowUp(enabled),
     };
   } catch (cause) {
     const error = publicSafeErrorFromUnknown(cause, {
@@ -438,16 +426,7 @@ export async function verifyCodexHookInstall(
       status: "warn",
       verified: false,
       error,
-      message: codexHookVerificationFollowUp({
-        detail: error.message,
-        doctorCommand,
-        repairCommand,
-        uninstallCommand,
-        enabled,
-        ...(options.stationConfigPath === undefined
-          ? {}
-          : { stationConfigPath: options.stationConfigPath }),
-      }),
+      message: codexHookVerificationFollowUp(enabled),
     };
   }
 }
@@ -728,46 +707,11 @@ function codexHookRemediationCommand(
   return commandLine(args);
 }
 
-function codexHookDoctorCommand(
-  options: CodexHookPlanOptions,
-  installResult: CodexHookInstallResult,
-): string {
-  const args = ["stn"];
-  if (options.stationConfigPath !== undefined) {
-    args.push("--config", options.stationConfigPath);
+function codexHookVerificationFollowUp(enabled: boolean): string {
+  if (!enabled) {
+    return "Codex hook writes completed while configured hook installation is disabled, so provider doctor did not verify them. Enable configured hook installation and rerun setup, or use the explicit uninstall flow. Run provider doctor before retrying.";
   }
-  args.push(
-    "hooks",
-    "doctor",
-    "codex",
-    "--codex-config",
-    installResult.profileConfigPath,
-    "--hook-script",
-    installResult.hookScriptPath,
-  );
-  if (options.hookBin !== undefined) {
-    args.push("--hook-bin", options.hookBin);
-  }
-  return commandLine(args);
-}
-
-function codexHookVerificationFollowUp(input: {
-  detail: string;
-  doctorCommand: string;
-  repairCommand: string;
-  uninstallCommand: string;
-  enabled: boolean;
-  stationConfigPath?: string;
-}): string {
-  const prefix = `Codex hook writes completed, but provider verification requires manual follow-up. ${input.detail}`;
-  if (!input.enabled) {
-    const configLocation =
-      input.stationConfigPath === undefined
-        ? "the Station config used by this command"
-        : JSON.stringify(input.stationConfigPath);
-    return `${prefix} To keep these artifacts, set \`install_hooks = true\` under \`[harness.codex]\` in ${configLocation}, then run \`${input.repairCommand}\`. To remove them instead, run \`${input.uninstallCommand}\`. Run \`${input.doctorCommand}\` after choosing to check the same resolved artifacts before treating the repair as successful.`;
-  }
-  return `${prefix} Correct invalid configuration or ownership first if either is reported, then run \`${input.repairCommand}\` to repair the same resolved artifacts. Run \`${input.doctorCommand}\` afterward before treating the repair as successful.`;
+  return "Codex hook writes completed, but provider doctor did not verify them. Correct the reported configuration or ownership issue, then rerun hook installation and provider doctor before retrying.";
 }
 
 function assignBackupPaths(

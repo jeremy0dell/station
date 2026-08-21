@@ -69,7 +69,7 @@ describe("harness hook reconciliation", () => {
       code: "HARNESS_HOOK_OWNERSHIP_CONFLICT",
       message: "Configured harness hooks are owned by another runtime.",
       provider: "codex",
-      hint: "Run stn hooks install codex --yes --takeover only to transfer ownership, then retry.",
+      hint: "Use the explicit codex provider hook install takeover flow only to transfer ownership, then retry.",
     });
   });
 

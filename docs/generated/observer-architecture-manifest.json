@@ -13093,7 +13093,7 @@
       "declaration": "runUpdateCommand",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Selects one owned install channel, preflights default live Host preservation, and crosses runtimes through the successor launcher after mutation.",
+      "purpose": "Selects one owned install channel, preflights default live Host preservation, reconciles configured hooks through the selected launcher, and only then crosses runtimes.",
       "dependencies": [
         {
           "path": "apps/cli/src/commands/update/scenario.ts",
@@ -15377,7 +15377,7 @@
       "declaration": "createCodexHarnessProvider",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Supplies Codex launch, discovery, hook normalization, and compatibility admission through the harness port.",
+      "purpose": "Supplies Codex launch, discovery, hook health/reconciliation, normalization, and compatibility admission through the harness port.",
       "dependencies": [
         {
           "path": "packages/contracts/src/providers.ts",

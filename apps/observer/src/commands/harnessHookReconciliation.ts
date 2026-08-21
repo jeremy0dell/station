@@ -110,11 +110,11 @@ function followUpHint(
 ): string {
   switch (action) {
     case "enable-hooks":
-      return `Enable install_hooks for ${provider}, then retry.`;
+      return `Enable configured hook installation for ${provider}, then retry.`;
     case "run-doctor":
-      return `Run stn hooks doctor ${provider}, correct the reported issue, then retry.`;
+      return `Use ${provider} provider hook doctor, correct the reported issue, then retry.`;
     case "run-explicit-takeover":
-      return `Run stn hooks install ${provider} --yes --takeover only to transfer ownership, then retry.`;
+      return `Use the explicit ${provider} provider hook install takeover flow only to transfer ownership, then retry.`;
     case "retry":
       return `Retry ${provider} hook reconciliation after correcting the write failure.`;
   }

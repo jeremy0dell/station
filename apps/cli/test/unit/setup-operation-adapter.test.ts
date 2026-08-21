@@ -409,7 +409,8 @@ describe("setup operation adapters", () => {
         provider: "codex",
       },
     });
-    expect(result.message).toContain("stn hooks doctor codex");
+    expect(result.message).toContain("provider doctor");
+    expect(result.message).not.toContain("stn hooks");
   });
 
   it("fails Codex tracking with actionable follow-up when provider verification errors", async () => {
@@ -427,8 +428,8 @@ describe("setup operation adapters", () => {
         provider: "codex",
       },
     });
-    expect(result.message).toContain("Codex hook config could not be verified");
-    expect(result.message).toContain("stn hooks doctor codex");
+    expect(result.message).toContain("provider doctor");
+    expect(result.message).not.toContain("stn hooks");
     expect(JSON.stringify(outcome)).not.toMatch(/native before sentinel|native after sentinel/);
   });
 
@@ -677,8 +678,8 @@ function unverifiedCodexRepairResult(
   const install = codexInstallResult();
   const message =
     failure === "doctor-warning"
-      ? "Codex hook writes completed, but provider verification requires manual follow-up. Codex hook script is stale. Run `stn hooks doctor codex`."
-      : "Codex hook writes completed, but provider verification requires manual follow-up. Codex hook config could not be verified. Run `stn hooks doctor codex`.";
+      ? "Codex hook writes completed, but provider doctor did not verify them. Correct the reported configuration or ownership issue, then rerun hook installation and provider doctor before retrying."
+      : "Codex hook writes completed, but provider doctor could not verify them. Correct the reported configuration or ownership issue, then rerun hook installation and provider doctor before retrying.";
   if (failure === "doctor-warning") {
     return {
       ...install,

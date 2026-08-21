@@ -1,6 +1,10 @@
 import { z } from "zod";
 import { type SafeError, SafeErrorSchema } from "./errors.js";
 import { type ObserverStartupEvidence, ObserverStartupEvidenceSchema } from "./observer.js";
+import {
+  type ProviderHookReconciliationResult,
+  ProviderHookReconciliationResultSchema,
+} from "./providerHooks.js";
 import { nonEmptyStringSchema, safeTextSchema } from "./shared.js";
 
 export const UpdateChannelIdSchema = z.enum([
@@ -21,6 +25,7 @@ export const UpdateCommandStepIdSchema = z.enum([
   "detect",
   "plan",
   "apply",
+  "hook-reconciliation",
   "observer-restart",
   "host-handoff",
 ]);
@@ -74,12 +79,13 @@ const UpdateArtifactSchema = z
   );
 
 /**
- * Strict machine-readable schema-version-1 contract emitted by `stn update --json`.
+ * Strict machine-readable schema-version-2 contract emitted by `stn update --json`.
  * Consumers must parse this shared contract before interpreting update outcomes; runtime
- * crossover failures keep the update error outermost and child cause/evidence separate.
+ * crossover failures keep the update error outermost and child cause/evidence separate. Version 2
+ * adds provider-neutral hook reconciliation; #639 owns the coordinated version-3 successor.
  */
 export type UpdateCommandReport = {
-  schemaVersion: 1;
+  schemaVersion: 2;
   channel: UpdateChannelId;
   status: "current" | "planned" | "updated" | "deferred" | "failed";
   current: { version: string; revision?: string };
@@ -87,6 +93,7 @@ export type UpdateCommandReport = {
   steps: UpdateCommandStep[];
   warnings: SafeError[];
   recoveryCommands: UpdateCommandArgv[];
+  hookReconciliation?: ProviderHookReconciliationResult;
   error?: SafeError;
   cause?: SafeError;
   startupEvidence?: ObserverStartupEvidence;
@@ -94,7 +101,7 @@ export type UpdateCommandReport = {
 
 export const UpdateCommandReportSchema: z.ZodType<UpdateCommandReport> = z
   .object({
-    schemaVersion: z.literal(1),
+    schemaVersion: z.literal(2),
     channel: UpdateChannelIdSchema,
     status: z.enum(["current", "planned", "updated", "deferred", "failed"]),
     current: UpdateArtifactSchema,
@@ -102,6 +109,7 @@ export const UpdateCommandReportSchema: z.ZodType<UpdateCommandReport> = z
     steps: z.array(UpdateCommandStepSchema),
     warnings: z.array(SafeErrorSchema),
     recoveryCommands: z.array(UpdateCommandArgvSchema),
+    hookReconciliation: ProviderHookReconciliationResultSchema.optional(),
     error: SafeErrorSchema.optional(),
     cause: SafeErrorSchema.optional(),
     startupEvidence: ObserverStartupEvidenceSchema.optional(),
@@ -117,6 +125,9 @@ export const UpdateCommandReportSchema: z.ZodType<UpdateCommandReport> = z
       steps: report.steps,
       warnings: report.warnings,
       recoveryCommands: report.recoveryCommands,
+      ...(report.hookReconciliation === undefined
+        ? {}
+        : { hookReconciliation: report.hookReconciliation }),
       ...(report.error === undefined ? {} : { error: report.error }),
       ...(report.cause === undefined ? {} : { cause: report.cause }),
       ...(report.startupEvidence === undefined ? {} : { startupEvidence: report.startupEvidence }),

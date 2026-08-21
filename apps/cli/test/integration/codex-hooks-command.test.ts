@@ -64,6 +64,30 @@ describe("CLI Codex hook commands", () => {
     );
   });
 
+  it("reconciles configured hooks through a redaction-safe idempotent command", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-cli-codex-hooks-"));
+    const configPath = await writeConfig(root, true);
+    const env = codexEnv(root);
+    const options = { env, providerHookIngressLauncher: "/opt/stn-ingress" };
+
+    const repaired = await runCli(["--config", configPath, "hooks", "reconcile", "codex"], options);
+    expect(repaired).toEqual({
+      code: 0,
+      output: { provider: "codex", status: "repaired", changed: true, verified: true },
+    });
+    expect(JSON.stringify(repaired.output)).not.toContain(root);
+
+    const healthy = await runCli(["--config", configPath, "hooks", "reconcile", "codex"], options);
+    expect(healthy).toEqual({
+      code: 0,
+      output: { provider: "codex", status: "healthy", changed: false, verified: true },
+    });
+
+    await expect(
+      runCli(["--config", configPath, "hooks", "reconcile", "codex", "--takeover"], options),
+    ).rejects.toThrow("never accepts --takeover");
+  });
+
   it("uses the composed ingress launcher when --hook-bin is omitted", async () => {
     const root = await mkdtemp(join(tmpdir(), "station-cli-codex-hooks-"));
     const configPath = await writeConfig(root, true);
@@ -244,6 +268,23 @@ describe("CLI Codex hook commands", () => {
       },
     });
     await expect(readFile(hookScriptPath, "utf8")).resolves.toBe(installedScript);
+
+    const conflict = await runCli(["--config", configPath, "hooks", "reconcile", "codex"], {
+      env,
+      providerHookIngressLauncher: sourceOwner.launcher,
+      providerHookArtifactOwner: sourceOwner,
+    });
+    expect(conflict).toEqual({
+      code: 1,
+      output: {
+        provider: "codex",
+        status: "ownership-conflict",
+        changed: false,
+        verified: false,
+        followUp: { action: "run-explicit-takeover" },
+      },
+    });
+    expect(JSON.stringify(conflict.output)).not.toContain(root);
 
     await expect(
       runCli(["--config", configPath, "hooks", "install", "codex", "--yes"], {
@@ -677,42 +718,14 @@ describe("CLI Codex hook commands", () => {
           hookScriptPath,
           message: expect.stringContaining("not requested in station config"),
         },
-        message: expect.stringContaining("provider verification requires manual follow-up"),
+        message: expect.stringContaining("configured hook installation is disabled"),
       },
     });
-    expect(writeCompleted.output).toEqual(
-      expect.objectContaining({
-        message: expect.stringContaining("`install_hooks = true` under `[harness.codex]`"),
-      }),
-    );
-    const expectedFollowUpCommands = [
-      ["install", "--yes"],
-      ["uninstall", "--yes"],
-      ["doctor"],
-    ] as const;
-    for (const [action, ...confirmation] of expectedFollowUpCommands) {
-      expect(writeCompleted.output).toEqual(
-        expect.objectContaining({
-          message: expect.stringContaining(
-            commandLine([
-              "stn",
-              "--config",
-              configPath,
-              "hooks",
-              action,
-              "codex",
-              ...confirmation,
-              "--codex-config",
-              codexConfigPath,
-              "--hook-script",
-              hookScriptPath,
-              "--hook-bin",
-              "/opt/custom-stn-ingress",
-            ]),
-          ),
-        }),
-      );
-    }
+    const followUpMessage = (writeCompleted.output as { message: string }).message;
+    expect(followUpMessage).not.toContain(configPath);
+    expect(followUpMessage).not.toContain(codexConfigPath);
+    expect(followUpMessage).not.toContain(hookScriptPath);
+    expect(followUpMessage).not.toContain("/opt/custom-stn-ingress");
     const installedProfile = await readFile(codexConfigPath, "utf8");
     await writeFile(
       codexConfigPath,

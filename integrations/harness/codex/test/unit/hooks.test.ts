@@ -225,22 +225,16 @@ describe("Codex hook setup", () => {
         hookScriptPath,
         message: expect.stringContaining("script is missing or stale"),
       },
-      message: expect.stringContaining("provider verification requires manual follow-up"),
+      message: expect.stringContaining("provider doctor did not verify them"),
     });
     if (!("doctor" in verification)) {
       throw new Error("Expected post-write drift to return the complete Codex doctor result.");
     }
-    expect(verification.message).toContain(verification.doctor.message);
-    expect(verification.message).toContain(
-      "stn --config /tmp/station/config.toml hooks doctor codex",
-    );
-    expect(verification.message).toContain(
-      "stn --config /tmp/station/config.toml hooks install codex --yes",
-    );
-    expect(verification.message).toContain("repair the same resolved artifacts");
-    expect(verification.message).toContain(`--codex-config ${configPath}`);
-    expect(verification.message).toContain(`--hook-script ${hookScriptPath}`);
-    expect(verification.message).toContain("--hook-bin /opt/custom-stn-ingress");
+    expect(verification.message).not.toContain(verification.doctor.message);
+    expect(verification.message).not.toContain("/tmp/station");
+    expect(verification.message).not.toContain(configPath);
+    expect(verification.message).not.toContain(hookScriptPath);
+    expect(verification.message).not.toContain("--hook-bin");
     await expect(readFile(hookScriptPath, "utf8")).resolves.toBe("post-write drift\n");
     await expect(readFile(configPath, "utf8")).resolves.toContain(hookScriptPath);
     await expect(readFile(baseConfigPath, "utf8")).resolves.not.toContain("Notify station");
@@ -275,16 +269,13 @@ describe("Codex hook setup", () => {
         code: "CODEX_HOOK_INVALID_TOML",
         provider: "codex",
       },
-      message: expect.stringContaining("provider verification requires manual follow-up"),
+      message: expect.stringContaining("provider doctor did not verify them"),
     });
     expect("doctor" in verification).toBe(false);
-    expect(verification.message).toContain(
-      `--codex-config ${configPath} --hook-script ${hookScriptPath}`,
-    );
-    expect(verification.message).toContain(
-      "stn --config /tmp/station/config.toml hooks install codex --yes",
-    );
-    expect(verification.message).toContain("Correct invalid configuration or ownership first");
+    expect(verification.message).not.toContain(configPath);
+    expect(verification.message).not.toContain(hookScriptPath);
+    expect(verification.message).not.toContain("/tmp/station/config.toml");
+    expect(verification.message).toContain("Correct the reported configuration or ownership issue");
     await expect(readFile(configPath, "utf8")).resolves.toBe("not = [valid");
     await expect(readFile(hookScriptPath, "utf8")).resolves.toContain("codex > /dev/null");
   });
