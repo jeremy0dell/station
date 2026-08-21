@@ -12,6 +12,7 @@ import { TerminalProcessEmitter } from "./terminalProcessEmitter.js";
 
 const MIN_COLS = 2;
 const MIN_ROWS = 1;
+const DEFAULT_TERMINAL_KILL_SIGNAL = "SIGHUP";
 
 type BunTerminal = {
   readonly closed: boolean;
@@ -215,7 +216,8 @@ export class BunTerminalProcess implements StationTerminalProcess {
     if (this.#disposed || this.#events.exited) {
       return;
     }
-    this.#child.kill(signal);
+    // Match node-pty's terminal hangup default; interactive shells commonly ignore SIGTERM.
+    this.#child.kill(signal ?? DEFAULT_TERMINAL_KILL_SIGNAL);
   }
 
   dispose(): void {
@@ -227,7 +229,7 @@ export class BunTerminalProcess implements StationTerminalProcess {
     this.#events.dispose();
     if (!exited) {
       try {
-        this.#child.kill();
+        this.#child.kill(DEFAULT_TERMINAL_KILL_SIGNAL);
       } catch {
         // The payload may have exited between the state check and the signal.
       }
