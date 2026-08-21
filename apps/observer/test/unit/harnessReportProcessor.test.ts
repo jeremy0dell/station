@@ -23,6 +23,7 @@ describe("harness report processor logging", () => {
     const records: LogRecord[] = [];
     const snapshot = emptyStationSnapshot(now);
     const logger: StationLogger = {
+      recordOperationalEvent: () => Promise.resolve(),
       info: (message, attributes) => {
         records.push({ message, attributes });
         return Promise.resolve();

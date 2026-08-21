@@ -58,6 +58,7 @@ describe("fake providers", () => {
           projectId: "web",
           worktreeId: "wt_web_main",
           harnessRunId: "run_web_main",
+          hasManagedAttachment: false,
           now,
         }),
       ],
@@ -80,6 +81,7 @@ describe("fake providers", () => {
         id: "term_web_main",
         provider: "fake-terminal",
         observedAt: now,
+        hasManagedAttachment: false,
       }),
     ]);
     await expect(

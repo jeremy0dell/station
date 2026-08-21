@@ -27,7 +27,7 @@ describe("CLI diagnostic commands", () => {
       clientFactory: () =>
         ({
           health: async () => ({
-            schemaVersion: "0.11.0",
+            schemaVersion: "0.12.0",
             status: "healthy",
             pid: 1234,
             startedAt: now,
@@ -49,7 +49,7 @@ describe("CLI diagnostic commands", () => {
     ).resolves.toMatchObject({
       code: 0,
       output: {
-        schemaVersion: "0.11.0",
+        schemaVersion: "0.12.0",
         status: "healthy",
         debugBundle: {
           available: true,
@@ -166,7 +166,7 @@ describe("CLI diagnostic commands", () => {
       clientFactory: () =>
         ({
           health: async () => ({
-            schemaVersion: "0.11.0",
+            schemaVersion: "0.12.0",
             status: "healthy",
             pid: 1234,
             startedAt: now,
@@ -201,7 +201,7 @@ describe("CLI diagnostic commands", () => {
       clientFactory: () =>
         ({
           health: async () => ({
-            schemaVersion: "0.11.0",
+            schemaVersion: "0.12.0",
             status: "healthy",
             pid: 1234,
             startedAt: now,
@@ -238,7 +238,7 @@ describe("CLI diagnostic commands", () => {
       clientFactory: () =>
         ({
           health: async () => ({
-            schemaVersion: "0.11.0",
+            schemaVersion: "0.12.0",
             status: "healthy",
             pid: 1234,
             startedAt: now,
@@ -301,7 +301,7 @@ describe("CLI diagnostic commands", () => {
       clientFactory: () =>
         ({
           health: async () => ({
-            schemaVersion: "0.11.0",
+            schemaVersion: "0.12.0",
             status: "healthy",
             pid: 1234,
             startedAt: now,
@@ -342,7 +342,7 @@ describe("CLI diagnostic commands", () => {
       clientFactory: () =>
         ({
           health: async () => ({
-            schemaVersion: "0.11.0",
+            schemaVersion: "0.12.0",
             status: "healthy",
             pid: 1234,
             startedAt: now,
@@ -737,6 +737,83 @@ describe("CLI diagnostic commands", () => {
     });
   });
 
+  it("returns strict operational decision payloads with envelope correlation", async () => {
+    const fixture = await createTempState();
+    const configPath = await writeConfigToml(fixture.root, fixture.config);
+    await mkdir(join(fixture.stateDir, "logs"), { recursive: true });
+    await writeFile(
+      join(fixture.stateDir, "logs", "observer.jsonl"),
+      `${JSON.stringify({
+        timestamp: "2026-05-20T12:03:00.000Z",
+        level: "info",
+        component: "observer",
+        message: "Terminal focus decision recorded.",
+        commandId: "cmd_focus",
+        traceId: "trc_focus",
+        projectId: "web",
+        worktreeId: "wt_web_feature",
+        sessionId: "ses_web_feature",
+        provider: "tmux",
+        operationalEvent: {
+          kind: "terminal.focus.decision",
+          decision: {
+            outcome: "focused",
+            hasOriginClientId: false,
+            resolution: {
+              kind: "selected",
+              totalTargetCount: 2,
+              matchingTargetCount: 1,
+              targetId: "tmux:station:@1:%2",
+              targetState: "open",
+              selectionBasis: "session-main-agent",
+            },
+          },
+        },
+      })}\n`,
+    );
+
+    await expect(
+      runCli(["--config", configPath, "debug", "logs", "terminal.focus.decision"]),
+    ).resolves.toMatchObject({
+      code: 0,
+      output: {
+        matched: 1,
+        records: [
+          {
+            level: "info",
+            commandId: "cmd_focus",
+            traceId: "trc_focus",
+            projectId: "web",
+            worktreeId: "wt_web_feature",
+            sessionId: "ses_web_feature",
+            provider: "tmux",
+            operationalEvent: {
+              kind: "terminal.focus.decision",
+              decision: {
+                outcome: "focused",
+                hasOriginClientId: false,
+                resolution: {
+                  kind: "selected",
+                  totalTargetCount: 2,
+                  matchingTargetCount: 1,
+                  targetId: "tmux:station:@1:%2",
+                  targetState: "open",
+                  selectionBasis: "session-main-agent",
+                },
+              },
+            },
+            matchEvidence: [
+              expect.objectContaining({
+                path: "/operationalEvent/kind",
+                excerpt: expect.stringContaining("terminal.focus.decision"),
+              }),
+            ],
+          },
+        ],
+      },
+    });
+  });
+
   it("returns doctor diagnostics for an invalid config without starting the observer", async () => {
     const root = await mkdtemp(join(tmpdir(), "station-invalid-config-"));
     const configPath = join(root, "config.toml");
@@ -821,12 +898,12 @@ describe("CLI diagnostic commands", () => {
 
 function doctorReport(stateDir: string): DoctorReport {
   return {
-    schemaVersion: "0.11.0",
+    schemaVersion: "0.12.0",
     generatedAt: now,
     status: "healthy",
     checks: [{ name: "observer", status: "ok", message: "Observer is healthy." }],
     observer: {
-      schemaVersion: "0.11.0",
+      schemaVersion: "0.12.0",
       status: "healthy",
       pid: 1234,
       startedAt: now,
@@ -854,17 +931,17 @@ function doctorReport(stateDir: string): DoctorReport {
 
 function diagnosticSnapshot(): DiagnosticSnapshot {
   return {
-    schemaVersion: "0.11.0",
+    schemaVersion: "0.12.0",
     collectedAt: now,
     observerHealth: {
-      schemaVersion: "0.11.0",
+      schemaVersion: "0.12.0",
       status: "healthy",
       pid: 1234,
       startedAt: now,
       version: observerBuildVersion,
     },
     snapshot: {
-      schemaVersion: "0.11.0",
+      schemaVersion: "0.12.0",
       generatedAt: now,
       observer: { pid: 1234, startedAt: now, version: "0.7.0", healthy: true },
       providerHealth: {},

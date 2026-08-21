@@ -102,6 +102,7 @@
       "sessionId": "ses_web_feature_auth",
       "harnessRunId": "run_web_feature_auth",
       "state": "open",
+      "focusable": true,
       "cwd": "/tmp/station-fixtures/web/worktrees/feature-auth",
       "pid": 5012,
       "title": "web feature/auth agent",

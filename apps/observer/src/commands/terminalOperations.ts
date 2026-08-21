@@ -5,7 +5,9 @@ import type {
   ProviderProjectConfig,
   SafeError,
   SessionView,
+  TerminalFocusOperationalEvent,
   TerminalFocusOrigin,
+  TerminalFocusResolutionEvidence,
   TerminalProvider,
   TerminalState,
   TerminalTargetObservation,
@@ -15,7 +17,7 @@ import type {
 import { terminalTargetObservationFromBinding } from "@station/contracts";
 import { type RuntimeClock, systemClock, toIsoTimestamp } from "@station/runtime";
 import { toSafeError } from "../diagnostics/errors.js";
-import type { StationLogger } from "../stationLogger.js";
+import type { StationLogger, StationOperationalEventRecord } from "../stationLogger.js";
 import { throwIfAborted } from "./cancellation.js";
 import type { HarnessLaunchPreflight } from "./harnessLaunchPreflight.js";
 import type { CommandHandlerContext } from "./queue.js";
@@ -142,7 +144,12 @@ export async function ensureAgentWorkspace(
   }
 }
 
-/** Resolves and focuses one provider-owned target from product session/worktree identity. */
+/**
+ * USE CASE
+ *
+ * Resolves fresh provider-owned target evidence from product identity, focuses the selected
+ * target with request-local origin context, and retains one bounded decision record.
+ */
 export async function focusTerminal(
   input: {
     terminal: TerminalProvider;
@@ -150,8 +157,13 @@ export async function focusTerminal(
     origin?: TerminalFocusOrigin | undefined;
   } & TerminalOperationRuntime,
 ): Promise<void> {
+  let resolution: TerminalTargetResolution | undefined;
   try {
-    const target = await resolveTerminalTarget(input);
+    resolution = await resolveTerminalTarget(input);
+    if (resolution.kind !== "selected") {
+      throw terminalTargetResolutionError(input.terminal.id, input.subject, resolution);
+    }
+    const selectedResolution = resolution;
     await runProviderMutation(
       {
         ...operationRuntime(input),
@@ -163,10 +175,14 @@ export async function focusTerminal(
           provider: input.terminal.id,
         },
       },
-      () => input.terminal.focusTarget(target.id, focusContext(input.origin)),
+      () => input.terminal.focusTarget(selectedResolution.target.id, focusContext(input.origin)),
     );
+    await recordTerminalFocusDecision(input, {
+      outcome: "focused",
+      resolution: selectedResolution,
+    });
   } catch (error) {
-    throw toSafeError(
+    const safeError = toSafeError(
       error,
       {
         tag: "TerminalProviderError",
@@ -174,8 +190,15 @@ export async function focusTerminal(
         message: "The terminal provider failed to focus the target.",
         provider: input.terminal.id,
       },
-      { commandId: input.context.commandId },
+      { commandId: input.context.commandId, traceId: input.context.trace.traceId },
     );
+    const failedDecision: TerminalFocusDecisionResult = {
+      outcome: "failed",
+      errorCode: safeError.code,
+    };
+    if (resolution !== undefined) failedDecision.resolution = resolution;
+    await recordTerminalFocusDecision(input, failedDecision);
+    throw safeError;
   }
 }
 
@@ -187,7 +210,10 @@ export async function closeTerminal(
   } & TerminalOperationRuntime,
 ): Promise<void> {
   try {
-    const target = await resolveTerminalTarget(input);
+    const resolution = await resolveTerminalTarget(input);
+    if (resolution.kind !== "selected") {
+      throw terminalTargetResolutionError(input.terminal.id, input.subject, resolution);
+    }
     await runProviderMutation(
       {
         ...operationRuntime(input),
@@ -199,7 +225,7 @@ export async function closeTerminal(
           provider: input.terminal.id,
         },
       },
-      () => input.terminal.closeTarget(target.id),
+      () => input.terminal.closeTarget(resolution.target.id),
     );
   } catch (error) {
     throw toSafeError(
@@ -247,7 +273,7 @@ async function resolveTerminalTarget(input: {
   subject: TerminalTargetSubject;
   context: CommandHandlerContext;
   clock?: RuntimeClock | undefined;
-}): Promise<TerminalTargetObservation> {
+}): Promise<TerminalTargetResolution> {
   const targets = await runProviderMutation(
     {
       ...operationRuntime(input),
@@ -277,12 +303,28 @@ async function resolveTerminalTarget(input: {
         ? left.stateRank - right.stateRank
         : left.identityRank - right.identityRank,
     );
-  const selected = ranked[0]?.target;
-  if (selected !== undefined) return selected;
-  if (matching.some((target) => target.state === "stale")) {
-    throw terminalTargetStaleError(input.terminal.id, input.subject);
+  const selected = ranked[0];
+  if (selected !== undefined) {
+    return {
+      kind: "selected",
+      target: selected.target,
+      selectionBasis: selected.selectionBasis,
+      totalTargetCount: targets.length,
+      matchingTargetCount: matching.length,
+    };
   }
-  throw terminalTargetMissingError(input.terminal.id, input.subject);
+  if (matching.some((target) => target.state === "stale")) {
+    return {
+      kind: "stale",
+      totalTargetCount: targets.length,
+      matchingTargetCount: matching.length,
+    };
+  }
+  return {
+    kind: "missing",
+    totalTargetCount: targets.length,
+    matchingTargetCount: matching.length,
+  };
 }
 
 async function closeOpenedTargetBestEffort(
@@ -403,7 +445,29 @@ type RankedTarget = {
   target: TerminalTargetObservation;
   identityRank: number;
   stateRank: number;
+  selectionBasis: TerminalTargetSelectionBasis;
 };
+
+type TerminalTargetSelectionBasis =
+  | "session-main-agent"
+  | "session"
+  | "worktree-main-agent"
+  | "worktree"
+  | "cwd-fallback";
+
+type TerminalTargetResolution =
+  | {
+      kind: "selected";
+      target: TerminalTargetObservation;
+      selectionBasis: TerminalTargetSelectionBasis;
+      totalTargetCount: number;
+      matchingTargetCount: number;
+    }
+  | {
+      kind: "stale" | "missing";
+      totalTargetCount: number;
+      matchingTargetCount: number;
+    };
 
 function targetMatchesSubject(input: {
   target: TerminalTargetObservation;
@@ -431,25 +495,35 @@ function rankedTarget(
   subject: TerminalTargetSubject,
 ): RankedTarget | undefined {
   const stateRank = targetStateRank(target.state);
-  const identityRank = targetIdentityRank(target, subject);
-  return stateRank === undefined || identityRank === undefined
+  const identity = targetIdentity(target, subject);
+  return stateRank === undefined || identity === undefined
     ? undefined
-    : { target, identityRank, stateRank };
+    : {
+        target,
+        identityRank: identity.rank,
+        stateRank,
+        selectionBasis: identity.basis,
+      };
 }
 
-function targetIdentityRank(
+function targetIdentity(
   target: TerminalTargetObservation,
   subject: TerminalTargetSubject,
-): number | undefined {
+): { rank: number; basis: TerminalTargetSelectionBasis } | undefined {
   const mainAgent = target.harnessBinding?.role === "main-agent";
-  if (subject.sessionId !== undefined && target.sessionId === subject.sessionId && mainAgent)
-    return 0;
-  if (subject.sessionId !== undefined && target.sessionId === subject.sessionId) return 1;
-  if (subject.worktreeId !== undefined && target.worktreeId === subject.worktreeId && mainAgent) {
-    return 2;
+  if (subject.sessionId !== undefined && target.sessionId === subject.sessionId && mainAgent) {
+    return { rank: 0, basis: "session-main-agent" };
   }
-  if (subject.worktreeId !== undefined && target.worktreeId === subject.worktreeId) return 3;
-  if (target.cwd !== undefined) return 4;
+  if (subject.sessionId !== undefined && target.sessionId === subject.sessionId) {
+    return { rank: 1, basis: "session" };
+  }
+  if (subject.worktreeId !== undefined && target.worktreeId === subject.worktreeId && mainAgent) {
+    return { rank: 2, basis: "worktree-main-agent" };
+  }
+  if (subject.worktreeId !== undefined && target.worktreeId === subject.worktreeId) {
+    return { rank: 3, basis: "worktree" };
+  }
+  if (target.cwd !== undefined) return { rank: 4, basis: "cwd-fallback" };
   return undefined;
 }
 
@@ -495,6 +569,100 @@ function terminalTargetStaleError(provider: string, subject: TerminalTargetSubje
   };
   assignSubject(error, subject);
   return error;
+}
+
+function terminalTargetResolutionError(
+  provider: string,
+  subject: TerminalTargetSubject,
+  resolution: Exclude<TerminalTargetResolution, { kind: "selected" }>,
+): SafeError {
+  return resolution.kind === "stale"
+    ? terminalTargetStaleError(provider, subject)
+    : terminalTargetMissingError(provider, subject);
+}
+
+type TerminalFocusDecisionResult =
+  | {
+      outcome: "focused";
+      resolution: Extract<TerminalTargetResolution, { kind: "selected" }>;
+    }
+  | {
+      outcome: "failed";
+      errorCode: string;
+      resolution?: TerminalTargetResolution | undefined;
+    };
+
+async function recordTerminalFocusDecision(
+  input: {
+    terminal: TerminalProvider;
+    subject: TerminalTargetSubject;
+    origin?: TerminalFocusOrigin | undefined;
+  } & TerminalOperationRuntime,
+  result: TerminalFocusDecisionResult,
+): Promise<void> {
+  if (input.logger === undefined) return;
+  let decision: TerminalFocusOperationalEvent["decision"];
+  if (result.outcome === "focused") {
+    decision = {
+      outcome: "focused",
+      hasOriginClientId: input.origin?.clientId !== undefined,
+      resolution: terminalFocusResolutionEvidence(result.resolution),
+    };
+  } else {
+    const failedDecision: Extract<
+      TerminalFocusOperationalEvent["decision"],
+      { outcome: "failed" }
+    > = {
+      outcome: "failed",
+      hasOriginClientId: input.origin?.clientId !== undefined,
+      errorCode: result.errorCode,
+    };
+    if (result.resolution !== undefined) {
+      failedDecision.resolution = terminalFocusResolutionEvidence(result.resolution);
+    }
+    decision = failedDecision;
+  }
+  if (input.origin?.provider !== undefined) decision.originProvider = input.origin.provider;
+  const record: StationOperationalEventRecord = {
+    level: "info",
+    commandId: input.context.commandId,
+    traceId: input.context.trace.traceId,
+    provider: input.terminal.id,
+    operationalEvent: {
+      kind: "terminal.focus.decision",
+      decision,
+    },
+  };
+  if (input.subject.projectId !== undefined) record.projectId = input.subject.projectId;
+  if (input.subject.worktreeId !== undefined) record.worktreeId = input.subject.worktreeId;
+  if (input.subject.sessionId !== undefined) record.sessionId = input.subject.sessionId;
+  await input.logger.recordOperationalEvent(record).catch(() => undefined);
+}
+
+function terminalFocusResolutionEvidence(
+  resolution: Extract<TerminalTargetResolution, { kind: "selected" }>,
+): Extract<TerminalFocusResolutionEvidence, { kind: "selected" }>;
+function terminalFocusResolutionEvidence(
+  resolution: TerminalTargetResolution,
+): TerminalFocusResolutionEvidence;
+function terminalFocusResolutionEvidence(
+  resolution: TerminalTargetResolution,
+): TerminalFocusResolutionEvidence {
+  if (resolution.kind !== "selected") {
+    return {
+      kind: resolution.kind,
+      totalTargetCount: resolution.totalTargetCount,
+      matchingTargetCount: resolution.matchingTargetCount,
+    };
+  }
+  return {
+    kind: "selected",
+    totalTargetCount: resolution.totalTargetCount,
+    matchingTargetCount: resolution.matchingTargetCount,
+    targetId: resolution.target.id,
+    targetState: resolution.target.state,
+    selectionBasis: resolution.selectionBasis,
+  };
 }
 
 function assignSubject(error: SafeError, subject: TerminalTargetSubject): void {

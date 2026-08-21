@@ -7,6 +7,7 @@ import type {
   DoctorOptions,
   DoctorReport,
   EventFilter,
+  ExternalLaunchPreparationOperationalEvent,
   HarnessEventReport,
   HarnessEventReportReceipt,
   ObserverApi,
@@ -68,7 +69,7 @@ import type { ObserverPersistenceBundle, PersistenceHealthSource } from "../pers
 import type { ProviderRegistry } from "../providers/registry.js";
 import { type ObserverCore, providerProjectsFromConfig } from "../reconcile/core.js";
 import { inspectObserverRecoveryInventory } from "../sessionRecoveryInventory.js";
-import type { StationLogger } from "../stationLogger.js";
+import type { StationLogger, StationOperationalEventRecord } from "../stationLogger.js";
 import {
   createWorktreeMutationCoordinator,
   type WorktreeMutationCoordinator,
@@ -277,7 +278,7 @@ export function createObserverApi(options: CreateObserverApiOptions): ObserverAp
         stopProviderHealthPublication,
         clock,
       ),
-    getSnapshot: async () => options.core.getSnapshot(),
+    getSnapshot: async (snapshotOptions) => options.core.getSnapshot(snapshotOptions),
     getSessionRecoveryReadiness: async () => sessionRecoveryReadiness(options),
     getSessionRecoveryInventory: (): Promise<ObserverRecoveryInventory> =>
       inspectObserverRecoveryInventory({
@@ -381,6 +382,10 @@ async function prepareExternalLaunchSafe(
       code: "EXTERNAL_LAUNCH_PREPARE_FAILED",
       message: "External agent launch preparation failed.",
     });
+    await recordExternalLaunchPreparationDecision(options.logger, params, {
+      outcome: "failed",
+      errorCode: error.code,
+    });
     if (error.code === "HARNESS_HOOKS_NOT_INSTALLED") {
       const attributes: Record<string, unknown> = {
         error,
@@ -396,11 +401,60 @@ async function prepareExternalLaunchSafe(
     }
     throw cause;
   }
-  const { outcome, reconcile } = result;
+  const { outcome, reconcile, decision } = result;
+  await recordExternalLaunchPreparationDecision(options.logger, params, {
+    outcome: "prepared",
+    decision,
+  });
   if (reconcile) {
     reconcileScheduler.request("agent.prepareExternalLaunch");
   }
   return outcome;
+}
+
+async function recordExternalLaunchPreparationDecision(
+  logger: StationLogger | undefined,
+  params: Parameters<ObserverApi["prepareExternalLaunch"]>[0],
+  result:
+    | {
+        outcome: "prepared";
+        decision: Awaited<ReturnType<typeof prepareExternalLaunch>>["decision"];
+      }
+    | { outcome: "failed"; errorCode: string },
+): Promise<void> {
+  if (logger === undefined) return;
+  let decision: ExternalLaunchPreparationOperationalEvent["decision"];
+  if (result.outcome === "prepared") {
+    const preparedDecision: Extract<
+      ExternalLaunchPreparationOperationalEvent["decision"],
+      { outcome: "prepared" }
+    > = {
+      outcome: "prepared",
+      route: result.decision.route,
+    };
+    if (result.decision.terminalTargetId !== undefined) {
+      preparedDecision.terminalTargetId = result.decision.terminalTargetId;
+    }
+    decision = preparedDecision;
+  } else {
+    decision = { outcome: "failed", errorCode: result.errorCode };
+  }
+  const record: StationOperationalEventRecord = {
+    level: "info",
+    projectId: params.projectId,
+    worktreeId: params.worktreeId,
+    operationalEvent: {
+      kind: "agent.prepareExternalLaunch.decision",
+      decision,
+    },
+  };
+  if (result.outcome === "prepared") {
+    record.sessionId = result.decision.sessionId;
+    if (result.decision.terminalProvider !== undefined) {
+      record.provider = result.decision.terminalProvider;
+    }
+  }
+  await logger.recordOperationalEvent(record).catch(() => undefined);
 }
 
 async function reportExternalExitSafe(

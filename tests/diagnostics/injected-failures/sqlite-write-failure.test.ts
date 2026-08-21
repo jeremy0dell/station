@@ -7,7 +7,7 @@ describe("SQLite write failure diagnostic", () => {
     const index = buildDiagnosticEvidenceIndex(
       baseDiagnosticSnapshot({
         observerHealth: {
-          schemaVersion: "0.11.0",
+          schemaVersion: "0.12.0",
           status: "degraded",
           pid: 1234,
           startedAt: diagnosticNow,

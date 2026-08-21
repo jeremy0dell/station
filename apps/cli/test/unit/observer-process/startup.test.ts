@@ -17,7 +17,7 @@ const lowerBuildVersion = `1.0.0+station.${"b".repeat(64)}`;
 
 const healthyObserver = (pid = 1234, version = stationObserverBuildVersion()) =>
   ({
-    schemaVersion: "0.11.0",
+    schemaVersion: "0.12.0",
     status: "healthy",
     pid,
     startedAt: now,

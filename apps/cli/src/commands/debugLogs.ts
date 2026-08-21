@@ -1,6 +1,11 @@
 import { readFile } from "node:fs/promises";
 import type { StationConfig } from "@station/config";
-import type { LogRecord, ObserverStartupEvidence, SafeError } from "@station/contracts";
+import type {
+  LogRecord,
+  ObserverOperationalEvent,
+  ObserverStartupEvidence,
+  SafeError,
+} from "@station/contracts";
 import { LogRecordSchema } from "@station/contracts";
 import { componentLogPath } from "@station/observability";
 import { resolveObserverPaths } from "../paths.js";
@@ -60,6 +65,7 @@ type DebugLogRecordSummary = {
   worktreeId?: string;
   sessionId?: string;
   provider?: string;
+  operationalEvent?: ObserverOperationalEvent;
   operationalBoundaryEvidence?: OperationalBoundaryEvidence;
   context?: DiagnosticContextEntry[];
   matchEvidence?: DiagnosticMatchEvidence[];
@@ -313,6 +319,7 @@ function logSummary(
   if (record.worktreeId !== undefined) summary.worktreeId = record.worktreeId;
   if (record.sessionId !== undefined) summary.sessionId = record.sessionId;
   if (record.provider !== undefined) summary.provider = record.provider;
+  if (record.operationalEvent !== undefined) summary.operationalEvent = record.operationalEvent;
   if (context.length > 0) summary.context = context;
   if (query !== undefined) {
     const matchEvidence = extractDiagnosticMatchEvidence(record, query);

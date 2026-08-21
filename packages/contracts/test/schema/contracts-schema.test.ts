@@ -168,7 +168,7 @@ describe("contract schemas", () => {
   });
 
   it("exports the shared schema version used by snapshot fixtures", async () => {
-    expect(STATION_SCHEMA_VERSION).toBe("0.11.0");
+    expect(STATION_SCHEMA_VERSION).toBe("0.12.0");
 
     const snapshots = (await loadJson("snapshots/snapshot-scenarios.json")) as Record<
       string,
@@ -556,6 +556,7 @@ describe("contract schemas", () => {
       state: "open",
       focusable: true,
       closeable: true,
+      hasManagedAttachment: false,
       hasWorkspace: true,
       hasPrimaryAgentEndpoint: true,
       confidence: "high",
@@ -574,6 +575,39 @@ describe("contract schemas", () => {
       StationSnapshotSchema,
       providerNeutralTerminalSnapshot,
       "snapshot with provider-neutral terminal attachment",
+    );
+
+    const debugSnapshot = structuredClone(snapshots.idleAgent) as Record<string, unknown>;
+    const debugTarget = {
+      id: "native:wt_web_feature_auth",
+      provider: "native",
+      projectId: "web",
+      worktreeId: "wt_web_feature_auth",
+      sessionId: "ses_web_feature_auth",
+      state: "open",
+      focusable: false,
+      closeable: true,
+      hasManagedAttachment: true,
+      confidence: "high",
+      reason: "Reconciled from Station Host liveness.",
+      observedAt: "2026-05-20T12:00:00.000Z",
+    };
+    debugSnapshot.debug = { terminalTargets: [debugTarget] };
+    expectParses(StationSnapshotSchema, debugSnapshot, "snapshot with terminal debug evidence");
+    expectFails(
+      StationSnapshotSchema,
+      {
+        ...debugSnapshot,
+        debug: {
+          terminalTargets: [
+            {
+              ...debugTarget,
+              providerData: { ptyId: "pty-secret" },
+            },
+          ],
+        },
+      },
+      "snapshot debug target with provider data",
     );
 
     const externalSessionSnapshot = structuredClone(snapshots.idleAgent) as {
@@ -635,6 +669,7 @@ describe("contract schemas", () => {
       state: "open",
       focusable: true,
       closeable: true,
+      hasManagedAttachment: false,
       hasWorkspace: true,
       hasPrimaryAgentEndpoint: true,
       confidence: "high",
@@ -2434,6 +2469,8 @@ describe("contract schemas", () => {
         worktreeId: "wt_web_task",
         sessionId: "ses_web_task",
         state: "open",
+        focusable: false,
+        hasManagedAttachment: false,
         cwd: "/tmp/station/web/task",
         confidence: "high",
         reason: "tmux pane has station identity binding.",

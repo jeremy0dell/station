@@ -44,6 +44,43 @@ Use the narrowest tool that can answer the question:
 | Observer event hook setup | `stn event-hooks doctor` |
 | Setup and tool readiness | `stn setup check --json`, `stn setup system --check`, or `pnpm setup:system:check` |
 
+## Terminal Evidence
+
+Use `stn snapshot --json --include-debug` when a canonical session or attachment does
+not explain which terminal target Observer saw. The optional `debug.terminalTargets`
+array comes from the latest successful reconcile and matches the target input used to
+produce that reconcile's canonical graph. It contains only provider-neutral identity,
+correlation, state, capability, confidence, reason, and observation-time fields. It
+intentionally excludes provider-private payloads, cwd, process ids, and titles. Without
+`--include-debug`, the block is absent.
+
+Interpret the terminal facts separately:
+
+- `focusable: true` means the terminal provider advertised an external focus action.
+- `hasManagedAttachment: true` means Station currently advertised a managed attachment
+  route for that target.
+- Neither field proves that the native renderer has opened or revealed a local pane.
+
+`stn doctor` summarizes terminal providers and states, then tallies external-focus and
+managed-attachment evidence as yes, no, or unknown. Detached targets are normal
+topology and do not warn by themselves; stale targets and orphaned sessions do.
+
+For historical decisions, query the one-record operation summaries:
+
+```bash
+stn debug logs "terminal.focus.decision"
+stn debug logs "agent.prepareExternalLaunch.decision"
+```
+
+These stable event kinds identify strict `operationalEvent` payloads; the human-readable
+log message is presentation only. Focus records put command, trace, subject, and provider
+correlation in the log envelope, while their event payload contains candidate counts,
+selection basis, selected target, and normalized outcome. External-launch records put the
+resulting session and provider in the envelope, while their event payload contains the
+chosen route and target when available. Both are informational, best-effort historical
+evidence even when their domain outcome is `failed`; failure outcome alone does not make a
+record a warning. They exclude provider-private payloads.
+
 Use `stn debug logs [query]` for bounded historical log inspection when there is no
 trace, command, or diagnostic ID yet. It reads structured JSONL logs from the
 configured state directory without contacting the observer. By default it searches

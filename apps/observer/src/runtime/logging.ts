@@ -1,3 +1,4 @@
+import type { ObserverOperationalEvent } from "@station/contracts";
 import { componentLogPath, createJsonlLogger } from "@station/observability";
 import type { RuntimeClock } from "@station/runtime";
 import type { StationLogger } from "../stationLogger.js";
@@ -18,6 +19,12 @@ export function createObserverLogger(input: {
     ...(input.clock === undefined ? {} : { clock: input.clock }),
   });
   return {
+    async recordOperationalEvent(record) {
+      await logger.log({
+        ...record,
+        message: operationalEventMessage(record.operationalEvent),
+      });
+    },
     async info(message, attributes) {
       await logger.info(message, attributes);
     },
@@ -28,4 +35,13 @@ export function createObserverLogger(input: {
       await logger.error(message, attributes);
     },
   };
+}
+
+function operationalEventMessage(event: ObserverOperationalEvent): string {
+  switch (event.kind) {
+    case "terminal.focus.decision":
+      return "Terminal focus decision recorded.";
+    case "agent.prepareExternalLaunch.decision":
+      return "External launch preparation decision recorded.";
+  }
 }

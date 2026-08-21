@@ -176,6 +176,7 @@ function fakeLogger(): StationLogger & { records: LogRecord[] } {
   };
   return {
     records,
+    recordOperationalEvent: async () => undefined,
     info: (message, attributes) => record("info", message, attributes),
     warn: (message, attributes) => record("warn", message, attributes),
     error: (message, attributes) => record("error", message, attributes),

@@ -438,6 +438,9 @@ function terminalAttachment(
   } else if (terminal.closeable === false || capabilities?.canCloseTarget === false) {
     attachment.closeable = false;
   }
+  if (terminal.hasManagedAttachment !== undefined) {
+    attachment.hasManagedAttachment = terminal.hasManagedAttachment;
+  }
   if (terminal.worktreeId !== undefined) attachment.hasWorkspace = true;
   if (hasPrimaryAgentEndpoint(terminal, harnessRun)) {
     attachment.hasPrimaryAgentEndpoint = true;

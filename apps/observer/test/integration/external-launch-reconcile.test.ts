@@ -30,7 +30,7 @@ import {
   ProviderRegistry,
   providerIngressSpoolDir,
 } from "../../src/internal";
-import type { StationLogger } from "../../src/stationLogger";
+import type { StationLogger, StationOperationalEventRecord } from "../../src/stationLogger";
 import { FakeDiagnosticEvidenceSource } from "../support/diagnosticEvidenceSources.js";
 
 const now = "2026-05-20T12:00:00.000Z";
@@ -222,7 +222,11 @@ describe("observer external-launch reconcile", () => {
   it("logs hook readiness rejections with their diagnostic code", async () => {
     const stateDir = await mkdtemp(join(tmpdir(), "station-observer-ext-"));
     const records: Array<{ message: string; attributes?: Record<string, unknown> }> = [];
+    const operationalRecords: StationOperationalEventRecord[] = [];
     const logger: StationLogger = {
+      recordOperationalEvent: async (record) => {
+        operationalRecords.push(record);
+      },
       info: async () => {},
       warn: async (message, attributes) => {
         records.push({ message, ...(attributes === undefined ? {} : { attributes }) });
@@ -238,6 +242,18 @@ describe("observer external-launch reconcile", () => {
     await expect(
       fixture.api.prepareExternalLaunch({ projectId: "web", worktreeId: "wt_web_feature" }),
     ).rejects.toMatchObject({ code: "HARNESS_HOOKS_NOT_INSTALLED" });
+    expect(operationalRecords).toContainEqual({
+      level: "info",
+      projectId: "web",
+      worktreeId: "wt_web_feature",
+      operationalEvent: {
+        kind: "agent.prepareExternalLaunch.decision",
+        decision: {
+          outcome: "failed",
+          errorCode: "HARNESS_HOOKS_NOT_INSTALLED",
+        },
+      },
+    });
     expect(records).toContainEqual({
       message: "External agent launch rejected because harness hooks are unavailable.",
       attributes: {
@@ -247,6 +263,49 @@ describe("observer external-launch reconcile", () => {
       },
     });
 
+    fixture.sqlite.close();
+  });
+
+  it("logs the provider-neutral external launch preparation route", async () => {
+    const stateDir = await mkdtemp(join(tmpdir(), "station-observer-ext-"));
+    const records: Array<{ message: string; attributes?: Record<string, unknown> }> = [];
+    const operationalRecords: StationOperationalEventRecord[] = [];
+    const logger: StationLogger = {
+      recordOperationalEvent: async (record) => {
+        operationalRecords.push(record);
+      },
+      info: async (message, attributes) => {
+        records.push({ message, ...(attributes === undefined ? {} : { attributes }) });
+      },
+      warn: async (message, attributes) => {
+        records.push({ message, ...(attributes === undefined ? {} : { attributes }) });
+      },
+      error: async () => {},
+    };
+    const fixture = createFixture(providerIngressSpoolDir(stateDir), { logger });
+    await fixture.api.reconcile("seed");
+
+    const result = await fixture.api.prepareExternalLaunch({
+      projectId: "web",
+      worktreeId: "wt_web_feature",
+    });
+    if (result.kind !== "prepared") throw new Error("expected prepared launch");
+
+    expect(operationalRecords).toContainEqual({
+      level: "info",
+      projectId: "web",
+      worktreeId: "wt_web_feature",
+      sessionId: result.sessionId,
+      provider: "native",
+      operationalEvent: {
+        kind: "agent.prepareExternalLaunch.decision",
+        decision: {
+          outcome: "prepared",
+          route: "prepared-caller-owned",
+          terminalTargetId: "native:wt_web_feature",
+        },
+      },
+    });
     fixture.sqlite.close();
   });
 

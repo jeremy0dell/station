@@ -15,6 +15,7 @@ import {
 } from "./ids.js";
 import { LogComponentSchema, LogLevelSchema } from "./logging.js";
 import { ObserverHealthSchema, ObserverSqliteHealthSummarySchema } from "./observer.js";
+import { ObserverOperationalEventSchema } from "./operationalEvents.js";
 import { ProviderHealthSchema, ProviderHookRuntimeSchema } from "./providers.js";
 import { nonEmptyStringSchema } from "./shared.js";
 import { StationSnapshotSchema } from "./snapshot.js";
@@ -48,6 +49,7 @@ export const LogRecordSchema = z
     sessionId: nonEmptyStringSchema.optional(),
     provider: ProviderIdSchema.optional(),
     lifecycle: UiLifecycleEventSchema.optional(),
+    operationalEvent: ObserverOperationalEventSchema.optional(),
     attributes: z.record(nonEmptyStringSchema, z.unknown()).optional(),
   })
   .strict();

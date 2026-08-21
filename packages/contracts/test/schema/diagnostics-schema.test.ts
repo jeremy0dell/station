@@ -7,6 +7,7 @@ import {
   DoctorOptionsSchema,
   DoctorReportSchema,
   LogRecordSchema,
+  ObserverOperationalEventSchema,
   RedactionReportSchema,
   RetentionPolicySchema,
   STATION_SCHEMA_VERSION,
@@ -123,6 +124,51 @@ describe("diagnostics schemas", () => {
       rendererPid: rendererExit.rendererPid,
       clientKind: "native_renderer",
     });
+  });
+
+  it("parses strict Observer operational decision events", () => {
+    const focusDecision = {
+      kind: "terminal.focus.decision",
+      decision: {
+        outcome: "focused",
+        hasOriginClientId: true,
+        originProvider: "tmux",
+        resolution: {
+          kind: "selected",
+          totalTargetCount: 2,
+          matchingTargetCount: 1,
+          targetId: "term_1",
+          targetState: "open",
+          selectionBasis: "session-main-agent",
+        },
+      },
+    };
+    expect(ObserverOperationalEventSchema.parse(focusDecision)).toEqual(focusDecision);
+    expect(
+      ObserverOperationalEventSchema.safeParse({
+        ...focusDecision,
+        decision: { ...focusDecision.decision, extra: true },
+      }).success,
+    ).toBe(false);
+    expect(
+      ObserverOperationalEventSchema.safeParse({
+        kind: "terminal.focus.decision",
+        decision: {
+          outcome: "focused",
+          hasOriginClientId: false,
+          errorCode: "TERMINAL_TARGET_MISSING",
+        },
+      }).success,
+    ).toBe(false);
+
+    const failedPreparation = {
+      kind: "agent.prepareExternalLaunch.decision",
+      decision: {
+        outcome: "failed",
+        errorCode: "HARNESS_HOOKS_NOT_INSTALLED",
+      },
+    };
+    expect(ObserverOperationalEventSchema.parse(failedPreparation)).toEqual(failedPreparation);
   });
 
   it("parses a minimal diagnostic snapshot with trace-aware command and event records", () => {

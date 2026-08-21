@@ -74,7 +74,7 @@ type OpenSubscription = {
 };
 
 const defaultRequestId = () => `req_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-const PREVIOUS_LIFECYCLE_SCHEMA_VERSION = "0.10.0";
+const PREVIOUS_LIFECYCLE_SCHEMA_VERSION = "0.11.0";
 const PREVIOUS_LIFECYCLE_SCHEMA_REQUIRED = "PROTOCOL_PREVIOUS_LIFECYCLE_SCHEMA_REQUIRED";
 const ProtocolSchemaVersionProbeSchema = z
   .object({

@@ -164,6 +164,7 @@ describe("StationTerminalProvider", () => {
       state: "open",
       focusable: false,
       closeable: false,
+      hasManagedAttachment: false,
       projectId: "web",
       worktreeId: "wt_web_feature",
       sessionId: "ses_web_feature",
@@ -363,7 +364,11 @@ describe("StationTerminalProvider (host-backed)", () => {
     const provider = new StationTerminalProvider({ clock, host });
 
     await expect(provider.listTargets()).resolves.toMatchObject([
-      { id: stationTargetId(worktree.id), sessionId: "ses_web_feature" },
+      {
+        id: stationTargetId(worktree.id),
+        sessionId: "ses_web_feature",
+        hasManagedAttachment: true,
+      },
     ]);
     expect(recoverOrphanedTargets).toHaveBeenCalledOnce();
   });
@@ -403,7 +408,7 @@ describe("StationTerminalProvider (host-backed)", () => {
       ptyId: "pty-1",
       pid: 99,
     }));
-    const provider = hostBackedProvider(fakeHostClient({ spawn }));
+    const provider = hostBackedProvider(fakeHostClient({ spawn, list: async () => [liveEntry()] }));
     const opened = await provider.openManagedWorkspace(openRequest());
     const result = await provider.launchManagedProcess({
       project,
@@ -422,6 +427,9 @@ describe("StationTerminalProvider (host-backed)", () => {
         terminalTargetId: stationTargetId(worktree.id),
       },
     });
+    await expect(provider.listTargets()).resolves.toMatchObject([
+      { id: stationTargetId(worktree.id), hasManagedAttachment: true },
+    ]);
     expect(spawn).toHaveBeenCalledTimes(1);
     expect(spawn.mock.calls[0]?.[0]).toMatchObject({
       terminalTargetId: stationTargetId(worktree.id),
@@ -496,6 +504,9 @@ describe("StationTerminalProvider (host-backed)", () => {
       started: false,
       outputCompatibility: "top-region-scrollback",
     });
+    await expect(provider.listTargets()).resolves.toMatchObject([
+      { id: stationTargetId(worktree.id), hasManagedAttachment: false },
+    ]);
   });
 
   it("leaves managed cleanup to the caller when a live-PTY upgrade blocks launch", async () => {

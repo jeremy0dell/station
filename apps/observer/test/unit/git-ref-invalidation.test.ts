@@ -295,6 +295,7 @@ async function createWatchFixture(
 
 function testLogger(warn: StationLogger["warn"]): StationLogger {
   return {
+    recordOperationalEvent: async () => undefined,
     info: async () => undefined,
     warn,
     error: async () => undefined,

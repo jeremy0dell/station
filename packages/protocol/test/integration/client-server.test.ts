@@ -168,6 +168,60 @@ describe("protocol client/server", () => {
     await server.close();
   });
 
+  it("round-trips opt-in snapshot debug evidence without adding it to ordinary snapshots", async () => {
+    const { socketPath } = await createTempSocketPath();
+    const requested: Array<{ includeDebug?: boolean } | undefined> = [];
+    const snapshot = emptySnapshot();
+    const api = createFakeObserverApi({
+      getSnapshot: async (options) => {
+        requested.push(options);
+        return options?.includeDebug === true
+          ? {
+              ...snapshot,
+              debug: {
+                terminalTargets: [
+                  {
+                    id: "native:wt_web_task",
+                    provider: "native",
+                    projectId: "web",
+                    worktreeId: "wt_web_task",
+                    sessionId: "ses_web_task",
+                    state: "open",
+                    focusable: false,
+                    closeable: true,
+                    hasManagedAttachment: true,
+                    confidence: "high",
+                    reason: "Reconciled from Station Host liveness.",
+                    observedAt: protocolTestNow,
+                  },
+                ],
+              },
+            }
+          : snapshot;
+      },
+    });
+    const server = await startProtocolServer({ socketPath, api });
+    const client = createObserverClient({ socketPath, requestId: ids("snapshot_debug") });
+
+    try {
+      await expect(client.getSnapshot()).resolves.not.toHaveProperty("debug");
+      await expect(client.getSnapshot({ includeDebug: true })).resolves.toMatchObject({
+        debug: {
+          terminalTargets: [
+            {
+              id: "native:wt_web_task",
+              focusable: false,
+              hasManagedAttachment: true,
+            },
+          ],
+        },
+      });
+      expect(requested).toEqual([undefined, { includeDebug: true }]);
+    } finally {
+      await server.close();
+    }
+  });
+
   it.each([
     ["another build", `0.0.0+station.${"a".repeat(64)}`],
     ["a legacy Observer", undefined],
@@ -317,7 +371,7 @@ describe("protocol client/server", () => {
     };
     const previousLifecycleRequestSchema = z
       .object({
-        schemaVersion: z.literal("0.10.0"),
+        schemaVersion: z.literal("0.11.0"),
         jsonrpc: z.literal("2.0"),
         id: z.string().min(1),
         method: z.enum(["observer.health", "observer.stop"]),
@@ -333,7 +387,7 @@ describe("protocol client/server", () => {
         if (connectionCount === 1) {
           const currentRequest = ProtocolRequestSchema.parse(firstRequest);
           connection.send({
-            schemaVersion: "0.10.0",
+            schemaVersion: "0.11.0",
             jsonrpc: "2.0",
             id: currentRequest.id,
             error: {
@@ -348,11 +402,11 @@ describe("protocol client/server", () => {
         const healthRequest = previousLifecycleRequestSchema.parse(firstRequest);
         expect(healthRequest.method).toBe("observer.health");
         connection.send({
-          schemaVersion: "0.10.0",
+          schemaVersion: "0.11.0",
           jsonrpc: "2.0",
           id: healthRequest.id,
           result: {
-            schemaVersion: "0.10.0",
+            schemaVersion: "0.11.0",
             status: "healthy",
             ...expectedObserverIdentity,
           },
@@ -361,10 +415,10 @@ describe("protocol client/server", () => {
         const stopRequest = previousLifecycleRequestSchema.parse((await iterator.next()).value);
         expect(stopRequest.method).toBe("observer.stop");
         connection.send({
-          schemaVersion: "0.10.0",
+          schemaVersion: "0.11.0",
           jsonrpc: "2.0",
           id: stopRequest.id,
-          result: { schemaVersion: "0.10.0", stopped: true, at: protocolTestNow },
+          result: { schemaVersion: "0.11.0", stopped: true, at: protocolTestNow },
         });
       },
     });
@@ -815,7 +869,7 @@ describe("protocol client/server", () => {
         tag: "ProtocolError",
         code: "PROTOCOL_SCHEMA_MISMATCH",
         message:
-          "Observer protocol schema mismatch: the observer responded with schema 9.9.9, but this CLI expects schema 0.11.0.",
+          "Observer protocol schema mismatch: the observer responded with schema 9.9.9, but this CLI expects schema 0.12.0.",
         hint: expect.stringContaining("A different STATION checkout"),
       });
     } finally {

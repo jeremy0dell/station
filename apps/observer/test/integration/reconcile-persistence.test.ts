@@ -636,6 +636,7 @@ describe("observer reconcile persistence", () => {
       persistence,
       clock,
       logger: {
+        recordOperationalEvent: async () => undefined,
         info: async () => undefined,
         warn: async () => undefined,
         error: async (message, attributes) => {

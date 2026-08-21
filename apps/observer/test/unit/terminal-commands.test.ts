@@ -6,7 +6,7 @@ import {
   FakeTerminalProvider,
   FakeWorktreeProvider,
 } from "@station/testing";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   createObserverCore,
   createTerminalCloseHandler,
@@ -20,6 +20,7 @@ describe("observer terminal commands", () => {
   it("focuses a target resolved from worktreeId without exposing tmux details", async () => {
     const focused: string[] = [];
     const focusContexts: Array<TerminalFocusContext | undefined> = [];
+    const recordOperationalEvent = vi.fn(async () => undefined);
     const terminal = new RecordingTerminalProvider({
       id: "tmux",
       now,
@@ -80,6 +81,12 @@ describe("observer terminal commands", () => {
     const handler = createTerminalFocusHandler({
       core,
       providers,
+      logger: {
+        recordOperationalEvent,
+        info: async () => undefined,
+        warn: async () => undefined,
+        error: async () => undefined,
+      },
     });
 
     await handler({
@@ -107,6 +114,20 @@ describe("observer terminal commands", () => {
         },
       },
     ]);
+    expect(recordOperationalEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        level: "info",
+        commandId: "cmd_1",
+        traceId: "trc_1",
+        operationalEvent: expect.objectContaining({
+          kind: "terminal.focus.decision",
+          decision: expect.objectContaining({
+            outcome: "focused",
+            resolution: expect.objectContaining({ targetId: "tmux:station:@1:%2" }),
+          }),
+        }),
+      }),
+    );
   });
 
   it("throws a safe terminal provider error when the target cannot be resolved", async () => {

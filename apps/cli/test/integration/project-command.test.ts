@@ -144,7 +144,7 @@ function runningObserverDeps(options: {
     clientFactory: (socketPath: string) =>
       ({
         health: async () => ({
-          schemaVersion: "0.11.0",
+          schemaVersion: "0.12.0",
           status: "healthy",
           pid: 1234,
           startedAt: now,
