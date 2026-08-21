@@ -14,6 +14,37 @@ import {
 const now = "2026-08-21T12:00:00.000Z";
 
 describe("runUpdateRecoveryPreflight", () => {
+  it("reports a matching target with no live runtime without inferring persisted recovery", async () => {
+    const readHookHealth = vi.fn(async () => ({ provider: "codex", status: "healthy" as const }));
+    const result = await runUpdateRecoveryPreflight({
+      installed: { version: "1.1.0", revision: "same-build" },
+      target: { version: "1.1.0", revision: "same-build" },
+      ports: {
+        inspectObserver: async () => ({ status: "absent" }),
+        inspectHost: async () => ({ status: "absent" }),
+        hookProviderIds: ["codex"],
+        readHookHealth,
+      },
+    });
+
+    expect(result).toMatchObject({
+      boundary: {
+        authorization: "none",
+        actions: "not-included",
+        digest: "not-included",
+      },
+      installed: { version: "1.1.0", revision: "same-build" },
+      target: { version: "1.1.0", revision: "same-build" },
+      observer: { status: "absent" },
+      host: { status: "absent" },
+      hooks: [{ provider: "codex", status: "healthy" }],
+      terminalDispositions: [],
+      evidenceComplete: false,
+    });
+    expect(readHookHealth).toHaveBeenCalledOnce();
+    expect(renderUpdateRecoveryPreflight(result)).toContain("sessions:\n  unknown");
+  });
+
   it("settles, sorts, and composes every terminal with retained-session recovery", async () => {
     const observer = observerEvidence(
       assessment([
