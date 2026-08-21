@@ -236,17 +236,30 @@ function recoverySession(
 }
 
 describe("observer graph derivation", () => {
-  it("projects recovery only for one exact eligible open-session handle", () => {
+  it("projects the newest exact eligible open-session recovery handle", () => {
     const recoverable = worktree("wt_web_recoverable", "web", "recoverable");
-    const valid = recoveryHandle(recoverable);
-    const wrongSession = recoveryHandle(recoverable, {
-      id: "rec_wrong_session",
+    const older = recoveryHandle(recoverable, {
+      id: "rec_older",
+      target: { kind: "native-session", id: "native_older" },
+      observedAt: "2026-05-20T10:00:00.000Z",
+      lastSeenAt: "2026-05-20T11:00:00.000Z",
+    });
+    const selected = recoveryHandle(recoverable, {
+      id: "rec_selected",
+      target: { kind: "native-session", id: "native_selected" },
+      observedAt: "2026-05-20T11:30:00.000Z",
+      lastSeenAt: "2026-05-20T11:59:00.000Z",
+    });
+    const wrongSessionNewer = recoveryHandle(recoverable, {
+      id: "rec_wrong_session_newer",
       sessionId: "ses_other",
       target: { kind: "native-session", id: "native_wrong_session" },
+      observedAt: "2026-05-20T12:30:00.000Z",
+      lastSeenAt: "2026-05-20T13:00:00.000Z",
     });
     const snapshot = build({
       worktrees: [recoverable],
-      recoveryHandles: [valid, wrongSession],
+      recoveryHandles: [wrongSessionNewer, older, selected],
       sessionMetadata: [recoverySession(recoverable)],
       harnessCapabilities: { "fake-harness": resumableHarnessCapabilities },
       featureFlags: recoveryFeatureFlags,
@@ -254,11 +267,11 @@ describe("observer graph derivation", () => {
 
     expect(snapshot.rows[0]?.recovery).toEqual({
       kind: "agent-resume",
-      handleId: valid.id,
+      handleId: selected.id,
       provider: "fake-harness",
       targetKind: "native-session",
-      sessionId: valid.sessionId,
-      lastSeenAt: generatedAt,
+      sessionId: selected.sessionId,
+      lastSeenAt: selected.lastSeenAt,
     });
   });
 

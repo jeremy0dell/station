@@ -27,6 +27,7 @@ import {
 import { pathIsSameOrInside } from "@station/runtime";
 import { harnessRunCanActivateSession, terminalCanActivateSession } from "../sessionActivation.js";
 import { sessionRecoveryEligibility } from "../sessionRecoveryEligibility.js";
+import { selectNewestSessionRecoveryCandidate } from "../sessionRecoverySelection.js";
 import { countsForSnapshot } from "./snapshotCounts.js";
 
 export type ObserverGraphInput = {
@@ -388,16 +389,15 @@ function recoveryActionForRow(input: {
         canResume: capabilities.canResume,
       };
     }
-    return sessionRecoveryEligibility(eligibilityInput).kind === "eligible" ? [handle] : [];
+    return sessionRecoveryEligibility(eligibilityInput).kind === "eligible" ? [{ handle }] : [];
   });
-  if (eligible.length !== 1) {
+  // Snapshot actions and launch resolution share one total order so reconcile cannot advertise a
+  // different recovery target than the command will validate and launch.
+  const selected = selectNewestSessionRecoveryCandidate(eligible);
+  if (selected === undefined) {
     return undefined;
   }
-
-  const handle = eligible[0];
-  if (handle === undefined) {
-    return undefined;
-  }
+  const handle = selected.handle;
   const action: WorktreeRecoveryAction = {
     kind: "agent-resume",
     handleId: handle.id,

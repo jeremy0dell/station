@@ -424,6 +424,14 @@ trace-correlated diagnostic evidence.
 
 ### Session Recovery Cutover
 
+Automatic session recovery first applies the provider-neutral
+`sessionRecoveryEligibility` policy, then selects the newest eligible handle by
+`lastSeenAt`, `observedAt`, and opaque Station handle ID. Snapshot projection and
+managed or command launch share that total order, so input order, reconcile, and
+restart cannot change the chosen provider-native target. Explicit handle selection
+remains available through the existing command contract and is revalidated through
+the same eligibility policy.
+
 Session migration is an exclusive cutover, not a blue/green launch. Its
 read-only plan pins source and target Observer identities, compares the complete
 source Host PTY census, requires each canonical source row title to match its
