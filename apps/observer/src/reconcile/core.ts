@@ -4,6 +4,7 @@ import type {
   ProviderHealth,
   ProviderProjectConfig,
   SessionGroupView,
+  SnapshotTerminalTargetDebug,
   StationEvent,
   StationSnapshot,
   WorktreeRow,
@@ -40,6 +41,7 @@ import {
   projectHarnessEventReportOntoSnapshot,
   type StatusProjectionResult,
 } from "./statusProjection.js";
+import { terminalTargetDebugFromObservations } from "./terminalTargetDebug.js";
 
 export type { ReconcileTiming } from "./reconcileResult.js";
 
@@ -61,7 +63,7 @@ export type ObserverCore = {
   clearTurnReadiness(input: { sessionId: string; token: string }): StationEvent | undefined;
   updateConfig(config: StationConfig): void;
   getProjects(): readonly ProviderProjectConfig[];
-  getSnapshot(): StationSnapshot;
+  getSnapshot(options?: { includeDebug?: boolean }): StationSnapshot;
   getHealth(): ObserverCoreHealth;
 };
 
@@ -97,6 +99,7 @@ export function createObserverCore(input: CreateObserverCoreInput): ObserverCore
   let snapshotWriterChain: Promise<void> = Promise.resolve();
   let providerHealth: Record<string, ProviderHealth> = {};
   let lastReconcile: ReconcileTiming | undefined;
+  let terminalTargetDebug: SnapshotTerminalTargetDebug[] = [];
   let snapshot = buildInitialSnapshot({
     generatedAt: startedAt,
     observer: { pid, startedAt, version },
@@ -141,6 +144,7 @@ export function createObserverCore(input: CreateObserverCoreInput): ObserverCore
         providerHealth = result.providerHealth;
         lastReconcile = result.lastReconcile;
         snapshot = result.snapshot;
+        terminalTargetDebug = terminalTargetDebugFromObservations(result.terminalTargets);
         return snapshot;
       };
 
@@ -316,7 +320,10 @@ export function createObserverCore(input: CreateObserverCoreInput): ObserverCore
       projects = providerProjectsFromConfig(nextConfig);
     },
     getProjects: () => projects,
-    getSnapshot: () => snapshot,
+    getSnapshot: (options) =>
+      options?.includeDebug === true
+        ? { ...snapshot, debug: { terminalTargets: terminalTargetDebug } }
+        : snapshot,
     getHealth: () => ({
       status: snapshot.observer.healthy ? "healthy" : "degraded",
       startedAt,

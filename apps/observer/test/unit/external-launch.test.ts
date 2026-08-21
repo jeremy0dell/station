@@ -510,6 +510,12 @@ describe("prepareExternalLaunch", () => {
     expect(result.outcome.launchPlan.provider).toBe("fake-harness");
     expect(result.outcome.launchPlan.env?.STATION_SESSION_ID).toBe(result.outcome.sessionId);
     expect(result.outcome).not.toHaveProperty("outputCompatibility");
+    expect(result.decision).toEqual({
+      route: "prepared-caller-owned",
+      sessionId: result.outcome.sessionId,
+      terminalProvider: "managed-test",
+      terminalTargetId: managedTargetId("wt_web_feature"),
+    });
 
     // Exactly one station target was registered for the worktree.
     const targets = await station.listTargets();
@@ -725,6 +731,12 @@ describe("prepareExternalLaunch", () => {
         attachment,
       },
       reconcile: false,
+      decision: {
+        route: "existing-managed-attachment",
+        sessionId: first.outcome.sessionId,
+        terminalProvider: "managed-test",
+        terminalTargetId: managedTargetId("wt_web_feature"),
+      },
     });
     expect(await station.listTargets()).toHaveLength(1);
     await expect(secondDeps.persistence.listWorktreeDisplayTitles()).resolves.toEqual([]);
@@ -749,6 +761,10 @@ describe("prepareExternalLaunch", () => {
         harnessProvider: "fake-harness",
       },
       reconcile: false,
+      decision: {
+        route: "existing-live-session-without-attachment",
+        sessionId: "ses_existing",
+      },
     });
     // No title or target is created when an agent already exists.
     expect(persistence.seeded).toEqual([]);
@@ -1192,6 +1208,10 @@ describe("prepareExternalLaunch", () => {
         harnessProvider: "fake-harness",
       },
       reconcile: false,
+      decision: {
+        route: "existing-live-session-without-attachment",
+        sessionId: "ses_replacement",
+      },
     });
     await expect(persistence.listSessionRecoveryHandles()).resolves.toEqual([persistedHandle]);
     expect(harness.healthCalls).toBe(0);
@@ -1229,6 +1249,12 @@ describe("prepareExternalLaunch", () => {
         attachment,
       },
       reconcile: false,
+      decision: {
+        route: "existing-managed-attachment",
+        sessionId: "ses_replacement",
+        terminalProvider: "managed-test",
+        terminalTargetId: managedTargetId("wt_web_feature"),
+      },
     });
     expect(harness.healthCalls).toBe(0);
     expect(harness.hooksCalls).toBe(0);
@@ -1482,6 +1508,10 @@ describe("prepareExternalLaunch", () => {
         harnessProvider: "fake-harness",
       },
       reconcile: false,
+      decision: {
+        route: "existing-live-session-without-attachment",
+        sessionId: "ses_existing",
+      },
     });
   });
 
@@ -1966,6 +1996,12 @@ describe("prepareExternalLaunch managed attachments", () => {
     if (result.outcome.kind !== "prepared") throw new Error("expected prepared");
     expect(result.outcome.attachment).toBe(attachment);
     expect(result.outcome).not.toHaveProperty("outputCompatibility");
+    expect(result.decision).toEqual({
+      route: "prepared-managed-attachment",
+      sessionId: result.outcome.sessionId,
+      terminalProvider: "managed-test",
+      terminalTargetId: managedTargetId("wt_web_feature"),
+    });
   });
 
   it("passes the adapter's opaque attachment through to an existing-session result", async () => {
@@ -2009,6 +2045,12 @@ describe("prepareExternalLaunch managed attachments", () => {
         },
       },
       reconcile: false,
+      decision: {
+        route: "existing-managed-attachment",
+        sessionId: "ses_replacement",
+        terminalProvider: "managed-test",
+        terminalTargetId: managedTargetId("wt_web_feature"),
+      },
     });
   });
 

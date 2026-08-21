@@ -53,7 +53,10 @@ No single layer owns all truth.
 - Config is authoritative for the projects station manages, project defaults, provider choices, and safe local policy.
 - Fresh worktree-provider reads are authoritative for external worktree existence and metadata they can prove;
   adapters do not retain list results as a second inventory.
-- Terminal providers are authoritative for terminal topology and provider-owned target identity.
+- Terminal providers are authoritative for terminal topology, provider-owned target identity,
+  external-focus capability, and current Station-managed attachment evidence. A managed
+  attachment proves that Station advertised an attachment route; it does not prove that a
+  renderer has opened or revealed a native pane.
 - Harness providers are authoritative for agent launch, present-tense run discovery observations,
   persisted-event compatibility, status signals, and provider-native recovery artifacts they can prove. Each
   discovered run carries its normalized current status; Observer overlays newer admitted event
@@ -68,6 +71,10 @@ No single layer owns all truth.
   deterministic parent-before-child order. `WorktreeRow.title` is the
   display authority, while `SessionView.title` is its lifecycle projection. Session and activity
   counts derive from `sessions`, while worktree counts derive from `rows`.
+- Snapshot debug evidence is opt-in and non-canonical. Its terminal-target list is sanitized from
+  the latest successful reconcile and matches the target input used to produce that reconcile's
+  canonical graph, so operators can explain target selection without exposing provider-private
+  payloads. Ordinary clients receive no debug block.
 - Session start and resume resolve only from current snapshot `rows`; absence is not repaired from
   provider-process memory. Mutating providers receive configured project context explicitly and may
   perform a final fresh read when the operation requires race-safe identity revalidation.

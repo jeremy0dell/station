@@ -417,7 +417,9 @@ export interface WorktreeProvider {
 /**
  * DRIVEN PORT
  *
- * Supplies terminal topology and lifecycle through provider-owned target identities without exposing provider mechanics.
+ * Supplies terminal topology and lifecycle through provider-owned target identities without exposing
+ * provider mechanics. Target focusability describes external provider control, not whether a
+ * particular renderer can reveal, attach, or otherwise land in the target.
  */
 export interface TerminalProvider {
   id: ProviderId;
@@ -472,7 +474,8 @@ export type ReleaseManagedTerminalTargetRequest = {
  * output policy for the caller-owned process. `openManagedWorkspace` returns opaque
  * binding authority so launch and cleanup cannot mutate a superseding same-session attempt.
  * Release never terminates a process: `false` proves the qualified binding was
- * absent or superseded, while rejection leaves release uncertain.
+ * absent or superseded, while rejection leaves release uncertain. Target observations
+ * distinguish a currently issuable managed attachment from renderer-local pane state.
  */
 export interface ManagedTerminalLifecycle extends TerminalProvider {
   /** Opens a provisional binding whose token qualifies its launch and rollback. */

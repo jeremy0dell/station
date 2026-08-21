@@ -55,6 +55,7 @@ type ReconcileOnceInput = {
 
 type ReconcileOnceResult = {
   snapshot: StationSnapshot;
+  terminalTargets: TerminalTargetObservation[];
   providerHealth: Record<string, ProviderHealth>;
   lastReconcile: ReconcileTiming;
 };
@@ -63,8 +64,8 @@ type ReconcileOnceResult = {
  * USE CASE
  *
  * Orchestrates provider reads, relationship correlation, durable harness-event repair and overlays,
- * cached metadata hydration, Group projection, snapshot assembly, and atomic session persistence.
- * The same resolved title records feed snapshot composition and atomic reconcile persistence.
+ * cached metadata hydration, Group projection, snapshot and sanitized-debug input assembly, and
+ * atomic session persistence. The same resolved title and terminal records feed every output.
  */
 export async function runReconcileOnce(input: ReconcileOnceInput): Promise<ReconcileOnceResult> {
   const started = toIsoTimestamp(input.read.clock.now());
@@ -158,6 +159,7 @@ export async function runReconcileOnce(input: ReconcileOnceInput): Promise<Recon
 
   return {
     snapshot,
+    terminalTargets: observations.terminalTargets,
     providerHealth,
     lastReconcile,
   };

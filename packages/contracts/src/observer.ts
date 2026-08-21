@@ -247,11 +247,13 @@ export type WorktreeCancelRemovalResult = z.infer<typeof WorktreeCancelRemovalRe
  * DRIVING PORT
  *
  * Exposes Observer state and recovery-readiness queries, handshakes, ingress reports,
- * maintenance, and lifecycle operations to external actors.
+ * maintenance, and lifecycle operations to external actors. Snapshot debug evidence is
+ * opt-in and explanatory; ordinary snapshots remain the canonical client graph.
  */
 export type ObserverApi = {
   health(): Promise<ObserverHealth>;
   stop(): Promise<ObserverStopReceipt>;
+  /** Includes sanitized terminal-target evidence only when `includeDebug` is true. */
   getSnapshot(options?: { includeDebug?: boolean }): Promise<StationSnapshot>;
   getSessionRecoveryReadiness(): Promise<SessionRecoveryReadiness>;
   subscribe(filter?: EventFilter): AsyncIterable<StationEvent>;

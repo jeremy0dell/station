@@ -211,7 +211,7 @@ describe("negotiateObserverIncumbent", () => {
       fixture.listening = false;
       fixture.startToken = undefined;
       return {
-        schemaVersion: "0.11.0" as const,
+        schemaVersion: "0.12.0" as const,
         stopped: true,
         at: "2026-07-12T12:00:00.000Z",
       };
@@ -371,7 +371,7 @@ describe("negotiateObserverIncumbent", () => {
     fixture.stop.mockImplementation(async () => {
       fixture.listening = false;
       return {
-        schemaVersion: "0.11.0" as const,
+        schemaVersion: "0.12.0" as const,
         stopped: true,
         at: "2026-07-12T12:00:00.000Z",
       };
@@ -395,7 +395,7 @@ describe("negotiateObserverIncumbent", () => {
     fixture.stop.mockImplementation(async () => {
       fixture.listening = false;
       return {
-        schemaVersion: "0.11.0" as const,
+        schemaVersion: "0.12.0" as const,
         stopped: true,
         at: "2026-07-12T12:00:00.000Z",
       };
@@ -414,7 +414,7 @@ describe("negotiateObserverIncumbent", () => {
     fixture.stop.mockImplementation(async () => {
       fixture.startToken = undefined;
       return {
-        schemaVersion: "0.11.0" as const,
+        schemaVersion: "0.12.0" as const,
         stopped: true,
         at: "2026-07-12T12:00:00.000Z",
       };
@@ -447,7 +447,7 @@ describe("negotiateObserverIncumbent", () => {
         throw new Error("successor process evidence is unavailable");
       };
       return {
-        schemaVersion: "0.11.0" as const,
+        schemaVersion: "0.12.0" as const,
         stopped: true,
         at: "2026-07-12T12:00:00.000Z",
       };
@@ -464,7 +464,7 @@ describe("negotiateObserverIncumbent", () => {
       fixture.listening = false;
       fixture.startToken = undefined;
       return {
-        schemaVersion: "0.11.0" as const,
+        schemaVersion: "0.12.0" as const,
         stopped: true,
         at: "2026-07-12T12:00:00.000Z",
       };
@@ -506,7 +506,7 @@ function observerBuildVersion(version: string, buildIdentity: string): string {
 
 function handoffFixture() {
   const incumbentHealth: ObserverHealth = {
-    schemaVersion: "0.11.0",
+    schemaVersion: "0.12.0",
     status: "healthy",
     pid: 100,
     startedAt: "2026-07-12T11:00:00.000Z",
@@ -528,7 +528,7 @@ function handoffFixture() {
     incumbentHealth,
     health: vi.fn(async (_socketPath: string, _request: { timeoutMs: number }) => incumbentHealth),
     stop: vi.fn(async (_socketPath: string, _request: { timeoutMs: number }) => ({
-      schemaVersion: "0.11.0" as const,
+      schemaVersion: "0.12.0" as const,
       stopped: true,
       at: "2026-07-12T12:00:00.000Z",
     })),

@@ -169,11 +169,13 @@ The split is allowed because both pieces are outer wiring. Application modules
 must not compensate for it by selecting concrete adapters at runtime.
 
 The Station terminal adapter may use Station Host when CLI composition enables
-host-backed terminals. Host backing supplies process lifecycle, close, and opaque
-attachment identity, but not external presentation control: native targets remain
-non-focusable from dashboards. Observer application code knows only the injected
-`ManagedTerminalLifecycle`; Station resolves its attachment to host socket and PTY
-mechanics at its own boundary and selects or reveals the session locally.
+host-backed terminals. Host backing supplies process lifecycle, close, opaque
+attachment identity, and current managed-attachment evidence, but not external
+presentation control: native targets remain non-focusable from dashboards. Observer
+application code knows only the injected `ManagedTerminalLifecycle`; Station resolves
+its attachment to host socket and PTY mechanics at its own boundary and selects or
+reveals the session locally. Observer evidence cannot prove that this renderer-local
+step has opened or revealed a pane.
 
 ## Port, Actor, And Adapter Map
 
@@ -188,8 +190,8 @@ ownership even where current ownership is still a deviation.
 | Provider hook delivery | Driving | provider hook ingress | `stn-ingress`, protocol method, offline spool, provider hook adapters | Raw input is validated and persisted once. Adapter-backed harness hooks normalize into reports; other hooks schedule reconcile without invoking provider operations. |
 | Harness status delivery | Driving | harness event report ingress | harness hooks, provider hook adapters, protocol clients | Reports are deduplicated, queued, projected, persisted, and followed by reconcile. |
 | Worktree operations | Driven | `WorktreeProvider` | Worktrunk and test adapters | Fresh list evidence and mutations only; Observer snapshots own current session selection, callers supply project context for mutation, and adapters retain no second worktree inventory. |
-| Terminal operations | Driven | `TerminalProvider` | tmux, Station terminal, and test adapters | General topology and operations are provider-owned. |
-| Managed terminal lifecycle | Driven | `ManagedTerminalLifecycle` | Station terminal adapter, optionally backed by Station Host | Explicit injected role returning only an opaque target identity and declaring whether launched processes persist beyond the caller; Host backing may add spawn/list/close/attachment lifecycle, while Station retains native presentation and host-backed targets remain externally non-focusable. |
+| Terminal operations | Driven | `TerminalProvider` | tmux, Station terminal, and test adapters | General topology and operations are provider-owned. Target observations distinguish external-focus support from current Station-managed attachment evidence. |
+| Managed terminal lifecycle | Driven | `ManagedTerminalLifecycle` | Station terminal adapter, optionally backed by Station Host | Explicit injected role returning only an opaque target identity and declaring whether launched processes persist beyond the caller; Host backing may add spawn/list/close/attachment lifecycle and managed-attachment evidence, while Station retains native presentation and host-backed targets remain externally non-focusable. |
 | Harness operations | Driven | `HarnessProvider`, `SessionRecoveryArtifactLocator` | Claude, Codex, Cursor, OpenCode, Pi, scripted, and test adapters | Strong purpose-owned ports: discovery returns provider-normalized current run status, while separate hook adapters own event parsing and harness providers retain compatibility admission and exact recovery-artifact location; unsupported artifact providers make migration ineligible. |
 | Repository metadata | Driven | `RepositoryProvider` | GitHub and test repository adapters | Adapters declare deterministic remote support; provider-neutral metadata policy selects zero or one match and rejects overlaps. |
 | Durable observer memory | Driven | `CommandJournal`, `EventJournal`, `IngressJournal`, `ObservationStore`, `ReconcileStore`, `SessionStore`, `SessionGroupStore`, `WorktreeMetadataStore` | Production SQLite adapter and test-only in-memory adapter | Observer-private, application-purpose ports separate current conversations from storage representation. Consumers receive only the named ports they use; the unmarked `ObserverPersistenceBundle` intersection exists only at adapter and composition seams. |
@@ -733,6 +735,16 @@ remains read-only with respect to product state. Provider doctor calls receive a
 Observer-owned total timeout and cancellation signal; adapters that fan out
 checks must bound concurrency and return completed evidence before that budget
 expires.
+
+Terminal diagnostics report provider/state totals plus separate external-focus and
+managed-attachment tallies. Detached targets remain current topology and are not
+warnings by themselves; stale targets and orphaned sessions remain warnings. An
+opt-in snapshot debug block exposes the sanitized terminal targets from the latest
+successful reconcile and the canonical graph input produced at that time. Terminal
+focus and external-launch preparation each emit one structured best-effort decision
+record containing the selected route or target and normalized outcome, with
+command/trace correlation when that operation owns those identifiers. These records
+exclude provider-private payloads and are diagnostic evidence rather than runtime truth.
 
 ## Concurrency, Failure, And Backpressure
 

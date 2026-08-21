@@ -175,6 +175,7 @@ export function registerObserverCommandHandlers(
       core: options.core,
       providers: options.providers,
       clock: options.clock,
+      logger: options.logger,
     }),
     "terminal.close": createTerminalCloseHandler({
       providers: options.providers,

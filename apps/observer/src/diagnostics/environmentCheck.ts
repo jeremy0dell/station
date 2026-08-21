@@ -6,32 +6,30 @@ import type {
 } from "@station/contracts";
 
 /**
- * Readable `stn doctor` summary of session terminal topology. Detached/stale
- * sessions or orphans warn; full per-session detail remains in the JSON snapshot.
+ * Readable `stn doctor` summary of session terminal topology and normalized
+ * capability evidence. Stale sessions or orphans warn; detached is lifecycle
+ * state rather than renderer-relative evidence of unreachability.
  */
 export function buildSessionEnvironmentCheck(
   snapshot: Pick<StationSnapshot, "sessions" | "orphans">,
 ): DoctorCheck {
   const sessions = snapshot.sessions;
   const orphans = snapshot.orphans ?? [];
-  const detached = sessions.filter(isDetachedOrStale);
+  const stale = sessions.filter((session) => session.terminal?.state === "stale");
 
   const parts = [`${sessions.length} session(s)${summarizeProviders(sessions)}.`];
-  if (detached.length > 0) {
-    parts.push(
-      `${detached.length} detached/stale (running, not attachable here): ${describeSessions(detached)}.`,
-    );
+  if (sessions.length > 0) {
+    parts.push(summarizeTerminalEvidence(sessions));
+  }
+  if (stale.length > 0) {
+    parts.push(`${stale.length} stale: ${describeSessions(stale)}.`);
   }
   if (orphans.length > 0) {
     parts.push(`${orphans.length} orphaned runtime state(s)${summarizeOrphans(orphans)}.`);
   }
 
-  const status: DoctorCheck["status"] = detached.length > 0 || orphans.length > 0 ? "warn" : "ok";
+  const status: DoctorCheck["status"] = stale.length > 0 || orphans.length > 0 ? "warn" : "ok";
   return { name: "sessions", status, message: parts.join(" ") };
-}
-
-function isDetachedOrStale(session: SessionView): boolean {
-  return session.terminal?.state === "detached" || session.terminal?.state === "stale";
 }
 
 /** ` — station: 4 open · tmux: 3 detached` (empty for zero sessions). */
@@ -57,6 +55,35 @@ function summarizeProviders(sessions: readonly SessionView[]): string {
     segments.push(`no terminal: ${withoutTerminal}`);
   }
   return ` — ${segments.join(" · ")}`;
+}
+
+function summarizeTerminalEvidence(sessions: readonly SessionView[]): string {
+  const focus = countEvidence(sessions, (session) => session.terminal?.focusable);
+  const managedAttachment = countEvidence(
+    sessions,
+    (session) => session.terminal?.hasManagedAttachment,
+  );
+  return `Terminal evidence — external focus: ${evidenceText(focus)} · managed attachment: ${evidenceText(managedAttachment)}.`;
+}
+
+type EvidenceCounts = { yes: number; no: number; unknown: number };
+
+function countEvidence(
+  sessions: readonly SessionView[],
+  select: (session: SessionView) => boolean | undefined,
+): EvidenceCounts {
+  const counts: EvidenceCounts = { yes: 0, no: 0, unknown: 0 };
+  for (const session of sessions) {
+    const evidence = select(session);
+    if (evidence === true) counts.yes += 1;
+    else if (evidence === false) counts.no += 1;
+    else counts.unknown += 1;
+  }
+  return counts;
+}
+
+function evidenceText(counts: EvidenceCounts): string {
+  return `${counts.yes} yes, ${counts.no} no, ${counts.unknown} unknown`;
 }
 
 const MAX_LISTED = 4;
