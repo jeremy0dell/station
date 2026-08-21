@@ -531,6 +531,44 @@ describe("CLI observer process startup", () => {
     expect(statusError(result)?.message).not.toContain("super-secret-value");
   });
 
+  it("preserves a typed stale-evidence refusal from the child report", async () => {
+    const fixture = await createTempState();
+    const result = await startObserver(
+      { config: fixture.config, timeoutMs: 5_000 },
+      {
+        spawnObserver: async (): Promise<ChildProcessLike> =>
+          fakeChild({
+            exited: Promise.resolve({
+              type: "exit",
+              code: 1,
+              signal: null,
+              report: {
+                kind: "observer-startup-failure",
+                version: 1,
+                error: {
+                  tag: "ObserverEvidenceRepairError",
+                  code: "OBSERVER_STALE_EVIDENCE_UNCERTAIN",
+                  message: "Observer process ownership could not be established safely.",
+                  hint: "Inspect Observer status and exact ownership evidence before retrying.",
+                },
+              },
+            }),
+          }),
+        clientFactory: unavailableClientFactory(),
+      },
+    );
+
+    expect(result).toMatchObject({
+      status: "unhealthy",
+      error: { code: "OBSERVER_EXITED_ON_START" },
+      cause: {
+        code: "OBSERVER_STALE_EVIDENCE_UNCERTAIN",
+        message: "Observer process ownership could not be established safely.",
+      },
+      startupEvidence: { bootLogPath: observerBootLogPath(fixture.stateDir) },
+    });
+  });
+
   it("reports the signal when the child is terminated during startup", async () => {
     const fixture = await createTempState();
 

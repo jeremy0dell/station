@@ -1,4 +1,5 @@
 import type { ObserverProcessIdentity } from "@station/contracts";
+import { safeErrorFromUnknown } from "@station/runtime";
 
 export type ObserverProcessEntry = {
   pid: number;
@@ -28,6 +29,22 @@ export interface ObserverProcessIdentityEvidenceSource {
   processStartToken(pid: number): string | undefined;
 }
 
+export type ObserverProcessExistence =
+  | { status: "running"; osStartTime: string }
+  | { status: "absent" }
+  | { status: "unavailable"; cause?: unknown };
+
+/** DRIVEN PORT: Supplies bounded, read-only process existence evidence without signaling. */
+export interface ObserverProcessExistenceEvidenceSource {
+  readProcessExistence(pid: number): ObserverProcessExistence;
+}
+
+/** DRIVEN PORT: Reads and atomically removes only an exact strict Observer pidfile identity. */
+export interface ObserverProcessIdentityRepair {
+  read(socketPath: string): Promise<ObserverProcessIdentity | undefined>;
+  removeIfExact(identity: ObserverProcessIdentity): Promise<boolean>;
+}
+
 export type ObserverProcessIdentityExpectation =
   | { source: "pidfile"; identity: ObserverProcessIdentity }
   | { source: "process"; process: ObserverProcessEntry };
@@ -41,7 +58,7 @@ export type ObserverProcessIdentityMismatchReason =
 
 export type ObserverProcessIdentityVerification =
   | { status: "exact"; process: ObserverProcessEntry }
-  | { status: "mismatch"; reason: ObserverProcessIdentityMismatchReason }
+  | { status: "mismatch"; reason: ObserverProcessIdentityMismatchReason; cause?: unknown }
   | { status: "unavailable"; cause?: unknown };
 
 /** Compares the complete evidence for one exact Observer process generation. */
@@ -59,6 +76,20 @@ export function observerProcessEntriesMatch(
     left.startupTimeoutMs === right.startupTimeoutMs &&
     left.argv.length === right.argv.length &&
     left.argv.every((value, index) => value === right.argv[index])
+  );
+}
+
+/** Compares every field of a strict Observer pidfile identity. */
+export function observerProcessIdentitiesMatch(
+  actual: ObserverProcessIdentity,
+  expected: ObserverProcessIdentity,
+): boolean {
+  return (
+    actual.pid === expected.pid &&
+    actual.osStartTime === expected.osStartTime &&
+    actual.processToken === expected.processToken &&
+    actual.version === expected.version &&
+    actual.socketPath === expected.socketPath
   );
 }
 
@@ -81,7 +112,20 @@ export function verifyObserverProcessIdentity(
       return { status: "mismatch", reason: "os-start-token-drift" };
     }
 
-    const process = evidence.readObserverProcess(identity.pid);
+    let process: ObserverProcessEntry | undefined;
+    try {
+      process = evidence.readObserverProcess(identity.pid);
+    } catch (cause) {
+      const normalized = safeErrorFromUnknown(cause, {
+        tag: "ObserverProcessEvidenceError",
+        code: "OBSERVER_PROCESS_EVIDENCE_UNAVAILABLE",
+        message: "Observer process evidence was unavailable.",
+      });
+      if (normalized.code === "OBSERVER_PROCESS_EXECUTABLE_ARGV_MISMATCH") {
+        return { status: "mismatch", reason: "executable-argv-drift", cause };
+      }
+      return { status: "unavailable", cause };
+    }
     if (process === undefined) {
       return { status: "mismatch", reason: "executable-argv-drift" };
     }

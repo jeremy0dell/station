@@ -241,6 +241,39 @@ describe("local Observer process evidence", () => {
     expect(execFile.mock.calls.map(([file]) => file)).toEqual([expectedPs, expectedPs]);
   });
 
+  it("distinguishes bounded process existence from unavailable evidence without signaling", () => {
+    const running = createLocalObserverProcessEvidence({
+      execFileStatus: () => ({
+        status: 0,
+        stdout: "Sat Jul  4 17:45:33 2026\n",
+        stderr: "",
+      }),
+    });
+    const absent = createLocalObserverProcessEvidence({
+      execFileStatus: () => ({ status: 1, stdout: "", stderr: "" }),
+    });
+    const unavailable = createLocalObserverProcessEvidence({
+      execFileStatus: () => ({ status: 2, stdout: "", stderr: "ps failed" }),
+    });
+    const invalidPid = createLocalObserverProcessEvidence({
+      execFileStatus: () => ({ status: 1, stdout: "", stderr: "process id too large" }),
+    });
+
+    expect(running.readProcessExistence(42)).toEqual({
+      status: "running",
+      osStartTime: "Sat Jul  4 17:45:33 2026",
+    });
+    expect(absent.readProcessExistence(42)).toEqual({ status: "absent" });
+    expect(unavailable.readProcessExistence(42)).toMatchObject({
+      status: "unavailable",
+      cause: expect.any(Error),
+    });
+    expect(invalidPid.readProcessExistence(42)).toMatchObject({
+      status: "unavailable",
+      cause: expect.any(Error),
+    });
+  });
+
   it("propagates unavailable holder evidence instead of reporting zero owners", () => {
     const evidence = createLocalObserverProcessEvidence({
       socketHolders: () => {

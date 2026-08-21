@@ -2082,6 +2082,35 @@ describe("contract schemas", () => {
       },
       "observer stop receipt",
     );
+    expectParses(
+      ObserverStopReceiptSchema,
+      {
+        schemaVersion: STATION_SCHEMA_VERSION,
+        stopped: false,
+        at: "2026-05-20T12:05:00.000Z",
+        message: "Observer was already stopped; stale lifecycle evidence was reconciled.",
+        evidenceRepair: {
+          socket: "stale",
+          pidfile: "removed",
+          reason: "os-start-token-drift",
+        },
+      },
+      "idempotent Observer stop with stale evidence repair",
+    );
+    expectFails(
+      ObserverStopReceiptSchema,
+      {
+        schemaVersion: STATION_SCHEMA_VERSION,
+        stopped: false,
+        at: "2026-05-20T12:05:00.000Z",
+        evidenceRepair: {
+          socket: "stale",
+          pidfile: "absent",
+          reason: "process-missing",
+        },
+      },
+      "Observer repair summary with fields from another discriminator branch",
+    );
 
     expectParses(
       ReconcileReceiptSchema,
