@@ -24,6 +24,7 @@ import {
   systemClock,
   toIsoTimestamp,
 } from "@station/runtime";
+import { reconcileConfiguredHarnessHooksOrThrow } from "../commands/harnessHookReconciliation.js";
 import {
   assertHarnessLaunchPreconditionsOrThrow,
   type HarnessLaunchPreflight,
@@ -306,6 +307,12 @@ async function runClaimedObserverRuntime(input: {
     providerOptions.configPath = loadedConfig.configPath;
   }
   const providers = await deps.providerRegistryFactory(config, providerOptions);
+  // The boot claim is the startup serialization authority; configured hooks must verify before
+  // any socket, pidfile, or healthy readiness is published.
+  await reconcileConfiguredHarnessHooksOrThrow({
+    providers,
+    ...(options.configPath === undefined ? {} : { stationConfigPath: loadedConfig.configPath }),
+  });
 
   const sqlite = openObserverSqlite({
     path: join(stateDir, "observer.sqlite"),
