@@ -160,7 +160,7 @@ configured harnesses remain available for explicit selection.
 | `permission_mode` | `standard` \| `yolo` | **`auto` is accepted only under `[harness.claude]`.** |
 | `sandbox_mode` | string | Free-form, e.g. codex `"workspace-write"`. |
 | `approval_policy` | string | Free-form, e.g. codex `"on-request"`. |
-| `install_hooks` | bool | Station intent to install and require its tracking artifacts for this harness; it does not prove the files are current or that the provider executed them. |
+| `install_hooks` | bool | Declarative Station intent to install and require its tracking artifacts for this harness. Supported providers reconcile owned missing or drifted artifacts during setup, update, Observer startup, managed launch, and resume, then verify successful writes with provider doctor. It does not prove that the provider executed or approved the hooks. |
 | `resume` | bool | Whether to resume sessions. |
 
 Setup requires the effective global default harness, plus any harness explicitly
@@ -180,6 +180,13 @@ unresolved commands remain byte-for-byte unchanged.
 Artifact preparation is not runtime delivery proof. In particular, Codex may
 still require review of Station's current hook definition through `/hooks`.
 Setup neither bypasses nor verifies that review.
+
+For Codex, `install_hooks = true` fails closed when the configured artifacts are
+foreign-owned, cannot be written, or do not pass the post-write doctor check.
+Automatic paths never transfer ownership; use the explicit hook-install
+takeover flow only after inspecting the existing owner. `install_hooks = false`
+is a configured-disabled result and does not authorize automatic hook writes or
+removal.
 
 Harness command fallback env vars:
 
