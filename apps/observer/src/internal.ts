@@ -1,4 +1,5 @@
 export * from "./commands/cleanup/index.js";
+export * from "./commands/harnessHookHealth.js";
 export * from "./commands/project.js";
 export * from "./commands/queue.js";
 export * from "./commands/reconcile.js";

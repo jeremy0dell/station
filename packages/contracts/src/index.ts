@@ -13,6 +13,7 @@ export * from "./liveness.js";
 export * from "./logging.js";
 export * from "./observations.js";
 export * from "./observer.js";
+export * from "./providerHooks.js";
 export * from "./providers.js";
 export * from "./recovery.js";
 export * from "./recoveryAssessment.js";
