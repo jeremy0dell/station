@@ -103,6 +103,18 @@ describe("Observer API composition with in-memory persistence", () => {
     });
     expect(cloneSpy).toHaveBeenCalledTimes(2);
     cloneSpy.mockRestore();
+    const graphReadSpy = vi.spyOn(core, "getSnapshot");
+    const inventoryReadSpy = vi.spyOn(persistence, "readRecoveryInventory");
+    await expect(api.getSessionRecoveryAssessment()).resolves.toEqual({
+      schemaVersion: 1,
+      inventory: { schemaVersion: 1, sessions: [], recoveryHandles: [] },
+      resumeEnabled: false,
+      sessions: [],
+    });
+    expect(graphReadSpy).toHaveBeenCalledOnce();
+    expect(inventoryReadSpy).toHaveBeenCalledOnce();
+    graphReadSpy.mockRestore();
+    inventoryReadSpy.mockRestore();
     expect(reconcileSpy).not.toHaveBeenCalled();
     expect(worktreeReadSpy).not.toHaveBeenCalled();
     expect(terminalReadSpy).not.toHaveBeenCalled();

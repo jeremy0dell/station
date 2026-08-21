@@ -6,7 +6,10 @@ import type {
 } from "@station/contracts";
 import { ObserverRecoveryInventorySchema } from "@station/contracts";
 import type { SessionStore } from "./persistence/ports.js";
-import type { PersistedSession } from "./persistence/types.js";
+import type {
+  ObserverRecoveryInventoryPersistenceSnapshot,
+  PersistedSession,
+} from "./persistence/types.js";
 
 /**
  * USE CASE
@@ -18,6 +21,13 @@ export async function inspectObserverRecoveryInventory(input: {
   persistence: Pick<SessionStore, "readRecoveryInventory">;
 }): Promise<ObserverRecoveryInventory> {
   const snapshot = await input.persistence.readRecoveryInventory();
+  return observerRecoveryInventoryFromPersistence(snapshot);
+}
+
+/** Projects an already captured persistence snapshot without issuing another persistence read. */
+export function observerRecoveryInventoryFromPersistence(
+  snapshot: ObserverRecoveryInventoryPersistenceSnapshot,
+): ObserverRecoveryInventory {
   const sessions = snapshot.sessions.map(recoveryInventorySession).sort(compareId);
   const recoveryHandles = snapshot.recoveryHandles.map(recoveryInventoryHandle).sort(compareId);
   return ObserverRecoveryInventorySchema.parse({

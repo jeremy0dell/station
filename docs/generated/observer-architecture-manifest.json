@@ -4339,7 +4339,7 @@
           "name": "createObserverApi",
           "kind": "function",
           "role": "COMPOSITION ROOT",
-          "purpose": "Wires Observer use cases with supplied durable, local-metadata, and diagnostic- evidence roles, ingress workers, provider-health publication, scheduling, exact build publication, recovery-readiness and coherent recovery-inventory queries, read-only singleton diagnostics, and adapter shutdown behind the application API."
+          "purpose": "Wires Observer use cases with supplied durable, local-metadata, and diagnostic- evidence roles, ingress workers, provider-health publication, scheduling, exact build publication, recovery-readiness, coherent recovery-inventory, and recovery-assessment queries, read-only singleton diagnostics, and adapter shutdown behind the application API."
         },
         {
           "name": "CreateObserverApiOptions",
@@ -10407,7 +10407,7 @@
           "name": "createObserverApi",
           "kind": "function",
           "role": "COMPOSITION ROOT",
-          "purpose": "Wires Observer use cases with supplied durable, local-metadata, and diagnostic- evidence roles, ingress workers, provider-health publication, scheduling, exact build publication, recovery-readiness and coherent recovery-inventory queries, read-only singleton diagnostics, and adapter shutdown behind the application API."
+          "purpose": "Wires Observer use cases with supplied durable, local-metadata, and diagnostic- evidence roles, ingress workers, provider-health publication, scheduling, exact build publication, recovery-readiness, coherent recovery-inventory, and recovery-assessment queries, read-only singleton diagnostics, and adapter shutdown behind the application API."
         },
         {
           "name": "CreateObserverApiOptions",
@@ -10628,6 +10628,12 @@
           "bindings": ["SpoolDrainDeps"]
         },
         {
+          "specifier": "../sessionRecoveryAssessment.js",
+          "resolvedPath": "apps/observer/src/sessionRecoveryAssessment.ts",
+          "edgeKind": "runtime",
+          "bindings": ["inspectObserverRecoveryAssessment"]
+        },
+        {
           "specifier": "../sessionRecoveryInventory.js",
           "resolvedPath": "apps/observer/src/sessionRecoveryInventory.ts",
           "edgeKind": "runtime",
@@ -10685,6 +10691,7 @@
             "HarnessEventReportReceipt",
             "ObserverApi",
             "ObserverHealth",
+            "ObserverRecoveryAssessment",
             "ObserverRecoveryInventory",
             "ObserverStopReceipt",
             "ProviderHealth",
@@ -12637,6 +12644,90 @@
       ]
     },
     {
+      "path": "apps/observer/src/sessionRecoveryAssessment.ts",
+      "exports": [
+        {
+          "name": "assessObserverRecovery",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "inspectObserverRecoveryAssessment",
+          "kind": "function",
+          "role": "USE CASE",
+          "purpose": "Assesses all retained sessions from exactly one coherent persistence inventory against one caller-captured Observer graph. Eligibility and newest-candidate selection remain delegated to their canonical policies; the result is redacted evidence only and grants no resume authority."
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "./persistence/ports.js",
+          "resolvedPath": "apps/observer/src/persistence/ports.ts",
+          "edgeKind": "type-only",
+          "bindings": ["SessionStore"]
+        },
+        {
+          "specifier": "./persistence/types.js",
+          "resolvedPath": "apps/observer/src/persistence/types.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ObserverRecoveryInventoryPersistenceSnapshot", "PersistedSession"]
+        },
+        {
+          "specifier": "./providers/registry.js",
+          "resolvedPath": "apps/observer/src/providers/registry.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ProviderRegistry"]
+        },
+        {
+          "specifier": "./sessionRecoveryEligibility.js",
+          "resolvedPath": "apps/observer/src/sessionRecoveryEligibility.ts",
+          "edgeKind": "runtime",
+          "bindings": ["sessionRecoveryEligibility"]
+        },
+        {
+          "specifier": "./sessionRecoveryEligibility.js",
+          "resolvedPath": "apps/observer/src/sessionRecoveryEligibility.ts",
+          "edgeKind": "type-only",
+          "bindings": ["SessionRecoveryEligibility", "SessionRecoveryEligibilityInput"]
+        },
+        {
+          "specifier": "./sessionRecoveryInventory.js",
+          "resolvedPath": "apps/observer/src/sessionRecoveryInventory.ts",
+          "edgeKind": "runtime",
+          "bindings": ["observerRecoveryInventoryFromPersistence"]
+        },
+        {
+          "specifier": "./sessionRecoverySelection.js",
+          "resolvedPath": "apps/observer/src/sessionRecoverySelection.ts",
+          "edgeKind": "runtime",
+          "bindings": ["selectNewestSessionRecoveryCandidate"]
+        },
+        {
+          "specifier": "@station/config",
+          "resolvedPath": "packages/config/src/index.ts",
+          "edgeKind": "type-only",
+          "bindings": ["StationConfig"]
+        },
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "runtime",
+          "bindings": ["ObserverRecoveryAssessmentSchema"]
+        },
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "type-only",
+          "bindings": [
+            "ObserverRecoveryAssessment",
+            "ObserverSessionRecoveryAssessment",
+            "SessionRecoveryAssessmentReason",
+            "StationSnapshot"
+          ]
+        }
+      ]
+    },
+    {
       "path": "apps/observer/src/sessionRecoveryEligibility.ts",
       "exports": [
         {
@@ -12693,6 +12784,12 @@
           "kind": "function",
           "role": "USE CASE",
           "purpose": "Projects one coherent persistence snapshot into provider-neutral, redacted recovery evidence without dispatching commands, reconciling providers, or writing durable state."
+        },
+        {
+          "name": "observerRecoveryInventoryFromPersistence",
+          "kind": "function",
+          "role": null,
+          "purpose": null
         }
       ],
       "imports": [
@@ -12706,7 +12803,7 @@
           "specifier": "./persistence/types.js",
           "resolvedPath": "apps/observer/src/persistence/types.ts",
           "edgeKind": "type-only",
-          "bindings": ["PersistedSession"]
+          "bindings": ["ObserverRecoveryInventoryPersistenceSnapshot", "PersistedSession"]
         },
         {
           "specifier": "@station/contracts",
@@ -15161,7 +15258,7 @@
       "declaration": "createObserverApi",
       "kind": "function",
       "role": "COMPOSITION ROOT",
-      "purpose": "Wires Observer use cases with supplied durable, local-metadata, and diagnostic- evidence roles, ingress workers, provider-health publication, scheduling, exact build publication, recovery-readiness and coherent recovery-inventory queries, read-only singleton diagnostics, and adapter shutdown behind the application API.",
+      "purpose": "Wires Observer use cases with supplied durable, local-metadata, and diagnostic- evidence roles, ingress workers, provider-health publication, scheduling, exact build publication, recovery-readiness, coherent recovery-inventory, and recovery-assessment queries, read-only singleton diagnostics, and adapter shutdown behind the application API.",
       "dependencies": [
         {
           "path": "apps/observer/src/diagnostics/collector.ts",
@@ -15250,6 +15347,13 @@
         {
           "path": "apps/observer/src/runtime/spoolDrain.ts",
           "declaration": "createSpoolDrainer",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/observer/src/sessionRecoveryAssessment.ts",
+          "declaration": "inspectObserverRecoveryAssessment",
           "kind": "function",
           "role": "USE CASE",
           "edgeKind": "runtime"
@@ -15909,6 +16013,22 @@
       ]
     },
     {
+      "path": "apps/observer/src/sessionRecoveryAssessment.ts",
+      "declaration": "inspectObserverRecoveryAssessment",
+      "kind": "function",
+      "role": "USE CASE",
+      "purpose": "Assesses all retained sessions from exactly one coherent persistence inventory against one caller-captured Observer graph. Eligibility and newest-candidate selection remain delegated to their canonical policies; the result is redacted evidence only and grants no resume authority.",
+      "dependencies": [
+        {
+          "path": "apps/observer/src/persistence/ports.ts",
+          "declaration": "SessionStore",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
       "path": "apps/observer/src/sessionRecoveryEligibility.ts",
       "declaration": "sessionRecoveryEligibility",
       "kind": "function",
@@ -16319,7 +16439,7 @@
       "declaration": "ObserverApi",
       "kind": "type",
       "role": "DRIVING PORT",
-      "purpose": "Exposes Observer state, recovery-readiness, and coherent recovery-inventory queries, plus handshakes, ingress reports, maintenance, and lifecycle operations to external actors.",
+      "purpose": "Exposes Observer state, recovery-readiness, coherent recovery-inventory, and read-only recovery-assessment queries, plus handshakes, ingress reports, maintenance, and lifecycle operations to external actors.",
       "dependencies": []
     },
     {
