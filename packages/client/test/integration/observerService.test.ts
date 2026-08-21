@@ -494,6 +494,7 @@ function fakeApi(
         schemaVersion: 1,
         inventory: { schemaVersion: 1, sessions: [], recoveryHandles: [] },
         resumeEnabled: true,
+        providerCapabilities: [],
         sessions: [],
       })),
     prepareExternalLaunch:
@@ -641,6 +642,7 @@ function fakeClient(overrides: Partial<ObserverClient>): ObserverClient {
       schemaVersion: 1,
       inventory: { schemaVersion: 1, sessions: [], recoveryHandles: [] },
       resumeEnabled: true,
+      providerCapabilities: [],
       sessions: [],
     }),
     prepareExternalLaunch: async (params) => ({

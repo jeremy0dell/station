@@ -109,6 +109,7 @@ describe("Observer API composition with in-memory persistence", () => {
       schemaVersion: 1,
       inventory: { schemaVersion: 1, sessions: [], recoveryHandles: [] },
       resumeEnabled: false,
+      providerCapabilities: [],
       sessions: [],
     });
     expect(graphReadSpy).toHaveBeenCalledOnce();

@@ -28,3 +28,4 @@ export * from "./tuiConfig.js";
 export * from "./tuiRendererControl.js";
 export * from "./uiLifecycle.js";
 export * from "./update.js";
+export * from "./updateRecoveryPreflight.js";

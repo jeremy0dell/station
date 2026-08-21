@@ -64,8 +64,8 @@ export const UpdateCommandStepSchema: z.ZodType<UpdateCommandStep> = z
     }),
   );
 
-type UpdateArtifact = { version: string; revision?: string };
-const UpdateArtifactSchema = z
+export type UpdateArtifact = { version: string; revision?: string };
+export const UpdateArtifactSchema = z
   .object({
     version: nonEmptyStringSchema,
     revision: nonEmptyStringSchema.optional(),
