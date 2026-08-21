@@ -1,4 +1,11 @@
-import type { ObserverHealth, ObserverStopReceipt, SafeError } from "@station/contracts";
+import type {
+  ObserverHealth,
+  ObserverLifecycleFailure,
+  ObserverStartupEvidence,
+  ObserverStopReceipt,
+  SafeError,
+} from "@station/contracts";
+import { ObserverLifecycleFailureSchema, textLineTerminatorPattern } from "@station/contracts";
 import { componentLogPath, createJsonlLogger, createTraceContext } from "@station/observability";
 import {
   createObserverClient,
@@ -117,6 +124,7 @@ function observerHealthTimedOut(paths: ObserverPaths): ObserverStatus {
  *
  * Translates CLI startup intent into exact-build Observer attachment or child
  * startup while leaving socket ownership mutation to the child's boot lifecycle.
+ * Startup failures retain their typed child cause and bounded boot evidence.
  */
 export async function startObserver(
   options: ObserverProcessOptions = {},
@@ -135,6 +143,7 @@ async function startObserverWithPolicy(
   const clock = deps.clock ?? systemClock;
   const buildVersion = deps.buildVersion ?? stationObserverBuildVersion();
   const trace = createTraceContext({ operation: "cli.observer.start" });
+  let replaceableIncumbent: ObserverHealth | undefined;
   const statusTimeoutMs = remainingObserverStartBudget(timeoutMs, options.startupDeadlineMs);
   if (statusTimeoutMs <= 0) return observerStartTimedOut(paths);
   const existing = await getObserverStatus({ ...options, paths, timeoutMs: statusTimeoutMs }, deps);
@@ -149,6 +158,9 @@ async function startObserverWithPolicy(
         paths,
         error: observerHandoffRefusedError(existing.health, buildVersion, classification.reason),
       };
+    }
+    if (classification.action === "replace") {
+      replaceableIncumbent = existing.health;
     }
   }
   if (
@@ -168,6 +180,7 @@ async function startObserverWithPolicy(
       trace,
       clock,
       buildVersion,
+      ...(replaceableIncumbent === undefined ? {} : { replaceableIncumbent }),
       ...(options.configPath === undefined ? {} : { configPath: options.configPath }),
       ...(options.observerCommand === undefined
         ? {}
@@ -192,6 +205,8 @@ async function startObserverWithPolicy(
     operation: "cli.observer.start",
     trace,
     error: result.error,
+    ...(result.cause === undefined ? {} : { cause: result.cause }),
+    ...(result.startupEvidence === undefined ? {} : { startupEvidence: result.startupEvidence }),
     deps,
     clock,
   });
@@ -199,6 +214,8 @@ async function startObserverWithPolicy(
     status: "unhealthy",
     paths,
     error: result.error,
+    ...(result.cause === undefined ? {} : { cause: result.cause }),
+    ...(result.startupEvidence === undefined ? {} : { startupEvidence: result.startupEvidence }),
   };
 }
 
@@ -248,7 +265,8 @@ export async function stopObserver(
  * Converges one configured Observer socket to this caller's exact immutable build within one
  * deadline. At most the admitted identity-pinned incumbent is stopped cooperatively; the child
  * preserves any later non-exact owner. Failures report their phase and the admitted incumbent's
- * last proven disposition without changing generic singleton ordering.
+ * last proven disposition while retaining a separate typed cause and startup evidence, without
+ * changing generic singleton ordering.
  */
 export async function ensureExactObserverBuild(
   options: ObserverProcessOptions = {},
@@ -271,6 +289,8 @@ export async function ensureExactObserverBuild(
       phase: "inspection",
       incumbentDisposition: "preserved",
       error: status.error,
+      ...(status.cause === undefined ? {} : { cause: status.cause }),
+      ...(status.startupEvidence === undefined ? {} : { startupEvidence: status.startupEvidence }),
     });
   }
 
@@ -336,6 +356,10 @@ export async function ensureExactObserverBuild(
         code: "OBSERVER_START_FAILED",
         message: "Observer startup failed without a diagnostic.",
       },
+      ...(started.cause === undefined ? {} : { cause: started.cause }),
+      ...(started.startupEvidence === undefined
+        ? {}
+        : { startupEvidence: started.startupEvidence }),
     });
   }
   if (started.health.version !== buildVersion) {
@@ -357,18 +381,22 @@ function exactBuildActivationFailure(
     phase: ExactObserverActivationPhase;
     incumbentDisposition: ExactObserverIncumbentDisposition;
     error: unknown;
+    cause?: SafeError;
+    startupEvidence?: ObserverStartupEvidence;
   },
 ): ExactObserverBuildStatus {
-  const cause = safeErrorFromUnknown(input.error, {
-    tag: "ObserverStartupError",
-    code: "OBSERVER_EXACT_BUILD_ACTIVATION_CAUSE_UNKNOWN",
-    message: "The exact Observer build activation failed for an unknown reason.",
-  });
+  const cause =
+    input.cause ??
+    safeErrorFromUnknown(input.error, {
+      tag: "ObserverStartupError",
+      code: "OBSERVER_EXACT_BUILD_ACTIVATION_CAUSE_UNKNOWN",
+      message: "The exact Observer build activation failed for an unknown reason.",
+    });
   const error: SafeError = {
     tag: "ObserverStartupError",
     code: "OBSERVER_EXACT_BUILD_ACTIVATION_FAILED",
     message: "The exact Observer build could not be activated safely.",
-    hint: exactBuildFailureHint(input.phase, input.incumbentDisposition, cause),
+    hint: exactBuildFailureHint(input.phase, input.incumbentDisposition),
   };
   if (cause.traceId !== undefined) error.traceId = cause.traceId;
   if (cause.diagnosticId !== undefined) error.diagnosticId = cause.diagnosticId;
@@ -376,6 +404,8 @@ function exactBuildActivationFailure(
     status: "unhealthy",
     paths,
     error,
+    cause,
+    ...(input.startupEvidence === undefined ? {} : { startupEvidence: input.startupEvidence }),
     phase: input.phase,
     incumbentDisposition: input.incumbentDisposition,
   };
@@ -384,7 +414,6 @@ function exactBuildActivationFailure(
 function exactBuildFailureHint(
   phase: ExactObserverActivationPhase,
   incumbentDisposition: ExactObserverIncumbentDisposition,
-  cause: SafeError,
 ): string {
   const recovery =
     incumbentDisposition === "stopped"
@@ -394,8 +423,7 @@ function exactBuildFailureHint(
         : incumbentDisposition === "none"
           ? "No incumbent was observed, and no exact successor was confirmed; retry after resolving the startup failure."
           : "The admitted incumbent's final state could not be proven; inspect status before retrying.";
-  const causeHint = cause.hint === undefined ? "" : ` ${cause.hint}`;
-  return `Activation phase: ${phase}. Incumbent: ${incumbentDisposition}. ${recovery} Cause (${cause.code}): ${cause.message}${causeHint}`;
+  return `Activation phase: ${phase}. Incumbent: ${incumbentDisposition}. ${recovery}`;
 }
 
 function exactBuildMismatchError(health: ObserverHealth, requestedVersion: string): SafeError {
@@ -529,7 +557,8 @@ function hasLegacyObserverBuildIdentity(health: ObserverHealth): boolean {
  *
  * Translates a CLI restart request while preserving a newer winning Observer build.
  * An explicit higher-build restart cooperatively stops the identity-pinned incumbent before spawn.
- * A failed replacement annotates the error hint with the incumbent build identity it tried to replace.
+ * A failed replacement retains its typed cause and startup evidence while annotating only the outer
+ * error hint with the incumbent build identity it tried to replace.
  */
 export async function restartObserver(
   options: ObserverProcessOptions = {},
@@ -589,6 +618,7 @@ function annotateReplacedIncumbent(error: SafeError, incumbent: ObserverHealth):
   return { ...error, hint };
 }
 
+/** Renders a concise lifecycle failure with a separate cause and one executable next step. */
 export function observerStatusErrorMessage(
   status: Exclude<ObserverStatus, { status: "running" }>,
 ): string {
@@ -597,21 +627,62 @@ export function observerStatusErrorMessage(
     return "Observer is not running.";
   }
 
-  const lines = [error.message];
-  if (error.hint !== undefined) {
-    lines.push(`Hint: ${error.hint}`);
+  const lines = [`${error.message} (${error.code})`];
+  if (status.cause !== undefined) {
+    lines.push(`Cause: ${status.cause.message} (${status.cause.code})`);
   }
-  if (error.code !== undefined) {
-    lines.push(`Code: ${error.code}`);
+  if (status.cause === undefined && error.hint !== undefined) {
+    lines.push(`Next: ${error.hint.split(textLineTerminatorPattern).join(" ")}`);
+    return lines.join("\n");
   }
+  const traceId = error.traceId ?? status.cause?.traceId;
+  lines.push(
+    traceId === undefined ? "Next: stn observer status" : `Next: stn debug trace ${traceId}`,
+  );
   return lines.join("\n");
 }
 
+/**
+ * Preserves the strict lifecycle envelope when an auto-starting command cannot obtain a running Observer.
+ */
+export function assertObserverRunning(
+  status: ObserverStatus,
+): asserts status is Extract<ObserverStatus, { status: "running" }> {
+  if (status.status === "running") return;
+  throw observerLifecycleFailure(status);
+}
+
+/** Builds the strict public lifecycle envelope from one non-running Observer status. */
+export function observerLifecycleFailure(
+  status: Exclude<ObserverStatus, { status: "running" }>,
+): ObserverLifecycleFailure {
+  const failure: ObserverLifecycleFailure = {
+    error:
+      status.error ??
+      ({
+        tag: "ObserverStartupError",
+        code: "OBSERVER_NOT_RUNNING",
+        message: "Observer is not running.",
+      } satisfies SafeError),
+  };
+  if (status.cause !== undefined) failure.cause = status.cause;
+  if (status.startupEvidence !== undefined) failure.startupEvidence = status.startupEvidence;
+  return ObserverLifecycleFailureSchema.parse(failure);
+}
+
+/**
+ * ADAPTER
+ *
+ * Persists one redacted CLI lifecycle boundary with distinct outer error,
+ * causal failure, and bounded startup evidence fields.
+ */
 export async function logObserverLifecycleFailure(input: {
   paths: ObserverPaths;
   operation: string;
   trace: RuntimeTraceContext;
   error: SafeError;
+  cause?: SafeError;
+  startupEvidence?: ObserverStartupEvidence;
   deps: ObserverProcessDeps;
   clock: RuntimeClock;
 }): Promise<void> {
@@ -633,6 +704,8 @@ export async function logObserverLifecycleFailure(input: {
         socketPath: input.paths.socketPath,
         stateDir: input.paths.stateDir,
         error: input.error,
+        ...(input.cause === undefined ? {} : { cause: input.cause }),
+        ...(input.startupEvidence === undefined ? {} : { startupEvidence: input.startupEvidence }),
       },
     });
   } catch {

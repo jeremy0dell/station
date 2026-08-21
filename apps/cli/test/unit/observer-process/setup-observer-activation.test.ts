@@ -140,4 +140,62 @@ describe("setup activation wires observer startup progress", () => {
     expect(received).toHaveLength(1);
     expect(Object.hasOwn(received[0] ?? {}, "onStartupProgress")).toBe(false);
   });
+
+  it("retains restart cause and startup evidence in the failed setup operation", async () => {
+    const fixture = await createTempState();
+    const configPath = join(fixture.root, "config.toml");
+    await writeFile(
+      configPath,
+      [
+        "schema_version = 1",
+        "projects = []",
+        "",
+        "[observer]",
+        `socket_path = ${JSON.stringify(fixture.socketPath)}`,
+        `state_dir = ${JSON.stringify(fixture.stateDir)}`,
+        "",
+        "[defaults]",
+        'worktree_provider = "worktrunk"',
+        'terminal = "tmux"',
+        'harness = "codex"',
+        'layout = "agent-build-shell"',
+      ].join("\n"),
+      "utf8",
+    );
+    restartObserverSpy.mockResolvedValueOnce({
+      status: "unhealthy",
+      paths: fixture,
+      error: {
+        tag: "ObserverStartupError",
+        code: "OBSERVER_HANDOFF_REFUSED",
+        message: "Observer handoff was refused.",
+      },
+      cause: {
+        tag: "ObserverProcessEvidenceError",
+        code: "OBSERVER_PROCESS_EXECUTABLE_ARGV_MISMATCH",
+        message: "Observer executable arguments did not match.",
+      },
+      startupEvidence: {
+        bootLogPath: join(fixture.stateDir, "logs", "observer-boot.log"),
+        bootLogTail: "replacement refused",
+      },
+    });
+
+    const outcome = await createObserverActivationAdapter({
+      configPath: () => configPath,
+      homeDir: fixture.root,
+    })({
+      id: "activate-observer-config",
+      kind: "activate-observer-config",
+      tier: "required",
+      selected: true,
+    });
+
+    expect(outcome).toMatchObject({
+      status: "failed",
+      error: { code: "OBSERVER_HANDOFF_REFUSED" },
+      cause: { code: "OBSERVER_PROCESS_EXECUTABLE_ARGV_MISMATCH" },
+      startupEvidence: { bootLogTail: "replacement refused" },
+    });
+  });
 });

@@ -101,6 +101,16 @@ export type ObserverProviderRegistryFactory = (
   options: ObserverProviderRegistryFactoryOptions,
 ) => ProviderRegistry | Promise<ProviderRegistry>;
 
+/**
+ * DRIVEN PORT
+ *
+ * Notifies the spawning process that startup publication completed so its
+ * private failure-report channel can close without waiting for process exit.
+ */
+export interface ObserverStartupReadinessSink {
+  ready(): void;
+}
+
 export type RunObserverMainDeps = {
   providerRegistryFactory: ObserverProviderRegistryFactory;
   /** Exact Observer build selector; defaults to the running artifact selector. */
@@ -112,6 +122,7 @@ export type RunObserverMainDeps = {
   handoffSleep?: (ms: number) => Promise<void>;
   /** Test/composition override for the child-side incumbent admission policy. */
   startupPolicy?: "generic" | "preserve-incumbent";
+  startupReadinessSink?: ObserverStartupReadinessSink;
   exit?: (code: number) => void;
 };
 
@@ -121,7 +132,8 @@ export type RunObserverMainDeps = {
  * Claims boot ownership, branches on four-state socket evidence, selects
  * Observer-private infrastructure from resolved runtime identity, and owns bind,
  * pidfile, read-only duplicate inspection, ownership-aware shutdown, and exact build
- * health publication.
+ * health publication. Successful publication notifies the injected readiness sink;
+ * startup rejection retains the original failure after best-effort cleanup.
  */
 export async function runObserverMain(
   argv = process.argv.slice(2),
@@ -186,7 +198,10 @@ export async function runObserverMain(
         const incumbent = await lifecycle.health(socketPath, {
           timeoutMs: remainingStartupMs,
         });
-        if (incumbent.version === buildVersion) return 0;
+        if (incumbent.version === buildVersion) {
+          notifyObserverStartupReady(deps.startupReadinessSink);
+          return 0;
+        }
         throw preserveIncumbentRefusal(
           socketPath,
           incumbent.version ?? "legacy/unknown build",
@@ -228,7 +243,10 @@ export async function runObserverMain(
           ...(deps.handoffSleep === undefined ? {} : { sleep: deps.handoffSleep }),
         },
       );
-      if (result.action === "attach") return 0;
+      if (result.action === "attach") {
+        notifyObserverStartupReady(deps.startupReadinessSink);
+        return 0;
+      }
     }
     return await runClaimedObserverRuntime({
       options,
@@ -540,6 +558,9 @@ async function runClaimedObserverRuntime(input: {
     await api.reconcile("observer.startup");
     const startupCommit = startupGate.settleReady(() => claim.release());
     shouldReconcile = startupCommit.status === "ready";
+    if (startupCommit.status === "ready") {
+      notifyObserverStartupReady(deps.startupReadinessSink);
+    }
     if (startupCommit.status === "ready" && startupCommit.claimRelease.status === "failed") {
       // Readiness is already committed; cleanup after a partial SQLite release
       // could race a successor, so the live Observer remains the socket owner.
@@ -555,10 +576,12 @@ async function runClaimedObserverRuntime(input: {
     process.off("SIGTERM", stopFromSignal);
     startupGate.settleFailed();
     shutdownExitCode = 1;
-    await logger.error("Observer startup failed; shutting down runtime services.", {
-      socketPath,
-      error,
-    });
+    await logger
+      .error("Observer startup failed; shutting down runtime services.", {
+        socketPath,
+        error,
+      })
+      .catch(() => undefined);
     try {
       await stopObserver(1);
     } catch (shutdownError) {
@@ -569,10 +592,13 @@ async function runClaimedObserverRuntime(input: {
         })
         .catch(() => undefined);
     } finally {
-      sqlite.close();
+      try {
+        sqlite.close();
+      } catch {
+        // Cleanup failure must not replace the original startup rejection.
+      }
     }
-    setTimeout(() => process.exit(1), 2000).unref();
-    return 1;
+    throw error;
   }
   if (shouldReconcile) {
     duplicateInspectionFlight = inspectObserverDuplicates(socketPath, {
@@ -604,6 +630,14 @@ async function runClaimedObserverRuntime(input: {
   // Stray unref-less timers must not keep a stopped observer alive.
   setTimeout(() => process.exit(0), 2000).unref();
   return 0;
+}
+
+function notifyObserverStartupReady(sink: ObserverStartupReadinessSink | undefined): void {
+  try {
+    sink?.ready();
+  } catch {
+    // Readiness is already committed; process-report transport failure cannot revoke it.
+  }
 }
 
 async function logDuplicateInspection(

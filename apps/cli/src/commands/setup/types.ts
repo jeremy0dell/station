@@ -1,6 +1,7 @@
 import type {
   CliSetupHarnessId,
   HarnessHooksStatus,
+  ObserverLifecycleFailure,
   ProviderHookArtifactOwner,
 } from "@station/contracts";
 import type { ExternalCommandRunner } from "@station/runtime";
@@ -76,7 +77,7 @@ export type SetupCommandDeps = {
     configPath: string;
     homeDir: string;
     onStartupProgress?: (message: string) => void;
-  }) => Promise<void>;
+  }) => Promise<ObserverLifecycleFailure | undefined>;
   now?: () => Date;
   nodeVersion?: string;
   // Defaults to process.platform; injected by machine-state tests to drive the

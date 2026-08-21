@@ -3,6 +3,10 @@ import { join } from "node:path";
 import { startObserver } from "@station/cli";
 import type { ChildProcessLike } from "@station/cli/internal";
 import type { ObserverHealth, SafeError } from "@station/contracts";
+import {
+  OBSERVER_STARTUP_BOOT_LOG_TAIL_MAX_BYTES,
+  OBSERVER_STARTUP_BOOT_LOG_TAIL_MAX_LINES,
+} from "@station/contracts";
 import { stationObserverBuildVersion } from "@station/runtime";
 import { describe, expect, it, vi } from "vitest";
 import { createTempState } from "../../../../../tests/support/temp-projects";
@@ -115,7 +119,7 @@ describe("CLI observer process startup", () => {
     const fixture = await createTempState();
     const lines = Array.from({ length: 20 }, (_, index) => `boot-line-${index + 1}`);
     lines[19] = "API_TOKEN=super-secret-value";
-    const attemptTail = lines.slice(-15).join("\n");
+    const attemptTail = lines.join("\u2028");
     let healthCalls = 0;
     let bootLogDisposals = 0;
     let settled = false;
@@ -157,15 +161,18 @@ describe("CLI observer process startup", () => {
         error: {
           code: "OBSERVER_EXITED_ON_START",
           message: expect.stringContaining("exit code 17"),
-          hint: expect.stringContaining(`Latest observer boot log: ${bootLogPath}`),
+        },
+        startupEvidence: {
+          bootLogPath,
+          bootLogTail: expect.stringContaining("boot-line-6"),
         },
       });
-      expect(statusError(result)?.hint).toContain("This attempt's last 15 lines (redacted):");
-      expect(statusError(result)?.hint).toContain("boot-line-6");
-      expect(statusError(result)?.hint).not.toContain("boot-line-5\n");
-      expect(statusError(result)?.hint).toContain("API_TOKEN=[REDACTED]");
-      expect(statusError(result)?.hint).not.toContain("super-secret-value");
-      expect(statusError(result)?.hint).not.toContain("winning-attempt");
+      if (result.status === "running") throw new Error("Expected startup failure.");
+      expect(result.startupEvidence?.bootLogTail).not.toContain("boot-line-5");
+      expect(result.startupEvidence?.bootLogTail?.split("\n")).toHaveLength(15);
+      expect(result.startupEvidence?.bootLogTail).toContain("API_TOKEN=[REDACTED]");
+      expect(result.startupEvidence?.bootLogTail).not.toContain("super-secret-value");
+      expect(result.startupEvidence?.bootLogTail).not.toContain("winning-attempt");
       await expect(readFile(bootLogPath, "utf8")).resolves.toBe("winning-attempt\n");
       expect(bootLogDisposals).toBe(1);
       const healthCallsAtExit = healthCalls;
@@ -288,12 +295,12 @@ describe("CLI observer process startup", () => {
     {
       label: "exit code",
       exit: { type: "exit" as const, code: 17, signal: null },
-      expected: "Replacement child: exit code 17",
+      expected: "exit code 17",
     },
     {
       label: "signal",
       exit: { type: "exit" as const, code: null, signal: "SIGTERM" as const },
-      expected: "Replacement child: signal SIGTERM",
+      expected: "signal SIGTERM",
     },
     {
       label: "spawn error",
@@ -301,14 +308,17 @@ describe("CLI observer process startup", () => {
         type: "spawn_error" as const,
         error: new Error("launch failed with API_TOKEN=super-secret-value"),
       },
-      expected: "Replacement child: spawn error: launch failed with API_TOKEN=[REDACTED]",
+      expected: "spawn error",
     },
     {
       label: "unknown status",
       exit: { type: "exit" as const, code: null, signal: null },
-      expected: "Replacement child: unknown exit status",
+      expected: "unknown exit status",
     },
-  ])("retains a replacement child's $label under handoff refusal", async ({ exit, expected }) => {
+  ])("keeps parent handoff refusal for a replacement child's $label", async ({
+    exit,
+    expected,
+  }) => {
     const fixture = await createTempState();
     let healthCalls = 0;
 
@@ -330,18 +340,23 @@ describe("CLI observer process startup", () => {
 
     expect(result).toMatchObject({
       status: "unhealthy",
-      error: { code: "OBSERVER_HANDOFF_REFUSED", traceId: expect.any(String) },
+      error: {
+        code: "OBSERVER_HANDOFF_REFUSED",
+      },
+      startupEvidence: { bootLogPath: observerBootLogPath(fixture.stateDir) },
     });
-    expect(statusError(result)?.hint).toContain(expected);
-    expect(statusError(result)?.hint).toContain(
-      "Health convergence: OBSERVER_INCUMBENT_HEALTH_TIMEOUT after 1000 ms",
-    );
-    expect(statusError(result)?.hint).toContain("Boot-log tail unavailable");
-    expect(statusError(result)?.hint).toContain("1.0.0 (build bbbbbbbbbbbb)");
-    expect(statusError(result)?.hint).toContain("2.0.0 (build aaaaaaaaaaaa)");
-    expect(statusError(result)?.hint).toContain(
-      `station debug trace ${statusError(result)?.traceId}`,
-    );
+    expect(statusError(result)?.hint).toContain("Running build:");
+    expect(statusError(result)?.hint).toContain("Requested build:");
+    expect(statusError(result)?.hint).not.toContain(expected);
+    expect(result).toMatchObject({
+      cause:
+        exit.type === "spawn_error"
+          ? {
+              code: "OBSERVER_STARTUP_CAUSE_ERROR",
+              message: "launch failed with API_TOKEN=[REDACTED]",
+            }
+          : { code: "OBSERVER_INCUMBENT_HEALTH_TIMEOUT" },
+    });
     expect(statusError(result)?.hint).not.toContain("super-secret-value");
     expect(healthCalls).toBeGreaterThan(1);
   });
@@ -397,9 +412,7 @@ describe("CLI observer process startup", () => {
       expect(result.status).toBe(expectedStatus);
       expect(statusError(result)?.code).toBe(expectedCode);
       if (delayMs === 1_001) {
-        expect(statusError(result)?.hint).toContain(
-          "Health convergence: OBSERVER_INCUMBENT_HEALTH_TIMEOUT after 1000 ms",
-        );
+        expect(result).toMatchObject({ cause: { code: "OBSERVER_INCUMBENT_HEALTH_TIMEOUT" } });
       }
     } finally {
       vi.useRealTimers();
@@ -429,10 +442,11 @@ describe("CLI observer process startup", () => {
     );
 
     expect(statusError(result)?.code).toBe("OBSERVER_HANDOFF_REFUSED");
-    expect(statusError(result)?.hint).toContain("Health convergence: OBSERVER_HANDOFF_REFUSED");
-    expect(statusError(result)?.hint).toContain("This attempt's last 15 lines (redacted):");
-    expect(statusError(result)?.hint).toContain("API_TOKEN=[REDACTED]");
-    expect(statusError(result)?.hint).not.toContain("super-secret-value");
+    expect(result).toMatchObject({
+      cause: { code: "OBSERVER_HANDOFF_REFUSED" },
+      startupEvidence: { bootLogTail: "startup failed with API_TOKEN=[REDACTED]" },
+    });
+    expect(JSON.stringify(result)).not.toContain("super-secret-value");
   });
 
   it("lets the outer startup timeout preempt incumbent convergence", async () => {
@@ -506,9 +520,13 @@ describe("CLI observer process startup", () => {
       status: "unhealthy",
       error: {
         code: "OBSERVER_EXITED_ON_START",
-        message: expect.stringContaining("spawn error: spawn failed with API_TOKEN=[REDACTED]"),
-        hint: expect.stringContaining(observerBootLogPath(fixture.stateDir)),
+        message: expect.stringContaining("spawn error"),
       },
+      cause: {
+        code: "OBSERVER_STARTUP_CAUSE_ERROR",
+        message: "spawn failed with API_TOKEN=[REDACTED]",
+      },
+      startupEvidence: { bootLogPath: observerBootLogPath(fixture.stateDir) },
     });
     expect(statusError(result)?.message).not.toContain("super-secret-value");
   });
@@ -560,9 +578,9 @@ describe("CLI observer process startup", () => {
       },
     );
 
-    expect(statusError(result)?.hint).toContain(`Observer boot log: ${bootLogPath}`);
-    expect(statusError(result)?.hint).toContain("Boot-log tail unavailable");
-    expect(statusError(result)?.hint).not.toContain("Last 15 lines");
+    expect(result).toMatchObject({ startupEvidence: { bootLogPath } });
+    if (result.status === "running") throw new Error("Expected startup failure.");
+    expect(result.startupEvidence?.bootLogTail).toBeUndefined();
   });
 
   it("emits delayed startup progress at 1.5s and 5s, then clears its timers", async () => {
@@ -686,7 +704,7 @@ describe("CLI observer process startup", () => {
     }
   });
 
-  it("includes the redacted boot-log tail in a startup timeout hint", async () => {
+  it("includes the redacted boot-log tail as structured startup evidence", async () => {
     const fixture = await createTempState();
     const readBootLogTail = vi.fn(async () => "boot crashed after API_TOKEN=super-secret-value");
     let killed = false;
@@ -709,16 +727,49 @@ describe("CLI observer process startup", () => {
 
     expect(killed).toBe(true);
     expect(statusError(result)?.code).toBe("OBSERVER_START_FAILED");
-    expect(statusError(result)?.hint).toMatch(/^Run station debug trace trc_/);
+    expect(statusError(result)?.hint).toMatch(/^Run stn debug trace trc_/);
     expect(readBootLogTail).toHaveBeenCalled();
-    expect(statusError(result)?.hint).toContain(
-      `Latest observer boot log: ${observerBootLogPath(fixture.stateDir)}`,
-    );
-    expect(statusError(result)?.hint).toContain("boot crashed after API_TOKEN=[REDACTED]");
+    expect(result).toMatchObject({
+      startupEvidence: {
+        bootLogPath: observerBootLogPath(fixture.stateDir),
+        bootLogTail: "boot crashed after API_TOKEN=[REDACTED]",
+      },
+    });
     expect(statusError(result)?.hint).not.toContain("super-secret-value");
   });
 
-  it("includes the redacted one-line spawn failure reason in a flattened startup error hint", async () => {
+  it("bounds injected boot evidence after redaction expands it", async () => {
+    const fixture = await createTempState();
+    const readBootLogTail = vi.fn(async () =>
+      Array.from({ length: 20 }, () => `${"ordinary-prefix ".repeat(6_000)}API_TOKEN=x`).join("\n"),
+    );
+
+    const result = await startObserver(
+      { config: fixture.config, timeoutMs: 60 },
+      {
+        spawnObserver: async (): Promise<ChildProcessLike> =>
+          fakeChild({
+            exited: new Promise<never>(() => undefined),
+            readBootLogTail,
+            kill: () => true,
+          }),
+        clientFactory: unavailableClientFactory(),
+      },
+    );
+
+    if (result.status === "running" || result.startupEvidence?.bootLogTail === undefined) {
+      throw new Error("Startup did not retain bounded boot evidence.");
+    }
+    expect(Buffer.byteLength(result.startupEvidence.bootLogTail, "utf8")).toBeLessThanOrEqual(
+      OBSERVER_STARTUP_BOOT_LOG_TAIL_MAX_BYTES,
+    );
+    expect(result.startupEvidence.bootLogTail.split("\n").length).toBeLessThanOrEqual(
+      OBSERVER_STARTUP_BOOT_LOG_TAIL_MAX_LINES,
+    );
+    expect(result.startupEvidence.bootLogTail).not.toContain("API_TOKEN=x");
+  });
+
+  it("includes the redacted one-line spawn failure reason as a cause", async () => {
     const fixture = await createTempState();
 
     const result = await startObserver(
@@ -735,13 +786,14 @@ describe("CLI observer process startup", () => {
 
     expect(statusError(result)?.code).toBe("OBSERVER_START_FAILED");
     expect(statusError(result)?.message).toBe("Observer startup failed.");
-    expect(statusError(result)?.hint).toMatch(/^Run station debug trace trc_/);
-    expect(statusError(result)?.hint).toContain(
-      "Startup failure: spawn aborted: listener failed with API_TOKEN=[REDACTED]",
-    );
-    expect(statusError(result)?.hint).toContain(
-      `Observer boot log: ${observerBootLogPath(fixture.stateDir)}`,
-    );
+    expect(statusError(result)?.hint).toMatch(/^Run stn debug trace trc_/);
+    expect(result).toMatchObject({
+      cause: {
+        code: "OBSERVER_STARTUP_CAUSE_ERROR",
+        message: "spawn aborted: listener failed with API_TOKEN=[REDACTED]",
+      },
+      startupEvidence: { bootLogPath: observerBootLogPath(fixture.stateDir) },
+    });
     expect(statusError(result)?.hint).not.toContain("super-secret-value");
     expect(statusError(result)?.hint).not.toContain("internal-frame");
   });
@@ -764,7 +816,7 @@ describe("CLI observer process startup", () => {
     );
 
     expect(statusError(result)?.code).toBe("OBSERVER_START_FAILED");
-    expect(statusError(result)?.hint).toMatch(/^Run station debug trace trc_/);
+    expect(statusError(result)?.hint).toMatch(/^Run stn debug trace trc_/);
     expect(statusError(result)?.hint).not.toContain("Startup failure:");
     expect(JSON.stringify(statusError(result))).not.toContain("internal-frame");
   });

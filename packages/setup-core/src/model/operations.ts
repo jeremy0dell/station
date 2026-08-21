@@ -1,4 +1,4 @@
-import type { CliSetupHarnessId, SafeError } from "@station/contracts";
+import type { CliSetupHarnessId, ObserverStartupEvidence, SafeError } from "@station/contracts";
 import type { SetupToolId } from "./facts.js";
 
 type SetupOperationBase<
@@ -204,6 +204,8 @@ export type SetupOperationFailedOutcome = {
   readonly status: "failed";
   readonly operationId: SetupOperation["id"];
   readonly error: SafeError;
+  readonly cause?: SafeError;
+  readonly startupEvidence?: ObserverStartupEvidence;
 };
 
 /** Boundary result for one requested semantic operation, correlated by operation identity. */

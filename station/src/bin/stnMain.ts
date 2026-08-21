@@ -34,11 +34,16 @@ function compiledRunners(installedRoot: string): SelfExecRunners {
   return {
     cli: async (argv) => (await import("@station/cli/main")).runCliMain(argv, cliOptions),
     observer: async (argv) => {
-      const { runCliObserverMain } = await import("@station/cli/observer-main");
-      process.exitCode = await runCliObserverMain(argv, {
-        preparePiExtension: prepareCompiledPiExtension,
-        providerHookIngressLauncher,
-      });
+      const { runCliObserverMain, runCliObserverProcess } = await import(
+        "@station/cli/observer-main"
+      );
+      process.exitCode = await runCliObserverProcess((startupReadinessSink) =>
+        runCliObserverMain(argv, {
+          preparePiExtension: prepareCompiledPiExtension,
+          providerHookIngressLauncher,
+          startupReadinessSink,
+        }),
+      );
     },
     ingress: async (argv) => (await import("@station/cli/ingress-main")).runCliIngressMain(argv),
     tui: async () =>
@@ -59,7 +64,8 @@ function compiledRunners(installedRoot: string): SelfExecRunners {
  * COMPOSITION ROOT
  *
  * Binds compiled raw arguments to lazy process entries, packaged runtime assets,
- * installed launcher identity, popup ownership, and setup wiring.
+ * installed launcher identity, the shared Observer process failure boundary,
+ * popup ownership, and setup wiring.
  */
 export async function runStationBinaryMain(): Promise<void> {
   // The OpenCode plugin body is embedded as an asset; expose its path so the

@@ -413,6 +413,10 @@ class SetupSessionRuntime implements SetupSessionApplication {
         status: "blocked",
         reason: blockReasonForPhase(applying.applyPhase),
         error: outcome.error,
+        ...(outcome.cause === undefined ? {} : { cause: outcome.cause }),
+        ...(outcome.startupEvidence === undefined
+          ? {}
+          : { startupEvidence: outcome.startupEvidence }),
       };
     } else {
       this.#state = withOutcome;

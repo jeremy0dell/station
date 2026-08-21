@@ -508,7 +508,18 @@ describe("CLI diagnostic commands", () => {
             tag: "ObserverStartupError",
             code: "OBSERVER_START_FAILED",
             message: "Observer did not become healthy before the startup timeout.",
+            hint: "Run stn debug trace trc_lifecycle.",
             traceId: "trc_lifecycle",
+          },
+          cause: {
+            tag: "ObserverProcessEvidenceError",
+            code: "OBSERVER_PROCESS_EXECUTABLE_ARGV_MISMATCH",
+            message: "Observer process evidence did not match the exact executable and argv.",
+            hint: "Use the launcher that owns the incumbent build.",
+          },
+          startupEvidence: {
+            bootLogPath: join(fixture.stateDir, "logs", "observer-boot.log"),
+            bootLogTail: "startup evidence API_TOKEN=[REDACTED]",
           },
         },
       })}\n`,
@@ -530,13 +541,28 @@ describe("CLI diagnostic commands", () => {
         traceId: "trc_lifecycle",
         spanId: "spn_lifecycle",
         error: {
+          tag: "ObserverStartupError",
           code: "OBSERVER_START_FAILED",
+          hint: "Run stn debug trace trc_lifecycle.",
         },
+        cause: {
+          tag: "ObserverProcessEvidenceError",
+          code: "OBSERVER_PROCESS_EXECUTABLE_ARGV_MISMATCH",
+          hint: "Use the launcher that owns the incumbent build.",
+        },
+        startupEvidence: {
+          bootLogPath: join(fixture.stateDir, "logs", "observer-boot.log"),
+          bootLogTail: "startup evidence API_TOKEN=[REDACTED]",
+        },
+        rootCauseCodes: expect.arrayContaining([
+          "OBSERVER_START_FAILED",
+          "OBSERVER_PROCESS_EXECUTABLE_ARGV_MISMATCH",
+        ]),
         causeAssessment: {
-          status: "observed_failure",
-          explicitRootCauseCodes: [],
+          status: "explicit_root_cause",
+          explicitRootCauseCodes: ["OBSERVER_PROCESS_EXECUTABLE_ARGV_MISMATCH"],
           observedFailureCodes: ["OBSERVER_START_FAILED"],
-          limitations: ["no_explicit_root_cause", "reporting_boundary_only"],
+          limitations: ["reporting_boundary_only"],
         },
         evidenceRoles: {
           operationalBoundaryEvidence: "failure_and_ownership_evidence",
@@ -551,6 +577,45 @@ describe("CLI diagnostic commands", () => {
         suggestedCommands: expect.arrayContaining(["stn debug bundle --trace trc_lifecycle"]),
       },
     });
+
+    const logs = await runCli(
+      ["--config", configPath, "debug", "logs", "OBSERVER_PROCESS_EXECUTABLE_ARGV_MISMATCH"],
+      {
+        observerDeps: {
+          clientFactory: () => {
+            throw new Error("debug logs should not contact observer");
+          },
+        },
+      },
+    );
+    expect(logs).toMatchObject({
+      code: 0,
+      output: {
+        matched: 1,
+        causeAssessment: {
+          status: "explicit_root_cause",
+          explicitRootCauseCodes: ["OBSERVER_PROCESS_EXECUTABLE_ARGV_MISMATCH"],
+        },
+        records: [
+          {
+            error: {
+              tag: "ObserverStartupError",
+              code: "OBSERVER_START_FAILED",
+              hint: "Run stn debug trace trc_lifecycle.",
+            },
+            cause: {
+              tag: "ObserverProcessEvidenceError",
+              code: "OBSERVER_PROCESS_EXECUTABLE_ARGV_MISMATCH",
+              hint: "Use the launcher that owns the incumbent build.",
+            },
+            startupEvidence: {
+              bootLogTail: "startup evidence API_TOKEN=[REDACTED]",
+            },
+          },
+        ],
+      },
+    });
+    expect(JSON.stringify({ traced, logs })).not.toContain("super-secret-value");
   });
 
   it("filters runtime logs without searching hook logs by default", async () => {

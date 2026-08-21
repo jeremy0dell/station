@@ -26,6 +26,18 @@ const report = {
 describe("update command schemas", () => {
   it("parses the strict schema-version-1 report contract", () => {
     expect(UpdateCommandReportSchema.parse(report)).toEqual(report);
+    const failed = {
+      ...report,
+      status: "failed" as const,
+      error: { tag: "UpdateError", code: "UPDATE_RUNTIME_CROSSOVER_FAILED", message: "Failed." },
+      cause: {
+        tag: "ObserverProcessIdentityError",
+        code: "OBSERVER_PROCESS_EXECUTABLE_ARGV_MISMATCH",
+        message: "Mismatch.",
+      },
+      startupEvidence: { bootLogPath: "/tmp/station/logs/observer-boot.log" },
+    };
+    expect(UpdateCommandReportSchema.parse(failed)).toEqual(failed);
   });
 
   it("rejects unknown report and step fields", () => {

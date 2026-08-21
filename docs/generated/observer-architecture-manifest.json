@@ -3942,10 +3942,16 @@
           "purpose": null
         },
         {
+          "name": "ObserverStartupReadinessSink",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "purpose": "Notifies the spawning process that startup publication completed so its private failure-report channel can close without waiting for process exit."
+        },
+        {
           "name": "runObserverMain",
           "kind": "function",
           "role": "COMPOSITION ROOT",
-          "purpose": "Claims boot ownership, branches on four-state socket evidence, selects Observer-private infrastructure from resolved runtime identity, and owns bind, pidfile, read-only duplicate inspection, ownership-aware shutdown, and exact build health publication."
+          "purpose": "Claims boot ownership, branches on four-state socket evidence, selects Observer-private infrastructure from resolved runtime identity, and owns bind, pidfile, read-only duplicate inspection, ownership-aware shutdown, and exact build health publication. Successful publication notifies the injected readiness sink; startup rejection retains the original failure after best-effort cleanup."
         },
         {
           "name": "RunObserverMainDeps",
@@ -4168,7 +4174,7 @@
           "name": "createLocalObserverProcessEvidence",
           "kind": "function",
           "role": "ADAPTER",
-          "purpose": "Translates targeted and global exact argv, executable provenance, launch nonce, OS start time, strict socket-holder and complete file-descriptor evidence, pidfiles, socket identities, and signals into conservative ownership evidence."
+          "purpose": "Translates targeted and global exact argv, executable provenance, launch nonce, OS start time, strict socket-holder and complete file-descriptor evidence, pidfiles, socket identities, and signals into conservative ownership evidence. Exact executable/argv mismatch throws a stable typed refusal without weakening the fail-closed ownership decision."
         },
         {
           "name": "createObserverApi",
@@ -4498,7 +4504,7 @@
           "name": "negotiateObserverIncumbent",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Replaces an older incumbent only after corroborating its socket and process identity; probe or evidence failure refuses before any signal."
+          "purpose": "Replaces an older incumbent only after corroborating its socket and process identity; probe or evidence failure refuses before any signal, preserving a typed evidence failure as the handoff refusal's cause."
         },
         {
           "name": "ObservationStore",
@@ -4666,7 +4672,7 @@
           "name": "ObserverProcessEvidenceSource",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Supplies exact incumbent-process evidence without exposing operating-system commands; unavailable socket-holder evidence throws and never means zero."
+          "purpose": "Supplies exact incumbent-process evidence without exposing operating-system commands; typed evidence failures remain available as causes, while unavailable socket-holder evidence throws and never means zero."
         },
         {
           "name": "ObserverProcessSignalResult",
@@ -4781,6 +4787,12 @@
           "kind": "type",
           "role": null,
           "purpose": null
+        },
+        {
+          "name": "ObserverStartupReadinessSink",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "purpose": "Notifies the spawning process that startup publication completed so its private failure-report channel can close without waiting for process exit."
         },
         {
           "name": "ObserverStopRequest",
@@ -5200,7 +5212,7 @@
           "name": "runObserverMain",
           "kind": "function",
           "role": "COMPOSITION ROOT",
-          "purpose": "Claims boot ownership, branches on four-state socket evidence, selects Observer-private infrastructure from resolved runtime identity, and owns bind, pidfile, read-only duplicate inspection, ownership-aware shutdown, and exact build health publication."
+          "purpose": "Claims boot ownership, branches on four-state socket evidence, selects Observer-private infrastructure from resolved runtime identity, and owns bind, pidfile, read-only duplicate inspection, ownership-aware shutdown, and exact build health publication. Successful publication notifies the injected readiness sink; startup rejection retains the original failure after best-effort cleanup."
         },
         {
           "name": "RunObserverMainDeps",
@@ -10684,10 +10696,16 @@
           "purpose": null
         },
         {
+          "name": "ObserverStartupReadinessSink",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "purpose": "Notifies the spawning process that startup publication completed so its private failure-report channel can close without waiting for process exit."
+        },
+        {
           "name": "runObserverMain",
           "kind": "function",
           "role": "COMPOSITION ROOT",
-          "purpose": "Claims boot ownership, branches on four-state socket evidence, selects Observer-private infrastructure from resolved runtime identity, and owns bind, pidfile, read-only duplicate inspection, ownership-aware shutdown, and exact build health publication."
+          "purpose": "Claims boot ownership, branches on four-state socket evidence, selects Observer-private infrastructure from resolved runtime identity, and owns bind, pidfile, read-only duplicate inspection, ownership-aware shutdown, and exact build health publication. Successful publication notifies the injected readiness sink; startup rejection retains the original failure after best-effort cleanup."
         },
         {
           "name": "RunObserverMainDeps",
@@ -11081,7 +11099,7 @@
           "name": "negotiateObserverIncumbent",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Replaces an older incumbent only after corroborating its socket and process identity; probe or evidence failure refuses before any signal."
+          "purpose": "Replaces an older incumbent only after corroborating its socket and process identity; probe or evidence failure refuses before any signal, preserving a typed evidence failure as the handoff refusal's cause."
         },
         {
           "name": "observerBuildSelectorIsValid",
@@ -11147,7 +11165,7 @@
           "name": "ObserverProcessEvidenceSource",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Supplies exact incumbent-process evidence without exposing operating-system commands; unavailable socket-holder evidence throws and never means zero."
+          "purpose": "Supplies exact incumbent-process evidence without exposing operating-system commands; typed evidence failures remain available as causes, while unavailable socket-holder evidence throws and never means zero."
         },
         {
           "name": "ObserverProcessSignalResult",
@@ -11302,7 +11320,7 @@
           "name": "createLocalObserverProcessEvidence",
           "kind": "function",
           "role": "ADAPTER",
-          "purpose": "Translates targeted and global exact argv, executable provenance, launch nonce, OS start time, strict socket-holder and complete file-descriptor evidence, pidfiles, socket identities, and signals into conservative ownership evidence."
+          "purpose": "Translates targeted and global exact argv, executable provenance, launch nonce, OS start time, strict socket-holder and complete file-descriptor evidence, pidfiles, socket identities, and signals into conservative ownership evidence. Exact executable/argv mismatch throws a stable typed refusal without weakening the fail-closed ownership decision."
         },
         {
           "name": "parseObserverProcessList",
@@ -11383,6 +11401,12 @@
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "runtime",
           "bindings": ["ObserverProcessTokenSchema"]
+        },
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "type-only",
+          "bindings": ["SafeError"]
         },
         {
           "specifier": "zod",
@@ -12441,6 +12465,22 @@
   ],
   "controlledDeclarations": [
     {
+      "path": "apps/cli/src/commands/debugLogs.ts",
+      "declaration": "runDebugLogsCommand",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Reads redacted lifecycle logs and projects strict outer, causal, and startup evidence fields without treating the logging component as failure ownership.",
+      "dependencies": []
+    },
+    {
+      "path": "apps/cli/src/commands/debugTrace.ts",
+      "declaration": "runDebugTraceCommand",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Correlates existing bundle and log evidence, projecting a strict lifecycle cause as explicit causal evidence while retaining its outer reporting boundary.",
+      "dependencies": []
+    },
+    {
       "path": "apps/cli/src/commands/doctor.ts",
       "declaration": "runDoctorCommand",
       "kind": "function",
@@ -12641,7 +12681,7 @@
       "declaration": "createObserverActivationAdapter",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Translates setup activation into config loading, Observer path resolution, restart, and health confirmation. Forwards Observer startup progress to the caller-supplied callback without interpreting it.",
+      "purpose": "Translates setup activation into config loading, Observer path resolution, restart, and health confirmation. Forwards startup progress and retains lifecycle cause/evidence without interpreting either.",
       "dependencies": [
         {
           "path": "apps/cli/src/observerProcess.ts",
@@ -12856,6 +12896,13 @@
         {
           "path": "apps/cli/src/commands/tuiRendererControl.ts",
           "declaration": "attachTuiRendererControl",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/observerProcess.ts",
+          "declaration": "logObserverLifecycleFailure",
           "kind": "function",
           "role": "ADAPTER",
           "edgeKind": "runtime"
@@ -13123,7 +13170,7 @@
       "declaration": "runCliObserverMain",
       "kind": "function",
       "role": "COMPOSITION ROOT",
-      "purpose": "Chooses CLI-owned provider composition and joins it to the Observer runtime lifecycle.",
+      "purpose": "Chooses CLI-owned provider composition and joins it to the Observer runtime lifecycle, including private startup-readiness notification for the spawning CLI.",
       "dependencies": [
         {
           "path": "apps/cli/src/observerProviders.ts",
@@ -13142,15 +13189,52 @@
       ]
     },
     {
+      "path": "apps/cli/src/observerMain.ts",
+      "declaration": "runCliObserverProcess",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Applies one shared source/compiled Observer process boundary: typed startup reporting, redacted stderr, readiness closure, and exit-code translation.",
+      "dependencies": [
+        {
+          "path": "apps/cli/src/observerProcess/failureReport.ts",
+          "declaration": "createObserverStartupFailureReporter",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/observer/src/runtime/main.ts",
+          "declaration": "ObserverStartupReadinessSink",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
       "path": "apps/cli/src/observerProcess.ts",
       "declaration": "ensureExactObserverBuild",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Converges one configured Observer socket to this caller's exact immutable build within one deadline. At most the admitted identity-pinned incumbent is stopped cooperatively; the child preserves any later non-exact owner. Failures report their phase and the admitted incumbent's last proven disposition without changing generic singleton ordering.",
+      "purpose": "Converges one configured Observer socket to this caller's exact immutable build within one deadline. At most the admitted identity-pinned incumbent is stopped cooperatively; the child preserves any later non-exact owner. Failures report their phase and the admitted incumbent's last proven disposition while retaining a separate typed cause and startup evidence, without changing generic singleton ordering.",
       "dependencies": [
         {
           "path": "apps/cli/src/observerProcess.ts",
           "declaration": "getObserverStatus",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/observerProcess.ts",
+          "declaration": "logObserverLifecycleFailure",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/observerProcess/startup.ts",
+          "declaration": "startObserverProcess",
           "kind": "function",
           "role": "ADAPTER",
           "edgeKind": "runtime"
@@ -13189,10 +13273,18 @@
     },
     {
       "path": "apps/cli/src/observerProcess.ts",
+      "declaration": "logObserverLifecycleFailure",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Persists one redacted CLI lifecycle boundary with distinct outer error, causal failure, and bounded startup evidence fields.",
+      "dependencies": []
+    },
+    {
+      "path": "apps/cli/src/observerProcess.ts",
       "declaration": "restartObserver",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Translates a CLI restart request while preserving a newer winning Observer build. An explicit higher-build restart cooperatively stops the identity-pinned incumbent before spawn. A failed replacement annotates the error hint with the incumbent build identity it tried to replace.",
+      "purpose": "Translates a CLI restart request while preserving a newer winning Observer build. An explicit higher-build restart cooperatively stops the identity-pinned incumbent before spawn. A failed replacement retains its typed cause and startup evidence while annotating only the outer error hint with the incumbent build identity it tried to replace.",
       "dependencies": [
         {
           "path": "apps/cli/src/observerProcess.ts",
@@ -13222,11 +13314,25 @@
       "declaration": "startObserver",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Translates CLI startup intent into exact-build Observer attachment or child startup while leaving socket ownership mutation to the child's boot lifecycle.",
+      "purpose": "Translates CLI startup intent into exact-build Observer attachment or child startup while leaving socket ownership mutation to the child's boot lifecycle. Startup failures retain their typed child cause and bounded boot evidence.",
       "dependencies": [
         {
           "path": "apps/cli/src/observerProcess.ts",
           "declaration": "getObserverStatus",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/observerProcess.ts",
+          "declaration": "logObserverLifecycleFailure",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/observerProcess/startup.ts",
+          "declaration": "startObserverProcess",
           "kind": "function",
           "role": "ADAPTER",
           "edgeKind": "runtime"
@@ -13250,6 +13356,54 @@
         {
           "path": "packages/protocol/src/client.ts",
           "declaration": "createObserverClient",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
+      "path": "apps/cli/src/observerProcess/failureReport.ts",
+      "declaration": "createObserverStartupFailureReporter",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Writes at most one strict, redacted Observer startup failure to the inherited report descriptor and closes the descriptor on either readiness or failure.",
+      "dependencies": []
+    },
+    {
+      "path": "apps/cli/src/observerProcess/failureReport.ts",
+      "declaration": "readObserverStartupFailureReport",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Consumes one bounded inherited-pipe payload and validates the strict private child report before exposing typed failure evidence to lifecycle orchestration.",
+      "dependencies": []
+    },
+    {
+      "path": "apps/cli/src/observerProcess/spawn.ts",
+      "declaration": "defaultSpawnObserver",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Spawns one detached Observer with a private failure-report descriptor and child-owned boot log, then exposes bounded exit and diagnostic cleanup.",
+      "dependencies": [
+        {
+          "path": "apps/cli/src/observerProcess/failureReport.ts",
+          "declaration": "readObserverStartupFailureReport",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
+      "path": "apps/cli/src/observerProcess/startup.ts",
+      "declaration": "startObserverProcess",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Starts the Observer child and waits for exact-build health inside one timed runtime boundary, retaining a separate typed cause and bounded boot evidence before diagnostic handles close.",
+      "dependencies": [
+        {
+          "path": "apps/cli/src/observerProcess/spawn.ts",
+          "declaration": "defaultSpawnObserver",
           "kind": "function",
           "role": "ADAPTER",
           "edgeKind": "runtime"
@@ -14488,10 +14642,18 @@
     },
     {
       "path": "apps/observer/src/runtime/main.ts",
+      "declaration": "ObserverStartupReadinessSink",
+      "kind": "interface",
+      "role": "DRIVEN PORT",
+      "purpose": "Notifies the spawning process that startup publication completed so its private failure-report channel can close without waiting for process exit.",
+      "dependencies": []
+    },
+    {
+      "path": "apps/observer/src/runtime/main.ts",
       "declaration": "runObserverMain",
       "kind": "function",
       "role": "COMPOSITION ROOT",
-      "purpose": "Claims boot ownership, branches on four-state socket evidence, selects Observer-private infrastructure from resolved runtime identity, and owns bind, pidfile, read-only duplicate inspection, ownership-aware shutdown, and exact build health publication.",
+      "purpose": "Claims boot ownership, branches on four-state socket evidence, selects Observer-private infrastructure from resolved runtime identity, and owns bind, pidfile, read-only duplicate inspection, ownership-aware shutdown, and exact build health publication. Successful publication notifies the injected readiness sink; startup rejection retains the original failure after best-effort cleanup.",
       "dependencies": [
         {
           "path": "apps/observer/src/commands/harnessLaunchPreflight.ts",
@@ -14534,6 +14696,13 @@
           "kind": "function",
           "role": "ADAPTER",
           "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/observer/src/runtime/main.ts",
+          "declaration": "ObserverStartupReadinessSink",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
         },
         {
           "path": "apps/observer/src/runtime/observerBootClaim.ts",
@@ -14651,7 +14820,7 @@
       "declaration": "negotiateObserverIncumbent",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Replaces an older incumbent only after corroborating its socket and process identity; probe or evidence failure refuses before any signal.",
+      "purpose": "Replaces an older incumbent only after corroborating its socket and process identity; probe or evidence failure refuses before any signal, preserving a typed evidence failure as the handoff refusal's cause.",
       "dependencies": [
         {
           "path": "apps/observer/src/runtime/observerHandoff.ts",
@@ -14689,7 +14858,7 @@
       "declaration": "ObserverProcessEvidenceSource",
       "kind": "interface",
       "role": "DRIVEN PORT",
-      "purpose": "Supplies exact incumbent-process evidence without exposing operating-system commands; unavailable socket-holder evidence throws and never means zero.",
+      "purpose": "Supplies exact incumbent-process evidence without exposing operating-system commands; typed evidence failures remain available as causes, while unavailable socket-holder evidence throws and never means zero.",
       "dependencies": []
     },
     {
@@ -14697,7 +14866,7 @@
       "declaration": "createLocalObserverProcessEvidence",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Translates targeted and global exact argv, executable provenance, launch nonce, OS start time, strict socket-holder and complete file-descriptor evidence, pidfiles, socket identities, and signals into conservative ownership evidence.",
+      "purpose": "Translates targeted and global exact argv, executable provenance, launch nonce, OS start time, strict socket-holder and complete file-descriptor evidence, pidfiles, socket identities, and signals into conservative ownership evidence. Exact executable/argv mismatch throws a stable typed refusal without weakening the fail-closed ownership decision.",
       "dependencies": [
         {
           "path": "apps/observer/src/runtime/observerReap.ts",
@@ -15575,7 +15744,7 @@
       "declaration": "SetupObserverActivationPort",
       "kind": "type",
       "role": "DRIVEN PORT",
-      "purpose": "Activates a committed setup configuration and confirms Observer health.",
+      "purpose": "Activates a committed setup configuration and confirms Observer health while retaining typed lifecycle cause and startup evidence in failed operation outcomes.",
       "dependencies": []
     },
     {

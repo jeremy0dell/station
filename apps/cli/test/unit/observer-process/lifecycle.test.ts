@@ -13,6 +13,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createRealStaleSocket } from "../../../../../tests/support/sockets";
 import { fileExists } from "../../../../../tests/support/spool";
 import { createTempState } from "../../../../../tests/support/temp-projects";
+import { observerStatusErrorMessage } from "../../../src/observerProcess.js";
 
 const now = "2026-05-20T12:00:00.000Z";
 const zeroBuildVersion = `0.0.0+station.${"a".repeat(64)}`;
@@ -22,6 +23,55 @@ const exactOneBuildVersion = `1.0.0+station.${"a".repeat(64)}`;
 const exactTwoBuildVersion = `2.0.0+station.${"a".repeat(64)}`;
 
 describe("CLI observer process lifecycle", () => {
+  it("renders the outer failure, separate cause, and one executable next step", async () => {
+    const fixture = await createTempState();
+    expect(
+      observerStatusErrorMessage({
+        status: "unhealthy",
+        paths: fixture,
+        error: {
+          tag: "ObserverStartupError",
+          code: "OBSERVER_EXITED_ON_START",
+          message: "Observer exited before becoming healthy (exit code 1).",
+          traceId: "trc_lifecycle",
+        },
+        cause: {
+          tag: "ObserverProcessEvidenceError",
+          code: "OBSERVER_PROCESS_EXECUTABLE_ARGV_MISMATCH",
+          message: "Observer process evidence did not match the exact executable and argv.",
+        },
+      }),
+    ).toBe(
+      [
+        "Observer exited before becoming healthy (exit code 1). (OBSERVER_EXITED_ON_START)",
+        "Cause: Observer process evidence did not match the exact executable and argv. (OBSERVER_PROCESS_EXECUTABLE_ARGV_MISMATCH)",
+        "Next: stn debug trace trc_lifecycle",
+      ].join("\n"),
+    );
+
+    expect(observerStatusErrorMessage({ status: "stopped", paths: fixture })).toBe(
+      "Observer is not running.",
+    );
+
+    expect(
+      observerStatusErrorMessage({
+        status: "unhealthy",
+        paths: fixture,
+        error: {
+          tag: "ObserverStartupError",
+          code: "OBSERVER_HANDOFF_REFUSED",
+          message: "Observer build handoff was refused.",
+          hint: "Running build: 1.2.3 (build bbbbbbbbbbbb).\nRequested build: 1.2.3 (build aaaaaaaaaaaa). Run `stn observer stop` and retry.",
+        },
+      }),
+    ).toBe(
+      [
+        "Observer build handoff was refused. (OBSERVER_HANDOFF_REFUSED)",
+        "Next: Running build: 1.2.3 (build bbbbbbbbbbbb). Requested build: 1.2.3 (build aaaaaaaaaaaa). Run `stn observer stop` and retry.",
+      ].join("\n"),
+    );
+  });
+
   it("reports an absent socket as stopped without spending the remaining deadline on health", async () => {
     const fixture = await createTempState();
     let healthRequested = false;
@@ -201,7 +251,10 @@ describe("CLI observer process lifecycle", () => {
       error: {
         tag: "ObserverStartupError",
         traceId: expect.stringMatching(/^trc_/),
-        hint: expect.stringMatching(/^Run station debug trace trc_/),
+        hint: expect.stringMatching(/^Run stn debug trace trc_/),
+      },
+      startupEvidence: {
+        bootLogPath: join(fixture.stateDir, "logs", "observer-boot.log"),
       },
     });
     if (result.status === "running") {
@@ -225,6 +278,7 @@ describe("CLI observer process lifecycle", () => {
         error: {
           traceId: result.error?.traceId,
         },
+        startupEvidence: result.startupEvidence,
       },
     });
   });
@@ -320,7 +374,7 @@ describe("CLI observer process lifecycle", () => {
           expect(result).toMatchObject({
             phase: "inspection",
             incumbentDisposition: "preserved",
-            error: { hint: expect.stringContaining("OBSERVER_SOCKET_INACCESSIBLE") },
+            cause: { code: "OBSERVER_SOCKET_INACCESSIBLE" },
           });
         }
       }
@@ -593,6 +647,9 @@ describe("CLI observer process lifecycle", () => {
     expect(result).toMatchObject({
       status: "unhealthy",
       error: {
+        code: "OBSERVER_EXACT_BUILD_ACTIVATION_FAILED",
+      },
+      cause: {
         code: "OBSERVER_EXACT_BUILD_ACTIVATION_FAILED",
         hint: expect.stringContaining("configured socket changed owners"),
       },
@@ -1050,7 +1107,13 @@ describe("CLI observer process lifecycle", () => {
     expect(result.error?.hint).toContain(
       "Restart was replacing incumbent 1.0.0 (build aaaaaaaaaaaa) (pid 1234).",
     );
-    expect(result.error?.hint).toContain("Startup failure: boot aborted: socket claim refused");
+    expect(result.error?.hint).not.toContain("boot aborted");
+    expect(result).toMatchObject({
+      cause: {
+        code: "OBSERVER_STARTUP_CAUSE_ERROR",
+        message: "boot aborted: socket claim refused",
+      },
+    });
   });
 
   it("spawns a higher build and ignores the lower incumbent until its child is healthy", async () => {

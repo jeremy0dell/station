@@ -58,10 +58,13 @@ command diagnostics, and suggested next commands without contacting the observer
 When a command error envelope includes external-command diagnostics, trace output
 can show the command, cwd, exit code, duration, bounded stdout/stderr snippets,
 and the effective `PATH` for an `ENOENT` executable lookup failure, after
-redaction. `causeAssessment` distinguishes a correlated,
-diagnostic-index-declared root cause from an observed command/error failure or
-insufficient evidence. A generic error code is failure evidence, not proof of
-the mechanism beneath it.
+redaction. Observer lifecycle records preserve the outer `error`, a separately
+normalized `cause`, and bounded `startupEvidence`; `debug logs` and `debug trace`
+parse those fields through strict shared schemas instead of reconstructing them
+from hint text. `causeAssessment` distinguishes a correlated diagnostic-index
+root cause or strict lifecycle cause from an observed generic command/error
+failure or insufficient evidence. A generic outer error code is failure evidence,
+not proof of the mechanism beneath it.
 
 Trace and log results expose `evidenceRoles` so consumers do not confuse the
 record's logging component with failure ownership. `operationalBoundaryEvidence`
@@ -80,6 +83,12 @@ and detach reasons. Each record marks `componentRole` as
 `context` for direct citation. An exactly matched warning or error record can
 establish the retained event as an observed proximate failure without
 establishing a deeper cause.
+
+Lifecycle child reports and boot tails are redacted before they cross the process
+boundary. Ordinary JavaScript errors retain only their redacted first message
+line; arbitrary, cyclic, primitive, or malformed values become a stable unknown
+startup cause without interpolation or raw serialization. Stacks and untrusted
+object fields are not persisted.
 
 `stn observer status` checks the configured observer process/socket state. It is
 non-mutating, but it is still a live status check rather than an existing-state

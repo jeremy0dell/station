@@ -316,6 +316,30 @@ describe("negotiateObserverIncumbent", () => {
     expect(fixture.signal).not.toHaveBeenCalled();
   });
 
+  it("preserves a typed process-evidence failure as the handoff refusal cause", async () => {
+    const fixture = handoffFixture();
+    const evidenceFailure = Object.assign(
+      new Error("Observer process evidence did not match the exact executable and argv."),
+      {
+        tag: "ObserverProcessEvidenceError",
+        code: "OBSERVER_PROCESS_EXECUTABLE_ARGV_MISMATCH",
+        message: "Observer process evidence did not match the exact executable and argv.",
+      },
+    );
+    fixture.evidence.readObserverProcess = () => {
+      throw evidenceFailure;
+    };
+
+    const failure = await runNegotiation(fixture).catch((error: unknown) => error);
+
+    expect(failure).toMatchObject({
+      code: "OBSERVER_HANDOFF_REFUSED",
+      cause: evidenceFailure,
+    });
+    expect(fixture.stop).not.toHaveBeenCalled();
+    expect(fixture.signal).not.toHaveBeenCalled();
+  });
+
   it("treats a stop receipt as acknowledgement and waits for socket closure and exact death", async () => {
     const fixture = handoffFixture();
     let sleeps = 0;

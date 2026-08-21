@@ -81,7 +81,8 @@ export function assessCauseEvidence(input: {
   const explicitRootCauseCodes = uniqueSorted(input.explicitRootCauseCodes);
   const observedFailureCodes = uniqueSorted(input.observedFailureCodes);
   const observedFailureSignals = uniqueSorted(input.observedFailureSignals ?? []);
-  // Only diagnostic-index root-cause declarations authorize this status; an error code is evidence of a failure, not proof of its underlying cause.
+  // Diagnostic-index declarations and strict lifecycle cause fields authorize this status;
+  // an unclassified error code remains failure evidence rather than proof of a deeper mechanism.
   // An exactly matched warning or error record establishes its retained event as a proximate failure without establishing a deeper mechanism.
   let status: CauseAssessmentStatus = "insufficient_evidence";
   if (explicitRootCauseCodes.length > 0) {

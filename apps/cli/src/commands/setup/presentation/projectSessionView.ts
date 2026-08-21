@@ -1,4 +1,4 @@
-import type { SafeError } from "@station/contracts";
+import type { ObserverStartupEvidence, SafeError } from "@station/contracts";
 import type {
   SetupPlan,
   SetupSessionBlockedState,
@@ -34,6 +34,8 @@ export type ProjectSetupSessionView = {
   readonly operationOutcomes: readonly SetupSessionOperationOutcome[];
   readonly blockReason?: SetupSessionBlockedState["reason"];
   readonly error?: SafeError;
+  readonly cause?: SafeError;
+  readonly startupEvidence?: ObserverStartupEvidence;
 };
 
 export function projectSessionView(state: SetupSessionState): ProjectSetupSessionView {
@@ -50,6 +52,8 @@ export function projectSessionView(state: SetupSessionState): ProjectSetupSessio
         blockReason: state.reason,
         ...(state.plan === undefined ? {} : { plan: state.plan }),
         ...(state.error === undefined ? {} : { error: state.error }),
+        ...(state.cause === undefined ? {} : { cause: state.cause }),
+        ...(state.startupEvidence === undefined ? {} : { startupEvidence: state.startupEvidence }),
       };
     case "completed":
       return { ...base, plan: state.plan, result: state.result };

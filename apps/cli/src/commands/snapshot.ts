@@ -3,10 +3,9 @@ import type { StationSnapshot } from "@station/contracts";
 import { createObserverClient } from "@station/protocol";
 import { runRuntimeBoundaryWithTimeout } from "@station/runtime";
 import {
+  assertObserverRunning,
   getObserverStatus,
   type ObserverProcessDeps,
-  type ObserverStatus,
-  observerStatusErrorMessage,
   startObserver,
 } from "../observerProcess.js";
 import { resolveObserverPaths } from "../paths.js";
@@ -35,7 +34,7 @@ export async function runSnapshotCommand(
   const status = parsed.requireRunning
     ? await getObserverStatus(processOptions, deps)
     : await startObserver(processOptions, deps);
-  assertRunning(status);
+  assertObserverRunning(status);
   const client =
     deps.clientFactory?.(paths.socketPath) ??
     createObserverClient({
@@ -79,12 +78,4 @@ function parseSnapshotArgs(args: string[]): { includeDebug: boolean; requireRunn
     includeDebug: args.includes("--include-debug"),
     requireRunning: args.includes("--require-running"),
   };
-}
-
-function assertRunning(
-  status: ObserverStatus,
-): asserts status is Extract<ObserverStatus, { status: "running" }> {
-  if (status.status !== "running") {
-    throw new Error(observerStatusErrorMessage(status));
-  }
 }

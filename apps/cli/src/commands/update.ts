@@ -1,5 +1,10 @@
 import type { StationConfig } from "@station/config";
 import {
+  type ObserverLifecycleFailure,
+  ObserverLifecycleFailureSchema,
+  ObserverRestartCommandResultSchema,
+} from "@station/contracts";
+import {
   type ExternalCommandRunner,
   runExternalCommand,
   type StationBuildInfo,
@@ -161,7 +166,20 @@ async function crossOverRuntime(
     String(OBSERVER_CROSSOVER_TIMEOUT_MS),
   ]);
   try {
-    await runCrossover(observerCommand, commandRunner);
+    const lifecycleFailure = await runObserverCrossover(observerCommand, commandRunner);
+    if (lifecycleFailure !== undefined) {
+      return failedUpdateResult(
+        report,
+        "observer-restart",
+        updateErrorFromUnknown(undefined, {
+          code: "UPDATE_RUNTIME_CROSSOVER_FAILED",
+          message: "Station installed the new build but runtime crossover did not complete.",
+        }),
+        [observerCommand],
+        request.output,
+        lifecycleFailure,
+      );
+    }
     report.steps.push(
       updateStep(
         "observer-restart",
@@ -202,6 +220,41 @@ async function runCrossover(command: UpdateCommandArgv, runner: ExternalCommandR
       },
       runner,
     );
+  } catch (error) {
+    throw updateErrorFromUnknown(error, {
+      code: "UPDATE_RUNTIME_CROSSOVER_FAILED",
+      message: "Station installed the new build but runtime crossover did not complete.",
+    });
+  }
+}
+
+async function runObserverCrossover(
+  command: UpdateCommandArgv,
+  runner: ExternalCommandRunner | undefined,
+): Promise<ObserverLifecycleFailure | undefined> {
+  const [executable, ...args] = command;
+  try {
+    const result = await runExternalCommand(
+      {
+        command: executable,
+        args,
+        timeoutMs: 60_000,
+        maxOutputChars: 64 * 1024,
+        allowedExitCodes: [1],
+      },
+      runner,
+    );
+    const parsed = ObserverRestartCommandResultSchema.parse(JSON.parse(result.stdout));
+    if (result.exitCode === 0 && parsed.status === "running") return undefined;
+    if (result.exitCode !== 0 && parsed.status !== "running") {
+      const failure: ObserverLifecycleFailure = { error: parsed.error };
+      if (parsed.cause !== undefined) failure.cause = parsed.cause;
+      if (parsed.startupEvidence !== undefined) {
+        failure.startupEvidence = parsed.startupEvidence;
+      }
+      return ObserverLifecycleFailureSchema.parse(failure);
+    }
+    throw new Error("Observer restart result contradicted its process exit status.");
   } catch (error) {
     throw updateErrorFromUnknown(error, {
       code: "UPDATE_RUNTIME_CROSSOVER_FAILED",

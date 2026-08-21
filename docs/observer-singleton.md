@@ -137,6 +137,15 @@ Publication, OS-start-token, bind, or pre-ready lifecycle failure keeps health c
 retains the claim through socket and pidfile cleanup. A stop requested before readiness is
 terminal.
 
+The spawning CLI gives the child one private inherited pipe for startup outcome reporting.
+Before readiness, the child may write one strict, redacted, versioned failure report and then
+close the pipe; readiness closes it without a report. The parent preserves the lifecycle
+classification separately from the report's typed causal error and bounded boot-log evidence.
+The channel is diagnostic transport only: malformed, missing, or oversized reports authorize
+no retry, repair, unlink, stop, or signal. In particular, an exact executable/argv mismatch is
+reported as `OBSERVER_PROCESS_EXECUTABLE_ARGV_MISMATCH` while the existing fail-closed handoff
+decision continues to preserve the incumbent.
+
 ## Ownership-loss shutdown
 
 The ownership watcher compares the bound socket's inode and birth time with the identity
@@ -226,7 +235,8 @@ Station fails closed for singleton mutation:
 - an inaccessible socket is preserved for operator diagnosis.
 
 The actionable operator surfaces are `stn doctor`, `stn observer status`,
-`stn observer reap`, existing structured logs, and redacted debug bundles.
+`stn observer reap`, typed lifecycle results, existing structured logs, and redacted debug
+traces and bundles.
 
 ## Non-goals
 

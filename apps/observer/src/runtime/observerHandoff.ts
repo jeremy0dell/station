@@ -105,7 +105,8 @@ export type ObserverStopRequest = ObserverLifecycleRequest & {
  * DRIVEN PORT
  *
  * Supplies exact incumbent-process evidence without exposing operating-system
- * commands; unavailable socket-holder evidence throws and never means zero.
+ * commands; typed evidence failures remain available as causes, while unavailable
+ * socket-holder evidence throws and never means zero.
  */
 export interface ObserverProcessEvidenceSource {
   readObserverProcess(pid: number): ObserverProcessEntry | undefined;
@@ -270,7 +271,8 @@ function comparePublicVersionLineReset(candidate: string, incumbent: string): -1
  * USE CASE
  *
  * Replaces an older incumbent only after corroborating its socket and process
- * identity; probe or evidence failure refuses before any signal.
+ * identity; probe or evidence failure refuses before any signal, preserving a
+ * typed evidence failure as the handoff refusal's cause.
  */
 export async function negotiateObserverIncumbent(
   input: {

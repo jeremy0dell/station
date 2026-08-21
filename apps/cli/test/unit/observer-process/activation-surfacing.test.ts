@@ -8,8 +8,8 @@ import { createTempState } from "../../../../../tests/support/temp-projects";
  * Surfacing guarantees for Observer-activation failures when a foreign-build Observer owns the
  * socket during `stn setup`:
  *
- *  1. A flattened or timed-out startup failure surfaces the redacted boot reason and the
- *     child-owned boot-log tail instead of a bare "Observer startup failed."
+ *  1. A flattened or timed-out startup failure surfaces a separate typed cause and bounded,
+ *     redacted child-owned boot evidence instead of interpolating either into the hint.
  *  2. A failed cross-build restart retains the incumbent build identity it tried to replace.
  *  3. The setup activation adapter wires the startup progress callback that startObserver
  *     supports (proven in setup-observer-activation.test.ts).
@@ -47,7 +47,7 @@ function unavailableClientFactory(message = "connect ENOENT observer.sock") {
 }
 
 describe("startup failures surface the boot failure evidence", () => {
-  it("keeps the redacted spawn failure reason in the flattened error hint", async () => {
+  it("keeps the redacted spawn failure reason as a structured cause", async () => {
     const fixture = await createTempState();
 
     const result = await startObserver(
@@ -64,8 +64,13 @@ describe("startup failures surface the boot failure evidence", () => {
     const error = unhealthyError(result);
     expect(error.code).toBe("OBSERVER_START_FAILED");
     expect(error.message).toBe("Observer startup failed.");
-    expect(error.hint).toContain(`Startup failure: spawn aborted: ${bootReason}`);
-    expect(JSON.stringify(error)).toContain("dbf7f368");
+    expect(error.hint).not.toContain(bootReason);
+    expect(result).toMatchObject({
+      cause: {
+        code: "OBSERVER_STARTUP_CAUSE_ERROR",
+        message: `spawn aborted: ${bootReason}`,
+      },
+    });
   });
 
   it("reads the child boot log when the boot wait fails without early exit", async () => {
@@ -95,8 +100,8 @@ describe("startup failures surface the boot failure evidence", () => {
     const error = unhealthyError(result);
     expect(killed).toBe(true);
     expect(readBootLogTail).toHaveBeenCalled();
-    expect(error.hint).toContain(bootReason);
-    expect(JSON.stringify(error)).toContain("dbf7f368");
+    expect(error.hint).not.toContain(bootReason);
+    expect(result).toMatchObject({ startupEvidence: { bootLogTail: bootReason } });
   });
 
   it("control: reads the same boot log when the child exits early", async () => {
@@ -123,7 +128,8 @@ describe("startup failures surface the boot failure evidence", () => {
     const error = unhealthyError(result);
     expect(error.code).toBe("OBSERVER_EXITED_ON_START");
     expect(readBootLogTail).toHaveBeenCalled();
-    expect(error.hint).toContain(bootReason);
+    expect(error.hint).not.toContain(bootReason);
+    expect(result).toMatchObject({ startupEvidence: { bootLogTail: bootReason } });
   });
 });
 
@@ -170,7 +176,10 @@ describe("a failed cross-build restart retains the incumbent build context", () 
     // owned the socket plus the redacted reason the replacement never booted.
     expect(error.hint).toContain("Restart was replacing incumbent 0.0.0-pre-alpha.4");
     expect(error.hint).toContain("pid 4321");
-    expect(JSON.stringify(error)).toContain(bootReason);
+    expect(JSON.stringify(error)).not.toContain(bootReason);
+    expect(result).toMatchObject({
+      cause: { code: "OBSERVER_STARTUP_CAUSE_ERROR", message: `boot aborted: ${bootReason}` },
+    });
   });
 
   it("control: the upfront refusal path surfaces both builds without attempting a start", async () => {

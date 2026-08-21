@@ -33,8 +33,68 @@ import {
 } from "./providers.js";
 import type { ObserverRecoveryInventory } from "./recoveryInventory.js";
 import type { SessionRecoveryReadiness } from "./sessionRecovery.js";
-import { nonEmptyStringSchema, userFacingTitleSchema } from "./shared.js";
+import {
+  nonEmptyStringSchema,
+  textLineTerminatorPattern,
+  userFacingTitleSchema,
+} from "./shared.js";
 import { type StationSnapshot, StationSnapshotSchema } from "./snapshot.js";
+
+/** Maximum encoded size of one child-to-parent Observer startup failure report. */
+export const OBSERVER_STARTUP_FAILURE_REPORT_MAX_BYTES = 64 * 1024;
+
+/** Maximum encoded size retained from the end of one Observer boot log. */
+export const OBSERVER_STARTUP_BOOT_LOG_TAIL_MAX_BYTES = 64 * 1024;
+
+/** Maximum number of boot-log lines retained as startup evidence. */
+export const OBSERVER_STARTUP_BOOT_LOG_TAIL_MAX_LINES = 15;
+
+const ObserverStartupBootLogTailSchema = z
+  .string()
+  .min(1)
+  .refine(
+    (value) =>
+      new TextEncoder().encode(value).byteLength <= OBSERVER_STARTUP_BOOT_LOG_TAIL_MAX_BYTES,
+    "Observer boot-log tail exceeded its byte limit.",
+  )
+  .refine(
+    (value) =>
+      value.split(textLineTerminatorPattern).length <= OBSERVER_STARTUP_BOOT_LOG_TAIL_MAX_LINES,
+    "Observer boot-log tail exceeded its line limit.",
+  );
+
+/** Bounded, redacted local evidence retained for one Observer startup attempt. */
+export const ObserverStartupEvidenceSchema = z
+  .object({
+    bootLogPath: nonEmptyStringSchema,
+    bootLogTail: ObserverStartupBootLogTailSchema.optional(),
+  })
+  .strict();
+
+export type ObserverStartupEvidence = z.infer<typeof ObserverStartupEvidenceSchema>;
+
+/** Public lifecycle failure fields shared by CLI results and diagnostic records. */
+export const ObserverLifecycleFailureSchema = z
+  .object({
+    error: SafeErrorSchema,
+    cause: SafeErrorSchema.optional(),
+    startupEvidence: ObserverStartupEvidenceSchema.optional(),
+  })
+  .strict();
+
+export type ObserverLifecycleFailure = z.infer<typeof ObserverLifecycleFailureSchema>;
+
+/** Strict private report written once by an Observer child before an unsuccessful exit. */
+export const ObserverStartupFailureReportSchema = z
+  .object({
+    kind: z.literal("observer-startup-failure"),
+    version: z.literal(1),
+    error: SafeErrorSchema,
+    cause: SafeErrorSchema.optional(),
+  })
+  .strict();
+
+export type ObserverStartupFailureReport = z.infer<typeof ObserverStartupFailureReportSchema>;
 
 export const ObserverHealthStatusSchema = z.enum(["healthy", "degraded", "unavailable"]);
 
@@ -124,6 +184,35 @@ export const ObserverHealthSchema = z
   .strict();
 
 export type ObserverHealth = z.infer<typeof ObserverHealthSchema>;
+
+/** Concrete local paths emitted with a non-running Observer command result. */
+export const ObserverCommandPathsSchema = z
+  .object({
+    stateDir: nonEmptyStringSchema,
+    socketPath: nonEmptyStringSchema,
+    dbPath: nonEmptyStringSchema,
+    logDir: nonEmptyStringSchema,
+    diagnosticsDir: nonEmptyStringSchema,
+    hookSpoolDir: nonEmptyStringSchema,
+  })
+  .strict();
+
+/** Strict JSON result consumed when an update asks its successor launcher to restart Observer. */
+export const ObserverRestartCommandResultSchema = z.discriminatedUnion("status", [
+  z
+    .object({
+      status: z.literal("running"),
+      socketPath: nonEmptyStringSchema,
+      health: ObserverHealthSchema,
+    })
+    .strict(),
+  ObserverLifecycleFailureSchema.extend({
+    status: z.enum(["stopped", "stale", "unhealthy"]),
+    paths: ObserverCommandPathsSchema,
+  }).strict(),
+]);
+
+export type ObserverRestartCommandResult = z.infer<typeof ObserverRestartCommandResultSchema>;
 
 export const ObserverStopReceiptSchema = z
   .object({

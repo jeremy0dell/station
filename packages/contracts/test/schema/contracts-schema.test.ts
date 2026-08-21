@@ -28,8 +28,12 @@ import {
   ObserverEventHookConfigSchema,
   ObserverEventHookInvocationSchema,
   ObserverHealthSchema,
+  ObserverLifecycleFailureSchema,
   type ObserverProcessIdentity,
   ObserverProcessIdentitySchema,
+  ObserverRestartCommandResultSchema,
+  ObserverStartupEvidenceSchema,
+  ObserverStartupFailureReportSchema,
   ObserverStopReceiptSchema,
   type ProjectId,
   ProjectIdSchema,
@@ -2148,6 +2152,102 @@ describe("contract schemas", () => {
         message: "External command failed.\n    at run (/tmp/internal.ts:10:1)",
       },
       "stack-like SafeError message",
+    );
+  });
+
+  it("strictly parses Observer lifecycle failures and private startup reports", () => {
+    const error = {
+      tag: "ObserverStartupError",
+      code: "OBSERVER_EXITED_ON_START",
+      message: "Observer exited before becoming healthy (exit code 1).",
+      traceId: "trc_observer_start",
+    };
+    const cause = {
+      tag: "ObserverProcessEvidenceError",
+      code: "OBSERVER_PROCESS_EXECUTABLE_ARGV_MISMATCH",
+      message: "Observer process evidence did not match the exact executable and argv.",
+    };
+    const startupEvidence = {
+      bootLogPath: "/tmp/station/logs/observer-boot.log",
+      bootLogTail: "line one\nline two",
+    };
+
+    expect(ObserverStartupEvidenceSchema.parse(startupEvidence)).toEqual(startupEvidence);
+    expect(ObserverLifecycleFailureSchema.parse({ error, cause, startupEvidence })).toEqual({
+      error,
+      cause,
+      startupEvidence,
+    });
+    expect(ObserverLifecycleFailureSchema.parse({ error })).toEqual({ error });
+    expect(
+      ObserverRestartCommandResultSchema.parse({
+        status: "unhealthy",
+        paths: {
+          stateDir: "/tmp/station",
+          socketPath: "/tmp/station/run/observer.sock",
+          dbPath: "/tmp/station/observer.sqlite",
+          logDir: "/tmp/station/logs",
+          diagnosticsDir: "/tmp/station/diagnostics",
+          hookSpoolDir: "/tmp/station/spool/hooks",
+        },
+        error,
+        cause,
+        startupEvidence,
+      }),
+    ).toMatchObject({ status: "unhealthy", cause, startupEvidence });
+    expect(
+      ObserverStartupFailureReportSchema.parse({
+        kind: "observer-startup-failure",
+        version: 1,
+        error,
+        cause,
+      }),
+    ).toMatchObject({ version: 1, cause });
+
+    expectFails(
+      ObserverStartupEvidenceSchema,
+      { ...startupEvidence, bootLogTail: Array.from({ length: 16 }, () => "line").join("\n") },
+      "startup evidence over the line bound",
+    );
+    for (const terminator of ["\r", "\u2028", "\u2029"]) {
+      expectFails(
+        ObserverStartupEvidenceSchema,
+        {
+          ...startupEvidence,
+          bootLogTail: Array.from({ length: 16 }, () => "line").join(terminator),
+        },
+        `startup evidence over the line bound with ${JSON.stringify(terminator)}`,
+      );
+      expectFails(
+        ObserverLifecycleFailureSchema,
+        {
+          error: {
+            ...error,
+            message: `failed${terminator}    at /private/secret.ts`,
+          },
+        },
+        `lifecycle stack disclosure with ${JSON.stringify(terminator)}`,
+      );
+    }
+    expectFails(
+      ObserverStartupEvidenceSchema,
+      { ...startupEvidence, extra: true },
+      "startup evidence with an extra field",
+    );
+    expectFails(
+      ObserverLifecycleFailureSchema,
+      { error, cause: { code: cause.code, message: cause.message } },
+      "lifecycle failure with a malformed cause",
+    );
+    expectFails(
+      ObserverStartupFailureReportSchema,
+      { kind: "observer-startup-failure", version: 2, error },
+      "startup report with an unsupported version",
+    );
+    expectFails(
+      ObserverStartupFailureReportSchema,
+      { kind: "observer-startup-failure", version: 1, error, extra: true },
+      "startup report with an extra field",
     );
   });
 

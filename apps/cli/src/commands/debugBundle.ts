@@ -6,9 +6,8 @@ import { createObserverClient } from "@station/protocol";
 import { runRuntimeBoundary, runRuntimeBoundaryWithTimeout } from "@station/runtime";
 import { parseRequiredOptionValue } from "../args.js";
 import {
+  assertObserverRunning,
   type ObserverProcessDeps,
-  type ObserverStatus,
-  observerStatusErrorMessage,
   startObserver,
 } from "../observerProcess.js";
 import { resolveObserverPaths } from "../paths.js";
@@ -34,7 +33,7 @@ export async function runDebugBundleCommand(
   const collectionOptions = parseDebugBundleOptions(args);
   const paths = resolveObserverPaths(options.config);
   const status = await startObserver({ ...options, paths }, deps);
-  assertRunning(status);
+  assertObserverRunning(status);
   const client =
     deps.clientFactory?.(paths.socketPath) ??
     createObserverClient({
@@ -157,12 +156,4 @@ function sinceFromDuration(input: string): string {
           ? 60 * 60 * 1000
           : 24 * 60 * 60 * 1000;
   return new Date(Date.now() - amount * unitMs).toISOString();
-}
-
-function assertRunning(
-  status: ObserverStatus,
-): asserts status is Extract<ObserverStatus, { status: "running" }> {
-  if (status.status !== "running") {
-    throw new Error(observerStatusErrorMessage(status));
-  }
 }

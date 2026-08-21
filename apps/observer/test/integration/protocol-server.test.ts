@@ -1,4 +1,4 @@
-import { access, chmod, mkdtemp, rm } from "node:fs/promises";
+import { access, chmod, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DEFAULT_WORKSPACE_CONFIG, type StationConfig } from "@station/config";
@@ -143,6 +143,29 @@ describe("observer protocol server", () => {
       await server.close();
       fixture.sqlite.close();
     }
+  });
+
+  it("rejects a post-bind publication failure with its original cause after cleanup", async () => {
+    const { dir, socketPath } = await createTempSocketPath();
+    const stateDir = join(dir, "publication-failure-state");
+    await mkdir(`${socketPath}.pid`);
+
+    const failure = await runObserverMain(
+      ["--socket", socketPath, "--state-dir", stateDir, "--startup-timeout-ms", "1000"],
+      {
+        providerRegistryFactory: () =>
+          new ProviderRegistry({
+            worktree: new FakeWorktreeProvider({ now }),
+            terminal: new FakeTerminalProvider({ now }),
+            harnesses: [new FakeHarnessProvider({ now })],
+          }),
+        buildVersion: observerBuildVersion,
+      },
+    ).catch((error: unknown) => error);
+
+    expect(failure).toMatchObject({ code: expect.stringMatching(/EISDIR|ENOTDIR/u) });
+    await expect(access(socketPath)).rejects.toMatchObject({ code: "ENOENT" });
+    await rm(dir, { recursive: true, force: true });
   });
 
   it("captures canonical runtime paths in the local diagnostic adapter", async () => {
@@ -305,6 +328,7 @@ describe("observer protocol server", () => {
     const providerReadStarted = deferred();
     const releaseProviderRead = deferred();
     const terminal = new FakeTerminalProvider({ now });
+    const startupReadinessSink = { ready: vi.fn() };
     vi.spyOn(terminal, "listTargets").mockImplementation(async () => {
       providerReadStarted.resolve();
       await releaseProviderRead.promise;
@@ -320,6 +344,7 @@ describe("observer protocol server", () => {
             harnesses: [new FakeHarnessProvider({ now })],
           }),
         buildVersion: observerBuildVersion,
+        startupReadinessSink,
       },
     );
     const client = createObserverClient({ socketPath, requestId: ids("startup-context") });
@@ -331,6 +356,7 @@ describe("observer protocol server", () => {
       await expect(client.health()).resolves.toMatchObject({
         lastReconcile: { reason: "observer.startup" },
       });
+      expect(startupReadinessSink.ready).toHaveBeenCalledOnce();
       await expect(client.getSnapshot()).resolves.toMatchObject({ observer: { healthy: true } });
     } finally {
       releaseProviderRead.resolve();

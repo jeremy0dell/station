@@ -8,9 +8,8 @@ import {
 import { createObserverClient } from "@station/protocol";
 import { Effect, runRuntimeBoundaryWithTimeout } from "@station/runtime";
 import {
+  assertObserverRunning,
   type ObserverProcessDeps,
-  type ObserverStatus,
-  observerStatusErrorMessage,
   startObserver,
 } from "../../observerProcess.js";
 import { resolveObserverPaths } from "../../paths.js";
@@ -97,7 +96,7 @@ export async function runObserveCommand(
     observerOptions.configPath = options.configPath;
   }
   const status = await startObserver(observerOptions, observerDeps);
-  assertRunning(status);
+  assertObserverRunning(status);
 
   const client =
     observerDeps.clientFactory?.(paths.socketPath) ??
@@ -558,12 +557,4 @@ function isBrokenPipeError(error: unknown): boolean {
     "code" in error &&
     (error as { code?: unknown }).code === "EPIPE"
   );
-}
-
-function assertRunning(
-  status: ObserverStatus,
-): asserts status is Extract<ObserverStatus, { status: "running" }> {
-  if (status.status !== "running") {
-    throw new Error(observerStatusErrorMessage(status));
-  }
 }

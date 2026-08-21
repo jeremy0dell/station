@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { type SafeError, SafeErrorSchema } from "./errors.js";
+import { type ObserverStartupEvidence, ObserverStartupEvidenceSchema } from "./observer.js";
 import { nonEmptyStringSchema, safeTextSchema } from "./shared.js";
 
 export const UpdateChannelIdSchema = z.enum([
@@ -74,7 +75,8 @@ const UpdateArtifactSchema = z
 
 /**
  * Strict machine-readable schema-version-1 contract emitted by `stn update --json`.
- * Consumers must parse this shared contract before interpreting update outcomes.
+ * Consumers must parse this shared contract before interpreting update outcomes; runtime
+ * crossover failures keep the update error outermost and child cause/evidence separate.
  */
 export type UpdateCommandReport = {
   schemaVersion: 1;
@@ -86,6 +88,8 @@ export type UpdateCommandReport = {
   warnings: SafeError[];
   recoveryCommands: UpdateCommandArgv[];
   error?: SafeError;
+  cause?: SafeError;
+  startupEvidence?: ObserverStartupEvidence;
 };
 
 export const UpdateCommandReportSchema: z.ZodType<UpdateCommandReport> = z
@@ -99,6 +103,8 @@ export const UpdateCommandReportSchema: z.ZodType<UpdateCommandReport> = z
     warnings: z.array(SafeErrorSchema),
     recoveryCommands: z.array(UpdateCommandArgvSchema),
     error: SafeErrorSchema.optional(),
+    cause: SafeErrorSchema.optional(),
+    startupEvidence: ObserverStartupEvidenceSchema.optional(),
   })
   .strict()
   .transform(
@@ -112,5 +118,7 @@ export const UpdateCommandReportSchema: z.ZodType<UpdateCommandReport> = z
       warnings: report.warnings,
       recoveryCommands: report.recoveryCommands,
       ...(report.error === undefined ? {} : { error: report.error }),
+      ...(report.cause === undefined ? {} : { cause: report.cause }),
+      ...(report.startupEvidence === undefined ? {} : { startupEvidence: report.startupEvidence }),
     }),
   );

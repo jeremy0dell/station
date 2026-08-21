@@ -1,13 +1,18 @@
 import type { ChildProcess } from "node:child_process";
 import type { StationConfig } from "@station/config";
-import type { ObserverHealth, SafeError } from "@station/contracts";
+import type {
+  ObserverHealth,
+  ObserverStartupEvidence,
+  ObserverStartupFailureReport,
+  SafeError,
+} from "@station/contracts";
 import type { JsonlLogger } from "@station/observability";
 import type {
   CreateObserverClientOptions,
   createObserverClient,
   probeUnixSocket,
 } from "@station/protocol";
-import type { RuntimeClock } from "@station/runtime";
+import type { RuntimeBoundaryResult, RuntimeClock } from "@station/runtime";
 import type { ObserverPaths } from "../paths.js";
 import type { ExecutableArgv } from "../selfExec.js";
 
@@ -22,6 +27,10 @@ export type ObserverStatus =
       status: "stopped" | "stale" | "unhealthy";
       paths: ObserverPaths;
       error?: SafeError;
+      /** Deepest typed child failure retained separately from the lifecycle classification. */
+      cause?: SafeError;
+      /** Bounded, redacted evidence from this startup attempt. */
+      startupEvidence?: ObserverStartupEvidence;
     };
 
 export type ExactObserverActivationPhase = "inspection" | "stop" | "start" | "verification";
@@ -43,6 +52,10 @@ export type ExactObserverBuildStatus =
       status: "unhealthy";
       paths: ObserverPaths;
       error: SafeError;
+      /** Underlying typed lifecycle failure without changing the exact-activation code. */
+      cause?: SafeError;
+      /** Bounded, redacted evidence from the attempted successor startup. */
+      startupEvidence?: ObserverStartupEvidence;
       phase: ExactObserverActivationPhase;
       incumbentDisposition: ExactObserverIncumbentDisposition;
     };
@@ -78,11 +91,15 @@ export type ChildProcessExit = {
   type: "exit";
   code: number | null;
   signal: NodeJS.Signals | null;
+  /** Strict report fully consumed from the inherited pipe before exit resolution. */
+  report?: ObserverStartupFailureReport;
 };
 
 export type ChildProcessSpawnError = {
   type: "spawn_error";
   error: Error;
+  /** Strict report fully consumed from the inherited pipe before exit resolution. */
+  report?: ObserverStartupFailureReport;
 };
 
 export type ChildExitResult = ChildProcessExit | ChildProcessSpawnError;
@@ -91,6 +108,7 @@ export type ChildProcessLike = Pick<ChildProcess, "pid" | "unref"> & {
   kill?: ChildProcess["kill"];
   exited?: Promise<ChildExitResult>;
   disposeExitWait?: () => void;
+  disposeFailureReport?: () => void;
   readBootLogTail?: () => Promise<string | undefined>;
   disposeBootLog?: () => Promise<void>;
 };
@@ -104,4 +122,10 @@ export type ObserverProcessOptions = {
   startupDeadlineMs?: number;
   observerCommand?: ExecutableArgv;
   onStartupProgress?: (message: string) => void;
+};
+
+/** Timed child-start result with causal and bounded evidence kept outside the outer SafeError. */
+export type ObserverStartupProcessResult = RuntimeBoundaryResult<ObserverHealth> & {
+  cause?: SafeError;
+  startupEvidence?: ObserverStartupEvidence;
 };

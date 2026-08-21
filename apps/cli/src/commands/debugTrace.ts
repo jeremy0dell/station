@@ -7,7 +7,7 @@ import type {
   DiagnosticEvidenceIndex,
   ErrorEnvelope,
   LogRecord,
-  SafeError,
+  ObserverStartupEvidence,
 } from "@station/contracts";
 import {
   CommandIdSchema,
@@ -15,7 +15,6 @@ import {
   DiagnosticEvidenceIndexSchema,
   ErrorEnvelopeSchema,
   LogRecordSchema,
-  SafeErrorSchema,
   SpanIdSchema,
   TraceIdSchema,
 } from "@station/contracts";
@@ -30,6 +29,11 @@ import {
   projectOperationalBoundaryEvidence,
   retainedFailureSignal,
 } from "./diagnosticEvidence.js";
+import {
+  parseLifecycleLogEvidence,
+  parseLogSafeError,
+  summarizeLifecycleError,
+} from "./lifecycleLogEvidence.js";
 
 export type DebugTraceCommandOptions = {
   config?: StationConfig;
@@ -52,13 +56,26 @@ export type DebugTraceResult = {
     spanId?: string;
   };
   error?: {
+    tag: string;
     id?: string;
     code?: string;
     message?: string;
+    hint?: string;
     provider?: string;
     diagnosticId?: string;
     diagnostics?: DiagnosticDetail[];
+    traceId?: string;
   };
+  cause?: {
+    tag: string;
+    code?: string;
+    message?: string;
+    hint?: string;
+    provider?: string;
+    diagnosticId?: string;
+    traceId?: string;
+  };
+  startupEvidence?: ObserverStartupEvidence;
   rootCauseCodes: string[];
   causeAssessment: CauseAssessment;
   evidenceRoles: DiagnosticEvidenceRoles;
@@ -88,6 +105,8 @@ type DebugTraceMatch = {
   bundlePath?: string;
   command?: DebugTraceResult["command"];
   error?: DebugTraceResult["error"];
+  cause?: DebugTraceResult["cause"];
+  startupEvidence?: ObserverStartupEvidence;
   traceId?: string;
   spanId?: string;
   rootCauseCodes: string[];
@@ -109,6 +128,8 @@ type ParsedDebugTraceLogAttributes = {
   operation?: string;
   kind?: string;
   error?: DebugTraceErrorSummary;
+  cause?: NonNullable<DebugTraceResult["cause"]>;
+  startupEvidence?: ObserverStartupEvidence;
 };
 
 const DebugTraceLogAttributesSchema = z
@@ -123,6 +144,12 @@ const DebugTraceLogAttributesSchema = z
   })
   .passthrough();
 
+/**
+ * ADAPTER
+ *
+ * Correlates existing bundle and log evidence, projecting a strict lifecycle
+ * cause as explicit causal evidence while retaining its outer reporting boundary.
+ */
 export async function runDebugTraceCommand(
   args: string[],
   options: DebugTraceCommandOptions = {},
@@ -163,6 +190,10 @@ export async function runDebugTraceCommand(
   if (match?.spanId !== undefined) result.spanId = match.spanId;
   if (match?.command !== undefined) result.command = match.command;
   if (match?.error !== undefined) result.error = match.error;
+  if (match?.cause !== undefined) result.cause = match.cause;
+  if (match?.startupEvidence !== undefined) {
+    result.startupEvidence = match.startupEvidence;
+  }
   const operationalInput: OperationalBoundaryEvidence = {};
   if (result.command?.type !== undefined) operationalInput.commandType = result.command.type;
   if (match?.reportedBy?.operation !== undefined) {
@@ -412,7 +443,7 @@ function errorMatchesQuery(error: ErrorEnvelope, query: string): boolean {
 function matchFromLog(log: LogRecord, path: string, query: string | undefined): DebugTraceMatch {
   const attributes = parseDebugTraceLogAttributes(log.attributes);
   const commandId = attributes.commandId ?? log.commandId;
-  const traceId = attributes.traceId ?? log.traceId;
+  const traceId = attributes.traceId ?? log.traceId ?? attributes.cause?.traceId;
   const spanId = attributes.spanId ?? log.spanId;
   const commandType = attributes.commandType;
   const reportedBy: DebugTraceReportingProvenance = { component: log.component };
@@ -434,8 +465,10 @@ function matchFromLog(log: LogRecord, path: string, query: string | undefined): 
     ...(command === undefined ? {} : { command }),
     ...(traceId === undefined ? {} : { traceId }),
     ...(spanId === undefined ? {} : { spanId }),
-    rootCauseCodes: errorResult?.code === undefined ? [] : [errorResult.code],
-    explicitRootCauseCodes: [],
+    rootCauseCodes: [errorResult?.code, attributes.cause?.code].filter(
+      (code): code is string => code !== undefined,
+    ),
+    explicitRootCauseCodes: attributes.cause?.code === undefined ? [] : [attributes.cause.code],
     observedFailureCodes: errorResult?.code === undefined ? [] : [errorResult.code],
     observedFailureRecord: log.level === "warn" || log.level === "error",
     reportedBy,
@@ -446,6 +479,10 @@ function matchFromLog(log: LogRecord, path: string, query: string | undefined): 
   const signalKind = retainedFailureSignal(attributes.kind);
   if (signalKind !== undefined) match.signalKind = signalKind;
   if (errorResult !== undefined) match.error = errorResult;
+  if (attributes.cause !== undefined) match.cause = attributes.cause;
+  if (attributes.startupEvidence !== undefined) {
+    match.startupEvidence = attributes.startupEvidence;
+  }
   return match;
 }
 
@@ -496,6 +533,7 @@ function errorSummary(error: ErrorEnvelope | undefined): DebugTraceResult["error
     return undefined;
   }
   const summary: DebugTraceErrorSummary = {
+    tag: error.tag,
     id: error.id,
     code: error.code,
     message: error.message,
@@ -523,10 +561,13 @@ function commandErrorSummary(command: CommandRecord | undefined): DebugTraceResu
   if (command?.error === undefined && command?.diagnostics === undefined) {
     return undefined;
   }
-  const summary: DebugTraceErrorSummary = {};
+  const summary: DebugTraceErrorSummary = {
+    tag: command.error?.tag ?? "CommandDiagnostics",
+  };
   if (command.error !== undefined) {
     summary.code = command.error.code;
     summary.message = command.error.message;
+    if (command.error.hint !== undefined) summary.hint = command.error.hint;
     if (command.error.provider !== undefined) summary.provider = command.error.provider;
     if (command.error.diagnosticId !== undefined) summary.diagnosticId = command.error.diagnosticId;
   }
@@ -586,16 +627,6 @@ function rootCauseCodes(
   return [...codes].sort();
 }
 
-function safeErrorSummary(error: SafeError): DebugTraceResult["error"] {
-  const summary: DebugTraceErrorSummary = {
-    code: error.code,
-    message: error.message,
-  };
-  if (error.provider !== undefined) summary.provider = error.provider;
-  if (error.diagnosticId !== undefined) summary.diagnosticId = error.diagnosticId;
-  return summary;
-}
-
 function parseDebugTraceLogAttributes(
   attributes: LogRecord["attributes"] | undefined,
 ): ParsedDebugTraceLogAttributes {
@@ -610,15 +641,25 @@ function parseDebugTraceLogAttributes(
   if (parsed.data.commandType !== undefined) result.commandType = parsed.data.commandType;
   if (parsed.data.operation !== undefined) result.operation = parsed.data.operation;
   if (parsed.data.kind !== undefined) result.kind = parsed.data.kind;
-  const error = parseLogAttributeError(parsed.data.error);
+  const lifecycle = parseLifecycleLogEvidence(attributes);
+  const error =
+    lifecycle !== undefined
+      ? summarizeLifecycleError(lifecycle.error)
+      : parseLogAttributeError(parsed.data.error);
   if (error !== undefined) result.error = error;
+  if (lifecycle?.cause !== undefined) {
+    result.cause = summarizeLifecycleError(lifecycle.cause);
+  }
+  if (lifecycle?.startupEvidence !== undefined) {
+    result.startupEvidence = lifecycle.startupEvidence;
+  }
   return result;
 }
 
 function parseLogAttributeError(error: unknown): DebugTraceResult["error"] {
-  const safeError = SafeErrorSchema.safeParse(error);
-  if (safeError.success) {
-    return safeErrorSummary(safeError.data);
+  const safeError = parseLogSafeError(error);
+  if (safeError !== undefined) {
+    return summarizeLifecycleError(safeError);
   }
   const envelope = ErrorEnvelopeSchema.safeParse(error);
   if (envelope.success) {

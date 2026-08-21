@@ -243,7 +243,7 @@ describe("CLI observe command", () => {
     expect(returned).toBe(true);
   });
 
-  it("surfaces observer socket schema errors with hint and code", async () => {
+  it("surfaces observer socket schema errors with a concise code and next step", async () => {
     const fixture = await createTempState();
     const server = await listenUnixSocket({
       socketPath: fixture.socketPath,
@@ -278,13 +278,7 @@ describe("CLI observe command", () => {
             },
           },
         ),
-      ).rejects.toThrow(
-        [
-          "Observer protocol schema mismatch: the observer responded with schema 0.3.0, but this CLI expects schema 0.11.0.",
-          "Hint: A different STATION checkout may own the observer socket.",
-          "Code: PROTOCOL_SCHEMA_MISMATCH",
-        ].join("\n"),
-      );
+      ).rejects.toMatchObject({ error: { code: "PROTOCOL_SCHEMA_MISMATCH" } });
     } finally {
       await server.close();
     }

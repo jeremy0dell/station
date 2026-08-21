@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import type { StationConfig } from "@station/config";
-import type { LogRecord, SafeError } from "@station/contracts";
-import { LogRecordSchema, SafeErrorSchema } from "@station/contracts";
+import type { LogRecord, ObserverStartupEvidence, SafeError } from "@station/contracts";
+import { LogRecordSchema } from "@station/contracts";
 import { componentLogPath } from "@station/observability";
 import { resolveObserverPaths } from "../paths.js";
 import {
@@ -17,6 +17,12 @@ import {
   projectOperationalBoundaryEvidence,
   retainedFailureSignal,
 } from "./diagnosticEvidence.js";
+import {
+  type LifecycleErrorSummary,
+  parseLifecycleLogEvidence,
+  parseLogSafeError,
+  summarizeLifecycleError,
+} from "./lifecycleLogEvidence.js";
 
 export type DebugLogsCommandOptions = {
   config?: StationConfig;
@@ -35,7 +41,7 @@ export type DebugLogsResult = {
   };
   causeAssessment: Pick<
     CauseAssessment,
-    "status" | "observedFailureCodes" | "observedFailureSignals"
+    "status" | "explicitRootCauseCodes" | "observedFailureCodes" | "observedFailureSignals"
   >;
   evidenceRoles: DiagnosticEvidenceRoles;
   records: DebugLogRecordSummary[];
@@ -58,14 +64,11 @@ type DebugLogRecordSummary = {
   context?: DiagnosticContextEntry[];
   matchEvidence?: DiagnosticMatchEvidence[];
   error?: DebugLogErrorSummary;
+  cause?: DebugLogErrorSummary;
+  startupEvidence?: ObserverStartupEvidence;
 };
 
-type DebugLogErrorSummary = {
-  code?: string;
-  message?: string;
-  provider?: string;
-  diagnosticId?: string;
-  traceId?: string;
+type DebugLogErrorSummary = LifecycleErrorSummary & {
   commandId?: string;
 };
 
@@ -96,6 +99,12 @@ const allComponents: DebugLogComponent[] = [
 ];
 const logLevels: DebugLogLevel[] = ["debug", "info", "warn", "error"];
 
+/**
+ * ADAPTER
+ *
+ * Reads redacted lifecycle logs and projects strict outer, causal, and startup
+ * evidence fields without treating the logging component as failure ownership.
+ */
 export async function runDebugLogsCommand(
   args: string[],
   options: DebugLogsCommandOptions = {},
@@ -127,12 +136,15 @@ export async function runDebugLogsCommand(
   const observedFailureCodes = records.flatMap((record) =>
     record.error?.code === undefined ? [] : [record.error.code],
   );
+  const explicitRootCauseCodes = records.flatMap((record) =>
+    record.cause?.code === undefined ? [] : [record.cause.code],
+  );
   const observedFailureSignals = records.flatMap((record) => {
     const signal = retainedFailureSignal(contextString(record.context ?? [], "/attributes/kind"));
     return signal === undefined ? [] : [signal];
   });
   const assessedCause = assessCauseEvidence({
-    explicitRootCauseCodes: [],
+    explicitRootCauseCodes,
     observedFailureCodes,
     observedFailureSignals,
     matched: selected.length > 0,
@@ -142,6 +154,7 @@ export async function runDebugLogsCommand(
   });
   const causeAssessment: DebugLogsResult["causeAssessment"] = {
     status: assessedCause.status,
+    explicitRootCauseCodes: assessedCause.explicitRootCauseCodes,
     observedFailureCodes: assessedCause.observedFailureCodes,
   };
   if (assessedCause.observedFailureSignals !== undefined) {
@@ -266,7 +279,11 @@ function logSummary(
   includeOperationalBoundaryEvidence: boolean,
 ): DebugLogRecordSummary {
   const context = projectDiagnosticContext(record);
-  const error = errorSummary(record.attributes?.error);
+  const lifecycle = parseLifecycleLogEvidence(record.attributes);
+  const error =
+    lifecycle === undefined
+      ? errorSummary(record.attributes?.error)
+      : debugLogErrorSummary(lifecycle.error);
   const summary: DebugLogRecordSummary = {
     timestamp: record.timestamp,
     level: record.level,
@@ -302,6 +319,10 @@ function logSummary(
     if (matchEvidence.length > 0) summary.matchEvidence = matchEvidence;
   }
   if (error !== undefined) summary.error = error;
+  if (lifecycle?.cause !== undefined) summary.cause = debugLogErrorSummary(lifecycle.cause);
+  if (lifecycle?.startupEvidence !== undefined) {
+    summary.startupEvidence = lifecycle.startupEvidence;
+  }
   return summary;
 }
 
@@ -314,39 +335,12 @@ function contextString(
 }
 
 function errorSummary(value: unknown): DebugLogErrorSummary | undefined {
-  const safeError = SafeErrorSchema.safeParse(value);
-  if (safeError.success) {
-    return safeErrorSummary(safeError.data);
-  }
-  if (!value || typeof value !== "object") {
-    return undefined;
-  }
-  const candidate = value as {
-    code?: unknown;
-    message?: unknown;
-    provider?: unknown;
-    diagnosticId?: unknown;
-    traceId?: unknown;
-    commandId?: unknown;
-  };
-  const summary: DebugLogErrorSummary = {};
-  if (typeof candidate.code === "string") summary.code = candidate.code;
-  if (typeof candidate.message === "string") summary.message = candidate.message;
-  if (typeof candidate.provider === "string") summary.provider = candidate.provider;
-  if (typeof candidate.diagnosticId === "string") summary.diagnosticId = candidate.diagnosticId;
-  if (typeof candidate.traceId === "string") summary.traceId = candidate.traceId;
-  if (typeof candidate.commandId === "string") summary.commandId = candidate.commandId;
-  return Object.keys(summary).length === 0 ? undefined : summary;
+  const safeError = parseLogSafeError(value);
+  return safeError === undefined ? undefined : debugLogErrorSummary(safeError);
 }
 
-function safeErrorSummary(error: SafeError): DebugLogErrorSummary {
-  const summary: DebugLogErrorSummary = {
-    code: error.code,
-    message: error.message,
-  };
-  if (error.provider !== undefined) summary.provider = error.provider;
-  if (error.diagnosticId !== undefined) summary.diagnosticId = error.diagnosticId;
-  if (error.traceId !== undefined) summary.traceId = error.traceId;
+function debugLogErrorSummary(error: SafeError): DebugLogErrorSummary {
+  const summary: DebugLogErrorSummary = summarizeLifecycleError(error);
   if (error.commandId !== undefined) summary.commandId = error.commandId;
   return summary;
 }
