@@ -220,18 +220,36 @@ describe("resolveSessionRecovery", () => {
     });
   });
 
-  it("requires exactly one actionable automatic handle", async () => {
+  it("requires an actionable automatic handle and selects the newest eligible candidate", async () => {
     await expect(resolveRecovery()).rejects.toMatchObject({
       code: "SESSION_RECOVERY_HANDLE_NOT_FOUND",
     });
 
-    const first = recoveryHandle();
-    const second = recoveryHandle({
-      id: "rec_second",
-      target: { kind: "native-session", id: "native_second" },
+    const older = recoveryHandle({
+      id: "rec_older",
+      target: { kind: "native-session", id: "native_older" },
+      observedAt: "2026-08-08T10:00:00.000Z",
+      lastSeenAt: "2026-08-08T11:00:00.000Z",
     });
-    await expect(resolveRecovery({ handles: [first, second] })).rejects.toMatchObject({
-      code: "SESSION_RECOVERY_HANDLE_AMBIGUOUS",
+    const selected = recoveryHandle({
+      id: "rec_selected",
+      target: { kind: "native-session", id: "native_selected" },
+      observedAt: "2026-08-08T11:30:00.000Z",
+      lastSeenAt: "2026-08-08T11:59:00.000Z",
+    });
+    const ineligibleNewer = recoveryHandle({
+      id: "rec_ineligible_newer",
+      sessionId: "ses_other",
+      target: { kind: "native-session", id: "native_ineligible_newer" },
+      observedAt: "2026-08-08T12:30:00.000Z",
+      lastSeenAt: "2026-08-08T13:00:00.000Z",
+    });
+
+    await expect(
+      resolveRecovery({ handles: [ineligibleNewer, older, selected] }),
+    ).resolves.toMatchObject({
+      handle: { target: selected.target },
+      resume: { target: selected.target },
     });
   });
 

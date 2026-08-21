@@ -13,6 +13,7 @@ import {
   type SessionRecoveryEligibilityInput,
   sessionRecoveryEligibility,
 } from "./sessionRecoveryEligibility.js";
+import { selectNewestSessionRecoveryCandidate } from "./sessionRecoverySelection.js";
 
 type SessionRecoveryExpectation = {
   sessionId: string;
@@ -29,10 +30,10 @@ type ResolvedSessionRecovery = {
 /**
  * USE CASE
  *
- * Filters durable handles through exact lifecycle and provider-neutral eligibility before applying
- * zero/one/many cardinality, then returns only typed resume authority for the selected provider.
- * Explicit selection retains imported-handle compatibility only when no contradictory local
- * Station lifecycle exists.
+ * Filters durable handles through exact lifecycle and provider-neutral eligibility before selecting
+ * the newest automatic candidate deterministically, then returns only typed resume authority for
+ * that provider. Explicit selection retains imported-handle compatibility only when no
+ * contradictory local Station lifecycle exists.
  */
 export async function resolveSessionRecovery(input: {
   persistence: SessionStore;
@@ -97,17 +98,9 @@ async function resolveRecoveryHandle(
     const eligibility = evaluateHandle(input, sessions, handle, false);
     return eligibility.kind === "eligible" ? [{ handle, eligibility }] : [];
   });
-  if (eligible.length === 1) {
-    return eligible[0] as (typeof eligible)[number];
-  }
-  if (eligible.length > 1) {
-    throw commandValidationError({
-      code: "SESSION_RECOVERY_HANDLE_AMBIGUOUS",
-      message: "More than one recovery handle is available for this worktree.",
-      hint: "Select a specific recovery handle and retry.",
-      projectId: input.projectId,
-      worktreeId: input.worktreeId,
-    });
+  const selected = selectNewestSessionRecoveryCandidate(eligible);
+  if (selected !== undefined) {
+    return selected;
   }
   throw commandValidationError({
     code: "SESSION_RECOVERY_HANDLE_NOT_FOUND",

@@ -1686,10 +1686,35 @@ describe("session command vertical slice", () => {
     await expect(fixture.persistence.getCommand(importReceipt.commandId)).resolves.toMatchObject({
       status: "succeeded",
     });
-    const [handle] = await fixture.persistence.listSessionRecoveryHandles({
+    const newerImportReceipt = await fixture.queue.dispatch({
+      type: "session.importRecoveryHandle",
+      payload: {
+        projectId: "web",
+        worktreeId: "wt_web_resume",
+        expectedPath: "/tmp/station/web/resume",
+        handle: {
+          id: "report_resume_newest",
+          provider: "fake-harness",
+          projectId: "web",
+          worktreeId: "wt_web_resume",
+          sessionId: "ses_previous",
+          target: { kind: "native-session", id: "native_session_newest" },
+          cwd: "/tmp/station/web/resume",
+          observedAt: "2026-05-21T12:01:00.000Z",
+          lastSeenAt: "2026-05-21T12:02:00.000Z",
+        },
+      },
+    });
+    await fixture.queue.drain();
+    await expect(
+      fixture.persistence.getCommand(newerImportReceipt.commandId),
+    ).resolves.toMatchObject({ status: "succeeded" });
+    const [handle, olderHandle] = await fixture.persistence.listSessionRecoveryHandles({
       worktreeId: "wt_web_resume",
     });
-    if (handle === undefined) throw new Error("Expected imported recovery handle.");
+    if (handle === undefined || olderHandle === undefined) {
+      throw new Error("Expected both imported recovery handles.");
+    }
 
     expect(fixture.core.getSnapshot().rows[0]?.recovery).toMatchObject({
       kind: "agent-resume",
@@ -1726,7 +1751,7 @@ describe("session command vertical slice", () => {
       initialPrompt: "Continue the recovered context.",
       mode: "interactive",
       resume: {
-        target: { kind: "native-session", id: "native_session_123" },
+        target: { kind: "native-session", id: "native_session_newest" },
         previousSessionId: "ses_previous",
         recoveryHandleId: handle.id,
       },
@@ -1737,6 +1762,9 @@ describe("session command vertical slice", () => {
     expect(
       (await fixture.persistence.listSessions()).find((session) => session.id === "ses_previous"),
     ).not.toHaveProperty("endedAt");
+    await expect(
+      fixture.persistence.listSessionRecoveryHandles({ worktreeId: "wt_web_resume" }),
+    ).resolves.toHaveLength(2);
     expect(fixture.core.getSnapshot().sessions).toEqual([
       expect.objectContaining({
         id: "ses_previous",
