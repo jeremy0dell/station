@@ -5,12 +5,14 @@ import { resolveObserverSocketForProcessArgs } from "@station/config";
 import { ObserverProcessTokenSchema, type SafeError } from "@station/contracts";
 import { z } from "zod";
 import {
-  type ObserverProcessEntry,
   type ObserverProcessSignalResult,
   observerBuildSelectorIsValid,
-  observerProcessEntriesMatch,
 } from "./observerHandoff.js";
 import { readObserverProcessIdentity } from "./observerPidfile.js";
+import {
+  type ObserverProcessEntry,
+  observerProcessEntriesMatch,
+} from "./observerProcessIdentity.js";
 import type { ObserverDuplicateProcessEvidenceSource } from "./observerReap.js";
 import { readObserverSocketHolderPids } from "./server.js";
 import { readSocketIdentity } from "./socketOwnership.js";
