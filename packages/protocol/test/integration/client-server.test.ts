@@ -49,6 +49,40 @@ describe("protocol client/server", () => {
           },
         ],
       }),
+      getSessionRecoveryAssessment: async () => ({
+        schemaVersion: 1,
+        inventory: {
+          schemaVersion: 1,
+          sessions: [
+            {
+              id: "session-protocol",
+              projectId: "web",
+              worktreeId: "worktree-protocol",
+              lifecycle: "ended",
+              createdAt: protocolTestNow,
+              lastSeenAt: protocolTestNow,
+            },
+          ],
+          recoveryHandles: [],
+        },
+        resumeEnabled: false,
+        sessions: [
+          {
+            sessionId: "session-protocol",
+            projectId: "web",
+            worktreeId: "worktree-protocol",
+            lifecycle: "ended",
+            disposition: "not-applicable",
+            reasons: ["station_session_ended"],
+            handleResolution: {
+              kind: "none",
+              eligibleHandleCount: 0,
+              rejectedHandleCount: 0,
+              reasons: ["no_recovery_handles", "station_session_ended"],
+            },
+          },
+        ],
+      }),
       dispatch: async (command) => {
         const record: CommandRecord = {
           id: "cmd_1",
@@ -97,6 +131,17 @@ describe("protocol client/server", () => {
           targetKind: "session-file",
           observedAt: protocolTestNow,
           lastSeenAt: protocolTestNow,
+        },
+      ],
+    });
+    await expect(client.getSessionRecoveryAssessment()).resolves.toMatchObject({
+      schemaVersion: 1,
+      resumeEnabled: false,
+      sessions: [
+        {
+          sessionId: "session-protocol",
+          disposition: "not-applicable",
+          reasons: ["station_session_ended"],
         },
       ],
     });

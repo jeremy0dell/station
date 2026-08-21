@@ -37,6 +37,12 @@ export function createFakeObserverApi(
       sessions: [],
       recoveryHandles: [],
     }),
+    getSessionRecoveryAssessment: async () => ({
+      schemaVersion: 1,
+      inventory: { schemaVersion: 1, sessions: [], recoveryHandles: [] },
+      resumeEnabled: true,
+      sessions: [],
+    }),
     subscribe: () => stream([]),
     dispatch: async () => ({ commandId: "cmd_1", accepted: true, status: "accepted" }),
     getCommand: async () => undefined,

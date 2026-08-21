@@ -73,6 +73,7 @@ export const ObserverSessionRecoveryAssessmentSchema = z
     lifecycle: z.enum(["legacy", "open", "ended"]),
     harnessProvider: ProviderIdSchema.optional(),
     disposition: z.enum(["recoverable", "non-resumable", "not-applicable", "unknown"]),
+    reasons: orderedReasonsSchema,
     handleResolution: SessionRecoveryHandleResolutionSchema,
   })
   .strict();
@@ -117,6 +118,22 @@ export const ObserverRecoveryAssessmentSchema = z
         path: ["sessions"],
         message: "Every inventory session must have exactly one assessment.",
       });
+    }
+    for (const [index, session] of assessment.sessions.entries()) {
+      if (session.disposition === "recoverable" && session.reasons.length > 0) {
+        context.addIssue({
+          code: "custom",
+          path: ["sessions", index, "reasons"],
+          message: "Recoverable sessions cannot contain blocking reasons.",
+        });
+      }
+      if (session.disposition !== "recoverable" && session.reasons.length === 0) {
+        context.addIssue({
+          code: "custom",
+          path: ["sessions", index, "reasons"],
+          message: "Blocked, unknown, and inapplicable sessions require a typed reason.",
+        });
+      }
     }
   });
 export type ObserverRecoveryAssessment = z.infer<typeof ObserverRecoveryAssessmentSchema>;

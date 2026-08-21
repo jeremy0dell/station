@@ -43,6 +43,7 @@ describe("ObserverRecoveryAssessmentSchema", () => {
             lifecycle: "open",
             harnessProvider: "codex",
             disposition: "recoverable",
+            reasons: [],
             handleResolution: {
               kind: "selected",
               selectedHandleId: "handle_a",
@@ -63,6 +64,7 @@ describe("ObserverRecoveryAssessmentSchema", () => {
       worktreeId: "worktree_a",
       lifecycle: "open" as const,
       disposition: "non-resumable" as const,
+      reasons: ["global_resume_disabled" as const],
       handleResolution: {
         kind: "none" as const,
         eligibleHandleCount: 0 as const,
@@ -110,6 +112,7 @@ describe("ObserverRecoveryAssessmentSchema", () => {
             worktreeId: "worktree_a",
             lifecycle: "open",
             disposition: "non-resumable",
+            reasons: ["station_session_missing", "project_mismatch"],
             extra: "not allowed",
             handleResolution: {
               kind: "none",

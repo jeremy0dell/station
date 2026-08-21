@@ -31,6 +31,7 @@ import {
   ProviderHealthSchema,
   TerminalOutputCompatibilitySchema,
 } from "./providers.js";
+import type { ObserverRecoveryAssessment } from "./recoveryAssessment.js";
 import type { ObserverRecoveryInventory } from "./recoveryInventory.js";
 import type { SessionRecoveryReadiness } from "./sessionRecovery.js";
 import {
@@ -336,7 +337,8 @@ export type WorktreeCancelRemovalResult = z.infer<typeof WorktreeCancelRemovalRe
 /**
  * DRIVING PORT
  *
- * Exposes Observer state, recovery-readiness, and coherent recovery-inventory queries,
+ * Exposes Observer state, recovery-readiness, coherent recovery-inventory, and read-only
+ * recovery-assessment queries,
  * plus handshakes, ingress reports, maintenance, and lifecycle operations to external actors.
  */
 export type ObserverApi = {
@@ -345,6 +347,7 @@ export type ObserverApi = {
   getSnapshot(options?: { includeDebug?: boolean }): Promise<StationSnapshot>;
   getSessionRecoveryReadiness(): Promise<SessionRecoveryReadiness>;
   getSessionRecoveryInventory(): Promise<ObserverRecoveryInventory>;
+  getSessionRecoveryAssessment(): Promise<ObserverRecoveryAssessment>;
   subscribe(filter?: EventFilter): AsyncIterable<StationEvent>;
   dispatch(command: StationCommand): Promise<CommandReceipt>;
   getCommand(commandId: CommandId): Promise<CommandRecord | undefined>;

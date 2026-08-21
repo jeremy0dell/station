@@ -162,6 +162,9 @@ async function routeSingleResponseRequest(
       case "session.recoveryInventory": {
         return await api.getSessionRecoveryInventory();
       }
+      case "session.recoveryAssessment": {
+        return await api.getSessionRecoveryAssessment();
+      }
       case "command.dispatch": {
         const params = CommandDispatchParamsSchema.parse(request.params);
         return await api.dispatch(params.command);
