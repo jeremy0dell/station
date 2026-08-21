@@ -7,6 +7,8 @@ import type {
   HarnessProvider,
   ProviderDoctorCheck,
   ProviderDoctorContext,
+  ProviderHookHealth,
+  ProviderHookReconciliationResult,
 } from "@station/contracts";
 import {
   type CommonHarnessProviderOptions,
@@ -21,7 +23,7 @@ import {
 import { safeErrorFromUnknown } from "@station/runtime";
 import { codexProviderErrorFromUnknown } from "./errors.js";
 import { acceptsCodexPersistedEvent } from "./events.js";
-import { doctorCodexHooks } from "./hooks.js";
+import { doctorCodexHooks, inspectCodexHookHealth, reconcileCodexHooks } from "./hooks.js";
 import { buildCodexLaunchPlan, type CodexLaunchOptions } from "./launch.js";
 
 const CODEX_STATION_PROFILE = "station";
@@ -80,6 +82,8 @@ const codexSpec: TerminalBoundHarnessProviderSpec<CodexHarnessProviderOptions> =
   acceptsPersistedEvent: acceptsCodexPersistedEvent,
   doctorChecks,
   hooksStatus,
+  hookHealth,
+  reconcileHooks: reconcileHooksForProvider,
   version: { latestPackage: "@openai/codex" },
 };
 
@@ -179,6 +183,20 @@ async function hooksStatus(
 ): Promise<HarnessHooksStatus> {
   const hookResult = await doctorCodexHooks(harnessHookDoctorOptions(options, context));
   return harnessHooksStatusFrom("codex", options.installHooks === true, hookResult);
+}
+
+async function hookHealth(
+  options: CodexHarnessProviderOptions,
+  context?: ProviderDoctorContext,
+): Promise<ProviderHookHealth> {
+  return inspectCodexHookHealth(harnessHookDoctorOptions(options, context));
+}
+
+async function reconcileHooksForProvider(
+  options: CodexHarnessProviderOptions,
+  context?: ProviderDoctorContext,
+): Promise<ProviderHookReconciliationResult> {
+  return reconcileCodexHooks(harnessHookDoctorOptions(options, context));
 }
 
 /**
