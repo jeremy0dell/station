@@ -25,6 +25,17 @@ const testBuildInfo = () => ({
 const higherObserverBuildVersion = `2.0.0+station.${"b".repeat(64)}`;
 
 describe("stn update command", () => {
+  it("rejects non-dry-run --reap before update detection or mutation", async () => {
+    const detectAndPlan = vi.fn();
+
+    await expect(
+      runUpdateCommand(["--reap"], commandOptions(), {
+        probes: [{ channel: "installer-binary", detectAndPlan }],
+      }),
+    ).rejects.toThrow("Use --dry-run --reap");
+    expect(detectAndPlan).not.toHaveBeenCalled();
+  });
+
   it("converges an already-current installation without misreporting a higher accepted Observer", async () => {
     const fixture = probeFixture("installer-binary", { planStatus: "current" });
     const liveHost = await createLiveHostFixture();

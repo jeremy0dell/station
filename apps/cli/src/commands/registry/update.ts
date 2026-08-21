@@ -8,7 +8,7 @@ export const updateCliCommand: CliCommandNode = {
   requiresConfig: true,
   run: runUpdateCliCommand,
   usage: [
-    "stn update [--channel <id>] [--dry-run] [--json] [--drive-package-manager] [--handoff[=processes|screen] | --no-handoff]",
+    "stn update [--channel <id>] [--dry-run] [--reap] [--json] [--drive-package-manager] [--handoff[=processes|screen] | --no-handoff]",
   ],
   options: [
     {
@@ -16,6 +16,10 @@ export const updateCliCommand: CliCommandNode = {
       description: "Require installer-binary, dev-checkout, homebrew, npm-global, or mise.",
     },
     { name: "--dry-run", description: "Print the complete plan without applying it." },
+    {
+      name: "--reap",
+      description: "With --dry-run, disclose exact terminal-loss and recovery consequences.",
+    },
     { name: "--json", description: "Print the update plan or result as JSON." },
     {
       name: "--drive-package-manager",
@@ -33,12 +37,14 @@ export const updateCliCommand: CliCommandNode = {
   examples: [
     "stn update --dry-run",
     "stn update --dry-run --json",
+    "stn update --dry-run --reap --json",
     "stn update --drive-package-manager",
     "stn update --handoff=screen",
   ],
   notes: [
     "Package-managed installations defer by default and print the exact manager command.",
     "A committed update restarts the Observer before the default processes Host handoff.",
+    "Non-dry-run --reap is reserved for the later destructive executor and is rejected before update detection.",
   ],
   verification: ["stn update --dry-run --json"],
 };
