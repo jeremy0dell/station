@@ -368,20 +368,24 @@ config and runtime paths, and artifact owner. A successful result has
 exits zero. If doctor still finds missing, stale, or conflicting artifacts—or
 cannot complete—the write evidence remains `installed: true`, but the result
 has `status: "warn"` and `verified: false`, retains the provider remediation or
-normalized error, names a same-path doctor command, and exits nonzero.
+normalized error, returns bounded follow-up without resolved paths, scripts,
+commands, config, or provider payloads, and exits nonzero.
 
 Codex repair does not roll back completed writes after a verification warning.
 Existing write-triggered profile and base-config backups remain available for
 recovery. A verified no-op reports `changed: false` and creates no new backup.
 Artifact ownership remains fail-closed: transfer requires the separate explicit
-`--takeover` flag, and verification never transfers ownership. For manual
-follow-up, the warning returns exact same-path install and doctor commands. If
-Station config does not request Codex hooks, it instead names the
-`[harness.codex]` `install_hooks = true` change and exact install command needed
-to keep the written artifacts, plus an exact uninstall command to remove them.
-Preview the same paths with `hooks plan codex`, address the reported condition,
-rerun the returned confirmed repair command, and finish with the returned
-doctor command.
+`--takeover` flag, and verification never transfers ownership. Manual warning
+text identifies the corrective flow without echoing resolved artifacts. Use
+`hooks plan codex` and `hooks doctor codex` to inspect provider-native detail;
+then rerun the confirmed install flow or the explicit uninstall flow.
+
+`stn hooks reconcile codex` is the machine-facing automatic surface. It emits
+only the strict provider-neutral status, `changed`/`verified` facts, bounded
+`SafeError`, and enumerated follow-up action. It never accepts `--takeover`.
+Owned missing or drifted hooks use the same plan/install/doctor writer above;
+foreign or unknown ownership fails closed and names the separate explicit
+takeover flow. A second reconciliation is a verified no-op.
 
 This verification proves only the current Station-owned Codex artifacts. It
 does not prove provider-hook delivery, Codex `/hooks` trust or approval, Codex

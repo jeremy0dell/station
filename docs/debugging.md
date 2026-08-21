@@ -134,6 +134,13 @@ confirms a normal mutation but does not transfer ownership; only run
 intentional. Setup apply deliberately stops on this conflict instead of choosing
 an owner.
 
+For automatic Codex hook repair, `stn hooks reconcile codex` returns the strict
+provider-neutral outcome without resolved paths, scripts, raw commands, config,
+or provider payloads. Use `stn hooks doctor codex` for provider-native local
+detail. Automatic setup, update, Observer startup, managed launch, and resume
+never transfer ownership; an ownership conflict must be resolved through the
+separate explicit takeover flow.
+
 ## State Directory
 
 The default observer state directory is:
@@ -261,9 +268,13 @@ Auto-starting `snapshot`, `doctor`, `command`, `reconcile`, `observe`, and
 `debug bundle` boundaries preserve failures as the strict `{ error, cause?,
 startupEvidence? }` lifecycle envelope instead of flattening them into prose.
 Setup activation retains the same fields in its failed operation/session
-outcome. `stn update --json` keeps `UPDATE_RUNTIME_CROSSOVER_FAILED` as its outer
-`error` and publishes the strictly parsed successor lifecycle `cause` and
-`startupEvidence` separately.
+outcome. Update report schema version 2 adds the provider-neutral
+`hookReconciliation` result and `hook-reconciliation` step. A same-version
+update reconciles through the current launcher; an installed successor
+reconciles through the successor launcher before Observer restart. Hook failure
+prevents runtime crossover. `stn update --json` keeps
+`UPDATE_RUNTIME_CROSSOVER_FAILED` as its outer `error` and publishes the
+strictly parsed successor lifecycle `cause` and `startupEvidence` separately.
 
 `OBSERVER_EXACT_BUILD_ACTIVATION_FAILED` means an explicit configured-runtime
 activation could not finish with the caller's exact immutable selector. The

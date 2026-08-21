@@ -190,7 +190,7 @@ ownership even where current ownership is still a deviation.
 | Worktree operations | Driven | `WorktreeProvider` | Worktrunk and test adapters | Fresh list evidence and mutations only; Observer snapshots own current session selection, callers supply project context for mutation, and adapters retain no second worktree inventory. |
 | Terminal operations | Driven | `TerminalProvider` | tmux, Station terminal, and test adapters | General topology and operations are provider-owned. |
 | Managed terminal lifecycle | Driven | `ManagedTerminalLifecycle` | Station terminal adapter, optionally backed by Station Host | Explicit injected role returning only an opaque target identity and declaring whether launched processes persist beyond the caller; Host backing may add spawn/list/close/attachment lifecycle, while Station retains native presentation and host-backed targets remain externally non-focusable. |
-| Harness operations | Driven | `HarnessProvider`, `SessionRecoveryArtifactLocator` | Claude, Codex, Cursor, OpenCode, Pi, scripted, and test adapters | Strong purpose-owned ports: discovery returns provider-normalized current run status, while separate hook adapters own event parsing and harness providers retain compatibility admission and exact recovery-artifact location; unsupported artifact providers make migration ineligible. |
+| Harness operations | Driven | `HarnessProvider`, `SessionRecoveryArtifactLocator` | Claude, Codex, Cursor, OpenCode, Pi, scripted, and test adapters | Strong purpose-owned ports: discovery returns provider-normalized current run status; `hookHealth()` returns strict read-only hook evidence; `reconcileHooks()` delegates mutation and post-write verification to the integration; separate hook adapters own event parsing; and harness providers retain compatibility admission and exact recovery-artifact location. Unsupported capabilities remain explicit provider-neutral outcomes. |
 | Repository metadata | Driven | `RepositoryProvider` | GitHub and test repository adapters | Adapters declare deterministic remote support; provider-neutral metadata policy selects zero or one match and rejects overlaps. |
 | Durable observer memory | Driven | `CommandJournal`, `EventJournal`, `IngressJournal`, `ObservationStore`, `ReconcileStore`, `SessionStore`, `SessionGroupStore`, `WorktreeMetadataStore` | Production SQLite adapter and test-only in-memory adapter | Observer-private, application-purpose ports separate current conversations from storage representation. `SessionStore.readRecoveryInventory` returns retained sessions and recovery handles from one coherent read transaction without classifying their eligibility. Consumers receive only the named ports they use; the unmarked `ObserverPersistenceBundle` intersection exists only at adapter and composition seams. |
 | Persistence health | Driven | `PersistenceHealthSource` | SQLite adapter created by `createSqliteObserverPersistence` | Runtime health and diagnostics read the public SQLite health projection without receiving the concrete database handle. |
@@ -310,14 +310,19 @@ Application composition proceeds around that boundary in this order:
 2. CLI composition receives the resolved state directory and constructs the
    providers. Compiled composition materializes the Pi extension here; Observer
    code remains provider-neutral.
-3. The main Observer SQLite opens and applies pending migrations, then
+3. While the existing socket-relative boot claim still serializes startup,
+   runtime composition requests provider-owned reconciliation for every
+   configured harness capability. Any enabled unverified outcome fails startup
+   before the main SQLite database, socket, pidfile, or healthy readiness is
+   published. Reconciliation never receives takeover authority.
+4. The main Observer SQLite opens and applies pending migrations, then
    `createSqliteObserverPersistence` binds the eight application persistence
    ports and `PersistenceHealthSource` to that handle. Runtime composition owns
    the concrete handle lifecycle and distributes narrow application views.
-4. Runtime composition creates the event bus, logging and project-config
+5. Runtime composition creates the event bus, logging and project-config
    adapters, command queue, feature evaluator, core, handlers, and configured
    event hooks around the provider registry.
-5. Runtime composition captures the resolved state, socket, diagnostics, log,
+6. Runtime composition captures the resolved state, socket, diagnostics, log,
    and hook-spool locations in the local diagnostic-evidence adapter before
    supplying it to the API. API composition constructs ingress queues, reconcile
    scheduling, metadata refresh, diagnostics dependencies, spool draining, and
@@ -326,14 +331,14 @@ Application composition proceeds around that boundary in this order:
    arm lazily on the first metadata refresh, and each refresh replaces the
    complete watched identity set before cache or metadata reads so a later ref
    move cannot be missed.
-6. Startup reconcile establishes the first provider-backed snapshot while
+7. Startup reconcile establishes the first provider-backed snapshot while
    application operations remain behind the readiness gate. Singleton readiness
    commits only after the snapshot is available. Harness discovery returns run
    identity and current status in one observation; Observer overlays newer event
    evidence without a second per-run provider callback. Provider-health probes
    commit into the current snapshot as they land, while harness-version probes
    fill their cache in the background.
-7. Runtime composition starts the same force-false duplicate inspection used by
+8. Runtime composition starts the same force-false duplicate inspection used by
    explicit reap and caches its promise for logging and Doctor. The inspection
    has no timer, claim, cancellation protocol, or signal authority.
 
@@ -623,10 +628,11 @@ classic session commands, launch-bound worktree commands, terminal-intent
 execution, and external launch. It resolves only the selected active harness,
 rejects providers that cannot launch, awaits a fresh single-flight health probe,
 and rejects only proven `unavailable` health while preserving the provider's
-exact error. `healthy`, `degraded`, and `unknown` remain launchable. It then uses
-the provider-neutral optional `hooksStatus()` capability and fails closed when
-requested Station tracking artifacts are absent, disabled, or cannot be
-inspected. Providers without that capability, including Pi, intentionally pass.
+exact error. `healthy`, `degraded`, and `unknown` remain launchable. It then
+requests the optional provider-owned `reconcileHooks()` capability without
+takeover authority and fails closed on any enabled unverified result before the
+legacy `hooksStatus()` delivery gate. Providers without either capability,
+including Pi, intentionally pass.
 Command cancellation is checked around shared health and hook work without
 cancelling a health flight shared by another caller.
 
@@ -767,6 +773,7 @@ expires.
 | Harness ingress | First-party hook transports delegate delivery and spooling to `stn-ingress`. Known build/schema/handoff incompatibility rejects without spooling. One Observer worker processes a bounded pending map; new reports can replace pending work for the same key, and a full map rejects unrelated work with a backpressure error. |
 | Spool drain | One configured drain runs at a time and processes stable filename order through direct durable ingress. Stable spool IDs survive legacy records without hook IDs; completion is idempotent after primary dedupe, and failed records remain on disk with attempt/error evidence. |
 | Hook auto-start throttle | `hook-autostart.lock` limits provider-hook spawn attempts only around the canonical CLI Observer lifecycle. It is never Observer ownership; each child still enters the socket-relative SQLite boot claim. |
+| Codex hook mutation | One provider-owned artifact lock serializes the existing plan/install/doctor writer across setup, manual install, update, Observer startup, launch, and resume. It covers the resolved profile, base config, and script artifacts, preserves backups, releases by file identity, and uses sorted acquisition to avoid deadlock. Observer startup adds no second hook lock; its existing boot claim remains only the broader startup authority. |
 | Event delivery | Each subscriber currently has an unbounded in-memory queue. There is no replay or publisher backpressure; slow-subscriber growth is therefore a known operating characteristic. |
 | Background refresh | Each unique provider probe publishes its completed result through the serialized snapshot writer before its in-flight slot clears. Joined refresh callers do not duplicate publication; shutdown unsubscribes first and drains commits already in progress. Probe and metadata-refresh failures remain best-effort and do not block the primary reconcile result. Duplicate cleanup is one-shot after startup reconcile, single-flight, claim-authorized, and shutdown-cancellable rather than periodic. |
 
