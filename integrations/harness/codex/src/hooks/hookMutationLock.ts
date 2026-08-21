@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { link, mkdir, open, stat, unlink } from "node:fs/promises";
 import { dirname } from "node:path";
+import { Effect } from "@station/runtime";
 import { CodexHookSetupError } from "./hookErrors.js";
 
 type HeldLock = {
@@ -12,6 +13,7 @@ type FileIdentity = { dev: number | bigint; ino: number | bigint };
 const lockStaleMs = 5 * 60 * 1_000;
 const lockWaitMs = 10_000;
 const retryMs = 25;
+const lockAttempts = Math.ceil(lockWaitMs / retryMs);
 
 /** Serializes the existing Codex writer across every resolved artifact it can mutate. */
 export async function withCodexHookMutationLock<T>(
@@ -34,8 +36,7 @@ export async function withCodexHookMutationLock<T>(
 
 async function acquireLock(path: string): Promise<HeldLock> {
   await mkdir(dirname(path), { recursive: true, mode: 0o700 });
-  const deadline = Date.now() + lockWaitMs;
-  while (Date.now() <= deadline) {
+  for (let attempt = 0; attempt <= lockAttempts; attempt += 1) {
     try {
       const handle = await open(path, "wx", 0o600);
       const metadata = await handle.stat({ bigint: true });
@@ -54,7 +55,7 @@ async function acquireLock(path: string): Promise<HeldLock> {
         await unlinkIfIdentityMatches(path, await fileIdentity(path));
         continue;
       }
-      await delay(retryMs);
+      if (attempt < lockAttempts) await delay(retryMs);
     }
   }
   throw lockError();
@@ -95,7 +96,7 @@ async function lockIsStale(path: string): Promise<boolean> {
 }
 
 function delay(milliseconds: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+  return Effect.runPromise(Effect.sleep(`${milliseconds} millis`));
 }
 
 function errorCode(cause: unknown): string | undefined {
