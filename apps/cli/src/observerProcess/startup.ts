@@ -33,6 +33,16 @@ import type {
 
 const incumbentHealthGraceMs = 1_000;
 
+type ObserverStartupFailureEvidence = {
+  error: SafeError;
+  cause?: SafeError;
+  startupEvidence: ObserverStartupEvidence;
+};
+
+type StartedObserverResult =
+  | { ok: true; health: ObserverHealth }
+  | { ok: false; failure: ObserverStartupFailureEvidence };
+
 /**
  * ADAPTER
  *
@@ -105,7 +115,7 @@ export async function startObserverProcess(
           throw observerHealthWaitCancelledError();
         }
         child.unref?.();
-        return await waitForStartedObserver(
+        const started = await waitForStartedObserver(
           {
             child,
             paths: input.paths,
@@ -113,13 +123,15 @@ export async function startObserverProcess(
             buildVersion: input.buildVersion,
             trace: input.trace,
             signal,
-            onFailureEvidence: (evidence) => {
-              if (evidence.cause !== undefined) startupCause = evidence.cause;
-              startupEvidence = evidence.startupEvidence;
-            },
           },
           deps,
         );
+        if (!started.ok) {
+          startupCause = started.failure.cause;
+          startupEvidence = started.failure.startupEvidence;
+          throw started.failure.error;
+        }
+        return started.health;
       } catch (error) {
         if (startupCause === undefined) {
           const report = normalizeObserverStartupFailure(error);
@@ -160,13 +172,9 @@ async function waitForStartedObserver(
     buildVersion: string;
     trace: RuntimeTraceContext;
     signal: AbortSignal;
-    onFailureEvidence: (evidence: {
-      cause?: SafeError;
-      startupEvidence: ObserverStartupEvidence;
-    }) => void;
   },
   deps: ObserverProcessDeps,
-): Promise<ObserverHealth> {
+): Promise<StartedObserverResult> {
   const healthController = new AbortController();
   let replaceableIncumbent: ObserverHealth | undefined;
   const cancelHealth = () => healthController.abort();
@@ -191,7 +199,7 @@ async function waitForStartedObserver(
     const childExit = input.child.exited;
     if (childExit === undefined) {
       try {
-        return await healthPromise;
+        return { ok: true, health: await healthPromise };
       } catch (error) {
         if (replaceableIncumbent !== undefined) {
           throw observerHandoffRefusedError(
@@ -231,40 +239,37 @@ async function waitForStartedObserver(
       throw outcome.error;
     }
     if (outcome.type === "healthy") {
-      return outcome.health;
+      return { ok: true, health: outcome.health };
     }
 
     let convergenceError: unknown;
     try {
       // A losing child can exit just before the winning observer becomes healthy, so preserve its retry loop briefly.
-      return await waitForIncumbentHealth(healthPromise, healthController);
+      return { ok: true, health: await waitForIncumbentHealth(healthPromise, healthController) };
     } catch (error) {
       if (input.signal.aborted) {
         throw observerHealthWaitCancelledError();
       }
       convergenceError = error;
     }
-    if (replaceableIncumbent !== undefined) {
-      const failure = await observerReplacementExitedFailure(
-        replaceableIncumbent,
-        input.buildVersion,
+    let cause = startupCauseFromExit(outcome.exit);
+    if (cause === undefined && replaceableIncumbent !== undefined) {
+      cause = publicSafeErrorFromUnknown(convergenceError, {
+        tag: "ObserverStartupError",
+        code: "OBSERVER_HEALTH_FAILED",
+        message: "Observer health check failed during startup convergence.",
+      });
+    }
+    return {
+      ok: false,
+      failure: await observerExitedFailure(
         input.paths,
         input.child,
         outcome.exit,
-        convergenceError,
         input.trace,
-      );
-      input.onFailureEvidence(failure);
-      throw failure.error;
-    }
-    const failure = await observerExitedOnStartFailure(
-      input.paths,
-      input.child,
-      outcome.exit,
-      input.trace,
-    );
-    input.onFailureEvidence(failure);
-    throw failure.error;
+        cause,
+      ),
+    };
   } finally {
     input.signal.removeEventListener("abort", cancelHealth);
     healthController.abort();
@@ -273,52 +278,13 @@ async function waitForStartedObserver(
   }
 }
 
-async function observerReplacementExitedFailure(
-  _incumbent: ObserverHealth,
-  _requestedVersion: string,
-  paths: SpawnObserverInput["paths"],
-  child: ChildProcessLike,
-  exit: ChildExitResult,
-  convergenceFailure: unknown,
-  trace: RuntimeTraceContext,
-): Promise<{
-  error: SafeError;
-  cause?: SafeError;
-  startupEvidence: ObserverStartupEvidence;
-}> {
-  const convergence = publicSafeErrorFromUnknown(convergenceFailure, {
-    tag: "ObserverStartupError",
-    code: "OBSERVER_HEALTH_FAILED",
-    message: "Observer health check failed during startup convergence.",
-  });
-  const cause = startupCauseFromExit(exit) ?? convergence;
-  return observerExitedFailure(paths, child, exit, trace, cause);
-}
-
-async function observerExitedOnStartFailure(
-  paths: SpawnObserverInput["paths"],
-  child: ChildProcessLike,
-  exit: ChildExitResult,
-  trace: RuntimeTraceContext,
-): Promise<{
-  error: SafeError;
-  cause?: SafeError;
-  startupEvidence: ObserverStartupEvidence;
-}> {
-  return observerExitedFailure(paths, child, exit, trace, startupCauseFromExit(exit));
-}
-
 async function observerExitedFailure(
   paths: SpawnObserverInput["paths"],
   child: ChildProcessLike,
   exit: ChildExitResult,
   trace: RuntimeTraceContext,
   cause: SafeError | undefined,
-): Promise<{
-  error: SafeError;
-  cause?: SafeError;
-  startupEvidence: ObserverStartupEvidence;
-}> {
+): Promise<ObserverStartupFailureEvidence> {
   const error: SafeError = {
     tag: "ObserverStartupError",
     code: "OBSERVER_EXITED_ON_START",
@@ -364,22 +330,15 @@ async function readObserverStartupEvidence(
   child: ChildProcessLike | undefined,
 ): Promise<ObserverStartupEvidence> {
   const evidence: ObserverStartupEvidence = { bootLogPath: observerBootLogPath(paths) };
-  if (child?.readBootLogTail !== undefined) {
-    try {
-      const tail = await child.readBootLogTail();
-      const boundedTail = boundedRedactedBootLogTail(tail);
-      if (boundedTail !== undefined) evidence.bootLogTail = boundedTail;
-    } catch {
-      // The path remains useful when the attempt-owned handle cannot be read.
-    }
-    return evidence;
-  }
   try {
-    const tail = await readObserverBootLogTail(evidence.bootLogPath);
+    const tail =
+      child?.readBootLogTail === undefined
+        ? await readObserverBootLogTail(evidence.bootLogPath)
+        : await child.readBootLogTail();
     const boundedTail = boundedRedactedBootLogTail(tail);
     if (boundedTail !== undefined) evidence.bootLogTail = boundedTail;
   } catch {
-    // An absent or unreadable tail is represented by the optional field being absent.
+    // The boot log path remains useful when the optional tail cannot be read.
   }
   return evidence;
 }

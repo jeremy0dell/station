@@ -16,12 +16,11 @@ export type RunCliObserverMainOptions = {
   startupReadinessSink?: ObserverStartupReadinessSink;
 };
 
-export type RunCliObserverProcessOptions = {
+type RunCliObserverProcessOptions = {
   startupFailureReporter?: ObserverStartupFailureReporter;
-  startupReadinessSink?: ObserverStartupReadinessSink;
 };
 
-export type CliObserverProcessOperation = (
+type CliObserverProcessOperation = (
   startupReadinessSink: ObserverStartupReadinessSink,
 ) => Promise<number>;
 
@@ -72,24 +71,15 @@ export async function runCliObserverProcess(
   options: RunCliObserverProcessOptions = {},
 ): Promise<number> {
   const reporter = options.startupFailureReporter ?? createObserverStartupFailureReporter();
-  let reportChannelClosed = false;
-  const closeReportChannel = (): void => {
-    if (reportChannelClosed) return;
-    reportChannelClosed = true;
+  let reportClosed = false;
+  const closeReport = (): void => {
+    if (reportClosed) return;
+    reportClosed = true;
     reporter.ready();
   };
-  const readinessSink: ObserverStartupReadinessSink = {
-    ready: () => {
-      try {
-        options.startupReadinessSink?.ready();
-      } finally {
-        closeReportChannel();
-      }
-    },
-  };
   try {
-    const code = await operation(readinessSink);
-    closeReportChannel();
+    const code = await operation({ ready: closeReport });
+    closeReport();
     return code;
   } catch (error) {
     const report = reporter.failure(error);

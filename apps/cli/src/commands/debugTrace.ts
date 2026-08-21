@@ -8,7 +8,6 @@ import type {
   ErrorEnvelope,
   LogRecord,
   ObserverStartupEvidence,
-  SafeError,
 } from "@station/contracts";
 import {
   CommandIdSchema,
@@ -16,8 +15,6 @@ import {
   DiagnosticEvidenceIndexSchema,
   ErrorEnvelopeSchema,
   LogRecordSchema,
-  ObserverLifecycleFailureSchema,
-  SafeErrorSchema,
   SpanIdSchema,
   TraceIdSchema,
 } from "@station/contracts";
@@ -32,6 +29,11 @@ import {
   projectOperationalBoundaryEvidence,
   retainedFailureSignal,
 } from "./diagnosticEvidence.js";
+import {
+  parseLifecycleLogEvidence,
+  parseLogSafeError,
+  summarizeLifecycleError,
+} from "./lifecycleLogEvidence.js";
 
 export type DebugTraceCommandOptions = {
   config?: StationConfig;
@@ -137,8 +139,6 @@ const DebugTraceLogAttributesSchema = z
     error: z.unknown().optional(),
   })
   .passthrough();
-const LifecycleLogAttributesSchema = ObserverLifecycleFailureSchema.passthrough();
-const SafeErrorViewSchema = SafeErrorSchema.strip();
 
 /**
  * ADAPTER
@@ -619,17 +619,6 @@ function rootCauseCodes(
   return [...codes].sort();
 }
 
-function safeErrorSummary(error: SafeError): DebugTraceErrorSummary {
-  const summary: DebugTraceErrorSummary = {
-    code: error.code,
-    message: error.message,
-  };
-  if (error.provider !== undefined) summary.provider = error.provider;
-  if (error.diagnosticId !== undefined) summary.diagnosticId = error.diagnosticId;
-  if (error.traceId !== undefined) summary.traceId = error.traceId;
-  return summary;
-}
-
 function parseDebugTraceLogAttributes(
   attributes: LogRecord["attributes"] | undefined,
 ): ParsedDebugTraceLogAttributes {
@@ -644,24 +633,25 @@ function parseDebugTraceLogAttributes(
   if (parsed.data.commandType !== undefined) result.commandType = parsed.data.commandType;
   if (parsed.data.operation !== undefined) result.operation = parsed.data.operation;
   if (parsed.data.kind !== undefined) result.kind = parsed.data.kind;
-  const lifecycle = LifecycleLogAttributesSchema.safeParse(attributes);
-  const error = lifecycle.success
-    ? safeErrorSummary(lifecycle.data.error)
-    : parseLogAttributeError(parsed.data.error);
+  const lifecycle = parseLifecycleLogEvidence(attributes);
+  const error =
+    lifecycle !== undefined
+      ? summarizeLifecycleError(lifecycle.error)
+      : parseLogAttributeError(parsed.data.error);
   if (error !== undefined) result.error = error;
-  if (lifecycle.success && lifecycle.data.cause !== undefined) {
-    result.cause = safeErrorSummary(lifecycle.data.cause);
+  if (lifecycle?.cause !== undefined) {
+    result.cause = summarizeLifecycleError(lifecycle.cause);
   }
-  if (lifecycle.success && lifecycle.data.startupEvidence !== undefined) {
-    result.startupEvidence = lifecycle.data.startupEvidence;
+  if (lifecycle?.startupEvidence !== undefined) {
+    result.startupEvidence = lifecycle.startupEvidence;
   }
   return result;
 }
 
 function parseLogAttributeError(error: unknown): DebugTraceResult["error"] {
-  const safeError = SafeErrorViewSchema.safeParse(error);
-  if (safeError.success) {
-    return safeErrorSummary(safeError.data);
+  const safeError = parseLogSafeError(error);
+  if (safeError !== undefined) {
+    return summarizeLifecycleError(safeError);
   }
   const envelope = ErrorEnvelopeSchema.safeParse(error);
   if (envelope.success) {

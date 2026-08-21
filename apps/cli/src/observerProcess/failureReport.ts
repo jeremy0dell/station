@@ -101,72 +101,33 @@ export function createObserverStartupFailureReporter(
 export function readObserverStartupFailureReport(
   stream: Readable,
 ): ObserverStartupFailureReportReader {
-  const chunks: Buffer[] = [];
-  let bytes = 0;
-  let settled = false;
-  let resolveReport!: (report: ObserverStartupFailureReport | undefined) => void;
-  let rejectReport!: (error: Error) => void;
-  const report = new Promise<ObserverStartupFailureReport | undefined>((resolve, reject) => {
-    resolveReport = resolve;
-    rejectReport = reject;
-  });
-
-  const cleanup = (): void => {
-    stream.off("data", onData);
-    stream.off("end", onEnd);
-    stream.off("error", onError);
-    stream.off("close", onClose);
-  };
-  const resolve = (value: ObserverStartupFailureReport | undefined): void => {
-    if (settled) return;
-    settled = true;
-    cleanup();
-    resolveReport(value);
-  };
-  const reject = (error: Error): void => {
-    if (settled) return;
-    settled = true;
-    cleanup();
-    rejectReport(error);
-  };
-  const onData = (chunk: Buffer | string): void => {
-    const buffer = typeof chunk === "string" ? Buffer.from(chunk) : chunk;
-    bytes += buffer.byteLength;
-    if (bytes > OBSERVER_STARTUP_FAILURE_REPORT_MAX_BYTES) {
-      reject(new Error("Observer startup failure report exceeded its byte limit."));
-      stream.destroy();
-      return;
-    }
-    chunks.push(buffer);
-  };
-  const onEnd = (): void => {
-    if (bytes === 0) {
-      resolve(undefined);
-      return;
-    }
+  let disposed = false;
+  const report = (async (): Promise<ObserverStartupFailureReport | undefined> => {
+    const chunks: Buffer[] = [];
+    let bytes = 0;
     try {
-      resolve(parseObserverStartupFailureReport(Buffer.concat(chunks, bytes)));
+      for await (const chunk of stream as AsyncIterable<Buffer | string>) {
+        const buffer = typeof chunk === "string" ? Buffer.from(chunk) : chunk;
+        bytes += buffer.byteLength;
+        if (bytes > OBSERVER_STARTUP_FAILURE_REPORT_MAX_BYTES) {
+          stream.destroy();
+          throw new Error("Observer startup failure report exceeded its byte limit.");
+        }
+        chunks.push(buffer);
+      }
     } catch (error) {
-      reject(
-        error instanceof Error ? error : new Error("Observer startup failure report was invalid."),
-      );
+      if (disposed) return undefined;
+      throw error;
     }
-  };
-  const onError = (error: Error): void => reject(error);
-  const onClose = (): void => {
-    if (!settled) reject(new Error("Observer startup failure report ended before EOF."));
-  };
-
-  stream.on("data", onData);
-  stream.once("end", onEnd);
-  stream.once("error", onError);
-  stream.once("close", onClose);
+    if (disposed || bytes === 0) return undefined;
+    return parseObserverStartupFailureReport(Buffer.concat(chunks, bytes));
+  })();
 
   return {
     report,
     dispose: () => {
-      if (settled) return;
-      resolve(undefined);
+      if (disposed) return;
+      disposed = true;
       stream.destroy();
     },
   };
