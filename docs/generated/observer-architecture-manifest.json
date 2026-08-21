@@ -4675,6 +4675,30 @@
           "purpose": "Supplies exact incumbent-process evidence without exposing operating-system commands; typed evidence failures remain available as causes, while unavailable socket-holder evidence throws and never means zero."
         },
         {
+          "name": "ObserverProcessIdentityEvidenceSource",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "purpose": "Supplies exact, read-only Observer process evidence without exposing the operating-system commands used to collect it."
+        },
+        {
+          "name": "ObserverProcessIdentityExpectation",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ObserverProcessIdentityMismatchReason",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ObserverProcessIdentityVerification",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "ObserverProcessSignalResult",
           "kind": "type",
           "role": null,
@@ -5383,6 +5407,12 @@
           "purpose": null
         },
         {
+          "name": "verifyObserverProcessIdentity",
+          "kind": "function",
+          "role": "USE CASE",
+          "purpose": "Verifies one exact Observer process generation from read-only evidence. The caller decides whether an exact, mismatched, or unavailable result permits a lifecycle action; the verifier never creates signal authority."
+        },
+        {
           "name": "withSessionCorrelationFromSnapshot",
           "kind": "function",
           "role": "POLICY",
@@ -5627,6 +5657,12 @@
         {
           "specifier": "./runtime/observerProcessEvidence.js",
           "resolvedPath": "apps/observer/src/runtime/observerProcessEvidence.ts",
+          "edgeKind": "runtime",
+          "bindings": ["*"]
+        },
+        {
+          "specifier": "./runtime/observerProcessIdentity.js",
+          "resolvedPath": "apps/observer/src/runtime/observerProcessIdentity.ts",
           "edgeKind": "runtime",
           "bindings": ["*"]
         },
@@ -11157,18 +11193,6 @@
           "purpose": null
         },
         {
-          "name": "observerProcessEntriesMatch",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "ObserverProcessEntry",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
           "name": "ObserverProcessEvidenceSource",
           "kind": "interface",
           "role": "DRIVEN PORT",
@@ -11193,6 +11217,18 @@
           "resolvedPath": "apps/observer/src/runtime/observerPidfile.ts",
           "edgeKind": "runtime",
           "bindings": ["observerProcessIdentitiesMatch"]
+        },
+        {
+          "specifier": "./observerProcessIdentity.js",
+          "resolvedPath": "apps/observer/src/runtime/observerProcessIdentity.ts",
+          "edgeKind": "runtime",
+          "bindings": ["verifyObserverProcessIdentity"]
+        },
+        {
+          "specifier": "./observerProcessIdentity.js",
+          "resolvedPath": "apps/observer/src/runtime/observerProcessIdentity.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ObserverProcessIdentityEvidenceSource"]
         },
         {
           "specifier": "@station/contracts",
@@ -11347,19 +11383,31 @@
           "specifier": "./observerHandoff.js",
           "resolvedPath": "apps/observer/src/runtime/observerHandoff.ts",
           "edgeKind": "runtime",
-          "bindings": ["observerBuildSelectorIsValid", "observerProcessEntriesMatch"]
+          "bindings": ["observerBuildSelectorIsValid"]
         },
         {
           "specifier": "./observerHandoff.js",
           "resolvedPath": "apps/observer/src/runtime/observerHandoff.ts",
           "edgeKind": "type-only",
-          "bindings": ["ObserverProcessEntry", "ObserverProcessSignalResult"]
+          "bindings": ["ObserverProcessSignalResult"]
         },
         {
           "specifier": "./observerPidfile.js",
           "resolvedPath": "apps/observer/src/runtime/observerPidfile.ts",
           "edgeKind": "runtime",
           "bindings": ["readObserverProcessIdentity"]
+        },
+        {
+          "specifier": "./observerProcessIdentity.js",
+          "resolvedPath": "apps/observer/src/runtime/observerProcessIdentity.ts",
+          "edgeKind": "runtime",
+          "bindings": ["observerProcessEntriesMatch"]
+        },
+        {
+          "specifier": "./observerProcessIdentity.js",
+          "resolvedPath": "apps/observer/src/runtime/observerProcessIdentity.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ObserverProcessEntry"]
         },
         {
           "specifier": "./observerReap.js",
@@ -11420,6 +11468,61 @@
           "resolvedPath": "zod",
           "edgeKind": "runtime",
           "bindings": ["z"]
+        }
+      ]
+    },
+    {
+      "path": "apps/observer/src/runtime/observerProcessIdentity.ts",
+      "exports": [
+        {
+          "name": "observerProcessEntriesMatch",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ObserverProcessEntry",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ObserverProcessIdentityEvidenceSource",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "purpose": "Supplies exact, read-only Observer process evidence without exposing the operating-system commands used to collect it."
+        },
+        {
+          "name": "ObserverProcessIdentityExpectation",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ObserverProcessIdentityMismatchReason",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ObserverProcessIdentityVerification",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "verifyObserverProcessIdentity",
+          "kind": "function",
+          "role": "USE CASE",
+          "purpose": "Verifies one exact Observer process generation from read-only evidence. The caller decides whether an exact, mismatched, or unavailable result permits a lifecycle action; the verifier never creates signal authority."
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ObserverProcessIdentity"]
         }
       ]
     },
@@ -11513,22 +11616,22 @@
       ],
       "imports": [
         {
-          "specifier": "./observerHandoff.js",
-          "resolvedPath": "apps/observer/src/runtime/observerHandoff.ts",
-          "edgeKind": "runtime",
-          "bindings": ["observerProcessEntriesMatch"]
-        },
-        {
-          "specifier": "./observerHandoff.js",
-          "resolvedPath": "apps/observer/src/runtime/observerHandoff.ts",
-          "edgeKind": "type-only",
-          "bindings": ["ObserverProcessEntry", "ObserverProcessEvidenceSource"]
-        },
-        {
           "specifier": "./observerPidfile.js",
           "resolvedPath": "apps/observer/src/runtime/observerPidfile.ts",
           "edgeKind": "runtime",
           "bindings": ["observerProcessIdentitiesMatch"]
+        },
+        {
+          "specifier": "./observerProcessIdentity.js",
+          "resolvedPath": "apps/observer/src/runtime/observerProcessIdentity.ts",
+          "edgeKind": "runtime",
+          "bindings": ["verifyObserverProcessIdentity"]
+        },
+        {
+          "specifier": "./observerProcessIdentity.js",
+          "resolvedPath": "apps/observer/src/runtime/observerProcessIdentity.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ObserverProcessEntry", "ObserverProcessIdentityEvidenceSource"]
         },
         {
           "specifier": "./socketOwnership.js",
@@ -14946,6 +15049,13 @@
           "kind": "interface",
           "role": "DRIVEN PORT",
           "edgeKind": "type-only"
+        },
+        {
+          "path": "apps/observer/src/runtime/observerProcessIdentity.ts",
+          "declaration": "verifyObserverProcessIdentity",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
         }
       ]
     },
@@ -14963,7 +15073,15 @@
       "kind": "interface",
       "role": "DRIVEN PORT",
       "purpose": "Supplies exact incumbent-process evidence without exposing operating-system commands; typed evidence failures remain available as causes, while unavailable socket-holder evidence throws and never means zero.",
-      "dependencies": []
+      "dependencies": [
+        {
+          "path": "apps/observer/src/runtime/observerProcessIdentity.ts",
+          "declaration": "ObserverProcessIdentityEvidenceSource",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
     },
     {
       "path": "apps/observer/src/runtime/observerProcessEvidence.ts",
@@ -14982,12 +15100,43 @@
       ]
     },
     {
+      "path": "apps/observer/src/runtime/observerProcessIdentity.ts",
+      "declaration": "ObserverProcessIdentityEvidenceSource",
+      "kind": "interface",
+      "role": "DRIVEN PORT",
+      "purpose": "Supplies exact, read-only Observer process evidence without exposing the operating-system commands used to collect it.",
+      "dependencies": []
+    },
+    {
+      "path": "apps/observer/src/runtime/observerProcessIdentity.ts",
+      "declaration": "verifyObserverProcessIdentity",
+      "kind": "function",
+      "role": "USE CASE",
+      "purpose": "Verifies one exact Observer process generation from read-only evidence. The caller decides whether an exact, mismatched, or unavailable result permits a lifecycle action; the verifier never creates signal authority.",
+      "dependencies": [
+        {
+          "path": "apps/observer/src/runtime/observerProcessIdentity.ts",
+          "declaration": "ObserverProcessIdentityEvidenceSource",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
       "path": "apps/observer/src/runtime/observerReap.ts",
       "declaration": "createObserverReap",
       "kind": "function",
       "role": "USE CASE",
       "purpose": "Creates explicit operator reap with centralized selection and revalidation; only this manual force path may escalate from SIGTERM to SIGKILL.",
       "dependencies": [
+        {
+          "path": "apps/observer/src/runtime/observerProcessIdentity.ts",
+          "declaration": "verifyObserverProcessIdentity",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
+        },
         {
           "path": "apps/observer/src/runtime/observerReap.ts",
           "declaration": "inspectObserverDuplicates",
@@ -15012,6 +15161,13 @@
       "purpose": "Collects one read-only duplicate-process plan for startup diagnostics and explicit reap without creating signal authority.",
       "dependencies": [
         {
+          "path": "apps/observer/src/runtime/observerProcessIdentity.ts",
+          "declaration": "verifyObserverProcessIdentity",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
+        },
+        {
           "path": "apps/observer/src/runtime/observerReap.ts",
           "declaration": "ObserverDuplicateProcessEvidenceSource",
           "kind": "interface",
@@ -15028,8 +15184,8 @@
       "purpose": "Supplies strict process, socket-identity, pidfile, signal, and per-process Unix-socket descriptor evidence for fail-closed global duplicate decisions.",
       "dependencies": [
         {
-          "path": "apps/observer/src/runtime/observerHandoff.ts",
-          "declaration": "ObserverProcessEvidenceSource",
+          "path": "apps/observer/src/runtime/observerProcessIdentity.ts",
+          "declaration": "ObserverProcessIdentityEvidenceSource",
           "kind": "interface",
           "role": "DRIVEN PORT",
           "edgeKind": "type-only"

@@ -1,10 +1,10 @@
 import type { ObserverProcessIdentity } from "@station/contracts";
+import { observerProcessIdentitiesMatch } from "./observerPidfile.js";
 import {
   type ObserverProcessEntry,
-  type ObserverProcessEvidenceSource,
-  observerProcessEntriesMatch,
-} from "./observerHandoff.js";
-import { observerProcessIdentitiesMatch } from "./observerPidfile.js";
+  type ObserverProcessIdentityEvidenceSource,
+  verifyObserverProcessIdentity,
+} from "./observerProcessIdentity.js";
 import type { SocketIdentity } from "./socketOwnership.js";
 
 const DEFAULT_LEGACY_QUARANTINE_MS = 10_000;
@@ -17,7 +17,11 @@ const SIGKILL_CONFIRM_MS = 500;
  * Supplies strict process, socket-identity, pidfile, signal, and per-process
  * Unix-socket descriptor evidence for fail-closed global duplicate decisions.
  */
-export interface ObserverDuplicateProcessEvidenceSource extends ObserverProcessEvidenceSource {
+export interface ObserverDuplicateProcessEvidenceSource
+  extends ObserverProcessIdentityEvidenceSource {
+  socketHolders(socketPath: string): number[];
+  readProcessIdentity(socketPath: string): Promise<ObserverProcessIdentity | undefined>;
+  signal(pid: number, signal: NodeJS.Signals | 0): "sent" | "absent" | "refused";
   listObserverProcesses(): ObserverProcessEntry[];
   socketIdentity(socketPath: string): Promise<SocketIdentity | undefined>;
   unixSocketFdCount(process: ObserverProcessEntry): number;
@@ -54,14 +58,14 @@ function inspectExactProcess(
     const exists = evidence.signal(target.pid, 0);
     if (exists === "absent") return "absent";
     if (exists === "refused") return "unavailable";
-    const startToken = evidence.processStartToken(target.pid);
-    if (startToken === undefined) return "unavailable";
-    if (startToken !== target.startToken) return "changed";
-    const process = evidence.listObserverProcesses().find((entry) => entry.pid === target.pid);
-    if (process === undefined) return "unavailable";
-    return observerProcessEntriesMatch(process, target.process) && process.socketPath === socketPath
-      ? "same"
-      : "changed";
+    const verification = verifyObserverProcessIdentity(
+      { source: "process", process: target.process },
+      evidence,
+    );
+    if (verification.status === "exact" && verification.process.socketPath === socketPath) {
+      return "same";
+    }
+    return verification.status === "mismatch" ? "changed" : "unavailable";
   } catch {
     return "unavailable";
   }
@@ -369,14 +373,10 @@ function manualTargetRemains(
   return (
     holders.length === 1 &&
     holders[0] === keeper &&
-    evidence.processStartToken(target.pid) === target.startToken &&
+    verifyObserverProcessIdentity({ source: "process", process: target.process }, evidence)
+      .status === "exact" &&
     evidence.unixSocketFdCount(target.process) === 0 &&
-    evidence
-      .listObserverProcesses()
-      .some(
-        (entry) =>
-          observerProcessEntriesMatch(entry, target.process) && entry.socketPath === socketPath,
-      )
+    target.process.socketPath === socketPath
   );
 }
 
@@ -418,18 +418,13 @@ async function addAutomaticEligibility(
     };
   }
 
-  const keeperProcess = evidence.listObserverProcesses().find((entry) => entry.pid === plan.keeper);
   const holders = evidence.socketHolders(plan.socketPath);
   const keeperExact =
     pidfile.socketPath === plan.socketPath &&
     holders.length === 1 &&
     holders[0] === plan.keeper &&
-    evidence.processStartToken(plan.keeper) === pidfile.osStartTime &&
-    keeperProcess !== undefined &&
-    keeperProcess.socketPath === plan.socketPath &&
-    keeperProcess.startToken === pidfile.osStartTime &&
-    keeperProcess.processToken === pidfile.processToken &&
-    keeperProcess.buildVersion === pidfile.version;
+    verifyObserverProcessIdentity({ source: "pidfile", identity: pidfile }, evidence).status ===
+      "exact";
   return {
     ...plan,
     targets: plan.targets.map((target) => {
@@ -477,28 +472,30 @@ async function captureManualKeeperBaseline(
     evidence.socketIdentity(socketPath),
     healthPid(socketPath),
   ]);
-  const startToken = evidence.processStartToken(keeper);
   const holders = evidence.socketHolders(socketPath);
-  const process = evidence.listObserverProcesses().find((entry) => entry.pid === keeper);
+  const verification =
+    pidfile === undefined
+      ? undefined
+      : verifyObserverProcessIdentity({ source: "pidfile", identity: pidfile }, evidence);
   if (
     pidfile === undefined ||
     socketIdentity === undefined ||
-    startToken === undefined ||
-    process === undefined ||
+    verification?.status !== "exact" ||
     healthyPid !== keeper ||
     holders.length !== 1 ||
     holders[0] !== keeper ||
     pidfile.pid !== keeper ||
-    pidfile.socketPath !== socketPath ||
-    pidfile.osStartTime !== startToken ||
-    process.startToken !== startToken ||
-    process.processToken !== pidfile.processToken ||
-    process.buildVersion !== pidfile.version ||
-    process.socketPath !== socketPath
+    pidfile.socketPath !== socketPath
   ) {
     return undefined;
   }
-  return { keeper, startToken, socketIdentity, pidfile, process };
+  return {
+    keeper,
+    startToken: pidfile.osStartTime,
+    socketIdentity,
+    pidfile,
+    process: verification.process,
+  };
 }
 
 async function manualKeeperMatches(
@@ -513,14 +510,12 @@ async function manualKeeperMatches(
     healthPid(socketPath),
   ]);
   const holders = evidence.socketHolders(socketPath);
-  const process = evidence.listObserverProcesses().find((entry) => entry.pid === baseline.keeper);
   return (
     holders.length === 1 &&
     holders[0] === baseline.keeper &&
     healthyPid === baseline.keeper &&
-    evidence.processStartToken(baseline.keeper) === baseline.startToken &&
-    process !== undefined &&
-    observerProcessEntriesMatch(process, baseline.process) &&
+    verifyObserverProcessIdentity({ source: "process", process: baseline.process }, evidence)
+      .status === "exact" &&
     socketIdentitiesMatch(socketIdentity, baseline.socketIdentity) &&
     pidfile !== undefined &&
     observerProcessIdentitiesMatch(pidfile, baseline.pidfile)
@@ -539,14 +534,12 @@ async function inspectManualKeeperPreservation(
     healthPid(socketPath),
   ]);
   const holders = evidence.socketHolders(socketPath);
-  const process = evidence.listObserverProcesses().find((entry) => entry.pid === baseline.keeper);
   const pid =
     holders.length === 1 &&
     holders[0] === baseline.keeper &&
     healthyPid === baseline.keeper &&
-    evidence.processStartToken(baseline.keeper) === baseline.startToken &&
-    process !== undefined &&
-    observerProcessEntriesMatch(process, baseline.process);
+    verifyObserverProcessIdentity({ source: "process", process: baseline.process }, evidence)
+      .status === "exact";
   const preservedSocket = socketIdentitiesMatch(socketIdentity, baseline.socketIdentity);
   const preservedPidfile =
     pidfile !== undefined && observerProcessIdentitiesMatch(pidfile, baseline.pidfile);

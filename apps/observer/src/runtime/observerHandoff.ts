@@ -12,6 +12,10 @@ import {
 } from "@station/runtime";
 import { z } from "zod";
 import { observerProcessIdentitiesMatch } from "./observerPidfile.js";
+import {
+  type ObserverProcessIdentityEvidenceSource,
+  verifyObserverProcessIdentity,
+} from "./observerProcessIdentity.js";
 
 const GRACEFUL_HANDOFF_BUDGET_RATIO = 0.5;
 const MAX_STOP_ACKNOWLEDGEMENT_MS = 1_000;
@@ -66,23 +70,6 @@ export type ObserverIncumbentDecision =
   | { action: "replace"; reason: "candidate-wins" }
   | { action: "refuse"; reason: string };
 
-export type ObserverProcessEntry = {
-  pid: number;
-  argv: string[];
-  /** Executable path corroborated against the OS process image. */
-  executablePath: string;
-  /** Verbatim OS start time; second-resolution output is never sufficient alone. */
-  startToken: string;
-  /** Per-launch nonce that prevents same-second PID reuse from inheriting authority. */
-  processToken: string;
-  /** Immutable Observer build selector advertised by the child and checked at startup. */
-  buildVersion: string;
-  /** Resolved bound socket; absent when argv cannot prove one. */
-  socketPath?: string;
-  /** Positive startup exclusion budget advertised by current Observer argv. */
-  startupTimeoutMs?: number;
-};
-
 export type ObserverProcessSignalResult = "sent" | "absent" | "refused";
 
 export type ObserverLifecycleRequest = {
@@ -108,30 +95,10 @@ export type ObserverStopRequest = ObserverLifecycleRequest & {
  * commands; typed evidence failures remain available as causes, while unavailable
  * socket-holder evidence throws and never means zero.
  */
-export interface ObserverProcessEvidenceSource {
-  readObserverProcess(pid: number): ObserverProcessEntry | undefined;
+export interface ObserverProcessEvidenceSource extends ObserverProcessIdentityEvidenceSource {
   socketHolders(socketPath: string): number[];
-  processStartToken(pid: number): string | undefined;
   readProcessIdentity(socketPath: string): Promise<ObserverProcessIdentity | undefined>;
   signal(pid: number, signal: NodeJS.Signals | 0): ObserverProcessSignalResult;
-}
-
-/** Compares the complete evidence for one exact Observer process generation. */
-export function observerProcessEntriesMatch(
-  left: ObserverProcessEntry,
-  right: ObserverProcessEntry,
-): boolean {
-  return (
-    left.pid === right.pid &&
-    left.executablePath === right.executablePath &&
-    left.startToken === right.startToken &&
-    left.processToken === right.processToken &&
-    left.buildVersion === right.buildVersion &&
-    left.socketPath === right.socketPath &&
-    left.startupTimeoutMs === right.startupTimeoutMs &&
-    left.argv.length === right.argv.length &&
-    left.argv.every((value, index) => value === right.argv[index])
-  );
 }
 
 /**
@@ -413,16 +380,15 @@ async function requireVerifiedProcessEvidence(
   if (currentIdentity === undefined || !observerProcessIdentitiesMatch(currentIdentity, identity)) {
     throw handoffRefused("The incumbent Observer pidfile changed during handoff.");
   }
-  const processEntry = deps.evidence.readObserverProcess(identity.pid);
-  if (
-    processEntry === undefined ||
-    processEntry.socketPath !== socketPath ||
-    processEntry.startToken !== identity.osStartTime ||
-    processEntry.processToken !== identity.processToken ||
-    processEntry.buildVersion !== identity.version ||
-    deps.evidence.processStartToken(identity.pid) !== identity.osStartTime
-  ) {
-    throw handoffRefused("The incumbent Observer process identity could not be corroborated.");
+  const verification = verifyObserverProcessIdentity(
+    { source: "pidfile", identity },
+    deps.evidence,
+  );
+  if (verification.status !== "exact") {
+    throw handoffRefused(
+      "The incumbent Observer process identity could not be corroborated.",
+      verification.status === "unavailable" ? verification.cause : undefined,
+    );
   }
 }
 
