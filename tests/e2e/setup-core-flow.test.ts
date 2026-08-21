@@ -281,7 +281,9 @@ describe("setup core flow e2e", () => {
       expect(apply.stdout).toContain(`Then rerun: stn --config ${configPath} setup apply --yes`);
       expect(apply.stdout).not.toContain("Core setup complete.");
       await expect(readFile(configPath, "utf8")).resolves.toContain("[harness.codex]");
-      await expect(readFile(join(home, ".codex", "station.config.toml"), "utf8")).rejects.toThrow();
+      await expect(
+        readFile(join(home, ".codex", "station.config.toml"), "utf8"),
+      ).resolves.toContain("[[hooks.SessionStart]]");
 
       expect(processIsAlive(beforeHealth.pid)).toBe(true);
       const blockedSocket = await stat(observerSocket);
