@@ -306,7 +306,7 @@ export type ListSessionRecoveryHandlesOptions = {
   provider?: string;
 };
 
-export type ObserverRepairPersistenceSnapshot = {
+export type ObserverRecoveryInventoryPersistenceSnapshot = {
   sessions: PersistedSession[];
   recoveryHandles: SessionRecoveryHandle[];
 };

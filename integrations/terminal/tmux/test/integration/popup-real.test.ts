@@ -3328,7 +3328,7 @@ function snapshotObserver(
     },
     getCommand: async (commandId) => records.get(commandId),
     getSessionRecoveryReadiness: async () => unsupportedObserverCall("getSessionRecoveryReadiness"),
-    inspectRepairInventory: async () => unsupportedObserverCall("inspectRepairInventory"),
+    getSessionRecoveryInventory: async () => unsupportedObserverCall("getSessionRecoveryInventory"),
     reconcile: async (reason = "manual") => ({
       schemaVersion: STATION_SCHEMA_VERSION,
       reason,
@@ -3391,7 +3391,7 @@ function popupFocusObserver(focusCommands: StationCommand[]): ObserverApi {
     },
     getCommand: async (commandId) => records.get(commandId),
     getSessionRecoveryReadiness: async () => unsupportedObserverCall("getSessionRecoveryReadiness"),
-    inspectRepairInventory: async () => unsupportedObserverCall("inspectRepairInventory"),
+    getSessionRecoveryInventory: async () => unsupportedObserverCall("getSessionRecoveryInventory"),
     reconcile: async (reason = "manual") => ({
       schemaVersion: STATION_SCHEMA_VERSION,
       reason,

@@ -4174,7 +4174,7 @@
           "name": "createObserverApi",
           "kind": "function",
           "role": "COMPOSITION ROOT",
-          "purpose": "Wires Observer use cases with supplied durable, local-metadata, and diagnostic- evidence roles, ingress workers, provider-health publication, scheduling, exact build publication, recovery-readiness and repair-inventory queries, read-only singleton diagnostics, and adapter shutdown behind the application API."
+          "purpose": "Wires Observer use cases with supplied durable, local-metadata, and diagnostic- evidence roles, ingress workers, provider-health publication, scheduling, exact build publication, recovery-readiness and coherent recovery-inventory queries, read-only singleton diagnostics, and adapter shutdown behind the application API."
         },
         {
           "name": "CreateObserverApiOptions",
@@ -4729,7 +4729,7 @@
           "purpose": null
         },
         {
-          "name": "ObserverRepairPersistenceSnapshot",
+          "name": "ObserverRecoveryInventoryPersistenceSnapshot",
           "kind": "type",
           "role": null,
           "purpose": null
@@ -5302,7 +5302,7 @@
           "name": "SessionStore",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Admits Observer-owned sessions with selected provider identity and maintains their lifecycle, native execution bindings, canonical worktree-scoped titles, recovery, and readiness. Seed, explicit root Group placement or current source-Group inheritance, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles. Repair inspection reads sessions and recovery handles from one coherent transaction so one result never combines different persistence lifetimes. Provider-native recovery keys permanently bind project and worktree, may fill Station session identity once, and reject contradictory identity before mutable evidence can refresh."
+          "purpose": "Admits Observer-owned sessions with selected provider identity and maintains their lifecycle, native execution bindings, canonical worktree-scoped titles, recovery, and readiness. Seed, explicit root Group placement or current source-Group inheritance, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles. Recovery inventory reads sessions and handles from one snapshot without classifying eligibility, so one result never combines different persistence lifetimes. Provider-native recovery keys permanently bind project and worktree, may fill Station session identity once, and reject contradictory identity before mutable evidence can refresh."
         },
         {
           "name": "SessionTurnReadinessMutation",
@@ -5641,48 +5641,6 @@
           "resolvedPath": "apps/observer/src/sqlite.ts",
           "edgeKind": "runtime",
           "bindings": ["*"]
-        }
-      ]
-    },
-    {
-      "path": "apps/observer/src/maintenance/repairInventory.ts",
-      "exports": [
-        {
-          "name": "inspectObserverRepairInventory",
-          "kind": "function",
-          "role": "USE CASE",
-          "purpose": "Reads one transactionally coherent session/recovery snapshot and projects only provider-neutral, redacted repair evidence. It never reconciles or writes durable state."
-        }
-      ],
-      "imports": [
-        {
-          "specifier": "../persistence/ports.js",
-          "resolvedPath": "apps/observer/src/persistence/ports.ts",
-          "edgeKind": "type-only",
-          "bindings": ["SessionStore"]
-        },
-        {
-          "specifier": "../persistence/types.js",
-          "resolvedPath": "apps/observer/src/persistence/types.ts",
-          "edgeKind": "type-only",
-          "bindings": ["PersistedSession"]
-        },
-        {
-          "specifier": "@station/contracts",
-          "resolvedPath": "packages/contracts/src/index.ts",
-          "edgeKind": "runtime",
-          "bindings": ["ObserverRepairInventorySchema"]
-        },
-        {
-          "specifier": "@station/contracts",
-          "resolvedPath": "packages/contracts/src/index.ts",
-          "edgeKind": "type-only",
-          "bindings": [
-            "ObserverRepairInventory",
-            "RepairRecoveryHandle",
-            "RepairRetainedSession",
-            "SessionRecoveryHandle"
-          ]
         }
       ]
     },
@@ -7202,7 +7160,7 @@
           "purpose": null
         },
         {
-          "name": "ObserverRepairPersistenceSnapshot",
+          "name": "ObserverRecoveryInventoryPersistenceSnapshot",
           "kind": "type",
           "role": null,
           "purpose": null
@@ -7397,7 +7355,7 @@
           "name": "SessionStore",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Admits Observer-owned sessions with selected provider identity and maintains their lifecycle, native execution bindings, canonical worktree-scoped titles, recovery, and readiness. Seed, explicit root Group placement or current source-Group inheritance, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles. Repair inspection reads sessions and recovery handles from one coherent transaction so one result never combines different persistence lifetimes. Provider-native recovery keys permanently bind project and worktree, may fill Station session identity once, and reject contradictory identity before mutable evidence can refresh."
+          "purpose": "Admits Observer-owned sessions with selected provider identity and maintains their lifecycle, native execution bindings, canonical worktree-scoped titles, recovery, and readiness. Seed, explicit root Group placement or current source-Group inheritance, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles. Recovery inventory reads sessions and handles from one snapshot without classifying eligibility, so one result never combines different persistence lifetimes. Provider-native recovery keys permanently bind project and worktree, may fill Station session identity once, and reject contradictory identity before mutable evidence can refresh."
         },
         {
           "name": "SessionTurnReadinessMutation",
@@ -7700,7 +7658,7 @@
           "name": "SessionStore",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Admits Observer-owned sessions with selected provider identity and maintains their lifecycle, native execution bindings, canonical worktree-scoped titles, recovery, and readiness. Seed, explicit root Group placement or current source-Group inheritance, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles. Repair inspection reads sessions and recovery handles from one coherent transaction so one result never combines different persistence lifetimes. Provider-native recovery keys permanently bind project and worktree, may fill Station session identity once, and reject contradictory identity before mutable evidence can refresh."
+          "purpose": "Admits Observer-owned sessions with selected provider identity and maintains their lifecycle, native execution bindings, canonical worktree-scoped titles, recovery, and readiness. Seed, explicit root Group placement or current source-Group inheritance, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles. Recovery inventory reads sessions and handles from one snapshot without classifying eligibility, so one result never combines different persistence lifetimes. Provider-native recovery keys permanently bind project and worktree, may fill Station session identity once, and reject contradictory identity before mutable evidence can refresh."
         },
         {
           "name": "WorktreeMetadataStore",
@@ -7721,7 +7679,7 @@
             "HarnessExecutionIngress",
             "IngressDedupeKey",
             "ListSessionRecoveryHandlesOptions",
-            "ObserverRepairPersistenceSnapshot",
+            "ObserverRecoveryInventoryPersistenceSnapshot",
             "PersistReconcileResultInput",
             "PersistedCommand",
             "PersistedCommandError",
@@ -8554,7 +8512,7 @@
           "purpose": null
         },
         {
-          "name": "ObserverRepairPersistenceSnapshot",
+          "name": "ObserverRecoveryInventoryPersistenceSnapshot",
           "kind": "type",
           "role": null,
           "purpose": null
@@ -10086,7 +10044,7 @@
           "name": "createObserverApi",
           "kind": "function",
           "role": "COMPOSITION ROOT",
-          "purpose": "Wires Observer use cases with supplied durable, local-metadata, and diagnostic- evidence roles, ingress workers, provider-health publication, scheduling, exact build publication, recovery-readiness and repair-inventory queries, read-only singleton diagnostics, and adapter shutdown behind the application API."
+          "purpose": "Wires Observer use cases with supplied durable, local-metadata, and diagnostic- evidence roles, ingress workers, provider-health publication, scheduling, exact build publication, recovery-readiness and coherent recovery-inventory queries, read-only singleton diagnostics, and adapter shutdown behind the application API."
         },
         {
           "name": "CreateObserverApiOptions",
@@ -10167,12 +10125,6 @@
           "resolvedPath": "apps/observer/src/hooks/spool.ts",
           "edgeKind": "runtime",
           "bindings": ["createFilesystemProviderIngressSpoolStore", "providerIngressSpoolDepth"]
-        },
-        {
-          "specifier": "../maintenance/repairInventory.js",
-          "resolvedPath": "apps/observer/src/maintenance/repairInventory.ts",
-          "edgeKind": "runtime",
-          "bindings": ["inspectObserverRepairInventory"]
         },
         {
           "specifier": "../metadata/gitRefInvalidation.js",
@@ -10313,6 +10265,12 @@
           "bindings": ["SpoolDrainDeps"]
         },
         {
+          "specifier": "../sessionRecoveryInventory.js",
+          "resolvedPath": "apps/observer/src/sessionRecoveryInventory.ts",
+          "edgeKind": "runtime",
+          "bindings": ["inspectObserverRecoveryInventory"]
+        },
+        {
           "specifier": "../stationLogger.js",
           "resolvedPath": "apps/observer/src/stationLogger.ts",
           "edgeKind": "type-only",
@@ -10364,7 +10322,7 @@
             "HarnessEventReportReceipt",
             "ObserverApi",
             "ObserverHealth",
-            "ObserverRepairInventory",
+            "ObserverRecoveryInventory",
             "ObserverStopReceipt",
             "ProviderHealth",
             "ProviderHookEvent",
@@ -12122,6 +12080,48 @@
           "resolvedPath": "packages/runtime/src/index.ts",
           "edgeKind": "runtime",
           "bindings": ["pathIsSameOrInside"]
+        }
+      ]
+    },
+    {
+      "path": "apps/observer/src/sessionRecoveryInventory.ts",
+      "exports": [
+        {
+          "name": "inspectObserverRecoveryInventory",
+          "kind": "function",
+          "role": "USE CASE",
+          "purpose": "Projects one coherent persistence snapshot into provider-neutral, redacted recovery evidence without dispatching commands, reconciling providers, or writing durable state."
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "./persistence/ports.js",
+          "resolvedPath": "apps/observer/src/persistence/ports.ts",
+          "edgeKind": "type-only",
+          "bindings": ["SessionStore"]
+        },
+        {
+          "specifier": "./persistence/types.js",
+          "resolvedPath": "apps/observer/src/persistence/types.ts",
+          "edgeKind": "type-only",
+          "bindings": ["PersistedSession"]
+        },
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "runtime",
+          "bindings": ["ObserverRecoveryInventorySchema"]
+        },
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "type-only",
+          "bindings": [
+            "ObserverRecoveryInventory",
+            "ObserverRecoveryInventoryHandle",
+            "ObserverRecoveryInventorySession",
+            "SessionRecoveryHandle"
+          ]
         }
       ]
     },
@@ -13932,22 +13932,6 @@
       "dependencies": []
     },
     {
-      "path": "apps/observer/src/maintenance/repairInventory.ts",
-      "declaration": "inspectObserverRepairInventory",
-      "kind": "function",
-      "role": "USE CASE",
-      "purpose": "Reads one transactionally coherent session/recovery snapshot and projects only provider-neutral, redacted repair evidence. It never reconciles or writes durable state.",
-      "dependencies": [
-        {
-          "path": "apps/observer/src/persistence/ports.ts",
-          "declaration": "SessionStore",
-          "kind": "interface",
-          "role": "DRIVEN PORT",
-          "edgeKind": "type-only"
-        }
-      ]
-    },
-    {
       "path": "apps/observer/src/metadata/gitRefInvalidation.ts",
       "declaration": "createLocalGitWorktreeMetadataInvalidationSource",
       "kind": "function",
@@ -14080,7 +14064,7 @@
       "declaration": "SessionStore",
       "kind": "interface",
       "role": "DRIVEN PORT",
-      "purpose": "Admits Observer-owned sessions with selected provider identity and maintains their lifecycle, native execution bindings, canonical worktree-scoped titles, recovery, and readiness. Seed, explicit root Group placement or current source-Group inheritance, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles. Repair inspection reads sessions and recovery handles from one coherent transaction so one result never combines different persistence lifetimes. Provider-native recovery keys permanently bind project and worktree, may fill Station session identity once, and reject contradictory identity before mutable evidence can refresh.",
+      "purpose": "Admits Observer-owned sessions with selected provider identity and maintains their lifecycle, native execution bindings, canonical worktree-scoped titles, recovery, and readiness. Seed, explicit root Group placement or current source-Group inheritance, and provenance-safe discard are one atomic conversation; canonical-title handoff and recovery import also commit before recovery reconciles. Recovery inventory reads sessions and handles from one snapshot without classifying eligibility, so one result never combines different persistence lifetimes. Provider-native recovery keys permanently bind project and worktree, may fill Station session identity once, and reject contradictory identity before mutable evidence can refresh.",
       "dependencies": []
     },
     {
@@ -14278,7 +14262,7 @@
       "declaration": "createObserverApi",
       "kind": "function",
       "role": "COMPOSITION ROOT",
-      "purpose": "Wires Observer use cases with supplied durable, local-metadata, and diagnostic- evidence roles, ingress workers, provider-health publication, scheduling, exact build publication, recovery-readiness and repair-inventory queries, read-only singleton diagnostics, and adapter shutdown behind the application API.",
+      "purpose": "Wires Observer use cases with supplied durable, local-metadata, and diagnostic- evidence roles, ingress workers, provider-health publication, scheduling, exact build publication, recovery-readiness and coherent recovery-inventory queries, read-only singleton diagnostics, and adapter shutdown behind the application API.",
       "dependencies": [
         {
           "path": "apps/observer/src/diagnostics/collector.ts",
@@ -14313,13 +14297,6 @@
           "declaration": "createFilesystemProviderIngressSpoolStore",
           "kind": "function",
           "role": "ADAPTER",
-          "edgeKind": "runtime"
-        },
-        {
-          "path": "apps/observer/src/maintenance/repairInventory.ts",
-          "declaration": "inspectObserverRepairInventory",
-          "kind": "function",
-          "role": "USE CASE",
           "edgeKind": "runtime"
         },
         {
@@ -14374,6 +14351,13 @@
         {
           "path": "apps/observer/src/runtime/spoolDrain.ts",
           "declaration": "createSpoolDrainer",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/observer/src/sessionRecoveryInventory.ts",
+          "declaration": "inspectObserverRecoveryInventory",
           "kind": "function",
           "role": "USE CASE",
           "edgeKind": "runtime"
@@ -14898,6 +14882,22 @@
       "dependencies": []
     },
     {
+      "path": "apps/observer/src/sessionRecoveryInventory.ts",
+      "declaration": "inspectObserverRecoveryInventory",
+      "kind": "function",
+      "role": "USE CASE",
+      "purpose": "Projects one coherent persistence snapshot into provider-neutral, redacted recovery evidence without dispatching commands, reconciling providers, or writing durable state.",
+      "dependencies": [
+        {
+          "path": "apps/observer/src/persistence/ports.ts",
+          "declaration": "SessionStore",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
       "path": "apps/observer/src/stationLogger.ts",
       "declaration": "StationLogger",
       "kind": "interface",
@@ -15276,7 +15276,7 @@
       "declaration": "ObserverApi",
       "kind": "type",
       "role": "DRIVING PORT",
-      "purpose": "Exposes Observer state, recovery-readiness, and read-only repair inspection queries, handshakes, ingress reports, maintenance, and lifecycle operations to external actors.",
+      "purpose": "Exposes Observer state, recovery-readiness, and coherent recovery-inventory queries, plus handshakes, ingress reports, maintenance, and lifecycle operations to external actors.",
       "dependencies": []
     },
     {

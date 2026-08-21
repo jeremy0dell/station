@@ -128,11 +128,30 @@ export function createInMemoryObserverPersistence(
       }),
     );
 
+  const readSnapshot = <T>(task: (snapshot: InMemoryObserverPersistenceState) => T): Promise<T> =>
+    Effect.runPromise(
+      Effect.try({
+        try: () => {
+          // One detached snapshot isolates the reader without replacing the backing state.
+          const snapshot = structuredClone(state);
+          return task(snapshot);
+        },
+        catch: (error) =>
+          safeErrorFromUnknown(error, {
+            tag: "PersistenceError",
+            code: "PERSISTENCE_TRANSACTION_FAILED",
+            message: "Observer in-memory persistence snapshot failed.",
+          }),
+      }),
+    );
+
   return {
-    readRepairInventory: () =>
-      transaction((draft) => ({
-        sessions: [...draft.sessions.values()].sort((left, right) => compareAsc(left.id, right.id)),
-        recoveryHandles: [...draft.recoveryHandles.values()].sort((left, right) =>
+    readRecoveryInventory: () =>
+      readSnapshot((snapshot) => ({
+        sessions: [...snapshot.sessions.values()].sort((left, right) =>
+          compareAsc(left.id, right.id),
+        ),
+        recoveryHandles: [...snapshot.recoveryHandles.values()].sort((left, right) =>
           compareAsc(left.id, right.id),
         ),
       })),

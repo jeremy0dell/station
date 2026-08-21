@@ -1984,33 +1984,65 @@ export function observerPersistenceContract(
         });
       });
 
-      it("reads sessions and recovery handles through one coherent repair inventory", async () => {
+      it("reads sorted retained sessions and recovery handles through one coherent snapshot", async () => {
         await withPersistence(createFixture, async ({ persistence }) => {
-          await persistence.seedSession({
-            sessionId: "ses_repair_inventory",
-            projectId: "web",
-            worktreeId: "wt_repair_inventory",
-            initialTitle: "repair-inventory",
-            harness: "codex",
-            terminalProvider: "station",
-            createdAt: earlier,
-            lastSeenAt: now,
+          await expect(persistence.readRecoveryInventory()).resolves.toEqual({
+            sessions: [],
+            recoveryHandles: [],
           });
-          const handle: SessionRecoveryHandle = {
-            id: "handle_repair_inventory",
+
+          for (const sessionId of ["ses_recovery_z", "ses_recovery_a"]) {
+            await persistence.seedSession({
+              sessionId,
+              projectId: "web",
+              worktreeId: `wt_${sessionId}`,
+              initialTitle: sessionId,
+              harness: "codex",
+              terminalProvider: "station",
+              createdAt: earlier,
+              lastSeenAt: now,
+            });
+          }
+          await persistence.markSessionsEnded({
+            subject: { kind: "session", sessionId: "ses_recovery_z" },
+            endedAt: later,
+          });
+
+          const orphanedHandle: SessionRecoveryHandle = {
+            id: "ignored_orphaned_handle_id",
             provider: "codex",
-            projectId: "web",
-            worktreeId: "wt_repair_inventory",
-            sessionId: "ses_repair_inventory",
-            target: { kind: "native-session", id: "native_repair_inventory" },
-            observedAt: now,
+            projectId: "orphaned-project",
+            worktreeId: "orphaned-worktree",
+            target: { kind: "session-file", path: "/private/provider/orphaned.jsonl" },
+            observedAt: earlier,
             lastSeenAt: now,
           };
-          const persistedHandle = await persistence.upsertSessionRecoveryHandle(handle);
+          const mismatchedHandle: SessionRecoveryHandle = {
+            id: "ignored_mismatched_handle_id",
+            provider: "codex",
+            projectId: "different-project",
+            worktreeId: "different-worktree",
+            sessionId: "ses_recovery_z",
+            target: { kind: "native-session", id: "native_recovery_z" },
+            observedAt: earlier,
+            lastSeenAt: later,
+          };
+          const persistedHandles = await Promise.all([
+            persistence.upsertSessionRecoveryHandle(mismatchedHandle),
+            persistence.upsertSessionRecoveryHandle(orphanedHandle),
+          ]);
+          persistedHandles.sort((left, right) => left.id.localeCompare(right.id));
 
-          await expect(persistence.readRepairInventory()).resolves.toEqual({
-            sessions: [expect.objectContaining({ id: "ses_repair_inventory" })],
-            recoveryHandles: [persistedHandle],
+          await expect(persistence.readRecoveryInventory()).resolves.toEqual({
+            sessions: [
+              expect.objectContaining({ id: "ses_recovery_a", lifecycle: "open" }),
+              expect.objectContaining({
+                id: "ses_recovery_z",
+                lifecycle: "ended",
+                endedAt: later,
+              }),
+            ],
+            recoveryHandles: persistedHandles,
           });
         });
       });

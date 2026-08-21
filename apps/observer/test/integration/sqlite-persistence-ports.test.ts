@@ -143,7 +143,18 @@ describe("SQLite-only Observer persistence behavior", () => {
     });
     const writer = openSqlDatabase(path);
     try {
+      const writesBeforeInventory = (
+        sqlite.database.prepare("SELECT total_changes() AS value").get() as { value: number }
+      ).value;
       writer.exec("BEGIN IMMEDIATE");
+      await expect(persistence.readRecoveryInventory()).resolves.toEqual({
+        sessions: [],
+        recoveryHandles: [],
+      });
+      expect(
+        (sqlite.database.prepare("SELECT total_changes() AS value").get() as { value: number })
+          .value,
+      ).toBe(writesBeforeInventory);
       await expect(persistence.getCommand("cmd_pure_read")).resolves.toEqual(
         expect.objectContaining({ id: "cmd_pure_read", status: "accepted" }),
       );

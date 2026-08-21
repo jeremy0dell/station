@@ -32,7 +32,7 @@ export function createFakeObserverApi(
       managedTerminal: { provider: "native", canLaunchProcessPersistently: true },
       harnesses: [],
     }),
-    inspectRepairInventory: async () => ({
+    getSessionRecoveryInventory: async () => ({
       schemaVersion: 1,
       sessions: [],
       recoveryHandles: [],

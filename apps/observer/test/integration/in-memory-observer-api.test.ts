@@ -1,5 +1,5 @@
 import { DEFAULT_WORKSPACE_CONFIG, type StationConfig } from "@station/config";
-import { STATION_SCHEMA_VERSION } from "@station/contracts";
+import { type SessionRecoveryHandle, STATION_SCHEMA_VERSION } from "@station/contracts";
 import {
   createFakeHarnessRun,
   createFakeTerminalTarget,
@@ -84,11 +84,31 @@ describe("Observer API composition with in-memory persistence", () => {
       canonicalTitleImport: true,
       harnesses: [{ provider: "fake-harness", canResume: true }],
     });
-    await expect(api.inspectRepairInventory()).resolves.toEqual({
+    const reconcileSpy = vi.spyOn(core, "reconcile");
+    const worktreeReadSpy = vi.spyOn(providers.worktree, "listWorktrees");
+    const terminalReadSpy = vi.spyOn(providers.terminal, "listTargets");
+    const harness = providers.harnesses.get("fake-harness");
+    if (harness === undefined) throw new Error("Expected fake harness provider.");
+    const harnessReadSpy = vi.spyOn(harness, "discoverRuns");
+    const cloneSpy = vi.spyOn(globalThis, "structuredClone");
+    await expect(api.getSessionRecoveryInventory()).resolves.toEqual({
       schemaVersion: 1,
       sessions: [],
       recoveryHandles: [],
     });
+    await expect(api.getSessionRecoveryInventory()).resolves.toEqual({
+      schemaVersion: 1,
+      sessions: [],
+      recoveryHandles: [],
+    });
+    expect(cloneSpy).toHaveBeenCalledTimes(2);
+    cloneSpy.mockRestore();
+    expect(reconcileSpy).not.toHaveBeenCalled();
+    expect(worktreeReadSpy).not.toHaveBeenCalled();
+    expect(terminalReadSpy).not.toHaveBeenCalled();
+    expect(harnessReadSpy).not.toHaveBeenCalled();
+    await expect(persistence.listCommands()).resolves.toEqual([]);
+    await expect(persistence.listEvents()).resolves.toEqual([]);
 
     const initialEvents = api.subscribe({ type: "observer.reconciled" })[Symbol.asyncIterator]();
     const initialEvent = initialEvents.next();
@@ -212,6 +232,49 @@ describe("Observer API composition with in-memory persistence", () => {
     await settleBackgroundWork();
     expect(worktreeChangeSource.requests).toHaveLength(requestsAfterStop);
     await expect(commandQueue.drain()).resolves.toBeUndefined();
+  });
+
+  it("reads one detached recovery snapshot without committing it as backing state", async () => {
+    const persistence = createInMemoryObserverPersistence();
+    await persistence.seedSession({
+      sessionId: "session-snapshot",
+      projectId: "web",
+      worktreeId: "worktree-snapshot",
+      initialTitle: "Snapshot",
+      harness: "codex",
+      terminalProvider: "station",
+      createdAt: now,
+      lastSeenAt: now,
+    });
+    const recoveryHandle: SessionRecoveryHandle = {
+      id: "ignored-snapshot-handle",
+      provider: "codex",
+      projectId: "web",
+      worktreeId: "worktree-snapshot",
+      sessionId: "session-snapshot",
+      target: { kind: "native-session", id: "native-snapshot" },
+      observedAt: now,
+      lastSeenAt: now,
+    };
+    await persistence.upsertSessionRecoveryHandle(recoveryHandle);
+
+    const cloneSpy = vi.spyOn(globalThis, "structuredClone");
+    const snapshot = await persistence.readRecoveryInventory();
+    expect(cloneSpy).toHaveBeenCalledOnce();
+    cloneSpy.mockRestore();
+
+    const session = snapshot.sessions[0];
+    const handle = snapshot.recoveryHandles[0];
+    if (session === undefined || handle === undefined) {
+      throw new Error("Expected detached recovery inventory evidence.");
+    }
+    session.lifecycle = "ended";
+    handle.projectId = "mutated-project";
+
+    await expect(persistence.readRecoveryInventory()).resolves.toEqual({
+      sessions: [expect.objectContaining({ id: "session-snapshot", lifecycle: "open" })],
+      recoveryHandles: [expect.objectContaining({ projectId: "web" })],
+    });
   });
 
   it("clears cached local evidence when composition sees a matching missing worktree", async () => {

@@ -8,9 +8,7 @@ import {
 } from "./ids.js";
 import { nonEmptyStringSchema } from "./shared.js";
 
-export const RepairSchemaVersionSchema = z.literal(1);
-
-export const RepairRetainedSessionSchema = z
+export const ObserverRecoveryInventorySessionSchema = z
   .object({
     id: SessionIdSchema,
     projectId: ProjectIdSchema,
@@ -23,10 +21,12 @@ export const RepairRetainedSessionSchema = z
     endedAt: TimestampSchema.optional(),
   })
   .strict();
-export type RepairRetainedSession = z.infer<typeof RepairRetainedSessionSchema>;
+export type ObserverRecoveryInventorySession = z.infer<
+  typeof ObserverRecoveryInventorySessionSchema
+>;
 
 /** Redacted recovery evidence; provider-native targets and local paths never cross this boundary. */
-export const RepairRecoveryHandleSchema = z
+export const ObserverRecoveryInventoryHandleSchema = z
   .object({
     id: nonEmptyStringSchema,
     provider: ProviderIdSchema,
@@ -38,13 +38,13 @@ export const RepairRecoveryHandleSchema = z
     lastSeenAt: TimestampSchema,
   })
   .strict();
-export type RepairRecoveryHandle = z.infer<typeof RepairRecoveryHandleSchema>;
+export type ObserverRecoveryInventoryHandle = z.infer<typeof ObserverRecoveryInventoryHandleSchema>;
 
-export const ObserverRepairInventorySchema = z
+export const ObserverRecoveryInventorySchema = z
   .object({
-    schemaVersion: RepairSchemaVersionSchema,
-    sessions: z.array(RepairRetainedSessionSchema),
-    recoveryHandles: z.array(RepairRecoveryHandleSchema),
+    schemaVersion: z.literal(1),
+    sessions: z.array(ObserverRecoveryInventorySessionSchema),
+    recoveryHandles: z.array(ObserverRecoveryInventoryHandleSchema),
   })
   .strict()
   .superRefine((inventory, context) => {
@@ -52,7 +52,12 @@ export const ObserverRepairInventorySchema = z
       ["sessions", inventory.sessions.map((session) => session.id)],
       ["recoveryHandles", inventory.recoveryHandles.map((handle) => handle.id)],
     ] as const) {
-      if (ids.some((id, index) => index > 0 && (ids[index - 1] as string) >= id)) {
+      if (
+        ids.some((id, index) => {
+          const previousId = ids[index - 1];
+          return previousId !== undefined && previousId >= id;
+        })
+      ) {
         context.addIssue({
           code: "custom",
           path: [field],
@@ -61,4 +66,4 @@ export const ObserverRepairInventorySchema = z
       }
     }
   });
-export type ObserverRepairInventory = z.infer<typeof ObserverRepairInventorySchema>;
+export type ObserverRecoveryInventory = z.infer<typeof ObserverRecoveryInventorySchema>;

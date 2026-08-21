@@ -34,6 +34,12 @@ export type CreateSqliteObserverPersistenceOptions = {
   idFactory?: Partial<ObserverIdFactory>;
 };
 
+function compareIdentity(left: { id: string }, right: { id: string }): number {
+  if (left.id < right.id) return -1;
+  if (left.id > right.id) return 1;
+  return 0;
+}
+
 /**
  * ADAPTER
  *
@@ -69,11 +75,14 @@ export function createSqliteObserverPersistence(
   return {
     health: () => options.sqlite.health(),
 
-    readRepairInventory: () =>
-      readTransaction((database) => ({
-        sessions: correlationStore.listSessions(database),
-        recoveryHandles: sessionRecoveryHandleStore.listSessionRecoveryHandles(database, {}),
-      })),
+    readRecoveryInventory: () =>
+      readTransaction((database) => {
+        const sessions = correlationStore.listSessions(database).sort(compareIdentity);
+        const recoveryHandles = sessionRecoveryHandleStore
+          .listSessionRecoveryHandles(database, {})
+          .sort(compareIdentity);
+        return { sessions, recoveryHandles };
+      }),
 
     recordCommandAccepted: (input) =>
       transaction((database) =>

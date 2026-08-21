@@ -56,16 +56,16 @@
       "includeLogs": true
     }
   },
-  "repairInventoryRequest": {
+  "recoveryInventoryRequest": {
     "schemaVersion": "0.11.0",
     "jsonrpc": "2.0",
-    "id": "req_repair_inventory",
-    "method": "repair.inventory"
+    "id": "req_recovery_inventory",
+    "method": "session.recoveryInventory"
   },
-  "repairInventoryResponse": {
+  "recoveryInventoryResponse": {
     "schemaVersion": "0.11.0",
     "jsonrpc": "2.0",
-    "id": "req_repair_inventory",
+    "id": "req_recovery_inventory",
     "result": {
       "schemaVersion": 1,
       "sessions": [],

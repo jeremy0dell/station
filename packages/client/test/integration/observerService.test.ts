@@ -485,8 +485,8 @@ function fakeApi(
     getSessionRecoveryReadiness:
       overrides.getSessionRecoveryReadiness ??
       (async () => ({ resumeEnabled: true, harnesses: [] })),
-    inspectRepairInventory:
-      overrides.inspectRepairInventory ??
+    getSessionRecoveryInventory:
+      overrides.getSessionRecoveryInventory ??
       (async () => ({ schemaVersion: 1, sessions: [], recoveryHandles: [] })),
     prepareExternalLaunch:
       overrides.prepareExternalLaunch ??
@@ -624,7 +624,11 @@ function fakeClient(overrides: Partial<ObserverClient>): ObserverClient {
       scheduledReconcile: true,
     }),
     getSessionRecoveryReadiness: async () => ({ resumeEnabled: true, harnesses: [] }),
-    inspectRepairInventory: async () => ({ schemaVersion: 1, sessions: [], recoveryHandles: [] }),
+    getSessionRecoveryInventory: async () => ({
+      schemaVersion: 1,
+      sessions: [],
+      recoveryHandles: [],
+    }),
     prepareExternalLaunch: async (params) => ({
       kind: "existing-session",
       sessionId: `ses_${params.worktreeId}`,
