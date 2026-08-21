@@ -61,6 +61,19 @@ function previewObserverRestartStep(
   return updateStep("observer-restart", "skipped", "No Station build would be installed.");
 }
 
+function previewHookReconciliationStep(
+  scenario: Extract<UpdateScenario, { kind: "preview" }>,
+): UpdateCommandStep {
+  if (scenario.mutation.kind === "apply") {
+    return updateStep(
+      "hook-reconciliation",
+      "planned",
+      "The selected launcher would verify and repair configured provider hooks.",
+    );
+  }
+  return updateStep("hook-reconciliation", "skipped", "No Station build would be installed.");
+}
+
 function previewHostHandoffStep(hostHandoff: HostHandoffScenario): UpdateCommandStep {
   if (hostHandoff.kind === "handoff") {
     return updateStep(
@@ -93,7 +106,7 @@ function formatCommand(command: readonly string[]): string {
 
 export function createUpdateReport(selected: PlannedUpdateChannel): UpdateCommandReport {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     channel: selected.channel,
     status: "planned",
     current: artifact(selected.plan.currentVersion, selected.plan.currentRevision),
@@ -113,7 +126,6 @@ export function currentUpdateResult(
 ): CliRunResult {
   report.status = "current";
   report.steps.push(
-    updateStep("apply", "skipped", "The selected installation already matches its target."),
     updateStep("observer-restart", "skipped", "No build changed."),
     updateStep("host-handoff", "skipped", "No build changed."),
   );
@@ -128,6 +140,7 @@ export function previewUpdateResult(
   report.status = "planned";
   report.steps.push(
     previewApplyStep(scenario),
+    previewHookReconciliationStep(scenario),
     previewObserverRestartStep(scenario),
     previewHostHandoffStep(scenario.hostHandoff),
   );
@@ -147,6 +160,7 @@ export function deferredUpdateResult(
       "The package manager owns mutation and no manager command was executed.",
       managerCommand,
     ),
+    updateStep("hook-reconciliation", "skipped", "No Station build was installed."),
     updateStep("observer-restart", "skipped", "No Station build was installed."),
     updateStep("host-handoff", "skipped", "No Station build was installed."),
   );
@@ -184,8 +198,14 @@ export function failedUpdateResult(
   report.steps.push(updateStep(phase, "failed", safeError.message, recoveryCommands[0]));
   if (phase === "apply") {
     report.steps.push(
+      updateStep("hook-reconciliation", "skipped", "The update did not install a build."),
       updateStep("observer-restart", "skipped", "The update did not reach runtime crossover."),
       updateStep("host-handoff", "skipped", "The update did not reach runtime crossover."),
+    );
+  } else if (phase === "hook-reconciliation") {
+    report.steps.push(
+      updateStep("observer-restart", "skipped", "Hook reconciliation failed first."),
+      updateStep("host-handoff", "skipped", "Hook reconciliation failed first."),
     );
   } else if (phase === "observer-restart") {
     report.steps.push(updateStep("host-handoff", "skipped", "Observer crossover failed first."));
@@ -227,6 +247,9 @@ function renderUpdateReport(report: UpdateCommandReport): string {
     if (item.command !== undefined) lines.push(`    ${formatCommand(item.command)}`);
   }
   for (const warning of report.warnings) lines.push(`warning: ${warning.message}`);
+  if (report.hookReconciliation !== undefined) {
+    lines.push(`hooks: ${report.hookReconciliation.status}`);
+  }
   if (report.error !== undefined)
     lines.push(`error: ${report.error.message} (${report.error.code})`);
   if (report.cause !== undefined)

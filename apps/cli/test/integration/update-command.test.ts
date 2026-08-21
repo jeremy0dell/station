@@ -44,7 +44,7 @@ describe("registered stn update command", () => {
     expect(result).toMatchObject({
       code: 0,
       output: {
-        schemaVersion: 1,
+        schemaVersion: 2,
         channel: "installer-binary",
         status: "planned",
       },

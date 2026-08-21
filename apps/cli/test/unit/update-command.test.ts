@@ -38,7 +38,7 @@ describe("stn update command", () => {
   it("reports an already-current installation without applying or preflighting handoff", async () => {
     const fixture = probeFixture("installer-binary", { planStatus: "current" });
     const liveHost = await createLiveHostFixture();
-    const commandRunner = vi.fn();
+    const commandRunner = vi.fn(async (input: ExternalCommandInput) => commandResult(input));
     try {
       const result = await runUpdateCommand(
         ["--handoff", "--json"],
@@ -58,7 +58,7 @@ describe("stn update command", () => {
       expect(result).toEqual({
         code: 0,
         output: {
-          schemaVersion: 1,
+          schemaVersion: 2,
           channel: "installer-binary",
           status: "current",
           current: { version: "1.0.0" },
@@ -75,15 +75,31 @@ describe("stn update command", () => {
               status: "skipped",
               detail: "The selected installation already matches its target.",
             },
+            {
+              id: "hook-reconciliation",
+              status: "completed",
+              detail: "Configured provider hooks are healthy.",
+            },
             { id: "observer-restart", status: "skipped", detail: "No build changed." },
             { id: "host-handoff", status: "skipped", detail: "No build changed." },
           ],
           warnings: [],
           recoveryCommands: [],
+          hookReconciliation: {
+            provider: "codex",
+            status: "healthy",
+            changed: false,
+            verified: true,
+          },
         },
       });
       expect(fixture.apply).not.toHaveBeenCalled();
-      expect(commandRunner).not.toHaveBeenCalled();
+      expect(commandRunner).toHaveBeenCalledWith(
+        expect.objectContaining({
+          command: "/opt/stn",
+          args: ["--config", "/tmp/config.toml", "hooks", "reconcile", "codex"],
+        }),
+      );
       expect(liveHost.clientFactory).not.toHaveBeenCalled();
     } finally {
       await liveHost.close();
@@ -101,7 +117,7 @@ describe("stn update command", () => {
 
     expect(result.code).toBe(0);
     expect(result.output).toMatchObject({
-      schemaVersion: 1,
+      schemaVersion: 2,
       channel: "installer-binary",
       status: "planned",
       current: { version: "1.0.0" },
@@ -110,6 +126,7 @@ describe("stn update command", () => {
         { id: "detect", status: "completed" },
         { id: "plan", status: "completed" },
         { id: "apply", status: "planned" },
+        { id: "hook-reconciliation", status: "planned" },
         { id: "observer-restart", status: "planned" },
         { id: "host-handoff", status: "skipped" },
       ],
@@ -148,6 +165,7 @@ describe("stn update command", () => {
             status: "deferred",
             command: ["/opt/npm", "install", "--global", "station@1.1.0"],
           },
+          { id: "hook-reconciliation", status: "skipped" },
           { id: "observer-restart", status: "skipped" },
           {
             id: "host-handoff",
@@ -183,6 +201,7 @@ describe("stn update command", () => {
           status: "planned",
           command: ["/opt/mise", "upgrade", "station"],
         },
+        { id: "hook-reconciliation", status: "planned" },
         { id: "observer-restart", status: "planned" },
         { id: "host-handoff", status: "skipped" },
       ],
@@ -242,6 +261,10 @@ describe("stn update command", () => {
     expect(commands).toEqual([
       expect.objectContaining({
         command: "/opt/mise",
+        args: ["exec", "--", "stn", "--config", "/tmp/config.toml", "hooks", "reconcile", "codex"],
+      }),
+      expect.objectContaining({
+        command: "/opt/mise",
         args: [
           "exec",
           "--",
@@ -257,12 +280,73 @@ describe("stn update command", () => {
     ]);
   });
 
+  it("stops successor crossover when configured hook reconciliation fails", async () => {
+    const fixture = probeFixture("installer-binary");
+    const commands: ExternalCommandInput[] = [];
+    const result = await runUpdateCommand(["--json"], commandOptions(), {
+      probes: [fixture.probe],
+      buildInfo: testBuildInfo,
+      commandRunner: async (input) => {
+        commands.push(input);
+        return {
+          command: input.command,
+          args: input.args ?? [],
+          stdout: JSON.stringify({
+            provider: "codex",
+            status: "post-write-doctor-failed",
+            changed: true,
+            verified: false,
+            error: {
+              tag: "CodexHookSetupError",
+              code: "CODEX_HOOK_POST_WRITE_DOCTOR_FAILED",
+              message: "Codex hook writes were not verified by provider doctor.",
+              provider: "codex",
+            },
+            followUp: { action: "run-doctor" },
+          }),
+          stderr: "/resolved/provider/path and raw provider payload",
+          exitCode: 1,
+        };
+      },
+    });
+
+    expect(commands).toHaveLength(1);
+    expect(commands[0]).toMatchObject({
+      args: ["--config", "/tmp/config.toml", "hooks", "reconcile", "codex"],
+    });
+    expect(result).toMatchObject({
+      code: 1,
+      output: {
+        schemaVersion: 2,
+        status: "failed",
+        hookReconciliation: {
+          status: "post-write-doctor-failed",
+          changed: true,
+          verified: false,
+          followUp: { action: "run-doctor" },
+        },
+        error: { code: "CODEX_HOOK_POST_WRITE_DOCTOR_FAILED" },
+        recoveryCommands: [],
+        steps: [
+          { id: "detect", status: "completed" },
+          { id: "plan", status: "completed" },
+          { id: "apply", status: "completed" },
+          { id: "hook-reconciliation", status: "failed" },
+          { id: "observer-restart", status: "skipped" },
+          { id: "host-handoff", status: "skipped" },
+        ],
+      },
+    });
+    expect(JSON.stringify(result.output)).not.toContain("/resolved/provider/path");
+  });
+
   it("retains a recovery command when Observer crossover fails after install", async () => {
     const fixture = probeFixture("installer-binary");
     const result = await runUpdateCommand(["--json"], commandOptions(), {
       probes: [fixture.probe],
       buildInfo: testBuildInfo,
-      commandRunner: async () => {
+      commandRunner: async (input) => {
+        if (input.args?.includes("hooks") === true) return commandResult(input);
         throw new Error("observer failed");
       },
     });
@@ -306,17 +390,20 @@ describe("stn update command", () => {
     const result = await runUpdateCommand(["--json"], commandOptions(), {
       probes: [fixture.probe],
       buildInfo: testBuildInfo,
-      commandRunner: async (input) => ({
-        command: input.command,
-        args: input.args ?? [],
-        stdout: JSON.stringify({
-          status: "unhealthy",
-          paths: observerCommandPaths(),
-          ...lifecycleFailure,
-        }),
-        stderr: "",
-        exitCode: 1,
-      }),
+      commandRunner: async (input) => {
+        if (input.args?.includes("hooks") === true) return commandResult(input);
+        return {
+          command: input.command,
+          args: input.args ?? [],
+          stdout: JSON.stringify({
+            status: "unhealthy",
+            paths: observerCommandPaths(),
+            ...lifecycleFailure,
+          }),
+          stderr: "",
+          exitCode: 1,
+        };
+      },
     });
 
     expect(result).toMatchObject({
@@ -361,6 +448,7 @@ describe("stn update command", () => {
           { id: "detect", status: "completed" },
           { id: "plan", status: "completed" },
           { id: "apply", status: "failed" },
+          { id: "hook-reconciliation", status: "skipped" },
           { id: "observer-restart", status: "skipped" },
           { id: "host-handoff", status: "skipped" },
         ],
@@ -438,6 +526,7 @@ describe("stn update command", () => {
 
       expect(result.output).toMatchObject({ status: "updated" });
       expect(commands.map(({ args }) => args)).toEqual([
+        ["--config", "/tmp/config.toml", "hooks", "reconcile", "codex"],
         ["--config", "/tmp/config.toml", "observer", "restart", "--timeout-ms", "20000"],
         ["--config", "/tmp/config.toml", "host", "handoff", "--fidelity", "processes"],
       ]);
@@ -499,7 +588,7 @@ describe("stn update command", () => {
           hostDeps: liveHost.hostDeps,
           commandRunner: async (input) => {
             commandCount += 1;
-            if (commandCount === 2) throw new Error("handoff failed");
+            if (commandCount === 3) throw new Error("handoff failed");
             return commandResult(input);
           },
         },
@@ -516,6 +605,7 @@ describe("stn update command", () => {
             { id: "detect", status: "completed" },
             { id: "plan", status: "completed" },
             { id: "apply", status: "completed" },
+            { id: "hook-reconciliation", status: "completed" },
             { id: "observer-restart", status: "completed" },
             { id: "host-handoff", status: "failed" },
           ],
@@ -627,21 +717,30 @@ function missingProbe(channel: UpdateChannelId): UpdateChannelProbe {
 }
 
 function commandResult(input: ExternalCommandInput): ExternalCommandResult {
+  const hookReconciliation =
+    input.args?.includes("hooks") === true && input.args.includes("reconcile");
   const observerRestart =
     input.args?.includes("observer") === true && input.args.includes("restart");
   return {
     command: input.command,
     args: input.args ?? [],
-    stdout: observerRestart
+    stdout: hookReconciliation
       ? JSON.stringify({
-          status: "running",
-          socketPath: config.observer.socketPath,
-          health: {
-            schemaVersion: STATION_SCHEMA_VERSION,
-            status: "healthy",
-          },
+          provider: "codex",
+          status: "healthy",
+          changed: false,
+          verified: true,
         })
-      : "",
+      : observerRestart
+        ? JSON.stringify({
+            status: "running",
+            socketPath: config.observer.socketPath,
+            health: {
+              schemaVersion: STATION_SCHEMA_VERSION,
+              status: "healthy",
+            },
+          })
+        : "",
     stderr: "",
     exitCode: 0,
   };

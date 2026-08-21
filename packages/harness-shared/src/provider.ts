@@ -75,7 +75,9 @@ export type TerminalBoundHarnessProviderSpec<TOpts extends CommonHarnessProvider
     ) => Promise<ProviderDoctorCheck[]>;
     version?: HarnessVersionSpec;
     hooksStatus?: (options: TOpts, context?: ProviderDoctorContext) => Promise<HarnessHooksStatus>;
+    /** Maps provider-native inspection onto strict, path-free hook-health evidence. */
     hookHealth?: (options: TOpts, context?: ProviderDoctorContext) => Promise<ProviderHookHealth>;
+    /** Requests the provider's sole no-takeover writer and post-write verification path. */
     reconcileHooks?: (
       options: TOpts,
       context?: ProviderDoctorContext,

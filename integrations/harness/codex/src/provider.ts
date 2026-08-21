@@ -185,6 +185,7 @@ async function hooksStatus(
   return harnessHooksStatusFrom("codex", options.installHooks === true, hookResult);
 }
 
+/** Translates Codex-native doctor evidence into the provider-neutral read contract. */
 async function hookHealth(
   options: CodexHarnessProviderOptions,
   context?: ProviderDoctorContext,
@@ -192,6 +193,7 @@ async function hookHealth(
   return inspectCodexHookHealth(harnessHookDoctorOptions(options, context));
 }
 
+/** Delegates automatic repair to the Codex-owned no-takeover plan/install/doctor path. */
 async function reconcileHooksForProvider(
   options: CodexHarnessProviderOptions,
   context?: ProviderDoctorContext,
@@ -202,7 +204,7 @@ async function reconcileHooksForProvider(
 /**
  * ADAPTER
  *
- * Supplies Codex launch, discovery, hook normalization, and compatibility admission through the harness port.
+ * Supplies Codex launch, discovery, hook health/reconciliation, normalization, and compatibility admission through the harness port.
  */
 export function createCodexHarnessProvider(
   options: CodexHarnessProviderOptions = {},
