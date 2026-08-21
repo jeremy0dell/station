@@ -35,6 +35,7 @@ describe("ObserverRecoveryAssessmentSchema", () => {
         schemaVersion: 1,
         inventory,
         resumeEnabled: true,
+        providerCapabilities: [{ provider: "codex", status: "enabled" }],
         sessions: [
           {
             sessionId: "sess_a",
@@ -77,6 +78,7 @@ describe("ObserverRecoveryAssessmentSchema", () => {
         schemaVersion: 1,
         inventory,
         resumeEnabled: false,
+        providerCapabilities: [],
         sessions: [],
       }).success,
     ).toBe(false);
@@ -94,6 +96,7 @@ describe("ObserverRecoveryAssessmentSchema", () => {
           ],
         },
         resumeEnabled: false,
+        providerCapabilities: [],
         sessions: [session, session],
       }).success,
     ).toBe(false);
@@ -105,6 +108,7 @@ describe("ObserverRecoveryAssessmentSchema", () => {
         schemaVersion: 1,
         inventory,
         resumeEnabled: false,
+        providerCapabilities: [{ provider: "codex", status: "disabled" }],
         sessions: [
           {
             sessionId: "sess_a",

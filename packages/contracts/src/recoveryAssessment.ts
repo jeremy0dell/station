@@ -22,6 +22,14 @@ export const SessionRecoveryAssessmentReasonSchema = z.enum([
 ]);
 export type SessionRecoveryAssessmentReason = z.infer<typeof SessionRecoveryAssessmentReasonSchema>;
 
+export const ProviderResumeCapabilitySchema = z
+  .object({
+    provider: ProviderIdSchema,
+    status: z.enum(["enabled", "disabled", "unsupported", "missing"]),
+  })
+  .strict();
+export type ProviderResumeCapability = z.infer<typeof ProviderResumeCapabilitySchema>;
+
 const orderedReasonsSchema = z
   .array(SessionRecoveryAssessmentReasonSchema)
   .superRefine((reasons, context) => {
@@ -91,11 +99,25 @@ export const ObserverRecoveryAssessmentSchema = z
     schemaVersion: z.literal(1),
     inventory: ObserverRecoveryInventorySchema,
     resumeEnabled: z.boolean(),
+    providerCapabilities: z.array(ProviderResumeCapabilitySchema),
     sessions: z.array(ObserverSessionRecoveryAssessmentSchema),
   })
   .strict()
   .superRefine((assessment, context) => {
     const sessionIds = assessment.sessions.map((session) => session.sessionId);
+    const capabilityProviders = assessment.providerCapabilities.map((entry) => entry.provider);
+    if (
+      capabilityProviders.some((provider, index) => {
+        const previous = capabilityProviders[index - 1];
+        return previous !== undefined && previous >= provider;
+      })
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["providerCapabilities"],
+        message: "Provider capabilities must be unique and deterministically sorted.",
+      });
+    }
     if (
       sessionIds.some((sessionId, index) => {
         const previous = sessionIds[index - 1];
@@ -133,6 +155,25 @@ export const ObserverRecoveryAssessmentSchema = z
           path: ["sessions", index, "reasons"],
           message: "Blocked, unknown, and inapplicable sessions require a typed reason.",
         });
+      }
+      if (session.disposition === "recoverable" && session.handleResolution.kind !== "selected") {
+        context.addIssue({
+          code: "custom",
+          path: ["sessions", index, "handleResolution"],
+          message: "Recoverable sessions require one deterministically selected handle.",
+        });
+      }
+      if (session.handleResolution.kind === "selected") {
+        const selectedHandleId = session.handleResolution.selectedHandleId;
+        if (
+          !assessment.inventory.recoveryHandles.some((handle) => handle.id === selectedHandleId)
+        ) {
+          context.addIssue({
+            code: "custom",
+            path: ["sessions", index, "handleResolution", "selectedHandleId"],
+            message: "Selected handles must belong to the coherent recovery inventory.",
+          });
+        }
       }
     }
   });

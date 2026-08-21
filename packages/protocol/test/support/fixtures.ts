@@ -41,6 +41,7 @@ export function createFakeObserverApi(
       schemaVersion: 1,
       inventory: { schemaVersion: 1, sessions: [], recoveryHandles: [] },
       resumeEnabled: true,
+      providerCapabilities: [],
       sessions: [],
     }),
     subscribe: () => stream([]),

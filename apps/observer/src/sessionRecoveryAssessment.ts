@@ -3,6 +3,7 @@ import {
   type ObserverRecoveryAssessment,
   ObserverRecoveryAssessmentSchema,
   type ObserverSessionRecoveryAssessment,
+  type ProviderResumeCapability,
   type SessionRecoveryAssessmentReason,
   type StationSnapshot,
 } from "@station/contracts";
@@ -54,6 +55,14 @@ export function assessObserverRecovery(input: {
 }): ObserverRecoveryAssessment {
   const inventory = observerRecoveryInventoryFromPersistence(input.persistenceSnapshot);
   const resumeEnabled = input.config?.featureFlags?.sessionResumeAgent === true;
+  const providerIds = new Set<string>();
+  for (const session of input.persistenceSnapshot.sessions) {
+    if (session.harness !== undefined) providerIds.add(session.harness);
+  }
+  for (const handle of input.persistenceSnapshot.recoveryHandles) providerIds.add(handle.provider);
+  const providerCapabilities = Array.from(providerIds)
+    .sort()
+    .map((provider) => normalizeProviderCapability(input, provider));
   const sessions = input.persistenceSnapshot.sessions
     .map((session) => assessSession(input, session, resumeEnabled))
     .sort((left, right) => left.sessionId.localeCompare(right.sessionId));
@@ -61,6 +70,7 @@ export function assessObserverRecovery(input: {
     schemaVersion: 1,
     inventory,
     resumeEnabled,
+    providerCapabilities,
     sessions,
   });
 }
@@ -140,7 +150,7 @@ function assessSession(
     ),
   );
   const selected = selectNewestSessionRecoveryCandidate(eligible);
-  const capabilityReason = normalizedCapabilityReason(input, harnessProvider);
+  const capabilityReason = capabilityReasonFor(normalizeProviderCapability(input, harnessProvider));
   const blockingReasons = sortedReasons([
     ...(!resumeEnabled ? (["global_resume_disabled"] as const) : []),
     ...(capabilityReason === undefined ? [] : [capabilityReason]),
@@ -216,18 +226,36 @@ function evaluateHandle(
   return sessionRecoveryEligibility(eligibilityInput);
 }
 
-function normalizedCapabilityReason(
+function normalizeProviderCapability(
   input: Parameters<typeof assessObserverRecovery>[0],
   providerId: string,
-): SessionRecoveryAssessmentReason | undefined {
+): ProviderResumeCapability {
   const provider = input.providers?.harnesses.get(providerId);
-  if (provider === undefined) return "harness_provider_missing";
+  if (provider === undefined) return { provider: providerId, status: "missing" };
   const configuredResume = input.config?.harness?.[providerId]?.resume;
-  if (configuredResume === false) return "provider_resume_disabled";
+  if (configuredResume === false) return { provider: providerId, status: "disabled" };
   if (!provider.capabilities().canResume) {
-    return configuredResume === true ? "harness_resume_unsupported" : "provider_resume_disabled";
+    return {
+      provider: providerId,
+      status: configuredResume === true ? "unsupported" : "disabled",
+    };
   }
-  return undefined;
+  return { provider: providerId, status: "enabled" };
+}
+
+function capabilityReasonFor(
+  capability: ProviderResumeCapability,
+): SessionRecoveryAssessmentReason | undefined {
+  switch (capability.status) {
+    case "enabled":
+      return undefined;
+    case "disabled":
+      return "provider_resume_disabled";
+    case "unsupported":
+      return "harness_resume_unsupported";
+    case "missing":
+      return "harness_provider_missing";
+  }
 }
 
 function sortedReasons(

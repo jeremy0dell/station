@@ -12325,6 +12325,7 @@
           "bindings": [
             "ObserverRecoveryAssessment",
             "ObserverSessionRecoveryAssessment",
+            "ProviderResumeCapability",
             "SessionRecoveryAssessmentReason",
             "StationSnapshot"
           ]
@@ -13957,6 +13958,95 @@
           "kind": "interface",
           "role": "DRIVEN PORT",
           "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
+      "path": "apps/cli/src/update/recoveryPreflight.ts",
+      "declaration": "runUpdateRecoveryPreflight",
+      "kind": "function",
+      "role": "USE CASE",
+      "purpose": "Aggregates read-only Observer, Host, retained-session, capability, handle, and hook facts while settling every evidence source. It computes dispositions only; executable actions, authorization, digests, and mutation remain downstream responsibilities.",
+      "dependencies": [
+        {
+          "path": "apps/cli/src/update/recoveryPreflight.ts",
+          "declaration": "UpdateRecoveryPreflightPorts",
+          "kind": "type",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
+      "path": "apps/cli/src/update/recoveryPreflight.ts",
+      "declaration": "UpdateRecoveryPreflightPorts",
+      "kind": "type",
+      "role": "DRIVEN PORT",
+      "purpose": "Supplies already normalized, read-only runtime and provider evidence. Implementations must not start, stop, signal, install, reconcile, resume, or otherwise mutate the inspected system.",
+      "dependencies": []
+    },
+    {
+      "path": "apps/cli/src/update/recoveryPreflightAdapters.ts",
+      "declaration": "createUpdateRecoveryPreflightPorts",
+      "kind": "function",
+      "role": "COMPOSITION ROOT",
+      "purpose": "Binds recovery preflight to read-only local process evidence, Observer protocol queries, strict Host inventory, and the provider-neutral hook-health use case. No lifecycle or repair capability is exposed through these ports.",
+      "dependencies": [
+        {
+          "path": "apps/cli/src/commands/host/index.ts",
+          "declaration": "runHostCommand",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/observerProcess.ts",
+          "declaration": "getObserverStatus",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/update/recoveryPreflight.ts",
+          "declaration": "UpdateRecoveryPreflightPorts",
+          "kind": "type",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        },
+        {
+          "path": "apps/observer/src/commands/harnessHookHealth.ts",
+          "declaration": "readHarnessHookHealth",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/observer/src/runtime/observerProcessEvidence.ts",
+          "declaration": "createLocalObserverProcessEvidence",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/observer/src/runtime/observerProcessIdentity.ts",
+          "declaration": "ObserverProcessIdentityEvidenceSource",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        },
+        {
+          "path": "apps/observer/src/runtime/observerProcessIdentity.ts",
+          "declaration": "verifyObserverProcessIdentity",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "packages/protocol/src/client.ts",
+          "declaration": "createObserverClient",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
         }
       ]
     },

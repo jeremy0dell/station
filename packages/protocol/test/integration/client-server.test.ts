@@ -66,6 +66,7 @@ describe("protocol client/server", () => {
           recoveryHandles: [],
         },
         resumeEnabled: false,
+        providerCapabilities: [],
         sessions: [
           {
             sessionId: "session-protocol",

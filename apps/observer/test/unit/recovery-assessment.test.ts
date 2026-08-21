@@ -34,6 +34,7 @@ describe("inspectObserverRecoveryAssessment", () => {
     });
 
     expect(readRecoveryInventory).toHaveBeenCalledOnce();
+    expect(result.providerCapabilities).toEqual([{ provider: "codex", status: "enabled" }]);
     expect(result.sessions).toEqual([
       expect.objectContaining({
         sessionId: "session-a",
