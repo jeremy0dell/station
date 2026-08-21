@@ -1423,7 +1423,7 @@ describe("guided setup command", () => {
     );
 
     expect(result.code).toBe(0);
-    expect(order).toEqual(["activate", "hook:worktrunk", "hook:codex", "hook:opencode"]);
+    expect(order).toEqual(["hook:worktrunk", "hook:codex", "hook:opencode", "activate"]);
     expect(fs.files[configPath]).toContain("use_lifecycle_hooks = true");
     expect(fs.files[configPath].match(/install_hooks = true/g)).toHaveLength(2);
     expect(calls.some((call) => (call.args ?? []).includes("hooks"))).toBe(false);

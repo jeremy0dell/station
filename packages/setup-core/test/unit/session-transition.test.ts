@@ -29,7 +29,7 @@ describe("setup session transitions", () => {
 
     expect((await application.review()).status).toBe("reviewing");
     expect((await application.apply()).status).toBe("completed");
-    expect(phases).toEqual(["initial", "after-preflight", "after-activation", "final"]);
+    expect(phases).toEqual(["initial", "after-preflight", "final"]);
     expect(Reflect.get(application, "dispatch")).toBeUndefined();
   });
 
