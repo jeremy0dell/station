@@ -171,6 +171,101 @@ describe("observer protocol server", () => {
     await rm(dir, { recursive: true, force: true });
   });
 
+  it("reconciles configured hooks under the boot claim before runtime publication", async () => {
+    const { dir, socketPath } = await createTempSocketPath();
+    const stateDir = join(dir, "hook-reconciliation-state");
+    const reconciliationStarted = deferred();
+    const releaseReconciliation = deferred();
+    const harness = new FakeHarnessProvider({ id: "codex", now });
+    harness.reconcileHooks = async () => {
+      reconciliationStarted.resolve();
+      await releaseReconciliation.promise;
+      return {
+        provider: "codex",
+        status: "repaired",
+        changed: true,
+        verified: true,
+      };
+    };
+    const runtime = runObserverMain(
+      ["--socket", socketPath, "--state-dir", stateDir, "--startup-timeout-ms", "2000"],
+      {
+        providerRegistryFactory: () =>
+          new ProviderRegistry({
+            worktree: new FakeWorktreeProvider({ now }),
+            terminal: new FakeTerminalProvider({ now }),
+            harnesses: [harness],
+          }),
+        buildVersion: observerBuildVersion,
+      },
+    );
+    const client = createObserverClient({ socketPath, requestId: ids("hook-reconcile") });
+
+    try {
+      await reconciliationStarted.promise;
+      await expect(access(socketPath)).rejects.toMatchObject({ code: "ENOENT" });
+      await expect(access(`${socketPath}.pid`)).rejects.toMatchObject({ code: "ENOENT" });
+      await expect(access(join(stateDir, "observer.sqlite"))).rejects.toMatchObject({
+        code: "ENOENT",
+      });
+      releaseReconciliation.resolve();
+      await vi.waitFor(
+        async () => {
+          await expect(probeObserverSocket(socketPath)).resolves.toMatchObject({
+            status: "listening",
+          });
+        },
+        { timeout: 2000 },
+      );
+      await expect(client.health()).resolves.toMatchObject({ status: "healthy" });
+    } finally {
+      releaseReconciliation.resolve();
+      await client.stop().catch(() => undefined);
+      await runtime.catch(() => undefined);
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("fails startup without publishing runtime state when hook repair is unverified", async () => {
+    const { dir, socketPath } = await createTempSocketPath();
+    const stateDir = join(dir, "hook-reconciliation-failure-state");
+    const harness = new FakeHarnessProvider({ id: "codex", now });
+    harness.reconcileHooks = async () => ({
+      provider: "codex",
+      status: "post-write-doctor-failed",
+      changed: true,
+      verified: false,
+      error: {
+        tag: "CodexHookSetupError",
+        code: "CODEX_HOOK_POST_WRITE_DOCTOR_FAILED",
+        message: "Codex hook writes were not verified by provider doctor.",
+        provider: "codex",
+      },
+      followUp: { action: "run-doctor" },
+    });
+
+    await expect(
+      runObserverMain(
+        ["--socket", socketPath, "--state-dir", stateDir, "--startup-timeout-ms", "2000"],
+        {
+          providerRegistryFactory: () =>
+            new ProviderRegistry({
+              worktree: new FakeWorktreeProvider({ now }),
+              terminal: new FakeTerminalProvider({ now }),
+              harnesses: [harness],
+            }),
+          buildVersion: observerBuildVersion,
+        },
+      ),
+    ).rejects.toMatchObject({ code: "CODEX_HOOK_POST_WRITE_DOCTOR_FAILED" });
+    await expect(access(socketPath)).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(access(`${socketPath}.pid`)).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(access(join(stateDir, "observer.sqlite"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    await rm(dir, { recursive: true, force: true });
+  });
+
   it("captures canonical runtime paths in the local diagnostic adapter", async () => {
     const root = await mkdtemp(join(tmpdir(), "station-runtime-diagnostics-"));
     const stateDir = join(root, "state with spaces");

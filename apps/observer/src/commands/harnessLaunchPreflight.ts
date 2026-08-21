@@ -1,6 +1,7 @@
 import type { ProviderId, SafeError } from "@station/contracts";
 import type { ProviderRegistry } from "../providers/registry.js";
 import { throwIfAborted } from "./cancellation.js";
+import { reconcileHarnessHooksOrThrow } from "./harnessHookReconciliation.js";
 import { assertHooksInstalledOrThrow, resolveHarnessProviderOrThrow } from "./providers.js";
 
 export type HarnessLaunchPreflight = (
@@ -18,7 +19,8 @@ export type HarnessLaunchPreflightOptions = {
 /**
  * USE CASE
  *
- * Freshly verifies the selected harness health and hook delivery immediately before launch mutation.
+ * Freshly verifies the selected harness health, reconciles configured hooks, and verifies delivery
+ * immediately before launch mutation.
  */
 export async function assertHarnessLaunchPreconditionsOrThrow(
   options: HarnessLaunchPreflightOptions,
@@ -38,6 +40,17 @@ export async function assertHarnessLaunchPreconditionsOrThrow(
   const health = options.providers.healthCache.read(provider.id);
   if (health?.status === "unavailable") {
     throw health.lastError ?? harnessUnavailableError(provider.id);
+  }
+
+  await reconcileHarnessHooksOrThrow({
+    providers: options.providers,
+    providerId: provider.id,
+    ...(options.stationConfigPath === undefined
+      ? {}
+      : { stationConfigPath: options.stationConfigPath }),
+  });
+  if (options.signal !== undefined) {
+    throwIfAborted(options.signal);
   }
 
   await assertHooksInstalledOrThrow(
