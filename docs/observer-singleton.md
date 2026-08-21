@@ -74,6 +74,40 @@ prevents an ordinary same-second PID replacement from inheriting authority. Miss
 stale, or conflicting evidence refuses ownership mutation. Clean shutdown removes a pidfile only
 when all fields still match the process's published identity.
 
+## Bounded stale-evidence repair
+
+Start, stop, and restart converge when an absent or proven-stale socket has no verified
+incumbent. They serialize repair with the same boot claim used by startup and explicit reap.
+`status`, Doctor, snapshots, and debug evidence stay read-only. Repair receives no signal
+capability and never unlinks a socket; only the successful binder may reclaim a proven-stale
+socket after its existing fresh path and zero-holder checks.
+
+The claim-holding repair applies this decision table:
+
+| Socket admission | Strict pidfile and process evidence | Outcome |
+| --- | --- | --- |
+| absent or same stale inode/birth identity | pidfile absent on two reads | idempotent clean result |
+| absent or same stale identity | PID positively absent | atomically remove the exact pidfile with reason `process-missing` |
+| absent or same stale identity | OS start token, executable/argv, process token, build selector, or socket argv differs | atomically remove the exact pidfile with the typed drift reason |
+| absent or same stale identity | exact live Observer generation | typed `OBSERVER_STALE_EVIDENCE_UNCERTAIN` refusal; preserve evidence |
+| absent or same stale identity | malformed, insecure, inaccessible, timed-out, or otherwise uncertain evidence | typed fail-closed refusal; preserve evidence |
+| listening, inaccessible, or changed socket/pidfile owner | any | typed refusal; preserve the current owner's evidence |
+
+One shared read-only verifier owns exact Observer identity comparison for handoff, repair,
+and equivalent reap checks. Repair reads and classifies the original pidfile generation,
+then repeats strict pidfile, process, and socket checks immediately before its commit. The
+commit reuses the existing atomic rename, strict parse, exact compare, delete-or-restore
+mechanics. A failed compare retries at most once while retaining the original generation as
+the admission baseline; it never adopts or deletes a successor's evidence. Cancellation or
+deadline exhaustion before commit refuses. Once the atomic filesystem operation begins it
+settles to delete the admitted exact value or restore what it claimed. Repeating repair after
+a successful removal returns the same clean state.
+
+An idempotent `stn observer stop` returns `stopped: false` plus strict `evidenceRepair`
+summary when no incumbent exists. Startup and restart carry a repair refusal through the
+private startup report as the separate typed lifecycle `cause`. No repair result is persisted,
+so this contract requires no Observer database migration.
+
 ## Attach versus coordinated handoff
 
 Handoff reads process evidence only for the incumbent PID named by the corroborated socket and
@@ -228,6 +262,7 @@ Station fails closed for singleton mutation:
 - any candidate Unix-domain socket descriptor refuses reap, including a
   descriptor for an unrelated socket;
 - process, socket, holder, pidfile, or argv change before or after grace refuses further signaling;
+- stale-evidence repair never signals and never treats missing or uncertain evidence as signal authority;
 - startup claim contention refuses explicit reap without waiting;
 - automatic handoff never sends SIGKILL; only explicit force may escalate after revalidation;
 - exact-build activation uses only identity-pinned cooperative stop and preserves
@@ -246,6 +281,7 @@ traces and bundles.
 - No thin proxy that lets an older or different build execute through incompatible code.
 - No periodic duplicate killer.
 - No automatic duplicate-process signal.
+- No change to verified live handoff policy or terminal update/reap execution.
 - No telemetry requirement for singleton inspection evidence.
 
 ## Verification
@@ -255,6 +291,8 @@ The permanent verification surface includes:
 - pure duplicate-selection decision tests for keeper, candidate, FD, and ambiguity rules;
 - process-evidence tests for strict `ps` and `lsof` parsing and unavailable evidence;
 - boot-claim tests for immediate contention, callback release, and failure cleanup;
+- stale-evidence use-case and strict pidfile-adapter tests for every drift reason,
+  unavailable evidence, cancellation, owner replacement, exact compare/remove, and restore;
 - use-case tests for quarantine, final revalidation, report mode, SIGTERM-only mode,
   cancellation, and survivors;
 - CLI tests preserving dry-run and manual force semantics;
