@@ -15,6 +15,7 @@ export * from "./observations.js";
 export * from "./observer.js";
 export * from "./providers.js";
 export * from "./recovery.js";
+export * from "./recoveryAssessment.js";
 export * from "./recoveryBreadcrumbs.js";
 export * from "./recoveryInventory.js";
 export * from "./sessionRecovery.js";
