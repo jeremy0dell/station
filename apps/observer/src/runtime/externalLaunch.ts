@@ -51,21 +51,41 @@ export type ExternalLaunchOutcome<T> = {
   reconcile: boolean;
 };
 
+export type ExternalLaunchPreparationRoute =
+  | "existing-managed-attachment"
+  | "existing-live-session-without-attachment"
+  | "prepared-managed-attachment"
+  | "prepared-caller-owned";
+
+export type ExternalLaunchPreparationDecision = {
+  route: ExternalLaunchPreparationRoute;
+  sessionId: string;
+  terminalProvider?: string | undefined;
+  terminalTargetId?: string | undefined;
+};
+
+export type PrepareExternalLaunchOutcome =
+  ExternalLaunchOutcome<AgentPrepareExternalLaunchResult> & {
+    decision: ExternalLaunchPreparationDecision;
+  };
+
 /**
  * USE CASE
  *
  * Returns a live or attachable managed identity first, then exactly recovers the canonical open
  * Station session unless explicit, identity-bound user consent requests a fresh provider execution.
  * Recovery retains that session's identity and durable state, passes only provider-neutral resume
- * options, and releases only its replacement target generation on failure. Both launch paths
- * preflight only the selected provider. A fresh Station identity is atomically seeded with explicit
- * root placement or the requested source session's current Group before target publication, and
- * confirmed failed launch cleanup removes only its membership and owned inline Group.
+ * options, and releases only its replacement target generation on failure. The provider-neutral
+ * preparation decision distinguishes attachment, live-session, managed-process, and caller-owned
+ * launch routes without claiming the client landed. Both launch paths preflight only the selected
+ * provider. A fresh Station identity is atomically seeded with explicit root placement or the
+ * requested source session's current Group before target publication, and confirmed failed launch
+ * cleanup removes only its membership and owned inline Group.
  */
 export async function prepareExternalLaunch(
   deps: ExternalLaunchDeps,
   params: AgentPrepareExternalLaunchParams,
-): Promise<ExternalLaunchOutcome<AgentPrepareExternalLaunchResult>> {
+): Promise<PrepareExternalLaunchOutcome> {
   return deps.worktreeMutations.run(params.projectId, params.worktreeId, () =>
     prepareExternalLaunchForWorktree(deps, params),
   );
@@ -74,7 +94,7 @@ export async function prepareExternalLaunch(
 async function prepareExternalLaunchForWorktree(
   deps: ExternalLaunchDeps,
   params: AgentPrepareExternalLaunchParams,
-): Promise<ExternalLaunchOutcome<AgentPrepareExternalLaunchResult>> {
+): Promise<PrepareExternalLaunchOutcome> {
   const project = findProjectOrThrow(deps.core.getProjects(), params.projectId);
   const snapshot = deps.core.getSnapshot();
   const row = snapshot.rows.find((candidate) => candidate.id === params.worktreeId);
@@ -115,6 +135,12 @@ async function prepareExternalLaunchForWorktree(
             attachment,
           },
           reconcile: false,
+          decision: {
+            route: "existing-managed-attachment",
+            sessionId: target.sessionId,
+            terminalProvider: managedTerminal.id,
+            terminalTargetId: target.id,
+          },
         };
       }
     }
@@ -127,6 +153,13 @@ async function prepareExternalLaunchForWorktree(
     if (agent?.sessionId === undefined) {
       throw sessionAlreadyHasAgentError(row.id);
     }
+    const decision: ExternalLaunchPreparationDecision = {
+      route: "existing-live-session-without-attachment",
+      sessionId: agent.sessionId,
+    };
+    if (row.terminal?.provider !== undefined) {
+      decision.terminalProvider = row.terminal.provider;
+    }
     return {
       outcome: {
         kind: "existing-session",
@@ -134,6 +167,7 @@ async function prepareExternalLaunchForWorktree(
         harnessProvider: agent.harness,
       },
       reconcile: false,
+      decision,
     };
   }
 
@@ -155,7 +189,7 @@ async function prepareExternalLaunchForWorktree(
             target.sessionId !== undefined,
         )
       : undefined;
-  if (concurrentManagedTarget?.sessionId !== undefined) {
+  if (managedTerminal !== undefined && concurrentManagedTarget?.sessionId !== undefined) {
     return {
       outcome: {
         kind: "existing-session",
@@ -164,6 +198,12 @@ async function prepareExternalLaunchForWorktree(
           concurrentManagedTarget.harnessBinding?.harnessProvider ?? project.defaults.harness,
       },
       reconcile: false,
+      decision: {
+        route: "existing-live-session-without-attachment",
+        sessionId: concurrentManagedTarget.sessionId,
+        terminalProvider: managedTerminal.id,
+        terminalTargetId: concurrentManagedTarget.id,
+      },
     };
   }
 
@@ -306,6 +346,12 @@ async function prepareExternalLaunchForWorktree(
     return {
       outcome,
       reconcile: true,
+      decision: {
+        route: launched.started ? "prepared-managed-attachment" : "prepared-caller-owned",
+        sessionId,
+        terminalProvider: managedTerminal.id,
+        terminalTargetId: opened.target.targetId,
+      },
     };
   } catch (error) {
     const targetReleaseConfirmed = await releaseOpenedTargetBestEffort({

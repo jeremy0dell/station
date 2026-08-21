@@ -78,8 +78,11 @@ export const TerminalAttachmentSchema = z
   .object({
     provider: ProviderIdSchema,
     state: TerminalStateSchema,
+    /** External provider-focus evidence; renderer-local opening routes are separate. */
     focusable: z.boolean().optional(),
     closeable: z.boolean().optional(),
+    /** Whether the provider can currently issue an opaque managed attachment. */
+    hasManagedAttachment: z.boolean().optional(),
     hasWorkspace: z.boolean().optional(),
     hasPrimaryAgentEndpoint: z.boolean().optional(),
     confidence: ConfidenceSchema.optional(),
@@ -273,6 +276,33 @@ export const OrphanedRuntimeStateSchema = z
 
 export type OrphanedRuntimeState = z.infer<typeof OrphanedRuntimeStateSchema>;
 
+export const SnapshotTerminalTargetDebugSchema = z
+  .object({
+    id: TerminalTargetIdSchema,
+    provider: ProviderIdSchema,
+    projectId: ProjectIdSchema.optional(),
+    worktreeId: WorktreeIdSchema.optional(),
+    sessionId: SessionIdSchema.optional(),
+    state: TerminalStateSchema,
+    focusable: z.boolean().optional(),
+    closeable: z.boolean().optional(),
+    hasManagedAttachment: z.boolean().optional(),
+    confidence: ConfidenceSchema,
+    reason: nonEmptyStringSchema,
+    observedAt: TimestampSchema,
+  })
+  .strict();
+
+export type SnapshotTerminalTargetDebug = z.infer<typeof SnapshotTerminalTargetDebugSchema>;
+
+export const StationSnapshotDebugSchema = z
+  .object({
+    terminalTargets: z.array(SnapshotTerminalTargetDebugSchema),
+  })
+  .strict();
+
+export type StationSnapshotDebug = z.infer<typeof StationSnapshotDebugSchema>;
+
 export const StationSnapshotSchema = z
   .object({
     schemaVersion: SchemaVersionSchema,
@@ -306,6 +336,8 @@ export const StationSnapshotSchema = z
     alerts: z.array(StationAlertSchema),
     featureFlags: ClientFeatureFlagsSchema.optional(),
     orphans: z.array(OrphanedRuntimeStateSchema).optional(),
+    /** Opt-in, redaction-safe evidence derived from the same reconcile as this snapshot. */
+    debug: StationSnapshotDebugSchema.optional(),
   })
   .strict()
   .superRefine((snapshot, context) => {

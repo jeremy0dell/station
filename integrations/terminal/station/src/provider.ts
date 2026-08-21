@@ -60,8 +60,9 @@ type PreviousTargetBinding = {
  * ADAPTER
  *
  * Station terminal provider: UI-hosted mode is a registration shim; host-backed
- * mode supplies process lifecycle and opaque attachment identity. Native
- * presentation remains locally owned by Station and is never externally focusable.
+ * mode supplies process lifecycle, opaque attachment identity, and normalized
+ * current attachment evidence. Native presentation remains locally owned by
+ * Station and is never externally focusable.
  * Deterministic targets are released only when their current Station session and,
  * for managed launch attempts, opaque binding generation match.
  */
@@ -155,7 +156,7 @@ export class StationTerminalProvider implements ManagedTerminalLifecycle {
    */
   async listTargets(): Promise<TerminalTargetObservation[]> {
     if (this.#host === undefined) {
-      return [...this.#targets.values()];
+      return this.#listedTargets();
     }
     this.#listRequestSequence += 1;
     const requestSequence = this.#listRequestSequence;
@@ -178,12 +179,12 @@ export class StationTerminalProvider implements ManagedTerminalLifecycle {
       if (recoveredOrphans) {
         throw error;
       }
-      return [...this.#targets.values()];
+      return this.#listedTargets();
     }
     // A response cannot overwrite a target rebound, released, or host-backed
     // after this request began; a newer list request also supersedes this view.
     if (requestSequence !== this.#listRequestSequence || targetRevision !== this.#targetRevision) {
-      return [...this.#targets.values()];
+      return this.#listedTargets();
     }
     const aliveById = new Map<string, HostListEntry>();
     for (const entry of live) {
@@ -216,7 +217,15 @@ export class StationTerminalProvider implements ManagedTerminalLifecycle {
         this.#previousBindings.delete(targetId);
       }
     }
-    return [...this.#targets.values()];
+    return this.#listedTargets();
+  }
+
+  #listedTargets(): TerminalTargetObservation[] {
+    return [...this.#targets.values()].map((target) => {
+      const observation: TerminalTargetObservation = { ...target };
+      observation.hasManagedAttachment = this.#hostBackedTargets.has(target.id);
+      return observation;
+    });
   }
 
   /**

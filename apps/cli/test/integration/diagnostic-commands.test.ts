@@ -27,7 +27,7 @@ describe("CLI diagnostic commands", () => {
       clientFactory: () =>
         ({
           health: async () => ({
-            schemaVersion: "0.11.0",
+            schemaVersion: "0.12.0",
             status: "healthy",
             pid: 1234,
             startedAt: now,
@@ -49,7 +49,7 @@ describe("CLI diagnostic commands", () => {
     ).resolves.toMatchObject({
       code: 0,
       output: {
-        schemaVersion: "0.11.0",
+        schemaVersion: "0.12.0",
         status: "healthy",
         debugBundle: {
           available: true,
@@ -166,7 +166,7 @@ describe("CLI diagnostic commands", () => {
       clientFactory: () =>
         ({
           health: async () => ({
-            schemaVersion: "0.11.0",
+            schemaVersion: "0.12.0",
             status: "healthy",
             pid: 1234,
             startedAt: now,
@@ -201,7 +201,7 @@ describe("CLI diagnostic commands", () => {
       clientFactory: () =>
         ({
           health: async () => ({
-            schemaVersion: "0.11.0",
+            schemaVersion: "0.12.0",
             status: "healthy",
             pid: 1234,
             startedAt: now,
@@ -238,7 +238,7 @@ describe("CLI diagnostic commands", () => {
       clientFactory: () =>
         ({
           health: async () => ({
-            schemaVersion: "0.11.0",
+            schemaVersion: "0.12.0",
             status: "healthy",
             pid: 1234,
             startedAt: now,
@@ -301,7 +301,7 @@ describe("CLI diagnostic commands", () => {
       clientFactory: () =>
         ({
           health: async () => ({
-            schemaVersion: "0.11.0",
+            schemaVersion: "0.12.0",
             status: "healthy",
             pid: 1234,
             startedAt: now,
@@ -342,7 +342,7 @@ describe("CLI diagnostic commands", () => {
       clientFactory: () =>
         ({
           health: async () => ({
-            schemaVersion: "0.11.0",
+            schemaVersion: "0.12.0",
             status: "healthy",
             pid: 1234,
             startedAt: now,
@@ -756,12 +756,12 @@ describe("CLI diagnostic commands", () => {
 
 function doctorReport(stateDir: string): DoctorReport {
   return {
-    schemaVersion: "0.11.0",
+    schemaVersion: "0.12.0",
     generatedAt: now,
     status: "healthy",
     checks: [{ name: "observer", status: "ok", message: "Observer is healthy." }],
     observer: {
-      schemaVersion: "0.11.0",
+      schemaVersion: "0.12.0",
       status: "healthy",
       pid: 1234,
       startedAt: now,
@@ -789,17 +789,17 @@ function doctorReport(stateDir: string): DoctorReport {
 
 function diagnosticSnapshot(): DiagnosticSnapshot {
   return {
-    schemaVersion: "0.11.0",
+    schemaVersion: "0.12.0",
     collectedAt: now,
     observerHealth: {
-      schemaVersion: "0.11.0",
+      schemaVersion: "0.12.0",
       status: "healthy",
       pid: 1234,
       startedAt: now,
       version: observerBuildVersion,
     },
     snapshot: {
-      schemaVersion: "0.11.0",
+      schemaVersion: "0.12.0",
       generatedAt: now,
       observer: { pid: 1234, startedAt: now, version: "0.7.0", healthy: true },
       providerHealth: {},

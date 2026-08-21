@@ -9,6 +9,7 @@ import type { EventJournal, SessionStore } from "../persistence/index.js";
 import type { ProviderRegistry } from "../providers/registry.js";
 import type { ObserverCore } from "../reconcile/core.js";
 import type { ObserverEventBus } from "../runtime/eventBus.js";
+import type { StationLogger } from "../stationLogger.js";
 import { nowIso } from "../utils/time.js";
 import { assertCommandType } from "./assertCommand.js";
 import { throwIfAborted } from "./cancellation.js";
@@ -34,6 +35,7 @@ export type CreateTerminalFocusHandlerOptions = {
   core: ObserverCore;
   providers: ProviderRegistry;
   clock?: RuntimeClock | undefined;
+  logger?: StationLogger | undefined;
 };
 
 export type CreateTerminalCloseHandlerOptions = {
@@ -61,6 +63,7 @@ export function createTerminalFocusHandler(
       origin: context.command.payload.origin,
       context,
       clock: options.clock,
+      logger: options.logger,
     });
     throwIfAborted(context.signal);
   };

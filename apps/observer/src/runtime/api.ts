@@ -275,7 +275,7 @@ export function createObserverApi(options: CreateObserverApiOptions): ObserverAp
         stopProviderHealthPublication,
         clock,
       ),
-    getSnapshot: async () => options.core.getSnapshot(),
+    getSnapshot: async (snapshotOptions) => options.core.getSnapshot(snapshotOptions),
     getSessionRecoveryReadiness: async () => sessionRecoveryReadiness(options),
     subscribe: (filter?: EventFilter): AsyncIterable<StationEvent> =>
       options.eventBus.subscribe(filter),
@@ -375,6 +375,10 @@ async function prepareExternalLaunchSafe(
       code: "EXTERNAL_LAUNCH_PREPARE_FAILED",
       message: "External agent launch preparation failed.",
     });
+    await logExternalLaunchPreparation(options.logger, params, {
+      outcome: "failed",
+      errorCode: error.code,
+    });
     if (error.code === "HARNESS_HOOKS_NOT_INSTALLED") {
       const attributes: Record<string, unknown> = {
         error,
@@ -390,11 +394,52 @@ async function prepareExternalLaunchSafe(
     }
     throw cause;
   }
-  const { outcome, reconcile } = result;
+  const { outcome, reconcile, decision } = result;
+  await logExternalLaunchPreparation(options.logger, params, {
+    outcome: "prepared",
+    decision,
+  });
   if (reconcile) {
     reconcileScheduler.request("agent.prepareExternalLaunch");
   }
   return outcome;
+}
+
+async function logExternalLaunchPreparation(
+  logger: StationLogger | undefined,
+  params: Parameters<ObserverApi["prepareExternalLaunch"]>[0],
+  result:
+    | {
+        outcome: "prepared";
+        decision: Awaited<ReturnType<typeof prepareExternalLaunch>>["decision"];
+      }
+    | { outcome: "failed"; errorCode: string },
+): Promise<void> {
+  if (logger === undefined) return;
+  const attributes: Record<string, unknown> = {
+    operation: "agent.prepareExternalLaunch",
+    projectId: params.projectId,
+    worktreeId: params.worktreeId,
+    outcome: result.outcome,
+  };
+  if (result.outcome === "prepared") {
+    attributes.route = result.decision.route;
+    attributes.sessionId = result.decision.sessionId;
+    if (result.decision.terminalProvider !== undefined) {
+      attributes.terminalProvider = result.decision.terminalProvider;
+    }
+    if (result.decision.terminalTargetId !== undefined) {
+      attributes.terminalTargetId = result.decision.terminalTargetId;
+    }
+    await logger
+      .info("External launch preparation decision completed.", attributes)
+      .catch(() => undefined);
+    return;
+  }
+  attributes.errorCode = result.errorCode;
+  await logger
+    .warn("External launch preparation decision failed.", attributes)
+    .catch(() => undefined);
 }
 
 async function reportExternalExitSafe(

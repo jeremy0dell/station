@@ -109,6 +109,27 @@ describe("Observer API composition with in-memory persistence", () => {
         },
       ],
     });
+    expect(initial.snapshot).not.toHaveProperty("debug");
+    await expect(api.getSnapshot()).resolves.not.toHaveProperty("debug");
+    await expect(api.getSnapshot({ includeDebug: false })).resolves.not.toHaveProperty("debug");
+    const debugSnapshot = await api.getSnapshot({ includeDebug: true });
+    expect(debugSnapshot).toMatchObject({
+      debug: {
+        terminalTargets: [
+          {
+            id: "term_web_task",
+            provider: "fake-terminal",
+            projectId: "web",
+            worktreeId: "wt_web_task",
+            sessionId: "ses_web_task",
+            focusable: true,
+            closeable: true,
+            hasManagedAttachment: false,
+          },
+        ],
+      },
+    });
+    expect(debugSnapshot.debug?.terminalTargets[0]).not.toHaveProperty("providerData");
     await initialEvents.return?.();
     await waitFor(() => worktreeChangeSource.requests.length > 0);
     expect(worktreeChangeSource.requests[0]?.target).toMatchObject({
@@ -349,6 +370,10 @@ function fakeProviders(): ProviderRegistry {
           sessionId: "ses_web_task",
           harnessRunId: "run_web_task",
           cwd: "/tmp/station/web/task",
+          focusable: true,
+          closeable: true,
+          hasManagedAttachment: false,
+          providerData: { paneId: "%private" },
           harnessBinding: { role: "main-agent", harnessProvider: "fake-harness" },
           now,
         }),

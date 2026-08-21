@@ -92,7 +92,7 @@ describe("observer lifecycle e2e", () => {
         code: "ENOENT",
       });
       await expect(client.getSnapshot()).resolves.toMatchObject({
-        schemaVersion: "0.11.0",
+        schemaVersion: "0.12.0",
         observer: { version: build.version },
         counts: { projects: 0 },
       });
@@ -881,7 +881,7 @@ describe("observer lifecycle e2e", () => {
         stateDir: fixture.stateDir,
       });
       await expect(client.getSnapshot()).resolves.toMatchObject({
-        schemaVersion: "0.11.0",
+        schemaVersion: "0.12.0",
         counts: { projects: 0 },
       });
     } finally {

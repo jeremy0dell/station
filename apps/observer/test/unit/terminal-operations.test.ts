@@ -119,6 +119,7 @@ describe("terminal operations", () => {
 
   it("focuses a listed target by session subject and preserves focus origin", async () => {
     const order: string[] = [];
+    const logger = new CapturingLogger();
     const terminal = new RecordingTerminalProvider({
       order,
       targets: [
@@ -158,6 +159,7 @@ describe("terminal operations", () => {
       origin: { provider: "tmux", clientId: "client_1" },
       context: commandContext("cmd_focus"),
       clock,
+      logger,
     });
 
     expect(order).toEqual(["listTargets", "focusTarget"]);
@@ -165,6 +167,104 @@ describe("terminal operations", () => {
     expect(terminal.snapshot().focusContexts).toEqual([
       { origin: { provider: "tmux", clientId: "client_1" } },
     ]);
+    expect(logger.records).toEqual([
+      expect.objectContaining({
+        level: "info",
+        message: "Terminal focus decision completed.",
+        attributes: expect.objectContaining({
+          operation: "terminal.focus",
+          commandId: "cmd_focus",
+          traceId: "trace_cmd_focus",
+          projectId: "web",
+          worktreeId: "wt_web_feature",
+          sessionId: "ses_web_feature",
+          terminalProvider: "fake-terminal",
+          originProvider: "tmux",
+          hasOriginClientId: true,
+          totalTargetCount: 2,
+          matchingTargetCount: 2,
+          selectedTargetId: "term_agent",
+          selectedTargetState: "open",
+          selectionBasis: "session-main-agent",
+          outcome: "focused",
+        }),
+      }),
+    ]);
+    expect(JSON.stringify(logger.records)).not.toContain("client_1");
+    expect(JSON.stringify(logger.records)).not.toContain("%ignored");
+  });
+
+  it("logs normalized provider focus failure against the selected target", async () => {
+    const logger = new CapturingLogger();
+    const terminal = new RecordingTerminalProvider({
+      targets: [
+        createFakeTerminalTarget({
+          id: "term_agent",
+          provider: "fake-terminal",
+          worktreeId: "wt_web_feature",
+          sessionId: "ses_web_feature",
+          now,
+        }),
+      ],
+      failures: {
+        focusTarget: {
+          tag: "TerminalProviderError",
+          code: "FAKE_FOCUS_FAILED",
+          message: "The fake terminal failed to focus.",
+          provider: "fake-terminal",
+        },
+      },
+    });
+
+    await expect(
+      focusTerminal({
+        terminal,
+        subject: { worktreeId: "wt_web_feature", sessionId: "ses_web_feature" },
+        context: commandContext("cmd_focus_failed"),
+        clock,
+        logger,
+      }),
+    ).rejects.toMatchObject({ code: "FAKE_FOCUS_FAILED" });
+    expect(logger.records).toEqual([
+      expect.objectContaining({
+        level: "warn",
+        message: "Terminal focus decision failed.",
+        attributes: expect.objectContaining({
+          selectedTargetId: "term_agent",
+          selectionBasis: "session",
+          outcome: "failed",
+          errorCode: "FAKE_FOCUS_FAILED",
+        }),
+      }),
+    ]);
+  });
+
+  it("does not let decision logger failure change successful focus", async () => {
+    const terminal = new RecordingTerminalProvider({
+      targets: [
+        createFakeTerminalTarget({
+          id: "term_agent",
+          provider: "fake-terminal",
+          worktreeId: "wt_web_feature",
+          now,
+        }),
+      ],
+    });
+    const logger: StationLogger = {
+      info: async () => Promise.reject(new Error("log unavailable")),
+      warn: async () => undefined,
+      error: async () => undefined,
+    };
+
+    await expect(
+      focusTerminal({
+        terminal,
+        subject: { worktreeId: "wt_web_feature" },
+        context: commandContext("cmd_focus_log_failure"),
+        clock,
+        logger,
+      }),
+    ).resolves.toBeUndefined();
   });
 
   it("closes the main-agent target before workspace targets for worktree subjects", async () => {
@@ -205,6 +305,7 @@ describe("terminal operations", () => {
   });
 
   it("rejects stale-only and missing focus or close subjects without provider mutation", async () => {
+    const logger = new CapturingLogger();
     const staleTerminal = new RecordingTerminalProvider({
       targets: [
         createFakeTerminalTarget({
@@ -223,6 +324,7 @@ describe("terminal operations", () => {
         subject: { projectId: "web", worktreeId: "wt_web_feature" },
         context: commandContext("cmd_stale_focus"),
         clock,
+        logger,
       }),
     ).rejects.toMatchObject({
       tag: "TerminalProviderError",
@@ -231,6 +333,17 @@ describe("terminal operations", () => {
       worktreeId: "wt_web_feature",
     });
     expect(staleTerminal.snapshot().focused).toEqual([]);
+    expect(logger.records).toEqual([
+      expect.objectContaining({
+        level: "warn",
+        attributes: expect.objectContaining({
+          totalTargetCount: 1,
+          matchingTargetCount: 1,
+          selectionBasis: "stale",
+          errorCode: "TERMINAL_TARGET_STALE",
+        }),
+      }),
+    ]);
 
     const missingTerminal = new RecordingTerminalProvider();
     await expect(

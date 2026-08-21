@@ -239,6 +239,16 @@ describe("observer external-launch reconcile", () => {
       fixture.api.prepareExternalLaunch({ projectId: "web", worktreeId: "wt_web_feature" }),
     ).rejects.toMatchObject({ code: "HARNESS_HOOKS_NOT_INSTALLED" });
     expect(records).toContainEqual({
+      message: "External launch preparation decision failed.",
+      attributes: {
+        operation: "agent.prepareExternalLaunch",
+        projectId: "web",
+        worktreeId: "wt_web_feature",
+        outcome: "failed",
+        errorCode: "HARNESS_HOOKS_NOT_INSTALLED",
+      },
+    });
+    expect(records).toContainEqual({
       message: "External agent launch rejected because harness hooks are unavailable.",
       attributes: {
         error: expect.objectContaining({ code: "HARNESS_HOOKS_NOT_INSTALLED" }),
@@ -247,6 +257,43 @@ describe("observer external-launch reconcile", () => {
       },
     });
 
+    fixture.sqlite.close();
+  });
+
+  it("logs the provider-neutral external launch preparation route", async () => {
+    const stateDir = await mkdtemp(join(tmpdir(), "station-observer-ext-"));
+    const records: Array<{ message: string; attributes?: Record<string, unknown> }> = [];
+    const logger: StationLogger = {
+      info: async (message, attributes) => {
+        records.push({ message, ...(attributes === undefined ? {} : { attributes }) });
+      },
+      warn: async (message, attributes) => {
+        records.push({ message, ...(attributes === undefined ? {} : { attributes }) });
+      },
+      error: async () => {},
+    };
+    const fixture = createFixture(providerIngressSpoolDir(stateDir), { logger });
+    await fixture.api.reconcile("seed");
+
+    const result = await fixture.api.prepareExternalLaunch({
+      projectId: "web",
+      worktreeId: "wt_web_feature",
+    });
+    if (result.kind !== "prepared") throw new Error("expected prepared launch");
+
+    expect(records).toContainEqual({
+      message: "External launch preparation decision completed.",
+      attributes: {
+        operation: "agent.prepareExternalLaunch",
+        projectId: "web",
+        worktreeId: "wt_web_feature",
+        outcome: "prepared",
+        route: "prepared-caller-owned",
+        sessionId: result.sessionId,
+        terminalProvider: "native",
+        terminalTargetId: "native:wt_web_feature",
+      },
+    });
     fixture.sqlite.close();
   });
 

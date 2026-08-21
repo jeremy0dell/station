@@ -88,6 +88,7 @@ describe("observer reconcile with a station-hosted target", () => {
     // does not dispatch a focus/close the station provider can only reject.
     expect(stationRow?.terminal?.focusable).toBe(false);
     expect(stationRow?.terminal?.closeable).toBe(false);
+    expect(stationRow?.terminal?.hasManagedAttachment).toBe(false);
 
     // Reporting exit drops only the station target; the tmux session survives.
     await expect(
@@ -160,9 +161,19 @@ describe("observer reconcile with a station-hosted target", () => {
     const stationSession = snapshot.sessions.find((session) => session.id === "ses_station");
     expect(stationSession).toMatchObject({
       worktreeId: "wt_web_station",
-      terminal: { provider: "native", closeable: true },
+      terminal: { provider: "native", closeable: true, hasManagedAttachment: true },
     });
     expect(stationSession?.terminal?.focusable).toBe(false);
+    expect(core.getSnapshot({ includeDebug: true }).debug?.terminalTargets).toContainEqual(
+      expect.objectContaining({
+        id: stationTargetId("wt_web_station"),
+        provider: "native",
+        sessionId: "ses_station",
+        focusable: false,
+        closeable: true,
+        hasManagedAttachment: true,
+      }),
+    );
 
     // Observer-restart proxy: a fresh provider has no in-memory targets and must
     // rebuild the same non-focusable projection from host.list.
@@ -176,7 +187,7 @@ describe("observer reconcile with a station-hosted target", () => {
     const rebuiltSession = rebuiltSnapshot.sessions.find((session) => session.id === "ses_station");
     expect(rebuiltSession).toMatchObject({
       worktreeId: "wt_web_station",
-      terminal: { provider: "native", closeable: true },
+      terminal: { provider: "native", closeable: true, hasManagedAttachment: true },
     });
     expect(rebuiltSession?.terminal?.focusable).toBe(false);
   });
@@ -250,6 +261,7 @@ describe("observer reconcile with a station-hosted target", () => {
     expect(stationRow?.terminal?.provider).toBe("native");
     expect(stationRow?.terminal?.focusable).toBe(false);
     expect(stationRow?.terminal?.closeable).toBe(false);
+    expect(stationRow?.terminal?.hasManagedAttachment).toBe(false);
   });
 
   it("re-derives multiple station sessions from distinct host PTYs", async () => {

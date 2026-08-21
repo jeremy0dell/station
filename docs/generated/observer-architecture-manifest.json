@@ -2469,6 +2469,12 @@
           "bindings": ["ObserverEventBus"]
         },
         {
+          "specifier": "../stationLogger.js",
+          "resolvedPath": "apps/observer/src/stationLogger.ts",
+          "edgeKind": "type-only",
+          "bindings": ["StationLogger"]
+        },
+        {
           "specifier": "../utils/time.js",
           "resolvedPath": "apps/observer/src/utils/time.ts",
           "edgeKind": "runtime",
@@ -2511,8 +2517,8 @@
         {
           "name": "focusTerminal",
           "kind": "function",
-          "role": null,
-          "purpose": null
+          "role": "USE CASE",
+          "purpose": "Resolves fresh provider-owned target evidence from product identity, focuses the selected target with request-local origin context, and retains one bounded decision record."
         },
         {
           "name": "hasCloseableTerminalAttachment",
@@ -4413,8 +4419,8 @@
         {
           "name": "focusTerminal",
           "kind": "function",
-          "role": null,
-          "purpose": null
+          "role": "USE CASE",
+          "purpose": "Resolves fresh provider-owned target evidence from product identity, focuses the selected target with request-local origin context, and retains one bounded decision record."
         },
         {
           "name": "GitRefInvalidationTarget",
@@ -9088,6 +9094,12 @@
           "bindings": ["StatusProjectionResult"]
         },
         {
+          "specifier": "./terminalTargetDebug.js",
+          "resolvedPath": "apps/observer/src/reconcile/terminalTargetDebug.ts",
+          "edgeKind": "runtime",
+          "bindings": ["terminalTargetDebugFromObservations"]
+        },
+        {
           "specifier": "../stationLogger.js",
           "resolvedPath": "apps/observer/src/stationLogger.ts",
           "edgeKind": "type-only",
@@ -9114,6 +9126,7 @@
             "ProviderHealth",
             "ProviderProjectConfig",
             "SessionGroupView",
+            "SnapshotTerminalTargetDebug",
             "StationEvent",
             "StationSnapshot",
             "WorktreeRow"
@@ -9549,7 +9562,7 @@
           "name": "runReconcileOnce",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Orchestrates provider reads, relationship correlation, durable harness-event repair and overlays, cached metadata hydration, Group projection, snapshot assembly, and atomic session persistence. The same resolved title records feed snapshot composition and atomic reconcile persistence."
+          "purpose": "Orchestrates provider reads, relationship correlation, durable harness-event repair and overlays, cached metadata hydration, Group projection, snapshot and sanitized-debug input assembly, and atomic session persistence. The same resolved title and terminal records feed every output."
         }
       ],
       "imports": [
@@ -9975,6 +9988,31 @@
       ]
     },
     {
+      "path": "apps/observer/src/reconcile/terminalTargetDebug.ts",
+      "exports": [
+        {
+          "name": "terminalTargetDebugFromObservation",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "terminalTargetDebugFromObservations",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "type-only",
+          "bindings": ["SnapshotTerminalTargetDebug", "TerminalTargetObservation"]
+        }
+      ]
+    },
+    {
       "path": "apps/observer/src/reconcile/worktreeMetadataOverlay.ts",
       "exports": [
         {
@@ -10386,10 +10424,28 @@
           "purpose": null
         },
         {
+          "name": "ExternalLaunchPreparationDecision",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ExternalLaunchPreparationRoute",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "prepareExternalLaunch",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Returns a live or attachable managed identity first, then exactly recovers the canonical open Station session unless explicit, identity-bound user consent requests a fresh provider execution. Recovery retains that session's identity and durable state, passes only provider-neutral resume options, and releases only its replacement target generation on failure. Both launch paths preflight only the selected provider. A fresh Station identity is atomically seeded with explicit root placement or the requested source session's current Group before target publication, and confirmed failed launch cleanup removes only its membership and owned inline Group."
+          "purpose": "Returns a live or attachable managed identity first, then exactly recovers the canonical open Station session unless explicit, identity-bound user consent requests a fresh provider execution. Recovery retains that session's identity and durable state, passes only provider-neutral resume options, and releases only its replacement target generation on failure. The provider-neutral preparation decision distinguishes attachment, live-session, managed-process, and caller-owned launch routes without claiming the client landed. Both launch paths preflight only the selected provider. A fresh Station identity is atomically seeded with explicit root placement or the requested source session's current Group before target publication, and confirmed failed launch cleanup removes only its membership and owned inline Group."
+        },
+        {
+          "name": "PrepareExternalLaunchOutcome",
+          "kind": "type",
+          "role": null,
+          "purpose": null
         },
         {
           "name": "reportExternalExit",
@@ -13722,6 +13778,29 @@
       ]
     },
     {
+      "path": "apps/observer/src/commands/terminalOperations.ts",
+      "declaration": "focusTerminal",
+      "kind": "function",
+      "role": "USE CASE",
+      "purpose": "Resolves fresh provider-owned target evidence from product identity, focuses the selected target with request-local origin context, and retains one bounded decision record.",
+      "dependencies": [
+        {
+          "path": "apps/observer/src/stationLogger.ts",
+          "declaration": "StationLogger",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        },
+        {
+          "path": "packages/contracts/src/providers.ts",
+          "declaration": "TerminalProvider",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
       "path": "apps/observer/src/commands/worktree/create.ts",
       "declaration": "createWorktreeCreateHandler",
       "kind": "function",
@@ -14104,7 +14183,7 @@
       "declaration": "runReconcileOnce",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Orchestrates provider reads, relationship correlation, durable harness-event repair and overlays, cached metadata hydration, Group projection, snapshot assembly, and atomic session persistence. The same resolved title records feed snapshot composition and atomic reconcile persistence.",
+      "purpose": "Orchestrates provider reads, relationship correlation, durable harness-event repair and overlays, cached metadata hydration, Group projection, snapshot and sanitized-debug input assembly, and atomic session persistence. The same resolved title and terminal records feed every output.",
       "dependencies": [
         {
           "path": "apps/observer/src/persistence/ports.ts",
@@ -14326,6 +14405,13 @@
           "edgeKind": "runtime"
         },
         {
+          "path": "apps/observer/src/stationLogger.ts",
+          "declaration": "StationLogger",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        },
+        {
           "path": "packages/contracts/src/observer.ts",
           "declaration": "ObserverApi",
           "kind": "type",
@@ -14339,7 +14425,7 @@
       "declaration": "prepareExternalLaunch",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Returns a live or attachable managed identity first, then exactly recovers the canonical open Station session unless explicit, identity-bound user consent requests a fresh provider execution. Recovery retains that session's identity and durable state, passes only provider-neutral resume options, and releases only its replacement target generation on failure. Both launch paths preflight only the selected provider. A fresh Station identity is atomically seeded with explicit root placement or the requested source session's current Group before target publication, and confirmed failed launch cleanup removes only its membership and owned inline Group.",
+      "purpose": "Returns a live or attachable managed identity first, then exactly recovers the canonical open Station session unless explicit, identity-bound user consent requests a fresh provider execution. Recovery retains that session's identity and durable state, passes only provider-neutral resume options, and releases only its replacement target generation on failure. The provider-neutral preparation decision distinguishes attachment, live-session, managed-process, and caller-owned launch routes without claiming the client landed. Both launch paths preflight only the selected provider. A fresh Station identity is atomically seeded with explicit root placement or the requested source session's current Group before target publication, and confirmed failed launch cleanup removes only its membership and owned inline Group.",
       "dependencies": [
         {
           "path": "apps/observer/src/commands/harnessLaunchPreflight.ts",
@@ -15127,7 +15213,7 @@
       "declaration": "StationTerminalProvider",
       "kind": "class",
       "role": "ADAPTER",
-      "purpose": "Station terminal provider: UI-hosted mode is a registration shim; host-backed mode supplies process lifecycle and opaque attachment identity. Native presentation remains locally owned by Station and is never externally focusable. Deterministic targets are released only when their current Station session and, for managed launch attempts, opaque binding generation match.",
+      "purpose": "Station terminal provider: UI-hosted mode is a registration shim; host-backed mode supplies process lifecycle, opaque attachment identity, and normalized current attachment evidence. Native presentation remains locally owned by Station and is never externally focusable. Deterministic targets are released only when their current Station session and, for managed launch attempts, opaque binding generation match.",
       "dependencies": [
         {
           "path": "packages/contracts/src/providers.ts",
@@ -15238,7 +15324,7 @@
       "declaration": "ObserverApi",
       "kind": "type",
       "role": "DRIVING PORT",
-      "purpose": "Exposes Observer state and recovery-readiness queries, handshakes, ingress reports, maintenance, and lifecycle operations to external actors.",
+      "purpose": "Exposes Observer state and recovery-readiness queries, handshakes, ingress reports, maintenance, and lifecycle operations to external actors. Snapshot debug evidence is opt-in and explanatory; ordinary snapshots remain the canonical client graph.",
       "dependencies": []
     },
     {
@@ -15254,7 +15340,7 @@
       "declaration": "ManagedTerminalLifecycle",
       "kind": "interface",
       "role": "DRIVEN PORT",
-      "purpose": "Owns the single managed terminal target used for an external Station launch. Its capabilities state whether process ownership survives the launching client; attachments expose only adapter-owned target identity, and at most one target may exist per worktree. A local fallback may instead carry a provider-neutral output policy for the caller-owned process. `openManagedWorkspace` returns opaque binding authority so launch and cleanup cannot mutate a superseding same-session attempt. Release never terminates a process: `false` proves the qualified binding was absent or superseded, while rejection leaves release uncertain.",
+      "purpose": "Owns the single managed terminal target used for an external Station launch. Its capabilities state whether process ownership survives the launching client; attachments expose only adapter-owned target identity, and at most one target may exist per worktree. A local fallback may instead carry a provider-neutral output policy for the caller-owned process. `openManagedWorkspace` returns opaque binding authority so launch and cleanup cannot mutate a superseding same-session attempt. Release never terminates a process: `false` proves the qualified binding was absent or superseded, while rejection leaves release uncertain. Target observations distinguish a currently issuable managed attachment from renderer-local pane state.",
       "dependencies": [
         {
           "path": "packages/contracts/src/providers.ts",
@@ -15278,7 +15364,7 @@
       "declaration": "TerminalProvider",
       "kind": "interface",
       "role": "DRIVEN PORT",
-      "purpose": "Supplies terminal topology and lifecycle through provider-owned target identities without exposing provider mechanics.",
+      "purpose": "Supplies terminal topology and lifecycle through provider-owned target identities without exposing provider mechanics. Target focusability describes external provider control, not whether a particular renderer can reveal, attach, or otherwise land in the target.",
       "dependencies": []
     },
     {
