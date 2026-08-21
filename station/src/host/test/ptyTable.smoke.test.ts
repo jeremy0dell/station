@@ -110,5 +110,37 @@ if (SMOKE) {
         table.disposeAll();
       }
     });
+
+    it("closes a Host-owned PTY whose payload ignores SIGTERM", async () => {
+      const table = createPtyTable();
+      try {
+        const { ptyId } = table.spawn({
+          kind: "aux",
+          terminalTargetId: "aux:close-smoke",
+          worktreeId: "aux",
+          projectId: "aux",
+          sessionId: "aux:close-smoke",
+          worktreePath: process.cwd(),
+          harnessProvider: "aux",
+          command: process.execPath,
+          args: [
+            "-e",
+            'process.on("SIGTERM", () => {}); process.stdout.write("READY"); setInterval(() => {}, 1000)',
+          ],
+          cwd: process.cwd(),
+          cols: 80,
+          rows: 24,
+        });
+        await waitUntil(
+          () => table.snapshot(ptyId).rawChunks.join("").includes("READY"),
+          2_000,
+        );
+
+        expect(await table.close(ptyId)).toBe(true);
+        expect(table.has(ptyId)).toBe(false);
+      } finally {
+        table.disposeAll();
+      }
+    });
   });
 }

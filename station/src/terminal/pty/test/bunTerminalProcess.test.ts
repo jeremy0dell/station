@@ -324,6 +324,29 @@ if (RUN_REAL_BUN_PTY) {
       expect(isProcessAlive(payloadPid)).toBe(false);
     });
 
+    it("kill defaults to terminal hangup when the payload ignores SIGTERM", async () => {
+      const terminal = trackTerminal(
+        createLocalPtyTerminal({
+          command: process.execPath,
+          args: [
+            "-e",
+            'process.on("SIGTERM", () => {}); process.stdout.write("READY"); setInterval(() => {}, 1000)',
+          ],
+        }),
+      );
+      const observed = observe(terminal);
+      const payloadPid = terminal.pid;
+      cleanups.push(() => {
+        if (isProcessAlive(payloadPid)) process.kill(payloadPid, "SIGKILL");
+      });
+
+      await waitFor(() => observed.output().includes("READY"), 5_000);
+      terminal.kill();
+      await waitFor(() => observed.exit() !== undefined, 5_000);
+
+      expect(isProcessAlive(payloadPid)).toBe(false);
+    });
+
     it("supports Ctrl-Z, fg, and Ctrl-C through the controlling terminal", async () => {
       const prompt = `__STATION_PTY_PROMPT_${process.pid}__ `;
       const terminal = trackTerminal(
