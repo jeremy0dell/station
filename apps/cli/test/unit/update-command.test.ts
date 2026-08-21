@@ -24,6 +24,17 @@ const testBuildInfo = () => ({
 });
 
 describe("stn update command", () => {
+  it("rejects non-dry-run --reap before update detection or mutation", async () => {
+    const detectAndPlan = vi.fn();
+
+    await expect(
+      runUpdateCommand(["--reap"], commandOptions(), {
+        probes: [{ channel: "installer-binary", detectAndPlan }],
+      }),
+    ).rejects.toThrow("Use --dry-run --reap");
+    expect(detectAndPlan).not.toHaveBeenCalled();
+  });
+
   it("reports an already-current installation without applying or preflighting handoff", async () => {
     const fixture = probeFixture("installer-binary", { planStatus: "current" });
     const liveHost = await createLiveHostFixture();

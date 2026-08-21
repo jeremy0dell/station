@@ -7,10 +7,11 @@ export type UpdateRequest = {
   output: "text" | "json";
   packageManager: "defer" | "drive";
   handoff?: HostHandoffFidelity;
+  reap: boolean;
 };
 
 const updateUsage =
-  "Usage: stn update [--channel <installer-binary|dev-checkout|homebrew|npm-global|mise>] [--dry-run] [--json] [--drive-package-manager] [--handoff[=processes|screen] | --no-handoff]";
+  "Usage: stn update [--channel <installer-binary|dev-checkout|homebrew|npm-global|mise>] [--dry-run] [--reap] [--json] [--drive-package-manager] [--handoff[=processes|screen] | --no-handoff]";
 
 function isUpdateChannelId(value: string | undefined): value is UpdateChannelId {
   return value !== undefined && updateChannelIds.some((channel) => channel === value);
@@ -23,6 +24,7 @@ export function parseUpdateRequest(args: readonly string[]): UpdateRequest {
   let packageManager: UpdateRequest["packageManager"] = "defer";
   let handoff: HostHandoffFidelity | undefined = "processes";
   let handoffConfigured = false;
+  let reap = false;
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
     if (arg === "--channel") {
@@ -41,6 +43,11 @@ export function parseUpdateRequest(args: readonly string[]): UpdateRequest {
     if (arg === "--json") {
       if (output === "json") throw new Error("--json may be provided only once.");
       output = "json";
+      continue;
+    }
+    if (arg === "--reap") {
+      if (reap) throw new Error("--reap may be provided only once.");
+      reap = true;
       continue;
     }
     if (arg === "--drive-package-manager") {
@@ -72,11 +79,17 @@ export function parseUpdateRequest(args: readonly string[]): UpdateRequest {
     }
     throw new Error(updateUsage);
   }
+  if (reap && mode !== "preview") {
+    throw new Error(
+      "stn update --reap is not an execution mode yet. Use --dry-run --reap to inspect non-resumable consequences without mutation.",
+    );
+  }
   return {
     ...(channel === undefined ? {} : { channel }),
     mode,
     output,
     packageManager,
+    reap,
     ...(handoff === undefined ? {} : { handoff }),
   };
 }
