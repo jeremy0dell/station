@@ -22,11 +22,15 @@ function runTestObserverReap(
   options: { force: boolean; graceMs?: number },
   deps: ObserverReapDeps,
 ) {
+  const readObserverProcess =
+    deps.readObserverProcess ??
+    ((pid: number) => deps.listObserverProcesses?.().find((entry) => entry.pid === pid));
   return runObserverReap(
     socketPath,
     options,
     createLocalObserverReap({
       ...deps,
+      readObserverProcess,
       exclusion: deps.exclusion ?? {
         runExclusive: async (operation) => ({
           status: "completed",
