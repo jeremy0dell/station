@@ -4,7 +4,13 @@
 import type {
   ProviderHookArtifactOwner,
   ProviderHookArtifactOwnership,
+  ProviderHookHealth,
+  ProviderHookReconciliationResult,
   SafeError,
+} from "@station/contracts";
+import {
+  ProviderHookHealthSchema,
+  ProviderHookReconciliationResultSchema,
 } from "@station/contracts";
 import {
   commandLine,
@@ -36,6 +42,7 @@ import {
   type CodexObsoleteHookEventName,
 } from "./hooks/hookConstants.js";
 import { CodexHookSetupError } from "./hooks/hookErrors.js";
+import { withCodexHookMutationLock } from "./hooks/hookMutationLock.js";
 import {
   resolveCodexBaseConfigPath,
   resolveCodexConfigPath,
@@ -58,6 +65,10 @@ export type CodexHookPlanOptions = {
   takeover?: boolean;
   env?: NodeJS.ProcessEnv;
   homeDir?: string;
+};
+
+export type CodexHookReconciliationOptions = CodexHookPlanOptions & {
+  enabled: boolean;
 };
 
 export type CodexGeneratedGlobalHookCleanup = {
@@ -217,6 +228,15 @@ export async function planCodexHooks(options: CodexHookPlanOptions = {}): Promis
 export async function installCodexHooks(
   options: CodexHookPlanOptions = {},
 ): Promise<CodexHookInstallResult> {
+  return withCodexHookMutationLock(codexHookMutationPaths(options), () =>
+    installCodexHooksUnlocked(options),
+  );
+}
+
+async function installCodexHooksUnlocked(
+  options: CodexHookPlanOptions,
+  onMutation?: () => void,
+): Promise<CodexHookInstallResult> {
   const plan = await planCodexHooks(options);
   const profileBackupPath = await installConfigScriptHook({
     configPath: plan.configPath,
@@ -231,11 +251,13 @@ export async function installCodexHooks(
     provider: "codex",
     ...(options.artifactOwner === undefined ? {} : { artifactOwner: options.artifactOwner }),
     ...(options.takeover === undefined ? {} : { takeover: options.takeover }),
+    ...(onMutation === undefined ? {} : { onMutation }),
   });
   let baseBackupPath: string | undefined;
   if (plan.generatedGlobalCleanup.changed) {
     baseBackupPath = await fileOps.backupIfPresent(plan.baseConfigPath);
     await fileOps.writeHookConfig(plan.baseConfigPath, plan.generatedGlobalCleanup.after);
+    onMutation?.();
   }
 
   const result = installResultFromPlan(plan, true);
@@ -248,6 +270,117 @@ export async function installCodexHooks(
   }
   assignBackupPaths(result, { profileBackupPath, baseBackupPath });
   return result;
+}
+
+/** Runs the #645 install writer and provider doctor under one provider-owned lock. */
+export async function repairCodexHooks(
+  options: CodexHookPlanOptions,
+  enabled: boolean,
+): Promise<CodexHookRepairResult> {
+  return runCodexHookRepair(options, enabled);
+}
+
+/** Maps Codex-native doctor evidence onto the provider-neutral read-only contract. */
+export async function inspectCodexHookHealth(
+  options: CodexHookReconciliationOptions,
+): Promise<ProviderHookHealth> {
+  if (!options.enabled) {
+    return ProviderHookHealthSchema.parse({
+      provider: "codex",
+      status: "configured-disabled",
+      followUp: { action: "enable-hooks" },
+    });
+  }
+
+  try {
+    return codexHealthFromDoctor(await doctorCodexHooks(options));
+  } catch (cause) {
+    return ProviderHookHealthSchema.parse({
+      provider: "codex",
+      status: "inspection-failed",
+      error: publicSafeErrorFromUnknown(cause, {
+        tag: "CodexHookSetupError",
+        code: "CODEX_HOOK_INSPECTION_FAILED",
+        message: "Codex hook inspection failed.",
+        provider: "codex",
+      }),
+      followUp: { action: "run-doctor" },
+    });
+  }
+}
+
+/** Reconciles Codex hooks without takeover and returns no provider-native paths or payloads. */
+export async function reconcileCodexHooks(
+  options: CodexHookReconciliationOptions,
+): Promise<ProviderHookReconciliationResult> {
+  if (!options.enabled) {
+    return ProviderHookReconciliationResultSchema.parse({
+      provider: "codex",
+      status: "configured-disabled",
+      changed: false,
+      verified: false,
+      followUp: { action: "enable-hooks" },
+    });
+  }
+
+  let plan: CodexHookPlan;
+  try {
+    plan = await planCodexHooks(options);
+  } catch (cause) {
+    return reconciliationFailure("inspection-failed", false, cause);
+  }
+  if (isOwnershipConflict(plan.ownership)) {
+    return ProviderHookReconciliationResultSchema.parse({
+      provider: "codex",
+      status: "ownership-conflict",
+      changed: false,
+      verified: false,
+      followUp: { action: "run-explicit-takeover" },
+    });
+  }
+
+  let changed = false;
+  try {
+    const repaired = await runCodexHookRepair(options, true, () => {
+      changed = true;
+    });
+    if (repaired.verified) {
+      return ProviderHookReconciliationResultSchema.parse({
+        provider: "codex",
+        status: repaired.changed ? "repaired" : "healthy",
+        changed: repaired.changed,
+        verified: true,
+      });
+    }
+    const failure = "error" in repaired ? repaired.error : undefined;
+    return reconciliationFailure(
+      "post-write-doctor-failed",
+      repaired.changed,
+      failure ?? new Error("Codex hook doctor did not verify the completed reconciliation."),
+    );
+  } catch (cause) {
+    if (isOwnershipConflictError(cause)) {
+      return ProviderHookReconciliationResultSchema.parse({
+        provider: "codex",
+        status: "ownership-conflict",
+        changed: false,
+        verified: false,
+        followUp: { action: "run-explicit-takeover" },
+      });
+    }
+    return reconciliationFailure("write-failed", changed, cause);
+  }
+}
+
+async function runCodexHookRepair(
+  options: CodexHookPlanOptions,
+  enabled: boolean,
+  onMutation?: () => void,
+): Promise<CodexHookRepairResult> {
+  return withCodexHookMutationLock(codexHookMutationPaths(options), async () => {
+    const installed = await installCodexHooksUnlocked(options, onMutation);
+    return verifyCodexHookInstall(installed, options, enabled);
+  });
 }
 
 export async function verifyCodexHookInstall(
@@ -321,6 +454,14 @@ export async function verifyCodexHookInstall(
 
 export async function uninstallCodexHooks(
   options: CodexHookPlanOptions = {},
+): Promise<CodexHookInstallResult> {
+  return withCodexHookMutationLock(codexHookMutationPaths(options), () =>
+    uninstallCodexHooksUnlocked(options),
+  );
+}
+
+async function uninstallCodexHooksUnlocked(
+  options: CodexHookPlanOptions,
 ): Promise<CodexHookInstallResult> {
   const configPath = resolveCodexConfigPath(options);
   const baseConfigPath = resolveCodexBaseConfigPath(options);
@@ -646,4 +787,85 @@ function assignBackupPaths(
   if (backupPaths.length > 0) {
     result.backupPaths = backupPaths;
   }
+}
+
+function codexHookMutationPaths(options: CodexHookPlanOptions): string[] {
+  return [
+    resolveCodexConfigPath(options),
+    resolveCodexBaseConfigPath(options),
+    resolveCodexHookScriptPath(options),
+  ];
+}
+
+function codexHealthFromDoctor(doctor: CodexHookDoctorResult): ProviderHookHealth {
+  if (isOwnershipConflict(doctor.ownership)) {
+    return ProviderHookHealthSchema.parse({
+      provider: "codex",
+      status: "ownership-conflict",
+      ownership: doctor.ownership.status,
+      followUp: { action: "run-explicit-takeover" },
+    });
+  }
+  if (doctor.status === "ok" && doctor.installed) {
+    return ProviderHookHealthSchema.parse({ provider: "codex", status: "healthy" });
+  }
+  return ProviderHookHealthSchema.parse({
+    provider: "codex",
+    status: "needs-repair",
+    reason:
+      doctor.ownership?.status === "same-owner" || doctor.installed ? "owned-drift" : "missing",
+  });
+}
+
+function reconciliationFailure(
+  status: "inspection-failed" | "write-failed" | "post-write-doctor-failed",
+  changed: boolean,
+  cause: unknown,
+): ProviderHookReconciliationResult {
+  const fallbackByStatus = {
+    "inspection-failed": {
+      code: "CODEX_HOOK_INSPECTION_FAILED",
+      message: "Codex hook inspection failed.",
+      action: "run-doctor",
+    },
+    "write-failed": {
+      code: "CODEX_HOOK_WRITE_FAILED",
+      message: "Codex hook reconciliation could not complete its writes.",
+      action: "retry",
+    },
+    "post-write-doctor-failed": {
+      code: "CODEX_HOOK_POST_WRITE_DOCTOR_FAILED",
+      message: "Codex hook writes were not verified by provider doctor.",
+      action: "run-doctor",
+    },
+  } as const;
+  const fallback = fallbackByStatus[status];
+  return ProviderHookReconciliationResultSchema.parse({
+    provider: "codex",
+    status,
+    changed: status === "inspection-failed" ? false : changed,
+    verified: false,
+    error: publicSafeErrorFromUnknown(cause, {
+      tag: "CodexHookSetupError",
+      code: fallback.code,
+      message: fallback.message,
+      provider: "codex",
+    }),
+    followUp: { action: fallback.action },
+  });
+}
+
+function isOwnershipConflict(
+  ownership: ProviderHookArtifactOwnership | undefined,
+): ownership is Extract<
+  ProviderHookArtifactOwnership,
+  { status: "different-owner" | "unknown-owner" }
+> {
+  return ownership?.status === "different-owner" || ownership?.status === "unknown-owner";
+}
+
+function isOwnershipConflictError(cause: unknown): boolean {
+  return (
+    cause instanceof Error && "code" in cause && cause.code === "PROVIDER_HOOK_OWNERSHIP_CONFLICT"
+  );
 }

@@ -12,6 +12,8 @@ import type {
   ProviderHealth,
   ProviderHookArtifactOwner,
   ProviderHookArtifactOwnership,
+  ProviderHookHealth,
+  ProviderHookReconciliationResult,
   ProviderId,
   SafeError,
 } from "@station/contracts";
@@ -73,6 +75,11 @@ export type TerminalBoundHarnessProviderSpec<TOpts extends CommonHarnessProvider
     ) => Promise<ProviderDoctorCheck[]>;
     version?: HarnessVersionSpec;
     hooksStatus?: (options: TOpts, context?: ProviderDoctorContext) => Promise<HarnessHooksStatus>;
+    hookHealth?: (options: TOpts, context?: ProviderDoctorContext) => Promise<ProviderHookHealth>;
+    reconcileHooks?: (
+      options: TOpts,
+      context?: ProviderDoctorContext,
+    ) => Promise<ProviderHookReconciliationResult>;
   };
 
 export function createTerminalBoundHarnessProvider<TOpts extends CommonHarnessProviderOptions>(
@@ -106,6 +113,14 @@ export function createTerminalBoundHarnessProvider<TOpts extends CommonHarnessPr
   const hooksStatus = spec.hooksStatus;
   if (hooksStatus) {
     provider.hooksStatus = (context) => hooksStatus(options, context);
+  }
+  const hookHealth = spec.hookHealth;
+  if (hookHealth) {
+    provider.hookHealth = (context) => hookHealth(options, context);
+  }
+  const reconcileHooks = spec.reconcileHooks;
+  if (reconcileHooks) {
+    provider.reconcileHooks = (context) => reconcileHooks(options, context);
   }
   const version = spec.version;
   if (version) {
