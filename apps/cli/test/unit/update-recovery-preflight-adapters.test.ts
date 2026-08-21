@@ -207,6 +207,53 @@ describe("createUpdateRecoveryPreflightPorts", () => {
     });
     expect(getSessionRecoveryAssessment).toHaveBeenCalledOnce();
   });
+
+  it("keeps matching and legacy idle Host build evidence explicit", async () => {
+    const targetBuildVersion = "1.1.0+station.target";
+    const cases = [
+      {
+        health: { ok: true as const, protocolVersion: 8, buildVersion: targetBuildVersion },
+        compatibility: { action: "reuse" as const },
+        expected: {
+          status: "inspected",
+          buildVersion: targetBuildVersion,
+          relation: "matching-target",
+          compatibility: "reuse",
+          terminals: [],
+        },
+      },
+      {
+        health: { ok: true as const, protocolVersion: 8 },
+        compatibility: { action: "refuse" as const, reason: "legacy-health" as const },
+        expected: {
+          status: "inspected",
+          relation: "unknown",
+          compatibility: "refuse",
+          terminals: [],
+        },
+      },
+    ];
+
+    for (const testCase of cases) {
+      const ports = createUpdateRecoveryPreflightPorts({
+        config: testConfig(),
+        providers: providerRegistry(),
+        observerStatus: async () => ({ status: "stopped", paths: observerPaths() }),
+        hostStatus: async () => ({
+          action: "status",
+          socketPath: "/private/runtime/host.sock",
+          probe: "listening",
+          health: testCase.health,
+          compatibility: testCase.compatibility,
+          livePtyCount: 0,
+          handoffEligible: true,
+          ptys: [],
+        }),
+      });
+
+      await expect(ports.inspectHost(targetBuildVersion)).resolves.toMatchObject(testCase.expected);
+    }
+  });
 });
 
 function providerRegistry(): ProviderRegistry {
