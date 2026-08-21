@@ -8,6 +8,7 @@ import {
   QUIT_HINT_FILTER_CLOSE,
   type TuiDashboardBindingId,
 } from "../../state/keymap.js";
+import { shortcutCodeInputForScreen } from "../../state/shortcutInput.js";
 import type { DashboardScreenView, DashboardViewState } from "../../state/types.js";
 import { cellWidth, truncateCells } from "../WorktreeRow/layout.js";
 import {
@@ -120,6 +121,20 @@ export function dashboardFooterModel(options: DashboardFooterModelOptions): Dash
       return persistentFilterEditingFooter(columns);
     }
     return persistentFilterConditionFooter(columns, screen.conditionEditor.stage);
+  }
+
+  const shortcutCodeInput = screen === undefined ? undefined : shortcutCodeInputForScreen(screen);
+  if (shortcutCodeInput !== undefined) {
+    const prompt = `\` ${shortcutCodeInput}▌`;
+    const model: DashboardFooterDashboardModel = {
+      kind: "dashboard",
+      text: fitFooterCandidates(columns, [
+        `${prompt}  Enter invoke  Backspace edit  Esc cancel`,
+        `${prompt}  ↵ invoke  Esc cancel`,
+        prompt,
+      ]),
+    };
+    return model;
   }
 
   if (persistentFilter !== undefined) {

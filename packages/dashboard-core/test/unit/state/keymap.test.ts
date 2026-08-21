@@ -29,6 +29,7 @@ describe("dashboard key bindings", () => {
     expect(matchDashboardBinding({ input: "G" })?.action).toBe("tui.quickGroup.create");
     expect(matchDashboardBinding({ input: "M" })?.action).toBe("tui.moveToGroup.open");
     expect(matchDashboardBinding({ input: "?" })?.action).toBe("tui.help.open");
+    expect(matchDashboardBinding({ input: "`" })?.action).toBe("tui.shortcut.arm");
   });
 
   it("derives the dedicated persistent-filter input mode", () => {
@@ -154,9 +155,15 @@ describe("dashboard footer binding metadata", () => {
     });
     expect(dashboardBindingHelp("tui.dashboard.slotActivate")).toMatchObject({
       keys: "1-9 a-z",
-      label: "open visible session",
+      label: "invoke one-key session shortcut",
       panelKeys: "1-9/a-z",
-      panelLabel: "open visible session or toggle condition",
+      panelLabel: "session shortcut or condition toggle",
+    });
+    expect(dashboardBindingHelp("tui.dashboard.shortcutPrefix")).toMatchObject({
+      keys: "`",
+      label: "shortcut",
+      panelKeys: "`code↵",
+      panelLabel: "invoke extended session shortcut",
     });
   });
 });

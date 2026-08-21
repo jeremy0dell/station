@@ -74,6 +74,33 @@ describe("worktree row layout and filter semantics", () => {
     expect(segmentsWidth(layout.segments)).toBeLessThanOrEqual(40);
   });
 
+  it("widens the shared identity column for multi-character shortcuts", () => {
+    const layouts = layoutWorktreeRowGrid({
+      columns: 80,
+      rows: [
+        worktreeStyleRowGridInput({
+          id: "short",
+          slot: "1",
+          slotWidth: 3,
+          marker: { kind: "text", text: "-" },
+          title: "first",
+        }),
+        worktreeStyleRowGridInput({
+          id: "extended",
+          slot: "100",
+          slotWidth: 3,
+          marker: { kind: "text", text: "!" },
+          title: "later",
+        }),
+      ],
+    });
+
+    expect(layouts.map(rowText)).toEqual([
+      expect.stringContaining("[1  ] - first"),
+      expect.stringContaining("[100] ! later"),
+    ]);
+  });
+
   it("segments every visible matched field with semantic match backgrounds", () => {
     const [layout] = layoutWorktreeRowGrid({
       columns: 80,

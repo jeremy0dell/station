@@ -72,6 +72,7 @@ import {
   widgetSettingsRemoveAt,
   widgetSettingsToggleAt,
 } from "./screens/widgetSettings.js";
+import { clearShortcutCodeInput, shortcutCodeInputForScreen } from "./shortcutInput.js";
 import type { TuiRuntimeContext, TuiTransition } from "./transition.js";
 import type {
   CreateGroupReturnTarget,
@@ -186,6 +187,10 @@ export function handleTuiAction(
   action: DashboardAction,
   context: TuiRuntimeContext,
 ): TuiTransition {
+  // Pointer and semantic actions supersede an unfinished keyboard prefix.
+  if (shortcutCodeInputForScreen(state.screen) !== undefined) {
+    state = clearShortcutCodeInput(state);
+  }
   switch (action.type) {
     case "dashboard.addProject":
       return handleFirstProjectAddAction(state, context);

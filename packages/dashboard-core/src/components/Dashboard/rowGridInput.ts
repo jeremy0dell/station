@@ -11,6 +11,7 @@ import {
 export function dashboardRowGridInput(
   row: DashboardTreeRow,
   keyBySession: ReadonlyMap<string, string>,
+  shortcutWidth = 1,
 ): RowGridRowInput | undefined {
   const payload = row.payload;
   if (payload.type !== "session" && payload.type !== "createLocalRow") {
@@ -22,6 +23,7 @@ export function dashboardRowGridInput(
       return worktreeStyleRowGridInput({
         id: row.id,
         slot: undefined,
+        slotWidth: shortcutWidth,
         marker: { kind: "throbber", variant: "braille" },
         title: payload.presentation.title,
         activity: payload.presentation.activity ?? "",
@@ -34,6 +36,7 @@ export function dashboardRowGridInput(
       return worktreeStyleRowGridInput({
         id: row.id,
         slot: keyBySession.get(payload.row.id),
+        slotWidth: shortcutWidth,
         marker: { kind: "throbber", variant: "braille" },
         title: payload.presentation.title,
         activity: payload.presentation.activity ?? "",
@@ -46,6 +49,7 @@ export function dashboardRowGridInput(
       id: row.id,
       row: payload.row.presentation,
       slot: keyBySession.get(payload.row.id),
+      slotWidth: shortcutWidth,
       presentation: {
         title: payload.presentation.title,
         agent: payload.presentation.agent ?? "",
@@ -58,6 +62,7 @@ export function dashboardRowGridInput(
     return worktreeStyleRowGridInput({
       id: row.id,
       slot: undefined,
+      slotWidth: shortcutWidth,
       marker: { kind: "text", text: "!" },
       title: payload.presentation.title,
       activity: payload.presentation.activity ?? "",
@@ -70,6 +75,7 @@ export function dashboardRowGridInput(
   return worktreeStyleRowGridInput({
     id: row.id,
     slot: undefined,
+    slotWidth: shortcutWidth,
     marker: { kind: "throbber", variant: "braille" },
     title: payload.presentation.title,
     agent: payload.presentation.agent ?? "",

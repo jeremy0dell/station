@@ -380,8 +380,9 @@ reattach; pane borders and neighboring panes must remain unlinked.
   interaction. Native row activation resolves an advertised managed attachment
   and creates or reveals the local pane without dispatching `terminal.focus`;
   no attachment leaves the overlay open with an actionable notice.
-- Dashboard row click, focused Enter, and `1-9/a-z` row jump are the explicit
-  authorization to relaunch a proven-exited managed pane. Pane clicks, pane
+- Dashboard row click, focused Enter, a bare `1-9/a-z` shortcut, and a submitted
+  backtick-prefixed logical shortcut are the explicit authorization to relaunch a
+  proven-exited managed pane. Pane clicks, pane
   cycling, overlay close, PTY exit, reconcile, restore, and HMR never relaunch;
   they may continue to expose the retained exit transcript.
 - Native worktree deletion begins only after Observer validation reserves that
@@ -398,7 +399,8 @@ reattach; pane borders and neighboring panes must remain unlinked.
 - Native Station owns its opaque Station canvas. The standalone dashboard uses opaque terminal-default background intent for its unaccented canvas, panels, prompts, Help surface, and toasts; this behavior is provider-neutral and does not use transparency.
 - Keep header, body, footer, overlays, prompts, and toasts from overlapping at narrow or short terminal sizes.
 - Render canonical Groups as contiguous blocks in the projected row order. An expanded Group uses its header as the top edge, inert side rails around direct members, and one inert closing-frame row; that row is the visible frame edge, not a synthetic blank spacer before or after the block. An empty expanded Group therefore has a header and closing edge only. A collapsed Group keeps the bounded identity and any enabled optional actions but omits its members and closing edge. The responsive `[qs]`/`[quick session]` action and `[▾]` are visible by default; runtime composition may independently suppress either action, with no user-facing config key yet. Identity toggles collapse, Quick Session expands the Group and launches into it, and `[▾]` opens the anchored Q/N/S/R Group menu.
-- Group ordering is the renderer-local union `"groups-first" | "alphabetical-interleaved"`. Groups-first is the default and places alphabetized Group blocks before project-root sessions. Alphabetical interleaving compares Group names with root-session display titles while keeping every Group block intact. Both modes retain canonical arrays, collapse and filter state, and continuous slots assigned only to rendered sessions; no user-facing config key selects the mode.
+- Group ordering is the renderer-local union `"groups-first" | "alphabetical-interleaved"`. Groups-first is the default and places alphabetized Group blocks before project-root sessions. Alphabetical interleaving compares Group names with root-session display titles while keeping every Group block intact. Both modes retain canonical arrays, collapse and filter state, and continuous logical shortcuts assigned only to rendered sessions; no user-facing config key selects the mode.
+- Dashboard session shortcuts are lowercase one-based base-36 codes in projected order: `1-9`, `a-z`, then `10-zz`, capped at 1,295 shortcut-bearing sessions. Bare `1-9/a-z` invokes the first 35 codes immediately, leaving uppercase keys for commands. Backtick arms a timeout-free prefix; alphanumeric input is normalized to lowercase, `Enter` invokes the same logical shortcut registry, `Backspace` edits, and `Esc` or a second backtick cancels. Filtering, collapse, and ordering rebuild that projected registry, while scrolling does not renumber it. Choose-session commands such as Remove, Rename, Move, and Fork keep these global codes and accept the same backtick prefix for extended targets. Sessions beyond `zz` remain reachable by cursor or pointer but have no shortcut code.
 - Group rings use the quiet hairline role by default, bright working color while the header is focused, and dim working color while a direct member has focus. Disclosure remains explicit through `▼` and `▶`. A focused dashboard session row carries `▏`, while the exact focused Project or Group header target carries `▸` in addition to compact focus fill. Member focus and hover keep the ordinary dashboard fills. Borders, separators, whitespace, and closing rows are inert, and viewport clipping may show any ordinary edge of the projected block without renderer-owned regrouping.
 - The tmux popup runs the same interactive observer-backed dashboard without
   native Station panes. Its close behavior and footer copy must match popup
@@ -418,7 +420,7 @@ reattach; pane borders and neighboring panes must remain unlinked.
 from the dashboard-local applied free text and structured conditions. Editing performs a
 deterministic, locale-neutral case-insensitive soft preview over the complete session and
 optimistic-row universe plus Project and Group labels. Folded match offsets map back to source text before
-highlighting. Every rendered row keeps its current order, slot, collapse visibility, and viewport
+highlighting. Every rendered row keeps its current order, logical shortcut, collapse visibility, and viewport
 position; visible text matches receive bounded highlight spans, while nonmatching rows and container
 headers are dimmed. Matches inside collapsed Projects or Groups contribute to the global count and header
 state without revealing the children during editing. The header includes the live row count and any
@@ -520,11 +522,11 @@ identity toggles collapse; Group quick session launches through the same pointer
 contract, and the Group menu control opens its anchored action menu while preserving the cell for
 safe return. Up/Down leaves any header segment immediately, and Left/Right on a
 session row or empty-project action is inert. Remove, rename, move-to-Group, and fork row choosers retain a separate
-visible, selectable canonical-session traversal with `▸` as its keyboard cursor; slots and Enter
+visible, selectable canonical-session traversal with `▸` as its keyboard cursor; global logical shortcuts and Enter
 resolve through that same chooser policy. Next-needs-me uses its own canonical-session policy. `N` continues to open the session flow
 without changing dashboard focus, while uppercase `G` creates a Quick Group for the focused row's
 owning Project (or the first canonical Project when nothing valid is focused). Lowercase `g` remains
-a visible-session slot. Gaps and optimistic create rows remain non-focusable.
+a one-key session shortcut. Gaps and optimistic create rows remain non-focusable and receive no session shortcut.
 
 Uppercase `M` opens the shared session chooser, then a Move to Group sheet. Native right-click on a
 session opens the same destination step directly. The sheet marks canonical current membership with

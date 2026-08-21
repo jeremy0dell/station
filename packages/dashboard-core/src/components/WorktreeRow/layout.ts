@@ -96,7 +96,6 @@ export const DEFAULT_WORKTREE_ROW_GRID: RowGridConfig = {
       role: "fixed",
       minCells: 7,
       idealCells: 7,
-      maxCells: 7,
       gapBefore: 0,
       dropPriority: 0,
       align: "left",
@@ -424,7 +423,7 @@ function assignLeftWidths(input: {
   for (const spec of activeSpecs) {
     nonFlexWidth += normalizeCells(spec.gapBefore);
     if (spec.role === "fixed") {
-      const width = fixedColumnWidth(spec);
+      const width = fixedColumnWidth(spec, input.rows);
       widths.set(spec.key, width);
       nonFlexWidth += width;
       continue;
@@ -744,8 +743,18 @@ function flexDesiredWidth(spec: RowGridColumnSpec, rows: readonly RowGridRowInpu
   return Math.min(max, Math.max(min, content));
 }
 
-function fixedColumnWidth(spec: RowGridColumnSpec): number {
-  return normalizeCells(spec.idealCells ?? spec.maxCells ?? spec.minCells);
+function fixedColumnWidth(spec: RowGridColumnSpec, rows: readonly RowGridRowInput[]): number {
+  // Fixed columns share one width, but logical shortcut codes may grow past one cell.
+  const content = Math.max(
+    0,
+    ...rows.map((row) => segmentsWidth(row.cells[spec.key]?.segments ?? [])),
+  );
+  const desired = Math.max(
+    normalizeCells(spec.minCells),
+    normalizeCells(spec.idealCells ?? spec.minCells),
+    content,
+  );
+  return spec.maxCells === undefined ? desired : Math.min(desired, normalizeCells(spec.maxCells));
 }
 
 function requiredSpec(config: RowGridConfig, key: RowGridCellKey): RowGridColumnSpec {

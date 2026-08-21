@@ -179,7 +179,7 @@ describe("dashboard golden frames", () => {
     }
   }
 
-  it("renders Group frames, counts, empty Groups, continuous slots, collapse, and both ordering modes", async () => {
+  it("renders Group frames, counts, empty Groups, continuous shortcuts, collapse, and both ordering modes", async () => {
     const snapshot = groupedManyProjectsSnapshot();
     const groupsFirst = await renderDashboard({ width: 120, height: 40, snapshot });
     const groupsFirstFrame = groupsFirst.captureCharFrame();
@@ -203,6 +203,7 @@ describe("dashboard golden frames", () => {
     });
     expect(collapsed.captureCharFrame()).toContain("▶ Runtime cleanup 1 session");
     expect(collapsed.captureCharFrame()).not.toContain("runtime-cleanup");
+    expect(collapsed.captureCharFrame()).toContain("[a]");
     expect(collapsed.captureCharFrame()).toContain("[b]");
     expect(collapsed.captureCharFrame()).not.toContain("[c]");
     expect(collapsed.captureCharFrame()).toMatchSnapshot();
@@ -947,7 +948,7 @@ describe("dashboard golden frames", () => {
     expect(targets.at(-1)).toEqual({ kind: "firstProjectAdd" });
   });
 
-  it("assigns slots only to visible actionable rows", async () => {
+  it("assigns logical shortcuts only to rendered actionable sessions", async () => {
     const setup = await renderDashboard({
       width: 80,
       height: 40,
@@ -955,11 +956,32 @@ describe("dashboard golden frames", () => {
     });
     const frame = setup.captureCharFrame();
     expect(frame).toContain("[1]");
-    // The starting row gets a slot too (it has a focusable terminal), but the
+    // The starting row gets a shortcut too (it has a focusable terminal), but the
     // empty project renders its calm empty-state line (with a click-to-add
     // button) and no slot cell.
     expect(frame).toContain("no sessions yet · ");
     expect(frame).toContain("[ + add session ]");
+  });
+
+  it("shows and dismisses the backtick shortcut prompt in the dashboard footer", async () => {
+    const setup = await renderDashboard({
+      width: 80,
+      height: 24,
+      snapshot: manyProjectsSnapshot(),
+    });
+
+    await act(async () => {
+      setup.store.actions.handleKey({ input: "`" });
+      setup.store.actions.handleKey({ input: "11" });
+    });
+    await setup.flush();
+    expect(setup.captureCharFrame()).toContain("` 11▌  Enter invoke  Backspace edit  Esc cancel");
+
+    await act(async () => {
+      setup.store.actions.handleKey({ input: "", escape: true });
+    });
+    await setup.flush();
+    expect(setup.captureCharFrame()).not.toContain("Enter invoke");
   });
 
   it("bounds empty-project focus, hover, and hit testing to Add Session cells", async () => {

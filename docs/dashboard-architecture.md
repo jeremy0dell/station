@@ -127,7 +127,7 @@ selectDashboardTree
         |
         v
 selectDashboardViewport
-  terminal clipping, scroll counts, and visible session slots
+  terminal clipping, scroll counts, and logical session shortcuts
         |
         v
 Station renderers
@@ -138,7 +138,7 @@ canonical sessions to worktree metadata, merges optimistic creates, applies
 filter and collapse state, and projects Project roots, direct Group blocks,
 project-root sessions, inert Group closing-frame rows, and inert inter-project gaps. Every
 expanded Group ends with one cell-less frame row, including an empty Group, so
-the visible ring has truthful viewport height without gaining focus, a slot, or
+the visible ring has truthful viewport height without gaining focus, a shortcut, or
 an action. That closing edge is part of the frame, not a synthetic spacer before
 or after the Group block. `snapshot.sessionGroups` is the exclusive membership authority;
 optional parent links are deliberately flattened. Ordinary optimistic create
@@ -156,7 +156,7 @@ The renderer-local `GroupOrderingMode` is `"groups-first" | "alphabetical-interl
 Groups-first is the default and places alphabetized Group blocks before project-root sessions.
 Alphabetical interleaving compares Group names with root-session display titles while keeping each
 Group header, direct members, and closing edge together as one block. Neither mode changes canonical
-arrays, collapse state, filtering, or the continuous slots assigned only to rendered sessions; no
+arrays, collapse state, filtering, or the continuous logical shortcuts assigned only to rendered sessions; no
 public config currently selects the mode.
 The internal `treeGrid.ts` controller knows only immutable nodes, ordered cells,
 visibility, and a supplied eligibility policy; it has no dashboard or terminal
@@ -203,13 +203,21 @@ header uses the working role, and member focus dims that working ring while the
 member keeps ordinary keyboard-focus or hover treatment. Frame edges clip and
 scroll as ordinary projected rows.
 
+The dashboard assigns every projected session a one-based base-36 logical shortcut. Physical
+`1-9/a-z` keys and the timeout-free backtick prefix resolve that same registry; the prefix only
+collects and normalizes a code before semantic row activation and never replays synthetic terminal
+input. Lowercase codes keep uppercase keys available for commands. Codes remain stable while
+scrolling and may grow from `z` to `10` through the fixed upper bound `zz` (1,295 shortcuts).
+Choose-session commands resolve this same global registry, including the backtick prefix, so opening
+or scrolling a chooser does not renumber its targets.
+
 Pointer targets identify one `dashboardCell`. In dashboard mode both pointer
 activation and focused Enter resolve that cell through the current visible tree
 and dispatch the same `dashboard.cell.activate` transition. The anchored Group
 menu and native Group-header context menu resolve Q/N/S/R through one validated
 stable-ID action path; native presentation does not own workflow behavior.
 Invalid, hidden, filtered, or stale cell targets are inert. Chooser modes accept
-only canonical session identity cells and retain their existing slot semantics.
+only canonical session identity cells and resolve the same global logical shortcut registry.
 
 ## Package surface
 

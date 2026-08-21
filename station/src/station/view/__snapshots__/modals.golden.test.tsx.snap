@@ -21,7 +21,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
  [9] ○ a│  G/M        quick group/move to group                        │6 #5 x1 
  [a] ? m│  / ↵ Esc Q  edit/apply/cancel-clear/retain-close filter      │ -1 #10 
         │  Tab S/P/A  build filter conditions · F applies builder      │        
- ▼ empty│  1-9/a-z    open visible session or toggle condition         │qs] [▾] 
+ ▼ empty│  1-9/a-z · \`code↵  session shortcut · condition toggle       │qs] [▾] 
         ╰──────────────────────────────────────────────────────────────╯        
 ─────────────────────────────────────────────────────────────────────────────── 
 ↵ activate  N new  ⇥ next  / filter  X delete  ? help  Q/esc:close              
@@ -602,10 +602,38 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 ┌────────────────────────────────────────────┐code  idle           +14 -6 #5 x1 
 │ Select session to delete                   │code  unknown           +3 -1 #10 
 │                                            │                                  
-│ ↑↓ move · ↵ choose · slot or click         │                    [sh] [qs] [▾] 
+│ ↑↓/↵ choose · 1-9/a-z/\`code↵ · click       │                    [sh] [qs] [▾] 
 │ Esc:cancel                                 │                                  
 │                                            │───────────────────────────────── 
 └────────────────────────────────────────────┘ ? help  Q/esc:close              
+"
+`;
+
+exports[`modal flow golden frames renders the remove extended shortcut prompt 1`] = `
+"                                                                                
+FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
+─────────────────────────────────────────────────────────────────────────────── 
+       SESSION                            AGENT     STATUS            DIFF · PR 
+ ▼ station  5 sessions · 4 agents                                 [sh] [qs] [▾] 
+ [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
+ [2] - docs-cleanup                       codex     no agent                    
+ [3] ○ pty-buffer                         codex     idle                  #73 ✓ 
+ [4] + session-resume                     codex     starting                    
+ [5] ⠋ station-XXXXXXy                    codex     working      +412 -96 #76 … 
+                                                                                
+ ▼ observer  3 sessions · 3 agents                                [sh] [qs] [▾] 
+ [6] x batch-export                       opencode  exited                 #8 ✓ 
+ [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 … 
+ [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓ 
+                                                                                
+ ▼ scripts  2 sessions · 2 agents                                 [sh] [qs] [▾] 
+┌────────────────────────────────────────────┐code  idle           +14 -6 #5 x1 
+│ Select session to delete                   │code  unknown           +3 -1 #10 
+│                                            │                                  
+│ \` 11▌ · ↵ invoke · ⌫ edit                  │                    [sh] [qs] [▾] 
+│ Esc:cancel                                 │                                  
+│                                            │───────────────────────────────── 
+└────────────────────────────────────────────┘l                                 
 "
 `;
 
@@ -734,7 +762,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
  [9] ○ api-cache                          opencode  idle           +14 -6 #5 x1 
  [a] ? metadata-refresh                   opencode  unknown           +3 -1 #10 
                                                                                 
-Rename: ↑↓ move · ↵ choose · 1-9/a-z or click                     [sh] [qs] [▾] 
+Rename: ↑↓/↵ choose · 1-9/a-z/\`code↵ · click                      [sh] [qs] [▾] 
                                                                                 
 ─────────────────────────────────────────────────────────────────────────────── 
 ↵ activate  N new  ⇥ next  / filter  X delete  ? help  Q/esc:close              
@@ -790,7 +818,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 ┌────────────────────────────────────────────┐code  idle           +14 -6 #5 x1 
 │ Select session to fork                     │code  unknown           +3 -1 #10 
 │                                            │                                  
-│ ↑↓ move · ↵ choose · slot or click         │                    [sh] [qs] [▾] 
+│ ↑↓/↵ choose · 1-9/a-z/\`code↵ · click       │                    [sh] [qs] [▾] 
 │ Esc:cancel                                 │                                  
 │                                            │───────────────────────────────── 
 └────────────────────────────────────────────┘ ? help  Q/esc:close              

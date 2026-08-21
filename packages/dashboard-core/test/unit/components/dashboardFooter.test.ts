@@ -67,6 +67,25 @@ describe("dashboard footer model", () => {
     });
   });
 
+  it("replaces ordinary help with the active dashboard or command-target prompt", () => {
+    expect(footer({ screen: { name: "dashboard", shortcutCodeInput: "11" } })).toEqual({
+      kind: "dashboard",
+      text: "` 11▌  Enter invoke  Backspace edit  Esc cancel",
+    });
+    expect(footer({ columns: 32, screen: { name: "dashboard", shortcutCodeInput: "10" } })).toEqual(
+      {
+        kind: "dashboard",
+        text: "` 10▌  ↵ invoke  Esc cancel",
+      },
+    );
+    expect(
+      footer({ screen: { name: "removeWorktree", step: "chooseSlot", shortcutCodeInput: "11" } }),
+    ).toEqual({
+      kind: "dashboard",
+      text: "` 11▌  Enter invoke  Backspace edit  Esc cancel",
+    });
+  });
+
   it("preserves compact and error quit-hint behavior", () => {
     expect(footer({ columns: 40 })).toEqual({
       kind: "dashboard",

@@ -4,6 +4,7 @@ import { BottomSheetFrameView } from "./BottomSheetFrameView.js";
 import {
   compactSheetWidth,
   responsiveSheetFooterText,
+  sessionShortcutChooserHelp,
   type ResponsiveSheetText,
   SheetButtonRow,
   SheetFooter,
@@ -47,7 +48,9 @@ export function RemoveSessionSheetView({ screen, columns, rows }: RemoveSessionS
         minHeight={CHOOSE_SLOT_MIN_HEIGHT}
       >
         <SheetLine width={contentWidth}> </SheetLine>
-        <SheetMessageLine width={contentWidth}>↑↓ move · ↵ choose · slot or click</SheetMessageLine>
+        <SheetMessageLine width={contentWidth}>
+          {sessionShortcutChooserHelp(screen.shortcutCodeInput)}
+        </SheetMessageLine>
         <SheetFooter width={contentWidth}>Esc:cancel</SheetFooter>
       </BottomSheetFrameView>
     );

@@ -432,7 +432,7 @@ exports[`dashboard golden frames renders no-projects at 40x12 1`] = `
 "
 `;
 
-exports[`dashboard golden frames renders Group frames, counts, empty Groups, continuous slots, collapse, and both ordering modes 1`] = `
+exports[`dashboard golden frames renders Group frames, counts, empty Groups, continuous shortcuts, collapse, and both ordering modes 1`] = `
 "                                                                                                                        
 FLEET  ● 0 ready  ⠋ 3 working  ! 1 needs you  x 1 exited  ○ 6 idle                  1 project · 12 sessions · 11 agents 
 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 
@@ -476,7 +476,7 @@ FLEET  ● 0 ready  ⠋ 3 working  ! 1 needs you  x 1 exited  ○ 6 idle        
 "
 `;
 
-exports[`dashboard golden frames renders Group frames, counts, empty Groups, continuous slots, collapse, and both ordering modes 2`] = `
+exports[`dashboard golden frames renders Group frames, counts, empty Groups, continuous shortcuts, collapse, and both ordering modes 2`] = `
 "                                                                                                                        
 FLEET  ● 0 ready  ⠋ 3 working  ! 1 needs you  x 1 exited  ○ 6 idle                  1 project · 12 sessions · 11 agents 
 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 
@@ -570,14 +570,14 @@ FLEET  ● 0 ready  ⠋ 3 working  ! 1 needs you  x 1 exited  ○ 6 idle  1 · 1
 ─────────────────────────────────────────────────────────────────────────────── 
 ▲ 3 sessions above                                                              
 ╭ ▼ Observer hardening 3 sessions──────────────────────────────────── [qs] [▾]╮ 
-│ [1] ○ diagnostic-index            codex     idle                      +38 -7│ 
-│ [2] ! handoff-refusal             codex     Agent needs app… +53 -11 #476 x1│ 
-│ [3] ⠋ trace-readiness             codex     working           +91 -22 #478 …│ 
+│ [4] ○ diagnostic-index            codex     idle                      +38 -7│ 
+│ [5] ! handoff-refusal             codex     Agent needs app… +53 -11 #476 x1│ 
+│ [6] ⠋ trace-readiness             codex     working           +91 -22 #478 …│ 
 ╰─────────────────────────────────────────────────────────────────────────────╯ 
 ╭ ▼ Post-launch 0 sessions─────────────────────────────────────────── [qs] [▾]╮ 
 ╰─────────────────────────────────────────────────────────────────────────────╯ 
 ╭ ▼ Release train 3 sessions───────────────────────────────────────── [qs] [▾]╮ 
-│ [4] x asset-proof                 codex     exited                    +19 -2│ 
+│ [7] x asset-proof                 codex     exited                    +19 -2│ 
 ▼ 5 below · showing 4 of 12                                                     
 ─────────────────────────────────────────────────────────────────────────────── 
 ↵ activate  N new  ⇥ next  / filter  X delete  ? help  Q/esc:close              

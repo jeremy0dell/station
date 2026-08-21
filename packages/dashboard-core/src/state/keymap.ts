@@ -128,9 +128,9 @@ type DashboardBindingSpec = {
 
 const slotHelp = {
   keys: "1-9 a-z",
-  label: "open visible session",
+  label: "invoke one-key session shortcut",
   panelKeys: "1-9/a-z",
-  panelLabel: "open visible session or toggle condition",
+  panelLabel: "session shortcut or condition toggle",
 };
 
 // Dashboard keyboard dispatch resolves through this table; every other screen
@@ -266,6 +266,18 @@ export const TUI_DASHBOARD_BINDINGS = [
     action: "tui.refresh",
     outcome: "handled",
     help: { keys: "Z", label: "refresh" },
+  },
+  {
+    id: "tui.dashboard.shortcutPrefix",
+    pattern: { kind: "char", char: "`" },
+    action: "tui.shortcut.arm",
+    outcome: "handled",
+    help: {
+      keys: "`",
+      label: "shortcut",
+      panelKeys: "`code↵",
+      panelLabel: "invoke extended session shortcut",
+    },
   },
   {
     id: "tui.dashboard.remove",

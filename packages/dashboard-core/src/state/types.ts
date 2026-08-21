@@ -156,8 +156,13 @@ export type GroupSettingsDetailFocus =
 
 export type GroupSettingsPendingMutation = "rename" | "membership" | "delete";
 
+type ShortcutInputState = {
+  /** Present while backtick-prefixed logical shortcut input owns session-jump keystrokes. */
+  shortcutCodeInput?: string;
+};
+
 export type TuiScreen =
-  | { name: "dashboard" }
+  | ({ name: "dashboard" } & ShortcutInputState)
   | { name: "help" }
   | { name: "projectMenu"; projectId: ProjectId; focus: ProjectMenuActionId }
   | {
@@ -192,7 +197,7 @@ export type TuiScreen =
       label: string;
       actionFocus: "startFresh" | "cancel";
     }
-  | { name: "removeWorktree"; step: "chooseSlot" }
+  | ({ name: "removeWorktree"; step: "chooseSlot" } & ShortcutInputState)
   | { name: "removeWorktree"; step: "unavailable" }
   | {
       name: "removeWorktree";
@@ -202,7 +207,7 @@ export type TuiScreen =
       label: string;
       actionFocus: "delete" | "keep";
     }
-  | { name: "renameSession"; step: "chooseSlot" }
+  | ({ name: "renameSession"; step: "chooseSlot" } & ShortcutInputState)
   | {
       name: "renameSession";
       step: "editName";
@@ -213,7 +218,7 @@ export type TuiScreen =
       returnTo?: "dashboard";
       validationError?: string;
     }
-  | { name: "moveToGroup"; step: "chooseSlot" }
+  | ({ name: "moveToGroup"; step: "chooseSlot" } & ShortcutInputState)
   | {
       name: "moveToGroup";
       step: "chooseDestination";
@@ -229,7 +234,7 @@ export type TuiScreen =
       draftName: EditableTextInputState;
       submitting: boolean;
     }
-  | { name: "fork"; step: "chooseSlot" }
+  | ({ name: "fork"; step: "chooseSlot" } & ShortcutInputState)
   | {
       name: "fork";
       step: "details";

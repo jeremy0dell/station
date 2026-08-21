@@ -44,6 +44,7 @@ export function worktreeRowGridInput({
   id,
   row,
   slot,
+  slotWidth,
   title,
   presentation,
   focused,
@@ -53,6 +54,7 @@ export function worktreeRowGridInput({
   id?: string;
   row: WorktreeRow;
   slot: string | undefined;
+  slotWidth?: number | undefined;
   title?: string | undefined;
   presentation?: WorktreeRowPresentation | undefined;
   focused?: boolean | undefined;
@@ -65,6 +67,7 @@ export function worktreeRowGridInput({
   const input: Parameters<typeof worktreeStyleRowGridInput>[0] = {
     id: id ?? row.id,
     slot,
+    ...(slotWidth === undefined ? {} : { slotWidth }),
     marker: visual.marker,
     title: visibleFields.title,
     agent: visibleFields.agent,
@@ -100,6 +103,7 @@ export function worktreeRowGridInput({
 export function worktreeStyleRowGridInput(input: {
   id: string;
   slot: string | undefined;
+  slotWidth?: number;
   marker: RowMarker;
   title: string;
   agent?: string;
@@ -120,6 +124,7 @@ export function worktreeStyleRowGridInput(input: {
     key: "identity",
     segments: identitySegments(
       input.slot,
+      input.slotWidth,
       input.marker,
       input.color,
       input.markerColor,
@@ -213,6 +218,7 @@ function dimmedSegment(segment: RowSegment): RowSegment {
 
 function identitySegments(
   slot: string | undefined,
+  slotWidth: number | undefined,
   marker: RowMarker,
   color: RowColor | undefined,
   markerColor: RowColor | undefined,
@@ -222,7 +228,7 @@ function identitySegments(
   // never shifts the shared grid geometry.
   const segments: RowSegment[] = [
     focused === true ? textSegment("▏", { color: "cyan" }) : textSegment(" ", { color }),
-    textSegment(`[${slot ?? " "}] `, { color }),
+    textSegment(`[${(slot ?? "").padEnd(Math.max(1, slotWidth ?? 1), " ")}] `, { color }),
   ];
   if (marker.kind === "throbber") {
     const throbberColor = markerColor ?? color;

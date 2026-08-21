@@ -114,8 +114,8 @@ const CASES: ModalCase[] = [
       "station help",
       "Ctrl-\\",
       "split pane right",
-      "1-9/a-z",
-      "open visible session",
+      "1-9/a-z · `code↵",
+      "session shortcut · condition toggle",
       "G",
       "quick group",
       "M",
@@ -394,7 +394,12 @@ const CASES: ModalCase[] = [
   {
     name: "remove slot sheet",
     keys: [{ input: "X" }],
-    expect: ["Select session to delete", "↑↓ move · ↵ choose · slot or click", "Esc:cancel"],
+    expect: ["Select session to delete", "↑↓/↵ choose · 1-9/a-z/`code↵ · click", "Esc:cancel"],
+  },
+  {
+    name: "remove extended shortcut prompt",
+    keys: [{ input: "X" }, { input: "`" }, { input: "11" }],
+    expect: ["Select session to delete", "` 11▌ · ↵ invoke · ⌫ edit"],
   },
   {
     name: "remove confirm sheet",
@@ -436,7 +441,7 @@ const CASES: ModalCase[] = [
   {
     name: "rename slot prompt",
     keys: [{ input: "R" }],
-    expect: ["Rename: ↑↓ move · ↵ choose · 1-9/a-z or click"],
+    expect: ["Rename: ↑↓/↵ choose · 1-9/a-z/`code↵ · click"],
   },
   {
     name: "rename sheet",
@@ -452,7 +457,7 @@ const CASES: ModalCase[] = [
   {
     name: "fork slot sheet",
     keys: [{ input: "F" }],
-    expect: ["Select session to fork", "↑↓ move · ↵ choose · slot or click", "Esc:cancel"],
+    expect: ["Select session to fork", "↑↓/↵ choose · 1-9/a-z/`code↵ · click", "Esc:cancel"],
   },
   {
     name: "fork details sheet",
