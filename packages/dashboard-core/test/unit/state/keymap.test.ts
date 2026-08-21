@@ -3,6 +3,7 @@ import { SELECTION_KEYS } from "../../../src/selectors/selectors.js";
 import {
   type DashboardFooterWidth,
   dashboardBindingHelp,
+  dashboardCommandShortcut,
   dashboardFooterShortcuts,
   deriveTuiInputMode,
   isSlotKey,
@@ -30,6 +31,17 @@ describe("dashboard key bindings", () => {
     expect(matchDashboardBinding({ input: "M" })?.action).toBe("tui.moveToGroup.open");
     expect(matchDashboardBinding({ input: "?" })?.action).toBe("tui.help.open");
     expect(matchDashboardBinding({ input: "`" })?.action).toBe("tui.shortcut.arm");
+  });
+
+  it("resolves only uppercase commands for command-bar invocation", () => {
+    expect(dashboardCommandShortcut("X")).toEqual({
+      key: "X",
+      action: "tui.remove.open",
+      label: "delete session",
+    });
+    expect(dashboardCommandShortcut("Z")?.action).toBe("tui.refresh");
+    expect(dashboardCommandShortcut("x")).toBeUndefined();
+    expect(dashboardCommandShortcut("XX")).toBeUndefined();
   });
 
   it("derives the dedicated persistent-filter input mode", () => {
@@ -161,9 +173,9 @@ describe("dashboard footer binding metadata", () => {
     });
     expect(dashboardBindingHelp("tui.dashboard.shortcutPrefix")).toMatchObject({
       keys: "`",
-      label: "shortcut",
-      panelKeys: "`code↵",
-      panelLabel: "invoke extended session shortcut",
+      label: "command",
+      panelKeys: "`value↵",
+      panelLabel: "run uppercase command or session shortcut",
     });
   });
 });

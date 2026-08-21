@@ -203,13 +203,13 @@ header uses the working role, and member focus dims that working ring while the
 member keeps ordinary keyboard-focus or hover treatment. Frame edges clip and
 scroll as ordinary projected rows.
 
-The dashboard assigns every projected session a one-based base-36 logical shortcut. Physical
-`1-9/a-z` keys and the timeout-free backtick prefix resolve that same registry; the prefix only
-collects and normalizes a code before semantic row activation and never replays synthetic terminal
-input. Lowercase codes keep uppercase keys available for commands. Codes remain stable while
-scrolling and may grow from `z` to `10` through the fixed upper bound `zz` (1,295 shortcuts).
-Choose-session commands resolve this same global registry, including the backtick prefix, so opening
-or scrolling a chooser does not renumber its targets.
+The dashboard assigns every projected session a bijective base-35 logical shortcut over
+`1-9/a-z`. Physical one-key shortcuts and the timeout-free backtick command bar resolve the same
+registry; the bar preserves case, dispatches one registered uppercase command or one lowercase
+session code, and never replays synthetic terminal input. Session codes contain no zero, remain
+stable while scrolling, and grow from `z` to `11` through the fixed upper bound `zzz` (44,135
+shortcuts). Choose-session commands resolve this same global registry, including the backtick prefix,
+so opening or scrolling a chooser does not renumber its targets.
 
 Pointer targets identify one `dashboardCell`. In dashboard mode both pointer
 activation and focused Enter resolve that cell through the current visible tree

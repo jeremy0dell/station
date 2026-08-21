@@ -157,7 +157,7 @@ export type GroupSettingsDetailFocus =
 export type GroupSettingsPendingMutation = "rename" | "membership" | "delete";
 
 type ShortcutInputState = {
-  /** Present while backtick-prefixed logical shortcut input owns session-jump keystrokes. */
+  /** Present while backtick-prefixed command/shortcut input owns dashboard keystrokes. */
   shortcutCodeInput?: string;
 };
 

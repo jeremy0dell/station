@@ -18,11 +18,13 @@ describe("createDashboardSequenceHandler", () => {
   it("dispatches printable keys, Enter, and arrows", () => {
     const { handle, keys } = harness();
     expect(handle("5")).toBe(true);
+    expect(handle("X")).toBe(true);
     expect(handle("\r")).toBe(true);
     expect(handle("\x1b[A")).toBe(true);
     expect(handle("\x1b[C")).toBe(true);
     expect(keys).toEqual([
       { input: "5" },
+      { input: "X" },
       { input: "\r", return: true },
       { input: "", upArrow: true },
       { input: "", rightArrow: true },

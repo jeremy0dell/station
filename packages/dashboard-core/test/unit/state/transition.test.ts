@@ -87,6 +87,16 @@ describe("TUI screen transitions", () => {
     expect(transition.state.screen).toEqual({ name: "removeWorktree", step: "chooseSlot" });
   });
 
+  it("invokes uppercase commands from the backtick command bar without changing case", () => {
+    const state = createInitialTuiState({ initialSnapshot: createDashboardSnapshot() });
+    const armed = handleTuiKey(state, { input: "`" }).state;
+    const typed = handleTuiKey(armed, { input: "X" }).state;
+    const invoked = handleTuiKey(typed, { input: "\r", return: true });
+
+    expect(typed.screen).toEqual({ name: "dashboard", shortcutCodeInput: "X" });
+    expect(invoked.state.screen).toEqual({ name: "removeWorktree", step: "chooseSlot" });
+  });
+
   it("opens rename slot selection from the dashboard and keeps refresh on Z", () => {
     const state = createInitialTuiState({ initialSnapshot: createDashboardSnapshot() });
     const rename = handleTuiKey(state, { input: "R" });
@@ -128,11 +138,11 @@ describe("TUI screen transitions", () => {
   it("edits and cancels backtick-prefixed shortcut input without a timeout", () => {
     const state = createInitialTuiState({ initialSnapshot: createDashboardSnapshot() });
     const armed = handleTuiKey(state, { input: "`" }).state;
-    const typed = handleTuiKey(armed, { input: "1Z0" }).state;
+    const typed = handleTuiKey(armed, { input: "zzzz" }).state;
     const edited = handleTuiKey(typed, { input: "", backspace: true }).state;
 
-    expect(typed.screen).toEqual({ name: "dashboard", shortcutCodeInput: "1z" });
-    expect(edited.screen).toEqual({ name: "dashboard", shortcutCodeInput: "1" });
+    expect(typed.screen).toEqual({ name: "dashboard", shortcutCodeInput: "zzz" });
+    expect(edited.screen).toEqual({ name: "dashboard", shortcutCodeInput: "zz" });
     expect(handleTuiKey(edited, { input: "", escape: true }).state.screen).toEqual({
       name: "dashboard",
     });

@@ -274,9 +274,9 @@ export const TUI_DASHBOARD_BINDINGS = [
     outcome: "handled",
     help: {
       keys: "`",
-      label: "shortcut",
-      panelKeys: "`code↵",
-      panelLabel: "invoke extended session shortcut",
+      label: "command",
+      panelKeys: "`value↵",
+      panelLabel: "run uppercase command or session shortcut",
     },
   },
   {
@@ -371,6 +371,12 @@ export type TuiDashboardBinding =
 /** Typed dashboard action vocabulary decoded by the keyboard binding table. */
 export type TuiDashboardAction = TuiDashboardBinding["action"];
 
+export type DashboardCommandShortcut = {
+  key: string;
+  action: TuiDashboardAction;
+  label: string;
+};
+
 export type TuiHelpContentLine =
   | { text: string; align?: "center" }
   | { key: string; description: string };
@@ -378,6 +384,25 @@ export type TuiHelpContentLine =
 export type TuiDashboardBindingId = (typeof TUI_DASHBOARD_BINDINGS)[number]["id"];
 
 export type DashboardFooterWidth = "full" | "compact";
+
+/** Resolves one uppercase command through the dashboard's canonical binding registry. */
+export function dashboardCommandShortcut(input: string): DashboardCommandShortcut | undefined {
+  if (!/^[A-Z]$/u.test(input)) {
+    return undefined;
+  }
+  const binding = TUI_DASHBOARD_BINDINGS.find(
+    (candidate) => candidate.pattern.kind === "char" && candidate.pattern.char === input,
+  );
+  if (binding === undefined || !("help" in binding)) {
+    return undefined;
+  }
+  const help: DashboardBindingHelp = binding.help;
+  return {
+    key: input,
+    action: binding.action,
+    label: help.panelLabel ?? help.label,
+  };
+}
 
 /** Returns the binding's stable keyboard language and action label. */
 export function dashboardBindingHelp(id: TuiDashboardBindingId): DashboardBindingHelp | undefined {

@@ -963,7 +963,7 @@ describe("dashboard golden frames", () => {
     expect(frame).toContain("[ + add session ]");
   });
 
-  it("shows and dismisses the backtick shortcut prompt in the dashboard footer", async () => {
+  it("shows session and uppercase-command previews in the backtick command bar", async () => {
     const setup = await renderDashboard({
       width: 80,
       height: 24,
@@ -975,13 +975,34 @@ describe("dashboard golden frames", () => {
       setup.store.actions.handleKey({ input: "11" });
     });
     await setup.flush();
-    expect(setup.captureCharFrame()).toContain("` 11▌  Enter invoke  Backspace edit  Esc cancel");
+    expect(setup.captureCharFrame()).toContain(
+      "SESSION   11▌  open session 11  Enter run  Backspace edit  Esc close",
+    );
+    const sessionBarSpans = setup.captureSpans();
+    expect(spanBgHex(spanAtFrameCell(sessionBarSpans, 23, 1))).toBe(
+      stationColorSnapshotValue(nativeStationTheme.filter.editorRail),
+    );
+    expect(spanBgHex(spanAtFrameCell(sessionBarSpans, 23, 11))).toBe(
+      stationColorSnapshotValue(nativeStationTheme.filter.editorSurface),
+    );
+    expect(spanHex(spanAtFrameCell(sessionBarSpans, 23, 11))).toBe(
+      stationColorSnapshotValue(nativeStationTheme.text.primary),
+    );
 
     await act(async () => {
       setup.store.actions.handleKey({ input: "", escape: true });
     });
     await setup.flush();
-    expect(setup.captureCharFrame()).not.toContain("Enter invoke");
+    expect(setup.captureCharFrame()).not.toContain("open session 11");
+
+    await act(async () => {
+      setup.store.actions.handleKey({ input: "`" });
+      setup.store.actions.handleKey({ input: "X" });
+    });
+    await setup.flush();
+    expect(setup.captureCharFrame()).toContain(
+      "COMMAND   X▌  delete session  Enter run  Backspace edit  Esc close",
+    );
   });
 
   it("bounds empty-project focus, hover, and hit testing to Add Session cells", async () => {

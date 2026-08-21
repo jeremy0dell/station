@@ -64,7 +64,7 @@ const STATION_HELP_CONTENT = [
   },
   {
     key: `${sessionShortcut.key} · ${shortcutPrefix.key}`,
-    description: "session shortcut · condition toggle",
+    description: "session/command · condition toggle",
   },
   dashboardHelpGroup([
     "tui.dashboard.newSession",

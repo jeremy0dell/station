@@ -10,7 +10,7 @@ export type ShortcutInputKeyResult =
   | { kind: "handled"; state: DashboardState }
   | { kind: "submit"; state: DashboardState; code: string };
 
-/** Returns the active session-jump prefix, distinguishing an armed empty prefix from absence. */
+/** Returns the active command/shortcut prefix, distinguishing an armed empty prefix from absence. */
 export function shortcutCodeInputForScreen(screen: DashboardScreenView): string | undefined {
   switch (screen.name) {
     case "dashboard":
@@ -25,7 +25,7 @@ export function shortcutCodeInputForScreen(screen: DashboardScreenView): string 
   }
 }
 
-/** Arms session-jump input only on the dashboard or a choose-session command screen. */
+/** Arms shortcut input only on the dashboard or a choose-session command screen. */
 export function armShortcutCodeInput(state: DashboardState): DashboardState {
   return setShortcutCodeInput(state, "");
 }
@@ -56,7 +56,7 @@ export function clearShortcutCodeInput(state: DashboardState): DashboardState {
   }
 }
 
-/** Collects, edits, cancels, or submits one timeout-free session-jump prefix. */
+/** Collects, edits, cancels, or submits one timeout-free command/shortcut prefix. */
 export function handleShortcutCodeInputKey(
   state: DashboardState,
   key: TuiKey,
@@ -84,10 +84,11 @@ export function handleShortcutCodeInputKey(
     return { kind: "handled", state };
   }
   const chunk = dashboardShortcutInputChunk(key.input);
-  if (chunk === undefined || input.length >= DASHBOARD_SHORTCUT_MAX_CODE_LENGTH) {
+  const maxLength = DASHBOARD_SHORTCUT_MAX_CODE_LENGTH;
+  if (chunk === undefined || input.length >= maxLength) {
     return { kind: "handled", state };
   }
-  const remaining = DASHBOARD_SHORTCUT_MAX_CODE_LENGTH - input.length;
+  const remaining = maxLength - input.length;
   return {
     kind: "handled",
     state: setShortcutCodeInput(state, `${input}${chunk.slice(0, remaining)}`),

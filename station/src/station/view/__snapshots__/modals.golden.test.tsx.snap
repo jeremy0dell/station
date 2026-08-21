@@ -21,7 +21,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
  [9] ○ a│  G/M        quick group/move to group                        │6 #5 x1 
  [a] ? m│  / ↵ Esc Q  edit/apply/cancel-clear/retain-close filter      │ -1 #10 
         │  Tab S/P/A  build filter conditions · F applies builder      │        
- ▼ empty│  1-9/a-z · \`code↵  session shortcut · condition toggle       │qs] [▾] 
+ ▼ empty│  1-9/a-z · \`value↵  session/command · condition toggle       │qs] [▾] 
         ╰──────────────────────────────────────────────────────────────╯        
 ─────────────────────────────────────────────────────────────────────────────── 
 ↵ activate  N new  ⇥ next  / filter  X delete  ? help  Q/esc:close              
@@ -602,7 +602,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 ┌────────────────────────────────────────────┐code  idle           +14 -6 #5 x1 
 │ Select session to delete                   │code  unknown           +3 -1 #10 
 │                                            │                                  
-│ ↑↓/↵ choose · 1-9/a-z/\`code↵ · click       │                    [sh] [qs] [▾] 
+│ ↑↓/Enter choose · 1-9/a-z · \` extended     │                    [sh] [qs] [▾] 
 │ Esc:cancel                                 │                                  
 │                                            │───────────────────────────────── 
 └────────────────────────────────────────────┘ ? help  Q/esc:close              
@@ -630,10 +630,10 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 ┌────────────────────────────────────────────┐code  idle           +14 -6 #5 x1 
 │ Select session to delete                   │code  unknown           +3 -1 #10 
 │                                            │                                  
-│ \` 11▌ · ↵ invoke · ⌫ edit                  │                    [sh] [qs] [▾] 
+│ Target 11▌ · Enter choose · ⌫ edit · Esc   │                    [sh] [qs] [▾] 
 │ Esc:cancel                                 │                                  
 │                                            │───────────────────────────────── 
-└────────────────────────────────────────────┘l                                 
+└────────────────────────────────────────────┘ ? help  Q/esc:close              
 "
 `;
 
@@ -762,7 +762,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
  [9] ○ api-cache                          opencode  idle           +14 -6 #5 x1 
  [a] ? metadata-refresh                   opencode  unknown           +3 -1 #10 
                                                                                 
-Rename: ↑↓/↵ choose · 1-9/a-z/\`code↵ · click                      [sh] [qs] [▾] 
+Rename: ↑↓/Enter choose · 1-9/a-z · \` extended                    [sh] [qs] [▾] 
                                                                                 
 ─────────────────────────────────────────────────────────────────────────────── 
 ↵ activate  N new  ⇥ next  / filter  X delete  ? help  Q/esc:close              
@@ -818,7 +818,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 ┌────────────────────────────────────────────┐code  idle           +14 -6 #5 x1 
 │ Select session to fork                     │code  unknown           +3 -1 #10 
 │                                            │                                  
-│ ↑↓/↵ choose · 1-9/a-z/\`code↵ · click       │                    [sh] [qs] [▾] 
+│ ↑↓/Enter choose · 1-9/a-z · \` extended     │                    [sh] [qs] [▾] 
 │ Esc:cancel                                 │                                  
 │                                            │───────────────────────────────── 
 └────────────────────────────────────────────┘ ? help  Q/esc:close              

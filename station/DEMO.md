@@ -174,7 +174,7 @@ shell can't receive them) until `Ctrl-O` closes it.
 **Dashboard navigation & actions:**
 
 - **Scroll** — `↑`/`↓` or wheel.
-- **Shortcut activation** — `1-9`/`a-z` immediately launches/focuses the first 35 lowercase logical session codes, leaving uppercase keys for commands. For later codes through `zz` (1,295 shortcuts), press backtick, type the base-36 code (`10`, `11`, …), and press `Enter`; `Backspace` edits and `Esc` cancels. Choose-session commands such as `X` use the same stable codes and accept the same backtick prefix for extended targets.
+- **Command and shortcut activation** — `1-9`/`a-z` immediately launches/focuses the first 35 lowercase session codes, leaving uppercase keys for commands. Backtick opens a labeled command bar: enter one uppercase command such as `X`, or a lowercase extended session code, and press `Enter`; `Backspace` edits and `Esc` closes. Session codes use `1-9/a-z` without zero in the order `… y, z, 11, 12, … 1z, 21, …` through `zzz` (44,135 shortcuts). After a choose-session command opens, its existing chooser accepts the same stable extended codes.
 - **`[+sh]` shell affordance** — click on a row opens a shell in that worktree's checkout; on a project header opens a shell at the project root.
 - **Clickable PR / checks links** — underlined segments open the GitHub URL in your browser.
 - **Persistent filter** — `/` opens a soft live preview over visible dashboard text; `Tab` opens `FILTER CONDITIONS`, and `S/P/A` chooses Status/Project/Agent. Slots or arrows + `Space` toggle values; header `[←]`/Left or bottom `Done (Enter)` retains that field so the next one can be added. Header `[×]`/`Esc` closes the builder, while bottom `Apply filter (F)` applies free text and all staged fields once. Free text/fields are ANDed and values within a field are ORed. Applying hard-projects matching context and sessions; `/ edit` reopens it, and `Esc clear` restores the unfiltered collapse state. Footer and condition-panel controls are clickable, and click-away discards only the active field's unretained toggles.
@@ -274,7 +274,7 @@ Best shown with `STATION_SCENARIO=disconnected`, or by stopping the observer mid
 | `Esc` `↑` `↓` | context-menu close / move |
 | `↑`/`↓`, wheel | scroll project list (dashboard) |
 | `1-9`/`a-z` | start or focus a one-key session shortcut |
-| backtick + code + `Enter` | invoke or command-target an extended session shortcut (`10`, `11`, …) |
+| backtick + uppercase command or lowercase code + `Enter` | run a registered command or session shortcut (`X`, `11`, … `zzz`) |
 | `N` `A` `R` `X` `C` | new / add-project / rename / remove / fold |
 | `/`, `Z` | edit filter / refresh snapshot |
 | `Tab`, `S/P/A` | open conditions / choose Status, Project, Agent |
