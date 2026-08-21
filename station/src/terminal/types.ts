@@ -111,6 +111,7 @@ export type StationTerminalProcess = {
   ): StationTerminalDisposable;
   write(data: string): void;
   resize(size: StationTerminalSize): void;
+  /** Signal the PTY payload; an omitted signal uses terminal hangup semantics (SIGHUP). */
   kill(signal?: string): void;
   /**
    * Bridge-only ownership release: close owner pipes or an adopted control
