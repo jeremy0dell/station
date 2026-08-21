@@ -61,6 +61,37 @@ describe("CLI observer commands", () => {
     ).resolves.toMatchObject({ status: "running" });
   });
 
+  it("returns a typed idempotent stop result after stale evidence repair", async () => {
+    const fixture = await createTempState();
+    await expect(
+      runObserverCommand(
+        ["stop"],
+        { config: fixture.config },
+        {
+          clock: { now: () => new Date(now) },
+          probeSocket: async () => ({ status: "absent" }),
+          clientFactory: () =>
+            ({ health: async () => Promise.reject(new Error("stopped")) }) as never,
+          repairStaleEvidence: async () => ({
+            socket: "absent",
+            pidfile: "removed",
+            reason: "process-missing",
+          }),
+        },
+      ),
+    ).resolves.toEqual({
+      schemaVersion: "0.11.0",
+      stopped: false,
+      at: now,
+      message: "Observer was already stopped; stale lifecycle evidence was reconciled.",
+      evidenceRepair: {
+        socket: "absent",
+        pidfile: "removed",
+        reason: "process-missing",
+      },
+    });
+  });
+
   it("routes runCli observer commands through global --config parsing and summaries", async () => {
     const fixture = await createTempState();
     const configPath = await writeConfigToml(fixture.root, fixture.config);

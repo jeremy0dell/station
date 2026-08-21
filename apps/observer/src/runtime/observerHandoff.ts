@@ -11,9 +11,9 @@ import {
   parseStationObserverBuildVersion,
 } from "@station/runtime";
 import { z } from "zod";
-import { observerProcessIdentitiesMatch } from "./observerPidfile.js";
 import {
   type ObserverProcessIdentityEvidenceSource,
+  observerProcessIdentitiesMatch,
   verifyObserverProcessIdentity,
 } from "./observerProcessIdentity.js";
 
@@ -387,7 +387,7 @@ async function requireVerifiedProcessEvidence(
   if (verification.status !== "exact") {
     throw handoffRefused(
       "The incumbent Observer process identity could not be corroborated.",
-      verification.status === "unavailable" ? verification.cause : undefined,
+      verification.cause,
     );
   }
 }

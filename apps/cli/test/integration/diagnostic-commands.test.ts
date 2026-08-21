@@ -618,6 +618,58 @@ describe("CLI diagnostic commands", () => {
     expect(JSON.stringify({ traced, logs })).not.toContain("super-secret-value");
   });
 
+  it("keeps stale-evidence refusal codes visible as lifecycle root causes", async () => {
+    const fixture = await createTempState();
+    const configPath = await writeConfigToml(fixture.root, fixture.config);
+    await mkdir(join(fixture.stateDir, "logs"), { recursive: true });
+    await writeFile(
+      join(fixture.stateDir, "logs", "cli.jsonl"),
+      `${JSON.stringify({
+        timestamp: "2026-05-20T12:02:00.000Z",
+        level: "error",
+        component: "cli",
+        message: "Observer lifecycle failed.",
+        traceId: "trc_stale_evidence",
+        attributes: {
+          operation: "cli.observer.start",
+          error: {
+            tag: "ObserverStartupError",
+            code: "OBSERVER_EXITED_ON_START",
+            message: "Observer exited during startup.",
+          },
+          cause: {
+            tag: "ObserverEvidenceRepairError",
+            code: "OBSERVER_STALE_EVIDENCE_UNCERTAIN",
+            message: "Observer process ownership could not be established safely.",
+            hint: "Inspect Observer status and exact ownership evidence before retrying.",
+          },
+        },
+      })}\n`,
+    );
+
+    const traced = await runCli(["--config", configPath, "debug", "trace", "trc_stale_evidence"], {
+      observerDeps: {
+        clientFactory: () => {
+          throw new Error("debug trace should not contact observer");
+        },
+      },
+    });
+
+    expect(traced).toMatchObject({
+      code: 0,
+      output: {
+        matched: true,
+        error: { code: "OBSERVER_EXITED_ON_START" },
+        cause: { code: "OBSERVER_STALE_EVIDENCE_UNCERTAIN" },
+        causeAssessment: {
+          status: "explicit_root_cause",
+          explicitRootCauseCodes: ["OBSERVER_STALE_EVIDENCE_UNCERTAIN"],
+          observedFailureCodes: ["OBSERVER_EXITED_ON_START"],
+        },
+      },
+    });
+  });
+
   it("filters runtime logs without searching hook logs by default", async () => {
     const fixture = await createTempState();
     const configPath = await writeConfigToml(fixture.root, fixture.config);

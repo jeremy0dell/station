@@ -1,8 +1,8 @@
 import type { ObserverProcessIdentity } from "@station/contracts";
-import { observerProcessIdentitiesMatch } from "./observerPidfile.js";
 import {
   type ObserverProcessEntry,
   type ObserverProcessIdentityEvidenceSource,
+  observerProcessIdentitiesMatch,
   verifyObserverProcessIdentity,
 } from "./observerProcessIdentity.js";
 import type { SocketIdentity } from "./socketOwnership.js";

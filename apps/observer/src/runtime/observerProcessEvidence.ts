@@ -11,6 +11,8 @@ import {
 import { readObserverProcessIdentity } from "./observerPidfile.js";
 import {
   type ObserverProcessEntry,
+  type ObserverProcessExistence,
+  type ObserverProcessExistenceEvidenceSource,
   observerProcessEntriesMatch,
 } from "./observerProcessIdentity.js";
 import type { ObserverDuplicateProcessEvidenceSource } from "./observerReap.js";
@@ -23,6 +25,7 @@ const ProcessListLineSchema = z.string().regex(processListLinePattern);
 const PositivePidSchema = z.coerce.number().int().positive();
 const ErrorCodeSchema = z.object({ code: z.string() });
 const processListingMaxBufferBytes = 8 * 1024 * 1024;
+const DEFAULT_PROCESS_EVIDENCE_TIMEOUT_MS = 1_000;
 const psPath = process.platform === "darwin" ? "/bin/ps" : "/usr/bin/ps";
 const lsofPath = process.platform === "darwin" ? "/usr/sbin/lsof" : "/usr/bin/lsof";
 const sourceObserverSuffix = "/apps/cli/dist/observerMain.js";
@@ -43,22 +46,33 @@ type LocalObserverProcessEvidenceDeps = {
   processExecutableMatches?: (pid: number, expectedPath: string) => boolean;
   socketHolders?: (socketPath: string) => number[];
   signal?: (pid: number, signal: NodeJS.Signals | 0) => void;
+  evidenceTimeoutMs?: number;
 };
+
+export type LocalObserverProcessEvidenceSource = ObserverDuplicateProcessEvidenceSource &
+  ObserverProcessExistenceEvidenceSource;
 
 /**
  * ADAPTER
  *
- * Translates targeted and global exact argv, executable provenance, launch nonce,
- * OS start time, strict socket-holder and complete file-descriptor evidence,
- * pidfiles, socket identities, and signals into conservative ownership evidence.
- * Exact executable/argv mismatch throws a stable typed refusal without weakening
- * the fail-closed ownership decision.
+ * Translates bounded targeted and global exact argv, executable provenance,
+ * launch nonce, OS start time, non-signaling process existence, strict
+ * socket-holder and complete file-descriptor evidence, pidfiles, socket
+ * identities, and signals into conservative ownership evidence. Exact
+ * executable/argv mismatch throws a stable typed refusal without weakening the
+ * fail-closed ownership decision.
  */
 export function createLocalObserverProcessEvidence(
   deps: LocalObserverProcessEvidenceDeps = {},
-): ObserverDuplicateProcessEvidenceSource {
-  const execFile = deps.execFile ?? defaultExecFile;
-  const execFileStatus = deps.execFileStatus ?? defaultExecFileStatus;
+): LocalObserverProcessEvidenceSource {
+  const evidenceTimeoutMs = Math.max(
+    1,
+    deps.evidenceTimeoutMs ?? DEFAULT_PROCESS_EVIDENCE_TIMEOUT_MS,
+  );
+  const execFile =
+    deps.execFile ?? ((file, args) => defaultExecFile(file, args, evidenceTimeoutMs));
+  const execFileStatus =
+    deps.execFileStatus ?? ((file, args) => defaultExecFileStatus(file, args, evidenceTimeoutMs));
   const readProcessArgv = deps.readProcessArgv ?? defaultReadProcessArgv;
   const processExecutableMatches =
     deps.processExecutableMatches ??
@@ -87,6 +101,7 @@ export function createLocalObserverProcessEvidence(
     listObserverProcesses: () => readEntries(processListArgs()),
     socketHolders: deps.socketHolders ?? readObserverSocketHolderPids,
     processStartToken: (pid) => readProcessStartToken(pid, execFile),
+    readProcessExistence: (pid) => readLocalProcessExistence(pid, execFileStatus),
     readProcessIdentity: readObserverProcessIdentity,
     socketIdentity: readSocketIdentity,
     unixSocketFdCount: (entry) => {
@@ -355,6 +370,28 @@ function readProcessStartToken(
   }
 }
 
+function readLocalProcessExistence(
+  pid: number,
+  execFileStatus: (file: string, args: readonly string[]) => ExecFileStatus,
+): ObserverProcessExistence {
+  try {
+    const result = execFileStatus(psPath, ["-ww", "-p", String(pid), "-o", "lstart="]);
+    const osStartTime = result.stdout.trim();
+    if (result.status === 0 && result.stderr.trim().length === 0 && osStartTime.length > 0) {
+      return { status: "running", osStartTime };
+    }
+    if (result.status === 1 && result.stderr.trim().length === 0 && osStartTime.length === 0) {
+      return { status: "absent" };
+    }
+    return {
+      status: "unavailable",
+      cause: new Error(`Process existence evidence was unavailable for PID ${pid}.`),
+    };
+  } catch (cause) {
+    return { status: "unavailable", cause };
+  }
+}
+
 export function parseUnixSocketFdCount(output: string, expectedPid: number): number {
   const lines = strictLsofLines(output, expectedPid);
   if (lines.length < 2) throw new Error("Unix-socket descriptor evidence was empty.");
@@ -466,19 +503,25 @@ function signalProcess(
   }
 }
 
-function defaultExecFile(file: string, args: readonly string[]): string {
+function defaultExecFile(file: string, args: readonly string[], timeoutMs: number): string {
   return execFileSync(file, [...args], {
     encoding: "utf8",
     env: { ...process.env, LC_ALL: "C" },
     maxBuffer: processListingMaxBufferBytes,
+    timeout: timeoutMs,
   });
 }
 
-function defaultExecFileStatus(file: string, args: readonly string[]): ExecFileStatus {
+function defaultExecFileStatus(
+  file: string,
+  args: readonly string[],
+  timeoutMs: number,
+): ExecFileStatus {
   const result = spawnSync(file, [...args], {
     encoding: "utf8",
     env: { ...process.env, LC_ALL: "C" },
     maxBuffer: processListingMaxBufferBytes,
+    timeout: timeoutMs,
   });
   if (result.error !== undefined) throw result.error;
   return { status: result.status, stdout: result.stdout, stderr: result.stderr };

@@ -5,7 +5,11 @@ import type {
   ObserverStopReceipt,
   SafeError,
 } from "@station/contracts";
-import { ObserverLifecycleFailureSchema, textLineTerminatorPattern } from "@station/contracts";
+import {
+  ObserverLifecycleFailureSchema,
+  STATION_SCHEMA_VERSION,
+  textLineTerminatorPattern,
+} from "@station/contracts";
 import { componentLogPath, createJsonlLogger, createTraceContext } from "@station/observability";
 import {
   createObserverClient,
@@ -21,7 +25,9 @@ import {
   safeErrorFromUnknown,
   stationObserverBuildVersion,
   systemClock,
+  toIsoTimestamp,
 } from "@station/runtime";
+import { repairLocalObserverEvidence } from "./observerProcess/evidenceRepair.js";
 import {
   classifyObserverHealth,
   formatObserverBuild,
@@ -123,8 +129,9 @@ function observerHealthTimedOut(paths: ObserverPaths): ObserverStatus {
  * ADAPTER
  *
  * Translates CLI startup intent into exact-build Observer attachment or child
- * startup while leaving socket ownership mutation to the child's boot lifecycle.
- * Startup failures retain their typed child cause and bounded boot evidence.
+ * startup while leaving claim-serialized stale-evidence repair and socket
+ * ownership mutation to the child's boot lifecycle. Startup failures retain
+ * their typed child cause and bounded boot evidence.
  */
 export async function startObserver(
   options: ObserverProcessOptions = {},
@@ -237,17 +244,27 @@ function observerStartTimedOut(paths: ObserverPaths): ObserverStatus {
 }
 
 /**
- * ADAPTER
+ * COMPOSITION ROOT
  *
- * Translates a CLI stop request into a pinned Observer lifecycle operation.
+ * Translates a CLI stop request into a pinned live lifecycle operation or a
+ * claim-serialized, idempotent stale-evidence repair.
  */
 export async function stopObserver(
   options: ObserverProcessOptions = {},
   deps: ObserverProcessDeps = {},
 ): Promise<ObserverStopReceipt> {
   const paths = options.paths ?? resolveObserverPaths(options.config);
-  const status = await getObserverStatus({ ...options, paths }, deps);
-  if (status.status !== "running") {
+  const timeoutMs = options.timeoutMs ?? 5_000;
+  const deadlineMs = Date.now() + timeoutMs;
+  const status = await getObserverStatus({ ...options, paths, timeoutMs }, deps);
+  if (status.status === "running") {
+    return stopRunningObserver(
+      status,
+      { ...options, paths, timeoutMs: remainingStopTimeoutMs(deadlineMs) },
+      deps,
+    );
+  }
+  if (status.status === "unhealthy") {
     throw (
       status.error ?? {
         tag: "ObserverConnectionError",
@@ -256,7 +273,44 @@ export async function stopObserver(
       }
     );
   }
-  return stopRunningObserver(status, options, deps);
+
+  try {
+    const repairTimeoutMs = remainingStopTimeoutMs(deadlineMs);
+    if (repairTimeoutMs <= 0) throw observerStopTimeoutError();
+    const evidenceRepair = await (deps.repairStaleEvidence ?? repairLocalObserverEvidence)({
+      socketPath: paths.socketPath,
+      timeoutMs: repairTimeoutMs,
+    });
+    const clock = deps.clock ?? systemClock;
+    return {
+      schemaVersion: STATION_SCHEMA_VERSION,
+      stopped: false,
+      at: toIsoTimestamp(clock.now()),
+      message: "Observer was already stopped; stale lifecycle evidence was reconciled.",
+      evidenceRepair,
+    };
+  } catch (error) {
+    const normalized = safeErrorFromUnknown(error, {
+      tag: "ObserverEvidenceRepairError",
+      code: "OBSERVER_STALE_EVIDENCE_UNCERTAIN",
+      message: "Observer lifecycle evidence could not be repaired safely.",
+    });
+    if (normalized.code !== "OBSERVER_STALE_EVIDENCE_OWNER_CHANGED") throw error;
+    const reclassificationTimeoutMs = remainingStopTimeoutMs(deadlineMs);
+    if (reclassificationTimeoutMs <= 0) throw observerStopTimeoutError();
+    const current = await getObserverStatus(
+      { ...options, paths, timeoutMs: reclassificationTimeoutMs },
+      deps,
+    );
+    if (current.status === "running") {
+      return stopRunningObserver(
+        current,
+        { ...options, paths, timeoutMs: remainingStopTimeoutMs(deadlineMs) },
+        deps,
+      );
+    }
+    throw error;
+  }
 }
 
 /**
@@ -555,9 +609,11 @@ function hasLegacyObserverBuildIdentity(health: ObserverHealth): boolean {
 /**
  * ADAPTER
  *
- * Translates a CLI restart request while preserving a newer winning Observer build.
- * An explicit higher-build restart cooperatively stops the identity-pinned incumbent before spawn.
- * A failed replacement retains its typed cause and startup evidence while annotating only the outer
+ * Translates a CLI restart request while preserving a newer winning Observer
+ * build. An explicit higher-build restart cooperatively stops the
+ * identity-pinned incumbent before spawn; a stopped or stale endpoint converges
+ * through the child's claim-serialized evidence repair. A failed replacement
+ * retains its typed cause and startup evidence while annotating only the outer
  * error hint with the incumbent build identity it tried to replace.
  */
 export async function restartObserver(
