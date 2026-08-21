@@ -148,17 +148,20 @@ describe("observer protocol server", () => {
   it("rejects a post-bind publication failure with its original cause after cleanup", async () => {
     const { dir, socketPath } = await createTempSocketPath();
     const stateDir = join(dir, "publication-failure-state");
-    await mkdir(`${socketPath}.pid`);
 
     const failure = await runObserverMain(
       ["--socket", socketPath, "--state-dir", stateDir, "--startup-timeout-ms", "1000"],
       {
-        providerRegistryFactory: () =>
-          new ProviderRegistry({
+        providerRegistryFactory: async () => {
+          // Repair has completed by provider construction; introduce the collision
+          // here so the successful binder still owns the publication failure.
+          await mkdir(`${socketPath}.pid`);
+          return new ProviderRegistry({
             worktree: new FakeWorktreeProvider({ now }),
             terminal: new FakeTerminalProvider({ now }),
             harnesses: [new FakeHarnessProvider({ now })],
-          }),
+          });
+        },
         buildVersion: observerBuildVersion,
       },
     ).catch((error: unknown) => error);
