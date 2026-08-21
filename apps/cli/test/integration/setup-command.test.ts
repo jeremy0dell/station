@@ -7,7 +7,10 @@ import type { ExternalCommandInput, ExternalCommandResult } from "@station/runti
 import { buildManagedFastPopupRunShellCommand } from "@station/tmux";
 import { afterEach, describe, expect, it } from "vitest";
 import type { SetupCommandDeps } from "../../src/commands/setup/types.js";
-import { configBackedHarnessHooksProbe } from "../fixtures/setupTrackingSupport.js";
+import {
+  configBackedHarnessHooksProbe,
+  successfulProviderTrackingPort,
+} from "../fixtures/setupTrackingSupport.js";
 
 async function runCli(...args: Parameters<typeof stationCli.runCli>) {
   const options = args[1] ?? {};
@@ -22,6 +25,9 @@ async function runCli(...args: Parameters<typeof stationCli.runCli>) {
       probeHarnessHooksStatus: configBackedHarnessHooksProbe(
         async (configPath) => (await deps.fs?.readFile(configPath)) ?? "",
       ),
+      ...(deps.providerTrackingPort === undefined
+        ? { providerTrackingPort: successfulProviderTrackingPort }
+        : {}),
     },
   });
 }

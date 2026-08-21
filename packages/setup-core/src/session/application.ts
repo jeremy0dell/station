@@ -262,7 +262,7 @@ class SetupSessionRuntime implements SetupSessionApplication {
       await this.#beginConfigWrite(inspecting, plan);
       return;
     }
-    await this.#beginTracking(inspecting, plan);
+    await this.#beginOptionalIntegrations(inspecting, plan);
   }
 
   async #beginConfigWrite(inspecting: SetupSessionInspectingState, plan: SetupPlan): Promise<void> {
@@ -290,13 +290,7 @@ class SetupSessionRuntime implements SetupSessionApplication {
         operation.kind === "write-config" && operation.selected,
     );
     if (configOperation === undefined) {
-      this.#state = {
-        ...applying,
-        status: "inspecting",
-        inspectionPhase: "after-activation",
-        revision: inspecting.revision + 1,
-      };
-      if (!this.#consumePendingCancellation()) await this.#inspect();
+      await this.#beginTracking(inspecting, plan);
       return;
     }
     this.#state = applying;
@@ -311,6 +305,22 @@ class SetupSessionRuntime implements SetupSessionApplication {
       plan,
       status: "applying",
       applyPhase: "tracking",
+      request: "apply",
+    };
+    if (!this.#consumePendingCancellation()) await this.#continueApplying();
+  }
+
+  async #beginOptionalIntegrations(
+    inspecting: SetupSessionInspectingState,
+    plan: SetupPlan,
+  ): Promise<void> {
+    this.#state = {
+      revision: inspecting.revision,
+      intent: inspecting.intent,
+      operationOutcomes: inspecting.operationOutcomes,
+      plan,
+      status: "applying",
+      applyPhase: "optional-integrations",
       request: "apply",
     };
     if (!this.#consumePendingCancellation()) await this.#continueApplying();
@@ -339,6 +349,15 @@ class SetupSessionRuntime implements SetupSessionApplication {
           return;
         }
         case "config-write": {
+          // Tracking must observe the committed config before startup enforces that config's hook intent.
+          this.#state = {
+            ...this.#state,
+            applyPhase: "tracking",
+            revision: this.#state.revision + 1,
+          };
+          break;
+        }
+        case "tracking": {
           const activation = this.#state.plan.operations.find(
             (operation): operation is SetupObserverActivationOperation =>
               operation.kind === "activate-observer-config" && operation.selected,
@@ -346,12 +365,10 @@ class SetupSessionRuntime implements SetupSessionApplication {
           if (activation === undefined || hasCompletedOperation(this.#state, activation.id)) {
             this.#state = {
               ...this.#state,
-              status: "inspecting",
-              inspectionPhase: "after-activation",
+              applyPhase: "optional-integrations",
               revision: this.#state.revision + 1,
             };
-            if (!this.#consumePendingCancellation()) await this.#inspect();
-            return;
+            break;
           }
           this.#state = {
             ...this.#state,
@@ -369,13 +386,6 @@ class SetupSessionRuntime implements SetupSessionApplication {
           };
           if (!this.#consumePendingCancellation()) await this.#inspect();
           return;
-        case "tracking":
-          this.#state = {
-            ...this.#state,
-            applyPhase: "optional-integrations",
-            revision: this.#state.revision + 1,
-          };
-          break;
         case "optional-integrations":
           this.#state = {
             ...this.#state,
