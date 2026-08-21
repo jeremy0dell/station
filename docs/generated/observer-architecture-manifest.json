@@ -532,6 +532,55 @@
       ]
     },
     {
+      "path": "apps/observer/src/commands/harnessHookHealth.ts",
+      "exports": [
+        {
+          "name": "readHarnessHookHealth",
+          "kind": "function",
+          "role": "USE CASE",
+          "purpose": "Reads provider-neutral hook evidence without invoking any mutation capability."
+        },
+        {
+          "name": "ReadHarnessHookHealthOptions",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "./providers.js",
+          "resolvedPath": "apps/observer/src/commands/providers.ts",
+          "edgeKind": "runtime",
+          "bindings": ["resolveHarnessProviderOrThrow"]
+        },
+        {
+          "specifier": "../diagnostics/errors.js",
+          "resolvedPath": "apps/observer/src/diagnostics/errors.ts",
+          "edgeKind": "runtime",
+          "bindings": ["toSafeError"]
+        },
+        {
+          "specifier": "../providers/registry.js",
+          "resolvedPath": "apps/observer/src/providers/registry.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ProviderRegistry"]
+        },
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "runtime",
+          "bindings": ["ProviderHookHealthSchema"]
+        },
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ProviderHookHealth", "ProviderId"]
+        }
+      ]
+    },
+    {
       "path": "apps/observer/src/commands/harnessLaunchPreflight.ts",
       "exports": [
         {
@@ -5077,6 +5126,18 @@
           "purpose": null
         },
         {
+          "name": "readHarnessHookHealth",
+          "kind": "function",
+          "role": "USE CASE",
+          "purpose": "Reads provider-neutral hook evidence without invoking any mutation capability."
+        },
+        {
+          "name": "ReadHarnessHookHealthOptions",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "readObserverSocketHolderPids",
           "kind": "function",
           "role": null,
@@ -5429,6 +5490,12 @@
         {
           "specifier": "./commands/cleanup/index.js",
           "resolvedPath": "apps/observer/src/commands/cleanup/index.ts",
+          "edgeKind": "runtime",
+          "bindings": ["*"]
+        },
+        {
+          "specifier": "./commands/harnessHookHealth.js",
+          "resolvedPath": "apps/observer/src/commands/harnessHookHealth.ts",
           "edgeKind": "runtime",
           "bindings": ["*"]
         },
@@ -13699,6 +13766,14 @@
       "kind": "interface",
       "role": "DRIVEN PORT",
       "purpose": "Defines one install owner's typed detect, plan, apply, and optional adapter-owned recovery lifecycle.",
+      "dependencies": []
+    },
+    {
+      "path": "apps/observer/src/commands/harnessHookHealth.ts",
+      "declaration": "readHarnessHookHealth",
+      "kind": "function",
+      "role": "USE CASE",
+      "purpose": "Reads provider-neutral hook evidence without invoking any mutation capability.",
       "dependencies": []
     },
     {
