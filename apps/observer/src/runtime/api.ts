@@ -11,6 +11,7 @@ import type {
   HarnessEventReportReceipt,
   ObserverApi,
   ObserverHealth,
+  ObserverRecoveryInventory,
   ObserverStopReceipt,
   ProviderHealth,
   ProviderHookEvent,
@@ -66,6 +67,7 @@ import {
 import type { ObserverPersistenceBundle, PersistenceHealthSource } from "../persistence/index.js";
 import type { ProviderRegistry } from "../providers/registry.js";
 import { type ObserverCore, providerProjectsFromConfig } from "../reconcile/core.js";
+import { inspectObserverRecoveryInventory } from "../sessionRecoveryInventory.js";
 import type { StationLogger } from "../stationLogger.js";
 import {
   createWorktreeMutationCoordinator,
@@ -124,8 +126,8 @@ export type CreateObserverApiOptions = {
  *
  * Wires Observer use cases with supplied durable, local-metadata, and diagnostic-
  * evidence roles, ingress workers, provider-health publication, scheduling, exact
- * build publication, recovery-readiness queries, read-only singleton diagnostics,
- * and adapter shutdown behind the application API.
+ * build publication, recovery-readiness and coherent recovery-inventory queries, read-only
+ * singleton diagnostics, and adapter shutdown behind the application API.
  */
 export function createObserverApi(options: CreateObserverApiOptions): ObserverApi {
   const clock = options.clock ?? systemClock;
@@ -277,6 +279,10 @@ export function createObserverApi(options: CreateObserverApiOptions): ObserverAp
       ),
     getSnapshot: async () => options.core.getSnapshot(),
     getSessionRecoveryReadiness: async () => sessionRecoveryReadiness(options),
+    getSessionRecoveryInventory: (): Promise<ObserverRecoveryInventory> =>
+      inspectObserverRecoveryInventory({
+        persistence: options.persistence,
+      }),
     subscribe: (filter?: EventFilter): AsyncIterable<StationEvent> =>
       options.eventBus.subscribe(filter),
     dispatch: (command: StationCommand) => options.commandQueue.dispatch(command),

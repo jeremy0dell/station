@@ -25,6 +25,30 @@ describe("protocol client/server", () => {
     const snapshot = emptySnapshot();
     const api = createFakeObserverApi({
       snapshot,
+      getSessionRecoveryInventory: async () => ({
+        schemaVersion: 1,
+        sessions: [
+          {
+            id: "session-protocol",
+            projectId: "web",
+            worktreeId: "worktree-protocol",
+            lifecycle: "ended",
+            createdAt: protocolTestNow,
+            lastSeenAt: protocolTestNow,
+          },
+        ],
+        recoveryHandles: [
+          {
+            id: "handle-protocol",
+            provider: "codex",
+            projectId: "different-project",
+            worktreeId: "different-worktree",
+            targetKind: "session-file",
+            observedAt: protocolTestNow,
+            lastSeenAt: protocolTestNow,
+          },
+        ],
+      }),
       dispatch: async (command) => {
         const record: CommandRecord = {
           id: "cmd_1",
@@ -51,6 +75,30 @@ describe("protocol client/server", () => {
       canonicalTitleImport: true,
       managedTerminal: { provider: "native", canLaunchProcessPersistently: true },
       harnesses: [],
+    });
+    await expect(client.getSessionRecoveryInventory()).resolves.toEqual({
+      schemaVersion: 1,
+      sessions: [
+        {
+          id: "session-protocol",
+          projectId: "web",
+          worktreeId: "worktree-protocol",
+          lifecycle: "ended",
+          createdAt: protocolTestNow,
+          lastSeenAt: protocolTestNow,
+        },
+      ],
+      recoveryHandles: [
+        {
+          id: "handle-protocol",
+          provider: "codex",
+          projectId: "different-project",
+          worktreeId: "different-worktree",
+          targetKind: "session-file",
+          observedAt: protocolTestNow,
+          lastSeenAt: protocolTestNow,
+        },
+      ],
     });
 
     const command: StationCommand = {
@@ -123,7 +171,7 @@ describe("protocol client/server", () => {
   it.each([
     ["another build", `0.0.0+station.${"a".repeat(64)}`],
     ["a legacy Observer", undefined],
-  ] as const)("rejects a pinned mutation before invoking %s", async (_scenario: string, actualBuildVersion:
+  ] as const)("rejects pinned operations before invoking %s", async (_scenario: string, actualBuildVersion:
     | string
     | undefined) => {
     const { socketPath } = await createTempSocketPath();
@@ -137,6 +185,7 @@ describe("protocol client/server", () => {
       reportedHealth.version = actualBuildVersion;
     }
     let reconcileCalls = 0;
+    let recoveryInventoryCalls = 0;
     const server = await startProtocolServer({
       socketPath,
       api: createFakeObserverApi({
@@ -144,6 +193,10 @@ describe("protocol client/server", () => {
         reconcile: async (reason) => {
           reconcileCalls += 1;
           return baseApi.reconcile(reason);
+        },
+        getSessionRecoveryInventory: async () => {
+          recoveryInventoryCalls += 1;
+          return baseApi.getSessionRecoveryInventory();
         },
       }),
     });
@@ -163,6 +216,11 @@ describe("protocol client/server", () => {
         hint: expect.stringContaining("isolated observer socket_path and state_dir"),
       });
       expect(reconcileCalls).toBe(0);
+      await expect(client.getSessionRecoveryInventory()).rejects.toMatchObject({
+        tag: "ProtocolError",
+        code: "OBSERVER_BUILD_MISMATCH",
+      });
+      expect(recoveryInventoryCalls).toBe(0);
     } finally {
       await server.close();
     }

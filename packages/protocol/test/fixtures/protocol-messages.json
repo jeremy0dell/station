@@ -55,5 +55,21 @@
       "commandId": "cmd_1",
       "includeLogs": true
     }
+  },
+  "recoveryInventoryRequest": {
+    "schemaVersion": "0.11.0",
+    "jsonrpc": "2.0",
+    "id": "req_recovery_inventory",
+    "method": "session.recoveryInventory"
+  },
+  "recoveryInventoryResponse": {
+    "schemaVersion": "0.11.0",
+    "jsonrpc": "2.0",
+    "id": "req_recovery_inventory",
+    "result": {
+      "schemaVersion": 1,
+      "sessions": [],
+      "recoveryHandles": []
+    }
   }
 }

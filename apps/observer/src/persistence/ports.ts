@@ -17,6 +17,7 @@ import type {
   HarnessExecutionIngress,
   IngressDedupeKey,
   ListSessionRecoveryHandlesOptions,
+  ObserverRecoveryInventoryPersistenceSnapshot,
   PersistedCommand,
   PersistedCommandError,
   PersistedEvent,
@@ -144,11 +145,13 @@ export interface ReconcileStore {
  * native execution bindings, canonical worktree-scoped titles, recovery, and readiness. Seed,
  * explicit root Group placement or current source-Group inheritance, and provenance-safe discard
  * are one atomic conversation; canonical-title handoff and recovery import also commit before
- * recovery reconciles. Provider-native recovery keys permanently bind project and worktree,
- * may fill Station session identity once, and reject contradictory identity before mutable evidence
- * can refresh.
+ * recovery reconciles. Recovery inventory reads sessions and handles from one snapshot without
+ * classifying eligibility, so one result never combines different persistence lifetimes.
+ * Provider-native recovery keys permanently bind project and worktree, may fill Station session
+ * identity once, and reject contradictory identity before mutable evidence can refresh.
  */
 export interface SessionStore {
+  readRecoveryInventory(): Promise<ObserverRecoveryInventoryPersistenceSnapshot>;
   listSessions(): Promise<PersistedSession[]>;
   listWorktreeDisplayTitles(): Promise<PersistedWorktreeDisplayTitle[]>;
   getSessionHarnessExecution(input: {

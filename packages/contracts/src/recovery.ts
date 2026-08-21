@@ -44,8 +44,8 @@ export const SessionRecoveryHandleSchema = z
     worktreeId: WorktreeIdSchema,
     sessionId: SessionIdSchema.optional(),
     target: HarnessResumeTargetSchema,
-    // Runtime context is useful for observer-side safety checks, but clients
-    // receive only WorktreeRecoveryAction and never see raw ids or file paths.
+    // Raw runtime context remains Observer-only. Recovery inventory projections
+    // expose target kind and Station ownership IDs, never native values or paths.
     cwd: nonEmptyStringSchema.optional(),
     terminalTargetId: TerminalTargetIdSchema.optional(),
     harnessRunId: nonEmptyStringSchema.optional(),

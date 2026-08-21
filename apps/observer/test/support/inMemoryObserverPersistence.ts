@@ -128,7 +128,34 @@ export function createInMemoryObserverPersistence(
       }),
     );
 
+  const readSnapshot = <T>(task: (snapshot: InMemoryObserverPersistenceState) => T): Promise<T> =>
+    Effect.runPromise(
+      Effect.try({
+        try: () => {
+          // One detached snapshot isolates the reader without replacing the backing state.
+          const snapshot = structuredClone(state);
+          return task(snapshot);
+        },
+        catch: (error) =>
+          safeErrorFromUnknown(error, {
+            tag: "PersistenceError",
+            code: "PERSISTENCE_TRANSACTION_FAILED",
+            message: "Observer in-memory persistence snapshot failed.",
+          }),
+      }),
+    );
+
   return {
+    readRecoveryInventory: () =>
+      readSnapshot((snapshot) => ({
+        sessions: [...snapshot.sessions.values()].sort((left, right) =>
+          compareAsc(left.id, right.id),
+        ),
+        recoveryHandles: [...snapshot.recoveryHandles.values()].sort((left, right) =>
+          compareAsc(left.id, right.id),
+        ),
+      })),
+
     recordCommandAccepted: (input) =>
       transaction((draft) => {
         const command = StationCommandSchema.parse(input.command);

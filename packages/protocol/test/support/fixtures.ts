@@ -32,6 +32,11 @@ export function createFakeObserverApi(
       managedTerminal: { provider: "native", canLaunchProcessPersistently: true },
       harnesses: [],
     }),
+    getSessionRecoveryInventory: async () => ({
+      schemaVersion: 1,
+      sessions: [],
+      recoveryHandles: [],
+    }),
     subscribe: () => stream([]),
     dispatch: async () => ({ commandId: "cmd_1", accepted: true, status: "accepted" }),
     getCommand: async () => undefined,

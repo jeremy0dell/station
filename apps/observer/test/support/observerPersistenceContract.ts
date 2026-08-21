@@ -1984,6 +1984,69 @@ export function observerPersistenceContract(
         });
       });
 
+      it("reads sorted retained sessions and recovery handles through one coherent snapshot", async () => {
+        await withPersistence(createFixture, async ({ persistence }) => {
+          await expect(persistence.readRecoveryInventory()).resolves.toEqual({
+            sessions: [],
+            recoveryHandles: [],
+          });
+
+          for (const sessionId of ["ses_recovery_z", "ses_recovery_a"]) {
+            await persistence.seedSession({
+              sessionId,
+              projectId: "web",
+              worktreeId: `wt_${sessionId}`,
+              initialTitle: sessionId,
+              harness: "codex",
+              terminalProvider: "station",
+              createdAt: earlier,
+              lastSeenAt: now,
+            });
+          }
+          await persistence.markSessionsEnded({
+            subject: { kind: "session", sessionId: "ses_recovery_z" },
+            endedAt: later,
+          });
+
+          const orphanedHandle: SessionRecoveryHandle = {
+            id: "ignored_orphaned_handle_id",
+            provider: "codex",
+            projectId: "orphaned-project",
+            worktreeId: "orphaned-worktree",
+            target: { kind: "session-file", path: "/private/provider/orphaned.jsonl" },
+            observedAt: earlier,
+            lastSeenAt: now,
+          };
+          const mismatchedHandle: SessionRecoveryHandle = {
+            id: "ignored_mismatched_handle_id",
+            provider: "codex",
+            projectId: "different-project",
+            worktreeId: "different-worktree",
+            sessionId: "ses_recovery_z",
+            target: { kind: "native-session", id: "native_recovery_z" },
+            observedAt: earlier,
+            lastSeenAt: later,
+          };
+          const persistedHandles = await Promise.all([
+            persistence.upsertSessionRecoveryHandle(mismatchedHandle),
+            persistence.upsertSessionRecoveryHandle(orphanedHandle),
+          ]);
+          persistedHandles.sort((left, right) => left.id.localeCompare(right.id));
+
+          await expect(persistence.readRecoveryInventory()).resolves.toEqual({
+            sessions: [
+              expect.objectContaining({ id: "ses_recovery_a", lifecycle: "open" }),
+              expect.objectContaining({
+                id: "ses_recovery_z",
+                lifecycle: "ended",
+                endedAt: later,
+              }),
+            ],
+            recoveryHandles: persistedHandles,
+          });
+        });
+      });
+
       it("ends open sessions without generic evidence reviving them and reopens explicitly", async () => {
         await withPersistence(createFixture, async ({ persistence }) => {
           for (const sessionId of ["ses_lifecycle_a", "ses_lifecycle_b"]) {

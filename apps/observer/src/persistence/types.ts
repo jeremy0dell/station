@@ -306,6 +306,11 @@ export type ListSessionRecoveryHandlesOptions = {
   provider?: string;
 };
 
+export type ObserverRecoveryInventoryPersistenceSnapshot = {
+  sessions: PersistedSession[];
+  recoveryHandles: SessionRecoveryHandle[];
+};
+
 export type PersistReconcileResultInput = {
   worktrees: WorktreeObservation[];
   terminalTargets: TerminalTargetObservation[];
