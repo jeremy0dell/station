@@ -35,7 +35,71 @@ import { createUnexpectedProjectConfigWriter } from "../support/projectConfigWri
 const now = "2026-05-21T12:00:00.000Z";
 
 describe("session command vertical slice", () => {
-  it("creates a session, launches the primary agent target, reconciles, and focuses it", async () => {
+  it("validates placement before worktree creation and revalidates in the final open", async () => {
+    const worktree = new FakeWorktreeProvider({ now });
+    const terminal = new FakeTerminalProvider({ now });
+    const validate = vi.spyOn(terminal.placement, "validatePlacement");
+    const create = vi.spyOn(worktree, "createWorktree");
+    const open = vi.spyOn(terminal.placement, "openPlacedWorkspace");
+    const fixture = createFixture({
+      worktree,
+      terminal,
+      sessionIds: ["ses_validation_order"],
+    });
+
+    const receipt = await fixture.queue.dispatch({
+      type: "session.create",
+      payload: {
+        projectId: "web",
+        branch: "validation-order",
+        harness: { provider: "fake-harness" },
+        terminal: { provider: "fake-terminal" },
+        placement: { intent: "detached" },
+      },
+    });
+    await fixture.queue.drain();
+
+    await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
+      status: "succeeded",
+    });
+    expect(validate).toHaveBeenCalledTimes(2);
+    expect(validate.mock.invocationCallOrder[0]).toBeLessThan(
+      create.mock.invocationCallOrder[0] ?? 0,
+    );
+    expect(create.mock.invocationCallOrder[0]).toBeLessThan(open.mock.invocationCallOrder[0] ?? 0);
+    expect(open.mock.invocationCallOrder[0]).toBeLessThan(
+      validate.mock.invocationCallOrder[1] ?? 0,
+    );
+    fixture.sqlite.close();
+  });
+
+  it("rejects an ordinary-only native terminal before worktree mutation", async () => {
+    const worktree = new FakeWorktreeProvider({ now });
+    const terminal = new FakeTerminalProvider({ id: "native", now });
+    const fixture = createFixture({ worktree, terminal, registerPlacement: false });
+
+    const receipt = await fixture.queue.dispatch({
+      type: "session.create",
+      payload: {
+        projectId: "web",
+        branch: "native-placement-refused",
+        harness: { provider: "fake-harness" },
+        terminal: { provider: "native" },
+        placement: { intent: "detached" },
+      },
+    });
+    await fixture.queue.drain();
+
+    await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
+      status: "failed",
+      error: { code: "TERMINAL_PLACEMENT_UNSUPPORTED", provider: "native" },
+    });
+    expect(worktree.snapshot().created).toEqual([]);
+    expect(worktree.snapshot().worktrees).toEqual([]);
+    fixture.sqlite.close();
+  });
+
+  it("creates a session, launches the primary agent target, and leaves focus unchanged", async () => {
     const harness = new FakeHarnessProvider({
       now,
       runs: [
@@ -69,12 +133,8 @@ describe("session command vertical slice", () => {
         terminal: {
           provider: "fake-terminal",
           layout: "agent-build-shell",
-          focus: true,
-          origin: {
-            provider: "tmux",
-            clientId: "client_1",
-          },
         },
+        placement: { intent: "detached" },
         initialPrompt: "Start the feature.",
       },
     });
@@ -82,10 +142,8 @@ describe("session command vertical slice", () => {
 
     expect(receipt).toMatchObject({ accepted: true, status: "accepted" });
     expect(terminal.snapshot().launches).toHaveLength(1);
-    expect(terminal.snapshot().focused).toEqual(["term_fake"]);
-    expect(terminal.snapshot().focusContexts).toEqual([
-      { origin: { provider: "tmux", clientId: "client_1" } },
-    ]);
+    expect(terminal.snapshot().focused).toEqual([]);
+    expect(terminal.snapshot().focusContexts).toEqual([]);
     expect(fixture.core.getSnapshot().sessions).toEqual([
       expect.objectContaining({
         id: "ses_web_feature",
@@ -147,7 +205,8 @@ describe("session command vertical slice", () => {
         branch: "grouped-existing",
         group: { kind: "existing", groupId: "grp_existing" },
         harness: { provider: "fake-harness" },
-        terminal: { provider: "fake-terminal", focus: false },
+        terminal: { provider: "fake-terminal" },
+        placement: { intent: "detached" },
       },
     });
     await fixture.queue.drain();
@@ -194,7 +253,8 @@ describe("session command vertical slice", () => {
         branch: "grouped-inline",
         group: { kind: "create", name: "Release" },
         harness: { provider: "fake-harness" },
-        terminal: { provider: "fake-terminal", focus: false },
+        terminal: { provider: "fake-terminal" },
+        placement: { intent: "detached" },
       },
     });
     await fixture.queue.drain();
@@ -241,6 +301,7 @@ describe("session command vertical slice", () => {
         group: { kind: "existing", groupId: "grp_nested" },
         harness: { provider: "fake-harness" },
         terminal: { provider: "fake-terminal" },
+        placement: { intent: "detached" },
       },
     });
     await fixture.queue.drain();
@@ -275,6 +336,7 @@ describe("session command vertical slice", () => {
           provider: "fake-terminal",
           layout: "agent-build-shell",
         },
+        placement: { intent: "detached" },
       },
     });
     await fixture.queue.drain();
@@ -312,8 +374,8 @@ describe("session command vertical slice", () => {
         terminal: {
           provider: "fake-terminal",
           layout: "agent-build-shell",
-          focus: false,
         },
+        placement: { intent: "detached" },
       },
     });
     await fixture.queue.drain();
@@ -355,6 +417,7 @@ describe("session command vertical slice", () => {
         branch: "blocked-create",
         harness: { provider: "fake-harness" },
         terminal: { provider: "fake-terminal" },
+        placement: { intent: "detached" },
       },
     });
     await fixture.queue.drain();
@@ -419,7 +482,8 @@ describe("session command vertical slice", () => {
           sourceSessionId: "ses_fork_source",
           groupId: "group_fork_source",
         },
-        terminal: { provider: "fake-terminal", focus: false },
+        terminal: { provider: "fake-terminal" },
+        placement: { intent: "detached" },
       },
     });
     await fixture.queue.drain();
@@ -429,7 +493,8 @@ describe("session command vertical slice", () => {
         projectId: "web",
         sourceWorktreeId: source.id,
         branch: "runner-fork-fallback",
-        terminal: { provider: "fake-terminal", focus: false },
+        terminal: { provider: "fake-terminal" },
+        placement: { intent: "detached" },
       },
     });
     await fixture.queue.drain();
@@ -504,6 +569,7 @@ describe("session command vertical slice", () => {
         branch: "blocked-fork",
         harness: { provider: "fake-harness" },
         terminal: { provider: "fake-terminal" },
+        placement: { intent: "detached" },
       },
     });
     await fixture.queue.drain();
@@ -570,6 +636,7 @@ describe("session command vertical slice", () => {
           groupId: "group_fork_cleanup",
         },
         terminal: { provider: "fake-terminal" },
+        placement: { intent: "detached" },
       },
     });
     await fixture.queue.drain();
@@ -618,8 +685,8 @@ describe("session command vertical slice", () => {
         terminal: {
           provider: "fake-terminal",
           layout: "agent-build-shell",
-          focus: false,
         },
+        placement: { intent: "detached" },
         initialPrompt: "Review the task.",
       },
     });
@@ -695,8 +762,8 @@ describe("session command vertical slice", () => {
         terminal: {
           provider: "fake-terminal",
           layout: "agent-build-shell",
-          focus: false,
         },
+        placement: { intent: "detached" },
         initialPrompt: "Review the task.",
       },
     });
@@ -766,8 +833,8 @@ describe("session command vertical slice", () => {
         terminal: {
           provider: "fake-terminal",
           layout: "agent-build-shell",
-          focus: false,
         },
+        placement: { intent: "detached" },
       },
     });
     await fixture.queue.drain();
@@ -825,8 +892,8 @@ describe("session command vertical slice", () => {
         terminal: {
           provider: "fake-terminal",
           layout: "agent-build-shell",
-          focus: false,
         },
+        placement: { intent: "detached" },
       },
     });
     await fixture.queue.drain();
@@ -874,6 +941,7 @@ describe("session command vertical slice", () => {
         branch: "broken",
         harness: { provider: "fake-harness" },
         terminal: { provider: "fake-terminal" },
+        placement: { intent: "detached" },
       },
     });
     await fixture.queue.drain();
@@ -928,6 +996,7 @@ describe("session command vertical slice", () => {
         group: { kind: "create", name: "Temporary" },
         harness: { provider: "fake-harness" },
         terminal: { provider: "fake-terminal" },
+        placement: { intent: "detached" },
       },
     });
     await fixture.queue.drain();
@@ -984,6 +1053,7 @@ describe("session command vertical slice", () => {
         branch: "cleanup-build",
         harness: { provider: "fake-harness" },
         terminal: { provider: "fake-terminal" },
+        placement: { intent: "detached" },
       },
     });
     await fixture.queue.drain();
@@ -1031,6 +1101,7 @@ describe("session command vertical slice", () => {
         branch: "cleanup-launch",
         harness: { provider: "fake-harness" },
         terminal: { provider: "fake-terminal" },
+        placement: { intent: "detached" },
       },
     });
     await fixture.queue.drain();
@@ -1057,18 +1128,8 @@ describe("session command vertical slice", () => {
     fixture.sqlite.close();
   });
 
-  it("does not fail session.create when focus fails after launch", async () => {
-    const terminal = new FakeTerminalProvider({
-      now,
-      failures: {
-        focusTarget: {
-          tag: "TerminalProviderError",
-          code: "FAKE_TERMINAL_FOCUS_FAILED",
-          message: "The fake terminal provider could not focus the target.",
-          provider: "fake-terminal",
-        },
-      },
-    });
+  it("does not focus session.create after launch", async () => {
+    const terminal = new FakeTerminalProvider({ now });
     const harness = new FakeHarnessProvider({
       now,
       runs: [
@@ -1090,7 +1151,8 @@ describe("session command vertical slice", () => {
         projectId: "web",
         branch: "focus",
         harness: { provider: "fake-harness" },
-        terminal: { provider: "fake-terminal", focus: true },
+        terminal: { provider: "fake-terminal" },
+        placement: { intent: "detached" },
       },
     });
     await fixture.queue.drain();
@@ -2670,7 +2732,7 @@ describe("session command vertical slice", () => {
     fixture.sqlite.close();
   });
 
-  it("preserves the original command error when cleanup also fails", async () => {
+  it("surfaces uncertain placed-target cleanup and retains reconciliation state", async () => {
     const worktree = new FakeWorktreeProvider({ now });
     const terminal = new FakeTerminalProvider({
       now,
@@ -2708,6 +2770,7 @@ describe("session command vertical slice", () => {
         branch: "cleanup-failure",
         harness: { provider: "fake-harness" },
         terminal: { provider: "fake-terminal" },
+        placement: { intent: "detached" },
       },
     });
     await fixture.queue.drain();
@@ -2715,19 +2778,68 @@ describe("session command vertical slice", () => {
     await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
       status: "failed",
       error: {
-        code: "FAKE_HARNESS_BUILD_FAILED",
-        provider: "fake-harness",
+        code: "TERMINAL_CLEANUP_UNCERTAIN",
+        provider: "fake-terminal",
       },
     });
-    expect(worktree.snapshot().removed).toEqual([
-      {
-        projectId: "web",
-        worktreeId: "wt_web_cleanup_failure",
-        expectedPath: "/tmp/station/web/cleanup-failure",
-        expectedBranch: "cleanup-failure",
-        expectedRegistrationIdentity: "fake-registration:web:cleanup-failure:managed",
-        force: true,
+    expect(worktree.snapshot().removed).toEqual([]);
+    expect(worktree.snapshot().worktrees).toEqual([
+      expect.objectContaining({ id: "wt_web_cleanup_failure" }),
+    ]);
+    await expect(fixture.persistence.listSessions()).resolves.toEqual([
+      expect.objectContaining({ id: "ses_cleanup_failure" }),
+    ]);
+    expect(fixture.core.getSnapshot().sessions).toEqual([
+      expect.objectContaining({ id: "ses_cleanup_failure" }),
+    ]);
+    fixture.sqlite.close();
+  });
+
+  it("retains the session seed when worktree removal reports removed false", async () => {
+    const worktree = new FakeWorktreeProvider({ now });
+    vi.spyOn(worktree, "removeWorktree").mockImplementation(async (request) => ({
+      worktreeId: request.worktreeId,
+      removed: false,
+      reason: "provider could not prove removal",
+    }));
+    const harness = new FakeHarnessProvider({
+      now,
+      failures: {
+        buildLaunch: {
+          tag: "HarnessProviderError",
+          code: "FAKE_HARNESS_BUILD_FAILED",
+          message: "The fake harness provider could not build a launch plan.",
+          provider: "fake-harness",
+        },
       },
+    });
+    const fixture = createFixture({
+      worktree,
+      harness,
+      sessionIds: ["ses_cleanup_not_removed"],
+    });
+
+    const receipt = await fixture.queue.dispatch({
+      type: "session.create",
+      payload: {
+        projectId: "web",
+        branch: "cleanup-not-removed",
+        harness: { provider: "fake-harness" },
+        terminal: { provider: "fake-terminal" },
+        placement: { intent: "detached" },
+      },
+    });
+    await fixture.queue.drain();
+
+    await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
+      status: "failed",
+      error: { code: "FAKE_HARNESS_BUILD_FAILED" },
+    });
+    expect(worktree.snapshot().worktrees).toEqual([
+      expect.objectContaining({ id: "wt_web_cleanup_not_removed" }),
+    ]);
+    await expect(fixture.persistence.listSessions()).resolves.toEqual([
+      expect.objectContaining({ id: "ses_cleanup_not_removed" }),
     ]);
     fixture.sqlite.close();
   });
@@ -2792,6 +2904,7 @@ function createFixture(
   options: {
     worktree?: FakeWorktreeProvider;
     terminal?: FakeTerminalProvider;
+    registerPlacement?: boolean;
     harness?: HarnessProvider;
     harnesses?: HarnessProvider[];
     managedTerminal?: ManagedTerminalLifecycle;
@@ -2806,9 +2919,11 @@ function createFixture(
   const persistence = createSqliteObserverPersistence({ sqlite, clock, idFactory: ids });
   const eventBus = createObserverEventBus();
   const queue = createCommandQueue({ persistence, clock, idFactory: ids, eventBus });
+  const terminal = options.terminal ?? new FakeTerminalProvider({ now });
   const providers = new ProviderRegistry({
     worktree: options.worktree ?? new FakeWorktreeProvider({ now }),
-    terminal: options.terminal ?? new FakeTerminalProvider({ now }),
+    terminal,
+    terminalPlacements: options.registerPlacement === false ? [] : [terminal.placement],
     ...(options.managedTerminal === undefined ? {} : { managedTerminal: options.managedTerminal }),
     harnesses: options.harnesses ?? [options.harness ?? new FakeHarnessProvider({ now })],
   });

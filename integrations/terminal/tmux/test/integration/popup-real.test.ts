@@ -33,7 +33,6 @@ import {
 import { parsePopupActiveClaim } from "../../src/popup/fastProtocol";
 import { TmuxProvider } from "../../src/provider";
 import { shellQuote } from "../../src/shell";
-import { buildTmuxTargetId } from "../../src/topology";
 
 const execFileAsync = promisify(execFile);
 const runRealTmux = process.env.STATION_REAL_TMUX === "1";
@@ -3071,10 +3070,13 @@ async function createTmuxFocusDestination(fixture: DashboardFixture): Promise<{
   if (observedSession !== sessionName || windowId === undefined || paneId === undefined) {
     throw new Error(`invalid private focus destination evidence: ${output}`);
   }
+  const qualified = await new TmuxProvider({
+    command: fixture.wrapper,
+  }).placement.qualifyTarget(paneId);
   return {
     paneId,
     sessionName,
-    targetId: buildTmuxTargetId({ sessionId: sessionName, windowId, paneId }),
+    targetId: qualified.targetId,
     windowId,
   };
 }

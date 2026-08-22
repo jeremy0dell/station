@@ -6,6 +6,7 @@ import {
   CommandIdSchema,
   CommandReceiptSchema,
   CommandRecordSchema,
+  CurrentSessionContextSchema,
   DiagnosticCollectionOptionsSchema,
   DiagnosticSnapshotSchema,
   DoctorOptionsSchema,
@@ -26,6 +27,7 @@ import {
   StationCommandSchema,
   StationEventSchema,
   StationSnapshotSchema,
+  TerminalCallerContextRequestSchema,
   WorktreeCancelRemovalParamsSchema,
   WorktreeCancelRemovalResultSchema,
   WorktreePrepareRemovalParamsSchema,
@@ -39,6 +41,7 @@ export const ProtocolMethods = [
   "snapshot.get",
   "session.recoveryReadiness",
   "session.recoveryInventory",
+  "session.current",
   "events.subscribe",
   "command.dispatch",
   "command.get",
@@ -145,6 +148,8 @@ export const HarnessEventReportParamsSchema = z
   })
   .strict();
 
+export const SessionCurrentParamsSchema = TerminalCallerContextRequestSchema;
+
 export const EventsSubscribeParamsSchema = EventFilterSchema.optional();
 
 export const ProtocolParamSchemas = {
@@ -153,6 +158,7 @@ export const ProtocolParamSchemas = {
   "snapshot.get": SnapshotGetParamsSchema,
   "session.recoveryReadiness": z.undefined().optional(),
   "session.recoveryInventory": z.undefined().optional(),
+  "session.current": SessionCurrentParamsSchema,
   "events.subscribe": EventsSubscribeParamsSchema,
   "command.dispatch": CommandDispatchParamsSchema,
   "command.get": CommandGetParamsSchema,
@@ -173,6 +179,7 @@ export const ProtocolResultSchemas = {
   "snapshot.get": StationSnapshotSchema,
   "session.recoveryReadiness": SessionRecoveryReadinessSchema,
   "session.recoveryInventory": ObserverRecoveryInventorySchema,
+  "session.current": CurrentSessionContextSchema,
   "events.subscribe": z.object({ subscribed: z.literal(true) }).strict(),
   "command.dispatch": CommandReceiptSchema,
   "command.get": CommandRecordSchema.nullable(),

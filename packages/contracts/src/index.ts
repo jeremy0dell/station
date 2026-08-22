@@ -22,6 +22,7 @@ export * from "./sessionRecovery.js";
 export * from "./setupTypes.js";
 export { textLineTerminatorPattern } from "./shared.js";
 export * from "./snapshot.js";
+export * from "./terminalPlacement.js";
 export * from "./terminalTargets.js";
 export * from "./tuiConfig.js";
 export * from "./tuiRendererControl.js";

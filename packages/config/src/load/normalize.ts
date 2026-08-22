@@ -79,6 +79,7 @@ function normalizeTmuxConfig(value: unknown): unknown {
   return normalizeObject(value, {
     session_prefix: "sessionPrefix",
     workbench_session: "workbenchSession",
+    workbench_socket_path: "workbenchSocketPath",
     window_naming: "windowNaming",
     primary_agent_pane: "primaryAgentPane",
     popup_width: "popupWidth",

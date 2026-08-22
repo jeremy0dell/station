@@ -11,6 +11,7 @@ import {
 } from "./ids.js";
 import { SessionRecoveryHandleSchema } from "./recovery.js";
 import { nonEmptyStringSchema, userFacingTitleSchema } from "./shared.js";
+import { TerminalPlacementRequestSchema } from "./terminalPlacement.js";
 
 export const CommandSourceSchema = z
   .object({
@@ -106,6 +107,14 @@ export const TerminalCommandOptionsSchema = z
   })
   .strict();
 
+/** Create/fork never infer presentation or focus from terminal configuration. */
+export const SessionTerminalCommandOptionsSchema = z
+  .object({
+    provider: ProviderIdSchema,
+    layout: z.enum(["default", "agent-only", "agent-build-shell"]).optional(),
+  })
+  .strict();
+
 export const SessionGroupNameSchema = z.string().trim().min(1);
 
 export const ExistingSessionGroupPlacementIntentSchema = z
@@ -147,11 +156,24 @@ export const CreateSessionPayloadSchema = z
     base: nonEmptyStringSchema.optional(),
     source: CommandSourceSchema.optional(),
     harness: HarnessCommandOptionsSchema,
-    terminal: TerminalCommandOptionsSchema,
+    terminal: SessionTerminalCommandOptionsSchema,
+    placement: TerminalPlacementRequestSchema,
     group: SessionGroupPlacementIntentSchema.optional(),
     initialPrompt: nonEmptyStringSchema.optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((payload, context) => {
+    if (
+      payload.placement.intent === "sibling" &&
+      payload.placement.source.provider !== payload.terminal.provider
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "The placement source provider must match the selected terminal provider.",
+        path: ["placement", "source", "provider"],
+      });
+    }
+  });
 
 export const StartAgentPayloadSchema = z
   .object({
@@ -194,10 +216,23 @@ export const ForkSessionPayloadSchema = z
     copyDirty: z.boolean().optional(),
     group: SourceSessionGroupPlacementIntentSchema.optional(),
     harness: StartAgentHarnessCommandOptionsSchema.optional(),
-    terminal: TerminalCommandOptionsSchema.partial().optional(),
+    terminal: SessionTerminalCommandOptionsSchema,
+    placement: TerminalPlacementRequestSchema,
     initialPrompt: nonEmptyStringSchema.optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((payload, context) => {
+    if (
+      payload.placement.intent === "sibling" &&
+      payload.placement.source.provider !== payload.terminal.provider
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "The placement source provider must match the selected terminal provider.",
+        path: ["placement", "source", "provider"],
+      });
+    }
+  });
 
 export const TerminalFocusPayloadSchema = z
   .object({

@@ -117,6 +117,7 @@ describeRealPi("real Pi session.create launch lane", () => {
         createPath: () => worktreePath,
       }),
       terminal,
+      terminalPlacements: [terminal.placement],
       harnesses: [
         createPiHarnessProvider({
           command: piWrapper.wrapperPath,
@@ -161,6 +162,7 @@ describeRealPi("real Pi session.create launch lane", () => {
             provider: "tmux",
             layout: "agent-build-shell",
           },
+          placement: { intent: "detached" },
         },
       });
       await queue.drain();

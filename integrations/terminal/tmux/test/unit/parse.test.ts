@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { parseTmuxTargetLines } from "../../src/parse";
 
 const now = "2026-05-21T12:00:00.000Z";
+const generation = "a".repeat(64);
 
 describe("tmux target parser", () => {
   it("normalizes workbench pane output into TerminalTargetObservation values", () => {
@@ -10,6 +11,7 @@ describe("tmux target parser", () => {
       [
         [
           "station",
+          "$1",
           "@1",
           "%2",
           "1",
@@ -27,13 +29,13 @@ describe("tmux target parser", () => {
           "codex",
         ].join("\t"),
       ].join("\n"),
-      { observedAt: now },
+      { observedAt: now, generation },
     );
 
     expect(targets).toHaveLength(1);
     expect(TerminalTargetObservationSchema.parse(targets[0])).toEqual(targets[0]);
     expect(targets[0]).toMatchObject({
-      id: "tmux:station:@1:%2",
+      id: `tmux:${generation}:$1:@1:%2`,
       provider: "tmux",
       projectId: "web",
       worktreeId: "wt_web_feature",
@@ -66,6 +68,7 @@ describe("tmux target parser", () => {
     const targets = parseTmuxTargetLines(
       [
         "station",
+        "$1",
         "@1",
         "%3",
         "0",
@@ -80,13 +83,14 @@ describe("tmux target parser", () => {
         "",
         "",
         "",
+        "",
       ].join("\t"),
-      { observedAt: now },
+      { observedAt: now, generation },
     );
 
     expect(targets).toEqual([
       expect.objectContaining({
-        id: "tmux:station:@1:%3",
+        id: `tmux:${generation}:$1:@1:%3`,
         state: "detached",
         confidence: "low",
         reason: "tmux pane is missing station identity binding.",
@@ -108,6 +112,7 @@ describe("tmux target parser", () => {
       [
         [
           "station",
+          "$1",
           "@1",
           "%4",
           "1",
@@ -125,12 +130,12 @@ describe("tmux target parser", () => {
           "codex",
         ].join("\t"),
       ].join("\n"),
-      { observedAt: now },
+      { observedAt: now, generation },
     );
 
     expect(TerminalTargetObservationSchema.parse(targets[0])).toEqual(targets[0]);
     expect(targets[0]).toMatchObject({
-      id: "tmux:station:@1:%4",
+      id: `tmux:${generation}:$1:@1:%4`,
       state: "stale",
       confidence: "high",
       reason: "tmux pane has station identity binding but is dead.",
@@ -139,5 +144,85 @@ describe("tmux target parser", () => {
         deadStatus: "0",
       },
     });
+  });
+
+  it("qualifies fresh observations with stable server and topology identity", () => {
+    const [target] = parseTmuxTargetLines(
+      [
+        "station",
+        "$1",
+        "@1",
+        "%2",
+        "1",
+        "0",
+        "",
+        "/tmp/station/web/feature",
+        "12345",
+        "codex",
+        "web-feature",
+        "ses_web_feature",
+        "web",
+        "wt_web_feature",
+        "/tmp/station/web/feature",
+        "main-agent",
+        "codex",
+      ].join("\t"),
+      { observedAt: now, generation },
+    );
+
+    expect(target?.id).toBe(`tmux:${generation}:$1:@1:%2`);
+  });
+
+  it("treats any positive session attachment count as open", () => {
+    const [target] = parseTmuxTargetLines(
+      [
+        "station",
+        "$1",
+        "@1",
+        "%2",
+        "2",
+        "0",
+        "",
+        "/tmp/station/web/feature",
+        "12345",
+        "zsh",
+        "scratch",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+      ].join("\t"),
+      { observedAt: now, generation },
+    );
+
+    expect(target?.state).toBe("open");
+    expect(target?.providerData.attached).toBe(true);
+  });
+
+  it("rejects pre-worktree-path target rows instead of shifting identity fields", () => {
+    const oldRow = [
+      "station",
+      "$1",
+      "@1",
+      "%2",
+      "1",
+      "0",
+      "",
+      "/tmp/station/web/feature",
+      "12345",
+      "codex",
+      "web-feature",
+      "ses_web_feature",
+      "web",
+      "wt_web_feature",
+      "main-agent",
+      "codex",
+    ].join("\t");
+
+    expect(() => parseTmuxTargetLines(oldRow, { observedAt: now, generation })).toThrow(
+      "tmux returned a malformed target row.",
+    );
   });
 });

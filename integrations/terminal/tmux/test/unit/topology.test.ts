@@ -1,10 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
-  buildTmuxTargetId,
   buildWorkbenchWindowName,
   defaultTmuxWorkbenchConfig,
   defaultTmuxWorkbenchSessionOptions,
-  parseTmuxTargetId,
   tmuxNewWindowTarget,
   tmuxSessionOptionArgs,
 } from "../../src/topology";
@@ -113,20 +111,5 @@ describe("tmux workbench topology", () => {
     });
 
     expect(left).toBe(right);
-  });
-
-  it("round-trips opaque provider target IDs without making core parse tmux fields", () => {
-    const id = buildTmuxTargetId({
-      sessionId: "station",
-      windowId: "@12",
-      paneId: "%34",
-    });
-
-    expect(id).toBe("tmux:station:@12:%34");
-    expect(parseTmuxTargetId(id)).toEqual({
-      sessionId: "station",
-      windowId: "@12",
-      paneId: "%34",
-    });
   });
 });

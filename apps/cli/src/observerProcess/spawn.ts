@@ -87,6 +87,10 @@ export function observerSpawnEnvironment(
   inheritedEnvironment: NodeJS.ProcessEnv = process.env,
 ): NodeJS.ProcessEnv {
   const env = environmentWithoutGitLocals(inheritedEnvironment);
+  // Caller tmux variables are evidence captured by the CLI, never Observer's
+  // command endpoint or child-process context.
+  delete env.TMUX;
+  delete env.TMUX_PANE;
   delete env.STATION_OBSERVER_STARTUP_POLICY;
   delete env[STATION_OBSERVER_STARTUP_FAILURE_FD];
   env[STATION_OBSERVER_STARTUP_FAILURE_FD] = String(OBSERVER_STARTUP_FAILURE_FD);

@@ -300,6 +300,17 @@ describe("runtime external command boundary", () => {
     expect(error.command).not.toContain("sk-secret");
   });
 
+  it("uses a safe diagnostic rendering when execution args contain private endpoints", () => {
+    const error = externalCommandErrorFromUnknown(new Error("failed"), {
+      command: "tmux",
+      args: ["-S", "/private/user/tmux.sock", "list-sessions"],
+      displayArgs: ["-S", "<configured-tmux-endpoint>", "list-sessions"],
+    });
+
+    expect(error.command).toBe("tmux -S <configured-tmux-endpoint> list-sessions");
+    expect(error.command).not.toContain("/private/user/tmux.sock");
+  });
+
   it("aborts fakeable command execution on timeout", async () => {
     let aborted = false;
     const runner = createFakeExternalCommandRunner(

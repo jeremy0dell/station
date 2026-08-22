@@ -145,8 +145,8 @@ describeReal("real native Station mouse input", () => {
           terminal: {
             provider: "tmux",
             layout: "agent-build-shell",
-            focus: false,
           },
+          placement: { intent: "detached" },
           initialPrompt: sentinel.prompt,
         },
       };

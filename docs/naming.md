@@ -160,6 +160,16 @@ Manual verification after naming work:
 
 ## Session, Worktree, and Pane Tree
 
+### Terminal Placement
+
+A **placement source** is the public, short-lived authority returned by `stn
+session current`; it names provider, target, and generation but not
+provider-private proof. A **placement request** is exactly `sibling` or
+`detached`. Sibling requires a source; detached is source-free and means an
+unselected terminal target, not the absence of a terminal. Use *source* for
+validated authority and *claim* only for raw environment/process hints that an
+adapter has not yet proved.
+
 Three lifecycle units are easy to conflate. Keep them distinct in names, commands, and UX: a session runs inside a worktree, and a pane tree is how one worktree row is drawn in the TUI.
 
 ### Session

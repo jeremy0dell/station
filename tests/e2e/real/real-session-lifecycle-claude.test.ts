@@ -73,8 +73,8 @@ describeReal("real Claude session lifecycle", () => {
         terminal: {
           provider: "tmux",
           layout: "agent-build-shell",
-          focus: false,
         },
+        placement: { intent: "detached" },
         initialPrompt: sentinel.prompt,
       },
     };

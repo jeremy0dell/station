@@ -111,6 +111,7 @@ describeRealOpenCode("real OpenCode session.create", () => {
         createPath: () => worktreePath,
       }),
       terminal,
+      terminalPlacements: [terminal.placement],
       harnesses: [
         createOpenCodeHarnessProvider({
           command: shimPath,
@@ -158,6 +159,7 @@ describeRealOpenCode("real OpenCode session.create", () => {
             provider: "tmux",
             layout: "agent-build-shell",
           },
+          placement: { intent: "detached" },
         },
       });
       await queue.drain();

@@ -6,6 +6,7 @@ import type {
   ProviderHookAdapter,
   ProviderId,
   RepositoryProvider,
+  TerminalPlacementPort,
   TerminalProvider,
   WorktreeProvider,
 } from "@station/contracts";
@@ -38,6 +39,8 @@ export type ProviderRegistryInput = {
    * managed lifecycle are always registered; extras are merged in.
    */
   terminals?: Iterable<TerminalProvider> | undefined;
+  /** Explicit placement roles; each must have an ordinary terminal with the same id. */
+  terminalPlacements?: Iterable<TerminalPlacementPort> | undefined;
   harnesses: Iterable<HarnessProvider> | Map<string, HarnessProvider>;
   repositories?: Iterable<RepositoryProvider> | Map<string, RepositoryProvider>;
   hookAdapters?: Iterable<ProviderHookAdapter> | undefined;
@@ -50,6 +53,8 @@ export class ProviderRegistry {
   readonly terminals: Map<string, TerminalProvider>;
   /** The default terminal provider id (project-config back-compat). */
   readonly defaultTerminalId: ProviderId;
+  /** Optional placement capabilities, keyed independently from ordinary terminals. */
+  readonly terminalPlacements: Map<ProviderId, TerminalPlacementPort>;
   readonly managedTerminal: ManagedTerminalLifecycle | undefined;
   readonly harnesses: Map<string, HarnessProvider>;
   readonly repositories: Map<string, RepositoryProvider>;
@@ -68,6 +73,18 @@ export class ProviderRegistry {
     this.managedTerminal = input.managedTerminal;
     if (this.managedTerminal !== undefined) {
       registerTerminal(this.terminals, this.managedTerminal);
+    }
+    this.terminalPlacements = new Map();
+    for (const placement of input.terminalPlacements ?? []) {
+      if (!this.terminals.has(placement.id)) {
+        throw new Error(
+          `Terminal placement provider has no matching terminal provider: ${placement.id}`,
+        );
+      }
+      if (this.terminalPlacements.has(placement.id)) {
+        throw new Error(`Duplicate terminal placement provider id: ${placement.id}`);
+      }
+      this.terminalPlacements.set(placement.id, placement);
     }
 
     if (input.harnesses instanceof Map) {

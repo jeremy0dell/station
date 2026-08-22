@@ -187,8 +187,8 @@ export function buildCreateSessionCommand(input: CreateSessionCommandInput): Sta
     terminal: {
       provider: input.project.defaults.terminal,
       layout: commandLayout(input.project.defaults.layout),
-      focus: false,
     },
+    placement: { intent: "detached" },
   };
   if (input.initialPrompt !== undefined && input.initialPrompt.length > 0) {
     payload.initialPrompt = input.initialPrompt;
@@ -211,8 +211,8 @@ export function buildForkSessionCommand(input: ForkSessionCommandInput): Station
     terminal: {
       provider: input.project.defaults.terminal,
       layout: commandLayout(input.project.defaults.layout),
-      focus: false,
     },
+    placement: { intent: "detached" },
   };
   if (input.base !== undefined) {
     payload.base = input.base;

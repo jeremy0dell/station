@@ -20,6 +20,7 @@ import {
   type RuntimeClock,
   type RuntimeSafeErrorFallback,
   runRuntimeBoundary,
+  safeErrorFromUnknown,
   systemClock,
   toIsoTimestamp,
 } from "@station/runtime";
@@ -416,7 +417,7 @@ export async function removeWorktreeBestEffort(input: {
   }
   const expectedRegistrationIdentity = input.expectedRegistrationIdentity;
   try {
-    await runProviderMutation(
+    const result = await runProviderMutation(
       {
         operation: `provider.${input.providers.worktree.id}.removeWorktree.cleanup`,
         clock: input.clock,
@@ -438,7 +439,7 @@ export async function removeWorktreeBestEffort(input: {
           force: true,
         }),
     );
-    return true;
+    return result.removed;
   } catch (error) {
     await input.logger?.warn("Session cleanup failed to remove worktree.", {
       commandId: input.context.commandId,
@@ -451,6 +452,16 @@ export async function removeWorktreeBestEffort(input: {
     });
     return false;
   }
+}
+
+export function isTerminalCleanupUncertain(error: unknown): boolean {
+  return (
+    safeErrorFromUnknown(error, {
+      tag: "TerminalProviderError",
+      code: "TERMINAL_CLEANUP_FAILED",
+      message: "Terminal cleanup failed.",
+    }).code === "TERMINAL_CLEANUP_UNCERTAIN"
+  );
 }
 
 export async function publishSessionCreated(input: {

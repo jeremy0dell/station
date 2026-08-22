@@ -190,6 +190,12 @@ run/runtime-owners/v1/
 
 Use `pnpm station:runtime-inventory [-- --json]` to inspect registered disposable owners without changing them. The report distinguishes a live persistent Host/PTY cohort from a disposable launcher record, returns only keys and root classifications, and names unavailable or ambiguous evidence as a refusal. It never prints raw commands, environment, terminal contents, prompts, credentials, or absolute private paths; use its logical `logs/cli.jsonl` location with `stn debug logs "runtime." --component cli` for the correlated lifecycle evidence. For the checkout-local devbox, run `cd station && bun run station:isolated inventory`.
 
+For terminal placement, run `stn session current` from the caller terminal and
+reuse only its unexpired `source` in a raw sibling request. A detached request
+has no source. If a command is rejected, inspect `stn debug trace <commandId>`
+for the placement or cleanup code. Debug export redacts `authorityId` and does
+not include raw caller claims or provider-private proof.
+
 `pnpm station:runtime-prune -- --runtime <run_uuid>` is the read-only plan for one inventory record. An eligible plan prints a stable SHA-256 digest; apply only by rerunning with `--yes --expect-plan <sha256>`. Apply serializes with runtime startup, requires the same plan after acquiring the runtime-key lock, and revalidates the exact owner, group, checkout, pinned cleanup roots, registered Host sockets, and live PTYs before every signal or recursive deletion. A stale digest, active owner, PID reuse, inaccessible Host, protected PTY overlap, malformed record, or root replacement refuses cleanup and retains the record. `runtime.prune.applied` means the group and pinned binary-smoke roots were confirmed absent before record retirement; `runtime.cleanup.refused` and `runtime.cleanup.failed` retain evidence for another inspection. The command never extends `agent:cleanup`, reset, or Observer reap behavior.
 
 `observer.sock.pid` is mode `0600` for the default socket and contains exactly:

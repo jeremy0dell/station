@@ -39,6 +39,10 @@ import {
   userFacingTitleSchema,
 } from "./shared.js";
 import { type StationSnapshot, StationSnapshotSchema } from "./snapshot.js";
+import type {
+  CurrentSessionContextSchema,
+  TerminalCallerContextRequestSchema,
+} from "./terminalPlacement.js";
 
 /** Maximum encoded size of one child-to-parent Observer startup failure report. */
 export const OBSERVER_STARTUP_FAILURE_REPORT_MAX_BYTES = 64 * 1024;
@@ -378,6 +382,10 @@ export type ObserverApi = {
   getSnapshot(options?: { includeDebug?: boolean }): Promise<StationSnapshot>;
   getSessionRecoveryReadiness(): Promise<SessionRecoveryReadiness>;
   getSessionRecoveryInventory(): Promise<ObserverRecoveryInventory>;
+  /** Resolve transient untrusted caller claims without retaining raw claim or provider proof. */
+  getCurrentSessionContext(
+    caller: z.infer<typeof TerminalCallerContextRequestSchema>,
+  ): Promise<z.infer<typeof CurrentSessionContextSchema>>;
   subscribe(filter?: EventFilter): AsyncIterable<StationEvent>;
   dispatch(command: StationCommand): Promise<CommandReceipt>;
   getCommand(commandId: CommandId): Promise<CommandRecord | undefined>;

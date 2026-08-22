@@ -488,6 +488,18 @@ function fakeApi(
     getSessionRecoveryInventory:
       overrides.getSessionRecoveryInventory ??
       (async () => ({ schemaVersion: 1, sessions: [], recoveryHandles: [] })),
+    getCurrentSessionContext:
+      overrides.getCurrentSessionContext ??
+      (async () => ({
+        source: {
+          provider: "fake-terminal",
+          targetId: "target_1",
+          generation: "generation_1",
+          authorityId: "authority_1",
+          expiresAt: fixtureNow,
+        },
+        presentation: "presented",
+      })),
     prepareExternalLaunch:
       overrides.prepareExternalLaunch ??
       (async (params) => ({

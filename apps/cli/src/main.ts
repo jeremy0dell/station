@@ -7,6 +7,7 @@ import {
   type RuntimeSafeError,
   stationBuildInfo,
 } from "@station/runtime";
+import { captureTmuxCallerClaims } from "@station/tmux";
 import { parseRequiredOptionValue } from "./args.js";
 import type { CliRunOptions, CliRunResult } from "./cliTypes.js";
 import {
@@ -32,7 +33,7 @@ export async function runCli(
   argv = process.argv.slice(2),
   options: CliRunOptions = {},
 ): Promise<CliRunResult> {
-  const commandOptions = withProviderHookSetupComposition(options);
+  const commandOptions = withCliComposition(options);
   const { args, configPath } = parseGlobalOptions(argv);
   const help = renderCliHelpFromArgs(args);
   if (help !== undefined) {
@@ -137,8 +138,9 @@ function withProcessComposition(options: CliRunOptions): CliRunOptions {
   };
 }
 
-function withProviderHookSetupComposition(options: CliRunOptions): CliRunOptions {
+function withCliComposition(options: CliRunOptions): CliRunOptions {
   const setupDeps = { ...options.setupDeps };
+  const sessionDeps = { ...options.sessionDeps };
   if (options.providerHookIngressLauncher !== undefined) {
     setupDeps.providerHookIngressLauncher = options.providerHookIngressLauncher;
   }
@@ -154,8 +156,10 @@ function withProviderHookSetupComposition(options: CliRunOptions): CliRunOptions
         ? {}
         : { artifactOwner: options.providerHookArtifactOwner }),
     });
+  sessionDeps.captureCallerClaims ??= captureTmuxCallerClaims;
   return {
     ...options,
+    sessionDeps,
     setupDeps,
   };
 }

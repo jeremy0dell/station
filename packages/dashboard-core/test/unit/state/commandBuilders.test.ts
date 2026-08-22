@@ -75,7 +75,8 @@ describe("TUI command builders", () => {
         title: "Dashboard launch",
         branch: "feature/new-dashboard",
         harness: { provider: "codex", mode: "interactive" },
-        terminal: { provider: "tmux", layout: "agent-build-shell", focus: false },
+        terminal: { provider: "tmux", layout: "agent-build-shell" },
+        placement: { intent: "detached" },
         initialPrompt: "wire the dashboard",
       },
     });
@@ -99,7 +100,8 @@ describe("TUI command builders", () => {
         title: "Hexagonal PT 12",
         branch: "feature/new-dashboard",
         harness: { provider: "opencode", mode: "interactive" },
-        terminal: { provider: "tmux", layout: "agent-build-shell", focus: false },
+        terminal: { provider: "tmux", layout: "agent-build-shell" },
+        placement: { intent: "detached" },
       },
     });
   });

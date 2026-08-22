@@ -36,6 +36,7 @@ describe("protocol message envelopes", () => {
       ProtocolResultSchemas["session.recoveryInventory"].safeParse(recoveryInventoryResponse.result)
         .success,
     ).toBe(true);
+    expect(ProtocolRequestSchema.safeParse(messages.sessionCurrentRequest).success).toBe(true);
   });
 
   it("rejects unknown protocol methods", () => {

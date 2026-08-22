@@ -2,10 +2,14 @@ import type {
   BuildHarnessLaunchRequest,
   HarnessProvider,
   HarnessResumeOptions,
+  OpenPlacedWorkspaceResult,
+  OpenWorkspaceResult,
   ProviderProjectConfig,
   SafeError,
   SessionView,
   TerminalFocusOrigin,
+  TerminalPlacementPort,
+  TerminalPlacementRequest,
   TerminalProvider,
   TerminalState,
   TerminalTargetObservation,
@@ -13,7 +17,12 @@ import type {
   WorktreeRow,
 } from "@station/contracts";
 import { terminalTargetObservationFromBinding } from "@station/contracts";
-import { type RuntimeClock, systemClock, toIsoTimestamp } from "@station/runtime";
+import {
+  type RuntimeClock,
+  safeErrorFromUnknown,
+  systemClock,
+  toIsoTimestamp,
+} from "@station/runtime";
 import { toSafeError } from "../diagnostics/errors.js";
 import type { StationLogger } from "../stationLogger.js";
 import { throwIfAborted } from "./cancellation.js";
@@ -40,10 +49,19 @@ type HarnessLaunchOptions = {
   sandboxMode?: string | undefined;
 };
 
-/** Opens and launches through provider ports, repeating preflight immediately before mutation. */
+/**
+ * USE CASE
+ *
+ * Opens and launches an agent workspace. When placement is supplied, the terminal
+ * adapter alone revalidates the authority immediately before target mutation;
+ * failures close only the target opened by this invocation and never fall back
+ * to a current, recent, or focused terminal.
+ */
 export async function ensureAgentWorkspace(
   input: {
     terminal: TerminalProvider;
+    placementPort?: TerminalPlacementPort | undefined;
+    placement?: TerminalPlacementRequest | undefined;
     harness: HarnessProvider;
     launchPreflight: HarnessLaunchPreflight;
     project: ProviderProjectConfig;
@@ -63,7 +81,8 @@ export async function ensureAgentWorkspace(
     beginMutation: input.context.beginCommit,
   });
   const runtime = operationRuntime(input);
-  let opened: Awaited<ReturnType<TerminalProvider["openWorkspace"]>> | undefined;
+  let opened: OpenWorkspaceResult | OpenPlacedWorkspaceResult | undefined;
+  let placedOpened: OpenPlacedWorkspaceResult | undefined;
 
   try {
     opened = await runProviderMutation(
@@ -77,14 +96,33 @@ export async function ensureAgentWorkspace(
           provider: input.terminal.id,
         },
       },
-      () =>
-        input.terminal.openWorkspace({
+      async () => {
+        const request = {
           project: input.project,
           worktree: input.worktree,
           harness: input.harness.id,
           layout: input.layout,
           sessionId: input.sessionId,
-        }),
+        };
+        if (input.placement === undefined) {
+          return input.terminal.openWorkspace(request);
+        }
+        if (input.placementPort === undefined) {
+          throw {
+            tag: "TerminalProviderError",
+            code: "TERMINAL_PLACEMENT_UNSUPPORTED",
+            message: "The terminal provider cannot open a workspace with explicit placement.",
+            provider: input.terminal.id,
+          } satisfies SafeError;
+        }
+        // The adapter validates its authority immediately before this mutation.
+        const result = await input.placementPort.openPlacedWorkspace({
+          ...request,
+          placement: input.placement,
+        });
+        placedOpened = result;
+        return result;
+      },
     );
     throwIfAborted(input.context.signal);
 
@@ -127,7 +165,13 @@ export async function ensureAgentWorkspace(
       });
     }
   } catch (error) {
-    if (opened !== undefined) {
+    if (placedOpened !== undefined && input.placementPort !== undefined) {
+      await releasePlacedTargetOrThrow({
+        ...input,
+        placementPort: input.placementPort,
+        opened: placedOpened,
+      });
+    } else if (opened !== undefined) {
       await closeOpenedTargetBestEffort({
         ...input,
         targetId: opened.target.targetId,
@@ -142,6 +186,57 @@ export async function ensureAgentWorkspace(
       },
       { commandId: input.context.commandId },
     );
+  }
+}
+
+async function releasePlacedTargetOrThrow(
+  input: {
+    placementPort: TerminalPlacementPort;
+    opened: OpenPlacedWorkspaceResult;
+    sessionId: string;
+  } & TerminalOperationRuntime,
+): Promise<void> {
+  try {
+    await runProviderMutation(
+      {
+        operation: `provider.${input.placementPort.id}.releasePlacedTarget.cleanup`,
+        clock: input.clock,
+        trace: input.context.trace,
+        fallback: {
+          tag: "TerminalProviderError",
+          code: "TERMINAL_CLEANUP_UNCERTAIN",
+          message: "The terminal provider could not prove placed-target cleanup.",
+          provider: input.placementPort.id,
+        },
+      },
+      () =>
+        input.placementPort.releasePlacedTarget({
+          targetId: input.opened.target.targetId,
+          sessionId: input.sessionId,
+          generation: input.opened.placement.generation,
+          bindingToken: input.opened.bindingToken,
+        }),
+    );
+  } catch (error) {
+    const normalized = safeErrorFromUnknown(error, {
+      tag: "TerminalProviderError",
+      code: "TERMINAL_CLEANUP_UNCERTAIN",
+      message: "The terminal provider could not prove placed-target cleanup.",
+      provider: input.placementPort.id,
+    });
+    await input.logger?.warn("Placed terminal cleanup is uncertain; session state was retained.", {
+      targetId: input.opened.target.targetId,
+      terminalProvider: input.placementPort.id,
+      traceId: input.context.trace.traceId,
+      error: normalized,
+    });
+    throw {
+      ...normalized,
+      tag: "TerminalProviderError",
+      code: "TERMINAL_CLEANUP_UNCERTAIN",
+      message: "The terminal provider could not prove placed-target cleanup.",
+      provider: input.placementPort.id,
+    } satisfies SafeError;
   }
 }
 

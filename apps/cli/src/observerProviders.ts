@@ -30,6 +30,7 @@ import type {
   RepositoryProvider,
   SafeError,
   TerminalCapabilities,
+  TerminalPlacementPort,
   TerminalProvider,
   TerminalTargetObservation,
   WorktreeCapabilities,
@@ -135,7 +136,8 @@ export async function probeHarnessHooksStatus(
  *
  * Constructs concrete provider adapters, including the packaged Pi extension
  * path plus canonical provider-hook launcher and artifact owner supplied by CLI
- * composition, and assigns their Observer roles.
+ * composition, and assigns their Observer roles. Terminal placement authority
+ * remains in those adapters; Observer use cases receive only the driven port.
  *
  * Observer application use cases are composed by the Observer runtime, not
  * stored in the provider registry.
@@ -145,7 +147,7 @@ export function createProviderRegistry(
   options: CreateProviderRegistryOptions = {},
 ): ProviderRegistry {
   const worktree = createWorktreeProvider(config, options);
-  const terminal = createTerminalProvider(config);
+  const terminalRoles = createTerminalProvider(config);
   const harnesses = createHarnessProviders(config, options);
   const repositories = createRepositoryProviders(config);
   // The externally-hosted native provider registers Station-owned terminal
@@ -163,7 +165,10 @@ export function createProviderRegistry(
     : new StationTerminalProvider();
   return new ProviderRegistry({
     worktree,
-    terminal,
+    terminal: terminalRoles.terminal,
+    ...(terminalRoles.placement === undefined
+      ? {}
+      : { terminalPlacements: [terminalRoles.placement] }),
     managedTerminal: station,
     harnesses,
     repositories,
@@ -225,7 +230,12 @@ function createWorktreeProvider(
   return new UnavailableWorktreeProvider(config.defaults.worktreeProvider);
 }
 
-function createTerminalProvider(config: StationConfig): TerminalProvider {
+type TerminalRoles = {
+  terminal: TerminalProvider;
+  placement?: TerminalPlacementPort;
+};
+
+function createTerminalProvider(config: StationConfig): TerminalRoles {
   if (config.defaults.terminal === "tmux") {
     const options: ConstructorParameters<typeof TmuxProvider>[0] = {};
     if (config.terminal?.tmux !== undefined) {
@@ -234,14 +244,15 @@ function createTerminalProvider(config: StationConfig): TerminalProvider {
         options.command = config.terminal.tmux.command;
       }
     }
-    return new TmuxProvider(options);
+    const terminal = new TmuxProvider(options);
+    return { terminal, placement: terminal.placement };
   }
 
   if (config.defaults.terminal === "noop-terminal") {
-    return new NoopTerminalProvider(config.defaults.terminal);
+    return { terminal: new NoopTerminalProvider(config.defaults.terminal) };
   }
 
-  return new UnavailableTerminalProvider(config.defaults.terminal);
+  return { terminal: new UnavailableTerminalProvider(config.defaults.terminal) };
 }
 
 function createHarnessProviders(

@@ -127,6 +127,32 @@ describe("config loading", () => {
     });
   });
 
+  it("normalizes and resolves the configured tmux workbench socket from the config directory", async () => {
+    const tempDir = await makeTempDir();
+    const root = await makeProjectRoot(tempDir, "web");
+    const loaded = await loadConfigFromToml(
+      `${baseToml(projectToml("web", root))}\n[terminal.tmux]\nworkbench_socket_path = "run/workbench.sock"\n`,
+      { configPath: join(tempDir, "config.toml"), homeDir: tempDir },
+    );
+
+    expect(loaded.config.terminal?.tmux?.workbenchSocketPath).toBe(
+      join(tempDir, "run/workbench.sock"),
+    );
+  });
+
+  it("expands a home-relative tmux workbench socket path", async () => {
+    const tempDir = await makeTempDir();
+    const root = await makeProjectRoot(tempDir, "web");
+    const loaded = await loadConfigFromToml(
+      `${baseToml(projectToml("web", root))}\n[terminal.tmux]\nworkbench_socket_path = "~/.tmux/station.sock"\n`,
+      { configPath: join(tempDir, "config.toml"), homeDir: tempDir },
+    );
+
+    expect(loaded.config.terminal?.tmux?.workbenchSocketPath).toBe(
+      join(tempDir, ".tmux/station.sock"),
+    );
+  });
+
   it("loads TOML, applies defaults, expands paths, and keeps every configured project", async () => {
     const tempDir = await makeTempDir();
     const roots = {

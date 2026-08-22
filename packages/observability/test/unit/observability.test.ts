@@ -24,6 +24,7 @@ describe("observability helpers", () => {
       {
         headers: { authorization: "Bearer abcdefghijklmnop" },
         env: { OPENAI_API_KEY: "sk-secret000000000000" },
+        placement: { authorityId: "placement-authority" },
         output: "TOKEN=super-secret-value",
       },
       new Date(now),
@@ -31,6 +32,8 @@ describe("observability helpers", () => {
 
     expect(JSON.stringify(result.value)).not.toContain("sk-secret");
     expect(JSON.stringify(result.value)).not.toContain("abcdefghijklmnop");
+    expect(JSON.stringify(result.value)).not.toContain("placement-authority");
+    expect(result.report.redactedFields).toContain("placement.authorityId");
     expect(result.report.replacements).toBeGreaterThanOrEqual(3);
   });
 

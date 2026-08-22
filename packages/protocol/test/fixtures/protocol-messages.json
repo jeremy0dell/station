@@ -71,5 +71,21 @@
       "sessions": [],
       "recoveryHandles": []
     }
+  },
+  "sessionCurrentRequest": {
+    "schemaVersion": "0.11.0",
+    "jsonrpc": "2.0",
+    "id": "req_session_current",
+    "method": "session.current",
+    "params": {
+      "process": {
+        "pid": 1234,
+        "startToken": "Tue May 20 12:00:00 2026"
+      },
+      "claims": {
+        "TMUX": "/tmp/tmux-501/default,123,0",
+        "TMUX_PANE": "%7"
+      }
+    }
   }
 }

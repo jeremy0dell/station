@@ -89,6 +89,8 @@ describe("observer spawn argv", () => {
   it("keeps generic startup fail-closed and opts only exact activation into preservation", () => {
     const inherited = {
       PATH: "/usr/bin",
+      TMUX: "/tmp/caller.sock,10,0",
+      TMUX_PANE: "%1",
       STATION_OBSERVER_STARTUP_POLICY: "preserve-incumbent",
       [STATION_OBSERVER_STARTUP_FAILURE_FD]: "99",
     };

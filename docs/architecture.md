@@ -53,7 +53,7 @@ No single layer owns all truth.
 - Config is authoritative for the projects station manages, project defaults, provider choices, and safe local policy.
 - Fresh worktree-provider reads are authoritative for external worktree existence and metadata they can prove;
   adapters do not retain list results as a second inventory.
-- Terminal providers are authoritative for terminal topology and provider-owned target identity.
+- Terminal providers are authoritative for ordinary terminal topology and provider-owned target identity. Placement is a separate explicit capability, currently supplied only by tmux. Sibling creation requires a source minted from live caller proof; Observer validates it before worktree mutation and tmux consumes and revalidates it immediately before terminal mutation on one configured endpoint. The source remains a bearer reference within Station's same-UID local-client trust model, not a cross-user security boundary. There is no current, recent, focused, alternate-server, or configured-target fallback. Detached creation is source-free and creates an unselected tmux workbench window. Native Station retains its renderer-managed launch path and rejects raw placement.
 - Harness providers are authoritative for agent launch, present-tense run discovery observations,
   persisted-event compatibility, status signals, and provider-native recovery artifacts they can prove. Each
   discovered run carries its normalized current status; Observer overlays newer admitted event

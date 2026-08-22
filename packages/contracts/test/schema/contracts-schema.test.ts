@@ -1317,15 +1317,11 @@ describe("contract schemas", () => {
           harness: { provider: "codex" },
           terminal: {
             provider: "tmux",
-            focus: true,
-            origin: {
-              provider: "tmux",
-              clientId: "client_1",
-            },
           },
+          placement: { intent: "detached" },
         },
       },
-      "create session command with popup focus origin",
+      "create session command with explicit detached placement",
     );
 
     expectFails(
@@ -1566,6 +1562,7 @@ describe("contract schemas", () => {
         branch: "station-grouped",
         harness: { provider: "codex" },
         terminal: { provider: "tmux" },
+        placement: { intent: "detached" },
       },
     } as const;
     expectParses(StationCommandSchema, base, "ungrouped session create");
@@ -1606,6 +1603,7 @@ describe("contract schemas", () => {
         title: "  Hexagonal PT 12!  ",
         harness: { provider: "codex" },
         terminal: { provider: "tmux" },
+        placement: { intent: "detached" },
       },
     };
     expect(StationCommandSchema.parse(create)).toMatchObject({
@@ -1620,6 +1618,7 @@ describe("contract schemas", () => {
           branch: "station-e91f2b",
           harness: { provider: "codex" },
           terminal: { provider: "tmux" },
+          placement: { intent: "detached" },
         },
       },
       "session create without optional title",
@@ -1638,6 +1637,8 @@ describe("contract schemas", () => {
             sourceSessionId: "ses_source",
             groupId: "grp_active",
           },
+          terminal: { provider: "tmux" },
+          placement: { intent: "detached" },
         },
       },
       "session fork with title containing spaces",

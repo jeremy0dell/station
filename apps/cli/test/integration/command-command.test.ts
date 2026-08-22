@@ -305,8 +305,8 @@ function cursorCreateCommand(): StationCommand {
       terminal: {
         provider: "tmux",
         layout: "agent-build-shell",
-        focus: false,
       },
+      placement: { intent: "detached" },
       initialPrompt: "Review the Cursor CLI dispatch path.",
     },
   };

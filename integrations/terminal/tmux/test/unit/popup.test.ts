@@ -261,6 +261,7 @@ describe("tmux popup", () => {
       "on",
     ]);
     expect(fake.globalOptions.get("@station_popup_active_claim")).toMatch(/^v1\.open\./);
+    expect(fake.calls.every((call) => call.unsetEnv === undefined)).toBe(true);
   });
 
   it("reuses a valid route and transitions a same-client claim to closing without replacing UI", async () => {

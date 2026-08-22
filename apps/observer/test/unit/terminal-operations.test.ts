@@ -307,6 +307,58 @@ describe("terminal operations", () => {
     expect(launchFailureTerminal.snapshot().closed).toEqual(["term_fake"]);
   });
 
+  it("releases an explicitly placed target with its exact binding after launch failure", async () => {
+    const terminal = new RecordingTerminalProvider({
+      failures: {
+        launchProcess: {
+          tag: "TerminalProviderError",
+          code: "FAKE_LAUNCH_FAILED",
+          message: "The fake terminal failed to launch.",
+          provider: "fake-terminal",
+        },
+      },
+    });
+
+    await expect(
+      ensureAgentWorkspace(
+        ensureInput(terminal, new CapturingHarnessProvider(), {
+          placementPort: terminal.placement,
+          placement: { intent: "detached" },
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "FAKE_LAUNCH_FAILED" });
+    expect(terminal.snapshot().closed).toEqual(["term_fake"]);
+  });
+
+  it("surfaces cleanup uncertainty instead of hiding a failed placed-target release", async () => {
+    const terminal = new RecordingTerminalProvider({
+      failures: {
+        launchProcess: {
+          tag: "TerminalProviderError",
+          code: "FAKE_LAUNCH_FAILED",
+          message: "The fake terminal failed to launch.",
+          provider: "fake-terminal",
+        },
+        releasePlacedTarget: {
+          tag: "TerminalProviderError",
+          code: "FAKE_RELEASE_FAILED",
+          message: "The fake terminal could not release the target.",
+          provider: "fake-terminal",
+        },
+      },
+    });
+
+    await expect(
+      ensureAgentWorkspace(
+        ensureInput(terminal, new CapturingHarnessProvider(), {
+          placementPort: terminal.placement,
+          placement: { intent: "detached" },
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "TERMINAL_CLEANUP_UNCERTAIN" });
+    expect(terminal.snapshot().closed).toEqual([]);
+  });
+
   it("repeats launch preflight immediately before opening the workspace", async () => {
     const order: string[] = [];
     const terminal = new RecordingTerminalProvider({ order });
