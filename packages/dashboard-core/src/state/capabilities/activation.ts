@@ -69,6 +69,9 @@ export function createObserverActivationCapabilities(
       if (isStaleFreshStartRequest(request, target)) {
         return dashboardExecution({ kind: "notice", notice: STALE_DASHBOARD_TARGET_NOTICE });
       }
+      if (retainedSessionRequiresFreshStartConfirmation(request, target)) {
+        return dashboardExecution({ kind: "notice", notice: STALE_DASHBOARD_TARGET_NOTICE });
+      }
       const action = resolveActivationAction(request, target);
       switch (action) {
         case "focus":
@@ -155,6 +158,18 @@ function isStaleFreshStartRequest(
   );
 }
 
+function retainedSessionRequiresFreshStartConfirmation(
+  request: SessionActivationRequest,
+  target: ResolvedCanonicalActivationTarget,
+): boolean {
+  return (
+    request.preferredObserverAction !== "fresh" &&
+    target.session.origin === "station" &&
+    !worktreeHasLiveAgent(target.row) &&
+    target.row.recovery === undefined
+  );
+}
+
 function resolveActivationAction(
   request: SessionActivationRequest,
   target: ResolvedCanonicalActivationTarget,
@@ -170,13 +185,9 @@ async function runFreshStart(
   request: SessionActivationRequest,
   target: ResolvedCanonicalActivationTarget,
 ): Promise<DashboardExecutionResult> {
-  const closed = await dispatchAndWait(options, {
-    type: "session.close",
-    payload: { sessionId: request.sessionId, mode: "all", force: false },
+  let command = buildStartAgentCommand(target.row, target.project, {
+    freshStart: { expectedSessionId: request.sessionId },
   });
-  if (closed.kind !== "success") return closed;
-
-  let command = buildStartAgentCommand(target.row, target.project);
   const focusTarget = await resolveConfiguredFocusTarget(options);
   if (focusTarget !== undefined) {
     command = withCommandFocusOrigin(command, focusTarget.origin);
@@ -185,12 +196,14 @@ async function runFreshStart(
   if (completed.kind !== "success") return completed;
 
   let snapshot = options.source.getState().snapshot;
-  if (sessionIdForStartedWorktree(snapshot, request.worktreeId) === undefined) {
+  if (sessionIdForStartedWorktree(snapshot, request.worktreeId) !== request.sessionId) {
     await options.service.loadSnapshot();
     snapshot = options.source.getState().snapshot;
   }
   const sessionId = sessionIdForStartedWorktree(snapshot, request.worktreeId);
-  return sessionId === undefined ? { kind: "success" } : runFocus(options, sessionId);
+  return sessionId !== request.sessionId
+    ? { kind: "success" }
+    : runFocus(options, request.sessionId);
 }
 
 async function runStartOrResume(

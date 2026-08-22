@@ -64,7 +64,8 @@ export type RegisterObserverCommandHandlersOptions = {
  * handlers with the command queue.
  *
  * Runtime-prebound config-aware launch preflight and ProjectConfigWriter are composed here;
- * handlers coordinate provider-neutral operations without receiving configuration or home paths.
+ * one shared worktree mutation coordinator serializes lifecycle use cases across command and native
+ * activation boundaries. Handlers remain provider-neutral and receive no configuration or home paths.
  */
 export function registerObserverCommandHandlers(
   options: RegisterObserverCommandHandlersOptions,
@@ -137,6 +138,7 @@ export function registerObserverCommandHandlers(
       clock: options.clock,
       idFactory: options.idFactory,
       logger: options.logger,
+      worktreeMutations,
     }),
     "session.resumeAgent": createSessionResumeAgentHandler({
       getProjects,

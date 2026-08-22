@@ -676,14 +676,23 @@ from canonical membership, so activation takes the fresh path even when an old
 handle remains.
 
 A retained Station session with no actionable recovery handle never silently
-falls back to a new provider conversation. After explicit confirmation, native
-Station may request a fresh start bound to the exact retained session ID. The
+falls back to a new provider conversation. After explicit confirmation, renderer
+activation may request a fresh start bound to the exact retained session ID. The
 worktree-serialized use case rejects stale consent, preflights the retained
 session's harness, atomically retires that provider's native-execution binding,
 recovery handles, and turn readiness, then launches without resume data under the
-same Station session ID. This preserves the worktree, canonical title, pane layout,
-and retained pane transcript; the discarded provider conversation is not
-recoverable. Launch failure does not restore the retired provider identity.
+same Station session ID. Native external launch retains pane layout and transcript;
+Observer-backed terminal launch closes an old closeable terminal target without
+ending the Station session before opening its replacement. Both paths preserve the
+worktree, canonical title, and Group membership. The discarded provider conversation
+is not recoverable, and launch failure does not restore its retired identity.
+
+`session.startAgent` distinguishes an ordinary launch, which may seed a new Station
+session only when no canonical Station session is retained, from explicit `freshStart`
+consent carrying the expected retained session ID. Ordinary launch refuses instead of
+silently replacing retained identity. Fresh launch shares the process-lifetime worktree
+mutation coordinator with session close and native activation, uses the retained harness,
+does not seed or emit `session.created`, and leaves Group version and membership untouched.
 
 A new managed session repeats the full selected-harness preflight immediately
 before title, target, or process mutation, then durably seeds the session from

@@ -1,6 +1,10 @@
 import { z } from "zod";
 import type { CommandReceipt, CommandRecord, StationCommand } from "./commands.js";
-import { FreshSessionGroupPlacementIntentSchema, RemoveWorktreePayloadSchema } from "./commands.js";
+import {
+  FreshSessionGroupPlacementIntentSchema,
+  RemoveWorktreePayloadSchema,
+  SessionFreshStartConsentSchema,
+} from "./commands.js";
 import type {
   DiagnosticCollectionOptions,
   DiagnosticSnapshot,
@@ -243,12 +247,7 @@ export const AgentPrepareExternalLaunchParamsSchema = z
     harness: ProviderIdSchema.optional(),
     title: userFacingTitleSchema.optional(),
     group: FreshSessionGroupPlacementIntentSchema.optional(),
-    freshStart: z
-      .object({
-        expectedSessionId: SessionIdSchema,
-      })
-      .strict()
-      .optional(),
+    freshStart: SessionFreshStartConsentSchema.optional(),
   })
   .strict();
 
