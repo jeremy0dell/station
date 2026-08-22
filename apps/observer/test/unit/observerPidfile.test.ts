@@ -1,5 +1,15 @@
 import { execFileSync } from "node:child_process";
-import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  stat,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import type { ObserverProcessIdentity } from "@station/contracts";
@@ -141,6 +151,21 @@ describe("observer pidfile", () => {
     const identity = processIdentity(socketPath);
     await writeFile(path, JSON.stringify({ ...identity, unexpected: true }), { mode: 0o600 });
 
+    await expect(readObserverProcessIdentity(socketPath)).rejects.toThrow();
+  });
+
+  it("refuses non-private and symlinked pidfile evidence", async () => {
+    dir = await mkdtemp(join(tmpdir(), "stn-pidfile-"));
+    const socketPath = join(dir, "observer.sock");
+    const path = observerPidfilePath(socketPath);
+    const target = join(dir, "identity-target.json");
+    await writeFile(path, `${JSON.stringify(processIdentity(socketPath))}\n`, { mode: 0o600 });
+    await chmod(path, 0o644);
+    await expect(readObserverProcessIdentity(socketPath)).rejects.toThrow("private regular file");
+
+    await rm(path);
+    await writeFile(target, `${JSON.stringify(processIdentity(socketPath))}\n`, { mode: 0o600 });
+    await symlink(target, path);
     await expect(readObserverProcessIdentity(socketPath)).rejects.toThrow();
   });
 

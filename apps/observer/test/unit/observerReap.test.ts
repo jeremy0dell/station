@@ -292,6 +292,16 @@ describe("manual Observer reap", () => {
     const { evidence } = createEvidence({ surviveSigterm: true });
     const changingEvidence: ObserverDuplicateProcessEvidenceSource = {
       ...evidence,
+      readObserverProcess: (pid) =>
+        [
+          processEntry(100, "keeper-start"),
+          {
+            ...processEntry(200, "candidate-start"),
+            processToken: changed
+              ? "00000000-0000-4000-8000-000000000003"
+              : "00000000-0000-4000-8000-000000000002",
+          },
+        ].find((entry) => entry.pid === pid),
       listObserverProcesses: () => [
         processEntry(100, "keeper-start"),
         {
