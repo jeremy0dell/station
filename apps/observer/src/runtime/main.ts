@@ -191,20 +191,14 @@ export async function runObserverMain(
   // pidfile cleanup; the ready gate performs the normal early release.
   try {
     const probeTimeoutMs = Math.max(MIN_STARTUP_BUDGET_MS, startupDeadline - handoffNow());
-    const localProcessEvidence =
-      deps.processEvidence === undefined || deps.processExistenceEvidence === undefined
-        ? createLocalObserverProcessEvidence({
-            evidenceTimeoutMs: Math.max(
-              MIN_STARTUP_BUDGET_MS,
-              Math.min(1_000, startupDeadline - handoffNow()),
-            ),
-          })
-        : undefined;
+    const localProcessEvidence = createLocalObserverProcessEvidence({
+      evidenceTimeoutMs: Math.max(
+        MIN_STARTUP_BUDGET_MS,
+        Math.min(1_000, startupDeadline - handoffNow()),
+      ),
+    });
     const processEvidence = deps.processEvidence ?? localProcessEvidence;
     const processExistenceEvidence = deps.processExistenceEvidence ?? localProcessEvidence;
-    if (processEvidence === undefined || processExistenceEvidence === undefined) {
-      throw new Error("Observer startup requires exact process evidence.");
-    }
     const socketProbe = await probeObserverSocket(socketPath, {
       timeoutMs: probeTimeoutMs,
       socketHolders: (path: string) => processEvidence.socketHolders(path),
