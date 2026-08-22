@@ -1,6 +1,6 @@
 # Real E2E
 
-This suite runs `bin/stn` and `bin/stn-ingress` against real config TOML, a real observer process, a real Unix socket, real SQLite state, real Worktrunk, real tmux, and real Codex. The Codex hook test creates an isolated temporary `CODEX_HOME`, appends inline hook config there, launches Codex with hooks enabled and hook trust bypassed for that temp project, and verifies `stn-ingress codex` reaches the observer.
+This suite runs `bin/stn` and `bin/stn-ingress` against real config TOML, a real observer process, a real Unix socket, real SQLite state, real Worktrunk, real tmux, and real Codex. Every Codex-launching scenario uses one shared fixture with an isolated temporary `CODEX_HOME`; its Station wrapper propagates that home into the Observer and its Codex wrapper enables hook trust bypass only for the temporary project. The Codex hook test installs the generated script at the canonical `<state_dir>/hooks/station-codex-hook.sh`, uses the private `CODEX_HOME` profile config, and verifies `stn-ingress codex` reaches the observer.
 
 It is intentionally excluded from `pnpm test:e2e` and `pnpm test:all`.
 
@@ -41,6 +41,8 @@ pnpm test:e2e:real:codex-hooks:keep-temp
 
 The popup navigation test is part of the local real E2E lane. It creates a real Worktrunk worktree, starts a real Codex agent in the tmux workbench, opens the station TUI in a real tmux popup over that agent pane, injects a numeric activation key through the popup TTY, and verifies tmux lands back on the same primary agent pane after the popup exits.
 
+`real-tui-control.test.ts` uses the real scripted harness process rather than Codex. It retains the process's dead tmux pane, Groups the retained Station session, activates the row through the real TUI, confirms **Start fresh**, and verifies exactly one replacement launch under the same session and Group with one workbench window. It then removes that terminal entirely and proves `session.close({ mode: "all" })` remains durable across an Observer restart.
+
 `real-native-tui-mouse.test.ts` runs bare `stn` with tmux context removed; tmux is only the
 fixed-size PTY and capture envelope. The test sends raw SGR bytes through an attached client
 (no `tmux send-keys` and no OpenTUI `mockMouse`), then proves native renderer selection, hover,
@@ -53,9 +55,9 @@ pnpm test:e2e:real:local tests/e2e/real/real-native-tui-mouse.test.ts
 
 ## Isolation
 
-Each test uses a temporary local clone of this repository, a temporary station config, a temporary Worktrunk config, unique private tmux sessions, a unique observer socket, and a temporary SQLite state directory. The native mouse test also owns its attached PTY client and native Station process.
+Each test uses a temporary local clone of this repository, a temporary station config, a temporary Worktrunk config, unique private tmux sessions, a unique observer socket, and a temporary SQLite state directory. Observer state and socket directories are created with exact `0700` permissions. Codex scenarios additionally own a private `CODEX_HOME`, and the native mouse test owns its attached PTY client and native Station process.
 
-The active checkout is never passed to Worktrunk as the project root. Cleanup kills the unique tmux sessions, stops the observer, removes created Worktrunk branches/worktrees where possible, and removes the temp clone.
+The active checkout is never passed to Worktrunk as the project root. Cleanup kills the unique tmux sessions, stops the observer, removes created Worktrunk branches/worktrees where possible, and removes the temp clone. Product cleanup treats an already-absent terminal as retired while preserving unrelated provider failures; the scripted stale-pane scenario exercises both stale replacement and terminal-absent session close.
 
 Set `STATION_REAL_E2E_KEEP_TEMP=1` while debugging a failure to leave the observer, tmux session, Worktrunk state, and temp clone in place. Clean those resources manually after inspection.
 
@@ -72,6 +74,6 @@ On lifecycle failures, tests attempt to write `stn debug bundle` under the test 
 
 Real Codex can be slow or model-dependent. The prompts are bounded and target only sentinel files under `.station-real-e2e/sentinels/` in the temp clone.
 
-The Codex hook lane also writes compact hook delivery evidence into the test temp root. Use that alongside `events.jsonl` to confirm that Codex lifecycle hooks such as `SessionStart`, tool-use events, compaction events, subagent events, and `Stop` came from the real Codex process and were ingested as `harness.eventReported` events for provider `codex`.
+The Codex hook lane retains its private profile, canonical hook script, and Observer diagnostics in the test temp root. Use those with `events.jsonl` to confirm that Codex lifecycle hooks such as `SessionStart`, tool-use events, compaction events, subagent events, and `Stop` came from the real Codex process and were ingested as `harness.eventReported` events for provider `codex`.
 
 Pi has a separate opt-in launch-scaffolding lane at `tests/agent/real/pi`. Run it with `pnpm test:e2e:pi:real` and `STATION_REAL_PI=1` when validating the Pi tmux launch path before adding full real Pi callback assertions.

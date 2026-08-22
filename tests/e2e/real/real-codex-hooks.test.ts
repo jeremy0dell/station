@@ -8,9 +8,8 @@ import { buildWorkbenchWindowName } from "@station/tmux";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { assertDebugBundleContains, findRowByBranch } from "../../support/real-station/assertions";
 import {
-  createCodexHookEnabledWrapper,
   createCodexSentinel,
-  installCodexHookProjectConfig,
+  createRealCodexFixture,
   waitForCodexSentinel,
   writeFailureBundle,
 } from "../../support/real-station/codex";
@@ -55,37 +54,33 @@ describeReal("real Codex hook ingestion", () => {
     cleanup = new CleanupStack();
     const repo = await createRealTempRepo(env);
     cleanup.defer(repo.cleanup);
-    const codexCommand = await createCodexHookEnabledWrapper({ env, repo });
+    const codex = await createRealCodexFixture({ env, repo });
+    const testEnv = codex.env;
     const notify = await createRealNotifyHookCapture(repo.root);
     const config = await writeRealStationConfig({
-      env,
+      env: testEnv,
       repo,
-      codexCommand,
+      codexCommand: codex.codexCommand,
       installCodexHooks: true,
       eventHook: {
         command: notify.command,
         args: notify.args,
       },
     });
-    const hooks = await installCodexHookProjectConfig({
-      env,
-      repo,
-      configPath: config.configPath,
-    });
-    cleanup.defer(hooks.cleanup);
+    await codex.installHooks(config);
     cleanup.defer(async () => {
-      await runStationJson(env, {
+      await runStationJson(testEnv, {
         configPath: config.configPath,
         args: ["observer", "stop"],
       }).catch(() => undefined);
     });
     cleanup.defer(async () => {
-      await killTmuxSession(env, config.tmuxSession);
+      await killTmuxSession(testEnv, config.tmuxSession);
     });
 
     const branch = uniqueBranch("codex-hooks");
     cleanup.defer(async () => {
-      await removeRealWorktrunkWorktree({ env, config, repo, branch });
+      await removeRealWorktrunkWorktree({ env: testEnv, config, repo, branch });
     });
     const sentinel = createCodexSentinel(repo, "hooks");
     const createCommand: StationCommand = {
@@ -108,7 +103,7 @@ describeReal("real Codex hook ingestion", () => {
 
     let createResult: CommandDispatchWaitResult | undefined;
     try {
-      createResult = await runStationJson<CommandDispatchWaitResult>(env, {
+      createResult = await runStationJson<CommandDispatchWaitResult>(testEnv, {
         configPath: config.configPath,
         args: ["command", "dispatch", "--stdin", "--wait", "--timeout-ms", "180000"],
         stdin: JSON.stringify(createCommand),
@@ -117,15 +112,15 @@ describeReal("real Codex hook ingestion", () => {
       expect(createResult.status).toBe("succeeded");
 
       const row = await waitForRowTerminalAttachment({
-        env,
+        env: testEnv,
         configPath: config.configPath,
         branch,
         timeoutMs: 90_000,
       });
-      await continuePastCodexStartupPrompts(env, config.tmuxSession, row);
+      await continuePastCodexStartupPrompts(testEnv, config.tmuxSession, row);
       await waitForCodexSentinel(sentinel, { rootPath: row.path, timeoutMs: 240_000 });
       const idleRow = await waitForRowAgentState({
-        env,
+        env: testEnv,
         configPath: config.configPath,
         branch,
         states: ["idle"],
@@ -149,7 +144,7 @@ describeReal("real Codex hook ingestion", () => {
         },
       });
 
-      const bundle = await runStationJson<{ bundlePath: string }>(env, {
+      const bundle = await runStationJson<{ bundlePath: string }>(testEnv, {
         configPath: config.configPath,
         args: ["debug", "bundle"],
         timeoutMs: 30_000,
@@ -168,7 +163,7 @@ describeReal("real Codex hook ingestion", () => {
       );
     } catch (error) {
       await writeFailureBundle({
-        env,
+        env: testEnv,
         configPath: config.configPath,
         commandId: createResult?.receipt.commandId,
       });

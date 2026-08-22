@@ -891,9 +891,16 @@ describe("dashboard runtime", () => {
 
     await waitFor(() => service.loadCount === 1);
     expect(store.state.getState().localRows.pendingStart).toHaveLength(1);
-    expect(service.dispatched.map((command) => command.type)).toEqual([
-      "session.close",
-      "session.startAgent",
+    expect(service.dispatched).toEqual([
+      {
+        type: "session.startAgent",
+        payload: {
+          projectId: "web",
+          worktreeId: "wt_web_no_agent",
+          terminal: { provider: "tmux", layout: "agent-build-shell", focus: false },
+          freshStart: { expectedSessionId: "ses_wt_web_no_agent" },
+        },
+      },
     ]);
   });
 

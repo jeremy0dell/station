@@ -419,6 +419,14 @@ unrelated scopes may run concurrently. Failure is normalized into `SafeError`,
 persisted with trace correlation, and published. A failed command does not
 poison the following command in its scope.
 
+Terminal target resolution follows operation intent. Focus accepts only live
+provider targets, while close may select a provider-reported stale target so
+the adapter can retire it. A genuinely missing target remains an honest
+low-level operation error. Cleanup use cases for fresh start, session close,
+and worktree removal are idempotent when no closeable attachment remains or
+close reports `TERMINAL_TARGET_MISSING` or `TERMINAL_TARGET_STALE`; every other
+provider failure still aborts cleanup.
+
 Recorded `sessionGroup.create`, `sessionGroup.rename`,
 `sessionGroup.updateMembership`, `sessionGroup.reparent`, and `sessionGroup.delete` commands serialize by
 project. Inside the snapshot-writer turn they validate configured-project and
@@ -696,14 +704,25 @@ from canonical membership, so activation takes the fresh path even when an old
 handle remains.
 
 A retained Station session with no actionable recovery handle never silently
-falls back to a new provider conversation. After explicit confirmation, native
-Station may request a fresh start bound to the exact retained session ID. The
+falls back to a new provider conversation. After explicit confirmation, renderer
+activation may request a fresh start bound to the exact retained session ID. The
 worktree-serialized use case rejects stale consent, preflights the retained
 session's harness, atomically retires that provider's native-execution binding,
 recovery handles, and turn readiness, then launches without resume data under the
-same Station session ID. This preserves the worktree, canonical title, pane layout,
-and retained pane transcript; the discarded provider conversation is not
-recoverable. Launch failure does not restore the retired provider identity.
+same Station session ID. Native external launch retains pane layout and transcript;
+Observer-backed terminal launch closes an old closeable terminal target, including
+a provider-reported stale target, without ending the Station session before opening
+its replacement. A target that disappears during this cleanup is already retired.
+Both paths preserve the
+worktree, canonical title, and Group membership. The discarded provider conversation
+is not recoverable, and launch failure does not restore its retired identity.
+
+`session.startAgent` distinguishes an ordinary launch, which may seed a new Station
+session only when no canonical Station session is retained, from explicit `freshStart`
+consent carrying the expected retained session ID. Ordinary launch refuses instead of
+silently replacing retained identity. Fresh launch shares the process-lifetime worktree
+mutation coordinator with session close and native activation, uses the retained harness,
+does not seed or emit `session.created`, and leaves Group version and membership untouched.
 
 A new managed session repeats the full selected-harness preflight immediately
 before title, target, or process mutation, then durably seeds the session from

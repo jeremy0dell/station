@@ -1,17 +1,28 @@
-import { type ChildProcess, spawn } from "node:child_process";
+import { type ChildProcess, execFile, spawn } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
+import { SafeErrorSchema } from "@station/contracts";
 import { createStationHostClient, type HostPtyAttachExpectation } from "@station/host";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { createHostAttachedTerminal } from "../../../station/src/terminal/pty/hostAttachedTerminal.js";
 import type { StationTerminalProcess } from "../../../station/src/terminal/types.js";
 
 const describeReal = process.env.STATION_REAL_E2E === "1" ? describe : describe.skip;
+const execFileAsync = promisify(execFile);
+const stationRoot = fileURLToPath(new URL("../../../station/", import.meta.url));
 const hostEntry = fileURLToPath(new URL("../../../station/src/host/hostMain.ts", import.meta.url));
 
 describeReal("real Station Host attachment control", () => {
+  beforeAll(async () => {
+    await execFileAsync(process.env.STATION_BUN ?? "bun", ["run", "build:ctty-helper"], {
+      cwd: stationRoot,
+      timeout: 30_000,
+    });
+  });
+
   it.each([
     "bridge",
     "bun",
@@ -108,7 +119,7 @@ describeReal("real Station Host attachment control", () => {
 
       expect(markers(firstOutput)).toEqual(markers(secondOutput));
     } catch (error) {
-      throw new Error(`${String(error)}\nHost stderr:\n${hostStderr}`, { cause: error });
+      throw new Error(`${errorMessage(error)}\nHost stderr:\n${hostStderr}`, { cause: error });
     } finally {
       first?.dispose();
       second?.dispose();
@@ -121,6 +132,14 @@ describeReal("real Station Host attachment control", () => {
     }
   }, 60_000);
 });
+
+function errorMessage(error: unknown): string {
+  const safeError = SafeErrorSchema.safeParse(error);
+  if (safeError.success) {
+    return `${safeError.data.code}: ${safeError.data.message}`;
+  }
+  return error instanceof Error ? error.message : "Unknown PTY control failure.";
+}
 
 function includes(output: string[], marker: string): boolean {
   return output.join("").includes(marker);

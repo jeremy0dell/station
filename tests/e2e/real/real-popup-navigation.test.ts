@@ -4,6 +4,7 @@ import type { StationSnapshot } from "@station/contracts";
 import { buildWorkbenchWindowName } from "@station/tmux";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { findRowByBranch } from "../../support/real-station/assertions";
+import { createRealCodexFixture } from "../../support/real-station/codex";
 import { writeRealStationConfig } from "../../support/real-station/config";
 import {
   type RealE2eEnvironment,
@@ -46,23 +47,31 @@ describeReal("real tmux popup navigation", () => {
     cleanup = new CleanupStack();
     const repo = await createRealTempRepo(env);
     cleanup.defer(repo.cleanup);
-    const config = await writeRealStationConfig({ env, repo });
+    const codex = await createRealCodexFixture({ env, repo });
+    const testEnv = codex.env;
+    const config = await writeRealStationConfig({
+      env: testEnv,
+      repo,
+      codexCommand: codex.codexCommand,
+      installCodexHooks: true,
+    });
+    await codex.installHooks(config);
     cleanup.defer(async () => {
-      await runStationJson(env, {
+      await runStationJson(testEnv, {
         configPath: config.configPath,
         args: ["observer", "stop"],
       }).catch(() => undefined);
     });
     cleanup.defer(async () => {
-      await killTmuxSession(env, config.tmuxSession);
+      await killTmuxSession(testEnv, config.tmuxSession);
     });
 
     const branch = uniqueBranch("popup");
     cleanup.defer(async () => {
-      await removeRealWorktrunkWorktree({ env, config, repo, branch });
+      await removeRealWorktrunkWorktree({ env: testEnv, config, repo, branch });
     });
-    await createRealWorktrunkWorktree({ env, config, repo, branch });
-    await runStationJson(env, {
+    await createRealWorktrunkWorktree({ env: testEnv, config, repo, branch });
+    await runStationJson(testEnv, {
       configPath: config.configPath,
       args: ["reconcile", "--reason", "real-popup-preload"],
       timeoutMs: 60_000,
@@ -101,11 +110,11 @@ describeReal("real tmux popup navigation", () => {
     );
     const agentRow = findRowByBranch(agentSnapshot, branch);
     const windowName = expectedWindowName(config.projectId, branch, agentRow.id, agentRow.path);
-    const paneId = await activeTmuxPane(env, `${config.tmuxSession}:${windowName}.0`);
+    const paneId = await activeTmuxPane(testEnv, `${config.tmuxSession}:${windowName}.0`);
     const markerPath = join(repo.root, "popup-navigation.marker");
 
     await displayStationPopupAndSendKey({
-      env,
+      env: testEnv,
       configPath: config.configPath,
       target: `${config.tmuxSession}:${windowName}.0`,
       key: "1",
@@ -114,8 +123,8 @@ describeReal("real tmux popup navigation", () => {
 
     await expect(readFile(markerPath, "utf8")).resolves.toContain("popup-started");
     await expect(readFile(markerPath, "utf8")).resolves.toContain("key-sent");
-    await expect(activeTmuxWindow(env, config.tmuxSession)).resolves.toBe(windowName);
-    await expect(activeTmuxPane(env, config.tmuxSession)).resolves.toBe(paneId);
+    await expect(activeTmuxWindow(testEnv, config.tmuxSession)).resolves.toBe(windowName);
+    await expect(activeTmuxPane(testEnv, config.tmuxSession)).resolves.toBe(paneId);
   }, 240_000);
 });
 
