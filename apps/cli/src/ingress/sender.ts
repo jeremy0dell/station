@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { isClaudeForwardedEventType } from "@station/claude";
-import { isCodexForwardedEventType } from "@station/codex";
+import { enrichCodexPermissionReviewerEvidence, isCodexForwardedEventType } from "@station/codex";
 import type { ObserverPaths } from "@station/config";
 import type {
   ProviderHookEvent,
@@ -215,8 +215,8 @@ export async function sendClaudeHookPayload(
 /**
  * ADAPTER
  *
- * Admits Codex's forwarded events before applying Station ownership/cwd
- * correlation and translating hook stdin into shared harness ingress.
+ * Admits Codex's forwarded events, adds bounded provider-private permission-reviewer
+ * evidence when available, then applies Station correlation and shared harness ingress.
  */
 export async function sendCodexHookPayload(
   input: SendCodexHookInput,
@@ -232,10 +232,11 @@ export async function sendCodexHookPayload(
       hookId: deps.hookId,
     });
   }
-  const enrichedPayload = enrichStationHookIdentityPayload({
+  const identityPayload = enrichStationHookIdentityPayload({
     payload: input.payload,
     env: input.env ?? process.env,
   });
+  const enrichedPayload = await enrichCodexPermissionReviewerEvidence(identityPayload);
   const correlationFailure = providerHookCorrelationFailureReason(
     enrichedPayload,
     input.projectRoots,

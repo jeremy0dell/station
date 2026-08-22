@@ -13051,7 +13051,7 @@
       "declaration": "sendCodexHookPayload",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Admits Codex's forwarded events before applying Station ownership/cwd correlation and translating hook stdin into shared harness ingress.",
+      "purpose": "Admits Codex's forwarded events, adds bounded provider-private permission-reviewer evidence when available, then applies Station correlation and shared harness ingress.",
       "dependencies": [
         {
           "path": "apps/cli/src/ingress/sender.ts",
@@ -15172,7 +15172,7 @@
       "declaration": "codexHookAdapter",
       "kind": "const",
       "role": "ADAPTER",
-      "purpose": "Normalizes Codex hook delivery into shared provider-event and harness-report contracts. Inherited Station identity is authoritative only when Codex cwd remains in the stamped worktree.",
+      "purpose": "Normalizes Codex hook delivery, including provider-private reviewer evidence, into shared harness reports. Inherited Station identity is authoritative only when Codex cwd remains in the stamped worktree.",
       "dependencies": [
         {
           "path": "packages/harness-shared/src/hookAdapter.ts",
