@@ -51,7 +51,7 @@ describe("observer activation capability", () => {
     expect(service.dispatched).toEqual([]);
   });
 
-  it("starts fresh only after the retained session closes successfully", async () => {
+  it("starts fresh under the exact retained session without closing it", async () => {
     const snapshot = createCommandSnapshot("none");
     const service = new FakeTuiObserverService(snapshot);
     const capability = createObserverActivationCapabilities({
@@ -69,9 +69,16 @@ describe("observer activation capability", () => {
 
     expect(handle.optimistic).toBe("pending-start");
     expect(await handle.completion).toEqual({ kind: "success" });
-    expect(service.dispatched.map((command) => command.type)).toEqual([
-      "session.close",
-      "session.startAgent",
+    expect(service.dispatched).toEqual([
+      {
+        type: "session.startAgent",
+        payload: {
+          projectId: "web",
+          worktreeId: "wt_web_no_agent",
+          terminal: { provider: "tmux", layout: "agent-build-shell", focus: false },
+          freshStart: { expectedSessionId: "ses_wt_web_no_agent" },
+        },
+      },
     ]);
   });
 
@@ -140,7 +147,11 @@ describe("observer activation capability", () => {
   });
 
   it("exposes pending-start while building start intent from canonical values", async () => {
-    const snapshot = createCommandSnapshot("none");
+    const retained = createCommandSnapshot("none");
+    const snapshot = {
+      ...retained,
+      sessions: retained.sessions.map((session) => ({ ...session, origin: "external" as const })),
+    };
     const service = new FakeTuiObserverService(snapshot);
     const capability = createObserverActivationCapabilities({
       source: new FakeClientStateSource(snapshot),
@@ -164,44 +175,11 @@ describe("observer activation capability", () => {
     });
   });
 
-  it.each([
-    {
-      description: "starts when requested resume intent has lost its recovery target",
-      hasRecovery: false,
-      preferredObserverAction: "resume" as const,
-      expectedCommandType: "session.startAgent",
-    },
-    {
-      description: "resumes when recovery appears after start intent was selected",
-      hasRecovery: true,
-      preferredObserverAction: "start" as const,
-      expectedCommandType: "session.resumeAgent",
-    },
-  ])("$description", async ({ hasRecovery, preferredObserverAction, expectedCommandType }) => {
+  it("requires renewed fresh-start confirmation when requested resume loses recovery", async () => {
     const snapshot = createCommandSnapshot("none");
-    const canonicalSnapshot = hasRecovery
-      ? {
-          ...snapshot,
-          rows: snapshot.rows.map((row) =>
-            row.id === "wt_web_no_agent"
-              ? {
-                  ...row,
-                  recovery: {
-                    kind: "agent-resume" as const,
-                    handleId: "rec_late",
-                    provider: "codex",
-                    targetKind: "native-session" as const,
-                    sessionId: "ses_wt_web_no_agent",
-                    lastSeenAt: "2026-06-01T12:01:00.000Z",
-                  },
-                }
-              : row,
-          ),
-        }
-      : snapshot;
-    const service = new FakeTuiObserverService(canonicalSnapshot);
+    const service = new FakeTuiObserverService(snapshot);
     const capability = createObserverActivationCapabilities({
-      source: new FakeClientStateSource(canonicalSnapshot),
+      source: new FakeClientStateSource(snapshot),
       service,
     });
 
@@ -210,10 +188,51 @@ describe("observer activation capability", () => {
       projectId: "web",
       worktreeId: "wt_web_no_agent",
       branch: "feature-start",
-      preferredObserverAction,
+      preferredObserverAction: "resume",
+    });
+
+    expect(await handle.completion).toEqual({
+      kind: "notice",
+      notice: { kind: "info", message: "That dashboard item is no longer available." },
+    });
+    expect(service.dispatched).toEqual([]);
+  });
+
+  it("resumes when recovery appears after start intent was selected", async () => {
+    const snapshot = createCommandSnapshot("none");
+    const recovered = {
+      ...snapshot,
+      rows: snapshot.rows.map((row) =>
+        row.id === "wt_web_no_agent"
+          ? {
+              ...row,
+              recovery: {
+                kind: "agent-resume" as const,
+                handleId: "rec_late",
+                provider: "codex",
+                targetKind: "native-session" as const,
+                sessionId: "ses_wt_web_no_agent",
+                lastSeenAt: "2026-06-01T12:01:00.000Z",
+              },
+            }
+          : row,
+      ),
+    };
+    const service = new FakeTuiObserverService(recovered);
+    const capability = createObserverActivationCapabilities({
+      source: new FakeClientStateSource(recovered),
+      service,
+    });
+
+    const handle = capability.activate({
+      sessionId: "ses_wt_web_no_agent",
+      projectId: "web",
+      worktreeId: "wt_web_no_agent",
+      branch: "feature-start",
+      preferredObserverAction: "start",
     });
 
     expect(await handle.completion).toEqual({ kind: "success" });
-    expect(service.dispatched[0]?.type).toBe(expectedCommandType);
+    expect(service.dispatched[0]?.type).toBe("session.resumeAgent");
   });
 });

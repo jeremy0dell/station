@@ -204,7 +204,7 @@ describe("terminal operations", () => {
     expect(terminal.snapshot().closed).toEqual(["term_agent"]);
   });
 
-  it("rejects stale-only and missing focus or close subjects without provider mutation", async () => {
+  it("rejects stale-only focus subjects without provider mutation", async () => {
     const staleTerminal = new RecordingTerminalProvider({
       targets: [
         createFakeTerminalTarget({
@@ -231,7 +231,33 @@ describe("terminal operations", () => {
       worktreeId: "wt_web_feature",
     });
     expect(staleTerminal.snapshot().focused).toEqual([]);
+  });
 
+  it("closes a stale target so the provider can retire it", async () => {
+    const staleTerminal = new RecordingTerminalProvider({
+      targets: [
+        createFakeTerminalTarget({
+          id: "term_stale",
+          provider: "fake-terminal",
+          projectId: "web",
+          worktreeId: "wt_web_feature",
+          state: "stale",
+          now,
+        }),
+      ],
+    });
+
+    await closeTerminal({
+      terminal: staleTerminal,
+      subject: { projectId: "web", worktreeId: "wt_web_feature" },
+      context: commandContext("cmd_stale_close"),
+      clock,
+    });
+
+    expect(staleTerminal.snapshot().closed).toEqual(["term_stale"]);
+  });
+
+  it("rejects a missing close subject without provider mutation", async () => {
     const missingTerminal = new RecordingTerminalProvider();
     await expect(
       closeTerminal({

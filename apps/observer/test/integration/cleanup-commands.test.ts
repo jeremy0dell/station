@@ -1,5 +1,5 @@
 import { DEFAULT_WORKSPACE_CONFIG, type StationConfig } from "@station/config";
-import type { HarnessProvider } from "@station/contracts";
+import type { HarnessProvider, SafeError } from "@station/contracts";
 import {
   createFakeHarnessRun,
   createFakeTerminalTarget,
@@ -244,6 +244,88 @@ describe("cleanup command handlers", () => {
     fixture.sqlite.close();
   });
 
+  it.each([
+    "terminal",
+    "all",
+  ] as const)("ends a retained Station session for session.close %s when no terminal remains", async (mode) => {
+    const fixture = await createFixture({ state: "none" });
+    await fixture.core.reconcile(`pre-session-close-${mode}-without-terminal`);
+
+    const receipt = await fixture.queue.dispatch({
+      type: "session.close",
+      payload: { sessionId: "ses_web_cleanup", mode },
+    });
+    await fixture.queue.drain();
+
+    await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
+      status: "succeeded",
+    });
+    expect(fixture.terminal.snapshot().closed).toEqual([]);
+    expect(fixture.core.getSnapshot().sessions).toEqual([]);
+    await expect(fixture.persistence.listSessions()).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "ses_web_cleanup", lifecycle: "ended", endedAt: now }),
+      ]),
+    );
+    fixture.sqlite.close();
+  });
+
+  it.each([
+    ["TERMINAL_TARGET_MISSING", "disappears"],
+    ["TERMINAL_TARGET_STALE", "is already stale"],
+  ] as const)("ends a retained Station session when its terminal %s during cleanup", async (code, detail) => {
+    const fixture = await createFixture({
+      state: "terminal",
+      terminalCloseFailure: terminalCleanupError(code, detail),
+    });
+    await fixture.core.reconcile(`pre-session-close-race-${code}`);
+
+    const receipt = await fixture.queue.dispatch({
+      type: "session.close",
+      payload: { sessionId: "ses_web_cleanup", mode: "terminal" },
+    });
+    await fixture.queue.drain();
+
+    await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
+      status: "succeeded",
+    });
+    expect(fixture.core.getSnapshot().sessions).toEqual([]);
+    await expect(fixture.persistence.listSessions()).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "ses_web_cleanup", lifecycle: "ended", endedAt: now }),
+      ]),
+    );
+    fixture.sqlite.close();
+  });
+
+  it("preserves unrelated provider close failures and leaves the session open", async () => {
+    const fixture = await createFixture({
+      state: "terminal",
+      terminalCloseFailure: terminalCleanupError(
+        "FAKE_TERMINAL_CLOSE_FAILED",
+        "could not be closed",
+      ),
+    });
+    await fixture.core.reconcile("pre-session-close-provider-failure");
+
+    const receipt = await fixture.queue.dispatch({
+      type: "session.close",
+      payload: { sessionId: "ses_web_cleanup", mode: "terminal" },
+    });
+    await fixture.queue.drain();
+
+    await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
+      status: "failed",
+      error: { code: "FAKE_TERMINAL_CLOSE_FAILED" },
+    });
+    await expect(fixture.persistence.listSessions()).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "ses_web_cleanup", lifecycle: "open" }),
+      ]),
+    );
+    fixture.sqlite.close();
+  });
+
   it("routes session terminal cleanup directly through the registered provider", async () => {
     const fixture = await createFixture({ state: "working" });
     await fixture.core.reconcile("pre-cleanup");
@@ -480,10 +562,10 @@ describe("cleanup command handlers", () => {
     fixture.sqlite.close();
   });
 
-  it("removes a clean exited worktree when terminal cleanup finds an already-missing target", async () => {
+  it("removes a clean exited worktree when terminal cleanup finds an already-stale target", async () => {
     const fixture = await createFixture({
       state: "exited",
-      terminalCloseTargetMissing: true,
+      terminalCloseFailure: terminalCleanupError("TERMINAL_TARGET_STALE", "is already stale"),
     });
     await fixture.core.reconcile("pre-cleanup");
 
@@ -649,6 +731,7 @@ async function createFixture(input: {
   harnessStopSupported?: boolean;
   terminalCloseable?: boolean;
   terminalCloseTargetMissing?: boolean;
+  terminalCloseFailure?: SafeError;
   projectRootPath?: boolean;
 }) {
   const clock = { now: () => new Date(now) };
@@ -699,15 +782,14 @@ async function createFixture(input: {
             }),
           ],
   };
-  if (input.terminalCloseTargetMissing === true) {
+  const terminalCloseFailure =
+    input.terminalCloseFailure ??
+    (input.terminalCloseTargetMissing === true
+      ? terminalCleanupError("TERMINAL_TARGET_MISSING", "is already missing")
+      : undefined);
+  if (terminalCloseFailure !== undefined) {
     terminalOptions.failures = {
-      closeTarget: {
-        tag: "TerminalProviderError",
-        code: "TERMINAL_TARGET_MISSING",
-        message: "No live host PTY for this station target.",
-        provider: "native",
-        worktreeId: "wt_web_cleanup",
-      },
+      closeTarget: terminalCloseFailure,
     };
   }
   const terminal = new FakeTerminalProvider(terminalOptions);
@@ -756,6 +838,16 @@ async function createFixture(input: {
     worktreeObservation,
     terminal,
     harness,
+  };
+}
+
+function terminalCleanupError(code: string, detail: string): SafeError {
+  return {
+    tag: "TerminalProviderError",
+    code,
+    message: `The terminal target ${detail}.`,
+    provider: "fake-terminal",
+    worktreeId: "wt_web_cleanup",
   };
 }
 

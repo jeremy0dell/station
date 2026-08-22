@@ -4,6 +4,7 @@ import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { findRowByBranch } from "../../support/real-station/assertions";
 import {
   createCodexSentinel,
+  createRealCodexFixture,
   waitForCodexSentinel,
   writeFailureBundle,
 } from "../../support/real-station/codex";
@@ -47,22 +48,30 @@ describeReal("real Codex session lifecycle", () => {
     cleanup = new CleanupStack();
     const repo = await createRealTempRepo(env);
     cleanup.defer(repo.cleanup);
-    const config = await writeRealStationConfig({ env, repo });
+    const codex = await createRealCodexFixture({ env, repo });
+    const testEnv = codex.env;
+    const config = await writeRealStationConfig({
+      env: testEnv,
+      repo,
+      codexCommand: codex.codexCommand,
+      installCodexHooks: true,
+    });
+    await codex.installHooks(config);
     cleanup.defer(async () => {
-      await runStationJson(env, {
+      await runStationJson(testEnv, {
         configPath: config.configPath,
         args: ["observer", "stop"],
       }).catch(() => undefined);
     });
     cleanup.defer(async () => {
-      await killTmuxSession(env, config.tmuxSession);
+      await killTmuxSession(testEnv, config.tmuxSession);
     });
 
     const branch = uniqueBranch(
       "codex-lifecycle-customer-account-permissions-rollout-for-enterprise-alpha",
     );
     cleanup.defer(async () => {
-      await removeRealWorktrunkWorktree({ env, config, repo, branch });
+      await removeRealWorktrunkWorktree({ env: testEnv, config, repo, branch });
     });
     const sentinel = createCodexSentinel(repo, "lifecycle");
     const createCommand: StationCommand = {
@@ -85,7 +94,7 @@ describeReal("real Codex session lifecycle", () => {
 
     let createResult: CommandDispatchWaitResult | undefined;
     try {
-      createResult = await runStationJson<CommandDispatchWaitResult>(env, {
+      createResult = await runStationJson<CommandDispatchWaitResult>(testEnv, {
         configPath: config.configPath,
         args: ["command", "dispatch", "--stdin", "--wait", "--timeout-ms", "180000"],
         stdin: JSON.stringify(createCommand),
@@ -126,7 +135,7 @@ describeReal("real Codex session lifecycle", () => {
         focusable: true,
         hasPrimaryAgentEndpoint: true,
       });
-      await expect(listTmuxWindows(env, config.tmuxSession)).resolves.toContain(
+      await expect(listTmuxWindows(testEnv, config.tmuxSession)).resolves.toContain(
         expectedWindowName(config.projectId, branch, row.id, row.path),
       );
 
@@ -134,7 +143,7 @@ describeReal("real Codex session lifecycle", () => {
         type: "terminal.focus",
         payload: { worktreeId: row.id },
       };
-      const focusResult = await runStationJson<CommandDispatchWaitResult>(env, {
+      const focusResult = await runStationJson<CommandDispatchWaitResult>(testEnv, {
         configPath: config.configPath,
         args: ["command", "dispatch", "--stdin", "--wait", "--timeout-ms", "60000"],
         stdin: JSON.stringify(focusCommand),
@@ -161,7 +170,7 @@ describeReal("real Codex session lifecycle", () => {
       });
     } catch (error) {
       await writeFailureBundle({
-        env,
+        env: testEnv,
         configPath: config.configPath,
         commandId: createResult?.receipt.commandId,
       });

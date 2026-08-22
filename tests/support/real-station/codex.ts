@@ -1,6 +1,7 @@
-import { access, chmod, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
-import { homedir, tmpdir } from "node:os";
-import { basename, dirname, join } from "node:path";
+import { access, chmod, mkdir, readFile, symlink, writeFile } from "node:fs/promises";
+import { homedir } from "node:os";
+import { dirname, join } from "node:path";
+import type { RealStationConfigFixture } from "./config";
 import type { RealE2eEnvironment } from "./env";
 import { requireToolPath } from "./env";
 import { runStationJson } from "./process";
@@ -20,11 +21,42 @@ export type CodexBranchSwitchSentinel = CodexSentinel & {
 export type CodexHookFixture = {
   hookScriptPath: string;
   hookConfigPath: string;
-  hookLogDirPath: string;
-  hookPayloadLogPath: string;
-  hookDeliveryLogPath: string;
-  cleanup: () => Promise<void>;
 };
+
+export type RealCodexFixture = {
+  env: RealE2eEnvironment;
+  codexHome: string;
+  codexCommand: string;
+  installHooks: (config: RealStationConfigFixture) => Promise<CodexHookFixture>;
+};
+
+export async function createRealCodexFixture(input: {
+  env: RealE2eEnvironment;
+  repo: RealTempRepo;
+}): Promise<RealCodexFixture> {
+  const codexHome = codexHomeForRepo(input.repo);
+  const codexCommand = await createCodexHookEnabledWrapper(input);
+  const stationWrapperPath = join(input.repo.root, "stn-with-private-codex-home.sh");
+  await writeFile(
+    stationWrapperPath,
+    [
+      "#!/usr/bin/env bash",
+      "set -euo pipefail",
+      `export CODEX_HOME=${shellSingleQuote(codexHome)}`,
+      `exec ${shellSingleQuote(input.env.stationBin)} "$@"`,
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+  await chmod(stationWrapperPath, 0o700);
+  const env: RealE2eEnvironment = { ...input.env, stationBin: stationWrapperPath };
+  return {
+    env,
+    codexHome,
+    codexCommand,
+    installHooks: (config) => installCodexHookProjectConfig({ env, repo: input.repo, config }),
+  };
+}
 
 export function createCodexSentinel(
   repo: RealTempRepo,
@@ -80,7 +112,7 @@ export async function waitForCodexSentinel(
   throw new Error(`Codex did not write sentinel ${sentinel.relativePath}.`);
 }
 
-export async function createCodexHookEnabledWrapper(input: {
+async function createCodexHookEnabledWrapper(input: {
   env: RealE2eEnvironment;
   repo: RealTempRepo;
 }): Promise<string> {
@@ -108,24 +140,19 @@ export async function createCodexHookEnabledWrapper(input: {
   return wrapperPath;
 }
 
-export async function installCodexHookProjectConfig(input: {
+async function installCodexHookProjectConfig(input: {
   env: RealE2eEnvironment;
   repo: RealTempRepo;
-  configPath: string;
+  config: RealStationConfigFixture;
 }): Promise<CodexHookFixture> {
   const codexHome = codexHomeForRepo(input.repo);
   const hookConfigPath = join(codexHome, "station.config.toml");
-  const hookLogDirPath = join(
-    tmpdir(),
-    `station-real-codex-hooks-${process.pid}-${Date.now()}-${basename(input.repo.root)}`,
-  );
-  const hookScriptPath = join(hookLogDirPath, "station-codex-hook.sh");
-  const hookPayloadLogPath = join(hookLogDirPath, "codex-hook-payloads.jsonl");
-  const hookDeliveryLogPath = join(hookLogDirPath, "codex-hook-delivery.log");
-  await mkdir(hookLogDirPath, { recursive: true });
+  const hookDirPath = join(input.config.stateDir, "hooks");
+  const hookScriptPath = join(hookDirPath, "station-codex-hook.sh");
+  await mkdir(hookDirPath, { recursive: true });
   await mkdir(codexHome, { recursive: true });
   await runStationJson(input.env, {
-    configPath: input.configPath,
+    configPath: input.config.configPath,
     args: [
       "hooks",
       "install",
@@ -146,12 +173,6 @@ export async function installCodexHookProjectConfig(input: {
   return {
     hookScriptPath,
     hookConfigPath,
-    hookLogDirPath,
-    hookPayloadLogPath,
-    hookDeliveryLogPath,
-    cleanup: async () => {
-      await rm(hookLogDirPath, { recursive: true, force: true });
-    },
   };
 }
 

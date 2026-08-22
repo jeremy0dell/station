@@ -1,5 +1,5 @@
 import { type ChildProcess, execFile, spawn } from "node:child_process";
-import { appendFile } from "node:fs/promises";
+import { appendFile, readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import type { RealE2eEnvironment } from "./env";
@@ -76,6 +76,12 @@ export async function killTmuxSession(env: RealE2eEnvironment, sessionName: stri
   await execFileAsync(requireToolPath(env, "tmux"), ["kill-session", "-t", sessionName], {
     timeout: 10_000,
   }).catch(() => undefined);
+}
+
+export async function killTmuxWindow(env: RealE2eEnvironment, target: string): Promise<void> {
+  await execFileAsync(requireToolPath(env, "tmux"), ["kill-window", "-t", target], {
+    timeout: 10_000,
+  });
 }
 
 export async function tmuxSessionExists(
@@ -277,11 +283,22 @@ export async function displayStationPopupAndSendKey(input: {
       ],
       { timeout: 120_000 },
     );
+    await waitForFileText(input.markerPath, "key-sent", delaySeconds * 1000 + 10_000);
   } finally {
     clearTimeout(keyTimer);
     await sendKeyDone?.catch(() => undefined);
     await ptyClient.close();
   }
+}
+
+async function waitForFileText(path: string, expected: string, timeoutMs: number): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() <= deadline) {
+    const content = await readFile(path, "utf8").catch(() => "");
+    if (content.includes(expected)) return;
+    await delay(100);
+  }
+  throw new Error(`Timed out waiting for ${expected} in ${path}.`);
 }
 
 export async function sendTmuxKeys(input: {

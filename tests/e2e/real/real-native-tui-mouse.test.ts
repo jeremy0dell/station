@@ -14,8 +14,8 @@ import {
 import { createStationHostClient } from "../../../packages/station-host/dist/index.js";
 import { findRowByBranch } from "../../support/real-station/assertions";
 import {
-  createCodexHookEnabledWrapper,
   createCodexSentinel,
+  createRealCodexFixture,
   waitForCodexSentinel,
 } from "../../support/real-station/codex";
 import {
@@ -77,11 +77,12 @@ describeReal("real native Station mouse input", () => {
     cleanup = new CleanupStack();
     const repo = await createRealTempRepo(env);
     cleanup.defer(repo.cleanup);
-    const codexCommand = await createCodexHookEnabledWrapper({ env, repo });
+    const codex = await createRealCodexFixture({ env, repo });
+    const testEnv = codex.env;
     const config = await writeRealStationConfig({
-      env,
+      env: testEnv,
       repo,
-      codexCommand,
+      codexCommand: codex.codexCommand,
       installCodexHooks: true,
     });
     await writeFile(
@@ -92,12 +93,7 @@ describeReal("real native Station mouse input", () => {
       )}\n[feature_flags]\nsession_resume_agent = true\nstation_persistent_agents = true\n`,
       "utf8",
     );
-    await runStationJson(env, {
-      configPath: config.configPath,
-      args: ["hooks", "install", "codex", "--yes"],
-      timeoutMs: 30_000,
-      env: isolatedStationEnv(config),
-    });
+    await codex.installHooks(config);
     const nativeSession = uniqueTmuxSession("station-real-native-mouse");
     const branch = `nm-${process.pid}-${Date.now().toString(36).slice(-6)}`;
     const groupName = "Native mouse Group";
@@ -106,17 +102,17 @@ describeReal("real native Station mouse input", () => {
     let runtime: NativeRuntime | undefined;
 
     cleanup.defer(async () => {
-      await runStationJson(env, {
+      await runStationJson(testEnv, {
         configPath: config.configPath,
         args: ["observer", "stop"],
         env: isolatedStationEnv(config),
       }).catch(() => undefined);
     });
     cleanup.defer(async () => {
-      await killTmuxSession(env, config.tmuxSession);
+      await killTmuxSession(testEnv, config.tmuxSession);
     });
     cleanup.defer(async () => {
-      await removeRealWorktrunkWorktree({ env, config, repo, branch });
+      await removeRealWorktrunkWorktree({ env: testEnv, config, repo, branch });
     });
     cleanup.defer(async () => {
       await stopStationHostIfIdle(config);
@@ -126,7 +122,7 @@ describeReal("real native Station mouse input", () => {
     });
 
     try {
-      await runStationJson(env, {
+      await runStationJson(testEnv, {
         configPath: config.configPath,
         args: ["observer", "start", "--timeout-ms", "30000"],
         timeoutMs: 45_000,
@@ -162,7 +158,7 @@ describeReal("real native Station mouse input", () => {
       );
       const createdRow = findRowByBranch(created, branch);
       await waitForCodexSentinel(sentinel, { rootPath: createdRow.path, timeoutMs: 180_000 });
-      await killTmuxSession(env, config.tmuxSession);
+      await killTmuxSession(testEnv, config.tmuxSession);
       const dormant = await waitForSnapshot(
         client,
         (snapshot: StationSnapshot) => {
@@ -206,7 +202,7 @@ describeReal("real native Station mouse input", () => {
       );
 
       const launched = await launchNativeStationInTmux({
-        env,
+        env: testEnv,
         configPath: config.configPath,
         observerSocketPath: config.socketPath,
         stateDir: config.stateDir,
@@ -215,15 +211,15 @@ describeReal("real native Station mouse input", () => {
         dimensions: NATIVE_DIMENSIONS,
       });
       cleanup.defer(async () => {
-        await killTmuxSession(env, nativeSession);
+        await killTmuxSession(testEnv, nativeSession);
       });
       const ptyClient = await startAttachedTmuxPtyClient({
-        env,
+        env: testEnv,
         sessionName: nativeSession,
         dimensions: NATIVE_DIMENSIONS,
       });
       cleanup.defer(ptyClient.close);
-      runtime = { client: ptyClient, config, env, target: launched.target };
+      runtime = { client: ptyClient, config, env: testEnv, target: launched.target };
 
       const welcome = await waitForNativeFrame(
         runtime,
@@ -470,13 +466,13 @@ describeReal("real native Station mouse input", () => {
         expect(await waitForPidExit(nativePid, 10_000)).toBe(true);
         expect(await waitForPidExit(attachedClientPid, 10_000)).toBe(true);
         expect(await waitForPidExit(observerPid, 10_000)).toBe(true);
-        expect(await tmuxSessionExists(env, nativeSession)).toBe(false);
-        expect(await tmuxSessionExists(env, config.tmuxSession)).toBe(false);
+        expect(await tmuxSessionExists(testEnv, nativeSession)).toBe(false);
+        expect(await tmuxSessionExists(testEnv, config.tmuxSession)).toBe(false);
         expect(await pathExists(worktreePath)).toBe(false);
         expect(await pathExists(repo.root)).toBe(false);
       }
     } catch (error) {
-      await writeNativeFailureBundle(env, config, commandId);
+      await writeNativeFailureBundle(testEnv, config, commandId);
       const diagnostics =
         runtime === undefined ? "" : await nativeDiagnostics(runtime).catch(() => "");
       throw new Error(`${errorMessage(error)}${diagnostics}`, { cause: error });
@@ -486,7 +482,6 @@ describeReal("real native Station mouse input", () => {
 
 function isolatedStationEnv(config: RealStationConfigFixture): NodeJS.ProcessEnv {
   return {
-    CODEX_HOME: join(dirname(config.configPath), "codex-home"),
     STATION_CONFIG_PATH: config.configPath,
     STATION_OBSERVER_SOCKET_PATH: config.socketPath,
     STATION_HOST_SOCKET_PATH: join(dirname(config.socketPath), "station-host.sock"),

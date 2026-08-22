@@ -3,6 +3,7 @@ import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { findRowByBranch } from "../../support/real-station/assertions";
 import {
   createCodexSentinel,
+  createRealCodexFixture,
   waitForCodexSentinel,
   writeFailureBundle,
 } from "../../support/real-station/codex";
@@ -44,29 +45,37 @@ describeReal("real existing Worktrunk worktree start-agent", () => {
     cleanup = new CleanupStack();
     const repo = await createRealTempRepo(env);
     cleanup.defer(repo.cleanup);
-    const config = await writeRealStationConfig({ env, repo });
+    const codex = await createRealCodexFixture({ env, repo });
+    const testEnv = codex.env;
+    const config = await writeRealStationConfig({
+      env: testEnv,
+      repo,
+      codexCommand: codex.codexCommand,
+      installCodexHooks: true,
+    });
+    await codex.installHooks(config);
     cleanup.defer(async () => {
-      await runStationJson(env, {
+      await runStationJson(testEnv, {
         configPath: config.configPath,
         args: ["observer", "stop"],
       }).catch(() => undefined);
     });
     cleanup.defer(async () => {
-      await killTmuxSession(env, config.tmuxSession);
+      await killTmuxSession(testEnv, config.tmuxSession);
     });
 
     const branch = uniqueBranch("existing");
     cleanup.defer(async () => {
-      await removeRealWorktrunkWorktree({ env, config, repo, branch });
+      await removeRealWorktrunkWorktree({ env: testEnv, config, repo, branch });
     });
-    await createRealWorktrunkWorktree({ env, config, repo, branch });
+    await createRealWorktrunkWorktree({ env: testEnv, config, repo, branch });
 
-    await runStationJson(env, {
+    await runStationJson(testEnv, {
       configPath: config.configPath,
       args: ["reconcile", "--reason", "real-existing-worktree"],
       timeoutMs: 60_000,
     });
-    const before = await runStationJson<StationSnapshot>(env, {
+    const before = await runStationJson<StationSnapshot>(testEnv, {
       configPath: config.configPath,
       args: ["snapshot", "--json"],
       timeoutMs: 30_000,
@@ -94,7 +103,7 @@ describeReal("real existing Worktrunk worktree start-agent", () => {
 
     let result: CommandDispatchWaitResult | undefined;
     try {
-      result = await runStationJson<CommandDispatchWaitResult>(env, {
+      result = await runStationJson<CommandDispatchWaitResult>(testEnv, {
         configPath: config.configPath,
         args: ["command", "dispatch", "--stdin", "--wait", "--timeout-ms", "180000"],
         stdin: JSON.stringify(command),
@@ -102,7 +111,7 @@ describeReal("real existing Worktrunk worktree start-agent", () => {
       });
       expect(result.status).toBe("succeeded");
       await waitForCodexSentinel(sentinel, { rootPath: row.path });
-      const after = await runStationJson<StationSnapshot>(env, {
+      const after = await runStationJson<StationSnapshot>(testEnv, {
         configPath: config.configPath,
         args: ["snapshot", "--json", "--include-debug"],
         timeoutMs: 30_000,
@@ -113,7 +122,7 @@ describeReal("real existing Worktrunk worktree start-agent", () => {
       });
     } catch (error) {
       await writeFailureBundle({
-        env,
+        env: testEnv,
         configPath: config.configPath,
         commandId: result?.receipt.commandId,
       });

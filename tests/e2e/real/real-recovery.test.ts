@@ -3,6 +3,7 @@ import { join } from "node:path";
 import type { CommandRecord, StationCommand, StationSnapshot } from "@station/contracts";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { assertDebugBundleContains, findRowByBranch } from "../../support/real-station/assertions";
+import { createRealCodexFixture } from "../../support/real-station/codex";
 import { writeRealStationConfig } from "../../support/real-station/config";
 import {
   type RealE2eEnvironment,
@@ -41,39 +42,45 @@ describeReal("real observer recovery", () => {
     cleanup = new CleanupStack();
     const repo = await createRealTempRepo(env);
     cleanup.defer(repo.cleanup);
-    const config = await writeRealStationConfig({ env, repo });
+    const codex = await createRealCodexFixture({ env, repo });
+    const testEnv = codex.env;
+    const config = await writeRealStationConfig({
+      env: testEnv,
+      repo,
+      codexCommand: codex.codexCommand,
+    });
     cleanup.defer(async () => {
-      await runStationJson(env, {
+      await runStationJson(testEnv, {
         configPath: config.configPath,
         args: ["observer", "stop"],
       }).catch(() => undefined);
     });
     cleanup.defer(async () => {
-      await killTmuxSession(env, config.tmuxSession);
+      await killTmuxSession(testEnv, config.tmuxSession);
     });
 
     const branch = uniqueBranch("recovery");
     cleanup.defer(async () => {
-      await removeRealWorktrunkWorktree({ env, config, repo, branch });
+      await removeRealWorktrunkWorktree({ env: testEnv, config, repo, branch });
     });
-    await createRealWorktrunkWorktree({ env, config, repo, branch });
+    await createRealWorktrunkWorktree({ env: testEnv, config, repo, branch });
 
-    const first = await runStationJson<{ snapshot: StationSnapshot }>(env, {
+    const first = await runStationJson<{ snapshot: StationSnapshot }>(testEnv, {
       configPath: config.configPath,
       args: ["reconcile", "--reason", "real-recovery-before-delete"],
       timeoutMs: 60_000,
     });
     expect(findRowByBranch(first.snapshot, branch).id).toEqual(expect.any(String));
 
-    const status = await runStationJson<{ health: { pid: number } }>(env, {
+    const status = await runStationJson<{ health: { pid: number } }>(testEnv, {
       configPath: config.configPath,
       args: ["observer", "status"],
     });
     process.kill(status.health.pid, "SIGTERM");
-    await waitForObserverDown(env, config.configPath);
+    await waitForObserverDown(testEnv, config.configPath);
 
     await rm(join(config.stateDir, "observer.sqlite"), { force: true });
-    const recovered = await runStationJson<{ snapshot: StationSnapshot }>(env, {
+    const recovered = await runStationJson<{ snapshot: StationSnapshot }>(testEnv, {
       configPath: config.configPath,
       args: ["reconcile", "--reason", "real-recovery-after-sqlite-delete"],
       timeoutMs: 60_000,
@@ -85,28 +92,36 @@ describeReal("real observer recovery", () => {
     cleanup = new CleanupStack();
     const repo = await createRealTempRepo(env);
     cleanup.defer(repo.cleanup);
-    const config = await writeRealStationConfig({ env, repo });
+    const codex = await createRealCodexFixture({ env, repo });
+    const testEnv = codex.env;
+    const config = await writeRealStationConfig({
+      env: testEnv,
+      repo,
+      codexCommand: codex.codexCommand,
+      installCodexHooks: true,
+    });
+    await codex.installHooks(config);
     cleanup.defer(async () => {
-      await runStationJson(env, {
+      await runStationJson(testEnv, {
         configPath: config.configPath,
         args: ["observer", "stop"],
       }).catch(() => undefined);
     });
     cleanup.defer(async () => {
-      await killTmuxSession(env, config.tmuxSession);
+      await killTmuxSession(testEnv, config.tmuxSession);
     });
 
     const branch = uniqueBranch("stale-tmux");
     cleanup.defer(async () => {
-      await removeRealWorktrunkWorktree({ env, config, repo, branch });
+      await removeRealWorktrunkWorktree({ env: testEnv, config, repo, branch });
     });
-    await createRealWorktrunkWorktree({ env, config, repo, branch });
-    await runStationJson(env, {
+    await createRealWorktrunkWorktree({ env: testEnv, config, repo, branch });
+    await runStationJson(testEnv, {
       configPath: config.configPath,
       args: ["reconcile", "--reason", "real-stale-tmux-before"],
       timeoutMs: 60_000,
     });
-    const snapshot = await runStationJson<StationSnapshot>(env, {
+    const snapshot = await runStationJson<StationSnapshot>(testEnv, {
       configPath: config.configPath,
       args: ["snapshot", "--json"],
     });
@@ -120,7 +135,7 @@ describeReal("real observer recovery", () => {
         terminal: { provider: "tmux", focus: true },
       },
     };
-    const started = await runStationJson<CommandDispatchWaitResult>(env, {
+    const started = await runStationJson<CommandDispatchWaitResult>(testEnv, {
       configPath: config.configPath,
       args: ["command", "dispatch", "--stdin", "--wait", "--timeout-ms", "90000"],
       stdin: JSON.stringify(command),
@@ -128,13 +143,13 @@ describeReal("real observer recovery", () => {
     });
     expect(started.status).toBe("succeeded");
 
-    await killTmuxSession(env, config.tmuxSession);
-    await runStationJson(env, {
+    await killTmuxSession(testEnv, config.tmuxSession);
+    await runStationJson(testEnv, {
       configPath: config.configPath,
       args: ["reconcile", "--reason", "real-stale-tmux-after-kill"],
       timeoutMs: 60_000,
     });
-    const bundle = await runStationJson<{ bundlePath: string }>(env, {
+    const bundle = await runStationJson<{ bundlePath: string }>(testEnv, {
       configPath: config.configPath,
       args: ["debug", "bundle", "--command", started.receipt.commandId],
       timeoutMs: 30_000,

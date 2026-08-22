@@ -33,7 +33,8 @@ export type CreateSessionCloseHandlerOptions = {
  * USE CASE
  *
  * Closes one canonical session and serializes its terminal and durable lifecycle
- * mutation against native activation for the same configured worktree.
+ * mutation against native activation for the same configured worktree. Terminal
+ * cleanup is idempotent when the provider target is already absent or retired.
  */
 export function createSessionCloseHandler(
   options: CreateSessionCloseHandlerOptions,
@@ -59,7 +60,6 @@ export function createSessionCloseHandler(
         mode: payload.mode,
         force: payload.force === true,
         context,
-        requireTerminalClose: payload.mode === "terminal" || payload.mode === "all",
         clock: options.clock,
       });
       throwIfAborted(context.signal);

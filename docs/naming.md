@@ -198,6 +198,14 @@ Avoid the older `sessionPaneIds` / `closeSession` names: the panes belong to the
 
 `session.close` takes a `mode` of `harness | terminal | all` (`CloseSessionPayloadSchema`). Use it for non-destructive stops; use `worktree.remove` for destructive deletes.
 
+A stale terminal target is still provider-visible but no longer live; a missing
+target is absent from the provider listing. Focus rejects stale targets. Direct
+terminal close may select a stale target so the provider can retire it, while a
+genuinely missing target remains an honest low-level error. Higher-level cleanup
+for fresh start, `session.close`, and `worktree.remove` is idempotent: an absent
+attachment, a missing-target race, or a provider-reported stale target already
+satisfies terminal retirement. Other close failures remain visible.
+
 ### Delete Session UX
 
 The current row action is destructive:

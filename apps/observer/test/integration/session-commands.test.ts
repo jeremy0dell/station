@@ -1308,6 +1308,442 @@ describe("session command vertical slice", () => {
     fixture.sqlite.close();
   });
 
+  it("starts fresh by retiring a stale target under the retained session identity and Group", async () => {
+    const worktree = createFakeWorktree({
+      id: "wt_web_grouped_restart",
+      projectId: "web",
+      branch: "grouped-restart",
+      now,
+    });
+    const harness = new FakeHarnessProvider({ now });
+    const terminal = new FakeTerminalProvider({
+      now,
+      targets: [
+        createFakeTerminalTarget({
+          id: "term_grouped_restart_old",
+          projectId: "web",
+          worktreeId: worktree.id,
+          sessionId: "ses_grouped_restart",
+          closeable: true,
+          focusable: true,
+          state: "stale",
+          now,
+        }),
+      ],
+      onLaunch: ({ launchPlan }) => {
+        harness.addRun(
+          createFakeHarnessRun({
+            id: "run_grouped_restart_new",
+            projectId: "web",
+            worktreeId: worktree.id,
+            sessionId: launchPlan.env?.STATION_SESSION_ID,
+            state: "working",
+            now,
+          }),
+        );
+      },
+    });
+    const fixture = createFixture({
+      worktree: new FakeWorktreeProvider({ now, worktrees: [worktree] }),
+      terminal,
+      harness,
+      sessionIds: ["ses_must_not_be_minted"],
+    });
+    await expect(
+      fixture.persistence.createSessionGroup({
+        id: "grp_restart",
+        projectId: "web",
+        name: "Restart",
+        createdAt: now,
+      }),
+    ).resolves.toMatchObject({ ok: true });
+    await expect(
+      fixture.persistence.seedSession({
+        sessionId: "ses_grouped_restart",
+        projectId: "web",
+        worktreeId: worktree.id,
+        initialTitle: "grouped-restart",
+        harness: "fake-harness",
+        terminalProvider: "fake-terminal",
+        group: { kind: "existing", groupId: "grp_restart" },
+        createdAt: now,
+        lastSeenAt: now,
+      }),
+    ).resolves.toMatchObject({ ok: true });
+    await expect(
+      fixture.persistence.renameSession({
+        sessionId: "ses_grouped_restart",
+        title: "Durable grouped restart",
+        renamedAt: now,
+      }),
+    ).resolves.toMatchObject({ id: "ses_grouped_restart", title: "Durable grouped restart" });
+    await expect(fixture.core.reconcile("pre-grouped-fresh-start")).resolves.toBeDefined();
+    const groupBefore = fixture.core.getSnapshot().sessionGroups[0];
+    const sessionBefore = (await fixture.persistence.listSessions())[0];
+
+    const receipt = await fixture.queue.dispatch({
+      type: "session.startAgent",
+      payload: {
+        projectId: "web",
+        worktreeId: worktree.id,
+        freshStart: { expectedSessionId: "ses_grouped_restart" },
+        terminal: { provider: "fake-terminal", focus: false },
+      },
+    });
+    await fixture.queue.drain();
+
+    await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
+      status: "succeeded",
+    });
+    expect(terminal.snapshot().closed).toEqual(["term_grouped_restart_old"]);
+    expect(terminal.snapshot().launches[0]?.launchPlan.env?.STATION_SESSION_ID).toBe(
+      "ses_grouped_restart",
+    );
+    expect(fixture.core.getSnapshot().sessions).toEqual([
+      expect.objectContaining({
+        id: "ses_grouped_restart",
+        title: "Durable grouped restart",
+      }),
+    ]);
+    expect(fixture.core.getSnapshot().sessionGroups).toEqual([groupBefore]);
+    const sessionAfter = (await fixture.persistence.listSessions())[0];
+    expect(sessionAfter).toMatchObject({
+      id: sessionBefore?.id,
+      createdAt: sessionBefore?.createdAt,
+      title: sessionBefore?.title,
+      lifecycle: sessionBefore?.lifecycle,
+    });
+    expect(
+      (await fixture.persistence.listEvents({ commandId: receipt.commandId })).map(
+        (event) => event.type,
+      ),
+    ).toEqual(["command.accepted", "command.started", "command.succeeded"]);
+    fixture.sqlite.close();
+  });
+
+  it("continues a grouped fresh start when the selected terminal disappears during close", async () => {
+    const test = await createGroupedFreshStartCleanupFixture({
+      tag: "TerminalProviderError",
+      code: "TERMINAL_TARGET_MISSING",
+      message: "The selected terminal disappeared before close completed.",
+      provider: "fake-terminal",
+    });
+    const reset = vi.spyOn(test.fixture.persistence, "resetSessionForFreshStart");
+
+    const receipt = await test.fixture.queue.dispatch({
+      type: "session.startAgent",
+      payload: {
+        projectId: "web",
+        worktreeId: test.worktree.id,
+        freshStart: { expectedSessionId: "ses_grouped_close_race" },
+        terminal: { provider: "fake-terminal", focus: false },
+      },
+    });
+    await test.fixture.queue.drain();
+
+    await expect(test.fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
+      status: "succeeded",
+    });
+    expect(reset).toHaveBeenCalledWith({
+      provider: "fake-harness",
+      sessionId: "ses_grouped_close_race",
+    });
+    expect(test.terminal.snapshot().launches).toHaveLength(1);
+    expect(test.terminal.snapshot().launches[0]?.launchPlan.env?.STATION_SESSION_ID).toBe(
+      "ses_grouped_close_race",
+    );
+    expect(test.fixture.core.getSnapshot().sessionGroups).toEqual(test.groupsBefore);
+    expect(test.fixture.core.getSnapshot().sessions).toHaveLength(1);
+    expect(test.fixture.core.getSnapshot().sessions[0]?.id).toBe("ses_grouped_close_race");
+    test.fixture.sqlite.close();
+  });
+
+  it("aborts a grouped fresh start before reset and launch on unrelated terminal close failure", async () => {
+    const test = await createGroupedFreshStartCleanupFixture({
+      tag: "TerminalProviderError",
+      code: "FAKE_TERMINAL_CLOSE_FAILED",
+      message: "The terminal provider could not close the selected target.",
+      provider: "fake-terminal",
+    });
+    const reset = vi.spyOn(test.fixture.persistence, "resetSessionForFreshStart");
+
+    const receipt = await test.fixture.queue.dispatch({
+      type: "session.startAgent",
+      payload: {
+        projectId: "web",
+        worktreeId: test.worktree.id,
+        freshStart: { expectedSessionId: "ses_grouped_close_race" },
+        terminal: { provider: "fake-terminal", focus: false },
+      },
+    });
+    await test.fixture.queue.drain();
+
+    await expect(test.fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
+      status: "failed",
+      error: { code: "FAKE_TERMINAL_CLOSE_FAILED", provider: "fake-terminal" },
+    });
+    expect(reset).not.toHaveBeenCalled();
+    expect(test.terminal.snapshot().launches).toEqual([]);
+    expect(test.fixture.core.getSnapshot().sessionGroups).toEqual(test.groupsBefore);
+    await expect(test.fixture.persistence.listSessions()).resolves.toEqual(test.sessionsBefore);
+    test.fixture.sqlite.close();
+  });
+
+  it("preflights retained fresh start before closing its terminal or changing its Group", async () => {
+    const worktree = createFakeWorktree({
+      id: "wt_web_grouped_preflight",
+      projectId: "web",
+      branch: "grouped-preflight",
+      now,
+    });
+    const terminal = new FakeTerminalProvider({
+      now,
+      targets: [
+        createFakeTerminalTarget({
+          id: "term_grouped_preflight_old",
+          projectId: "web",
+          worktreeId: worktree.id,
+          sessionId: "ses_grouped_preflight",
+          closeable: true,
+          now,
+        }),
+      ],
+    });
+    const fixture = createFixture({
+      worktree: new FakeWorktreeProvider({ now, worktrees: [worktree] }),
+      terminal,
+      harness: unavailableHarness(),
+    });
+    await fixture.persistence.createSessionGroup({
+      id: "grp_preflight",
+      projectId: "web",
+      name: "Preflight",
+      createdAt: now,
+    });
+    await fixture.persistence.seedSession({
+      sessionId: "ses_grouped_preflight",
+      projectId: "web",
+      worktreeId: worktree.id,
+      initialTitle: "Grouped preflight",
+      harness: "fake-harness",
+      terminalProvider: "fake-terminal",
+      group: { kind: "existing", groupId: "grp_preflight" },
+      createdAt: now,
+      lastSeenAt: now,
+    });
+    await fixture.core.reconcile("pre-grouped-fresh-preflight");
+    const groupsBefore = fixture.core.getSnapshot().sessionGroups;
+    const sessionsBefore = await fixture.persistence.listSessions();
+
+    const receipt = await fixture.queue.dispatch({
+      type: "session.startAgent",
+      payload: {
+        projectId: "web",
+        worktreeId: worktree.id,
+        freshStart: { expectedSessionId: "ses_grouped_preflight" },
+        terminal: { provider: "fake-terminal" },
+      },
+    });
+    await fixture.queue.drain();
+
+    await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
+      status: "failed",
+      error: unavailableHarnessError(),
+    });
+    expect(terminal.snapshot().closed).toEqual([]);
+    expect(terminal.snapshot().launches).toEqual([]);
+    expect(fixture.core.getSnapshot().sessionGroups).toEqual(groupsBefore);
+    await expect(fixture.persistence.listSessions()).resolves.toEqual(sessionsBefore);
+    fixture.sqlite.close();
+  });
+
+  it("retains grouped session state when fresh agent launch fails after terminal replacement", async () => {
+    const worktree = createFakeWorktree({
+      id: "wt_web_grouped_launch_failure",
+      projectId: "web",
+      branch: "grouped-launch-failure",
+      now,
+    });
+    const terminal = new FakeTerminalProvider({
+      now,
+      targets: [
+        createFakeTerminalTarget({
+          id: "term_grouped_launch_failure_old",
+          projectId: "web",
+          worktreeId: worktree.id,
+          sessionId: "ses_grouped_launch_failure",
+          closeable: true,
+          now,
+        }),
+      ],
+    });
+    const harness = new FakeHarnessProvider({
+      now,
+      failures: {
+        buildLaunch: {
+          tag: "HarnessProviderError",
+          code: "FAKE_HARNESS_BUILD_FAILED",
+          message: "The fake harness provider could not build a fresh launch plan.",
+          provider: "fake-harness",
+        },
+      },
+    });
+    const fixture = createFixture({
+      worktree: new FakeWorktreeProvider({ now, worktrees: [worktree] }),
+      terminal,
+      harness,
+    });
+    await fixture.persistence.createSessionGroup({
+      id: "grp_launch_failure",
+      projectId: "web",
+      name: "Launch failure",
+      createdAt: now,
+    });
+    await fixture.persistence.seedSession({
+      sessionId: "ses_grouped_launch_failure",
+      projectId: "web",
+      worktreeId: worktree.id,
+      initialTitle: "Grouped launch failure",
+      harness: "fake-harness",
+      terminalProvider: "fake-terminal",
+      group: { kind: "existing", groupId: "grp_launch_failure" },
+      createdAt: now,
+      lastSeenAt: now,
+    });
+    await fixture.core.reconcile("pre-grouped-fresh-launch-failure");
+    const groupsBefore = fixture.core.getSnapshot().sessionGroups;
+    const sessionsBefore = await fixture.persistence.listSessions();
+
+    const receipt = await fixture.queue.dispatch({
+      type: "session.startAgent",
+      payload: {
+        projectId: "web",
+        worktreeId: worktree.id,
+        freshStart: { expectedSessionId: "ses_grouped_launch_failure" },
+        terminal: { provider: "fake-terminal" },
+      },
+    });
+    await fixture.queue.drain();
+
+    await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
+      status: "failed",
+      error: { code: "FAKE_HARNESS_BUILD_FAILED", provider: "fake-harness" },
+    });
+    expect(terminal.snapshot().closed).toEqual(["term_grouped_launch_failure_old", "term_fake"]);
+    expect(fixture.core.getSnapshot().sessionGroups).toEqual(groupsBefore);
+    await expect(fixture.persistence.listSessions()).resolves.toEqual(sessionsBefore);
+    fixture.sqlite.close();
+  });
+
+  it("requires identity-bound consent before replacing a retained Station session", async () => {
+    const worktree = createFakeWorktree({
+      id: "wt_web_fresh_required",
+      projectId: "web",
+      branch: "fresh-required",
+      now,
+    });
+    const terminal = new FakeTerminalProvider({ now });
+    const fixture = createFixture({
+      worktree: new FakeWorktreeProvider({ now, worktrees: [worktree] }),
+      terminal,
+    });
+    await fixture.persistence.seedSession({
+      sessionId: "ses_fresh_required",
+      projectId: "web",
+      worktreeId: worktree.id,
+      initialTitle: "Fresh required",
+      harness: "fake-harness",
+      terminalProvider: "fake-terminal",
+      createdAt: now,
+      lastSeenAt: now,
+    });
+    await fixture.core.reconcile("pre-fresh-required");
+
+    const receipt = await fixture.queue.dispatch({
+      type: "session.startAgent",
+      payload: {
+        projectId: "web",
+        worktreeId: worktree.id,
+        terminal: { provider: "fake-terminal" },
+      },
+    });
+    await fixture.queue.drain();
+
+    await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
+      status: "failed",
+      error: {
+        code: "SESSION_FRESH_START_REQUIRED",
+        sessionId: "ses_fresh_required",
+      },
+    });
+    expect(terminal.snapshot().launches).toEqual([]);
+    await expect(fixture.persistence.listSessions()).resolves.toEqual([
+      expect.objectContaining({ id: "ses_fresh_required" }),
+    ]);
+    fixture.sqlite.close();
+  });
+
+  it("rejects stale fresh-start consent before terminal or session mutation", async () => {
+    const worktree = createFakeWorktree({
+      id: "wt_web_fresh_stale",
+      projectId: "web",
+      branch: "fresh-stale",
+      now,
+    });
+    const terminal = new FakeTerminalProvider({
+      now,
+      targets: [
+        createFakeTerminalTarget({
+          id: "term_fresh_stale",
+          projectId: "web",
+          worktreeId: worktree.id,
+          sessionId: "ses_fresh_current",
+          closeable: true,
+          now,
+        }),
+      ],
+    });
+    const fixture = createFixture({
+      worktree: new FakeWorktreeProvider({ now, worktrees: [worktree] }),
+      terminal,
+    });
+    await fixture.persistence.seedSession({
+      sessionId: "ses_fresh_current",
+      projectId: "web",
+      worktreeId: worktree.id,
+      initialTitle: "Fresh current",
+      harness: "fake-harness",
+      terminalProvider: "fake-terminal",
+      createdAt: now,
+      lastSeenAt: now,
+    });
+    await fixture.core.reconcile("pre-fresh-stale");
+    const sessionsBefore = await fixture.persistence.listSessions();
+
+    const receipt = await fixture.queue.dispatch({
+      type: "session.startAgent",
+      payload: {
+        projectId: "web",
+        worktreeId: worktree.id,
+        freshStart: { expectedSessionId: "ses_fresh_replaced" },
+        terminal: { provider: "fake-terminal" },
+      },
+    });
+    await fixture.queue.drain();
+
+    await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
+      status: "failed",
+      error: {
+        code: "SESSION_FRESH_START_STALE",
+        sessionId: "ses_fresh_replaced",
+      },
+    });
+    expect(terminal.snapshot().closed).toEqual([]);
+    expect(terminal.snapshot().launches).toEqual([]);
+    await expect(fixture.persistence.listSessions()).resolves.toEqual(sessionsBefore);
+    fixture.sqlite.close();
+  });
+
   it("rejects session.startAgent when the provider only retains a missing worktree", async () => {
     const missing = createFakeWorktree({
       id: "wt_web_missing",
@@ -2434,6 +2870,10 @@ describe("session command vertical slice", () => {
       ],
       observedAt: "2026-05-21T11:00:00.000Z",
     });
+    await fixture.persistence.markSessionsEnded({
+      subject: { kind: "worktree", projectId: "web", worktreeId: existingWorktree.id },
+      endedAt: "2026-05-21T11:45:00.000Z",
+    });
     await fixture.core.reconcile("pre-start-agent-remembered");
 
     await fixture.queue.dispatch({
@@ -2732,7 +3172,7 @@ describe("session command vertical slice", () => {
     fixture.sqlite.close();
   });
 
-  it("serializes conflicting start-agent commands by worktree", async () => {
+  it("serializes ordinary start and identity-bound fresh restart by worktree", async () => {
     let releaseFirst = () => {};
     const firstBlocked = new Promise<void>((resolve) => {
       releaseFirst = resolve;
@@ -2773,6 +3213,7 @@ describe("session command vertical slice", () => {
         projectId: "web",
         worktreeId: "wt_web_serial",
         harness: { provider: "fake-harness" },
+        freshStart: { expectedSessionId: "ses_serial_1" },
       },
     });
     await Promise.all([first, second]);
@@ -2783,10 +3224,76 @@ describe("session command vertical slice", () => {
     releaseFirst();
     await fixture.queue.drain();
 
-    expect(launchOrder).toEqual(["ses_serial_1", "ses_serial_2"]);
+    expect(launchOrder).toEqual(["ses_serial_1", "ses_serial_1"]);
     fixture.sqlite.close();
   });
 });
+
+async function createGroupedFreshStartCleanupFixture(closeTargetFailure: SafeError) {
+  const worktree = createFakeWorktree({
+    id: "wt_web_grouped_close_race",
+    projectId: "web",
+    branch: "grouped-close-race",
+    now,
+  });
+  const harness = new FakeHarnessProvider({ now });
+  const terminal = new FakeTerminalProvider({
+    now,
+    targets: [
+      createFakeTerminalTarget({
+        id: "term_grouped_close_race_old",
+        projectId: "web",
+        worktreeId: worktree.id,
+        sessionId: "ses_grouped_close_race",
+        closeable: true,
+        now,
+      }),
+    ],
+    failures: { closeTarget: closeTargetFailure },
+    onLaunch: ({ launchPlan }) => {
+      harness.addRun(
+        createFakeHarnessRun({
+          id: "run_grouped_close_race_new",
+          projectId: "web",
+          worktreeId: worktree.id,
+          sessionId: launchPlan.env?.STATION_SESSION_ID,
+          state: "working",
+          now,
+        }),
+      );
+    },
+  });
+  const fixture = createFixture({
+    worktree: new FakeWorktreeProvider({ now, worktrees: [worktree] }),
+    terminal,
+    harness,
+  });
+  await fixture.persistence.createSessionGroup({
+    id: "grp_close_race",
+    projectId: "web",
+    name: "Close race",
+    createdAt: now,
+  });
+  await fixture.persistence.seedSession({
+    sessionId: "ses_grouped_close_race",
+    projectId: "web",
+    worktreeId: worktree.id,
+    initialTitle: "Grouped close race",
+    harness: "fake-harness",
+    terminalProvider: "fake-terminal",
+    group: { kind: "existing", groupId: "grp_close_race" },
+    createdAt: now,
+    lastSeenAt: now,
+  });
+  await fixture.core.reconcile("pre-grouped-close-race");
+  return {
+    fixture,
+    terminal,
+    worktree,
+    groupsBefore: fixture.core.getSnapshot().sessionGroups,
+    sessionsBefore: await fixture.persistence.listSessions(),
+  };
+}
 
 function createFixture(
   options: {
