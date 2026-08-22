@@ -487,6 +487,7 @@ export async function installConfigScriptHook(input: {
   provider?: ProviderId;
   artifactOwner?: ProviderHookArtifactOwner;
   takeover?: boolean;
+  onMutation?: () => void;
 }): Promise<string | undefined> {
   if (input.provider !== undefined) {
     const currentScript = await input.fileOps.readOptionalFile(input.hookScriptPath);
@@ -503,9 +504,11 @@ export async function installConfigScriptHook(input: {
   if (input.configChanged) {
     backupPath = await input.fileOps.backupIfPresent(input.configPath);
     await input.fileOps.writeHookConfig(input.configPath, input.after);
+    input.onMutation?.();
   }
   if (input.scriptChanged) {
     await input.fileOps.writeHookScript(input.hookScriptPath, input.expectedScript);
+    input.onMutation?.();
   }
   return backupPath;
 }

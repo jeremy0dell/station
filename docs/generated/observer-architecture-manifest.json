@@ -532,13 +532,116 @@
       ]
     },
     {
+      "path": "apps/observer/src/commands/harnessHookHealth.ts",
+      "exports": [
+        {
+          "name": "readHarnessHookHealth",
+          "kind": "function",
+          "role": "USE CASE",
+          "purpose": "Reads provider-neutral hook evidence without invoking any mutation capability."
+        },
+        {
+          "name": "ReadHarnessHookHealthOptions",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "./providers.js",
+          "resolvedPath": "apps/observer/src/commands/providers.ts",
+          "edgeKind": "runtime",
+          "bindings": ["resolveHarnessProviderOrThrow"]
+        },
+        {
+          "specifier": "../diagnostics/errors.js",
+          "resolvedPath": "apps/observer/src/diagnostics/errors.ts",
+          "edgeKind": "runtime",
+          "bindings": ["toSafeError"]
+        },
+        {
+          "specifier": "../providers/registry.js",
+          "resolvedPath": "apps/observer/src/providers/registry.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ProviderRegistry"]
+        },
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "runtime",
+          "bindings": ["ProviderHookHealthSchema"]
+        },
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ProviderHookHealth", "ProviderId"]
+        }
+      ]
+    },
+    {
+      "path": "apps/observer/src/commands/harnessHookReconciliation.ts",
+      "exports": [
+        {
+          "name": "reconcileConfiguredHarnessHooksOrThrow",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ReconcileHarnessHooksOptions",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "reconcileHarnessHooksOrThrow",
+          "kind": "function",
+          "role": "USE CASE",
+          "purpose": "Requests one provider-owned reconciliation and rejects every unverified enabled outcome."
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "./providers.js",
+          "resolvedPath": "apps/observer/src/commands/providers.ts",
+          "edgeKind": "runtime",
+          "bindings": ["resolveHarnessProviderOrThrow"]
+        },
+        {
+          "specifier": "../diagnostics/errors.js",
+          "resolvedPath": "apps/observer/src/diagnostics/errors.ts",
+          "edgeKind": "runtime",
+          "bindings": ["toSafeError"]
+        },
+        {
+          "specifier": "../providers/registry.js",
+          "resolvedPath": "apps/observer/src/providers/registry.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ProviderRegistry"]
+        },
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "type-only",
+          "bindings": [
+            "HarnessProvider",
+            "ProviderHookReconciliationResult",
+            "ProviderId",
+            "SafeError"
+          ]
+        }
+      ]
+    },
+    {
       "path": "apps/observer/src/commands/harnessLaunchPreflight.ts",
       "exports": [
         {
           "name": "assertHarnessLaunchPreconditionsOrThrow",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Freshly verifies the selected harness health and hook delivery immediately before launch mutation."
+          "purpose": "Freshly verifies the selected harness health, reconciles configured hooks, and verifies delivery immediately before launch mutation."
         },
         {
           "name": "HarnessLaunchPreflight",
@@ -559,6 +662,12 @@
           "resolvedPath": "apps/observer/src/commands/cancellation.ts",
           "edgeKind": "runtime",
           "bindings": ["throwIfAborted"]
+        },
+        {
+          "specifier": "./harnessHookReconciliation.js",
+          "resolvedPath": "apps/observer/src/commands/harnessHookReconciliation.ts",
+          "edgeKind": "runtime",
+          "bindings": ["reconcileHarnessHooksOrThrow"]
         },
         {
           "specifier": "./providers.js",
@@ -5077,6 +5186,18 @@
           "purpose": null
         },
         {
+          "name": "readHarnessHookHealth",
+          "kind": "function",
+          "role": "USE CASE",
+          "purpose": "Reads provider-neutral hook evidence without invoking any mutation capability."
+        },
+        {
+          "name": "ReadHarnessHookHealthOptions",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "readObserverSocketHolderPids",
           "kind": "function",
           "role": null,
@@ -5111,6 +5232,24 @@
           "kind": "type",
           "role": null,
           "purpose": null
+        },
+        {
+          "name": "reconcileConfiguredHarnessHooksOrThrow",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ReconcileHarnessHooksOptions",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "reconcileHarnessHooksOrThrow",
+          "kind": "function",
+          "role": "USE CASE",
+          "purpose": "Requests one provider-owned reconciliation and rejects every unverified enabled outcome."
         },
         {
           "name": "ReconcileScheduler",
@@ -5429,6 +5568,18 @@
         {
           "specifier": "./commands/cleanup/index.js",
           "resolvedPath": "apps/observer/src/commands/cleanup/index.ts",
+          "edgeKind": "runtime",
+          "bindings": ["*"]
+        },
+        {
+          "specifier": "./commands/harnessHookHealth.js",
+          "resolvedPath": "apps/observer/src/commands/harnessHookHealth.ts",
+          "edgeKind": "runtime",
+          "bindings": ["*"]
+        },
+        {
+          "specifier": "./commands/harnessHookReconciliation.js",
+          "resolvedPath": "apps/observer/src/commands/harnessHookReconciliation.ts",
           "edgeKind": "runtime",
           "bindings": ["*"]
         },
@@ -10716,6 +10867,12 @@
       ],
       "imports": [
         {
+          "specifier": "../commands/harnessHookReconciliation.js",
+          "resolvedPath": "apps/observer/src/commands/harnessHookReconciliation.ts",
+          "edgeKind": "runtime",
+          "bindings": ["reconcileConfiguredHarnessHooksOrThrow"]
+        },
+        {
           "specifier": "../commands/harnessLaunchPreflight.js",
           "resolvedPath": "apps/observer/src/commands/harnessLaunchPreflight.ts",
           "edgeKind": "runtime",
@@ -12936,7 +13093,7 @@
       "declaration": "runUpdateCommand",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Selects one owned install channel, preflights default live Host preservation, and crosses runtimes through the successor launcher after mutation.",
+      "purpose": "Selects one owned install channel, preflights default live Host preservation, reconciles configured hooks through the selected launcher, and only then crosses runtimes.",
       "dependencies": [
         {
           "path": "apps/cli/src/commands/update/scenario.ts",
@@ -13702,12 +13859,44 @@
       "dependencies": []
     },
     {
+      "path": "apps/observer/src/commands/harnessHookHealth.ts",
+      "declaration": "readHarnessHookHealth",
+      "kind": "function",
+      "role": "USE CASE",
+      "purpose": "Reads provider-neutral hook evidence without invoking any mutation capability.",
+      "dependencies": []
+    },
+    {
+      "path": "apps/observer/src/commands/harnessHookReconciliation.ts",
+      "declaration": "reconcileHarnessHooksOrThrow",
+      "kind": "function",
+      "role": "USE CASE",
+      "purpose": "Requests one provider-owned reconciliation and rejects every unverified enabled outcome.",
+      "dependencies": [
+        {
+          "path": "packages/contracts/src/providers.ts",
+          "declaration": "HarnessProvider",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
       "path": "apps/observer/src/commands/harnessLaunchPreflight.ts",
       "declaration": "assertHarnessLaunchPreconditionsOrThrow",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Freshly verifies the selected harness health and hook delivery immediately before launch mutation.",
-      "dependencies": []
+      "purpose": "Freshly verifies the selected harness health, reconciles configured hooks, and verifies delivery immediately before launch mutation.",
+      "dependencies": [
+        {
+          "path": "apps/observer/src/commands/harnessHookReconciliation.ts",
+          "declaration": "reconcileHarnessHooksOrThrow",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
+        }
+      ]
     },
     {
       "path": "apps/observer/src/commands/project.ts",
@@ -15188,7 +15377,7 @@
       "declaration": "createCodexHarnessProvider",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Supplies Codex launch, discovery, hook normalization, and compatibility admission through the harness port.",
+      "purpose": "Supplies Codex launch, discovery, hook health/reconciliation, normalization, and compatibility admission through the harness port.",
       "dependencies": [
         {
           "path": "packages/contracts/src/providers.ts",

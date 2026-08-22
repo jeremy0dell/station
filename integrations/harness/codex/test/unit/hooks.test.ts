@@ -6,8 +6,10 @@ import { providerHookScriptRoutesByStationEnv } from "@station/runtime";
 import { describe, expect, it } from "vitest";
 import {
   doctorCodexHooks,
+  inspectCodexHookHealth,
   installCodexHooks,
   planCodexHooks,
+  reconcileCodexHooks,
   uninstallCodexHooks,
   verifyCodexHookInstall,
 } from "../../src/hooks";
@@ -223,22 +225,16 @@ describe("Codex hook setup", () => {
         hookScriptPath,
         message: expect.stringContaining("script is missing or stale"),
       },
-      message: expect.stringContaining("provider verification requires manual follow-up"),
+      message: expect.stringContaining("provider doctor did not verify them"),
     });
     if (!("doctor" in verification)) {
       throw new Error("Expected post-write drift to return the complete Codex doctor result.");
     }
-    expect(verification.message).toContain(verification.doctor.message);
-    expect(verification.message).toContain(
-      "stn --config /tmp/station/config.toml hooks doctor codex",
-    );
-    expect(verification.message).toContain(
-      "stn --config /tmp/station/config.toml hooks install codex --yes",
-    );
-    expect(verification.message).toContain("repair the same resolved artifacts");
-    expect(verification.message).toContain(`--codex-config ${configPath}`);
-    expect(verification.message).toContain(`--hook-script ${hookScriptPath}`);
-    expect(verification.message).toContain("--hook-bin /opt/custom-stn-ingress");
+    expect(verification.message).not.toContain(verification.doctor.message);
+    expect(verification.message).not.toContain("/tmp/station");
+    expect(verification.message).not.toContain(configPath);
+    expect(verification.message).not.toContain(hookScriptPath);
+    expect(verification.message).not.toContain("--hook-bin");
     await expect(readFile(hookScriptPath, "utf8")).resolves.toBe("post-write drift\n");
     await expect(readFile(configPath, "utf8")).resolves.toContain(hookScriptPath);
     await expect(readFile(baseConfigPath, "utf8")).resolves.not.toContain("Notify station");
@@ -273,16 +269,13 @@ describe("Codex hook setup", () => {
         code: "CODEX_HOOK_INVALID_TOML",
         provider: "codex",
       },
-      message: expect.stringContaining("provider verification requires manual follow-up"),
+      message: expect.stringContaining("provider doctor did not verify them"),
     });
     expect("doctor" in verification).toBe(false);
-    expect(verification.message).toContain(
-      `--codex-config ${configPath} --hook-script ${hookScriptPath}`,
-    );
-    expect(verification.message).toContain(
-      "stn --config /tmp/station/config.toml hooks install codex --yes",
-    );
-    expect(verification.message).toContain("Correct invalid configuration or ownership first");
+    expect(verification.message).not.toContain(configPath);
+    expect(verification.message).not.toContain(hookScriptPath);
+    expect(verification.message).not.toContain("/tmp/station/config.toml");
+    expect(verification.message).toContain("Correct the reported configuration or ownership issue");
     await expect(readFile(configPath, "utf8")).resolves.toBe("not = [valid");
     await expect(readFile(hookScriptPath, "utf8")).resolves.toContain("codex > /dev/null");
   });
@@ -424,6 +417,108 @@ describe("Codex hook setup", () => {
     });
   });
 
+  it("maps disabled and missing hooks to strict provider-neutral health", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-codex-hooks-"));
+    const options = {
+      hookScriptPath: join(root, "state", "hooks", "station-codex-hook.sh"),
+      env: codexEnv(root),
+    };
+
+    await expect(inspectCodexHookHealth({ ...options, enabled: false })).resolves.toEqual({
+      provider: "codex",
+      status: "configured-disabled",
+      followUp: { action: "enable-hooks" },
+    });
+    await expect(inspectCodexHookHealth({ ...options, enabled: true })).resolves.toEqual({
+      provider: "codex",
+      status: "needs-repair",
+      reason: "missing",
+    });
+  });
+
+  it("repairs owned drift, verifies it, and makes the second reconciliation a no-op", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-codex-hooks-"));
+    const hookScriptPath = join(root, "state", "hooks", "station-codex-hook.sh");
+    const artifactOwner = owner("/station/bin/stn-ingress", "a");
+    const options = { hookScriptPath, artifactOwner, env: codexEnv(root), enabled: true };
+    await installCodexHooks(options);
+    const installedScript = await readFile(hookScriptPath, "utf8");
+    await writeFile(hookScriptPath, `${installedScript}# owned drift\n`, "utf8");
+
+    await expect(inspectCodexHookHealth(options)).resolves.toEqual({
+      provider: "codex",
+      status: "needs-repair",
+      reason: "owned-drift",
+    });
+    await expect(reconcileCodexHooks(options)).resolves.toEqual({
+      provider: "codex",
+      status: "repaired",
+      changed: true,
+      verified: true,
+    });
+    await expect(reconcileCodexHooks(options)).resolves.toEqual({
+      provider: "codex",
+      status: "healthy",
+      changed: false,
+      verified: true,
+    });
+  });
+
+  it("fails closed on foreign ownership without exposing provider paths", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-codex-hooks-secret-"));
+    const hookScriptPath = join(root, "state", "hooks", "station-codex-hook.sh");
+    const env = codexEnv(root);
+    await installCodexHooks({ hookScriptPath, artifactOwner: owner("/old/stn-ingress", "a"), env });
+
+    const options = {
+      hookScriptPath,
+      artifactOwner: owner("/new/stn-ingress", "b"),
+      env,
+      enabled: true,
+    };
+    const health = await inspectCodexHookHealth(options);
+    const reconciliation = await reconcileCodexHooks(options);
+
+    expect(health).toEqual({
+      provider: "codex",
+      status: "ownership-conflict",
+      ownership: "different-owner",
+      followUp: { action: "run-explicit-takeover" },
+    });
+    expect(reconciliation).toEqual({
+      provider: "codex",
+      status: "ownership-conflict",
+      changed: false,
+      verified: false,
+      followUp: { action: "run-explicit-takeover" },
+    });
+    expect(JSON.stringify({ health, reconciliation })).not.toContain(root);
+  });
+
+  it("serializes concurrent reconciliation through one writer and one backup", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-codex-hooks-"));
+    const codexHome = join(root, "codex-home");
+    const configPath = join(codexHome, "station.config.toml");
+    await mkdir(codexHome, { recursive: true });
+    await writeFile(configPath, existingCodexConfig(), "utf8");
+    const options = {
+      hookScriptPath: join(root, "state", "hooks", "station-codex-hook.sh"),
+      env: { CODEX_HOME: codexHome },
+      enabled: true,
+    };
+
+    const results = await Promise.all([
+      reconcileCodexHooks(options),
+      reconcileCodexHooks(options),
+      reconcileCodexHooks(options),
+    ]);
+
+    expect(results.filter((result) => result.status === "repaired")).toHaveLength(1);
+    expect(results.filter((result) => result.status === "healthy")).toHaveLength(2);
+    expect((await readdir(codexHome)).filter((entry) => entry.includes(".bak."))).toHaveLength(1);
+    expect((await readdir(codexHome)).filter((entry) => entry.endsWith(".lock"))).toEqual([]);
+  });
+
   it("warns when generated global Codex hook entries remain", async () => {
     const root = await mkdtemp(join(tmpdir(), "station-codex-hooks-"));
     const codexHome = join(root, "codex-home");
@@ -522,6 +617,16 @@ function shellQuote(value: string): string {
 
 function codexEnv(root: string): Record<string, string> {
   return { CODEX_HOME: join(root, "codex-home") };
+}
+
+function owner(launcher: string, identityCharacter: string) {
+  return {
+    schemaVersion: 1 as const,
+    launcher,
+    runtimeKind: "compiled" as const,
+    version: "0.0.0-test",
+    buildIdentity: identityCharacter.repeat(64),
+  };
 }
 
 function existingCodexConfig(): string {

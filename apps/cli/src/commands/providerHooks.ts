@@ -1,6 +1,11 @@
 import { dirname, resolve } from "node:path";
 import { resolveObserverPaths, type StationConfig } from "@station/config";
-import type { ProviderHookArtifactOwner, ProviderId, SafeError } from "@station/contracts";
+import type {
+  ProviderHookArtifactOwner,
+  ProviderHookReconciliationResult,
+  ProviderId,
+  SafeError,
+} from "@station/contracts";
 import {
   ProviderHookArtifactOwnershipError,
   resolveExecutablePath,
@@ -36,6 +41,7 @@ type ProviderHooksAdapter<
   ) => Promise<VerifiedInstallResult>;
   uninstall: (options: PlanOptions) => Promise<unknown>;
   doctor: (options: PlanOptions & { enabled?: boolean }) => Promise<unknown>;
+  reconcile?: (options: PlanOptions) => Promise<ProviderHookReconciliationResult>;
   buildOptions: (flags: ParsedHookFlags, context: HookCommandContext) => PlanOptions;
   // Receives the possibly-absent config so each provider owns its no-config
   // default (worktrunk lifecycle hooks are default-on; others default-off).
@@ -157,8 +163,8 @@ export function assertHookConfirmed(
 }
 
 /**
- * Runs the shared provider-hook command flow. Adapters that opt into install verification report
- * success only after their provider doctor checks the exact resolved inputs used by installation.
+ * Runs the shared provider-hook command flow. Verified install and automatic reconciliation stay
+ * provider-owned; the latter cannot receive takeover authority from this adapter.
  */
 export function createProviderHooksRunner<
   PlanOptions extends CommonHookOptions,
@@ -176,6 +182,9 @@ export function createProviderHooksRunner<
     const flags = parseHookFlags(args.slice(1), adapter.provider, flagSpec);
     const context = await resolveHookBinOwnership(flags, options, adapter.provider);
     const hookOptions = adapter.buildOptions(flags, context);
+    if (action === "reconcile" && flags.takeover) {
+      throw new Error("Automatic hook reconciliation never accepts --takeover.");
+    }
     if (flags.takeover) hookOptions.takeover = true;
 
     try {
@@ -204,6 +213,9 @@ export function createProviderHooksRunner<
           enabled: adapter.isEnabled(options.config),
         });
       }
+      if (action === "reconcile" && adapter.reconcile !== undefined) {
+        return await adapter.reconcile(hookOptions);
+      }
     } catch (error) {
       if (error instanceof ProviderHookArtifactOwnershipError) {
         throw providerHookOwnershipSafeError(error);
@@ -212,7 +224,7 @@ export function createProviderHooksRunner<
     }
 
     throw new Error(
-      `Usage: station hooks plan|install|uninstall|doctor ${adapter.provider} [--yes]`,
+      `Usage: station hooks plan|install|uninstall|doctor|reconcile ${adapter.provider} [--yes]`,
     );
   };
 }

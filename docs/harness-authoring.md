@@ -71,6 +71,19 @@ integration's documentation of record; prose goes stale, fixtures fail loudly.
 - Hook transports: wire `stn hooks doctor <name>` so installation is
   verifiable, and remember doctor verifies *installation*, not build identity —
   check that `stn` and `stn-ingress` on PATH resolve to the same checkout.
+- If hooks are declarative, implement `hookHealth()` as a read-only mapping to
+  the strict provider-neutral contract and `reconcileHooks()` as the only
+  orchestration mutation capability. Resolve plan, install, and doctor from the
+  same provider profile and paths; reuse the provider's existing writer;
+  preserve backups; serialize overlapping entry points; and make the second
+  reconciliation a doctor-verified no-op.
+- Keep provider paths, file parsing, native diagnostics, raw commands, config
+  fragments, and payloads inside the integration. Neutral results expose only
+  bounded statuses, `changed`/`verified`, `SafeError`, and an enumerated follow-up
+  action. Build optional fields explicitly for `exactOptionalPropertyTypes`.
+- Automatic reconciliation must fail closed on foreign or unknown ownership and
+  never accept takeover authority. The manual confirmed install surface remains
+  the only ownership-transfer path.
 - Add the harness to setup checks if it needs system dependencies.
 - Setup tracking preparation must call the same typed provider installer in-process through the setup adapter. Return only installed/changed and backup-path commit evidence; provider plans, commands, before/after source, and other native result fields must not cross the setup port or print in guided output.
 
@@ -79,6 +92,9 @@ integration's documentation of record; prose goes stale, fixtures fail loudly.
 - Report `canLaunch: false` only when the adapter cannot construct or execute a launch.
 - Make `health()` freshly prove CLI/runtime availability without conflating unknown authentication or trust with unavailability. Preserve actionable provider errors in `lastError`.
 - Implement provider-local `hooksStatus()` when Station tracking artifacts are required for a managed launch. Report whether hooks were requested, whether they are installed, and the exact missing artifacts so shared policy can provide config-aware remediation.
+- When `reconcileHooks()` is implemented, launch and resume preflight request it
+  before the delivery gate and before terminal or provider mutation. An enabled
+  repair is successful only after doctor verifies the same resolved artifacts.
 - Omit `hooksStatus()` when the provider has no equivalent requirement. The shared launch policy intentionally permits such providers; do not invent a hook gate for them.
 - Keep setup and doctor richer than launch policy. Launch preflight consumes capability, health, and hook facts transiently and must not introduce provider-specific readiness state into Observer/core.
 
