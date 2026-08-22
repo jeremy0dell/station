@@ -8,6 +8,7 @@ import type {
 import { publicSafeErrorFromUnknown, shellQuote } from "@station/runtime";
 import type { CliRunResult } from "../../cliTypes.js";
 import type { PlannedUpdateChannel } from "../../update/channelDetection.js";
+import { renderUpdateRecoveryPreflight } from "../../update/recoveryPreflight.js";
 import type { UpdateRequest } from "./args.js";
 import type { HostHandoffScenario, UpdateScenario } from "./scenario.js";
 
@@ -106,7 +107,7 @@ function formatCommand(command: readonly string[]): string {
 
 export function createUpdateReport(selected: PlannedUpdateChannel): UpdateCommandReport {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     channel: selected.channel,
     status: "planned",
     current: artifact(selected.plan.currentVersion, selected.plan.currentRevision),
@@ -275,6 +276,9 @@ function renderUpdateReport(report: UpdateCommandReport): string {
   for (const warning of report.warnings) lines.push(`warning: ${warning.message}`);
   if (report.hookReconciliation !== undefined) {
     lines.push(`hooks: ${report.hookReconciliation.status}`);
+  }
+  if (report.recoveryPreflight !== undefined) {
+    lines.push(...renderUpdateRecoveryPreflight(report.recoveryPreflight).trimEnd().split("\n"));
   }
   if (report.error !== undefined)
     lines.push(`error: ${report.error.message} (${report.error.code})`);

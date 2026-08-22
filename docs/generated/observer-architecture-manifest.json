@@ -13600,7 +13600,7 @@
       "declaration": "runUpdateCommand",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Selects one owned install channel, preflights default live Host preservation, reconciles configured hooks through the selected launcher, and only then crosses runtimes.",
+      "purpose": "Selects one owned install channel and optionally aggregates non-authorizing recovery facts. Apply mode then preflights Host preservation, reconciles hooks through the selected launcher, and crosses runtimes; recovery preflight itself exposes no mutation capability.",
       "dependencies": [
         {
           "path": "apps/cli/src/commands/update/scenario.ts",
