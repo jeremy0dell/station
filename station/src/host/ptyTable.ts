@@ -36,6 +36,7 @@ import {
   type PtyEntryInit,
 } from "./ptyEntry.js";
 import {
+  classifyPtyHandoffSupport,
   createPtyHandoff,
   type PtyAdoptionReport,
   type PtyHandoffReleaseReport,
@@ -103,6 +104,7 @@ export type PtySnapshot = {
 export type PtyTable = {
   /** Reuse only identical targets; failed activation frees both indexes and disposes new resources. */
   spawn(params: HostSpawnParams): PtySpawnOutcome;
+  /** List exact PTY lifetimes plus read-only handoff support without exporting or parking them. */
   list(): HostListEntry[];
   snapshot(ptyId: string): PtySnapshot;
   /**
@@ -659,6 +661,7 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
           alive: !entry.exited,
           cols: entry.cols,
           rows: entry.rows,
+          handoffSupport: classifyPtyHandoffSupport({ entry, orphanBridges }),
         });
       }
       return list;

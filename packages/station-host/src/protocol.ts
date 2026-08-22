@@ -207,6 +207,16 @@ export const HostResizeParamsSchema = HostAttachmentCapabilitySchema.extend({
   rows: z.number().int(),
 }).strict();
 export const HostOkResultSchema = z.object({ ok: z.literal(true) }).strict();
+export const HostPtyHandoffSupportSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("bridge-releasable") }).strict(),
+  z
+    .object({
+      kind: z.literal("non-releasable"),
+      reason: z.enum(["no-bridge-transport", "orphan-mode-disabled", "release-unsupported"]),
+    })
+    .strict(),
+]);
+export type HostPtyHandoffSupport = z.infer<typeof HostPtyHandoffSupportSchema>;
 /** Live inventory entry whose reference and immutable identity derive from one table entry. */
 export const HostListEntrySchema = HostPtyWireIdentitySchema.extend({
   ptyId: idSchema,
@@ -215,6 +225,8 @@ export const HostListEntrySchema = HostPtyWireIdentitySchema.extend({
   alive: z.boolean(),
   cols: z.number().int(),
   rows: z.number().int(),
+  /** Optional so a newer inspector can represent older same-protocol Hosts as unknown. */
+  handoffSupport: HostPtyHandoffSupportSchema.optional(),
 }).strict();
 export type HostListEntry = z.infer<typeof HostListEntrySchema>;
 

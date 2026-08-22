@@ -68,6 +68,13 @@ describe("createPtyTable registry export", () => {
     const { ptyId, ptyInstanceId } = table.spawn(baseParams);
     spawned[0]?.scripted.helpers.emitData("exported-output");
 
+    expect(table.list()).toMatchObject([
+      {
+        ptyId,
+        handoffSupport: { kind: "non-releasable", reason: "release-unsupported" },
+      },
+    ]);
+
     const manifest = await table.exportRegistry();
     const entry = manifest[ptyId];
     expect(entry).toBeDefined();
@@ -484,6 +491,9 @@ describe("createPtyTable registry adoption", () => {
       }),
     });
     const { ptyId } = table.spawn(baseParams);
+    expect(table.list()).toMatchObject([
+      { ptyId, handoffSupport: { kind: "bridge-releasable" } },
+    ]);
     const report = await table.releaseRegistryForHandoff("processes");
     expect(report.released).toEqual([ptyId]);
     expect(report.manifest[ptyId]?.bridgePid).toEqual(1_001);

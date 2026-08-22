@@ -1,8 +1,13 @@
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { type FileHandle, link, open, readFile, rename, unlink } from "node:fs/promises";
+import { constants } from "node:fs";
+import { type FileHandle, link, open, rename, unlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { type ObserverProcessIdentity, ObserverProcessIdentitySchema } from "@station/contracts";
+import {
+  type ObserverProcessIdentityRepair,
+  observerProcessIdentitiesMatch,
+} from "./observerProcessIdentity.js";
 
 export type CreateObserverProcessIdentityOptions = {
   pid: number;
@@ -30,19 +35,6 @@ async function syncDirectory(path: string): Promise<void> {
   } finally {
     await directory.close();
   }
-}
-
-export function observerProcessIdentitiesMatch(
-  actual: ObserverProcessIdentity,
-  expected: ObserverProcessIdentity,
-): boolean {
-  return (
-    actual.pid === expected.pid &&
-    actual.osStartTime === expected.osStartTime &&
-    actual.processToken === expected.processToken &&
-    actual.version === expected.version &&
-    actual.socketPath === expected.socketPath
-  );
 }
 
 function isMissingFile(error: unknown): boolean {
@@ -109,8 +101,7 @@ export async function readObserverProcessIdentity(
   socketPath: string,
 ): Promise<ObserverProcessIdentity | undefined> {
   try {
-    const serialized = await readFile(observerPidfilePath(socketPath), "utf8");
-    return ObserverProcessIdentitySchema.parse(JSON.parse(serialized));
+    return await readStrictObserverProcessIdentity(observerPidfilePath(socketPath));
   } catch (error) {
     if (isMissingFile(error)) {
       return undefined;
@@ -135,9 +126,7 @@ export async function removeObserverProcessIdentity(
 
   let currentIdentity: ObserverProcessIdentity;
   try {
-    currentIdentity = ObserverProcessIdentitySchema.parse(
-      JSON.parse(await readFile(claimedPath, "utf8")),
-    );
+    currentIdentity = await readStrictObserverProcessIdentity(claimedPath);
   } catch (error) {
     try {
       await restoreClaimedIdentity(claimedPath, path);
@@ -177,4 +166,30 @@ export async function removeObserverProcessIdentity(
   }
   await syncDirectory(dirname(path));
   return true;
+}
+
+/**
+ * ADAPTER
+ *
+ * Exposes strict pidfile reads and atomic exact-identity removal to stale
+ * evidence repair without granting broader filesystem mutation.
+ */
+export function createLocalObserverProcessIdentityRepair(): ObserverProcessIdentityRepair {
+  return {
+    read: readObserverProcessIdentity,
+    removeIfExact: removeObserverProcessIdentity,
+  };
+}
+
+async function readStrictObserverProcessIdentity(path: string): Promise<ObserverProcessIdentity> {
+  const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+  try {
+    const metadata = await file.stat();
+    if (!metadata.isFile() || (metadata.mode & 0o777) !== 0o600) {
+      throw new Error("Observer process identity must be a private regular file.");
+    }
+    return ObserverProcessIdentitySchema.parse(JSON.parse(await file.readFile("utf8")));
+  } finally {
+    await file.close();
+  }
 }

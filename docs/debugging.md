@@ -134,6 +134,13 @@ confirms a normal mutation but does not transfer ownership; only run
 intentional. Setup apply deliberately stops on this conflict instead of choosing
 an owner.
 
+For automatic Codex hook repair, `stn hooks reconcile codex` returns the strict
+provider-neutral outcome without resolved paths, scripts, raw commands, config,
+or provider payloads. Use `stn hooks doctor codex` for provider-native local
+detail. Automatic setup, update, Observer startup, managed launch, and resume
+never transfer ownership; an ownership conflict must be resolved through the
+separate explicit takeover flow.
+
 ## State Directory
 
 The default observer state directory is:
@@ -205,6 +212,23 @@ process or unlink a socket from this file alone. Clean shutdown removes the
 file only when the Observer still owns the socket and every identity field
 matches its published value.
 
+`stn observer start`, `stop`, and `restart` self-heal a strict stale pidfile only
+while holding the Observer boot claim. Repair positively distinguishes a missing
+process or exact identity drift, repeats pidfile/process/socket checks, and uses an
+atomic compare/remove operation. It never signals and never unlinks the socket.
+An idempotent stop returns `stopped: false` with `evidenceRepair.socket`,
+`evidenceRepair.pidfile`, and, after removal, a non-sensitive drift `reason`.
+`OBSERVER_STALE_EVIDENCE_UNCERTAIN` means ownership could not be proven stale;
+`OBSERVER_STALE_EVIDENCE_OWNER_CHANGED` means evidence changed during the bounded
+repair; `OBSERVER_STALE_EVIDENCE_REPAIR_FAILED` means the exact atomic pidfile
+operation failed. Preserve current evidence and inspect `stn observer status`,
+`lsof -t <socket>`, the strict pidfile, and `ps -ww -p <pid> -o lstart=,command=`.
+Child startup surfaces these codes as the separate lifecycle `cause`, so
+`stn debug trace --latest-failure` and `stn debug logs` keep the outer startup
+classification distinct. Repair logs and receipts contain only socket state and
+the typed drift reason; raw argv, process tokens, and collected OS errors are not
+included.
+
 `OBSERVER_SOCKET_INACCESSIBLE` means the socket exists but Station could neither
 connect nor prove it stale. Preserve the socket and pidfile. Restore socket access
 (normally `chmod 600 <socket>`), compare `lsof -t <socket>` with the strict
@@ -244,9 +268,20 @@ Auto-starting `snapshot`, `doctor`, `command`, `reconcile`, `observe`, and
 `debug bundle` boundaries preserve failures as the strict `{ error, cause?,
 startupEvidence? }` lifecycle envelope instead of flattening them into prose.
 Setup activation retains the same fields in its failed operation/session
-outcome. `stn update --json` keeps `UPDATE_RUNTIME_CROSSOVER_FAILED` as its outer
-`error` and publishes the strictly parsed successor lifecycle `cause` and
-`startupEvidence` separately.
+outcome. Update report schema version 2 adds the provider-neutral
+`hookReconciliation` result and `hook-reconciliation` step. Schema version 3
+adds the optional `recoveryPreflight` assessment; compatible readers retain
+explicit version 1 and version 2 parsers instead of accepting version backports.
+Use `stn update --dry-run --reap --json` to collect the redacted aggregate
+Observer, Host, terminal, retained-session, resume-capability, handle-selection,
+and hook-health evidence without changing runtime state. Unknown or drifting
+identity remains typed in the report, and non-resumable dispositions are
+explicit. The assessment contains no executable action or digest. A
+same-version update reconciles through the current launcher; an installed
+successor reconciles through the successor launcher before Observer restart.
+Hook failure prevents runtime crossover. `stn update --json` keeps
+`UPDATE_RUNTIME_CROSSOVER_FAILED` as its outer `error` and publishes the
+strictly parsed successor lifecycle `cause` and `startupEvidence` separately.
 
 `OBSERVER_EXACT_BUILD_ACTIVATION_FAILED` means an explicit configured-runtime
 activation could not finish with the caller's exact immutable selector. The

@@ -3,6 +3,11 @@ import {
   type ObserverLifecycleFailure,
   ObserverLifecycleFailureSchema,
   ObserverRestartCommandResultSchema,
+  type ProviderHookReconciliationResult,
+  ProviderHookReconciliationResultSchema,
+  type SafeError,
+  type UpdateArtifact,
+  type UpdateReapRecoveryPreflight,
 } from "@station/contracts";
 import {
   type ExternalCommandRunner,
@@ -27,6 +32,7 @@ import {
   currentUpdateResult,
   deferredUpdateResult,
   failedUpdateResult,
+  previewCurrentUpdateResult,
   previewUpdateResult,
   type UpdateCommandReport,
   updatedUpdateResult,
@@ -51,6 +57,11 @@ export type UpdateCommandDeps = {
   executablePath?: string;
   commandRunner?: ExternalCommandRunner;
   hostDeps?: HostCommandDeps;
+  /** Runs the composed read-only assessment required only by `--dry-run --reap`. */
+  recoveryPreflight?: (input: {
+    installed: UpdateArtifact;
+    target: UpdateArtifact;
+  }) => Promise<UpdateReapRecoveryPreflight>;
 };
 
 type ExecutableUpdateScenario = Extract<
@@ -63,7 +74,9 @@ const OBSERVER_CROSSOVER_TIMEOUT_MS = 20_000;
 /**
  * ADAPTER
  *
- * Selects one owned install channel, preflights default live Host preservation, and crosses runtimes through the successor launcher after mutation.
+ * Selects one owned install channel and optionally aggregates non-authorizing recovery facts.
+ * Apply mode then preflights Host preservation, reconciles hooks through the selected launcher,
+ * and crosses runtimes; recovery preflight itself exposes no mutation capability.
  */
 export async function runUpdateCommand(
   args: readonly string[],
@@ -76,6 +89,19 @@ export async function runUpdateCommand(
     ...(request.channel === undefined ? {} : { requested: request.channel }),
   });
   const report = createUpdateReport(selected);
+  if (request.reap) {
+    if (deps.recoveryPreflight === undefined) {
+      throw {
+        tag: "UpdatePreflightError",
+        code: "UPDATE_PREFLIGHT_PORTS_UNAVAILABLE",
+        message: "Update recovery preflight is unavailable in this CLI composition.",
+      } satisfies SafeError;
+    }
+    report.recoveryPreflight = await deps.recoveryPreflight({
+      installed: report.current,
+      target: report.target,
+    });
+  }
   const scenario = await resolveUpdateScenario({
     selected,
     request,
@@ -85,7 +111,10 @@ export async function runUpdateCommand(
 
   switch (scenario.kind) {
     case "already-current":
-      return currentUpdateResult(report, request.output);
+      if (request.mode === "preview") {
+        return previewCurrentUpdateResult(report, request.output);
+      }
+      return reconcileCurrentInstallation(selected, report, request, options, deps.commandRunner);
     case "preview":
       return previewUpdateResult(report, scenario, request.output);
     case "defer-to-package-manager":
@@ -158,7 +187,17 @@ async function crossOverRuntime(
   options: UpdateCommandOptions,
   commandRunner: ExternalCommandRunner | undefined,
 ): Promise<CliRunResult> {
-  // Crossover must use the successor launcher: Observer first, then any planned Host handoff.
+  const hookCommand = stationCommand(successorCli, options.configPath, [
+    "hooks",
+    "reconcile",
+    "codex",
+  ]);
+  const hookFailure = await reconcileUpdateHooks(report, hookCommand, commandRunner);
+  if (hookFailure !== undefined) {
+    return failedUpdateResult(report, "hook-reconciliation", hookFailure, [], request.output);
+  }
+
+  // Crossover must use the successor launcher: hooks first, then Observer and Host.
   const observerCommand = stationCommand(successorCli, options.configPath, [
     "observer",
     "restart",
@@ -206,6 +245,116 @@ async function crossOverRuntime(
   }
 
   return updatedUpdateResult(report, hostHandoff, request.output);
+}
+
+async function reconcileCurrentInstallation(
+  selected: PlannedUpdateChannel,
+  report: UpdateCommandReport,
+  request: UpdateRequest,
+  options: UpdateCommandOptions,
+  commandRunner: ExternalCommandRunner | undefined,
+): Promise<CliRunResult> {
+  report.steps.push(
+    updateStep("apply", "skipped", "The selected installation already matches its target."),
+  );
+  const command = stationCommand(selected.plan.currentCli, options.configPath, [
+    "hooks",
+    "reconcile",
+    "codex",
+  ]);
+  const failure = await reconcileUpdateHooks(report, command, commandRunner);
+  if (failure !== undefined) {
+    return failedUpdateResult(report, "hook-reconciliation", failure, [], request.output);
+  }
+  return currentUpdateResult(report, request.output);
+}
+
+async function reconcileUpdateHooks(
+  report: UpdateCommandReport,
+  command: UpdateCommandArgv,
+  runner: ExternalCommandRunner | undefined,
+): Promise<SafeError | undefined> {
+  try {
+    const result = await runHookReconciliation(command, runner);
+    report.hookReconciliation = result;
+    switch (result.status) {
+      case "configured-disabled":
+        report.steps.push(
+          updateStep(
+            "hook-reconciliation",
+            "completed",
+            "Configured provider hook installation is disabled.",
+          ),
+        );
+        return undefined;
+      case "unsupported":
+        report.steps.push(
+          updateStep(
+            "hook-reconciliation",
+            "completed",
+            "The selected provider does not support managed hooks.",
+          ),
+        );
+        return undefined;
+      case "healthy":
+        report.steps.push(
+          updateStep("hook-reconciliation", "completed", "Configured provider hooks are healthy."),
+        );
+        return undefined;
+      case "repaired":
+        report.steps.push(
+          updateStep(
+            "hook-reconciliation",
+            "completed",
+            "Configured provider hooks were repaired and verified.",
+          ),
+        );
+        return undefined;
+      case "ownership-conflict":
+        return updateErrorFromUnknown(undefined, {
+          code: "UPDATE_HOOK_OWNERSHIP_CONFLICT",
+          message: "Configured provider hooks are owned by another installation.",
+          hint: "Use the explicit Codex hook takeover flow before retrying the update.",
+        });
+      case "write-failed":
+      case "post-write-doctor-failed":
+      case "inspection-failed":
+        return result.error;
+    }
+  } catch (error) {
+    return updateErrorFromUnknown(error, {
+      code: "UPDATE_HOOK_RECONCILIATION_FAILED",
+      message: "Station could not verify configured provider hooks.",
+      hint: "Run provider hook doctor and retry the update after correcting the reported issue.",
+    });
+  }
+}
+
+async function runHookReconciliation(
+  command: UpdateCommandArgv,
+  runner: ExternalCommandRunner | undefined,
+): Promise<ProviderHookReconciliationResult> {
+  const [executable, ...args] = command;
+  const result = await runExternalCommand(
+    {
+      command: executable,
+      args,
+      timeoutMs: 60_000,
+      maxOutputChars: 64 * 1024,
+      allowedExitCodes: [1],
+    },
+    runner,
+  );
+  const parsed = ProviderHookReconciliationResultSchema.parse(JSON.parse(result.stdout));
+  const succeeded =
+    parsed.status === "configured-disabled" ||
+    parsed.status === "unsupported" ||
+    parsed.status === "healthy" ||
+    parsed.status === "repaired";
+  if ((result.exitCode === 0) !== succeeded) {
+    throw new Error("Hook reconciliation result contradicted its process exit status.");
+  }
+  return parsed;
 }
 
 async function runCrossover(command: UpdateCommandArgv, runner: ExternalCommandRunner | undefined) {

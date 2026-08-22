@@ -13,6 +13,7 @@ import {
   type ObserverApi,
   type ObserverProcessIdentity,
   ObserverProcessTokenSchema,
+  type ObserverStaleEvidenceRepairSummary,
   type ObserverStopReceipt,
   type SafeError,
 } from "@station/contracts";
@@ -24,6 +25,7 @@ import {
   systemClock,
   toIsoTimestamp,
 } from "@station/runtime";
+import { reconcileConfiguredHarnessHooksOrThrow } from "../commands/harnessHookReconciliation.js";
 import {
   assertHarnessLaunchPreconditionsOrThrow,
   type HarnessLaunchPreflight,
@@ -53,16 +55,25 @@ import {
   type ObserverBootClaimReleaseResult,
 } from "./observerBootClaim.js";
 import {
+  observerEvidenceOwnerChangedRefusal,
+  repairStaleObserverEvidence,
+} from "./observerEvidenceRepair.js";
+import {
   negotiateObserverIncumbent,
   type ObserverIncumbentLifecycle,
   type ObserverProcessEvidenceSource,
 } from "./observerHandoff.js";
 import {
+  createLocalObserverProcessIdentityRepair,
   createObserverProcessIdentity,
   publishObserverProcessIdentity,
   removeObserverProcessIdentity,
 } from "./observerPidfile.js";
 import { createLocalObserverProcessEvidence } from "./observerProcessEvidence.js";
+import type {
+  ObserverProcessExistenceEvidenceSource,
+  ObserverProcessIdentityRepair,
+} from "./observerProcessIdentity.js";
 import {
   inspectObserverDuplicates,
   type ObserverDuplicateProcessEvidenceSource,
@@ -117,6 +128,8 @@ export type RunObserverMainDeps = {
   buildVersion?: string;
   incumbentLifecycle?: ObserverIncumbentLifecycle;
   processEvidence?: ObserverProcessEvidenceSource;
+  processExistenceEvidence?: ObserverProcessExistenceEvidenceSource;
+  processIdentityRepair?: ObserverProcessIdentityRepair;
   duplicateProcessEvidence?: ObserverDuplicateProcessEvidenceSource;
   handoffNow?: () => number;
   handoffSleep?: (ms: number) => Promise<void>;
@@ -129,11 +142,12 @@ export type RunObserverMainDeps = {
 /**
  * COMPOSITION ROOT
  *
- * Claims boot ownership, branches on four-state socket evidence, selects
- * Observer-private infrastructure from resolved runtime identity, and owns bind,
- * pidfile, read-only duplicate inspection, ownership-aware shutdown, and exact build
- * health publication. Successful publication notifies the injected readiness sink;
- * startup rejection retains the original failure after best-effort cleanup.
+ * Claims boot ownership, branches on four-state socket evidence, repairs only
+ * positively stale strict pidfile evidence, selects Observer-private infrastructure
+ * from resolved runtime identity, and owns bind, pidfile, read-only duplicate
+ * inspection, ownership-aware shutdown, and exact build health publication.
+ * Successful publication notifies the injected readiness sink; startup rejection
+ * retains the original failure after best-effort cleanup.
  */
 export async function runObserverMain(
   argv = process.argv.slice(2),
@@ -178,15 +192,23 @@ export async function runObserverMain(
   // pidfile cleanup; the ready gate performs the normal early release.
   try {
     const probeTimeoutMs = Math.max(MIN_STARTUP_BUDGET_MS, startupDeadline - handoffNow());
-    const processEvidence =
-      startupPolicy === "generic"
-        ? (deps.processEvidence ?? createLocalObserverProcessEvidence())
+    const localProcessEvidence =
+      deps.processEvidence === undefined || deps.processExistenceEvidence === undefined
+        ? createLocalObserverProcessEvidence({
+            evidenceTimeoutMs: Math.max(
+              MIN_STARTUP_BUDGET_MS,
+              Math.min(1_000, startupDeadline - handoffNow()),
+            ),
+          })
         : undefined;
+    const processEvidence = deps.processEvidence ?? localProcessEvidence;
+    const processExistenceEvidence = deps.processExistenceEvidence ?? localProcessEvidence;
+    if (processEvidence === undefined || processExistenceEvidence === undefined) {
+      throw new Error("Observer startup requires exact process evidence.");
+    }
     const socketProbe = await probeObserverSocket(socketPath, {
       timeoutMs: probeTimeoutMs,
-      ...(processEvidence === undefined
-        ? {}
-        : { socketHolders: (path: string) => processEvidence.socketHolders(path) }),
+      socketHolders: (path: string) => processEvidence.socketHolders(path),
     });
     if (socketProbe.status === "inaccessible") throw socketProbe.error;
     if (socketProbe.status === "listening") {
@@ -207,9 +229,6 @@ export async function runObserverMain(
           incumbent.version ?? "legacy/unknown build",
           buildVersion,
         );
-      }
-      if (processEvidence === undefined) {
-        throw new Error("Generic Observer startup requires process evidence.");
       }
       const parentReserveMs = Math.min(
         HANDOFF_PARENT_RESERVE_MAX_MS,
@@ -248,6 +267,40 @@ export async function runObserverMain(
         return 0;
       }
     }
+    const repairProbe =
+      socketProbe.status === "listening"
+        ? await probeObserverSocket(socketPath, {
+            timeoutMs: Math.max(MIN_STARTUP_BUDGET_MS, startupDeadline - handoffNow()),
+            socketHolders: (path: string) => processEvidence.socketHolders(path),
+          })
+        : socketProbe;
+    if (repairProbe.status === "listening") {
+      throw observerEvidenceOwnerChangedRefusal();
+    }
+    if (repairProbe.status === "inaccessible") throw repairProbe.error;
+    const processIdentityRepair =
+      deps.processIdentityRepair ?? createLocalObserverProcessIdentityRepair();
+    const evidenceRepair = await repairStaleObserverEvidence(
+      {
+        socketPath,
+        socketProbe: repairProbe,
+        deadlineMs: startupDeadline,
+      },
+      {
+        processEvidence: {
+          readObserverProcess: processEvidence.readObserverProcess,
+          processStartToken: processEvidence.processStartToken,
+          readProcessExistence: processExistenceEvidence.readProcessExistence,
+        },
+        identityRepair: processIdentityRepair,
+        probeSocket: () =>
+          probeObserverSocket(socketPath, {
+            timeoutMs: Math.max(MIN_STARTUP_BUDGET_MS, startupDeadline - handoffNow()),
+            socketHolders: (path: string) => processEvidence.socketHolders(path),
+          }),
+        now: handoffNow,
+      },
+    );
     return await runClaimedObserverRuntime({
       options,
       loadedConfig,
@@ -256,6 +309,7 @@ export async function runObserverMain(
       buildVersion,
       homeDir,
       claim: claimResult,
+      evidenceRepair,
       deps,
     });
   } finally {
@@ -295,9 +349,20 @@ async function runClaimedObserverRuntime(input: {
   buildVersion: string;
   homeDir: string;
   claim: AcquiredObserverBootClaim;
+  evidenceRepair: ObserverStaleEvidenceRepairSummary;
   deps: RunObserverMainDeps;
 }): Promise<number> {
-  const { options, loadedConfig, stateDir, socketPath, buildVersion, homeDir, claim, deps } = input;
+  const {
+    options,
+    loadedConfig,
+    stateDir,
+    socketPath,
+    buildVersion,
+    homeDir,
+    claim,
+    evidenceRepair,
+    deps,
+  } = input;
   const observerVersion = parseStationObserverBuildVersion(buildVersion).version;
   const config = loadedConfig.config;
   const spoolDir = providerIngressSpoolDir(stateDir);
@@ -306,6 +371,12 @@ async function runClaimedObserverRuntime(input: {
     providerOptions.configPath = loadedConfig.configPath;
   }
   const providers = await deps.providerRegistryFactory(config, providerOptions);
+  // The boot claim is the startup serialization authority; configured hooks must verify before
+  // any socket, pidfile, or healthy readiness is published.
+  await reconcileConfiguredHarnessHooksOrThrow({
+    providers,
+    ...(options.configPath === undefined ? {} : { stationConfigPath: loadedConfig.configPath }),
+  });
 
   const sqlite = openObserverSqlite({
     path: join(stateDir, "observer.sqlite"),
@@ -314,6 +385,13 @@ async function runClaimedObserverRuntime(input: {
   const persistence = createSqliteObserverPersistence({ sqlite, clock: systemClock });
   const eventBus = createObserverEventBus();
   const logger = createObserverLogger({ stateDir, clock: systemClock });
+  if (evidenceRepair.pidfile === "removed") {
+    await logger.info("Observer stale pidfile evidence repaired.", {
+      socketPath,
+      socket: evidenceRepair.socket,
+      reason: evidenceRepair.reason,
+    });
+  }
   const diagnosticEvidenceSource = createLocalDiagnosticEvidenceSource({
     stateDir,
     socketPath,

@@ -1,6 +1,7 @@
 export type CodexHookSetupErrorCode =
   | "CODEX_HOOK_CONFIG_UNREADABLE"
   | "CODEX_HOOK_INVALID_TOML"
+  | "CODEX_HOOK_RECONCILIATION_LOCK_FAILED"
   | "CODEX_HOOK_WRITE_FAILED";
 
 export class CodexHookSetupError extends Error {

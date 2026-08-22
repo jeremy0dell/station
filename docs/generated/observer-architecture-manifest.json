@@ -532,13 +532,116 @@
       ]
     },
     {
+      "path": "apps/observer/src/commands/harnessHookHealth.ts",
+      "exports": [
+        {
+          "name": "readHarnessHookHealth",
+          "kind": "function",
+          "role": "USE CASE",
+          "purpose": "Reads provider-neutral hook evidence without invoking any mutation capability."
+        },
+        {
+          "name": "ReadHarnessHookHealthOptions",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "./providers.js",
+          "resolvedPath": "apps/observer/src/commands/providers.ts",
+          "edgeKind": "runtime",
+          "bindings": ["resolveHarnessProviderOrThrow"]
+        },
+        {
+          "specifier": "../diagnostics/errors.js",
+          "resolvedPath": "apps/observer/src/diagnostics/errors.ts",
+          "edgeKind": "runtime",
+          "bindings": ["toSafeError"]
+        },
+        {
+          "specifier": "../providers/registry.js",
+          "resolvedPath": "apps/observer/src/providers/registry.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ProviderRegistry"]
+        },
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "runtime",
+          "bindings": ["ProviderHookHealthSchema"]
+        },
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ProviderHookHealth", "ProviderId"]
+        }
+      ]
+    },
+    {
+      "path": "apps/observer/src/commands/harnessHookReconciliation.ts",
+      "exports": [
+        {
+          "name": "reconcileConfiguredHarnessHooksOrThrow",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ReconcileHarnessHooksOptions",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "reconcileHarnessHooksOrThrow",
+          "kind": "function",
+          "role": "USE CASE",
+          "purpose": "Requests one provider-owned reconciliation and rejects every unverified enabled outcome."
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "./providers.js",
+          "resolvedPath": "apps/observer/src/commands/providers.ts",
+          "edgeKind": "runtime",
+          "bindings": ["resolveHarnessProviderOrThrow"]
+        },
+        {
+          "specifier": "../diagnostics/errors.js",
+          "resolvedPath": "apps/observer/src/diagnostics/errors.ts",
+          "edgeKind": "runtime",
+          "bindings": ["toSafeError"]
+        },
+        {
+          "specifier": "../providers/registry.js",
+          "resolvedPath": "apps/observer/src/providers/registry.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ProviderRegistry"]
+        },
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "type-only",
+          "bindings": [
+            "HarnessProvider",
+            "ProviderHookReconciliationResult",
+            "ProviderId",
+            "SafeError"
+          ]
+        }
+      ]
+    },
+    {
       "path": "apps/observer/src/commands/harnessLaunchPreflight.ts",
       "exports": [
         {
           "name": "assertHarnessLaunchPreconditionsOrThrow",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Freshly verifies the selected harness health and hook delivery immediately before launch mutation."
+          "purpose": "Freshly verifies the selected harness health, reconciles configured hooks, and verifies delivery immediately before launch mutation."
         },
         {
           "name": "HarnessLaunchPreflight",
@@ -559,6 +662,12 @@
           "resolvedPath": "apps/observer/src/commands/cancellation.ts",
           "edgeKind": "runtime",
           "bindings": ["throwIfAborted"]
+        },
+        {
+          "specifier": "./harnessHookReconciliation.js",
+          "resolvedPath": "apps/observer/src/commands/harnessHookReconciliation.ts",
+          "edgeKind": "runtime",
+          "bindings": ["reconcileHarnessHooksOrThrow"]
         },
         {
           "specifier": "./providers.js",
@@ -3951,7 +4060,7 @@
           "name": "runObserverMain",
           "kind": "function",
           "role": "COMPOSITION ROOT",
-          "purpose": "Claims boot ownership, branches on four-state socket evidence, selects Observer-private infrastructure from resolved runtime identity, and owns bind, pidfile, read-only duplicate inspection, ownership-aware shutdown, and exact build health publication. Successful publication notifies the injected readiness sink; startup rejection retains the original failure after best-effort cleanup."
+          "purpose": "Claims boot ownership, branches on four-state socket evidence, repairs only positively stale strict pidfile evidence, selects Observer-private infrastructure from resolved runtime identity, and owns bind, pidfile, read-only duplicate inspection, ownership-aware shutdown, and exact build health publication. Successful publication notifies the injected readiness sink; startup rejection retains the original failure after best-effort cleanup."
         },
         {
           "name": "RunObserverMainDeps",
@@ -3982,7 +4091,7 @@
           "name": "acquireObserverBootClaim",
           "kind": "function",
           "role": "ADAPTER",
-          "purpose": "Excludes cross-runtime startup and explicit reap mutation through a SQLite transaction whose ownership comes from the OS lock, never the persistent claim file."
+          "purpose": "Excludes cross-runtime startup, stale-evidence repair, and explicit reap mutation through a SQLite transaction whose ownership comes from the OS lock, never the persistent claim file."
         },
         {
           "name": "AppliedObserverSqliteMigration",
@@ -4174,13 +4283,19 @@
           "name": "createLocalObserverProcessEvidence",
           "kind": "function",
           "role": "ADAPTER",
-          "purpose": "Translates targeted and global exact argv, executable provenance, launch nonce, OS start time, strict socket-holder and complete file-descriptor evidence, pidfiles, socket identities, and signals into conservative ownership evidence. Exact executable/argv mismatch throws a stable typed refusal without weakening the fail-closed ownership decision."
+          "purpose": "Translates bounded targeted and global exact argv, executable provenance, launch nonce, OS start time, non-signaling process existence, strict socket-holder and complete file-descriptor evidence, pidfiles, socket identities, and signals into conservative ownership evidence. Exact executable/argv mismatch throws a stable typed refusal without weakening the fail-closed ownership decision."
+        },
+        {
+          "name": "createLocalObserverProcessIdentityRepair",
+          "kind": "function",
+          "role": "ADAPTER",
+          "purpose": "Exposes strict pidfile reads and atomic exact-identity removal to stale evidence repair without granting broader filesystem mutation."
         },
         {
           "name": "createObserverApi",
           "kind": "function",
           "role": "COMPOSITION ROOT",
-          "purpose": "Wires Observer use cases with supplied durable, local-metadata, and diagnostic- evidence roles, ingress workers, provider-health publication, scheduling, exact build publication, recovery-readiness and coherent recovery-inventory queries, read-only singleton diagnostics, and adapter shutdown behind the application API."
+          "purpose": "Wires Observer use cases with supplied durable, local-metadata, and diagnostic- evidence roles, ingress workers, provider-health publication, scheduling, exact build publication, recovery-readiness, coherent recovery-inventory, and recovery-assessment queries, read-only singleton diagnostics, and adapter shutdown behind the application API."
         },
         {
           "name": "CreateObserverApiOptions",
@@ -4229,6 +4344,18 @@
           "kind": "function",
           "role": "ADAPTER",
           "purpose": "Writes Observer operational events as redacted JSONL while retaining path and record representations at the logging boundary."
+        },
+        {
+          "name": "createObserverProcessIdentity",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "CreateObserverProcessIdentityOptions",
+          "kind": "type",
+          "role": null,
+          "purpose": null
         },
         {
           "name": "createObserverReap",
@@ -4495,6 +4622,12 @@
           "purpose": null
         },
         {
+          "name": "LocalObserverProcessEvidenceSource",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "migrations",
           "kind": "const",
           "role": null,
@@ -4591,6 +4724,18 @@
           "purpose": null
         },
         {
+          "name": "observerEvidenceOwnerChangedRefusal",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ObserverEvidenceSocketProbe",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "ObserverExpectedProcessHealth",
           "kind": "type",
           "role": null,
@@ -4657,6 +4802,12 @@
           "purpose": null
         },
         {
+          "name": "observerPidfilePath",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "observerProcessEntriesMatch",
           "kind": "function",
           "role": null,
@@ -4673,6 +4824,54 @@
           "kind": "interface",
           "role": "DRIVEN PORT",
           "purpose": "Supplies exact incumbent-process evidence without exposing operating-system commands; typed evidence failures remain available as causes, while unavailable socket-holder evidence throws and never means zero."
+        },
+        {
+          "name": "ObserverProcessExistence",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ObserverProcessExistenceEvidenceSource",
+          "kind": "interface",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "observerProcessIdentitiesMatch",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ObserverProcessIdentityEvidenceSource",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "purpose": "Supplies exact, read-only Observer process evidence without exposing the operating-system commands used to collect it."
+        },
+        {
+          "name": "ObserverProcessIdentityExpectation",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ObserverProcessIdentityMismatchReason",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ObserverProcessIdentityRepair",
+          "kind": "interface",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ObserverProcessIdentityVerification",
+          "kind": "type",
+          "role": null,
+          "purpose": null
         },
         {
           "name": "ObserverProcessSignalResult",
@@ -4741,6 +4940,12 @@
           "purpose": null
         },
         {
+          "name": "ObserverRepairableSocketProbe",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "ObserverServer",
           "kind": "type",
           "role": null,
@@ -4784,6 +4989,12 @@
         },
         {
           "name": "ObserverSqliteMigration",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ObserverStaleEvidenceRepairDeps",
           "kind": "type",
           "role": null,
           "purpose": null
@@ -5059,6 +5270,12 @@
           "purpose": null
         },
         {
+          "name": "publishObserverProcessIdentity",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "publishRemovedSessionIfAbsent",
           "kind": "function",
           "role": null,
@@ -5072,6 +5289,24 @@
         },
         {
           "name": "publishWorktreeRemoved",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "readHarnessHookHealth",
+          "kind": "function",
+          "role": "USE CASE",
+          "purpose": "Reads provider-neutral hook evidence without invoking any mutation capability."
+        },
+        {
+          "name": "ReadHarnessHookHealthOptions",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "readObserverProcessIdentity",
           "kind": "function",
           "role": null,
           "purpose": null
@@ -5111,6 +5346,24 @@
           "kind": "type",
           "role": null,
           "purpose": null
+        },
+        {
+          "name": "reconcileConfiguredHarnessHooksOrThrow",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ReconcileHarnessHooksOptions",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "reconcileHarnessHooksOrThrow",
+          "kind": "function",
+          "role": "USE CASE",
+          "purpose": "Requests one provider-owned reconciliation and rejects every unverified enabled outcome."
         },
         {
           "name": "ReconcileScheduler",
@@ -5155,10 +5408,22 @@
           "purpose": null
         },
         {
+          "name": "removeObserverProcessIdentity",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "removeWorktreeThroughProvider",
           "kind": "function",
           "role": null,
           "purpose": null
+        },
+        {
+          "name": "repairStaleObserverEvidence",
+          "kind": "function",
+          "role": "USE CASE",
+          "purpose": "Repairs positively stale pidfile evidence while the caller holds the Observer boot claim. It revalidates process, pidfile, and socket evidence before the atomic pidfile commit and never signals or unlinks a socket."
         },
         {
           "name": "RepositoryGitContext",
@@ -5212,7 +5477,7 @@
           "name": "runObserverMain",
           "kind": "function",
           "role": "COMPOSITION ROOT",
-          "purpose": "Claims boot ownership, branches on four-state socket evidence, selects Observer-private infrastructure from resolved runtime identity, and owns bind, pidfile, read-only duplicate inspection, ownership-aware shutdown, and exact build health publication. Successful publication notifies the injected readiness sink; startup rejection retains the original failure after best-effort cleanup."
+          "purpose": "Claims boot ownership, branches on four-state socket evidence, repairs only positively stale strict pidfile evidence, selects Observer-private infrastructure from resolved runtime identity, and owns bind, pidfile, read-only duplicate inspection, ownership-aware shutdown, and exact build health publication. Successful publication notifies the injected readiness sink; startup rejection retains the original failure after best-effort cleanup."
         },
         {
           "name": "RunObserverMainDeps",
@@ -5383,6 +5648,12 @@
           "purpose": null
         },
         {
+          "name": "verifyObserverProcessIdentity",
+          "kind": "function",
+          "role": "USE CASE",
+          "purpose": "Verifies one exact Observer process generation from read-only evidence. The caller decides whether an exact, mismatched, or unavailable result permits a lifecycle action; the verifier never creates signal authority."
+        },
+        {
           "name": "withSessionCorrelationFromSnapshot",
           "kind": "function",
           "role": "POLICY",
@@ -5429,6 +5700,18 @@
         {
           "specifier": "./commands/cleanup/index.js",
           "resolvedPath": "apps/observer/src/commands/cleanup/index.ts",
+          "edgeKind": "runtime",
+          "bindings": ["*"]
+        },
+        {
+          "specifier": "./commands/harnessHookHealth.js",
+          "resolvedPath": "apps/observer/src/commands/harnessHookHealth.ts",
+          "edgeKind": "runtime",
+          "bindings": ["*"]
+        },
+        {
+          "specifier": "./commands/harnessHookReconciliation.js",
+          "resolvedPath": "apps/observer/src/commands/harnessHookReconciliation.ts",
           "edgeKind": "runtime",
           "bindings": ["*"]
         },
@@ -5619,14 +5902,32 @@
           "bindings": ["*"]
         },
         {
+          "specifier": "./runtime/observerEvidenceRepair.js",
+          "resolvedPath": "apps/observer/src/runtime/observerEvidenceRepair.ts",
+          "edgeKind": "runtime",
+          "bindings": ["*"]
+        },
+        {
           "specifier": "./runtime/observerHandoff.js",
           "resolvedPath": "apps/observer/src/runtime/observerHandoff.ts",
           "edgeKind": "runtime",
           "bindings": ["*"]
         },
         {
+          "specifier": "./runtime/observerPidfile.js",
+          "resolvedPath": "apps/observer/src/runtime/observerPidfile.ts",
+          "edgeKind": "runtime",
+          "bindings": ["*"]
+        },
+        {
           "specifier": "./runtime/observerProcessEvidence.js",
           "resolvedPath": "apps/observer/src/runtime/observerProcessEvidence.ts",
+          "edgeKind": "runtime",
+          "bindings": ["*"]
+        },
+        {
+          "specifier": "./runtime/observerProcessIdentity.js",
+          "resolvedPath": "apps/observer/src/runtime/observerProcessIdentity.ts",
           "edgeKind": "runtime",
           "bindings": ["*"]
         },
@@ -10062,7 +10363,7 @@
           "name": "createObserverApi",
           "kind": "function",
           "role": "COMPOSITION ROOT",
-          "purpose": "Wires Observer use cases with supplied durable, local-metadata, and diagnostic- evidence roles, ingress workers, provider-health publication, scheduling, exact build publication, recovery-readiness and coherent recovery-inventory queries, read-only singleton diagnostics, and adapter shutdown behind the application API."
+          "purpose": "Wires Observer use cases with supplied durable, local-metadata, and diagnostic- evidence roles, ingress workers, provider-health publication, scheduling, exact build publication, recovery-readiness, coherent recovery-inventory, and recovery-assessment queries, read-only singleton diagnostics, and adapter shutdown behind the application API."
         },
         {
           "name": "CreateObserverApiOptions",
@@ -10283,6 +10584,12 @@
           "bindings": ["SpoolDrainDeps"]
         },
         {
+          "specifier": "../sessionRecoveryAssessment.js",
+          "resolvedPath": "apps/observer/src/sessionRecoveryAssessment.ts",
+          "edgeKind": "runtime",
+          "bindings": ["inspectObserverRecoveryAssessment"]
+        },
+        {
           "specifier": "../sessionRecoveryInventory.js",
           "resolvedPath": "apps/observer/src/sessionRecoveryInventory.ts",
           "edgeKind": "runtime",
@@ -10340,6 +10647,7 @@
             "HarnessEventReportReceipt",
             "ObserverApi",
             "ObserverHealth",
+            "ObserverRecoveryAssessment",
             "ObserverRecoveryInventory",
             "ObserverStopReceipt",
             "ProviderHealth",
@@ -10705,7 +11013,7 @@
           "name": "runObserverMain",
           "kind": "function",
           "role": "COMPOSITION ROOT",
-          "purpose": "Claims boot ownership, branches on four-state socket evidence, selects Observer-private infrastructure from resolved runtime identity, and owns bind, pidfile, read-only duplicate inspection, ownership-aware shutdown, and exact build health publication. Successful publication notifies the injected readiness sink; startup rejection retains the original failure after best-effort cleanup."
+          "purpose": "Claims boot ownership, branches on four-state socket evidence, repairs only positively stale strict pidfile evidence, selects Observer-private infrastructure from resolved runtime identity, and owns bind, pidfile, read-only duplicate inspection, ownership-aware shutdown, and exact build health publication. Successful publication notifies the injected readiness sink; startup rejection retains the original failure after best-effort cleanup."
         },
         {
           "name": "RunObserverMainDeps",
@@ -10715,6 +11023,12 @@
         }
       ],
       "imports": [
+        {
+          "specifier": "../commands/harnessHookReconciliation.js",
+          "resolvedPath": "apps/observer/src/commands/harnessHookReconciliation.ts",
+          "edgeKind": "runtime",
+          "bindings": ["reconcileConfiguredHarnessHooksOrThrow"]
+        },
         {
           "specifier": "../commands/harnessLaunchPreflight.js",
           "resolvedPath": "apps/observer/src/commands/harnessLaunchPreflight.ts",
@@ -10824,6 +11138,12 @@
           "bindings": ["AcquiredObserverBootClaim", "ObserverBootClaimReleaseResult"]
         },
         {
+          "specifier": "./observerEvidenceRepair.js",
+          "resolvedPath": "apps/observer/src/runtime/observerEvidenceRepair.ts",
+          "edgeKind": "runtime",
+          "bindings": ["observerEvidenceOwnerChangedRefusal", "repairStaleObserverEvidence"]
+        },
+        {
           "specifier": "./observerHandoff.js",
           "resolvedPath": "apps/observer/src/runtime/observerHandoff.ts",
           "edgeKind": "runtime",
@@ -10840,6 +11160,7 @@
           "resolvedPath": "apps/observer/src/runtime/observerPidfile.ts",
           "edgeKind": "runtime",
           "bindings": [
+            "createLocalObserverProcessIdentityRepair",
             "createObserverProcessIdentity",
             "publishObserverProcessIdentity",
             "removeObserverProcessIdentity"
@@ -10850,6 +11171,12 @@
           "resolvedPath": "apps/observer/src/runtime/observerProcessEvidence.ts",
           "edgeKind": "runtime",
           "bindings": ["createLocalObserverProcessEvidence"]
+        },
+        {
+          "specifier": "./observerProcessIdentity.js",
+          "resolvedPath": "apps/observer/src/runtime/observerProcessIdentity.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ObserverProcessExistenceEvidenceSource", "ObserverProcessIdentityRepair"]
         },
         {
           "specifier": "./observerReap.js",
@@ -10961,7 +11288,13 @@
           "specifier": "@station/contracts",
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "type-only",
-          "bindings": ["ObserverApi", "ObserverProcessIdentity", "ObserverStopReceipt", "SafeError"]
+          "bindings": [
+            "ObserverApi",
+            "ObserverProcessIdentity",
+            "ObserverStaleEvidenceRepairSummary",
+            "ObserverStopReceipt",
+            "SafeError"
+          ]
         },
         {
           "specifier": "@station/observability",
@@ -10996,7 +11329,7 @@
           "name": "acquireObserverBootClaim",
           "kind": "function",
           "role": "ADAPTER",
-          "purpose": "Excludes cross-runtime startup and explicit reap mutation through a SQLite transaction whose ownership comes from the OS lock, never the persistent claim file."
+          "purpose": "Excludes cross-runtime startup, stale-evidence repair, and explicit reap mutation through a SQLite transaction whose ownership comes from the OS lock, never the persistent claim file."
         },
         {
           "name": "createObserverReapExclusion",
@@ -11087,6 +11420,82 @@
       ]
     },
     {
+      "path": "apps/observer/src/runtime/observerEvidenceRepair.ts",
+      "exports": [
+        {
+          "name": "observerEvidenceOwnerChangedRefusal",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ObserverEvidenceSocketProbe",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ObserverRepairableSocketProbe",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ObserverStaleEvidenceRepairDeps",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "repairStaleObserverEvidence",
+          "kind": "function",
+          "role": "USE CASE",
+          "purpose": "Repairs positively stale pidfile evidence while the caller holds the Observer boot claim. It revalidates process, pidfile, and socket evidence before the atomic pidfile commit and never signals or unlinks a socket."
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "./observerProcessIdentity.js",
+          "resolvedPath": "apps/observer/src/runtime/observerProcessIdentity.ts",
+          "edgeKind": "runtime",
+          "bindings": ["observerProcessIdentitiesMatch", "verifyObserverProcessIdentity"]
+        },
+        {
+          "specifier": "./observerProcessIdentity.js",
+          "resolvedPath": "apps/observer/src/runtime/observerProcessIdentity.ts",
+          "edgeKind": "type-only",
+          "bindings": [
+            "ObserverProcessExistenceEvidenceSource",
+            "ObserverProcessIdentityEvidenceSource",
+            "ObserverProcessIdentityRepair"
+          ]
+        },
+        {
+          "specifier": "./socketOwnership.js",
+          "resolvedPath": "apps/observer/src/runtime/socketOwnership.ts",
+          "edgeKind": "type-only",
+          "bindings": ["SocketIdentity"]
+        },
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "runtime",
+          "bindings": ["ObserverStaleEvidenceRepairSummarySchema"]
+        },
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "type-only",
+          "bindings": [
+            "ObserverProcessIdentity",
+            "ObserverStaleEvidenceRepairReason",
+            "ObserverStaleEvidenceRepairSummary",
+            "SafeError"
+          ]
+        }
+      ]
+    },
+    {
       "path": "apps/observer/src/runtime/observerHandoff.ts",
       "exports": [
         {
@@ -11150,18 +11559,6 @@
           "purpose": null
         },
         {
-          "name": "observerProcessEntriesMatch",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "ObserverProcessEntry",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
           "name": "ObserverProcessEvidenceSource",
           "kind": "interface",
           "role": "DRIVEN PORT",
@@ -11182,10 +11579,16 @@
       ],
       "imports": [
         {
-          "specifier": "./observerPidfile.js",
-          "resolvedPath": "apps/observer/src/runtime/observerPidfile.ts",
+          "specifier": "./observerProcessIdentity.js",
+          "resolvedPath": "apps/observer/src/runtime/observerProcessIdentity.ts",
           "edgeKind": "runtime",
-          "bindings": ["observerProcessIdentitiesMatch"]
+          "bindings": ["observerProcessIdentitiesMatch", "verifyObserverProcessIdentity"]
+        },
+        {
+          "specifier": "./observerProcessIdentity.js",
+          "resolvedPath": "apps/observer/src/runtime/observerProcessIdentity.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ObserverProcessIdentityEvidenceSource"]
         },
         {
           "specifier": "@station/contracts",
@@ -11226,6 +11629,12 @@
       "path": "apps/observer/src/runtime/observerPidfile.ts",
       "exports": [
         {
+          "name": "createLocalObserverProcessIdentityRepair",
+          "kind": "function",
+          "role": "ADAPTER",
+          "purpose": "Exposes strict pidfile reads and atomic exact-identity removal to stale evidence repair without granting broader filesystem mutation."
+        },
+        {
           "name": "createObserverProcessIdentity",
           "kind": "function",
           "role": null,
@@ -11239,12 +11648,6 @@
         },
         {
           "name": "observerPidfilePath",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "observerProcessIdentitiesMatch",
           "kind": "function",
           "role": null,
           "purpose": null
@@ -11270,6 +11673,18 @@
       ],
       "imports": [
         {
+          "specifier": "./observerProcessIdentity.js",
+          "resolvedPath": "apps/observer/src/runtime/observerProcessIdentity.ts",
+          "edgeKind": "runtime",
+          "bindings": ["observerProcessIdentitiesMatch"]
+        },
+        {
+          "specifier": "./observerProcessIdentity.js",
+          "resolvedPath": "apps/observer/src/runtime/observerProcessIdentity.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ObserverProcessIdentityRepair"]
+        },
+        {
           "specifier": "node:child_process",
           "resolvedPath": "node:child_process",
           "edgeKind": "runtime",
@@ -11282,10 +11697,16 @@
           "bindings": ["randomUUID"]
         },
         {
+          "specifier": "node:fs",
+          "resolvedPath": "node:fs",
+          "edgeKind": "runtime",
+          "bindings": ["constants"]
+        },
+        {
           "specifier": "node:fs/promises",
           "resolvedPath": "node:fs/promises",
           "edgeKind": "runtime",
-          "bindings": ["link", "open", "readFile", "rename", "unlink"]
+          "bindings": ["link", "open", "rename", "unlink"]
         },
         {
           "specifier": "node:fs/promises",
@@ -11320,7 +11741,13 @@
           "name": "createLocalObserverProcessEvidence",
           "kind": "function",
           "role": "ADAPTER",
-          "purpose": "Translates targeted and global exact argv, executable provenance, launch nonce, OS start time, strict socket-holder and complete file-descriptor evidence, pidfiles, socket identities, and signals into conservative ownership evidence. Exact executable/argv mismatch throws a stable typed refusal without weakening the fail-closed ownership decision."
+          "purpose": "Translates bounded targeted and global exact argv, executable provenance, launch nonce, OS start time, non-signaling process existence, strict socket-holder and complete file-descriptor evidence, pidfiles, socket identities, and signals into conservative ownership evidence. Exact executable/argv mismatch throws a stable typed refusal without weakening the fail-closed ownership decision."
+        },
+        {
+          "name": "LocalObserverProcessEvidenceSource",
+          "kind": "type",
+          "role": null,
+          "purpose": null
         },
         {
           "name": "parseObserverProcessList",
@@ -11340,19 +11767,35 @@
           "specifier": "./observerHandoff.js",
           "resolvedPath": "apps/observer/src/runtime/observerHandoff.ts",
           "edgeKind": "runtime",
-          "bindings": ["observerBuildSelectorIsValid", "observerProcessEntriesMatch"]
+          "bindings": ["observerBuildSelectorIsValid"]
         },
         {
           "specifier": "./observerHandoff.js",
           "resolvedPath": "apps/observer/src/runtime/observerHandoff.ts",
           "edgeKind": "type-only",
-          "bindings": ["ObserverProcessEntry", "ObserverProcessSignalResult"]
+          "bindings": ["ObserverProcessSignalResult"]
         },
         {
           "specifier": "./observerPidfile.js",
           "resolvedPath": "apps/observer/src/runtime/observerPidfile.ts",
           "edgeKind": "runtime",
           "bindings": ["readObserverProcessIdentity"]
+        },
+        {
+          "specifier": "./observerProcessIdentity.js",
+          "resolvedPath": "apps/observer/src/runtime/observerProcessIdentity.ts",
+          "edgeKind": "runtime",
+          "bindings": ["observerProcessEntriesMatch"]
+        },
+        {
+          "specifier": "./observerProcessIdentity.js",
+          "resolvedPath": "apps/observer/src/runtime/observerProcessIdentity.ts",
+          "edgeKind": "type-only",
+          "bindings": [
+            "ObserverProcessEntry",
+            "ObserverProcessExistence",
+            "ObserverProcessExistenceEvidenceSource"
+          ]
         },
         {
           "specifier": "./observerReap.js",
@@ -11413,6 +11856,91 @@
           "resolvedPath": "zod",
           "edgeKind": "runtime",
           "bindings": ["z"]
+        }
+      ]
+    },
+    {
+      "path": "apps/observer/src/runtime/observerProcessIdentity.ts",
+      "exports": [
+        {
+          "name": "observerProcessEntriesMatch",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ObserverProcessEntry",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ObserverProcessExistence",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ObserverProcessExistenceEvidenceSource",
+          "kind": "interface",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "observerProcessIdentitiesMatch",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ObserverProcessIdentityEvidenceSource",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "purpose": "Supplies exact, read-only Observer process evidence without exposing the operating-system commands used to collect it."
+        },
+        {
+          "name": "ObserverProcessIdentityExpectation",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ObserverProcessIdentityMismatchReason",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ObserverProcessIdentityRepair",
+          "kind": "interface",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ObserverProcessIdentityVerification",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "verifyObserverProcessIdentity",
+          "kind": "function",
+          "role": "USE CASE",
+          "purpose": "Verifies one exact Observer process generation from read-only evidence. The caller decides whether an exact, mismatched, or unavailable result permits a lifecycle action; the verifier never creates signal authority."
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ObserverProcessIdentity"]
+        },
+        {
+          "specifier": "@station/runtime",
+          "resolvedPath": "packages/runtime/src/index.ts",
+          "edgeKind": "runtime",
+          "bindings": ["safeErrorFromUnknown"]
         }
       ]
     },
@@ -11506,22 +12034,16 @@
       ],
       "imports": [
         {
-          "specifier": "./observerHandoff.js",
-          "resolvedPath": "apps/observer/src/runtime/observerHandoff.ts",
+          "specifier": "./observerProcessIdentity.js",
+          "resolvedPath": "apps/observer/src/runtime/observerProcessIdentity.ts",
           "edgeKind": "runtime",
-          "bindings": ["observerProcessEntriesMatch"]
+          "bindings": ["observerProcessIdentitiesMatch", "verifyObserverProcessIdentity"]
         },
         {
-          "specifier": "./observerHandoff.js",
-          "resolvedPath": "apps/observer/src/runtime/observerHandoff.ts",
+          "specifier": "./observerProcessIdentity.js",
+          "resolvedPath": "apps/observer/src/runtime/observerProcessIdentity.ts",
           "edgeKind": "type-only",
-          "bindings": ["ObserverProcessEntry", "ObserverProcessEvidenceSource"]
-        },
-        {
-          "specifier": "./observerPidfile.js",
-          "resolvedPath": "apps/observer/src/runtime/observerPidfile.ts",
-          "edgeKind": "runtime",
-          "bindings": ["observerProcessIdentitiesMatch"]
+          "bindings": ["ObserverProcessEntry", "ObserverProcessIdentityEvidenceSource"]
         },
         {
           "specifier": "./socketOwnership.js",
@@ -12071,6 +12593,91 @@
       ]
     },
     {
+      "path": "apps/observer/src/sessionRecoveryAssessment.ts",
+      "exports": [
+        {
+          "name": "assessObserverRecovery",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "inspectObserverRecoveryAssessment",
+          "kind": "function",
+          "role": "USE CASE",
+          "purpose": "Assesses all retained sessions from exactly one coherent persistence inventory against one caller-captured Observer graph. Eligibility and newest-candidate selection remain delegated to their canonical policies; the result is redacted evidence only and grants no resume authority."
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "./persistence/ports.js",
+          "resolvedPath": "apps/observer/src/persistence/ports.ts",
+          "edgeKind": "type-only",
+          "bindings": ["SessionStore"]
+        },
+        {
+          "specifier": "./persistence/types.js",
+          "resolvedPath": "apps/observer/src/persistence/types.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ObserverRecoveryInventoryPersistenceSnapshot", "PersistedSession"]
+        },
+        {
+          "specifier": "./providers/registry.js",
+          "resolvedPath": "apps/observer/src/providers/registry.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ProviderRegistry"]
+        },
+        {
+          "specifier": "./sessionRecoveryEligibility.js",
+          "resolvedPath": "apps/observer/src/sessionRecoveryEligibility.ts",
+          "edgeKind": "runtime",
+          "bindings": ["sessionRecoveryEligibility"]
+        },
+        {
+          "specifier": "./sessionRecoveryEligibility.js",
+          "resolvedPath": "apps/observer/src/sessionRecoveryEligibility.ts",
+          "edgeKind": "type-only",
+          "bindings": ["SessionRecoveryEligibility", "SessionRecoveryEligibilityInput"]
+        },
+        {
+          "specifier": "./sessionRecoveryInventory.js",
+          "resolvedPath": "apps/observer/src/sessionRecoveryInventory.ts",
+          "edgeKind": "runtime",
+          "bindings": ["observerRecoveryInventoryFromPersistence"]
+        },
+        {
+          "specifier": "./sessionRecoverySelection.js",
+          "resolvedPath": "apps/observer/src/sessionRecoverySelection.ts",
+          "edgeKind": "runtime",
+          "bindings": ["selectNewestSessionRecoveryCandidate"]
+        },
+        {
+          "specifier": "@station/config",
+          "resolvedPath": "packages/config/src/index.ts",
+          "edgeKind": "type-only",
+          "bindings": ["StationConfig"]
+        },
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "runtime",
+          "bindings": ["ObserverRecoveryAssessmentSchema"]
+        },
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "type-only",
+          "bindings": [
+            "ObserverRecoveryAssessment",
+            "ObserverSessionRecoveryAssessment",
+            "ProviderResumeCapability",
+            "SessionRecoveryAssessmentReason",
+            "StationSnapshot"
+          ]
+        }
+      ]
+    },
+    {
       "path": "apps/observer/src/sessionRecoveryEligibility.ts",
       "exports": [
         {
@@ -12127,6 +12734,12 @@
           "kind": "function",
           "role": "USE CASE",
           "purpose": "Projects one coherent persistence snapshot into provider-neutral, redacted recovery evidence without dispatching commands, reconciling providers, or writing durable state."
+        },
+        {
+          "name": "observerRecoveryInventoryFromPersistence",
+          "kind": "function",
+          "role": null,
+          "purpose": null
         }
       ],
       "imports": [
@@ -12140,7 +12753,7 @@
           "specifier": "./persistence/types.js",
           "resolvedPath": "apps/observer/src/persistence/types.ts",
           "edgeKind": "type-only",
-          "bindings": ["PersistedSession"]
+          "bindings": ["ObserverRecoveryInventoryPersistenceSnapshot", "PersistedSession"]
         },
         {
           "specifier": "@station/contracts",
@@ -12565,7 +13178,7 @@
           "path": "apps/cli/src/observerProcess.ts",
           "declaration": "stopObserver",
           "kind": "function",
-          "role": "ADAPTER",
+          "role": "COMPOSITION ROOT",
           "edgeKind": "runtime"
         },
         {
@@ -12936,7 +13549,7 @@
       "declaration": "runUpdateCommand",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Selects one owned install channel, preflights default live Host preservation, and crosses runtimes through the successor launcher after mutation.",
+      "purpose": "Selects one owned install channel and optionally aggregates non-authorizing recovery facts. Apply mode then preflights Host preservation, reconciles hooks through the selected launcher, and crosses runtimes; recovery preflight itself exposes no mutation capability.",
       "dependencies": [
         {
           "path": "apps/cli/src/commands/update/scenario.ts",
@@ -13284,7 +13897,7 @@
       "declaration": "restartObserver",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Translates a CLI restart request while preserving a newer winning Observer build. An explicit higher-build restart cooperatively stops the identity-pinned incumbent before spawn. A failed replacement retains its typed cause and startup evidence while annotating only the outer error hint with the incumbent build identity it tried to replace.",
+      "purpose": "Translates a CLI restart request while preserving a newer winning Observer build. An explicit higher-build restart cooperatively stops the identity-pinned incumbent before spawn; a stopped or stale endpoint converges through the child's claim-serialized evidence repair. A failed replacement retains its typed cause and startup evidence while annotating only the outer error hint with the incumbent build identity it tried to replace.",
       "dependencies": [
         {
           "path": "apps/cli/src/observerProcess.ts",
@@ -13314,7 +13927,7 @@
       "declaration": "startObserver",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Translates CLI startup intent into exact-build Observer attachment or child startup while leaving socket ownership mutation to the child's boot lifecycle. Startup failures retain their typed child cause and bounded boot evidence.",
+      "purpose": "Translates CLI startup intent into exact-build Observer attachment or child startup while leaving claim-serialized stale-evidence repair and socket ownership mutation to the child's boot lifecycle. Startup failures retain their typed child cause and bounded boot evidence.",
       "dependencies": [
         {
           "path": "apps/cli/src/observerProcess.ts",
@@ -13343,8 +13956,8 @@
       "path": "apps/cli/src/observerProcess.ts",
       "declaration": "stopObserver",
       "kind": "function",
-      "role": "ADAPTER",
-      "purpose": "Translates a CLI stop request into a pinned Observer lifecycle operation.",
+      "role": "COMPOSITION ROOT",
+      "purpose": "Translates a CLI stop request into a pinned live lifecycle operation or a claim-serialized, idempotent stale-evidence repair.",
       "dependencies": [
         {
           "path": "apps/cli/src/observerProcess.ts",
@@ -13354,8 +13967,66 @@
           "edgeKind": "runtime"
         },
         {
+          "path": "apps/cli/src/observerProcess/evidenceRepair.ts",
+          "declaration": "repairLocalObserverEvidence",
+          "kind": "function",
+          "role": "COMPOSITION ROOT",
+          "edgeKind": "runtime"
+        },
+        {
           "path": "packages/protocol/src/client.ts",
           "declaration": "createObserverClient",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
+      "path": "apps/cli/src/observerProcess/evidenceRepair.ts",
+      "declaration": "repairLocalObserverEvidence",
+      "kind": "function",
+      "role": "COMPOSITION ROOT",
+      "purpose": "Joins the Observer boot claim, bounded local process evidence, strict pidfile adapter, and socket probe for one CLI-requested stale-evidence repair.",
+      "dependencies": [
+        {
+          "path": "apps/observer/src/runtime/observerBootClaim.ts",
+          "declaration": "acquireObserverBootClaim",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/observer/src/runtime/observerEvidenceRepair.ts",
+          "declaration": "repairStaleObserverEvidence",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/observer/src/runtime/observerHandoff.ts",
+          "declaration": "ObserverProcessEvidenceSource",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        },
+        {
+          "path": "apps/observer/src/runtime/observerPidfile.ts",
+          "declaration": "createLocalObserverProcessIdentityRepair",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/observer/src/runtime/observerProcessEvidence.ts",
+          "declaration": "createLocalObserverProcessEvidence",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/observer/src/runtime/server.ts",
+          "declaration": "probeObserverSocket",
           "kind": "function",
           "role": "ADAPTER",
           "edgeKind": "runtime"
@@ -13694,6 +14365,95 @@
       ]
     },
     {
+      "path": "apps/cli/src/update/recoveryPreflight.ts",
+      "declaration": "runUpdateRecoveryPreflight",
+      "kind": "function",
+      "role": "USE CASE",
+      "purpose": "Aggregates read-only Observer, Host, retained-session, capability, handle, and hook facts while settling every evidence source. It computes dispositions only; executable actions, authorization, digests, and mutation remain downstream responsibilities.",
+      "dependencies": [
+        {
+          "path": "apps/cli/src/update/recoveryPreflight.ts",
+          "declaration": "UpdateRecoveryPreflightPorts",
+          "kind": "type",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
+      "path": "apps/cli/src/update/recoveryPreflight.ts",
+      "declaration": "UpdateRecoveryPreflightPorts",
+      "kind": "type",
+      "role": "DRIVEN PORT",
+      "purpose": "Supplies already normalized, read-only runtime and provider evidence. Implementations must not start, stop, signal, install, reconcile, resume, or otherwise mutate the inspected system.",
+      "dependencies": []
+    },
+    {
+      "path": "apps/cli/src/update/recoveryPreflightAdapters.ts",
+      "declaration": "createUpdateRecoveryPreflightPorts",
+      "kind": "function",
+      "role": "COMPOSITION ROOT",
+      "purpose": "Binds recovery preflight to read-only local process evidence, Observer protocol queries, strict Host inventory, and the provider-neutral hook-health use case. No lifecycle or repair capability is exposed through these ports.",
+      "dependencies": [
+        {
+          "path": "apps/cli/src/commands/host/index.ts",
+          "declaration": "runHostCommand",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/observerProcess.ts",
+          "declaration": "getObserverStatus",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/update/recoveryPreflight.ts",
+          "declaration": "UpdateRecoveryPreflightPorts",
+          "kind": "type",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        },
+        {
+          "path": "apps/observer/src/commands/harnessHookHealth.ts",
+          "declaration": "readHarnessHookHealth",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/observer/src/runtime/observerProcessEvidence.ts",
+          "declaration": "createLocalObserverProcessEvidence",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/observer/src/runtime/observerProcessIdentity.ts",
+          "declaration": "ObserverProcessIdentityEvidenceSource",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        },
+        {
+          "path": "apps/observer/src/runtime/observerProcessIdentity.ts",
+          "declaration": "verifyObserverProcessIdentity",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "packages/protocol/src/client.ts",
+          "declaration": "createObserverClient",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
       "path": "apps/cli/src/update/updateChannel.ts",
       "declaration": "UpdateChannel",
       "kind": "interface",
@@ -13702,12 +14462,44 @@
       "dependencies": []
     },
     {
+      "path": "apps/observer/src/commands/harnessHookHealth.ts",
+      "declaration": "readHarnessHookHealth",
+      "kind": "function",
+      "role": "USE CASE",
+      "purpose": "Reads provider-neutral hook evidence without invoking any mutation capability.",
+      "dependencies": []
+    },
+    {
+      "path": "apps/observer/src/commands/harnessHookReconciliation.ts",
+      "declaration": "reconcileHarnessHooksOrThrow",
+      "kind": "function",
+      "role": "USE CASE",
+      "purpose": "Requests one provider-owned reconciliation and rejects every unverified enabled outcome.",
+      "dependencies": [
+        {
+          "path": "packages/contracts/src/providers.ts",
+          "declaration": "HarnessProvider",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
       "path": "apps/observer/src/commands/harnessLaunchPreflight.ts",
       "declaration": "assertHarnessLaunchPreconditionsOrThrow",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Freshly verifies the selected harness health and hook delivery immediately before launch mutation.",
-      "dependencies": []
+      "purpose": "Freshly verifies the selected harness health, reconciles configured hooks, and verifies delivery immediately before launch mutation.",
+      "dependencies": [
+        {
+          "path": "apps/observer/src/commands/harnessHookReconciliation.ts",
+          "declaration": "reconcileHarnessHooksOrThrow",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
+        }
+      ]
     },
     {
       "path": "apps/observer/src/commands/project.ts",
@@ -14454,7 +15246,7 @@
       "declaration": "createObserverApi",
       "kind": "function",
       "role": "COMPOSITION ROOT",
-      "purpose": "Wires Observer use cases with supplied durable, local-metadata, and diagnostic- evidence roles, ingress workers, provider-health publication, scheduling, exact build publication, recovery-readiness and coherent recovery-inventory queries, read-only singleton diagnostics, and adapter shutdown behind the application API.",
+      "purpose": "Wires Observer use cases with supplied durable, local-metadata, and diagnostic- evidence roles, ingress workers, provider-health publication, scheduling, exact build publication, recovery-readiness, coherent recovery-inventory, and recovery-assessment queries, read-only singleton diagnostics, and adapter shutdown behind the application API.",
       "dependencies": [
         {
           "path": "apps/observer/src/diagnostics/collector.ts",
@@ -14543,6 +15335,13 @@
         {
           "path": "apps/observer/src/runtime/spoolDrain.ts",
           "declaration": "createSpoolDrainer",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/observer/src/sessionRecoveryAssessment.ts",
+          "declaration": "inspectObserverRecoveryAssessment",
           "kind": "function",
           "role": "USE CASE",
           "edgeKind": "runtime"
@@ -14653,7 +15452,7 @@
       "declaration": "runObserverMain",
       "kind": "function",
       "role": "COMPOSITION ROOT",
-      "purpose": "Claims boot ownership, branches on four-state socket evidence, selects Observer-private infrastructure from resolved runtime identity, and owns bind, pidfile, read-only duplicate inspection, ownership-aware shutdown, and exact build health publication. Successful publication notifies the injected readiness sink; startup rejection retains the original failure after best-effort cleanup.",
+      "purpose": "Claims boot ownership, branches on four-state socket evidence, repairs only positively stale strict pidfile evidence, selects Observer-private infrastructure from resolved runtime identity, and owns bind, pidfile, read-only duplicate inspection, ownership-aware shutdown, and exact build health publication. Successful publication notifies the injected readiness sink; startup rejection retains the original failure after best-effort cleanup.",
       "dependencies": [
         {
           "path": "apps/observer/src/commands/harnessLaunchPreflight.ts",
@@ -14712,10 +15511,24 @@
           "edgeKind": "runtime"
         },
         {
+          "path": "apps/observer/src/runtime/observerEvidenceRepair.ts",
+          "declaration": "repairStaleObserverEvidence",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
+        },
+        {
           "path": "apps/observer/src/runtime/observerHandoff.ts",
           "declaration": "negotiateObserverIncumbent",
           "kind": "function",
           "role": "USE CASE",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/observer/src/runtime/observerPidfile.ts",
+          "declaration": "createLocalObserverProcessIdentityRepair",
+          "kind": "function",
+          "role": "ADAPTER",
           "edgeKind": "runtime"
         },
         {
@@ -14781,7 +15594,7 @@
       "declaration": "acquireObserverBootClaim",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Excludes cross-runtime startup and explicit reap mutation through a SQLite transaction whose ownership comes from the OS lock, never the persistent claim file.",
+      "purpose": "Excludes cross-runtime startup, stale-evidence repair, and explicit reap mutation through a SQLite transaction whose ownership comes from the OS lock, never the persistent claim file.",
       "dependencies": []
     },
     {
@@ -14804,6 +15617,22 @@
           "kind": "interface",
           "role": "DRIVEN PORT",
           "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
+      "path": "apps/observer/src/runtime/observerEvidenceRepair.ts",
+      "declaration": "repairStaleObserverEvidence",
+      "kind": "function",
+      "role": "USE CASE",
+      "purpose": "Repairs positively stale pidfile evidence while the caller holds the Observer boot claim. It revalidates process, pidfile, and socket evidence before the atomic pidfile commit and never signals or unlinks a socket.",
+      "dependencies": [
+        {
+          "path": "apps/observer/src/runtime/observerProcessIdentity.ts",
+          "declaration": "verifyObserverProcessIdentity",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
         }
       ]
     },
@@ -14842,6 +15671,13 @@
           "kind": "interface",
           "role": "DRIVEN PORT",
           "edgeKind": "type-only"
+        },
+        {
+          "path": "apps/observer/src/runtime/observerProcessIdentity.ts",
+          "declaration": "verifyObserverProcessIdentity",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
         }
       ]
     },
@@ -14859,6 +15695,22 @@
       "kind": "interface",
       "role": "DRIVEN PORT",
       "purpose": "Supplies exact incumbent-process evidence without exposing operating-system commands; typed evidence failures remain available as causes, while unavailable socket-holder evidence throws and never means zero.",
+      "dependencies": [
+        {
+          "path": "apps/observer/src/runtime/observerProcessIdentity.ts",
+          "declaration": "ObserverProcessIdentityEvidenceSource",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
+      "path": "apps/observer/src/runtime/observerPidfile.ts",
+      "declaration": "createLocalObserverProcessIdentityRepair",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Exposes strict pidfile reads and atomic exact-identity removal to stale evidence repair without granting broader filesystem mutation.",
       "dependencies": []
     },
     {
@@ -14866,11 +15718,27 @@
       "declaration": "createLocalObserverProcessEvidence",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Translates targeted and global exact argv, executable provenance, launch nonce, OS start time, strict socket-holder and complete file-descriptor evidence, pidfiles, socket identities, and signals into conservative ownership evidence. Exact executable/argv mismatch throws a stable typed refusal without weakening the fail-closed ownership decision.",
+      "purpose": "Translates bounded targeted and global exact argv, executable provenance, launch nonce, OS start time, non-signaling process existence, strict socket-holder and complete file-descriptor evidence, pidfiles, socket identities, and signals into conservative ownership evidence. Exact executable/argv mismatch throws a stable typed refusal without weakening the fail-closed ownership decision.",
+      "dependencies": []
+    },
+    {
+      "path": "apps/observer/src/runtime/observerProcessIdentity.ts",
+      "declaration": "ObserverProcessIdentityEvidenceSource",
+      "kind": "interface",
+      "role": "DRIVEN PORT",
+      "purpose": "Supplies exact, read-only Observer process evidence without exposing the operating-system commands used to collect it.",
+      "dependencies": []
+    },
+    {
+      "path": "apps/observer/src/runtime/observerProcessIdentity.ts",
+      "declaration": "verifyObserverProcessIdentity",
+      "kind": "function",
+      "role": "USE CASE",
+      "purpose": "Verifies one exact Observer process generation from read-only evidence. The caller decides whether an exact, mismatched, or unavailable result permits a lifecycle action; the verifier never creates signal authority.",
       "dependencies": [
         {
-          "path": "apps/observer/src/runtime/observerReap.ts",
-          "declaration": "ObserverDuplicateProcessEvidenceSource",
+          "path": "apps/observer/src/runtime/observerProcessIdentity.ts",
+          "declaration": "ObserverProcessIdentityEvidenceSource",
           "kind": "interface",
           "role": "DRIVEN PORT",
           "edgeKind": "type-only"
@@ -14884,6 +15752,13 @@
       "role": "USE CASE",
       "purpose": "Creates explicit operator reap with centralized selection and revalidation; only this manual force path may escalate from SIGTERM to SIGKILL.",
       "dependencies": [
+        {
+          "path": "apps/observer/src/runtime/observerProcessIdentity.ts",
+          "declaration": "verifyObserverProcessIdentity",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
+        },
         {
           "path": "apps/observer/src/runtime/observerReap.ts",
           "declaration": "inspectObserverDuplicates",
@@ -14908,6 +15783,13 @@
       "purpose": "Collects one read-only duplicate-process plan for startup diagnostics and explicit reap without creating signal authority.",
       "dependencies": [
         {
+          "path": "apps/observer/src/runtime/observerProcessIdentity.ts",
+          "declaration": "verifyObserverProcessIdentity",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
+        },
+        {
           "path": "apps/observer/src/runtime/observerReap.ts",
           "declaration": "ObserverDuplicateProcessEvidenceSource",
           "kind": "interface",
@@ -14924,8 +15806,8 @@
       "purpose": "Supplies strict process, socket-identity, pidfile, signal, and per-process Unix-socket descriptor evidence for fail-closed global duplicate decisions.",
       "dependencies": [
         {
-          "path": "apps/observer/src/runtime/observerHandoff.ts",
-          "declaration": "ObserverProcessEvidenceSource",
+          "path": "apps/observer/src/runtime/observerProcessIdentity.ts",
+          "declaration": "ObserverProcessIdentityEvidenceSource",
           "kind": "interface",
           "role": "DRIVEN PORT",
           "edgeKind": "type-only"
@@ -15088,6 +15970,22 @@
       ]
     },
     {
+      "path": "apps/observer/src/sessionRecoveryAssessment.ts",
+      "declaration": "inspectObserverRecoveryAssessment",
+      "kind": "function",
+      "role": "USE CASE",
+      "purpose": "Assesses all retained sessions from exactly one coherent persistence inventory against one caller-captured Observer graph. Eligibility and newest-candidate selection remain delegated to their canonical policies; the result is redacted evidence only and grants no resume authority.",
+      "dependencies": [
+        {
+          "path": "apps/observer/src/persistence/ports.ts",
+          "declaration": "SessionStore",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
       "path": "apps/observer/src/sessionRecoveryEligibility.ts",
       "declaration": "sessionRecoveryEligibility",
       "kind": "function",
@@ -15188,7 +16086,7 @@
       "declaration": "createCodexHarnessProvider",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Supplies Codex launch, discovery, hook normalization, and compatibility admission through the harness port.",
+      "purpose": "Supplies Codex launch, discovery, hook health/reconciliation, normalization, and compatibility admission through the harness port.",
       "dependencies": [
         {
           "path": "packages/contracts/src/providers.ts",
@@ -15498,7 +16396,7 @@
       "declaration": "ObserverApi",
       "kind": "type",
       "role": "DRIVING PORT",
-      "purpose": "Exposes Observer state, recovery-readiness, and coherent recovery-inventory queries, plus handshakes, ingress reports, maintenance, and lifecycle operations to external actors.",
+      "purpose": "Exposes Observer state, recovery-readiness, coherent recovery-inventory, and read-only recovery-assessment queries, plus handshakes, ingress reports, maintenance, and lifecycle operations to external actors.",
       "dependencies": []
     },
     {

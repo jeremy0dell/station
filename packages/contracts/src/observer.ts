@@ -31,6 +31,7 @@ import {
   ProviderHealthSchema,
   TerminalOutputCompatibilitySchema,
 } from "./providers.js";
+import type { ObserverRecoveryAssessment } from "./recoveryAssessment.js";
 import type { ObserverRecoveryInventory } from "./recoveryInventory.js";
 import type { SessionRecoveryReadiness } from "./sessionRecovery.js";
 import {
@@ -214,12 +215,45 @@ export const ObserverRestartCommandResultSchema = z.discriminatedUnion("status",
 
 export type ObserverRestartCommandResult = z.infer<typeof ObserverRestartCommandResultSchema>;
 
+export const ObserverStaleEvidenceRepairReasonSchema = z.enum([
+  "process-missing",
+  "os-start-token-drift",
+  "executable-argv-drift",
+  "process-token-drift",
+  "build-version-drift",
+  "socket-argv-drift",
+]);
+
+export const ObserverStaleEvidenceRepairSummarySchema = z.discriminatedUnion("pidfile", [
+  z
+    .object({
+      socket: z.enum(["absent", "stale"]),
+      pidfile: z.literal("absent"),
+    })
+    .strict(),
+  z
+    .object({
+      socket: z.enum(["absent", "stale"]),
+      pidfile: z.literal("removed"),
+      reason: ObserverStaleEvidenceRepairReasonSchema,
+    })
+    .strict(),
+]);
+
+export type ObserverStaleEvidenceRepairReason = z.infer<
+  typeof ObserverStaleEvidenceRepairReasonSchema
+>;
+export type ObserverStaleEvidenceRepairSummary = z.infer<
+  typeof ObserverStaleEvidenceRepairSummarySchema
+>;
+
 export const ObserverStopReceiptSchema = z
   .object({
     schemaVersion: SchemaVersionSchema,
     stopped: z.boolean(),
     at: TimestampSchema,
     message: nonEmptyStringSchema.optional(),
+    evidenceRepair: ObserverStaleEvidenceRepairSummarySchema.optional(),
   })
   .strict();
 
@@ -336,7 +370,8 @@ export type WorktreeCancelRemovalResult = z.infer<typeof WorktreeCancelRemovalRe
 /**
  * DRIVING PORT
  *
- * Exposes Observer state, recovery-readiness, and coherent recovery-inventory queries,
+ * Exposes Observer state, recovery-readiness, coherent recovery-inventory, and read-only
+ * recovery-assessment queries,
  * plus handshakes, ingress reports, maintenance, and lifecycle operations to external actors.
  */
 export type ObserverApi = {
@@ -345,6 +380,7 @@ export type ObserverApi = {
   getSnapshot(options?: { includeDebug?: boolean }): Promise<StationSnapshot>;
   getSessionRecoveryReadiness(): Promise<SessionRecoveryReadiness>;
   getSessionRecoveryInventory(): Promise<ObserverRecoveryInventory>;
+  getSessionRecoveryAssessment(): Promise<ObserverRecoveryAssessment>;
   subscribe(filter?: EventFilter): AsyncIterable<StationEvent>;
   dispatch(command: StationCommand): Promise<CommandReceipt>;
   getCommand(commandId: CommandId): Promise<CommandRecord | undefined>;

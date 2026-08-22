@@ -7,6 +7,8 @@ import type {
   HarnessProvider,
   ProviderDoctorCheck,
   ProviderDoctorContext,
+  ProviderHookHealth,
+  ProviderHookReconciliationResult,
 } from "@station/contracts";
 import {
   type CommonHarnessProviderOptions,
@@ -21,7 +23,7 @@ import {
 import { safeErrorFromUnknown } from "@station/runtime";
 import { codexProviderErrorFromUnknown } from "./errors.js";
 import { acceptsCodexPersistedEvent } from "./events.js";
-import { doctorCodexHooks } from "./hooks.js";
+import { doctorCodexHooks, inspectCodexHookHealth, reconcileCodexHooks } from "./hooks.js";
 import { buildCodexLaunchPlan, type CodexLaunchOptions } from "./launch.js";
 
 const CODEX_STATION_PROFILE = "station";
@@ -80,6 +82,8 @@ const codexSpec: TerminalBoundHarnessProviderSpec<CodexHarnessProviderOptions> =
   acceptsPersistedEvent: acceptsCodexPersistedEvent,
   doctorChecks,
   hooksStatus,
+  hookHealth,
+  reconcileHooks: reconcileHooksForProvider,
   version: { latestPackage: "@openai/codex" },
 };
 
@@ -181,10 +185,26 @@ async function hooksStatus(
   return harnessHooksStatusFrom("codex", options.installHooks === true, hookResult);
 }
 
+/** Translates Codex-native doctor evidence into the provider-neutral read contract. */
+async function hookHealth(
+  options: CodexHarnessProviderOptions,
+  context?: ProviderDoctorContext,
+): Promise<ProviderHookHealth> {
+  return inspectCodexHookHealth(harnessHookDoctorOptions(options, context));
+}
+
+/** Delegates automatic repair to the Codex-owned no-takeover plan/install/doctor path. */
+async function reconcileHooksForProvider(
+  options: CodexHarnessProviderOptions,
+  context?: ProviderDoctorContext,
+): Promise<ProviderHookReconciliationResult> {
+  return reconcileCodexHooks(harnessHookDoctorOptions(options, context));
+}
+
 /**
  * ADAPTER
  *
- * Supplies Codex launch, discovery, hook normalization, and compatibility admission through the harness port.
+ * Supplies Codex launch, discovery, hook health/reconciliation, normalization, and compatibility admission through the harness port.
  */
 export function createCodexHarnessProvider(
   options: CodexHarnessProviderOptions = {},

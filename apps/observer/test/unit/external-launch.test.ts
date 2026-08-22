@@ -28,7 +28,7 @@ import {
   FakeTerminalProvider,
   FakeWorktreeProvider,
 } from "@station/testing";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { SessionSeedGroupProvenance, SessionStore } from "../../src/persistence/index";
 import { ProviderRegistry } from "../../src/providers/registry";
 import type { ObserverCore } from "../../src/reconcile/core";
@@ -499,7 +499,15 @@ describe("ProviderRegistry managed terminal role", () => {
 describe("prepareExternalLaunch", () => {
   it("mints one session + one managed target + a launch plan", async () => {
     const station = new FakeManagedTerminalLifecycle();
-    const launchDeps = deps([row()], station);
+    const harness = new CapturingHarness({ id: "fake-harness", now: () => new Date(now) });
+    const reconcileHooks = vi.fn(async () => ({
+      provider: harness.id,
+      status: "healthy" as const,
+      changed: false as const,
+      verified: true as const,
+    }));
+    harness.reconcileHooks = reconcileHooks;
+    const launchDeps = deps([row()], station, [harness]);
     const result = await prepareExternalLaunch(launchDeps, prepareParams);
 
     expect(result.reconcile).toBe(true);
@@ -510,6 +518,7 @@ describe("prepareExternalLaunch", () => {
     expect(result.outcome.launchPlan.provider).toBe("fake-harness");
     expect(result.outcome.launchPlan.env?.STATION_SESSION_ID).toBe(result.outcome.sessionId);
     expect(result.outcome).not.toHaveProperty("outputCompatibility");
+    expect(reconcileHooks).toHaveBeenCalledWith(undefined);
 
     // Exactly one station target was registered for the worktree.
     const targets = await station.listTargets();
@@ -852,6 +861,13 @@ describe("prepareExternalLaunch", () => {
       }),
     );
     const harness = new CapturingHarness({ id: "fake-harness", now: () => new Date(now) });
+    const reconcileHooks = vi.fn(async () => ({
+      provider: harness.id,
+      status: "healthy" as const,
+      changed: false as const,
+      verified: true as const,
+    }));
+    harness.reconcileHooks = reconcileHooks;
     const station = new FakeManagedTerminalLifecycle();
 
     const result = await prepareExternalLaunch(
@@ -880,6 +896,7 @@ describe("prepareExternalLaunch", () => {
         },
       }),
     ]);
+    expect(reconcileHooks).toHaveBeenCalledWith(undefined);
     await expect(persistence.listSessions()).resolves.toEqual([
       expect.objectContaining({ id: "ses_recoverable", title: "Canonical recovered title" }),
     ]);

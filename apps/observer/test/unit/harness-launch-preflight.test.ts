@@ -73,6 +73,55 @@ describe("assertHarnessLaunchPreconditionsOrThrow", () => {
     expect(other.hooksCalls).toBe(0);
   });
 
+  it("repairs the selected provider before verifying installed hook delivery", async () => {
+    let repaired = false;
+    const harness = new PreflightHarness({
+      hooks: async () => ({
+        provider: "fake-harness",
+        requested: true,
+        installed: repaired,
+        missing: repaired ? [] : ["hook"],
+        message: repaired ? "Installed." : "Missing.",
+      }),
+    });
+    harness.reconcileHooks = async () => {
+      repaired = true;
+      return {
+        provider: harness.id,
+        status: "repaired",
+        changed: true,
+        verified: true,
+      };
+    };
+
+    await assertHarnessLaunchPreconditionsOrThrow({
+      providers: registry([harness]),
+      providerId: harness.id,
+    });
+
+    expect(repaired).toBe(true);
+    expect(harness.hooksCalls).toBe(1);
+  });
+
+  it("fails before the legacy hook gate when automatic reconciliation is unverified", async () => {
+    const harness = new PreflightHarness();
+    harness.reconcileHooks = async () => ({
+      provider: harness.id,
+      status: "ownership-conflict",
+      changed: false,
+      verified: false,
+      followUp: { action: "run-explicit-takeover" },
+    });
+
+    await expect(
+      assertHarnessLaunchPreconditionsOrThrow({
+        providers: registry([harness]),
+        providerId: harness.id,
+      }),
+    ).rejects.toMatchObject({ code: "HARNESS_HOOK_OWNERSHIP_CONFLICT" });
+    expect(harness.hooksCalls).toBe(0);
+  });
+
   it("rejects unavailable capabilities and unregistered providers before probing", async () => {
     const disabled = new PreflightHarness({ canLaunch: false });
     const providers = registry([disabled]);

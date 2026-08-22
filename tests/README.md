@@ -27,6 +27,12 @@ runs unit, contract, integration, diagnostics, scripted-agent, setup E2E, and
 Observer E2E coverage, then runs the installer smoke. Use the focused scripts in
 `package.json` when only one responsibility needs to be repeated.
 
+Codex hook reconciliation has a focused cross-system gate:
+
+```sh
+pnpm test:e2e:codex-hook-reconciliation
+```
+
 The pre-push hook is intentionally lint-only. It does not replace `test:all` or
 the focused gate required by the change.
 
