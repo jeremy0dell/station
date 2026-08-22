@@ -4,7 +4,7 @@ import { ProjectIdSchema, ProviderIdSchema, SessionIdSchema, WorktreeIdSchema } 
 import { ProviderHookHealthSchema } from "./providerHooks.js";
 import { ObserverRecoveryAssessmentSchema } from "./recoveryAssessment.js";
 import { nonEmptyStringSchema } from "./shared.js";
-import { UpdateArtifactSchema } from "./update.js";
+import { UpdateArtifactSchema } from "./updateArtifact.js";
 
 export const UpdateRuntimeBuildRelationSchema = z.enum(["matching-target", "different", "unknown"]);
 export type UpdateRuntimeBuildRelation = z.infer<typeof UpdateRuntimeBuildRelationSchema>;

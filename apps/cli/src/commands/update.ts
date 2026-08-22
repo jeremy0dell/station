@@ -6,6 +6,8 @@ import {
   type ProviderHookReconciliationResult,
   ProviderHookReconciliationResultSchema,
   type SafeError,
+  type UpdateArtifact,
+  type UpdateReapRecoveryPreflight,
 } from "@station/contracts";
 import {
   type ExternalCommandRunner,
@@ -30,6 +32,7 @@ import {
   currentUpdateResult,
   deferredUpdateResult,
   failedUpdateResult,
+  previewCurrentUpdateResult,
   previewUpdateResult,
   type UpdateCommandReport,
   updatedUpdateResult,
@@ -54,6 +57,11 @@ export type UpdateCommandDeps = {
   executablePath?: string;
   commandRunner?: ExternalCommandRunner;
   hostDeps?: HostCommandDeps;
+  /** Runs the composed read-only assessment required only by `--dry-run --reap`. */
+  recoveryPreflight?: (input: {
+    installed: UpdateArtifact;
+    target: UpdateArtifact;
+  }) => Promise<UpdateReapRecoveryPreflight>;
 };
 
 type ExecutableUpdateScenario = Extract<
@@ -66,8 +74,9 @@ const OBSERVER_CROSSOVER_TIMEOUT_MS = 20_000;
 /**
  * ADAPTER
  *
- * Selects one owned install channel, preflights default live Host preservation, reconciles
- * configured hooks through the selected launcher, and only then crosses runtimes.
+ * Selects one owned install channel and optionally aggregates non-authorizing recovery facts.
+ * Apply mode then preflights Host preservation, reconciles hooks through the selected launcher,
+ * and crosses runtimes; recovery preflight itself exposes no mutation capability.
  */
 export async function runUpdateCommand(
   args: readonly string[],
@@ -80,6 +89,19 @@ export async function runUpdateCommand(
     ...(request.channel === undefined ? {} : { requested: request.channel }),
   });
   const report = createUpdateReport(selected);
+  if (request.reap) {
+    if (deps.recoveryPreflight === undefined) {
+      throw {
+        tag: "UpdatePreflightError",
+        code: "UPDATE_PREFLIGHT_PORTS_UNAVAILABLE",
+        message: "Update recovery preflight is unavailable in this CLI composition.",
+      } satisfies SafeError;
+    }
+    report.recoveryPreflight = await deps.recoveryPreflight({
+      installed: report.current,
+      target: report.target,
+    });
+  }
   const scenario = await resolveUpdateScenario({
     selected,
     request,
@@ -89,6 +111,9 @@ export async function runUpdateCommand(
 
   switch (scenario.kind) {
     case "already-current":
+      if (request.mode === "preview") {
+        return previewCurrentUpdateResult(report, request.output);
+      }
       return reconcileCurrentInstallation(selected, report, request, options, deps.commandRunner);
     case "preview":
       return previewUpdateResult(report, scenario, request.output);

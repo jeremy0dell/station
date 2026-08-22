@@ -269,10 +269,17 @@ Auto-starting `snapshot`, `doctor`, `command`, `reconcile`, `observe`, and
 startupEvidence? }` lifecycle envelope instead of flattening them into prose.
 Setup activation retains the same fields in its failed operation/session
 outcome. Update report schema version 2 adds the provider-neutral
-`hookReconciliation` result and `hook-reconciliation` step. A same-version
-update reconciles through the current launcher; an installed successor
-reconciles through the successor launcher before Observer restart. Hook failure
-prevents runtime crossover. `stn update --json` keeps
+`hookReconciliation` result and `hook-reconciliation` step. Schema version 3
+adds the optional `recoveryPreflight` assessment; compatible readers retain
+explicit version 1 and version 2 parsers instead of accepting version backports.
+Use `stn update --dry-run --reap --json` to collect the redacted aggregate
+Observer, Host, terminal, retained-session, resume-capability, handle-selection,
+and hook-health evidence without changing runtime state. Unknown or drifting
+identity remains typed in the report, and non-resumable dispositions are
+explicit. The assessment contains no executable action or digest. A
+same-version update reconciles through the current launcher; an installed
+successor reconciles through the successor launcher before Observer restart.
+Hook failure prevents runtime crossover. `stn update --json` keeps
 `UPDATE_RUNTIME_CROSSOVER_FAILED` as its outer `error` and publishes the
 strictly parsed successor lifecycle `cause` and `startupEvidence` separately.
 

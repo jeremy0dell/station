@@ -1,6 +1,12 @@
+import {
+  type CreateProviderRegistryOptions,
+  createProviderRegistry,
+} from "../../observerProviders.js";
+import { runUpdateRecoveryPreflight } from "../../update/recoveryPreflight.js";
+import { createUpdateRecoveryPreflightPorts } from "../../update/recoveryPreflightAdapters.js";
 import { loadedConfigCommandOptions } from "../cliCommand/helpers.js";
 import type { CliCommandNode, CliCommandRunContext } from "../cliCommand/types.js";
-import { runUpdateCommand } from "../update.js";
+import { runUpdateCommand, type UpdateCommandDeps } from "../update.js";
 
 export const updateCliCommand: CliCommandNode = {
   name: "update",
@@ -59,14 +65,44 @@ async function runUpdateCliCommand(context: CliCommandRunContext) {
       ...(loaded.configPath === undefined ? {} : { configPath: loaded.configPath }),
       ...(context.options.env === undefined ? {} : { env: context.options.env }),
     },
-    updateDeps(context),
+    updateDeps(context, loaded),
   );
 }
 
-function updateDeps(context: CliCommandRunContext) {
+/** COMPOSITION ROOT: Adds read-only recovery ports only for an admitted dry-run reap request. */
+function updateDeps(
+  context: CliCommandRunContext,
+  loaded: ReturnType<typeof loadedConfigCommandOptions>,
+): UpdateCommandDeps {
   const hostDeps = context.options.updateDeps?.hostDeps ?? context.options.hostDeps;
-  return {
+  const deps: UpdateCommandDeps = {
     ...context.options.updateDeps,
     ...(hostDeps === undefined ? {} : { hostDeps }),
   };
+  if (
+    deps.recoveryPreflight === undefined &&
+    context.args.includes("--dry-run") &&
+    context.args.includes("--reap")
+  ) {
+    const registryOptions: CreateProviderRegistryOptions = {};
+    if (loaded.configPath !== undefined) registryOptions.configPath = loaded.configPath;
+    if (loaded.providerHookIngressLauncher !== undefined) {
+      registryOptions.providerHookIngressLauncher = loaded.providerHookIngressLauncher;
+    }
+    if (loaded.providerHookArtifactOwner !== undefined) {
+      registryOptions.providerHookArtifactOwner = loaded.providerHookArtifactOwner;
+    }
+    const preflightOptions: Parameters<typeof createUpdateRecoveryPreflightPorts>[0] = {
+      config: loaded.config,
+      providers: createProviderRegistry(loaded.config, registryOptions),
+    };
+    if (loaded.configPath !== undefined) preflightOptions.configPath = loaded.configPath;
+    if (hostDeps !== undefined) preflightOptions.hostDeps = hostDeps;
+    if (context.options.observerDeps !== undefined) {
+      preflightOptions.observerDeps = context.options.observerDeps;
+    }
+    const ports = createUpdateRecoveryPreflightPorts(preflightOptions);
+    deps.recoveryPreflight = (input) => runUpdateRecoveryPreflight({ ...input, ports });
+  }
+  return deps;
 }

@@ -263,7 +263,21 @@ plan without mutation in text or JSON:
 ```sh
 stn update --dry-run
 stn update --dry-run --json
+stn update --dry-run --reap
+stn update --dry-run --reap --json
 ```
+
+`--dry-run --reap` adds one read-only recovery preflight to the update report.
+It captures the installed and target builds, one live Observer graph snapshot,
+one retained-session inventory query through the Observer API, exact
+Station-owned terminal evidence, Host handoff support, provider resume
+capability and deterministic handle selection, and provider-neutral hook
+health. Every affected terminal and retained session receives a disposition;
+non-resumable consequences are called out explicitly. The preflight does not
+install, signal, restart, reconcile hooks, resume sessions, authorize actions,
+or produce an execution digest. `--reap` without `--dry-run` is rejected before
+update detection or mutation; destructive execution remains a later command
+boundary.
 
 The supported channel IDs are:
 
