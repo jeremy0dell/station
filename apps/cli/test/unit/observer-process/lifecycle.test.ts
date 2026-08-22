@@ -115,6 +115,128 @@ describe("CLI observer process lifecycle", () => {
     });
   });
 
+  it("stops idempotently by reconciling stale evidence when no incumbent exists", async () => {
+    const fixture = await createTempState();
+    const repairStaleEvidence = vi.fn(async () => ({
+      socket: "absent" as const,
+      pidfile: "removed" as const,
+      reason: "process-missing" as const,
+    }));
+
+    await expect(
+      stopObserver(
+        { config: fixture.config, timeoutMs: 500 },
+        {
+          clock: { now: () => new Date(now) },
+          probeSocket: async () => ({ status: "absent" }),
+          clientFactory: () =>
+            ({ health: async () => Promise.reject(new Error("stopped")) }) as never,
+          repairStaleEvidence,
+        },
+      ),
+    ).resolves.toEqual({
+      schemaVersion: "0.11.0",
+      stopped: false,
+      at: now,
+      message: "Observer was already stopped; stale lifecycle evidence was reconciled.",
+      evidenceRepair: {
+        socket: "absent",
+        pidfile: "removed",
+        reason: "process-missing",
+      },
+    });
+    expect(repairStaleEvidence).toHaveBeenCalledWith({
+      socketPath: fixture.socketPath,
+      timeoutMs: expect.any(Number),
+    });
+  });
+
+  it("keeps uncertain stale evidence as a typed stop refusal", async () => {
+    const fixture = await createTempState();
+    const refusal = {
+      tag: "ObserverEvidenceRepairError",
+      code: "OBSERVER_STALE_EVIDENCE_UNCERTAIN",
+      message: "Observer process ownership could not be established safely.",
+    };
+
+    await expect(
+      stopObserver(
+        { config: fixture.config, timeoutMs: 500 },
+        {
+          probeSocket: async () => ({ status: "absent" }),
+          clientFactory: () =>
+            ({ health: async () => Promise.reject(new Error("stopped")) }) as never,
+          repairStaleEvidence: async () => {
+            throw refusal;
+          },
+        },
+      ),
+    ).rejects.toMatchObject(refusal);
+  });
+
+  it("reclassifies an owner that appears during repair and stops only its pinned identity", async () => {
+    const fixture = await createTempState();
+    let running = true;
+    let probeReads = 0;
+    let repairAttempted = false;
+    let expectedObserverIdentity: unknown;
+    const ownerChanged = {
+      tag: "ObserverEvidenceRepairError",
+      code: "OBSERVER_STALE_EVIDENCE_OWNER_CHANGED",
+      message: "Observer socket ownership changed during repair.",
+    };
+
+    await expect(
+      stopObserver(
+        { config: fixture.config, timeoutMs: 500 },
+        {
+          probeSocket: async () => {
+            probeReads += 1;
+            return probeReads === 1 || !running
+              ? { status: "absent" as const }
+              : {
+                  status: "listening" as const,
+                  identity: { ino: 10n, birthtimeNs: 20n },
+                };
+          },
+          clientFactory: (_socketPath, options) => {
+            if (options?.expectedObserverIdentity !== undefined) {
+              expectedObserverIdentity = options.expectedObserverIdentity;
+            }
+            return {
+              health: async () => {
+                if (!repairAttempted || !running) throw new Error("stopped");
+                return {
+                  schemaVersion: "0.11.0",
+                  status: "healthy",
+                  pid: 4321,
+                  startedAt: now,
+                  version: exactOneBuildVersion,
+                  socketPath: fixture.socketPath,
+                };
+              },
+              stop: async () => {
+                running = false;
+                return { schemaVersion: "0.11.0", stopped: true, at: now };
+              },
+            } as never;
+          },
+          repairStaleEvidence: async () => {
+            repairAttempted = true;
+            throw ownerChanged;
+          },
+          sleep: async () => undefined,
+        },
+      ),
+    ).resolves.toMatchObject({ stopped: true });
+    expect(expectedObserverIdentity).toEqual({
+      pid: 4321,
+      startedAt: now,
+      version: exactOneBuildVersion,
+      socketPath: fixture.socketPath,
+    });
+  });
+
   it("spawns the observer and waits for health when it is stopped", async () => {
     const fixture = await createTempState();
     let spawned = false;

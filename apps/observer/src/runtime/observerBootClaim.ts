@@ -42,9 +42,9 @@ export function observerBootClaimPath(socketPath: string): string {
 /**
  * ADAPTER
  *
- * Excludes cross-runtime startup and explicit reap mutation through a
- * SQLite transaction whose ownership comes from the OS lock, never the
- * persistent claim file.
+ * Excludes cross-runtime startup, stale-evidence repair, and explicit reap
+ * mutation through a SQLite transaction whose ownership comes from the OS
+ * lock, never the persistent claim file.
  */
 export async function acquireObserverBootClaim(
   options: { socketPath: string; timeoutMs: number },

@@ -15,6 +15,7 @@ import type {
 import type { RuntimeBoundaryResult, RuntimeClock } from "@station/runtime";
 import type { ObserverPaths } from "../paths.js";
 import type { ExecutableArgv } from "../selfExec.js";
+import type { RepairLocalObserverEvidence } from "./evidenceRepair.js";
 
 // Shared types keep the facade and leaf modules connected without introducing runtime import cycles.
 export type ObserverStatus =
@@ -76,6 +77,8 @@ export type ObserverProcessDeps = {
   clock?: RuntimeClock;
   sleep?: (ms: number) => Promise<void>;
   logger?: JsonlLogger;
+  /** Test/composition seam for claim-serialized stale lifecycle evidence repair. */
+  repairStaleEvidence?: RepairLocalObserverEvidence;
 };
 
 export type SpawnObserverInput = {

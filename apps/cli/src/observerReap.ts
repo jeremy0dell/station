@@ -14,6 +14,7 @@ import { createObserverClient } from "@station/protocol";
 export type { ObserverProcessEntry, ObserverReapOutcome, ObserverReapTarget };
 
 export type ObserverReapDeps = {
+  readObserverProcess?: ObserverDuplicateProcessEvidenceSource["readObserverProcess"];
   listObserverProcesses?: () => ObserverProcessEntry[];
   socketHolders?: (socketPath: string) => number[];
   processStartToken?: (pid: number) => string | undefined;
@@ -34,7 +35,7 @@ export type ObserverReapDeps = {
 export function createLocalObserverReap(deps: ObserverReapDeps = {}): ObserverReap {
   const localEvidence = createLocalObserverProcessEvidence();
   const evidence: ObserverDuplicateProcessEvidenceSource = {
-    readObserverProcess: localEvidence.readObserverProcess,
+    readObserverProcess: deps.readObserverProcess ?? localEvidence.readObserverProcess,
     listObserverProcesses: deps.listObserverProcesses ?? localEvidence.listObserverProcesses,
     socketHolders: deps.socketHolders ?? localEvidence.socketHolders,
     processStartToken: deps.processStartToken ?? localEvidence.processStartToken,
