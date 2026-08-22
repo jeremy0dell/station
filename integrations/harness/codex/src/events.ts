@@ -14,6 +14,7 @@ import {
 import { harnessEventDiagnostics, reportCorrelation } from "@station/harness-shared";
 import { z } from "zod";
 import { codexHarnessError } from "./errors.js";
+import { CodexPermissionReviewerEvidenceSchema } from "./permissionReviewerEvidence.js";
 
 const nonEmptyStringSchema = z.string().min(1);
 const USER_INPUT_TOOL = "request_user_input";
@@ -36,6 +37,7 @@ const CodexHookProviderDataSchema = z
     agentId: nonEmptyStringSchema.optional(),
     agentType: nonEmptyStringSchema.optional(),
     trigger: z.enum(["manual", "auto"]).optional(),
+    permissionReviewerEvidence: CodexPermissionReviewerEvidenceSchema.optional(),
     stationProjectId: nonEmptyStringSchema.optional(),
     stationWorktreeId: nonEmptyStringSchema.optional(),
     stationWorktreePath: nonEmptyStringSchema.optional(),
@@ -106,6 +108,7 @@ const PermissionRequestEventSchema = z
     hook_event_name: z.literal("PermissionRequest"),
     tool_name: nonEmptyStringSchema,
     tool_input: z.unknown(),
+    station_codex_permission_reviewer_evidence: CodexPermissionReviewerEvidenceSchema.optional(),
   })
   .strict();
 
@@ -253,6 +256,18 @@ export function statusFromCodexHookEvent(
     };
   }
   if (event.hook_event_name === "PermissionRequest") {
+    if (
+      event.station_codex_permission_reviewer_evidence?.status === "resolved" &&
+      event.station_codex_permission_reviewer_evidence.reviewer === "auto_review"
+    ) {
+      return {
+        value: "working",
+        confidence: "medium",
+        reason: `Codex routed permission for ${event.tool_name} to automatic review.`,
+        source: "harness_event",
+        updatedAt: observedAt,
+      };
+    }
     return {
       value: "needs_attention",
       confidence: "high",
@@ -394,6 +409,10 @@ function providerDataFromCodexEvent(event: CodexHookEvent): CodexHookProviderDat
   }
   if ("trigger" in event) {
     providerData.trigger = event.trigger;
+  }
+  if (event.hook_event_name === "PermissionRequest") {
+    const evidence = event.station_codex_permission_reviewer_evidence;
+    if (evidence !== undefined) providerData.permissionReviewerEvidence = evidence;
   }
   if (event.station_project_id !== undefined) {
     providerData.stationProjectId = event.station_project_id;

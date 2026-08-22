@@ -221,6 +221,98 @@ describe("observer reconcile with Codex harness", () => {
     sqlite.close();
   });
 
+  it("projects Codex PermissionRequest attention only when automatic review is unproven", async () => {
+    const { sqlite, core, api, eventBus } = createTestObserver({
+      config,
+      providers: codexProviders(),
+      clock: { now: () => new Date(now) },
+    });
+    await core.reconcile("initial-codex-reviewer-context");
+    const payload = {
+      session_id: "codex_session_123",
+      transcript_path: "/tmp/codex-rollout.jsonl",
+      cwd: "/tmp/station/web/task",
+      hook_event_name: "PermissionRequest",
+      model: "gpt-5.6-sol",
+      permission_mode: "default",
+      turn_id: "turn_1",
+      tool_name: "Bash",
+      tool_input: { command: "pnpm test:all" },
+      station_worktree_id: "wt_web_task",
+      station_session_id: "ses_web_task",
+      station_terminal_target_id: "tmux:station:@1:%2",
+    };
+
+    const autoReconciled = nextObserverReconciled(eventBus);
+    const autoReceipt = await api.ingestProviderHookEvent({
+      schemaVersion: STATION_SCHEMA_VERSION,
+      hookId: "hook_codex_auto_review",
+      provider: "codex",
+      kind: "harness",
+      event: "PermissionRequest",
+      receivedAt: "2026-05-21T12:00:01.000Z",
+      payload: {
+        ...payload,
+        station_codex_permission_reviewer_evidence: {
+          status: "resolved",
+          source: "transcript_turn_context",
+          reviewer: "auto_review",
+        },
+      },
+    });
+
+    expect(autoReceipt).toMatchObject({ status: "ingested", accepted: true });
+    await autoReconciled.next;
+    await autoReconciled.close();
+    expect(core.getSnapshot()).toMatchObject({
+      counts: { working: 1, attention: 0 },
+      sessions: [
+        expect.objectContaining({
+          id: "ses_web_task",
+          status: expect.objectContaining({
+            value: "working",
+            reason: "Codex routed permission for Bash to automatic review.",
+          }),
+        }),
+      ],
+    });
+
+    const userReconciled = nextObserverReconciled(eventBus);
+    const userReceipt = await api.ingestProviderHookEvent({
+      schemaVersion: STATION_SCHEMA_VERSION,
+      hookId: "hook_codex_user_review",
+      provider: "codex",
+      kind: "harness",
+      event: "PermissionRequest",
+      receivedAt: "2026-05-21T12:00:02.000Z",
+      payload: {
+        ...payload,
+        station_codex_permission_reviewer_evidence: {
+          status: "unavailable",
+          source: "transcript_turn_context",
+          reason: "turn_context_not_found",
+        },
+      },
+    });
+
+    expect(userReceipt).toMatchObject({ status: "ingested", accepted: true });
+    await userReconciled.next;
+    await userReconciled.close();
+    expect(core.getSnapshot()).toMatchObject({
+      counts: { working: 0, attention: 1 },
+      sessions: [
+        expect.objectContaining({
+          id: "ses_web_task",
+          status: expect.objectContaining({
+            value: "needs_attention",
+            attention: "tool_approval",
+          }),
+        }),
+      ],
+    });
+    sqlite.close();
+  });
+
   it("keeps a parent owner when inherited identity crosses into a nested managed worktree", async () => {
     const { sqlite, persistence, eventBus, core, api } = createTestObserver({
       config: nestedManagedConfig,
