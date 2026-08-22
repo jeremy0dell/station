@@ -91,7 +91,7 @@ export function createManySlotDashboardSnapshot(): StationSnapshot {
   const base = createDashboardSnapshot();
   return snapshotFromRows([
     ...base.rows,
-    ...Array.from({ length: 4 }, (_, index) =>
+    ...Array.from({ length: 33 }, (_, index) =>
       row({
         id: `wt_web_slot_${index}`,
         projectId: "web",

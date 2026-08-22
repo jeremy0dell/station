@@ -114,7 +114,9 @@ function buildStationItems(
       return buildGroupItems(row.payload.group.id, row.payload.group.projectId, state);
     case "session": {
       const sessionRow = row.payload.row;
-      return viewport.rowChoices.some((choice) => choice.value.id === sessionRow.id)
+      const visible = viewport.rows.some((candidate) => candidate.id === row.id);
+      const actionable = viewport.rowChoices.some((choice) => choice.value.id === sessionRow.id);
+      return visible && actionable
         ? buildSessionItems(sessionRow, state)
         : [noActionsItem()];
     }

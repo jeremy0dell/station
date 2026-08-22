@@ -12,6 +12,7 @@ import {
 import type { DashboardStateView } from "@station/dashboard-core/state";
 import { toOpenTuiColor, useStationTheme, type StationTheme } from "../../theme/index.js";
 import { DashboardFilterFooterView } from "./DashboardFilterFooterView.js";
+import { DashboardShortcutFooterView } from "./DashboardShortcutFooterView.js";
 
 export type DashboardFooterViewProps = {
   state: DashboardStateSource;
@@ -46,6 +47,9 @@ export function DashboardFooterView({ state, columns }: DashboardFooterViewProps
       />
     );
   }
+  if (model.kind === "shortcutInput") {
+    return <DashboardShortcutFooterView segments={model.segments} />;
+  }
   return (
     <text fg={dashboardFooterColor(theme, model)}>{truncateCells(model.text, contentColumns)}</text>
   );
@@ -75,7 +79,8 @@ function dashboardFooterColor(
       kind:
         | "persistentFilterEditing"
         | "persistentFilterCondition"
-        | "persistentFilterApplied";
+        | "persistentFilterApplied"
+        | "shortcutInput";
     }
   >,
 ): ColorInput {

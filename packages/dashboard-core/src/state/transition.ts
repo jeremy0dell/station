@@ -1,4 +1,4 @@
-import type { TuiKey } from "./keys.js";
+import { isReturnKey, type TuiKey } from "./keys.js";
 import type { TuiOperation } from "./operations/types.js";
 import { handleAddProjectKey } from "./screens/addProjectScreen.js";
 import { handleDashboardKey } from "./screens/dashboard.js";
@@ -19,6 +19,7 @@ import { handleRenameSessionKey } from "./screens/renameSession.js";
 import { handleCreateGroupKey, handleProjectMenuKey } from "./screens/sessionGroups.js";
 import { handleWidgetSettingsKey } from "./screens/widgetSettings.js";
 import { selectionMiddleware } from "./selection/middleware.js";
+import { handleShortcutCodeInputKey, shortcutCodeInputForScreen } from "./shortcutInput.js";
 import { activeTuiToast, isTuiToastHiddenByScreen } from "./toasts.js";
 import type { DashboardState } from "./types.js";
 
@@ -43,6 +44,15 @@ export function handleTuiKey(
       state,
       operations: [{ type: "exitDashboardRenderer", exitCode: 0 }],
     };
+  }
+
+  // Prefix editing is modal and precedes toast/screen Esc; Enter stays with the owning screen so
+  // dashboard activation and command targeting can share collection without synthetic key replay.
+  if (shortcutCodeInputForScreen(state.screen) !== undefined && !isReturnKey(key)) {
+    const shortcutInput = handleShortcutCodeInputKey(state, key, { armOnBacktick: false });
+    if (shortcutInput.kind === "handled") {
+      return { state: shortcutInput.state };
+    }
   }
 
   const activeToast = activeTuiToast(state);

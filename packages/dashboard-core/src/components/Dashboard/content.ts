@@ -188,7 +188,7 @@ export function commandPromptLineForScreen(
   screen: DashboardScreenView,
 ): CommandPromptLine | undefined {
   if (screen.name === "renameSession" && screen.step === "chooseSlot") {
-    return { text: "Rename: ↑↓ move · ↵ choose · 1-9/a-z or click", color: "yellow" };
+    return { text: "Rename: ↑↓/Enter choose · 1-9/a-z · ` extended", color: "yellow" };
   }
   return undefined;
 }

@@ -48,8 +48,8 @@ export const SELECTION_KEYS = [
 
 export type SelectionKey = (typeof SELECTION_KEYS)[number];
 
-export type KeyedChoice<T> = {
-  key: SelectionKey;
+export type KeyedChoice<T, TKey extends string = SelectionKey> = {
+  key: TKey;
   value: T;
 };
 
@@ -86,7 +86,7 @@ export function keyChoices<T>(values: readonly T[]): Array<KeyedChoice<T>> {
 }
 
 export function choiceValueByKey<T>(
-  choices: readonly KeyedChoice<T>[],
+  choices: readonly KeyedChoice<T, string>[],
   input: string,
 ): T | undefined {
   return choices.find((choice) => choice.key === input)?.value;

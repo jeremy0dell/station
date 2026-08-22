@@ -128,9 +128,9 @@ type DashboardBindingSpec = {
 
 const slotHelp = {
   keys: "1-9 a-z",
-  label: "open visible session",
+  label: "invoke one-key session shortcut",
   panelKeys: "1-9/a-z",
-  panelLabel: "open visible session or toggle condition",
+  panelLabel: "session shortcut or condition toggle",
 };
 
 // Dashboard keyboard dispatch resolves through this table; every other screen
@@ -268,6 +268,18 @@ export const TUI_DASHBOARD_BINDINGS = [
     help: { keys: "Z", label: "refresh" },
   },
   {
+    id: "tui.dashboard.shortcutPrefix",
+    pattern: { kind: "char", char: "`" },
+    action: "tui.shortcut.arm",
+    outcome: "handled",
+    help: {
+      keys: "`",
+      label: "command",
+      panelKeys: "`value↵",
+      panelLabel: "run uppercase command or session shortcut",
+    },
+  },
+  {
     id: "tui.dashboard.remove",
     pattern: { kind: "char", char: "X" },
     action: "tui.remove.open",
@@ -359,6 +371,12 @@ export type TuiDashboardBinding =
 /** Typed dashboard action vocabulary decoded by the keyboard binding table. */
 export type TuiDashboardAction = TuiDashboardBinding["action"];
 
+export type DashboardCommandShortcut = {
+  key: string;
+  action: TuiDashboardAction;
+  label: string;
+};
+
 export type TuiHelpContentLine =
   | { text: string; align?: "center" }
   | { key: string; description: string };
@@ -366,6 +384,25 @@ export type TuiHelpContentLine =
 export type TuiDashboardBindingId = (typeof TUI_DASHBOARD_BINDINGS)[number]["id"];
 
 export type DashboardFooterWidth = "full" | "compact";
+
+/** Resolves one uppercase command through the dashboard's canonical binding registry. */
+export function dashboardCommandShortcut(input: string): DashboardCommandShortcut | undefined {
+  if (!/^[A-Z]$/u.test(input)) {
+    return undefined;
+  }
+  const binding = TUI_DASHBOARD_BINDINGS.find(
+    (candidate) => candidate.pattern.kind === "char" && candidate.pattern.char === input,
+  );
+  if (binding === undefined || !("help" in binding)) {
+    return undefined;
+  }
+  const help: DashboardBindingHelp = binding.help;
+  return {
+    key: input,
+    action: binding.action,
+    label: help.panelLabel ?? help.label,
+  };
+}
 
 /** Returns the binding's stable keyboard language and action label. */
 export function dashboardBindingHelp(id: TuiDashboardBindingId): DashboardBindingHelp | undefined {
