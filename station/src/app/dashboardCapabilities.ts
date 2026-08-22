@@ -161,7 +161,7 @@ export function createDashboardCapabilities(
                 ? { freshStart: { expectedSessionId: session.id } }
                 : {}),
             })
-            .then((result) => settleNativeActivation(options.store, result)),
+            .then((result) => settleNativeActivation(options.store, result, session.title)),
           {
             optimistic:
               request.preferredObserverAction === "focus" ? "none" : "pending-start",
@@ -242,6 +242,7 @@ export function createDashboardCapabilities(
 function settleNativeActivation(
   store: StationStore,
   result: ManagedLaunchResult,
+  sessionTitle: string,
 ): DashboardExecutionResult {
   if (result.kind === "success") {
     if (result.landed) {
@@ -252,7 +253,14 @@ function settleNativeActivation(
   if (result.kind === "notice") {
     return result;
   }
-  return { kind: "failure", error: result.error, disposition: "remove-immediately" };
+  return {
+    kind: "failure",
+    error: {
+      ...result.error,
+      message: `Could not open session "${sessionTitle}". ${result.error.message}`,
+    },
+    disposition: "remove-immediately",
+  };
 }
 
 function managedSessionExecution(

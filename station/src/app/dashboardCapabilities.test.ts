@@ -120,6 +120,36 @@ describe("native dashboard capabilities", () => {
     expect(await handle.completion).toEqual({ kind: "success" });
   });
 
+  it("names the selected session when native activation fails", async () => {
+    const fixture = harness();
+    fixture.setActivationResult({
+      kind: "failure",
+      stage: "launch",
+      error: {
+        tag: "CommandValidationError",
+        code: "SESSION_RECOVERY_HANDLE_AMBIGUOUS",
+        message: "More than one recovery handle is available for this worktree.",
+        hint: "Select a specific recovery handle and retry.",
+        projectId: "station",
+        worktreeId: "wt_station_idle",
+      },
+    });
+
+    expect(await fixture.capabilities.activation.activate(ACTIVATION).completion).toEqual({
+      kind: "failure",
+      disposition: "remove-immediately",
+      error: {
+        tag: "CommandValidationError",
+        code: "SESSION_RECOVERY_HANDLE_AMBIGUOUS",
+        message:
+          'Could not open session "pty-buffer". More than one recovery handle is available for this worktree.',
+        hint: "Select a specific recovery handle and retry.",
+        projectId: "station",
+        worktreeId: "wt_station_idle",
+      },
+    });
+  });
+
   it("binds confirmed fresh start to the selected retained session", async () => {
     const fixture = harness();
     const handle = fixture.capabilities.activation.activate(FRESH_ACTIVATION);

@@ -655,11 +655,10 @@ recovery. A retained canonical Station session with no such target fails with
 uses the IO-free `sessionRecoveryEligibility` policy to admit only handles whose
 Station session is explicitly open, harness provider and worktree identities match,
 registered provider can resume, and present cwd remains inside the current worktree.
-Eligibility is applied before cardinality: zero eligible handles is unavailable, one
-is exact recovery authority, and more than one remains an ambiguity with no ordering
-or selection until a separate resolution feature is implemented. An explicitly
-selected imported handle may proceed without a local lifecycle row, while legacy,
-ended, or contradictory local identity always refuses. All failures occur before
+Eligibility precedes deterministic automatic selection: zero eligible handles is unavailable,
+while one or more candidates select the newest by `lastSeenAt`, `observedAt`, and opaque Station
+handle ID. An explicitly selected imported handle may proceed without a local lifecycle row,
+while legacy, ended, or contradictory local identity always refuses. All failures occur before
 terminal mutation, and only typed provider-neutral resume options reach the launch adapter.
 
 Automatic recovery opens and launches the replacement target under the retained
