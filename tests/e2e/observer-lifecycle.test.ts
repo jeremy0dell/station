@@ -24,9 +24,14 @@ import {
   restartObserver,
   runCli,
   startObserver,
+  stopObserver,
 } from "@station/cli";
 import { emptyConfig } from "@station/config";
-import { ObserverProcessIdentitySchema, ObserverProcessTokenSchema } from "@station/contracts";
+import {
+  type ObserverProcessIdentity,
+  ObserverProcessIdentitySchema,
+  ObserverProcessTokenSchema,
+} from "@station/contracts";
 import { acquireObserverBootClaim, observerBootClaimPath } from "@station/observer/internal";
 import { createObserverClient, listenUnixSocket, probeUnixSocket } from "@station/protocol";
 import { stationBuildInfo, stationObserverBuildVersion } from "@station/runtime";
@@ -745,6 +750,136 @@ describe("observer lifecycle e2e", () => {
     }
   });
 
+  it("makes stop idempotent by removing a strict dead-process pidfile", async () => {
+    const fixture = await createTempState();
+    const config = observerConfig(fixture.stateDir, fixture.socketPath);
+    const pidfilePath = `${fixture.socketPath}.pid`;
+    const deadPid = await exitedProcessPid();
+    await writeStrictPidfile(pidfilePath, {
+      pid: deadPid,
+      osStartTime: "Mon Jan  1 00:00:00 2001",
+      processToken: randomUUID(),
+      version: stationObserverBuildVersion(),
+      socketPath: fixture.socketPath,
+    });
+
+    await expect(stopObserver({ config, timeoutMs: 10_000 })).resolves.toMatchObject({
+      stopped: false,
+      evidenceRepair: {
+        socket: "absent",
+        pidfile: "removed",
+        reason: "process-missing",
+      },
+    });
+    await expect(access(pidfilePath)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("refuses exact live identity without a socket and leaves the process untouched", async () => {
+    const fixture = await createTempState();
+    const config = observerConfig(fixture.stateDir, fixture.socketPath);
+    const processToken = randomUUID();
+    const staleProcess = await startObserverLikeProcess({
+      root: fixture.root,
+      socketPath: fixture.socketPath,
+      processToken,
+      version: stationObserverBuildVersion(),
+    });
+    try {
+      const osStartTime = await readProcessStartToken(staleProcess.pid);
+      await writeStrictPidfile(`${fixture.socketPath}.pid`, {
+        pid: staleProcess.pid,
+        osStartTime,
+        processToken,
+        version: stationObserverBuildVersion(),
+        socketPath: fixture.socketPath,
+      });
+
+      await expect(stopObserver({ config, timeoutMs: 10_000 })).rejects.toMatchObject({
+        code: "OBSERVER_STALE_EVIDENCE_UNCERTAIN",
+        message: "The recorded Observer process still has exact live identity.",
+      });
+      await expect(startObserver({ config, timeoutMs: 10_000 })).resolves.toMatchObject({
+        status: "unhealthy",
+        error: { code: "OBSERVER_EXITED_ON_START" },
+        cause: { code: "OBSERVER_STALE_EVIDENCE_UNCERTAIN" },
+      });
+      expect(processIsAlive(staleProcess.pid)).toBe(true);
+      await expect(access(`${fixture.socketPath}.pid`)).resolves.toBeUndefined();
+    } finally {
+      await terminateFixture(staleProcess.child);
+      await rm(`${fixture.socketPath}.pid`, { force: true });
+    }
+  });
+
+  it("repairs process-token drift and starts without signaling the stale process", async () => {
+    const fixture = await createTempState();
+    const config = observerConfig(fixture.stateDir, fixture.socketPath);
+    const staleProcess = await startObserverLikeProcess({
+      root: fixture.root,
+      socketPath: fixture.socketPath,
+      processToken: randomUUID(),
+      version: stationObserverBuildVersion(),
+    });
+    const client = createObserverClient({ socketPath: fixture.socketPath, timeoutMs: 1000 });
+    let started = false;
+    try {
+      await writeStrictPidfile(`${fixture.socketPath}.pid`, {
+        pid: staleProcess.pid,
+        osStartTime: await readProcessStartToken(staleProcess.pid),
+        processToken: randomUUID(),
+        version: stationObserverBuildVersion(),
+        socketPath: fixture.socketPath,
+      });
+
+      const status = await restartObserver({ config, timeoutMs: 30_000 });
+      started = status.status === "running";
+      expect(status).toMatchObject({ status: "running" });
+      expect(processIsAlive(staleProcess.pid)).toBe(true);
+      const current = ObserverProcessIdentitySchema.parse(
+        JSON.parse(await readFile(`${fixture.socketPath}.pid`, "utf8")),
+      );
+      expect(current.pid).not.toBe(staleProcess.pid);
+    } finally {
+      if (started) {
+        await client.stop().catch(() => undefined);
+        await waitForSocketClosed(fixture.socketPath).catch(() => undefined);
+      }
+      await terminateFixture(staleProcess.child);
+    }
+  });
+
+  it("repairs a reused PID record without signaling the unrelated live process", async () => {
+    const fixture = await createTempState();
+    const config = observerConfig(fixture.stateDir, fixture.socketPath);
+    const unrelated = spawn(process.execPath, ["-e", "setInterval(() => undefined, 1000)"], {
+      stdio: "ignore",
+    });
+    if (unrelated.pid === undefined) throw new Error("Unrelated process did not report a PID.");
+    const client = createObserverClient({ socketPath: fixture.socketPath, timeoutMs: 1000 });
+    let started = false;
+    try {
+      await readProcessStartToken(unrelated.pid);
+      await writeStrictPidfile(`${fixture.socketPath}.pid`, {
+        pid: unrelated.pid,
+        osStartTime: "Mon Jan  1 00:00:00 2001",
+        processToken: randomUUID(),
+        version: stationObserverBuildVersion(),
+        socketPath: fixture.socketPath,
+      });
+
+      const status = await restartObserver({ config, timeoutMs: 30_000 });
+      started = status.status === "running";
+      expect(status).toMatchObject({ status: "running" });
+      expect(processIsAlive(unrelated.pid)).toBe(true);
+    } finally {
+      if (started) {
+        await client.stop().catch(() => undefined);
+        await waitForSocketClosed(fixture.socketPath).catch(() => undefined);
+      }
+      await terminateFixture(unrelated);
+    }
+  });
+
   it("converges five starts from one real stale socket with spaces in its path", async () => {
     const fixture = await createTempState();
     const socketDir = await mkdtemp("/tmp/stn socket spaces ");
@@ -755,6 +890,14 @@ describe("observer lifecycle e2e", () => {
 
     try {
       await createRealStaleSocket(socketPath);
+      const deadPid = await exitedProcessPid();
+      await writeStrictPidfile(`${socketPath}.pid`, {
+        pid: deadPid,
+        osStartTime: "Mon Jan  1 00:00:00 2001",
+        processToken: randomUUID(),
+        version: stationObserverBuildVersion(),
+        socketPath,
+      });
       const statuses = await Promise.all(
         Array.from({ length: 5 }, () => startObserver({ config, timeoutMs: 30_000 })),
       );
@@ -1152,6 +1295,66 @@ async function terminateFixture(child: ChildProcess): Promise<void> {
   if (child.pid === undefined || !processIsAlive(child.pid)) return;
   child.kill("SIGKILL");
   await expectProcessExit(child.pid).catch(() => undefined);
+}
+
+async function exitedProcessPid(): Promise<number> {
+  const child = spawn(process.execPath, ["-e", "process.exit(0)"], { stdio: "ignore" });
+  if (child.pid === undefined) throw new Error("Dead-process fixture did not report a PID.");
+  const pid = child.pid;
+  await new Promise<void>((resolve, reject) => {
+    child.once("error", reject);
+    child.once("exit", () => resolve());
+  });
+  return pid;
+}
+
+async function writeStrictPidfile(path: string, identity: ObserverProcessIdentity): Promise<void> {
+  const parsed = ObserverProcessIdentitySchema.parse(identity);
+  await mkdir(dirname(path), { recursive: true, mode: 0o700 });
+  await writeFile(path, `${JSON.stringify(parsed)}\n`, { mode: 0o600 });
+  await chmod(path, 0o600);
+}
+
+async function startObserverLikeProcess(input: {
+  root: string;
+  socketPath: string;
+  processToken: string;
+  version: string;
+}): Promise<{ child: ChildProcess; pid: number }> {
+  const entry = join(input.root, "stale-runtime", "apps", "cli", "dist", "observerMain.js");
+  await mkdir(dirname(entry), { recursive: true });
+  await writeFile(entry, "setInterval(() => undefined, 1000);\n", "utf8");
+  const child = spawn(
+    process.execPath,
+    [
+      entry,
+      "--socket",
+      input.socketPath,
+      "--state-dir",
+      join(input.root, "stale-state"),
+      "--startup-timeout-ms",
+      "10000",
+      "--build-version",
+      input.version,
+      "--process-token",
+      input.processToken,
+    ],
+    { stdio: "ignore" },
+  );
+  if (child.pid === undefined) throw new Error("Observer-like process did not report a PID.");
+  await readProcessStartToken(child.pid);
+  return { child, pid: child.pid };
+}
+
+async function readProcessStartToken(pid: number): Promise<string> {
+  const { stdout } = await execFileAsync(
+    process.platform === "darwin" ? "/bin/ps" : "/usr/bin/ps",
+    ["-ww", "-p", String(pid), "-o", "lstart="],
+    { env: { ...process.env, LC_ALL: "C" } },
+  );
+  const token = stdout.trim();
+  if (token.length === 0) throw new Error(`Process ${pid} did not expose a start token.`);
+  return token;
 }
 
 async function expectProcessExit(pid: number | undefined, timeoutMs = 5000): Promise<void> {

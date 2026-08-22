@@ -205,6 +205,23 @@ process or unlink a socket from this file alone. Clean shutdown removes the
 file only when the Observer still owns the socket and every identity field
 matches its published value.
 
+`stn observer start`, `stop`, and `restart` self-heal a strict stale pidfile only
+while holding the Observer boot claim. Repair positively distinguishes a missing
+process or exact identity drift, repeats pidfile/process/socket checks, and uses an
+atomic compare/remove operation. It never signals and never unlinks the socket.
+An idempotent stop returns `stopped: false` with `evidenceRepair.socket`,
+`evidenceRepair.pidfile`, and, after removal, a non-sensitive drift `reason`.
+`OBSERVER_STALE_EVIDENCE_UNCERTAIN` means ownership could not be proven stale;
+`OBSERVER_STALE_EVIDENCE_OWNER_CHANGED` means evidence changed during the bounded
+repair; `OBSERVER_STALE_EVIDENCE_REPAIR_FAILED` means the exact atomic pidfile
+operation failed. Preserve current evidence and inspect `stn observer status`,
+`lsof -t <socket>`, the strict pidfile, and `ps -ww -p <pid> -o lstart=,command=`.
+Child startup surfaces these codes as the separate lifecycle `cause`, so
+`stn debug trace --latest-failure` and `stn debug logs` keep the outer startup
+classification distinct. Repair logs and receipts contain only socket state and
+the typed drift reason; raw argv, process tokens, and collected OS errors are not
+included.
+
 `OBSERVER_SOCKET_INACCESSIBLE` means the socket exists but Station could neither
 connect nor prove it stale. Preserve the socket and pidfile. Restore socket access
 (normally `chmod 600 <socket>`), compare `lsof -t <socket>` with the strict

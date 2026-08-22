@@ -214,12 +214,45 @@ export const ObserverRestartCommandResultSchema = z.discriminatedUnion("status",
 
 export type ObserverRestartCommandResult = z.infer<typeof ObserverRestartCommandResultSchema>;
 
+export const ObserverStaleEvidenceRepairReasonSchema = z.enum([
+  "process-missing",
+  "os-start-token-drift",
+  "executable-argv-drift",
+  "process-token-drift",
+  "build-version-drift",
+  "socket-argv-drift",
+]);
+
+export const ObserverStaleEvidenceRepairSummarySchema = z.discriminatedUnion("pidfile", [
+  z
+    .object({
+      socket: z.enum(["absent", "stale"]),
+      pidfile: z.literal("absent"),
+    })
+    .strict(),
+  z
+    .object({
+      socket: z.enum(["absent", "stale"]),
+      pidfile: z.literal("removed"),
+      reason: ObserverStaleEvidenceRepairReasonSchema,
+    })
+    .strict(),
+]);
+
+export type ObserverStaleEvidenceRepairReason = z.infer<
+  typeof ObserverStaleEvidenceRepairReasonSchema
+>;
+export type ObserverStaleEvidenceRepairSummary = z.infer<
+  typeof ObserverStaleEvidenceRepairSummarySchema
+>;
+
 export const ObserverStopReceiptSchema = z
   .object({
     schemaVersion: SchemaVersionSchema,
     stopped: z.boolean(),
     at: TimestampSchema,
     message: nonEmptyStringSchema.optional(),
+    evidenceRepair: ObserverStaleEvidenceRepairSummarySchema.optional(),
   })
   .strict();
 
