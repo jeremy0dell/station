@@ -1,18 +1,17 @@
-import type { ColorInput } from "@opentui/core";
 import { useStore } from "zustand/react";
 import type { DashboardStateSource } from "@station/dashboard-core/runtime";
-import { dashboardFooterModel, truncateCells } from "@station/dashboard-core/selectors";
-import type { DashboardFooterModel } from "@station/dashboard-core/selectors";
+import { dashboardFooterModel } from "@station/dashboard-core/selectors";
 import {
   activeTuiToast,
   isTuiToastHiddenByScreen,
   QUIT_HINT_CLOSE,
   QUIT_HINT_DISMISS_ERROR,
- } from "@station/dashboard-core/state";
+} from "@station/dashboard-core/state";
 import type { DashboardStateView } from "@station/dashboard-core/state";
-import { toOpenTuiColor, useStationTheme, type StationTheme } from "../../theme/index.js";
+import { DashboardCommandFooterView } from "./DashboardCommandFooterView.js";
 import { DashboardFilterFooterView } from "./DashboardFilterFooterView.js";
-import { DashboardShortcutFooterView } from "./DashboardShortcutFooterView.js";
+import { DashboardLoadingFooterView } from "./DashboardLoadingFooterView.js";
+import { DashboardRegularFooterView } from "./DashboardRegularFooterView.js";
 
 export type DashboardFooterViewProps = {
   state: DashboardStateSource;
@@ -20,7 +19,6 @@ export type DashboardFooterViewProps = {
 };
 
 export function DashboardFooterView({ state, columns }: DashboardFooterViewProps) {
-  const theme = useStationTheme();
   const snapshot = useStore(state, (current) => current.snapshot);
   const screen = useStore(state, (current) => current.screen);
   const persistentFilter = useStore(state, (current) => current.persistentFilter);
@@ -35,56 +33,16 @@ export function DashboardFooterView({ state, columns }: DashboardFooterViewProps
     ...(persistentFilter === undefined ? {} : { persistentFilter }),
   });
 
-  if (
-    model.kind === "persistentFilterEditing" ||
-    model.kind === "persistentFilterCondition" ||
-    model.kind === "persistentFilterApplied"
-  ) {
-    return (
-      <DashboardFilterFooterView
-        segments={model.segments}
-        variant={filterFooterVariant(model.kind)}
-      />
-    );
+  switch (model.kind) {
+    case "loading":
+      return <DashboardLoadingFooterView model={model} columns={contentColumns} />;
+    case "regular":
+      return <DashboardRegularFooterView model={model} columns={contentColumns} />;
+    case "filter":
+      return <DashboardFilterFooterView model={model} />;
+    case "command":
+      return <DashboardCommandFooterView model={model} columns={contentColumns} />;
   }
-  if (model.kind === "shortcutInput") {
-    return <DashboardShortcutFooterView segments={model.segments} />;
-  }
-  return (
-    <text fg={dashboardFooterColor(theme, model)}>{truncateCells(model.text, contentColumns)}</text>
-  );
-}
-
-function filterFooterVariant(
-  kind:
-    | "persistentFilterEditing"
-    | "persistentFilterCondition"
-    | "persistentFilterApplied",
-): "editing" | "condition" | "applied" {
-  switch (kind) {
-    case "persistentFilterEditing":
-      return "editing";
-    case "persistentFilterCondition":
-      return "condition";
-    case "persistentFilterApplied":
-      return "applied";
-  }
-}
-
-function dashboardFooterColor(
-  theme: StationTheme,
-  model: Exclude<
-    DashboardFooterModel,
-    {
-      kind:
-        | "persistentFilterEditing"
-        | "persistentFilterCondition"
-        | "persistentFilterApplied"
-        | "shortcutInput";
-    }
-  >,
-): ColorInput {
-  return toOpenTuiColor(model.kind === "loading" ? theme.text.muted : theme.text.primary);
 }
 
 function selectFooterQuitHint(

@@ -32,16 +32,19 @@ describe("DashboardFilterFooterView", () => {
     const setup = await testRender(
       <StationThemeProvider theme={nativeStationTheme}>
         <DashboardFilterFooterView
-          segments={[
-            { text: " CONDITION ", role: "badge" },
-            { text: "  ", role: "spacer" },
-            { text: "←", role: "key" },
-            { text: " fields", role: "description" },
-            { text: "  ", role: "spacer" },
-            { text: "Esc", role: "key" },
-            { text: " close", role: "description" },
-          ]}
-          variant="condition"
+          model={{
+            kind: "filter",
+            variant: "condition",
+            segments: [
+              { text: " CONDITION ", role: "badge" },
+              { text: "  ", role: "spacer" },
+              { text: "←", role: "key" },
+              { text: " fields", role: "description" },
+              { text: "  ", role: "spacer" },
+              { text: "Esc", role: "key" },
+              { text: " close", role: "description" },
+            ],
+          }}
         />
       </StationThemeProvider>,
       { width: 40, height: 1 },
@@ -59,7 +62,9 @@ describe("DashboardFilterFooterView", () => {
     const setup = await testRender(
       <StationThemeProvider theme={nativeStationTheme}>
         <StationMouseProvider value={(target) => targets.push(target)}>
-          <DashboardFilterFooterView segments={APPLIED_SEGMENTS} variant="applied" />
+          <DashboardFilterFooterView
+            model={{ kind: "filter", variant: "applied", segments: APPLIED_SEGMENTS }}
+          />
         </StationMouseProvider>
       </StationThemeProvider>,
       { width: 40, height: 1 },

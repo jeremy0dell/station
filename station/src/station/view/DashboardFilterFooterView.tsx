@@ -1,5 +1,8 @@
 import { TextAttributes, type ColorInput } from "@opentui/core";
-import type { DashboardFilterFooterSegment } from "@station/dashboard-core/selectors";
+import type {
+  DashboardFilterFooterSegment,
+  DashboardFooterFilterModel,
+} from "@station/dashboard-core/selectors";
 import {
   toOpenTuiColor,
   toOpenTuiOpaqueColor,
@@ -13,11 +16,9 @@ import {
 } from "./stationMouseContext.js";
 
 export function DashboardFilterFooterView({
-  segments,
-  variant,
+  model,
 }: {
-  segments: readonly DashboardFilterFooterSegment[];
-  variant: "editing" | "condition" | "applied";
+  model: DashboardFooterFilterModel;
 }) {
   const theme = useStationTheme();
   return (
@@ -25,9 +26,9 @@ export function DashboardFilterFooterView({
       height={1}
       width="100%"
       flexDirection="row"
-      {...footerBackground(theme, variant)}
+      {...footerBackground(theme, model.variant)}
     >
-      {segments.map((segment, index) => (
+      {model.segments.map((segment, index) => (
         <FilterFooterSegment key={`${segment.role}:${index}`} segment={segment} />
       ))}
     </box>

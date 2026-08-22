@@ -19,6 +19,7 @@ import { addTuiToast } from "../toasts.js";
 import type { TuiRuntimeContext, TuiTransition } from "../transition.js";
 import type { DashboardState } from "../types.js";
 import { openAddProject } from "./addProjectScreen.js";
+import { openHelp } from "./help.js";
 import {
   clearDashboardPersistentFilter,
   openDashboardPersistentFilter,
@@ -112,10 +113,7 @@ function handleDashboardAction(
       };
     case "tui.help.open":
       return {
-        state: {
-          ...state,
-          screen: { name: "help" },
-        },
+        state: openHelp(state),
       };
     case "tui.exit":
       return exitDashboardRenderer(state);

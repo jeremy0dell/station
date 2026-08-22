@@ -963,7 +963,7 @@ describe("dashboard golden frames", () => {
     expect(frame).toContain("[ + add session ]");
   });
 
-  it("shows session and uppercase-command previews in the backtick command bar", async () => {
+  it("shows right-aligned help, previews, and resumable Help in the backtick command bar", async () => {
     const setup = await renderDashboard({
       width: 80,
       height: 24,
@@ -975,18 +975,25 @@ describe("dashboard golden frames", () => {
       setup.store.actions.handleKey({ input: "11" });
     });
     await setup.flush();
-    expect(setup.captureCharFrame()).toContain(
-      "SESSION   11▌  open session 11  Enter run  Backspace edit  Esc close",
-    );
+    const sessionLine = (setup.captureCharFrame().split("\n")[23] ?? "").trimEnd();
+    expect(sessionLine).toContain("SHORTCUT   INPUT 11▌");
+    expect(sessionLine).toContain("│ SESSION open 11");
+    expect(sessionLine.endsWith("│ ? help · ↵ run · ⌫ edit · Esc")).toBe(true);
     const sessionBarSpans = setup.captureSpans();
     expect(spanBgHex(spanAtFrameCell(sessionBarSpans, 23, 1))).toBe(
       stationColorSnapshotValue(nativeStationTheme.filter.editorRail),
     );
-    expect(spanBgHex(spanAtFrameCell(sessionBarSpans, 23, 11))).toBe(
+    expect(spanBgHex(spanAtFrameCell(sessionBarSpans, 23, 18))).toBe(
       stationColorSnapshotValue(nativeStationTheme.filter.editorSurface),
     );
-    expect(spanHex(spanAtFrameCell(sessionBarSpans, 23, 11))).toBe(
+    expect(spanHex(spanAtFrameCell(sessionBarSpans, 23, 18))).toBe(
       stationColorSnapshotValue(nativeStationTheme.text.primary),
+    );
+    expect(spanHex(spanAtFrameCell(sessionBarSpans, 23, 12))).toBe(
+      stationColorSnapshotValue(nativeStationTheme.text.muted),
+    );
+    expect(spanHex(spanAtFrameCell(sessionBarSpans, 23, 22))).toBe(
+      stationColorSnapshotValue(nativeStationTheme.interaction.hairline),
     );
 
     await act(async () => {
@@ -1000,9 +1007,108 @@ describe("dashboard golden frames", () => {
       setup.store.actions.handleKey({ input: "X" });
     });
     await setup.flush();
-    expect(setup.captureCharFrame()).toContain(
-      "COMMAND   X▌  delete session  Enter run  Backspace edit  Esc close",
+    const commandLine = (setup.captureCharFrame().split("\n")[23] ?? "").trimEnd();
+    expect(commandLine).toContain("SHORTCUT   INPUT X▌");
+    expect(commandLine).toContain("│ COMMAND delete session");
+    expect(commandLine.endsWith("│ ? help · ↵ run · ⌫ edit · Esc")).toBe(true);
+    expect(commandLine.indexOf("│ COMMAND")).toBe(sessionLine.indexOf("│ SESSION"));
+    expect(commandLine.indexOf("│ ? help")).toBe(sessionLine.indexOf("│ ? help"));
+
+    await act(async () => {
+      setup.store.actions.handleKey({ input: "?" });
+    });
+    await setup.flush();
+    const helpFrame = setup.captureCharFrame();
+    expect(helpFrame).toContain("station help");
+    expect(setup.store.state.getState().screen).toEqual({
+      name: "help",
+      returnTo: { name: "dashboard", shortcutCodeInput: "X" },
+    });
+    const suspendedCommandLine = (helpFrame.split("\n")[23] ?? "").trimEnd();
+    expect(suspendedCommandLine).toContain("SHORTCUT   INPUT X");
+    expect(suspendedCommandLine).toContain("│ COMMAND delete session");
+    expect(suspendedCommandLine).not.toContain("▌");
+    expect(suspendedCommandLine.endsWith("│ ? help · ↵ run · ⌫ edit · Esc")).toBe(true);
+    const suspendedCommandSpans = setup.captureSpans();
+    expect(spanHex(spanAtFrameCell(suspendedCommandSpans, 23, 18))).toBe(
+      stationColorSnapshotValue(nativeStationTheme.text.muted),
     );
+    expect(spanBgHex(spanAtFrameCell(suspendedCommandSpans, 23, 18))).toBe(
+      stationColorSnapshotValue(nativeStationTheme.filter.editorSurface),
+    );
+    const suspendedPreviewDivider = suspendedCommandLine.indexOf("│ COMMAND");
+    const suspendedControlDot = suspendedCommandLine.indexOf(" · ") + 1;
+    expect(spanHex(spanAtFrameCell(suspendedCommandSpans, 23, suspendedPreviewDivider))).toBe(
+      stationColorSnapshotValue(nativeStationTheme.interaction.hairline),
+    );
+    expect(spanHex(spanAtFrameCell(suspendedCommandSpans, 23, suspendedControlDot))).toBe(
+      stationColorSnapshotValue(nativeStationTheme.interaction.hairline),
+    );
+
+    await act(async () => {
+      setup.store.actions.handleKey({ input: "?" });
+    });
+    await setup.flush();
+    expect(setup.store.state.getState().screen).toEqual({
+      name: "dashboard",
+      shortcutCodeInput: "X",
+    });
+    expect(
+      (setup.captureCharFrame().split("\n")[23] ?? "")
+        .trimEnd()
+        .endsWith("│ ? help · ↵ run · ⌫ edit · Esc"),
+    ).toBe(true);
+
+    await act(async () => {
+      setup.store.actions.handleKey({ input: "", escape: true });
+      setup.store.actions.handleKey({ input: "`" });
+      setup.store.actions.handleKey({ input: "B" });
+    });
+    await setup.flush();
+    const invalidFrame = setup.captureCharFrame();
+    const invalidLine = (invalidFrame.split("\n")[23] ?? "").trimEnd();
+    expect(invalidLine).toContain("SHORTCUT   INPUT B▌");
+    expect(invalidLine).toContain("│ NO MATCH 1-zzz or command");
+    expect(invalidLine.endsWith("│ ? help · ⌫ edit · Esc")).toBe(true);
+    expect(invalidLine.indexOf("│ NO MATCH")).toBe(sessionLine.indexOf("│ SESSION"));
+    const warningColumn = invalidLine.indexOf("NO MATCH");
+    expect(warningColumn).toBeGreaterThanOrEqual(0);
+    expect(spanHex(spanAtFrameCell(setup.captureSpans(), 23, warningColumn))).toBe(
+      stationColorSnapshotValue(nativeStationTheme.status.warning),
+    );
+  });
+
+  it("keeps the command footer component zones responsive at wide and narrow widths", async () => {
+    const wide = await renderDashboard({
+      width: 120,
+      height: 24,
+      snapshot: manyProjectsSnapshot(),
+    });
+    await act(async () => {
+      wide.store.actions.handleKey({ input: "`" });
+      wide.store.actions.handleKey({ input: "X" });
+    });
+    await wide.flush();
+    const wideLine = (wide.captureCharFrame().split("\n")[23] ?? "").trimEnd();
+    expect(wideLine).toContain("SHORTCUT   INPUT X▌");
+    expect(wideLine).toContain("│  COMMAND delete session");
+    expect(
+      wideLine.endsWith("│  KEYS ? help  ·  Enter run  ·  Backspace edit  ·  Esc close"),
+    ).toBe(true);
+
+    const narrow = await renderDashboard({
+      width: 32,
+      height: 24,
+      snapshot: manyProjectsSnapshot(),
+    });
+    await act(async () => {
+      narrow.store.actions.handleKey({ input: "`" });
+      narrow.store.actions.handleKey({ input: "zzz" });
+    });
+    await narrow.flush();
+    const narrowLine = (narrow.captureCharFrame().split("\n")[23] ?? "").trimEnd();
+    expect(narrowLine.startsWith(" SHORTCUT  zzz▌")).toBe(true);
+    expect(narrowLine.endsWith("? help · ↵ · Esc")).toBe(true);
   });
 
   it("bounds empty-project focus, hover, and hit testing to Add Session cells", async () => {

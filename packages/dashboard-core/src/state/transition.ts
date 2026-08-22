@@ -6,7 +6,7 @@ import { handleForkKey } from "./screens/fork.js";
 import { handleFreshStartKey } from "./screens/freshStart.js";
 import { handleGroupMenuKey } from "./screens/groupMenu.js";
 import { handleGroupSettingsKey } from "./screens/groupSettings.js";
-import { handleHelpKey } from "./screens/help.js";
+import { handleHelpKey, openHelp } from "./screens/help.js";
 import { handleMoveToGroupKey } from "./screens/moveToGroup.js";
 import { handleNewSessionKey } from "./screens/newSession.js";
 import { handleDashboardPersistentFilterKey } from "./screens/persistentFilter.js";
@@ -44,6 +44,14 @@ export function handleTuiKey(
       state,
       operations: [{ type: "exitDashboardRenderer", exitCode: 0 }],
     };
+  }
+
+  if (
+    state.screen.name === "dashboard" &&
+    state.screen.shortcutCodeInput !== undefined &&
+    key.input === "?"
+  ) {
+    return { state: openHelp(state) };
   }
 
   // Prefix editing is modal and precedes toast/screen Esc; Enter stays with the owning screen so

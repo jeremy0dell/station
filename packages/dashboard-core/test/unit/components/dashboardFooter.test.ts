@@ -39,15 +39,8 @@ function footer(
 }
 
 function editingFooterText(model: DashboardFooterModel): string {
-  if (model.kind !== "persistentFilterEditing" && model.kind !== "persistentFilterCondition") {
+  if (model.kind !== "filter" || model.variant === "applied") {
     throw new Error("Expected a persistent filter mode footer.");
-  }
-  return model.segments.map((segment) => segment.text).join("");
-}
-
-function shortcutFooterText(model: DashboardFooterModel): string {
-  if (model.kind !== "shortcutInput") {
-    throw new Error("Expected a shortcut-input footer.");
   }
   return model.segments.map((segment) => segment.text).join("");
 }
@@ -62,54 +55,78 @@ describe("dashboard footer model", () => {
 
   it("preserves the ready dashboard footer", () => {
     expect(footer()).toEqual({
-      kind: "dashboard",
+      kind: "regular",
       text: "↵ activate  N new  M move to group  A add  ⇥ next-needs-me  / filter  X delete  ? help  Q/esc:close",
     });
   });
 
   it("preserves the first-run footer", () => {
     expect(footer({ firstRun: true })).toEqual({
-      kind: "dashboard",
+      kind: "regular",
       text: "↵ add first project  A add project  Q/esc:close",
     });
   });
 
-  it("replaces ordinary help with a contextual dashboard command bar", () => {
+  it("projects command input and Help suspension without renderer segments", () => {
+    expect(footer({ screen: { name: "dashboard", shortcutCodeInput: "" } })).toEqual({
+      kind: "command",
+      input: "",
+      interaction: "active",
+      preview: { kind: "guide" },
+    });
+    expect(footer({ screen: { name: "dashboard", shortcutCodeInput: "11" } })).toEqual({
+      kind: "command",
+      input: "11",
+      interaction: "active",
+      preview: { kind: "session", code: "11" },
+    });
+    expect(footer({ screen: { name: "dashboard", shortcutCodeInput: "X" } })).toEqual({
+      kind: "command",
+      input: "X",
+      interaction: "active",
+      preview: { kind: "command", action: "delete session" },
+    });
+    expect(footer({ screen: { name: "dashboard", shortcutCodeInput: "B" } })).toEqual({
+      kind: "command",
+      input: "B",
+      interaction: "active",
+      preview: { kind: "noMatch" },
+    });
     expect(
-      shortcutFooterText(footer({ screen: { name: "dashboard", shortcutCodeInput: "" } })),
-    ).toBe(" COMMAND   ▌  Type 1-zzz for a session or an uppercase command  Esc close");
-    expect(
-      shortcutFooterText(footer({ screen: { name: "dashboard", shortcutCodeInput: "11" } })),
-    ).toBe(" SESSION   11▌  open session 11  Enter run  Backspace edit  Esc close");
-    expect(
-      shortcutFooterText(footer({ screen: { name: "dashboard", shortcutCodeInput: "X" } })),
-    ).toBe(" COMMAND   X▌  delete session  Enter run  Backspace edit  Esc close");
-    expect(
-      shortcutFooterText(
-        footer({ columns: 32, screen: { name: "dashboard", shortcutCodeInput: "zzz" } }),
-      ),
-    ).toBe(" SESSION   zzz▌  ↵ run · Esc");
+      footer({
+        columns: 80,
+        screen: {
+          name: "help",
+          returnTo: { name: "dashboard", shortcutCodeInput: "X" },
+        },
+      }),
+    ).toEqual({
+      kind: "command",
+      input: "X",
+      interaction: "inactive",
+      preview: { kind: "command", action: "delete session" },
+    });
     expect(
       footer({
         screen: { name: "removeWorktree", step: "chooseSlot", shortcutCodeInput: "11" },
       }),
     ).toEqual({
-      kind: "dashboard",
+      kind: "regular",
       text: "↵ activate  N new  M move to group  A add  ⇥ next-needs-me  / filter  X delete  ? help  Q/esc:close",
     });
   });
 
   it("preserves compact and error quit-hint behavior", () => {
     expect(footer({ columns: 40 })).toEqual({
-      kind: "dashboard",
+      kind: "regular",
       text: "↵ activate  N new  ⇥ next  / filter  X delete  ? help  Q/esc:close",
     });
     expect(footer({ columns: 40, quitHint: QUIT_HINT_DISMISS_ERROR })).toEqual({
-      kind: "dashboard",
+      kind: "regular",
       text: QUIT_HINT_DISMISS_ERROR,
     });
     expect(footer({ columns: 40, quitHint: QUIT_HINT_DISMISS_ERROR, firstRun: true })).toEqual({
-      kind: "dashboard",
+      kind: "regular",
       text: QUIT_HINT_DISMISS_ERROR,
     });
   });
@@ -150,7 +167,7 @@ describe("dashboard persistent filter footer", () => {
         },
       },
     });
-    if (valueModel.kind !== "persistentFilterCondition") {
+    if (valueModel.kind !== "filter" || valueModel.variant !== "condition") {
       throw new Error("expected condition footer");
     }
     const valueText = valueModel.segments.map((segment) => segment.text).join("");
@@ -179,7 +196,9 @@ describe("dashboard persistent filter footer", () => {
       [20, at20, "/ edit Esc clear Q"],
     ] as const;
     for (const [width, model, expectedText] of cases) {
-      if (model.kind !== "persistentFilterApplied") throw new Error("expected applied filter");
+      if (model.kind !== "filter" || model.variant !== "applied") {
+        throw new Error("expected applied filter");
+      }
       const text = model.segments.map((segment) => segment.text).join("");
       expect(text).toBe(expectedText);
       expect(cellWidth(text)).toBeLessThanOrEqual(width);
