@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { constants } from "node:fs";
-import { copyFile } from "node:fs/promises";
+import { type FileHandle, open, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import {
   type ProviderHookArtifactOwner,
@@ -9,12 +9,7 @@ import {
   type ProviderId,
 } from "@station/contracts";
 import type { StationBuildInfo } from "./buildInfo.js";
-import {
-  pathExists,
-  readTextFileIfPresent,
-  removeFileIfPresent,
-  replaceTextFile,
-} from "./files.js";
+import { removeFileIfPresent, replaceTextFile } from "./files.js";
 
 export type HookSetupErrorFactory = (input: {
   operation: "read" | "metadata" | "backup" | "writeConfig" | "writeScript" | "remove";
@@ -23,12 +18,26 @@ export type HookSetupErrorFactory = (input: {
 }) => Error;
 
 export type HookSetupFileOps = {
-  readOptionalFile: (path: string) => Promise<string>;
+  readOptionalFile: (path: string, options?: HookSetupReadOptions) => Promise<string>;
+  inspectOptionalFile: (
+    path: string,
+    options?: HookSetupReadOptions,
+  ) => Promise<HookSetupFileSnapshot>;
   writeHookConfig: (path: string, contents: string) => Promise<void>;
   writeHookScript: (path: string, contents: string) => Promise<void>;
   removeHookFileIfPresent: (path: string) => Promise<boolean>;
   backupIfPresent: (path: string) => Promise<string | undefined>;
 };
+
+export type HookSetupReadOptions = {
+  signal?: AbortSignal;
+};
+
+/** Descriptor-validated hook artifact state; nonregular snapshots never expose contents. */
+export type HookSetupFileSnapshot =
+  | { status: "absent" }
+  | { status: "nonregular" }
+  | { status: "regular"; contents: string; mode: number };
 
 export type ProviderHookScriptOptions = {
   hookScriptPath?: string;
@@ -169,6 +178,46 @@ export function assertProviderHookArtifactOwnership(input: {
   return ownership;
 }
 
+function classifyProviderHookSnapshotOwnership(
+  snapshot: HookSetupFileSnapshot,
+  requested: ProviderHookArtifactOwner,
+): ProviderHookArtifactOwnership {
+  if (snapshot.status === "absent") return { status: "absent", requested };
+  if (snapshot.status === "nonregular") return { status: "unknown-owner", requested };
+  const ownership = classifyProviderHookArtifactOwnership({
+    contents: snapshot.contents,
+    requested,
+  });
+  return ownership.status === "absent" ? { status: "unknown-owner", requested } : ownership;
+}
+
+function assertProviderHookSnapshotOwnership(input: {
+  provider: ProviderId;
+  action: "install" | "uninstall";
+  artifactPath: string;
+  snapshot: HookSetupFileSnapshot;
+  requested: ProviderHookArtifactOwner;
+  takeover?: boolean;
+}): ProviderHookArtifactOwnership {
+  const ownership = classifyProviderHookSnapshotOwnership(input.snapshot, input.requested);
+  if (
+    input.takeover !== true &&
+    (ownership.status === "different-owner" || ownership.status === "unknown-owner")
+  ) {
+    throw new ProviderHookArtifactOwnershipError({
+      provider: input.provider,
+      action: input.action,
+      artifactPath: input.artifactPath,
+      ownership,
+    });
+  }
+  return ownership;
+}
+
+function hookSetupReadOptions(signal: AbortSignal | undefined): HookSetupReadOptions | undefined {
+  return signal === undefined ? undefined : { signal };
+}
+
 export type ConfigScriptHookPlan<Document, EventName extends string> = {
   before: string;
   after: string;
@@ -239,12 +288,75 @@ function dynamicHookArg(
 async function readOptionalHookFile(
   path: string,
   createError: HookSetupErrorFactory,
+  options: HookSetupReadOptions = {},
 ): Promise<string> {
+  let snapshot: HookSetupFileSnapshot;
   try {
-    return (await readTextFileIfPresent(path)) ?? "";
+    snapshot = await inspectHookFile(path, options);
   } catch (cause) {
     throw createError({ operation: "read", path, cause });
   }
+  if (snapshot.status === "nonregular") {
+    throw createError({
+      operation: "read",
+      path,
+      cause: new Error("Hook artifact is not a regular file."),
+    });
+  }
+  return snapshot.status === "absent" ? "" : snapshot.contents;
+}
+
+async function inspectOptionalHookFile(
+  path: string,
+  createError: HookSetupErrorFactory,
+  options: HookSetupReadOptions = {},
+): Promise<HookSetupFileSnapshot> {
+  try {
+    return await inspectHookFile(path, options);
+  } catch (cause) {
+    throw createError({ operation: "read", path, cause });
+  }
+}
+
+async function inspectHookFile(
+  path: string,
+  options: HookSetupReadOptions,
+): Promise<HookSetupFileSnapshot> {
+  let handle: FileHandle;
+  try {
+    // Keep FIFO/device opens nonblocking, then validate the opened target before reading it.
+    // Following a live symlink preserves replaceTextFile's established hook-path behavior.
+    handle = await open(path, constants.O_RDONLY | constants.O_NONBLOCK);
+  } catch (cause) {
+    if ((cause as NodeJS.ErrnoException).code === "ENOENT") {
+      return { status: "absent" };
+    }
+    throw cause;
+  }
+  let snapshot: HookSetupFileSnapshot | undefined;
+  let inspectionFailure: { cause: unknown } | undefined;
+  try {
+    const metadata = await handle.stat();
+    if (!metadata.isFile()) {
+      snapshot = { status: "nonregular" };
+    } else {
+      const readOptions: { encoding: "utf8"; signal?: AbortSignal } = { encoding: "utf8" };
+      if (options.signal !== undefined) readOptions.signal = options.signal;
+      const contents = await handle.readFile(readOptions);
+      snapshot = { status: "regular", contents, mode: metadata.mode & 0o7777 };
+    }
+  } catch (cause) {
+    inspectionFailure = { cause };
+  }
+  try {
+    await handle.close();
+  } catch (cause) {
+    // A close error is actionable only when it does not obscure the primary inspection failure.
+    if (inspectionFailure === undefined) inspectionFailure = { cause };
+  }
+  if (inspectionFailure !== undefined) throw inspectionFailure.cause;
+  if (snapshot === undefined) throw new Error("Hook artifact inspection produced no result.");
+  return snapshot;
 }
 
 async function writeHookFile(
@@ -255,6 +367,16 @@ async function writeHookFile(
 ): Promise<void> {
   try {
     await replaceTextFile({ path, contents, mode, directoryMode: 0o700 });
+    if (mode === 0o700) {
+      const published = await inspectHookFile(path, {});
+      if (
+        published.status !== "regular" ||
+        published.contents !== contents ||
+        published.mode !== 0o700
+      ) {
+        throw new Error("Published hook script did not verify with exact contents and mode 0700.");
+      }
+    }
   } catch (cause) {
     throw createError({
       operation: mode === 0o700 ? "writeScript" : "writeConfig",
@@ -276,17 +398,24 @@ async function backupHookFile(
   path: string,
   createError: HookSetupErrorFactory,
 ): Promise<string | undefined> {
+  let snapshot: HookSetupFileSnapshot;
   try {
-    if (!(await pathExists(path))) {
-      return undefined;
+    snapshot = await inspectHookFile(path, {});
+    if (snapshot.status === "nonregular") {
+      throw new Error("Hook config backup source is not a regular file.");
     }
   } catch (cause) {
     throw createError({ operation: "metadata", path, cause });
   }
+  if (snapshot.status === "absent") return undefined;
 
   const backupPath = `${path}.bak.${new Date().toISOString().replaceAll(/[^0-9]/g, "")}.${randomUUID()}`;
   try {
-    await copyFile(path, backupPath, constants.COPYFILE_EXCL);
+    await writeFile(backupPath, snapshot.contents, {
+      encoding: "utf8",
+      flag: "wx",
+      mode: 0o600,
+    });
   } catch (cause) {
     throw createError({ operation: "backup", path, cause });
   }
@@ -295,7 +424,8 @@ async function backupHookFile(
 
 export function createHookSetupFileOps(createError: HookSetupErrorFactory): HookSetupFileOps {
   return {
-    readOptionalFile: (path) => readOptionalHookFile(path, createError),
+    readOptionalFile: (path, options) => readOptionalHookFile(path, createError, options),
+    inspectOptionalFile: (path, options) => inspectOptionalHookFile(path, createError, options),
     writeHookConfig: (path, contents) => writeHookFile(path, contents, 0o600, createError),
     writeHookScript: (path, contents) => writeHookFile(path, contents, 0o700, createError),
     removeHookFileIfPresent: (path) => removeHookFile(path, createError),
@@ -432,7 +562,8 @@ export function hookCommandsForEvents<EventName extends string>(
 }
 
 export async function planConfigScriptHook<Document, EventName extends string>(input: {
-  readOptionalFile: (path: string) => Promise<string>;
+  readOptionalFile: HookSetupFileOps["readOptionalFile"];
+  inspectOptionalFile: HookSetupFileOps["inspectOptionalFile"];
   configPath: string;
   hookScriptPath: string;
   parseDocument: (source: string) => Document;
@@ -444,23 +575,25 @@ export async function planConfigScriptHook<Document, EventName extends string>(i
   extraChanged?: boolean;
   provider?: ProviderId;
   artifactOwner?: ProviderHookArtifactOwner;
+  signal?: AbortSignal;
 }): Promise<ConfigScriptHookPlan<Document, EventName>> {
-  const before = await input.readOptionalFile(input.configPath);
+  const readOptions = hookSetupReadOptions(input.signal);
+  const before = await input.readOptionalFile(input.configPath, readOptions);
   const document = input.parseDocument(before);
   const commands = input.expectedCommands(input.hookScriptPath);
   const afterDocument = input.installCommands(document, commands);
   const after = input.stringifyDocument(afterDocument);
-  const scriptBefore = await input.readOptionalFile(input.hookScriptPath);
+  const script = await input.inspectOptionalFile(input.hookScriptPath, readOptions);
   const configChanged = before.trim() !== after.trim();
-  const scriptChanged = scriptBefore !== input.expectedScript;
+  const scriptChanged =
+    script.status !== "regular" ||
+    script.contents !== input.expectedScript ||
+    script.mode !== 0o700;
   const changed = configChanged || scriptChanged || input.extraChanged === true;
   const ownership =
     input.provider === undefined || input.artifactOwner === undefined
       ? undefined
-      : classifyProviderHookArtifactOwnership({
-          contents: scriptBefore,
-          requested: input.artifactOwner,
-        });
+      : classifyProviderHookSnapshotOwnership(script, input.artifactOwner);
 
   const result: ConfigScriptHookPlan<Document, EventName> = {
     before,
@@ -487,31 +620,45 @@ export async function installConfigScriptHook(input: {
   provider?: ProviderId;
   artifactOwner?: ProviderHookArtifactOwner;
   takeover?: boolean;
+  beginMutation?: () => void;
+  onMutationCommitted?: () => void;
+  signal?: AbortSignal;
 }): Promise<string | undefined> {
-  if (input.provider !== undefined) {
-    const currentScript = await input.fileOps.readOptionalFile(input.hookScriptPath);
-    assertProviderHookArtifactOwnership({
+  if (input.provider !== undefined && input.artifactOwner !== undefined) {
+    const currentScript = await input.fileOps.inspectOptionalFile(
+      input.hookScriptPath,
+      hookSetupReadOptions(input.signal),
+    );
+    assertProviderHookSnapshotOwnership({
       provider: input.provider,
       action: "install",
       artifactPath: input.hookScriptPath,
-      contents: currentScript,
-      ...(input.artifactOwner === undefined ? {} : { requested: input.artifactOwner }),
+      snapshot: currentScript,
+      requested: input.artifactOwner,
       ...(input.takeover === undefined ? {} : { takeover: input.takeover }),
     });
   }
   let backupPath: string | undefined;
+  if (input.configChanged || input.scriptChanged) {
+    input.beginMutation?.();
+  }
   if (input.configChanged) {
     backupPath = await input.fileOps.backupIfPresent(input.configPath);
-    await input.fileOps.writeHookConfig(input.configPath, input.after);
   }
   if (input.scriptChanged) {
     await input.fileOps.writeHookScript(input.hookScriptPath, input.expectedScript);
+    input.onMutationCommitted?.();
+  }
+  if (input.configChanged) {
+    // Publish the verified executable before config can make the command reachable.
+    await input.fileOps.writeHookConfig(input.configPath, input.after);
+    input.onMutationCommitted?.();
   }
   return backupPath;
 }
 
 export async function uninstallConfigScriptHook<Document, EventName extends string>(input: {
-  readOptionalFile: (path: string) => Promise<string>;
+  readOptionalFile: HookSetupFileOps["readOptionalFile"];
   configPath: string;
   hookScriptPath: string;
   parseDocument: (source: string) => Document;
@@ -524,19 +671,25 @@ export async function uninstallConfigScriptHook<Document, EventName extends stri
   provider?: ProviderId;
   artifactOwner?: ProviderHookArtifactOwner;
   takeover?: boolean;
+  beginMutation?: () => void;
+  onMutationCommitted?: () => void;
+  signal?: AbortSignal;
 }): Promise<ConfigScriptHookUninstallPlan<Document, EventName>> {
-  if (input.provider !== undefined) {
-    const currentScript = await input.fileOps.readOptionalFile(input.hookScriptPath);
-    assertProviderHookArtifactOwnership({
+  if (input.provider !== undefined && input.artifactOwner !== undefined) {
+    const currentScript = await input.fileOps.inspectOptionalFile(
+      input.hookScriptPath,
+      hookSetupReadOptions(input.signal),
+    );
+    assertProviderHookSnapshotOwnership({
       provider: input.provider,
       action: "uninstall",
       artifactPath: input.hookScriptPath,
-      contents: currentScript,
-      ...(input.artifactOwner === undefined ? {} : { requested: input.artifactOwner }),
+      snapshot: currentScript,
+      requested: input.artifactOwner,
       ...(input.takeover === undefined ? {} : { takeover: input.takeover }),
     });
   }
-  const before = await input.readOptionalFile(input.configPath);
+  const before = await input.readOptionalFile(input.configPath, hookSetupReadOptions(input.signal));
   const document = input.parseDocument(before);
   const commands = input.expectedCommands(input.hookScriptPath);
   const afterDocument = input.removeCommands(document, commands);
@@ -544,13 +697,21 @@ export async function uninstallConfigScriptHook<Document, EventName extends stri
   const configChanged = before.trim() !== after.trim();
   let backupPath: string | undefined;
   if (configChanged) {
+    input.beginMutation?.();
     backupPath = await input.fileOps.backupIfPresent(input.configPath);
     await input.fileOps.writeHookConfig(input.configPath, after);
+    input.onMutationCommitted?.();
   }
   const scriptStillNeeded = input.documentContainsCommand(afterDocument, input.hookScriptPath);
+  if (!scriptStillNeeded && !configChanged) {
+    input.beginMutation?.();
+  }
   const scriptRemoved = scriptStillNeeded
     ? false
     : await input.fileOps.removeHookFileIfPresent(input.hookScriptPath);
+  if (scriptRemoved) {
+    input.onMutationCommitted?.();
+  }
   const result: ConfigScriptHookUninstallPlan<Document, EventName> = {
     before,
     after,

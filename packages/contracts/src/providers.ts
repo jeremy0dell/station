@@ -22,6 +22,7 @@ import type {
   WorktreePullRequest,
 } from "./observations.js";
 import { RepositoryRemoteSchema } from "./observations.js";
+import type { ProviderHookHealth, ProviderHookReconciliationResult } from "./providerHooks.js";
 import type { HarnessResumeOptions } from "./recovery.js";
 import { nonEmptyStringSchema } from "./shared.js";
 
@@ -241,8 +242,16 @@ export type ProviderDoctorContext = {
   stationConfigPath?: string;
   providerHookRuntime?: ProviderHookRuntime;
   projects?: readonly ProviderProjectConfig[];
+  /** Cancels boundary work that has not begun a durable mutation. */
   signal?: AbortSignal;
+  /** Bounds boundary work that has not begun a durable mutation. */
   timeoutMs?: number;
+};
+
+/** Provider-neutral context for a hook writer that must join the caller's durable commit. */
+export type ProviderHookReconciliationContext = ProviderDoctorContext & {
+  /** Called once immediately before the first durable provider artifact mutation. */
+  beginMutation?: () => void;
 };
 
 /**
@@ -514,6 +523,18 @@ export interface HarnessProvider {
    * gating on hooks should fail open for such providers.
    */
   hooksStatus?(context?: ProviderDoctorContext): Promise<HarnessHooksStatus>;
+  /**
+   * Read-only, provider-neutral hook evidence. Provider paths, native diagnostics,
+   * and payload parsing must remain inside the integration.
+   */
+  hookHealth?(context?: ProviderDoctorContext): Promise<ProviderHookHealth>;
+  /**
+   * Reconcile through the provider-owned writer without takeover authority.
+   * A successful mutation includes post-write doctor verification.
+   */
+  reconcileHooks?(
+    context?: ProviderHookReconciliationContext,
+  ): Promise<ProviderHookReconciliationResult>;
   buildLaunch(request: BuildHarnessLaunchRequest): Promise<HarnessLaunchPlan>;
   discoverRuns(context: HarnessDiscoveryContext): Promise<HarnessRunObservation[]>;
   /**

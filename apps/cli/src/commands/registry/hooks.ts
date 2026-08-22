@@ -18,17 +18,18 @@ import {
 import { PROVIDER_HOOK_DEFINITIONS } from "../providerHookDefinitions.js";
 
 const hookTargets = [...Object.values(PROVIDER_HOOK_DEFINITIONS).map(({ id }) => id), "event"];
-const hookActions = ["plan", "install", "uninstall", "doctor"] as const;
+const hookActions = ["plan", "install", "uninstall", "doctor", "reconcile"] as const;
 
 export const hooksCliCommand: CliCommandNode = {
   name: "hooks",
-  description: "Plan, install, uninstall, or inspect provider delivery hooks.",
+  description: "Plan, install, uninstall, reconcile, or inspect provider delivery hooks.",
   requiresConfig: true,
   usage: [
     "stn hooks plan <target> [options]",
     "stn hooks install <target> --yes [options]",
     "stn hooks uninstall <target> --yes [options]",
     "stn hooks doctor <target> [options]",
+    "stn hooks reconcile codex",
   ],
   options: [
     { name: "<target>", description: `One of: ${hookTargets.join(", ")}.` },
@@ -60,6 +61,9 @@ async function runProviderHookCliCommand(context: CliCommandRunContext) {
     throw new Error(`Unknown hook action: ${hookAction ?? ""}`);
   }
   const hookTarget = context.args[0];
+  if (hookAction === "reconcile" && hookTarget !== "codex") {
+    throw new Error("Automatic hook reconciliation is currently supported only for codex.");
+  }
   const hookArgs = [hookAction, ...context.args.slice(1)];
   switch (hookTarget) {
     case "worktrunk": {
@@ -164,6 +168,8 @@ function hookActionDescription(action: (typeof hookActions)[number]): string {
       return "Remove generated hook delivery for a target.";
     case "doctor":
       return "Inspect hook setup for a target.";
+    case "reconcile":
+      return "Repair and verify configured Codex hook delivery without takeover.";
   }
 }
 

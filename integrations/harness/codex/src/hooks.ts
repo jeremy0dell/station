@@ -1,17 +1,26 @@
 // Installs/uninstalls the STATION hook into Codex's hook config.
 // Upstream hook contract: https://developers.openai.com/codex/hooks
 // STATION ingress flow: docs/harness-ingress.md. Generated command + payload must match the ingress parser.
+import { isAbsolute, resolve } from "node:path";
 import type {
   ProviderHookArtifactOwner,
   ProviderHookArtifactOwnership,
+  ProviderHookHealth,
+  ProviderHookReconciliationResult,
   SafeError,
 } from "@station/contracts";
 import {
+  ProviderHookHealthSchema,
+  ProviderHookReconciliationResultSchema,
+} from "@station/contracts";
+import {
+  classifyProviderHookArtifactOwnership,
   commandLine,
   createHookSetupFileOps,
   expectedProviderHookScript,
   hookCommandsForEvents,
   installConfigScriptHook,
+  ProviderHookArtifactOwnershipError,
   type ProviderHookScriptOptions,
   planConfigScriptHook,
   providerHookScriptOptions,
@@ -20,6 +29,7 @@ import {
 } from "@station/runtime";
 import {
   documentContainsCommand,
+  generatedStationHookCommands,
   generatedStationHookEvents,
   installCodexHookCommands,
   missingCodexHookEvents,
@@ -36,6 +46,7 @@ import {
   type CodexObsoleteHookEventName,
 } from "./hooks/hookConstants.js";
 import { CodexHookSetupError } from "./hooks/hookErrors.js";
+import { withCodexHookMutationLock } from "./hooks/hookMutationLock.js";
 import {
   resolveCodexBaseConfigPath,
   resolveCodexConfigPath,
@@ -56,8 +67,21 @@ export type CodexHookPlanOptions = {
   hookBin?: string;
   artifactOwner?: ProviderHookArtifactOwner;
   takeover?: boolean;
+  signal?: AbortSignal;
+  timeoutMs?: number;
+  beginMutation?: () => void;
   env?: NodeJS.ProcessEnv;
   homeDir?: string;
+};
+
+export type CodexHookReconciliationOptions = Omit<CodexHookPlanOptions, "takeover"> & {
+  enabled: boolean;
+};
+
+type CodexHookOperationBoundary = {
+  signal?: AbortSignal;
+  deadlineMs?: number;
+  mutationStarted: boolean;
 };
 
 export type CodexGeneratedGlobalHookCleanup = {
@@ -168,18 +192,32 @@ const fileOps = createHookSetupFileOps(({ operation, cause }) => {
 });
 
 export async function planCodexHooks(options: CodexHookPlanOptions = {}): Promise<CodexHookPlan> {
+  return planCodexHooksWithinBoundary(options, createCodexHookOperationBoundary(options));
+}
+
+async function planCodexHooksWithinBoundary(
+  options: CodexHookPlanOptions,
+  boundary: CodexHookOperationBoundary,
+): Promise<CodexHookPlan> {
+  assertCodexHookOperationCanContinue(boundary);
   const configPath = resolveCodexConfigPath(options);
   const baseConfigPath = resolveCodexBaseConfigPath(options);
   const hookScriptPath = resolveCodexHookScriptPath(options);
+  const readSignal = codexHookReadSignal(boundary);
   const script = expectedCodexHookScript(providerHookScriptOptions(hookScriptPath, options));
   const commands = expectedCodexHookCommands({ hookScriptPath });
-  const generatedGlobalCleanup = await buildGeneratedGlobalHookCleanup({
-    baseConfigPath,
-    profileConfigPath: configPath,
-    commands,
-  });
+  const generatedGlobalCleanup = await buildGeneratedGlobalHookCleanup(
+    {
+      baseConfigPath,
+      profileConfigPath: configPath,
+      commands,
+    },
+    boundary,
+  );
+  assertCodexHookOperationCanContinue(boundary);
   const plan = await planConfigScriptHook({
     readOptionalFile: fileOps.readOptionalFile,
+    inspectOptionalFile: fileOps.inspectOptionalFile,
     configPath,
     hookScriptPath,
     parseDocument: parseTomlDocument,
@@ -191,7 +229,9 @@ export async function planCodexHooks(options: CodexHookPlanOptions = {}): Promis
     extraChanged: generatedGlobalCleanup.changed,
     provider: "codex",
     ...(options.artifactOwner === undefined ? {} : { artifactOwner: options.artifactOwner }),
+    ...(readSignal === undefined ? {} : { signal: readSignal }),
   });
+  assertCodexHookOperationCanContinue(boundary);
 
   const result: CodexHookPlan = {
     provider: "codex",
@@ -210,14 +250,46 @@ export async function planCodexHooks(options: CodexHookPlanOptions = {}): Promis
     before: plan.before,
     after: plan.after,
   };
-  if (plan.ownership !== undefined) result.ownership = plan.ownership;
+  const ownership = await classifyCodexHookPlanOwnership(
+    {
+      requestedScriptPath: hookScriptPath,
+      profileSource: plan.before,
+      baseSource: generatedGlobalCleanup.before,
+      ownScriptOwnership: plan.ownership,
+      options,
+    },
+    boundary,
+  );
+  if (ownership !== undefined) result.ownership = ownership;
+  assertCodexHookOperationCanContinue(boundary);
   return result;
 }
 
 export async function installCodexHooks(
   options: CodexHookPlanOptions = {},
 ): Promise<CodexHookInstallResult> {
-  const plan = await planCodexHooks(options);
+  const boundary = createCodexHookOperationBoundary(options);
+  return withCodexHookMutationLock(
+    codexHookMutationPaths(options),
+    () => installCodexHooksUnlocked(options, boundary),
+    hookMutationWaitContext(boundary),
+  );
+}
+
+async function installCodexHooksUnlocked(
+  options: CodexHookPlanOptions,
+  boundary: CodexHookOperationBoundary,
+  onMutationCommitted?: () => void,
+): Promise<CodexHookInstallResult> {
+  const plan = await planCodexHooksWithinBoundary(options, boundary);
+  assertCodexHookPlanOwnership(plan, options, "install");
+  const readSignal = codexHookReadSignal(boundary);
+  const beginMutation = once(() => {
+    assertCodexHookOperationCanContinue(boundary);
+    options.beginMutation?.();
+    assertCodexHookOperationCanContinue(boundary);
+    boundary.mutationStarted = true;
+  });
   const profileBackupPath = await installConfigScriptHook({
     configPath: plan.configPath,
     hookScriptPath: plan.hookScriptPath,
@@ -231,11 +303,16 @@ export async function installCodexHooks(
     provider: "codex",
     ...(options.artifactOwner === undefined ? {} : { artifactOwner: options.artifactOwner }),
     ...(options.takeover === undefined ? {} : { takeover: options.takeover }),
+    beginMutation,
+    ...(onMutationCommitted === undefined ? {} : { onMutationCommitted }),
+    ...(readSignal === undefined ? {} : { signal: readSignal }),
   });
   let baseBackupPath: string | undefined;
   if (plan.generatedGlobalCleanup.changed) {
+    beginMutation();
     baseBackupPath = await fileOps.backupIfPresent(plan.baseConfigPath);
     await fileOps.writeHookConfig(plan.baseConfigPath, plan.generatedGlobalCleanup.after);
+    onMutationCommitted?.();
   }
 
   const result = installResultFromPlan(plan, true);
@@ -250,23 +327,187 @@ export async function installCodexHooks(
   return result;
 }
 
+/** Runs the #645 install writer and provider doctor under one provider-owned lock. */
+export async function repairCodexHooks(
+  options: CodexHookPlanOptions,
+  enabled: boolean,
+): Promise<CodexHookRepairResult> {
+  return runCodexHookRepair(options, enabled, createCodexHookOperationBoundary(options));
+}
+
+/** Maps Codex-native doctor evidence onto the provider-neutral read-only contract. */
+export async function inspectCodexHookHealth(
+  options: CodexHookReconciliationOptions,
+): Promise<ProviderHookHealth> {
+  if (!options.enabled) {
+    return ProviderHookHealthSchema.parse({
+      provider: "codex",
+      status: "configured-disabled",
+      followUp: { action: "enable-hooks" },
+    });
+  }
+  const boundary = createCodexHookOperationBoundary(options);
+  try {
+    return codexHealthFromDoctor(await doctorCodexHooksWithinBoundary(options, boundary));
+  } catch (cause) {
+    rethrowCodexHookBoundaryInterruption(cause, options, boundary);
+    return ProviderHookHealthSchema.parse({
+      provider: "codex",
+      status: "inspection-failed",
+      error: publicSafeErrorFromUnknown(cause, {
+        tag: "CodexHookSetupError",
+        code: "CODEX_HOOK_INSPECTION_FAILED",
+        message: "Codex hook inspection failed.",
+        provider: "codex",
+      }),
+      followUp: { action: "run-doctor" },
+    });
+  }
+}
+
+/** Reconciles Codex hooks without takeover and returns no provider-native paths or payloads. */
+export async function reconcileCodexHooks(
+  options: CodexHookReconciliationOptions,
+): Promise<ProviderHookReconciliationResult> {
+  if (!options.enabled) {
+    return ProviderHookReconciliationResultSchema.parse({
+      provider: "codex",
+      status: "configured-disabled",
+      changed: false,
+      verified: false,
+      followUp: { action: "enable-hooks" },
+    });
+  }
+  if (options.artifactOwner === undefined) {
+    return reconciliationFailure(
+      "inspection-failed",
+      false,
+      new CodexHookSetupError(
+        "CODEX_HOOK_RECONCILIATION_OWNER_REQUIRED",
+        "Codex hook reconciliation requires verified Station artifact ownership.",
+      ),
+    );
+  }
+
+  const reconciliationOptions = codexAutomaticReconciliationPlanOptions(options);
+  const boundary = createCodexHookOperationBoundary(reconciliationOptions);
+  let plan: CodexHookPlan;
+  try {
+    plan = await planCodexHooksWithinBoundary(reconciliationOptions, boundary);
+  } catch (cause) {
+    rethrowCodexHookBoundaryInterruption(cause, reconciliationOptions, boundary);
+    return reconciliationFailure("inspection-failed", false, cause);
+  }
+  if (isOwnershipConflict(plan.ownership)) {
+    return ProviderHookReconciliationResultSchema.parse({
+      provider: "codex",
+      status: "ownership-conflict",
+      changed: false,
+      verified: false,
+      followUp: { action: "run-explicit-takeover" },
+    });
+  }
+
+  let changed = false;
+  try {
+    const repaired = await runCodexHookRepair(reconciliationOptions, true, boundary, () => {
+      changed = true;
+    });
+    if (repaired.verified) {
+      return ProviderHookReconciliationResultSchema.parse({
+        provider: "codex",
+        status: repaired.changed ? "repaired" : "healthy",
+        changed: repaired.changed,
+        verified: true,
+      });
+    }
+    const failure = "error" in repaired ? repaired.error : undefined;
+    return reconciliationFailure(
+      "post-write-doctor-failed",
+      repaired.changed,
+      failure ?? new Error("Codex hook doctor did not verify the completed reconciliation."),
+    );
+  } catch (cause) {
+    rethrowCodexHookBoundaryInterruption(cause, reconciliationOptions, boundary);
+    if (isOwnershipConflictError(cause)) {
+      return ProviderHookReconciliationResultSchema.parse({
+        provider: "codex",
+        status: "ownership-conflict",
+        changed: false,
+        verified: false,
+        followUp: { action: "run-explicit-takeover" },
+      });
+    }
+    return reconciliationFailure("write-failed", changed, cause);
+  }
+}
+
+function codexAutomaticReconciliationPlanOptions(
+  options: CodexHookReconciliationOptions,
+): CodexHookPlanOptions {
+  // Automatic reconciliation never gains takeover authority from an untyped runtime caller.
+  const planOptions = { ...options } as CodexHookPlanOptions & { enabled?: boolean };
+  delete planOptions.enabled;
+  delete planOptions.takeover;
+  return planOptions;
+}
+
+async function runCodexHookRepair(
+  options: CodexHookPlanOptions,
+  enabled: boolean,
+  boundary: CodexHookOperationBoundary,
+  onMutationCommitted?: () => void,
+): Promise<CodexHookRepairResult> {
+  return withCodexHookMutationLock(
+    codexHookMutationPaths(options),
+    async () => {
+      const installed = await installCodexHooksUnlocked(options, boundary, onMutationCommitted);
+      return verifyCodexHookInstallWithinBoundary(installed, options, enabled, boundary);
+    },
+    hookMutationWaitContext(boundary),
+  );
+}
+
 export async function verifyCodexHookInstall(
   installResult: CodexHookInstallResult,
   options: CodexHookPlanOptions,
   enabled: boolean,
 ): Promise<CodexHookRepairResult> {
+  return verifyCodexHookInstallWithinBoundary(
+    installResult,
+    options,
+    enabled,
+    createCodexHookOperationBoundary(options),
+  );
+}
+
+async function verifyCodexHookInstallWithinBoundary(
+  installResult: CodexHookInstallResult,
+  options: CodexHookPlanOptions,
+  enabled: boolean,
+  boundary: CodexHookOperationBoundary,
+): Promise<CodexHookRepairResult> {
+  if (installResult.changed) {
+    boundary.mutationStarted = true;
+  }
   const doctorOptions: CodexHookPlanOptions & { enabled: boolean } = {
     ...options,
     codexConfigPath: installResult.profileConfigPath,
     hookScriptPath: installResult.hookScriptPath,
     enabled,
   };
+  if (installResult.changed) {
+    // A durable commit must finish verification even if its caller's budget expires.
+    delete doctorOptions.signal;
+    delete doctorOptions.timeoutMs;
+    delete doctorOptions.beginMutation;
+  }
   const repairCommand = codexHookRemediationCommand(options, installResult, "install");
   const uninstallCommand = codexHookRemediationCommand(options, installResult, "uninstall");
   const doctorCommand = codexHookDoctorCommand(options, installResult);
 
   try {
-    const doctor = await doctorCodexHooks(doctorOptions);
+    const doctor = await doctorCodexHooksWithinBoundary(doctorOptions, boundary);
     if (doctor.status === "ok" && doctor.installed) {
       return {
         ...installResult,
@@ -294,6 +535,7 @@ export async function verifyCodexHookInstall(
       }),
     };
   } catch (cause) {
+    rethrowCodexHookBoundaryInterruption(cause, options, boundary);
     const error = publicSafeErrorFromUnknown(cause, {
       tag: "CodexHookSetupError",
       code: "CODEX_HOOK_VERIFICATION_FAILED",
@@ -322,14 +564,39 @@ export async function verifyCodexHookInstall(
 export async function uninstallCodexHooks(
   options: CodexHookPlanOptions = {},
 ): Promise<CodexHookInstallResult> {
+  const boundary = createCodexHookOperationBoundary(options);
+  return withCodexHookMutationLock(
+    codexHookMutationPaths(options),
+    () => uninstallCodexHooksUnlocked(options, boundary),
+    hookMutationWaitContext(boundary),
+  );
+}
+
+async function uninstallCodexHooksUnlocked(
+  options: CodexHookPlanOptions,
+  boundary: CodexHookOperationBoundary,
+): Promise<CodexHookInstallResult> {
+  const ownershipPlan = await planCodexHooksWithinBoundary(options, boundary);
+  assertCodexHookPlanOwnership(ownershipPlan, options, "uninstall");
   const configPath = resolveCodexConfigPath(options);
   const baseConfigPath = resolveCodexBaseConfigPath(options);
   const hookScriptPath = resolveCodexHookScriptPath(options);
+  const readSignal = codexHookReadSignal(boundary);
   const commands = expectedCodexHookCommands({ hookScriptPath });
-  const generatedGlobalCleanup = await buildGeneratedGlobalHookCleanup({
-    baseConfigPath,
-    profileConfigPath: configPath,
-    commands,
+  const generatedGlobalCleanup = await buildGeneratedGlobalHookCleanup(
+    {
+      baseConfigPath,
+      profileConfigPath: configPath,
+      commands,
+    },
+    boundary,
+  );
+  assertCodexHookOperationCanContinue(boundary);
+  const beginMutation = once(() => {
+    assertCodexHookOperationCanContinue(boundary);
+    options.beginMutation?.();
+    assertCodexHookOperationCanContinue(boundary);
+    boundary.mutationStarted = true;
   });
   const plan = await uninstallConfigScriptHook({
     readOptionalFile: fileOps.readOptionalFile,
@@ -345,9 +612,12 @@ export async function uninstallCodexHooks(
     provider: "codex",
     ...(options.artifactOwner === undefined ? {} : { artifactOwner: options.artifactOwner }),
     ...(options.takeover === undefined ? {} : { takeover: options.takeover }),
+    beginMutation,
+    ...(readSignal === undefined ? {} : { signal: readSignal }),
   });
   let baseBackupPath: string | undefined;
   if (generatedGlobalCleanup.changed) {
+    beginMutation();
     baseBackupPath = await fileOps.backupIfPresent(baseConfigPath);
     await fileOps.writeHookConfig(baseConfigPath, generatedGlobalCleanup.after);
   }
@@ -378,7 +648,14 @@ export async function uninstallCodexHooks(
 export async function doctorCodexHooks(
   options: CodexHookPlanOptions & { enabled?: boolean } = {},
 ): Promise<CodexHookDoctorResult> {
-  const plan = await planCodexHooks(options);
+  return doctorCodexHooksWithinBoundary(options, createCodexHookOperationBoundary(options));
+}
+
+async function doctorCodexHooksWithinBoundary(
+  options: CodexHookPlanOptions & { enabled?: boolean },
+  boundary: CodexHookOperationBoundary,
+): Promise<CodexHookDoctorResult> {
+  const plan = await planCodexHooksWithinBoundary(options, boundary);
   const generatedGlobalInstalled = plan.generatedGlobalCleanup.stale.length > 0;
   const obsoleteEvents = obsoleteGeneratedHookEvents(plan);
   const obsoleteGeneratedInstalled = obsoleteEvents.length > 0;
@@ -427,7 +704,7 @@ export async function doctorCodexHooks(
     commands: plan.commands,
     generatedGlobalCleanup: plan.generatedGlobalCleanup,
     message: ownershipConflict
-      ? `Codex hook artifact ownership conflicts with this Station runtime; run \`stn hooks install codex --yes --takeover\` only to transfer it.`
+      ? `Codex hook artifact ownership conflicts with this Station runtime; run \`${codexHookTakeoverCommand(options, plan)}\` only to transfer it.`
       : doctorMessage({
           installed,
           generatedGlobalInstalled,
@@ -472,11 +749,14 @@ function installResultFromPlan(plan: CodexHookPlan, installed: boolean): CodexHo
   };
 }
 
-async function buildGeneratedGlobalHookCleanup(input: {
-  baseConfigPath: string;
-  profileConfigPath: string;
-  commands: Record<CodexForwardedEventType, string>;
-}): Promise<CodexGeneratedGlobalHookCleanup> {
+async function buildGeneratedGlobalHookCleanup(
+  input: {
+    baseConfigPath: string;
+    profileConfigPath: string;
+    commands: Record<CodexForwardedEventType, string>;
+  },
+  boundary: CodexHookOperationBoundary,
+): Promise<CodexGeneratedGlobalHookCleanup> {
   if (input.baseConfigPath === input.profileConfigPath) {
     return {
       configPath: input.baseConfigPath,
@@ -489,7 +769,11 @@ async function buildGeneratedGlobalHookCleanup(input: {
     };
   }
 
-  const before = await fileOps.readOptionalFile(input.baseConfigPath);
+  const before = await fileOps.readOptionalFile(
+    input.baseConfigPath,
+    codexHookReadOptions(boundary),
+  );
+  assertCodexHookOperationCanContinue(boundary);
   const document = parseTomlDocument(before);
   const stale = generatedStationHookEvents(document, input.commands);
   const afterDocument = removeGeneratedCodexHookCommands(document, input.commands);
@@ -587,6 +871,28 @@ function codexHookRemediationCommand(
   return commandLine(args);
 }
 
+function codexHookTakeoverCommand(options: CodexHookPlanOptions, plan: CodexHookPlan): string {
+  const args = ["stn"];
+  if (options.stationConfigPath !== undefined) {
+    args.push("--config", options.stationConfigPath);
+  }
+  args.push(
+    "hooks",
+    "install",
+    "codex",
+    "--yes",
+    "--takeover",
+    "--codex-config",
+    plan.profileConfigPath,
+    "--hook-script",
+    plan.hookScriptPath,
+  );
+  if (options.hookBin !== undefined) {
+    args.push("--hook-bin", options.hookBin);
+  }
+  return commandLine(args);
+}
+
 function codexHookDoctorCommand(
   options: CodexHookPlanOptions,
   installResult: CodexHookInstallResult,
@@ -646,4 +952,227 @@ function assignBackupPaths(
   if (backupPaths.length > 0) {
     result.backupPaths = backupPaths;
   }
+}
+
+function codexHookMutationPaths(options: CodexHookPlanOptions): string[] {
+  return [
+    resolveCodexConfigPath(options),
+    resolveCodexBaseConfigPath(options),
+    resolveCodexHookScriptPath(options),
+  ];
+}
+
+async function classifyCodexHookPlanOwnership(
+  input: {
+    requestedScriptPath: string;
+    profileSource: string;
+    baseSource: string;
+    ownScriptOwnership: ProviderHookArtifactOwnership | undefined;
+    options: CodexHookPlanOptions;
+  },
+  boundary: CodexHookOperationBoundary,
+): Promise<ProviderHookArtifactOwnership | undefined> {
+  const requested = input.options.artifactOwner;
+  if (requested === undefined) return input.ownScriptOwnership;
+
+  const referencedScripts = new Set([
+    ...generatedStationHookCommands(parseTomlDocument(input.profileSource)),
+    ...generatedStationHookCommands(parseTomlDocument(input.baseSource)),
+  ]);
+  const ownerships: ProviderHookArtifactOwnership[] = [];
+  if (input.ownScriptOwnership !== undefined) ownerships.push(input.ownScriptOwnership);
+
+  for (const scriptPath of referencedScripts) {
+    if (!isAbsolute(scriptPath)) {
+      ownerships.push({ status: "unknown-owner", requested });
+      continue;
+    }
+    if (resolve(scriptPath) === resolve(input.requestedScriptPath)) continue;
+    const contents = await fileOps.readOptionalFile(scriptPath, codexHookReadOptions(boundary));
+    assertCodexHookOperationCanContinue(boundary);
+    const ownership = classifyProviderHookArtifactOwnership({ contents, requested });
+    ownerships.push(
+      ownership.status === "absent" ? { status: "unknown-owner", requested } : ownership,
+    );
+  }
+
+  return strongestCodexHookOwnership(ownerships, requested);
+}
+
+function strongestCodexHookOwnership(
+  ownerships: readonly ProviderHookArtifactOwnership[],
+  requested: ProviderHookArtifactOwner,
+): ProviderHookArtifactOwnership {
+  return (
+    ownerships.find((ownership) => ownership.status === "different-owner") ??
+    ownerships.find((ownership) => ownership.status === "unknown-owner") ??
+    ownerships.find((ownership) => ownership.status === "same-owner") ?? {
+      status: "absent",
+      requested,
+    }
+  );
+}
+
+function assertCodexHookPlanOwnership(
+  plan: CodexHookPlan,
+  options: CodexHookPlanOptions,
+  action: "install" | "uninstall",
+): void {
+  if (options.takeover === true || !isOwnershipConflict(plan.ownership)) return;
+  throw new ProviderHookArtifactOwnershipError({
+    provider: "codex",
+    action,
+    artifactPath: plan.profileConfigPath,
+    ownership: plan.ownership,
+  });
+}
+
+function hookMutationWaitContext(boundary: CodexHookOperationBoundary): {
+  signal?: AbortSignal;
+  deadlineMs?: number;
+} {
+  const context: { signal?: AbortSignal; deadlineMs?: number } = {};
+  if (boundary.signal !== undefined) context.signal = boundary.signal;
+  if (boundary.deadlineMs !== undefined) context.deadlineMs = boundary.deadlineMs;
+  return context;
+}
+
+function codexHookReadSignal(boundary: CodexHookOperationBoundary): AbortSignal | undefined {
+  return boundary.mutationStarted ? undefined : boundary.signal;
+}
+
+function codexHookReadOptions(
+  boundary: CodexHookOperationBoundary,
+): { signal: AbortSignal } | undefined {
+  const signal = codexHookReadSignal(boundary);
+  return signal === undefined ? undefined : { signal };
+}
+
+function createCodexHookOperationBoundary(
+  options: CodexHookPlanOptions,
+): CodexHookOperationBoundary {
+  const boundary: CodexHookOperationBoundary = { mutationStarted: false };
+  if (options.signal !== undefined) boundary.signal = options.signal;
+  if (options.timeoutMs !== undefined) {
+    boundary.deadlineMs = performance.now() + Math.max(0, options.timeoutMs);
+  }
+  return boundary;
+}
+
+function assertCodexHookOperationCanContinue(boundary: CodexHookOperationBoundary): void {
+  if (boundary.mutationStarted) return;
+  if (boundary.signal?.aborted) {
+    throw (
+      boundary.signal.reason ??
+      new CodexHookSetupError(
+        "CODEX_HOOK_RECONCILIATION_CANCELLED",
+        "Codex hook reconciliation was cancelled before mutation.",
+      )
+    );
+  }
+  if (boundary.deadlineMs !== undefined && performance.now() >= boundary.deadlineMs) {
+    throw new CodexHookSetupError(
+      "CODEX_HOOK_RECONCILIATION_TIMEOUT",
+      "Codex hook reconciliation exceeded its deadline before mutation.",
+    );
+  }
+}
+
+function rethrowCodexHookBoundaryInterruption(
+  cause: unknown,
+  options: CodexHookPlanOptions,
+  boundary: CodexHookOperationBoundary,
+): void {
+  if (
+    cause instanceof CodexHookSetupError &&
+    (cause.code === "CODEX_HOOK_RECONCILIATION_CANCELLED" ||
+      cause.code === "CODEX_HOOK_RECONCILIATION_TIMEOUT")
+  ) {
+    throw cause;
+  }
+  if (!boundary.mutationStarted && options.signal?.aborted) {
+    throw options.signal.reason ?? cause;
+  }
+}
+
+function once(effect: () => void): () => void {
+  let called = false;
+  return () => {
+    if (called) return;
+    called = true;
+    effect();
+  };
+}
+
+function codexHealthFromDoctor(doctor: CodexHookDoctorResult): ProviderHookHealth {
+  if (isOwnershipConflict(doctor.ownership)) {
+    return ProviderHookHealthSchema.parse({
+      provider: "codex",
+      status: "ownership-conflict",
+      ownership: doctor.ownership.status,
+      followUp: { action: "run-explicit-takeover" },
+    });
+  }
+  if (doctor.status === "ok" && doctor.installed) {
+    return ProviderHookHealthSchema.parse({ provider: "codex", status: "healthy" });
+  }
+  return ProviderHookHealthSchema.parse({
+    provider: "codex",
+    status: "needs-repair",
+    reason:
+      doctor.ownership?.status === "same-owner" || doctor.installed ? "owned-drift" : "missing",
+  });
+}
+
+function reconciliationFailure(
+  status: "inspection-failed" | "write-failed" | "post-write-doctor-failed",
+  changed: boolean,
+  cause: unknown,
+): ProviderHookReconciliationResult {
+  const fallbackByStatus = {
+    "inspection-failed": {
+      code: "CODEX_HOOK_INSPECTION_FAILED",
+      message: "Codex hook inspection failed.",
+      action: "run-doctor",
+    },
+    "write-failed": {
+      code: "CODEX_HOOK_WRITE_FAILED",
+      message: "Codex hook reconciliation could not complete its writes.",
+      action: "retry",
+    },
+    "post-write-doctor-failed": {
+      code: "CODEX_HOOK_POST_WRITE_DOCTOR_FAILED",
+      message: "Codex hook writes were not verified by provider doctor.",
+      action: "run-doctor",
+    },
+  } as const;
+  const fallback = fallbackByStatus[status];
+  return ProviderHookReconciliationResultSchema.parse({
+    provider: "codex",
+    status,
+    changed: status === "inspection-failed" ? false : changed,
+    verified: false,
+    error: publicSafeErrorFromUnknown(cause, {
+      tag: "CodexHookSetupError",
+      code: fallback.code,
+      message: fallback.message,
+      provider: "codex",
+    }),
+    followUp: { action: fallback.action },
+  });
+}
+
+function isOwnershipConflict(
+  ownership: ProviderHookArtifactOwnership | undefined,
+): ownership is Extract<
+  ProviderHookArtifactOwnership,
+  { status: "different-owner" | "unknown-owner" }
+> {
+  return ownership?.status === "different-owner" || ownership?.status === "unknown-owner";
+}
+
+function isOwnershipConflictError(cause: unknown): boolean {
+  return (
+    cause instanceof Error && "code" in cause && cause.code === "PROVIDER_HOOK_OWNERSHIP_CONFLICT"
+  );
 }

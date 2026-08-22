@@ -197,7 +197,7 @@ export const ObserverCommandPathsSchema = z
   })
   .strict();
 
-/** Strict JSON result consumed when an update asks its successor launcher to restart Observer. */
+/** Strict JSON result consumed when an update asks its selected launcher to converge Observer. */
 export const ObserverRestartCommandResultSchema = z.discriminatedUnion("status", [
   z
     .object({

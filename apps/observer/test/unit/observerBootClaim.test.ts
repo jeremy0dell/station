@@ -428,6 +428,54 @@ describe("observer boot claim", () => {
       await server.close();
     }
   });
+
+  it("does not report preserve-incumbent attach ready when startup cancellation wins", async () => {
+    const root = await tempRoot();
+    const stateDir = join(root, "state");
+    const socketPath = join(root, "run", "observer.sock");
+    const buildVersion = "1.0.0+station.exact-owner";
+    const server = await listenUnixSocket({ socketPath, onConnection: () => undefined });
+    const originalSigtermListeners = new Set(process.listeners("SIGTERM"));
+    const startupReadinessSink = { ready: vi.fn() };
+    const providerRegistryFactory = vi.fn();
+
+    try {
+      await expect(
+        runObserverMain(
+          ["--state-dir", stateDir, "--socket", socketPath, "--startup-timeout-ms", "500"],
+          {
+            providerRegistryFactory,
+            buildVersion,
+            startupPolicy: "preserve-incumbent",
+            startupReadinessSink,
+            incumbentLifecycle: {
+              health: vi.fn(async () => {
+                const startupListener = process
+                  .listeners("SIGTERM")
+                  .find((listener) => !originalSigtermListeners.has(listener));
+                expect(startupListener).toBeDefined();
+                startupListener?.();
+                return {
+                  schemaVersion: "0.11.0",
+                  status: "healthy",
+                  pid: 4321,
+                  startedAt: "2026-08-19T12:00:00.000Z",
+                  version: buildVersion,
+                  socketPath,
+                };
+              }),
+              stop: vi.fn(),
+            },
+            processEvidence: { socketHolders: vi.fn() } as never,
+          },
+        ),
+      ).rejects.toMatchObject({ code: "OBSERVER_STARTUP_CANCELLED" });
+      expect(startupReadinessSink.ready).not.toHaveBeenCalled();
+      expect(providerRegistryFactory).not.toHaveBeenCalled();
+    } finally {
+      await server.close();
+    }
+  });
 });
 
 async function tempRoot(prefix = "station-observer-claim-"): Promise<string> {

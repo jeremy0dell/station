@@ -146,6 +146,26 @@ export function generatedStationHookEvents(
   return generated;
 }
 
+/** Returns every Station-generated script reference that the Codex writer may replace or remove. */
+export function generatedStationHookCommands(document: Record<string, unknown>): string[] {
+  const hooks = recordValue(document.hooks);
+  if (hooks === undefined) {
+    return [];
+  }
+  const commands = new Set<string>();
+  for (const eventName of [...CODEX_HOOK_EVENT_NAMES, ...CODEX_OBSOLETE_HOOK_EVENT_NAMES]) {
+    for (const entry of hookEntries(hooks[eventName])) {
+      const entryHooks = entry.hooks;
+      if (!Array.isArray(entryHooks)) continue;
+      for (const hook of entryHooks) {
+        const command = generatedStationHookCommand(hook);
+        if (command !== undefined) commands.add(command);
+      }
+    }
+  }
+  return [...commands];
+}
+
 function withGeneratedHookEntry(
   value: unknown,
   eventName: CodexForwardedEventType,
@@ -262,6 +282,20 @@ function isGeneratedStationHook(hook: unknown, command: string): boolean {
     hookRecord.statusMessage === GENERATED_HOOK_STATUS_MESSAGE &&
     commandLooksLikeGeneratedHookScript(hookRecord.command)
   );
+}
+
+function generatedStationHookCommand(hook: unknown): string | undefined {
+  const hookRecord = recordValue(hook);
+  if (
+    hookRecord === undefined ||
+    hookRecord.type !== "command" ||
+    hookRecord.statusMessage !== GENERATED_HOOK_STATUS_MESSAGE ||
+    typeof hookRecord.command !== "string" ||
+    !commandLooksLikeGeneratedHookScript(hookRecord.command)
+  ) {
+    return undefined;
+  }
+  return hookRecord.command;
 }
 
 function commandLooksLikeGeneratedHookScript(command: string): boolean {

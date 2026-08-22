@@ -248,6 +248,100 @@ describe("negotiateObserverIncumbent", () => {
     expect(fixture.signal).not.toHaveBeenCalled();
   });
 
+  it("preserves the incumbent when replacement prerequisites fail", async () => {
+    const fixture = handoffFixture();
+    const prerequisiteFailure = Object.assign(new Error("hook reconciliation failed"), {
+      tag: "HarnessProviderError",
+      code: "HARNESS_HOOK_RECONCILIATION_FAILED",
+    });
+    const prepareReplacement = vi.fn(async () => {
+      throw prerequisiteFailure;
+    });
+
+    const failure = await runNegotiation(fixture, 40, { prepareReplacement }).catch(
+      (error: unknown) => error,
+    );
+
+    expect(failure).toMatchObject({
+      code: "OBSERVER_HANDOFF_REFUSED",
+      cause: prerequisiteFailure,
+    });
+    expect(prepareReplacement).toHaveBeenCalledWith({ timeoutMs: 40 });
+    expect(fixture.health).toHaveBeenCalledTimes(1);
+    expect(fixture.stop).not.toHaveBeenCalled();
+    expect(fixture.signal).not.toHaveBeenCalled();
+  });
+
+  it("revalidates the exact incumbent after replacement prerequisites", async () => {
+    const fixture = handoffFixture();
+    const order: string[] = [];
+    fixture.health.mockImplementation(async () => {
+      order.push("health");
+      return fixture.incumbentHealth;
+    });
+    fixture.stop.mockImplementation(async () => {
+      order.push("stop");
+      fixture.listening = false;
+      fixture.startToken = undefined;
+      return {
+        schemaVersion: "0.11.0" as const,
+        stopped: true,
+        at: "2026-07-12T12:00:00.000Z",
+      };
+    });
+
+    await expect(
+      runNegotiation(fixture, 40, {
+        prepareReplacement: async () => {
+          order.push("prepare");
+        },
+        commitReplacement: () => {
+          order.push("commit");
+        },
+      }),
+    ).resolves.toMatchObject({ action: "replaced" });
+
+    expect(order).toEqual(["health", "prepare", "health", "commit", "stop"]);
+  });
+
+  it("preserves the incumbent when cancellation wins immediately before replacement commit", async () => {
+    const fixture = handoffFixture();
+    const cancellation = Object.assign(new Error("candidate cancelled"), {
+      tag: "ObserverStartupError",
+      code: "OBSERVER_STARTUP_CANCELLED",
+    });
+
+    const failure = await runNegotiation(fixture, 40, {
+      prepareReplacement: async () => undefined,
+      commitReplacement: () => {
+        throw cancellation;
+      },
+    }).catch((error: unknown) => error);
+
+    expect(failure).toMatchObject({
+      code: "OBSERVER_HANDOFF_REFUSED",
+      cause: cancellation,
+    });
+    expect(fixture.stop).not.toHaveBeenCalled();
+    expect(fixture.signal).not.toHaveBeenCalled();
+  });
+
+  it("does not stop when replacement prerequisites consume the handoff deadline", async () => {
+    const fixture = handoffFixture();
+
+    await expect(
+      runNegotiation(fixture, 40, {
+        prepareReplacement: async () => {
+          fixture.time = 40;
+        },
+      }),
+    ).rejects.toMatchObject({ code: "OBSERVER_HANDOFF_REFUSED" });
+
+    expect(fixture.health).toHaveBeenCalledTimes(1);
+    expect(fixture.stop).not.toHaveBeenCalled();
+    expect(fixture.signal).not.toHaveBeenCalled();
+  });
+
   it("bounds the stop acknowledgement wait so exact-exit fallback keeps the handoff budget", async () => {
     const fixture = handoffFixture();
 
@@ -590,7 +684,14 @@ function handoffFixture() {
   return Object.assign(fixture, { lifecycle, evidence, identity });
 }
 
-function runNegotiation(fixture: ReturnType<typeof handoffFixture>, timeoutMs = 40) {
+function runNegotiation(
+  fixture: ReturnType<typeof handoffFixture>,
+  timeoutMs = 40,
+  deps: {
+    prepareReplacement?: (request: { timeoutMs: number }) => Promise<void>;
+    commitReplacement?: () => void;
+  } = {},
+) {
   return negotiateObserverIncumbent(
     { socketPath, candidate, timeoutMs },
     {
@@ -599,6 +700,7 @@ function runNegotiation(fixture: ReturnType<typeof handoffFixture>, timeoutMs = 
       now: () => fixture.time,
       sleep: fixture.sleep,
       pollIntervalMs: 10,
+      ...deps,
     },
   );
 }

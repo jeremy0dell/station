@@ -15,12 +15,13 @@ import {
   type CodexHookPlanOptions,
   type CodexHookRepairResult,
   doctorCodexHooks,
-  installCodexHooks,
   planCodexHooks,
+  reconcileCodexHooks,
+  repairCodexHooks,
   uninstallCodexHooks,
-  verifyCodexHookInstall,
 } from "@station/codex";
 import type { StationConfig } from "@station/config";
+import type { ProviderHookReconciliationResult } from "@station/contracts";
 import {
   type CursorHookDoctorResult,
   type CursorHookInstallResult,
@@ -70,7 +71,8 @@ export type CodexHooksCommandResult =
   | CodexHookPlan
   | CodexHookInstallResult
   | CodexHookRepairResult
-  | CodexHookDoctorResult;
+  | CodexHookDoctorResult
+  | ProviderHookReconciliationResult;
 
 export type CursorHooksCommandResult =
   | CursorHookPlan
@@ -163,16 +165,13 @@ export function runCodexHooksCommand(
   args: string[],
   options: ProviderHooksCommandOptions = {},
 ): Promise<CodexHooksCommandResult> {
-  const runner = createProviderHooksRunner<
-    CodexHookPlanOptions,
-    CodexHookInstallResult,
-    CodexHookRepairResult
-  >(
+  const runner = createProviderHooksRunner<CodexHookPlanOptions, CodexHookRepairResult>(
     {
       provider: "codex",
       plan: planCodexHooks,
-      install: installCodexHooks,
-      verifyInstall: verifyCodexHookInstall,
+      install: (hookOptions) => repairCodexHooks(hookOptions, isCodexEnabled(options.config)),
+      reconcile: (hookOptions) =>
+        reconcileCodexHooks({ ...hookOptions, enabled: isCodexEnabled(options.config) }),
       uninstall: uninstallCodexHooks,
       doctor: doctorCodexHooks,
       buildOptions: (flags, context) => {

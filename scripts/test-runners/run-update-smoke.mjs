@@ -1370,7 +1370,7 @@ async function verifyBareLaunches(input) {
 }
 
 function assertUpdateReport(report, input, installedBinary, configPath) {
-  assertEqual(report.schemaVersion, 1, `${input.name} update schema`);
+  assertEqual(report.schemaVersion, 2, `${input.name} update schema`);
   assertEqual(report.channel, "installer-binary", `${input.name} update channel`);
   const refusal = input.busyHost && input.options.busyHostOutcome === "preserved-refusal";
   assertEqual(report.status, refusal ? "failed" : "updated", `${input.name} update status`);
@@ -1390,7 +1390,25 @@ function assertUpdateReport(report, input, installedBinary, configPath) {
     refusal ? "UPDATE_RUNTIME_CROSSOVER_FAILED" : undefined,
     `${input.name} update error`,
   );
-  const expectedIds = ["detect", "plan", "apply", "observer-restart", "host-handoff"];
+  assertDeepEqual(
+    report.hookReconciliation,
+    {
+      provider: "codex",
+      status: "configured-disabled",
+      changed: false,
+      verified: false,
+      followUp: { action: "enable-hooks" },
+    },
+    `${input.name} provider-neutral hook reconciliation`,
+  );
+  const expectedIds = [
+    "detect",
+    "plan",
+    "apply",
+    "hook-reconciliation",
+    "observer-restart",
+    "host-handoff",
+  ];
   assertDeepEqual(
     report.steps.map((step) => step.id),
     expectedIds,
@@ -1399,6 +1417,7 @@ function assertUpdateReport(report, input, installedBinary, configPath) {
   assertDeepEqual(
     report.steps.map((step) => step.status),
     [
+      "completed",
       "completed",
       "completed",
       "completed",

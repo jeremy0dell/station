@@ -63,7 +63,10 @@ export function createSessionCreateHandler(
     const project = findProjectOrThrow(options.getProjects(), payload.projectId);
     const terminal = resolveTerminalProviderOrThrow(options.providers, payload.terminal.provider);
     const harness = resolveHarnessProviderOrThrow(options.providers, payload.harness.provider);
-    await options.launchPreflight(payload.harness.provider, context.signal);
+    await options.launchPreflight(payload.harness.provider, {
+      signal: context.signal,
+      beginMutation: context.beginCommit,
+    });
     const sessionId = idFactory.sessionId();
     const group = sessionSeedGroupPlacement(payload.group, idFactory.sessionGroupId);
     const runtime = {

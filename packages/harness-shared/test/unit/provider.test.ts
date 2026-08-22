@@ -4,6 +4,7 @@ import {
   type CommonHarnessProviderOptions,
   createTerminalBoundHarnessProvider,
   harnessHookDoctorOptions,
+  harnessHookReconciliationOptions,
   harnessHooksStatusFrom,
   type TerminalBoundHarnessProviderSpec,
 } from "../../src/provider";
@@ -270,7 +271,7 @@ describe("harnessHookDoctorOptions", () => {
     });
   });
 
-  it("does not retain the incumbent config path when the requester omits it", () => {
+  it("drops an omitted requester config path but preserves the incumbent artifact owner", () => {
     const context: ProviderDoctorContext = {
       stationConfigPath: "/checkout/A/config.toml",
       providerHookRuntime: {
@@ -289,6 +290,28 @@ describe("harnessHookDoctorOptions", () => {
       stateDir: requesterRuntime.stateDir,
       hookSpoolDir: requesterRuntime.hookSpoolDir,
       autoStartFromHooks: requesterRuntime.autoStartFromHooks,
+      artifactOwner: incumbent.artifactOwner,
+    });
+  });
+
+  it("preserves cancellation, deadline, and mutation commit without mixing read authority", () => {
+    const controller = new AbortController();
+    const beginMutation = () => undefined;
+    const context = {
+      signal: controller.signal,
+      timeoutMs: 125,
+      beginMutation,
+    };
+
+    expect(harnessHookDoctorOptions(incumbent, context)).toMatchObject({
+      signal: controller.signal,
+      timeoutMs: 125,
+    });
+    expect(harnessHookDoctorOptions(incumbent, context)).not.toHaveProperty("beginMutation");
+    expect(harnessHookReconciliationOptions(incumbent, context)).toMatchObject({
+      signal: controller.signal,
+      timeoutMs: 125,
+      beginMutation,
     });
   });
 });

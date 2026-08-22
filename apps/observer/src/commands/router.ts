@@ -74,11 +74,12 @@ export function registerObserverCommandHandlers(
   const featureFlags = options.featureFlags ?? createFeatureFlagEvaluator();
   const launchPreflight: HarnessLaunchPreflight =
     options.launchPreflight ??
-    ((providerId, signal) =>
+    ((providerId, context) =>
       assertHarnessLaunchPreconditionsOrThrow({
         providers: options.providers,
         providerId,
-        ...(signal === undefined ? {} : { signal }),
+        ...(context?.signal === undefined ? {} : { signal: context.signal }),
+        ...(context?.beginMutation === undefined ? {} : { beginMutation: context.beginMutation }),
       }));
   const sessionGroupHandlers = createSessionGroupCommandHandlers({
     core: options.core,

@@ -113,7 +113,10 @@ export function createSessionResumeAgentHandler(
         worktree,
         recoveryHandleId: payload.recoveryHandleId,
       });
-      await options.launchPreflight(recovery.harness.id, context.signal);
+      await options.launchPreflight(recovery.harness.id, {
+        signal: context.signal,
+        beginMutation: context.beginCommit,
+      });
 
       const sessionNeedsSeed = recovery.stationSession === undefined;
       const sessionId =

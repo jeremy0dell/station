@@ -111,10 +111,6 @@
 │
 ◆  Write STATION config
 │
-◇  Activating observer configuration...
-│
-◆  Observer configuration active.
-│
 ◇  Install Codex tracking
 │
 ◆  Install Codex tracking
@@ -122,6 +118,10 @@
 ◇  Install OpenCode tracking
 │
 ◆  Install OpenCode tracking
+│
+◇  Activating observer configuration...
+│
+◆  Observer configuration active.
 Core setup complete. Tracking is prepared for Codex and OpenCode.
 
 Codex may require review of Station’s current hook definition through /hooks; setup did not bypass or verify that review.

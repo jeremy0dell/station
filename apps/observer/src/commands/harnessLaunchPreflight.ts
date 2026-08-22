@@ -1,11 +1,17 @@
 import type { ProviderId, SafeError } from "@station/contracts";
 import type { ProviderRegistry } from "../providers/registry.js";
 import { throwIfAborted } from "./cancellation.js";
+import { reconcileHarnessHooksOrThrow } from "./harnessHookReconciliation.js";
 import { assertHooksInstalledOrThrow, resolveHarnessProviderOrThrow } from "./providers.js";
+
+export type HarnessLaunchPreflightContext = {
+  signal?: AbortSignal | undefined;
+  beginMutation?: (() => void) | undefined;
+};
 
 export type HarnessLaunchPreflight = (
   providerId: ProviderId,
-  signal?: AbortSignal,
+  context?: HarnessLaunchPreflightContext,
 ) => Promise<void>;
 
 export type HarnessLaunchPreflightOptions = {
@@ -13,12 +19,14 @@ export type HarnessLaunchPreflightOptions = {
   providerId: ProviderId;
   stationConfigPath?: string | undefined;
   signal?: AbortSignal | undefined;
+  beginMutation?: (() => void) | undefined;
 };
 
 /**
  * USE CASE
  *
- * Freshly verifies the selected harness health and hook delivery immediately before launch mutation.
+ * Freshly verifies the selected harness health, reconciles configured hooks, and verifies delivery
+ * immediately before launch mutation.
  */
 export async function assertHarnessLaunchPreconditionsOrThrow(
   options: HarnessLaunchPreflightOptions,
@@ -40,10 +48,25 @@ export async function assertHarnessLaunchPreconditionsOrThrow(
     throw health.lastError ?? harnessUnavailableError(provider.id);
   }
 
-  await assertHooksInstalledOrThrow(
-    provider,
-    options.stationConfigPath === undefined ? {} : { stationConfigPath: options.stationConfigPath },
-  );
+  await reconcileHarnessHooksOrThrow({
+    providers: options.providers,
+    providerId: provider.id,
+    ...(options.stationConfigPath === undefined
+      ? {}
+      : { stationConfigPath: options.stationConfigPath }),
+    ...(options.signal === undefined ? {} : { signal: options.signal }),
+    ...(options.beginMutation === undefined ? {} : { beginMutation: options.beginMutation }),
+  });
+  if (options.signal !== undefined) {
+    throwIfAborted(options.signal);
+  }
+
+  await assertHooksInstalledOrThrow(provider, {
+    ...(options.stationConfigPath === undefined
+      ? {}
+      : { stationConfigPath: options.stationConfigPath }),
+    ...(options.signal === undefined ? {} : { signal: options.signal }),
+  });
   if (options.signal !== undefined) {
     throwIfAborted(options.signal);
   }

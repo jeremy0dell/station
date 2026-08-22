@@ -12,6 +12,9 @@ import type {
   ProviderHealth,
   ProviderHookArtifactOwner,
   ProviderHookArtifactOwnership,
+  ProviderHookHealth,
+  ProviderHookReconciliationContext,
+  ProviderHookReconciliationResult,
   ProviderId,
   SafeError,
 } from "@station/contracts";
@@ -73,6 +76,13 @@ export type TerminalBoundHarnessProviderSpec<TOpts extends CommonHarnessProvider
     ) => Promise<ProviderDoctorCheck[]>;
     version?: HarnessVersionSpec;
     hooksStatus?: (options: TOpts, context?: ProviderDoctorContext) => Promise<HarnessHooksStatus>;
+    /** Maps provider-native inspection onto strict, path-free hook-health evidence. */
+    hookHealth?: (options: TOpts, context?: ProviderDoctorContext) => Promise<ProviderHookHealth>;
+    /** Requests the provider's sole no-takeover writer and post-write verification path. */
+    reconcileHooks?: (
+      options: TOpts,
+      context?: ProviderHookReconciliationContext,
+    ) => Promise<ProviderHookReconciliationResult>;
   };
 
 export function createTerminalBoundHarnessProvider<TOpts extends CommonHarnessProviderOptions>(
@@ -106,6 +116,14 @@ export function createTerminalBoundHarnessProvider<TOpts extends CommonHarnessPr
   const hooksStatus = spec.hooksStatus;
   if (hooksStatus) {
     provider.hooksStatus = (context) => hooksStatus(options, context);
+  }
+  const hookHealth = spec.hookHealth;
+  if (hookHealth) {
+    provider.hookHealth = (context) => hookHealth(options, context);
+  }
+  const reconcileHooks = spec.reconcileHooks;
+  if (reconcileHooks) {
+    provider.reconcileHooks = (context) => reconcileHooks(options, context);
   }
   const version = spec.version;
   if (version) {
@@ -234,6 +252,12 @@ export type CommonHookDoctorOptions = {
   autoStartFromHooks?: boolean;
   stationConfigPath?: string;
   artifactOwner?: ProviderHookArtifactOwner;
+  signal?: AbortSignal;
+  timeoutMs?: number;
+};
+
+export type CommonHookReconciliationOptions = CommonHookDoctorOptions & {
+  beginMutation?: () => void;
 };
 
 /** Maps the whole requester hook runtime or preserves the incumbent provider options. */
@@ -254,6 +278,14 @@ export function harnessHookDoctorOptions(
     }
     if (runtime.artifactOwner !== undefined) {
       result.artifactOwner = runtime.artifactOwner;
+    } else if (options.artifactOwner !== undefined) {
+      result.artifactOwner = options.artifactOwner;
+    }
+    if (context?.signal !== undefined) {
+      result.signal = context.signal;
+    }
+    if (context?.timeoutMs !== undefined) {
+      result.timeoutMs = context.timeoutMs;
     }
     return result;
   }
@@ -277,6 +309,24 @@ export function harnessHookDoctorOptions(
   }
   if (context?.stationConfigPath !== undefined) {
     result.stationConfigPath = context.stationConfigPath;
+  }
+  if (context?.signal !== undefined) {
+    result.signal = context.signal;
+  }
+  if (context?.timeoutMs !== undefined) {
+    result.timeoutMs = context.timeoutMs;
+  }
+  return result;
+}
+
+/** Maps provider reconciliation context without exposing commit authority to read-only probes. */
+export function harnessHookReconciliationOptions(
+  options: HarnessHookDoctorOptionsInput,
+  context?: ProviderHookReconciliationContext,
+): CommonHookReconciliationOptions {
+  const result: CommonHookReconciliationOptions = harnessHookDoctorOptions(options, context);
+  if (context?.beginMutation !== undefined) {
+    result.beginMutation = context.beginMutation;
   }
   return result;
 }

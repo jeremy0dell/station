@@ -25,6 +25,8 @@ import {
   systemClock,
   toIsoTimestamp,
 } from "@station/runtime";
+import { throwIfAborted } from "../commands/cancellation.js";
+import { reconcileConfiguredHarnessHooksOrThrow } from "../commands/harnessHookReconciliation.js";
 import {
   assertHarnessLaunchPreconditionsOrThrow,
   type HarnessLaunchPreflight,
@@ -111,6 +113,8 @@ export type ObserverProviderRegistryFactory = (
   options: ObserverProviderRegistryFactoryOptions,
 ) => ProviderRegistry | Promise<ProviderRegistry>;
 
+type ObserverProviderPreparation = (request: { timeoutMs: number }) => Promise<ProviderRegistry>;
+
 /**
  * DRIVEN PORT
  *
@@ -186,6 +190,16 @@ export async function runObserverMain(
   if (claimResult.status !== "acquired") {
     throw claimResult.error;
   }
+  const startupSignals = createObserverStartupSignalController();
+  const prepareProviders = createObserverProviderPreparation({
+    deps,
+    config,
+    stateDir,
+    ...(options.configPath === undefined ? {} : { configPath: loadedConfig.configPath }),
+    startupDeadline,
+    now: handoffNow,
+    signal: startupSignals.signal,
+  });
 
   // This outer lifetime keeps the claim through any pre-ready socket and
   // pidfile cleanup; the ready gate performs the normal early release.
@@ -214,6 +228,7 @@ export async function runObserverMain(
           timeoutMs: remainingStartupMs,
         });
         if (incumbent.version === buildVersion) {
+          throwIfAborted(startupSignals.signal);
           notifyObserverStartupReady(deps.startupReadinessSink);
           return 0;
         }
@@ -253,9 +268,14 @@ export async function runObserverMain(
           evidence: processEvidence,
           now: handoffNow,
           ...(deps.handoffSleep === undefined ? {} : { sleep: deps.handoffSleep }),
+          prepareReplacement: async ({ timeoutMs }) => {
+            await prepareProviders({ timeoutMs });
+          },
+          commitReplacement: startupSignals.commitReplacement,
         },
       );
       if (result.action === "attach") {
+        throwIfAborted(startupSignals.signal);
         notifyObserverStartupReady(deps.startupReadinessSink);
         return 0;
       }
@@ -304,10 +324,111 @@ export async function runObserverMain(
       claim: claimResult,
       evidenceRepair,
       deps,
+      prepareProviders,
+      startupDeadline,
+      startupNow: handoffNow,
+      startupSignals,
     });
   } finally {
+    startupSignals.dispose();
     releaseObserverBootClaim(claimResult);
   }
+}
+
+type ObserverStartupSignalController = {
+  signal: AbortSignal;
+  commitReplacement(): void;
+  activate(onSignal: () => void): void;
+  dispose(): void;
+};
+
+function createObserverStartupSignalController(): ObserverStartupSignalController {
+  const controller = new AbortController();
+  let onSignal: (() => void) | undefined;
+  let replacementCommitted = false;
+  let signalReceived = false;
+  const abortFor = (signal: "SIGINT" | "SIGTERM") => {
+    signalReceived = true;
+    if (!replacementCommitted && !controller.signal.aborted) {
+      const safeError: SafeError = {
+        tag: "ObserverStartupError",
+        code: "OBSERVER_STARTUP_CANCELLED",
+        message: `Observer startup was cancelled by ${signal}.`,
+      };
+      controller.abort(Object.assign(new Error(safeError.message), safeError));
+    }
+    onSignal?.();
+  };
+  const onSigint = () => abortFor("SIGINT");
+  const onSigterm = () => abortFor("SIGTERM");
+  process.once("SIGINT", onSigint);
+  process.once("SIGTERM", onSigterm);
+
+  return {
+    signal: controller.signal,
+    commitReplacement: () => {
+      // No signal callback can interleave with this synchronous check-and-commit transition.
+      throwIfAborted(controller.signal);
+      replacementCommitted = true;
+    },
+    activate: (callback) => {
+      onSignal = callback;
+      if (signalReceived) callback();
+    },
+    dispose: () => {
+      process.off("SIGINT", onSigint);
+      process.off("SIGTERM", onSigterm);
+      onSignal = undefined;
+    },
+  };
+}
+
+function createObserverProviderPreparation(input: {
+  deps: RunObserverMainDeps;
+  config: StationConfig;
+  stateDir: string;
+  configPath?: string;
+  startupDeadline: number;
+  now: () => number;
+  signal: AbortSignal;
+}): ObserverProviderPreparation {
+  let preparation: Promise<ProviderRegistry> | undefined;
+  return (request) => {
+    preparation ??= (async () => {
+      throwIfAborted(input.signal);
+      const providerOptions: ObserverProviderRegistryFactoryOptions = { stateDir: input.stateDir };
+      if (input.configPath !== undefined) providerOptions.configPath = input.configPath;
+      const providers = await input.deps.providerRegistryFactory(input.config, providerOptions);
+      throwIfAborted(input.signal);
+      // The boot claim is the startup serialization authority; configured hooks must verify
+      // before an incumbent is stopped or any successor runtime state is published.
+      await reconcileConfiguredHarnessHooksOrThrow({
+        providers,
+        ...(input.configPath === undefined ? {} : { stationConfigPath: input.configPath }),
+        signal: input.signal,
+        timeoutMs: Math.min(
+          request.timeoutMs,
+          remainingObserverStartupMs(input.startupDeadline, input.now),
+        ),
+      });
+      throwIfAborted(input.signal);
+      return providers;
+    })();
+    return preparation;
+  };
+}
+
+function remainingObserverStartupMs(deadline: number, now: () => number): number {
+  const remaining = Math.floor(deadline - now());
+  if (remaining <= 0) {
+    const safeError: SafeError = {
+      tag: "ObserverStartupError",
+      code: "OBSERVER_STARTUP_TIMEOUT",
+      message: "Observer startup did not complete before its deadline.",
+    };
+    throw Object.assign(new Error(safeError.message), safeError);
+  }
+  return remaining;
 }
 
 /** Reads the internal child policy strictly so inherited or misspelled values fail closed. */
@@ -344,6 +465,10 @@ async function runClaimedObserverRuntime(input: {
   claim: AcquiredObserverBootClaim;
   evidenceRepair: ObserverStaleEvidenceRepairSummary;
   deps: RunObserverMainDeps;
+  prepareProviders: ObserverProviderPreparation;
+  startupDeadline: number;
+  startupNow: () => number;
+  startupSignals: ObserverStartupSignalController;
 }): Promise<number> {
   const {
     options,
@@ -355,15 +480,18 @@ async function runClaimedObserverRuntime(input: {
     claim,
     evidenceRepair,
     deps,
+    prepareProviders,
+    startupDeadline,
+    startupNow,
+    startupSignals,
   } = input;
   const observerVersion = parseStationObserverBuildVersion(buildVersion).version;
   const config = loadedConfig.config;
   const spoolDir = providerIngressSpoolDir(stateDir);
-  const providerOptions: ObserverProviderRegistryFactoryOptions = { stateDir };
-  if (options.configPath !== undefined) {
-    providerOptions.configPath = loadedConfig.configPath;
-  }
-  const providers = await deps.providerRegistryFactory(config, providerOptions);
+  const providers = await prepareProviders({
+    timeoutMs: remainingObserverStartupMs(startupDeadline, startupNow),
+  });
+  throwIfAborted(startupSignals.signal);
 
   const sqlite = openObserverSqlite({
     path: join(stateDir, "observer.sqlite"),
@@ -409,12 +537,13 @@ async function runClaimedObserverRuntime(input: {
     featureFlags,
     version: observerVersion,
   });
-  const launchPreflight: HarnessLaunchPreflight = (providerId, signal) =>
+  const launchPreflight: HarnessLaunchPreflight = (providerId, context) =>
     assertHarnessLaunchPreconditionsOrThrow({
       providers,
       providerId,
       ...(options.configPath === undefined ? {} : { stationConfigPath: loadedConfig.configPath }),
-      ...(signal === undefined ? {} : { signal }),
+      ...(context?.signal === undefined ? {} : { signal: context.signal }),
+      ...(context?.beginMutation === undefined ? {} : { beginMutation: context.beginMutation }),
     });
   registerObserverCommandHandlers({
     queue: commandQueue,
@@ -577,9 +706,11 @@ async function runClaimedObserverRuntime(input: {
       return stopReceipt;
     },
   };
+  startupSignals.activate(stopFromSignal);
 
   let shouldReconcile = false;
   try {
+    throwIfAborted(startupSignals.signal);
     // Only the successful socket binder may publish identity, and publication must finish before health responds.
     server = await startObserverServer({
       socketPath,
@@ -593,6 +724,7 @@ async function runClaimedObserverRuntime(input: {
       throw new Error(`Could not capture the bound Observer socket identity at ${socketPath}.`);
     }
     boundSocketIdentity = boundIdentity;
+    throwIfAborted(startupSignals.signal);
     processIdentity = createObserverProcessIdentity({
       pid: process.pid,
       processToken: options.processToken,
@@ -600,6 +732,7 @@ async function runClaimedObserverRuntime(input: {
       socketPath,
     });
     await publishObserverProcessIdentity(processIdentity);
+    throwIfAborted(startupSignals.signal);
     // Seed the watcher with the just-bound socket identity so it never adopts a
     // rival's socket as its baseline (the failure that let displaced observers linger).
     ownership = watchSocketOwnership({
@@ -617,8 +750,6 @@ async function runClaimedObserverRuntime(input: {
         void api.stop();
       },
     });
-    process.once("SIGINT", stopFromSignal);
-    process.once("SIGTERM", stopFromSignal);
     // Current provider context is part of readiness; hook correlation must never see the empty seed.
     await api.reconcile("observer.startup");
     const startupCommit = startupGate.settleReady(() => claim.release());
@@ -637,8 +768,6 @@ async function runClaimedObserverRuntime(input: {
         .catch(() => undefined);
     }
   } catch (error) {
-    process.off("SIGINT", stopFromSignal);
-    process.off("SIGTERM", stopFromSignal);
     startupGate.settleFailed();
     shutdownExitCode = 1;
     await logger
