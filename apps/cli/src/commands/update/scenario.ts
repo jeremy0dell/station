@@ -16,7 +16,7 @@ export type PreviewMutation =
   | { kind: "defer-to-package-manager"; managerCommand: UpdateCommandArgv };
 
 export type UpdateScenario =
-  | { kind: "already-current" }
+  | { kind: "already-current"; hostHandoff: HostHandoffScenario }
   | {
       kind: "preview";
       mutation: PreviewMutation;
@@ -126,7 +126,11 @@ export async function resolveUpdateScenario(input: UpdateScenarioInput): Promise
     });
   }
 
-  if (selected.plan.status === "current") return { kind: "already-current" };
+  if (selected.plan.status === "current") {
+    const hostHandoff =
+      request.mode === "preview" ? skippedHostHandoff(request) : await resolveHostHandoff(input);
+    return { kind: "already-current", hostHandoff };
+  }
 
   const mutationRequested = !managerOwned || request.packageManager === "drive";
   const hostHandoff = mutationRequested

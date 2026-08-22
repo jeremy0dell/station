@@ -144,10 +144,20 @@ results name the activation phase and the last proven disposition of the
 incumbent admitted at the beginning of the operation.
 
 A winning replacement candidate may coordinate handoff only while holding the boot claim.
-It revalidates holder, health, pidfile, argv, socket, and OS start token before controlled
-stop and before the one permitted SIGTERM. The controlled health-plus-stop exchange uses one
-connection, binding authorization to the revalidated incumbent. A stop receipt is acceptance,
-not exit proof: successor bind requires both socket closure and exact incumbent death.
+After first corroborating holder, health, pidfile, argv, socket, and OS start token, it constructs
+its provider registry and completes configured provider-owned hook reconciliation within the
+remaining startup deadline. Failure, cancellation, ownership conflict, or an unverified repair
+ends candidate startup before stop or signal, preserving the incumbent. A successful preparation
+is memoized for the successor runtime; it is not a second hook writer.
+
+After preparation, handoff freshly revalidates the exact incumbent before controlled stop and
+before the one permitted SIGTERM. Immediately before stop, the successor synchronously refuses
+any pending startup cancellation and commits to replacement. A signal that wins before this commit
+preserves the incumbent. A later signal is remembered but cannot strand an empty singleton between
+incumbent stop and successor cleanup ownership; it is delivered to normal shutdown as soon as the
+successor owns that cleanup. The controlled health-plus-stop exchange uses one connection, binding
+authorization to the revalidated incumbent. A stop receipt is acceptance, not exit proof: successor
+bind requires both socket closure and exact incumbent death.
 
 Automatic handoff never sends SIGKILL. A missing identity, changed owner, inaccessible
 socket, wedged process, or exhausted deadline returns `OBSERVER_HANDOFF_REFUSED` and preserves
@@ -155,21 +165,24 @@ the incumbent evidence.
 
 ## Bind, readiness, and claim release
 
-For an absent or proven-stale socket, the claim-holding child binds through the claimed
-stale-reclaim path. Immediately before its only unlink attempt, it repeats zero-holder and
-path-identity checks. After bind it:
+For an absent or proven-stale socket, the claim-holding child completes the same bounded
+provider-owned hook preparation before opening its main database or binding. It then binds through
+the claimed stale-reclaim path. Immediately before its only unlink attempt, it repeats zero-holder
+and path-identity checks. After bind it:
 
 1. captures socket inode and birth identity;
 2. publishes and fsyncs the strict pidfile;
 3. seeds the ownership watcher with the captured socket identity;
-4. commits the startup gate;
-5. synchronously rolls back and closes the boot claim;
-6. enables health waiters;
-7. runs startup reconcile outside the claim.
+4. runs the first provider-backed core reconcile while operations and health remain gated;
+5. commits readiness while still holding the boot claim;
+6. synchronously rolls back and closes the boot claim;
+7. enables health waiters.
 
-Publication, OS-start-token, bind, or pre-ready lifecycle failure keeps health closed and
-retains the claim through socket and pidfile cleanup. A stop requested before readiness is
-terminal.
+Provider preparation, publication, OS-start-token, bind, initial reconcile, or other pre-ready
+lifecycle failure keeps health closed and retains the claim through socket and pidfile cleanup. A
+stop requested before readiness is terminal. SIGINT and SIGTERM cancellation is installed before
+provider preparation; it prevents pre-commit hook mutation, preserves an incumbent before the
+replacement commit, and is handed to normal owned shutdown once runtime cleanup authority exists.
 
 The spawning CLI gives the child one private inherited pipe for startup outcome reporting.
 Before readiness, the child may write one strict, redacted, versioned failure report and then

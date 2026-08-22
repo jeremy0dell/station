@@ -229,6 +229,7 @@ export async function planCursorHooks(
   const script = expectedCursorHookScript(providerHookScriptOptions(hookScriptPath, options));
   const plan = await planConfigScriptHook({
     readOptionalFile: fileOps.readOptionalFile,
+    inspectOptionalFile: fileOps.inspectOptionalFile,
     configPath: hooksPath,
     hookScriptPath,
     parseDocument: parseJsonDocument,

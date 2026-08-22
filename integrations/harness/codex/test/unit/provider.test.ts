@@ -63,6 +63,50 @@ describe("CodexHarnessProvider", () => {
     });
   });
 
+  it("exposes neutral read and automatic reconciliation capabilities", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-codex-provider-"));
+    const previousCodexHome = process.env.CODEX_HOME;
+    process.env.CODEX_HOME = join(root, "codex-home");
+    try {
+      const disabled = createCodexHarnessProvider({ installHooks: false, stateDir: root });
+      await expect(disabled.hookHealth?.()).resolves.toMatchObject({
+        status: "configured-disabled",
+      });
+      await expect(disabled.reconcileHooks?.()).resolves.toMatchObject({
+        status: "configured-disabled",
+        changed: false,
+      });
+
+      const enabled = createCodexHarnessProvider({
+        installHooks: true,
+        stateDir: root,
+        artifactOwner: {
+          schemaVersion: 1,
+          launcher: "/station/bin/stn-ingress",
+          runtimeKind: "compiled",
+          version: "0.0.0-test",
+          buildIdentity: "a".repeat(64),
+        },
+      });
+      await expect(enabled.reconcileHooks?.()).resolves.toEqual({
+        provider: "codex",
+        status: "repaired",
+        changed: true,
+        verified: true,
+      });
+      await expect(enabled.hookHealth?.()).resolves.toEqual({
+        provider: "codex",
+        status: "healthy",
+      });
+    } finally {
+      if (previousCodexHome === undefined) {
+        delete process.env.CODEX_HOME;
+      } else {
+        process.env.CODEX_HOME = previousCodexHome;
+      }
+    }
+  });
+
   it("checks codex login status for provider health", async () => {
     const calls: ExternalCommandInput[] = [];
     const provider = createCodexHarnessProvider({

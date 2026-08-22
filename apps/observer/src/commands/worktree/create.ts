@@ -37,7 +37,10 @@ export function createWorktreeCreateHandler(
     const payload = context.command.payload;
     const project = findProjectOrThrow(options.getProjects(), payload.projectId);
     if (payload.launchHarness !== undefined) {
-      await options.launchPreflight(payload.launchHarness, context.signal);
+      await options.launchPreflight(payload.launchHarness, {
+        signal: context.signal,
+        beginMutation: context.beginCommit,
+      });
     }
 
     const request: CreateWorktreeRequest = { project, branch: payload.branch };

@@ -7,7 +7,10 @@ import type { ExternalCommandInput, ExternalCommandResult } from "@station/runti
 import { buildManagedFastPopupRunShellCommand } from "@station/tmux";
 import { afterEach, describe, expect, it } from "vitest";
 import type { SetupCommandDeps } from "../../src/commands/setup/types.js";
-import { configBackedHarnessHooksProbe } from "../fixtures/setupTrackingSupport.js";
+import {
+  configBackedHarnessHooksProbe,
+  successfulProviderTrackingPort,
+} from "../fixtures/setupTrackingSupport.js";
 
 async function runCli(...args: Parameters<typeof stationCli.runCli>) {
   const options = args[1] ?? {};
@@ -22,6 +25,9 @@ async function runCli(...args: Parameters<typeof stationCli.runCli>) {
       probeHarnessHooksStatus: configBackedHarnessHooksProbe(
         async (configPath) => (await deps.fs?.readFile(configPath)) ?? "",
       ),
+      ...(deps.providerTrackingPort === undefined
+        ? { providerTrackingPort: successfulProviderTrackingPort }
+        : {}),
     },
   });
 }
@@ -937,6 +943,7 @@ describe("CLI setup command", () => {
       'command = "codex"\ninstall_hooks = true',
     );
     const chunks: string[] = [];
+    let activationCount = 0;
 
     const result = await runCli(["--config", configPath, "setup", "apply", "--yes"], {
       setupDeps: {
@@ -963,6 +970,9 @@ describe("CLI setup command", () => {
             hint: "stn hooks install codex --yes --takeover",
           },
         }),
+        activateObserverConfig: async () => {
+          activationCount += 1;
+        },
         writeStdout: (chunk) => {
           chunks.push(chunk);
         },
@@ -974,6 +984,7 @@ describe("CLI setup command", () => {
     expect(output).toContain("Another Station runtime owns the hook.");
     expect(output).toContain("HOOK_OWNER_CONFLICT");
     expect(output).toContain("stn hooks install codex --yes --takeover");
+    expect(activationCount).toBe(0);
   });
 
   it("keeps apply non-ready when the final artifact re-probe fails", async () => {
@@ -995,6 +1006,7 @@ describe("CLI setup command", () => {
         activateObserverConfig: async () => {
           activations += 1;
         },
+        providerTrackingPort: successfulProviderTrackingPort,
         async probeHarnessHooksStatus(harnessId) {
           return {
             provider: harnessId,

@@ -60,6 +60,213 @@ describe("createSetupSessionApplication", () => {
     ]);
   });
 
+  it("prepares selected tracking after config commit and before Observer activation", async () => {
+    const trackingPending = facts({ state: "missing", write: "create", diagnostics: [] }, [
+      {
+        harnessId: "codex",
+        assessment: { state: "disabled", requested: false, installed: false },
+        required: true,
+        persistedIntent: true,
+      },
+    ]);
+    const inspections = [trackingPending, trackingPending, readyFacts(), readyFacts()];
+    const inspection = vi.fn<SetupInspection>(async () => {
+      const next = inspections.shift();
+      if (next === undefined) throw new Error("unexpected inspection");
+      return { status: "completed", facts: next };
+    });
+    const executeOperation = vi.fn<SetupOperationExecutor>(async (operation) => {
+      switch (operation.kind) {
+        case "write-config":
+          return {
+            status: "completed",
+            operationId: operation.id,
+            commit: { kind: "config", configPath: "/tmp/config.toml", change: "created" },
+          };
+        case "prepare-harness-tracking":
+          return {
+            status: "completed",
+            operationId: operation.id,
+            commit: { kind: "provider-tracking", provider: "codex", changed: true },
+          };
+        case "activate-observer-config":
+          return {
+            status: "completed",
+            operationId: operation.id,
+            commit: { kind: "observer-activation", configPath: "/tmp/config.toml" },
+          };
+        default:
+          throw new Error(`unexpected operation: ${operation.kind}`);
+      }
+    });
+    const application = createSetupSessionApplication({
+      intent: intent(),
+      inspection,
+      executeOperation,
+    });
+
+    const state = await application.apply();
+
+    expect(state.status).toBe("completed");
+    expect(executeOperation.mock.calls.map(([operation]) => operation.id)).toEqual([
+      "write-config",
+      "prepare-harness-tracking:codex",
+      "activate-observer-config",
+    ]);
+  });
+
+  it("blocks a failed required tracking repair before Observer activation", async () => {
+    const trackingPending = facts({ state: "missing", write: "create", diagnostics: [] }, [
+      {
+        harnessId: "codex",
+        assessment: { state: "disabled", requested: false, installed: false },
+        required: true,
+        persistedIntent: true,
+      },
+    ]);
+    const inspections = [trackingPending, trackingPending];
+    const inspection = vi.fn<SetupInspection>(async () => {
+      const next = inspections.shift();
+      if (next === undefined) throw new Error("unexpected inspection");
+      return { status: "completed", facts: next };
+    });
+    const trackingError = {
+      tag: "SetupProviderTrackingError",
+      code: "SETUP_PROVIDER_TRACKING_FAILED",
+      message: "Station tracking could not be prepared for codex.",
+      provider: "codex",
+    } as const;
+    const executeOperation = vi.fn<SetupOperationExecutor>(async (operation) => {
+      if (operation.kind === "write-config") {
+        return {
+          status: "completed",
+          operationId: operation.id,
+          commit: { kind: "config", configPath: "/tmp/config.toml", change: "created" },
+        };
+      }
+      if (operation.kind === "prepare-harness-tracking") {
+        return { status: "failed", operationId: operation.id, error: trackingError };
+      }
+      throw new Error(`unexpected operation: ${operation.kind}`);
+    });
+    const application = createSetupSessionApplication({
+      intent: intent(),
+      inspection,
+      executeOperation,
+    });
+
+    await expect(application.apply()).resolves.toMatchObject({
+      status: "blocked",
+      reason: "tracking-failed",
+      error: trackingError,
+      operationOutcomes: [
+        { status: "completed", operationId: "write-config" },
+        { status: "failed", operationId: "prepare-harness-tracking:codex" },
+      ],
+    });
+    expect(executeOperation.mock.calls.map(([operation]) => operation.id)).toEqual([
+      "write-config",
+      "prepare-harness-tracking:codex",
+    ]);
+    expect(inspection).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps a selected recommended tracking failure nonblocking", async () => {
+    const base = facts({ state: "missing", write: "create", diagnostics: [] }, [
+      {
+        harnessId: "codex",
+        assessment: { state: "prepared", requested: true, installed: true },
+        required: true,
+        persistedIntent: true,
+      },
+      {
+        harnessId: "opencode",
+        assessment: { state: "artifact-missing-or-drifted", requested: true, installed: false },
+        required: false,
+        persistedIntent: true,
+      },
+    ]);
+    const trackingPending: SetupPlanningFacts = {
+      ...base,
+      harnessSelection: {
+        config: { status: "missing", defaultHarness: "codex" },
+        harnesses: [
+          { id: "codex", availability: "available" },
+          { id: "opencode", availability: "available" },
+        ],
+      },
+      installableHarnessIds: ["codex", "opencode"],
+    };
+    const configCommitted: SetupPlanningFacts = {
+      ...trackingPending,
+      config: { state: "valid", write: "none", diagnostics: [] },
+      harnessSelection: {
+        ...trackingPending.harnessSelection,
+        config: { status: "valid", defaultHarness: "codex" },
+      },
+    };
+    const inspections = [trackingPending, trackingPending, configCommitted, configCommitted];
+    const inspection = vi.fn<SetupInspection>(async () => {
+      const next = inspections.shift();
+      if (next === undefined) throw new Error("unexpected inspection");
+      return { status: "completed", facts: next };
+    });
+    const trackingError = {
+      tag: "SetupProviderTrackingError",
+      code: "SETUP_PROVIDER_TRACKING_FAILED",
+      message: "Station tracking could not be prepared for opencode.",
+      provider: "opencode",
+    } as const;
+    const executeOperation = vi.fn<SetupOperationExecutor>(async (operation) => {
+      if (operation.kind === "write-config") {
+        return {
+          status: "completed",
+          operationId: operation.id,
+          commit: { kind: "config", configPath: "/tmp/config.toml", change: "created" },
+        };
+      }
+      if (operation.kind === "prepare-harness-tracking") {
+        expect(operation).toMatchObject({ harnessId: "opencode", tier: "recommended" });
+        return { status: "failed", operationId: operation.id, error: trackingError };
+      }
+      if (operation.kind === "activate-observer-config") {
+        return {
+          status: "completed",
+          operationId: operation.id,
+          commit: { kind: "observer-activation", configPath: "/tmp/config.toml" },
+        };
+      }
+      throw new Error(`unexpected operation: ${operation.kind}`);
+    });
+    const application = createSetupSessionApplication({
+      intent: {
+        ...intent(),
+        harnessSelection: { kind: "explicit", harnessIds: ["codex"] },
+      },
+      inspection,
+      executeOperation,
+    });
+
+    const state = await application.apply();
+
+    expect(state.status).toBe("completed");
+    expect(state.operationOutcomes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          status: "failed",
+          operationId: "prepare-harness-tracking:opencode",
+          error: trackingError,
+        }),
+      ]),
+    );
+    expect(executeOperation.mock.calls.map(([operation]) => operation.id)).toEqual([
+      "write-config",
+      "prepare-harness-tracking:opencode",
+      "activate-observer-config",
+    ]);
+    expect(inspection).toHaveBeenCalledTimes(4);
+  });
+
   it("retains Observer lifecycle evidence when activation blocks the session", async () => {
     const inspections = [missingConfigFacts(), missingConfigFacts()];
     const application = createSetupSessionApplication({

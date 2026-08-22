@@ -122,6 +122,10 @@ export type ObserverHandoffError = Error & SafeError;
 type ObserverHandoffDeps = {
   lifecycle: ObserverIncumbentLifecycle;
   evidence: ObserverProcessEvidenceSource;
+  /** Completes candidate-owned prerequisites before the verified incumbent may be stopped. */
+  prepareReplacement?: (request: ObserverLifecycleRequest) => Promise<void>;
+  /** Atomically enters irreversible replacement after refusing any pending candidate cancellation. */
+  commitReplacement?: () => void;
   now?: () => number;
   sleep?: (ms: number) => Promise<void>;
   pollIntervalMs?: number;
@@ -238,8 +242,10 @@ function comparePublicVersionLineReset(candidate: string, incumbent: string): -1
  * USE CASE
  *
  * Replaces an older incumbent only after corroborating its socket and process
- * identity; probe or evidence failure refuses before any signal, preserving a
- * typed evidence failure as the handoff refusal's cause.
+ * identity, completing candidate prerequisites, revalidating the incumbent,
+ * and synchronously refusing pending cancellation before committing to stop;
+ * any pre-commit failure preserves the incumbent and remains available as the
+ * typed handoff refusal's cause.
  */
 export async function negotiateObserverIncumbent(
   input: {
@@ -263,8 +269,12 @@ export async function negotiateObserverIncumbent(
     if (decision.action === "refuse") throw handoffRefused(decision.reason);
 
     const incumbent = (await requireVerifiedIncumbent(input, health, deps)).processIdentity;
+    await deps.prepareReplacement?.({
+      timeoutMs: remainingHandoffMs(deadline, now),
+    });
     // The claim excludes another legitimate successor, but ownership evidence
-    // is still refreshed immediately before asking this exact process to stop.
+    // is still refreshed after candidate preparation and immediately before
+    // asking this exact process to stop.
     const revalidatedHealth = await deps.lifecycle.health(input.socketPath, {
       timeoutMs: remainingHandoffMs(deadline, now),
     });
@@ -272,6 +282,9 @@ export async function negotiateObserverIncumbent(
     if (!observerProcessIdentitiesMatch(incumbent, revalidatedIncumbent.processIdentity)) {
       throw handoffRefused("The incumbent Observer process changed during handoff.");
     }
+    // Cancellation may preserve the incumbent until this synchronous commit; after it, the
+    // successor must retain startup authority long enough to own cleanup for the stopped process.
+    deps.commitReplacement?.();
     try {
       await deps.lifecycle.stop(input.socketPath, {
         timeoutMs: Math.min(MAX_STOP_ACKNOWLEDGEMENT_MS, remainingHandoffMs(gracefulDeadline, now)),

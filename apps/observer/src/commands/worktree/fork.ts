@@ -62,7 +62,10 @@ export function createWorktreeForkHandler(options: WorktreeForkHandlerOptions): 
       sourceWorktreeId: sourceRow.id,
     });
     if (payload.launchHarness !== undefined) {
-      await options.launchPreflight(payload.launchHarness, context.signal);
+      await options.launchPreflight(payload.launchHarness, {
+        signal: context.signal,
+        beginMutation: context.beginCommit,
+      });
     }
 
     const copyDirty = payload.copyDirty ?? true;

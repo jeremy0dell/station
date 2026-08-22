@@ -22,12 +22,15 @@ const testBuildInfo = () => ({
   version: "1.0.0",
   buildIdentity: "a".repeat(64),
 });
+const higherObserverBuildVersion = `2.0.0+station.${"b".repeat(64)}`;
 
 describe("stn update command", () => {
-  it("reports an already-current installation without applying or preflighting handoff", async () => {
+  it("converges an already-current installation without misreporting a higher accepted Observer", async () => {
     const fixture = probeFixture("installer-binary", { planStatus: "current" });
     const liveHost = await createLiveHostFixture();
-    const commandRunner = vi.fn();
+    const commandRunner = vi.fn(async (input: ExternalCommandInput) =>
+      commandResult(input, higherObserverBuildVersion),
+    );
     try {
       const result = await runUpdateCommand(
         ["--handoff", "--json"],
@@ -47,7 +50,7 @@ describe("stn update command", () => {
       expect(result).toEqual({
         code: 0,
         output: {
-          schemaVersion: 1,
+          schemaVersion: 2,
           channel: "installer-binary",
           status: "current",
           current: { version: "1.0.0" },
@@ -64,16 +67,130 @@ describe("stn update command", () => {
               status: "skipped",
               detail: "The selected installation already matches its target.",
             },
-            { id: "observer-restart", status: "skipped", detail: "No build changed." },
-            { id: "host-handoff", status: "skipped", detail: "No build changed." },
+            {
+              id: "hook-reconciliation",
+              status: "completed",
+              detail: "Configured provider hooks are healthy.",
+            },
+            {
+              id: "observer-restart",
+              status: "completed",
+              detail: "The accepted Observer singleton is running.",
+            },
+            {
+              id: "host-handoff",
+              status: "skipped",
+              detail: "No live Host handoff is needed.",
+            },
           ],
           warnings: [],
           recoveryCommands: [],
+          hookReconciliation: {
+            provider: "codex",
+            status: "healthy",
+            changed: false,
+            verified: true,
+          },
+        },
+      });
+      expect(fixture.apply).not.toHaveBeenCalled();
+      expect(commandRunner).toHaveBeenCalledWith(
+        expect.objectContaining({
+          command: "/opt/stn",
+          args: ["--config", "/tmp/config.toml", "hooks", "reconcile", "codex"],
+        }),
+      );
+      expect(commandRunner).toHaveBeenCalledWith(
+        expect.objectContaining({
+          command: "/opt/stn",
+          args: ["--config", "/tmp/config.toml", "observer", "start", "--timeout-ms", "20000"],
+        }),
+      );
+      expect(liveHost.clientFactory).toHaveBeenCalled();
+    } finally {
+      await liveHost.close();
+    }
+  });
+
+  it("keeps an already-current dry-run free of hook, Observer, and Host effects", async () => {
+    const fixture = probeFixture("installer-binary", { planStatus: "current" });
+    const liveHost = await createLiveHostFixture({ listError: new Error("must not inspect Host") });
+    const commandRunner = vi.fn();
+    try {
+      const result = await runUpdateCommand(
+        ["--dry-run", "--json"],
+        liveHostCommandOptions(liveHost.state.config),
+        {
+          probes: [fixture.probe],
+          commandRunner,
+          buildInfo: testBuildInfo,
+          hostDeps: liveHost.hostDeps,
+        },
+      );
+
+      expect(result).toMatchObject({
+        code: 0,
+        output: {
+          schemaVersion: 2,
+          status: "current",
+          steps: [
+            { id: "detect", status: "completed" },
+            { id: "plan", status: "completed" },
+            { id: "apply", status: "skipped" },
+            { id: "hook-reconciliation", status: "planned" },
+            { id: "observer-restart", status: "planned" },
+            {
+              id: "host-handoff",
+              status: "planned",
+              detail:
+                "The selected launcher would evaluate the active Host and preserve processes state if replacement is needed.",
+            },
+          ],
         },
       });
       expect(fixture.apply).not.toHaveBeenCalled();
       expect(commandRunner).not.toHaveBeenCalled();
       expect(liveHost.clientFactory).not.toHaveBeenCalled();
+    } finally {
+      await liveHost.close();
+    }
+  });
+
+  it("finishes an interrupted current-build crossover through the current launcher", async () => {
+    const fixture = probeFixture("installer-binary", { planStatus: "current" });
+    const liveHost = await createLiveHostFixture({ hostBuildVersion: "0.9.0" });
+    const commands: ExternalCommandInput[] = [];
+    try {
+      const result = await runUpdateCommand(
+        ["--json"],
+        liveHostCommandOptions(liveHost.state.config),
+        {
+          probes: [fixture.probe],
+          buildInfo: testBuildInfo,
+          hostDeps: liveHost.hostDeps,
+          commandRunner: async (input) => {
+            commands.push(input);
+            return commandResult(input);
+          },
+        },
+      );
+
+      expect(result.output).toMatchObject({
+        status: "current",
+        steps: [
+          { id: "detect", status: "completed" },
+          { id: "plan", status: "completed" },
+          { id: "apply", status: "skipped" },
+          { id: "hook-reconciliation", status: "completed" },
+          { id: "observer-restart", status: "completed" },
+          { id: "host-handoff", status: "completed" },
+        ],
+      });
+      expect(commands.map(({ args }) => args)).toEqual([
+        ["--config", "/tmp/config.toml", "hooks", "reconcile", "codex"],
+        ["--config", "/tmp/config.toml", "observer", "start", "--timeout-ms", "20000"],
+        ["--config", "/tmp/config.toml", "host", "handoff", "--fidelity", "processes"],
+      ]);
     } finally {
       await liveHost.close();
     }
@@ -90,7 +207,7 @@ describe("stn update command", () => {
 
     expect(result.code).toBe(0);
     expect(result.output).toMatchObject({
-      schemaVersion: 1,
+      schemaVersion: 2,
       channel: "installer-binary",
       status: "planned",
       current: { version: "1.0.0" },
@@ -99,6 +216,7 @@ describe("stn update command", () => {
         { id: "detect", status: "completed" },
         { id: "plan", status: "completed" },
         { id: "apply", status: "planned" },
+        { id: "hook-reconciliation", status: "planned" },
         { id: "observer-restart", status: "planned" },
         { id: "host-handoff", status: "skipped" },
       ],
@@ -137,6 +255,7 @@ describe("stn update command", () => {
             status: "deferred",
             command: ["/opt/npm", "install", "--global", "station@1.1.0"],
           },
+          { id: "hook-reconciliation", status: "skipped" },
           { id: "observer-restart", status: "skipped" },
           {
             id: "host-handoff",
@@ -172,6 +291,7 @@ describe("stn update command", () => {
           status: "planned",
           command: ["/opt/mise", "upgrade", "station"],
         },
+        { id: "hook-reconciliation", status: "planned" },
         { id: "observer-restart", status: "planned" },
         { id: "host-handoff", status: "skipped" },
       ],
@@ -226,9 +346,22 @@ describe("stn update command", () => {
       },
     });
 
-    expect(result.output).toMatchObject({ status: "updated" });
+    expect(result.output).toMatchObject({
+      status: "updated",
+      steps: expect.arrayContaining([
+        {
+          id: "observer-restart",
+          status: "completed",
+          detail: "The Observer is running from the selected build.",
+        },
+      ]),
+    });
     expect(fixture.apply).toHaveBeenCalledWith({ drivePackageManager: true });
     expect(commands).toEqual([
+      expect.objectContaining({
+        command: "/opt/mise",
+        args: ["exec", "--", "stn", "--config", "/tmp/config.toml", "hooks", "reconcile", "codex"],
+      }),
       expect.objectContaining({
         command: "/opt/mise",
         args: [
@@ -246,32 +379,217 @@ describe("stn update command", () => {
     ]);
   });
 
-  it("retains a recovery command when Observer crossover fails after install", async () => {
+  it("stops successor crossover when configured hook reconciliation fails", async () => {
     const fixture = probeFixture("installer-binary");
+    const commands: ExternalCommandInput[] = [];
     const result = await runUpdateCommand(["--json"], commandOptions(), {
       probes: [fixture.probe],
       buildInfo: testBuildInfo,
-      commandRunner: async () => {
+      commandRunner: async (input) => {
+        commands.push(input);
+        return {
+          command: input.command,
+          args: input.args ?? [],
+          stdout: JSON.stringify({
+            provider: "codex",
+            status: "post-write-doctor-failed",
+            changed: true,
+            verified: false,
+            error: {
+              tag: "CodexHookSetupError",
+              code: "CODEX_HOOK_POST_WRITE_DOCTOR_FAILED",
+              message: "Codex hook writes were not verified by provider doctor.",
+              provider: "codex",
+            },
+            followUp: { action: "run-doctor" },
+          }),
+          stderr: "/resolved/provider/path and raw provider payload",
+          exitCode: 1,
+        };
+      },
+    });
+
+    expect(commands).toHaveLength(1);
+    expect(commands[0]).toMatchObject({
+      args: ["--config", "/tmp/config.toml", "hooks", "reconcile", "codex"],
+    });
+    expect(result).toMatchObject({
+      code: 1,
+      output: {
+        schemaVersion: 2,
+        status: "failed",
+        hookReconciliation: {
+          status: "post-write-doctor-failed",
+          changed: true,
+          verified: false,
+          followUp: { action: "run-doctor" },
+        },
+        error: { code: "CODEX_HOOK_POST_WRITE_DOCTOR_FAILED" },
+        recoveryCommands: [
+          ["/opt/stn", "--config", "/tmp/config.toml", "hooks", "doctor", "codex"],
+          ["/opt/stn", "--config", "/tmp/config.toml", "hooks", "reconcile", "codex"],
+          [
+            "/opt/stn",
+            "--config",
+            "/tmp/config.toml",
+            "observer",
+            "restart",
+            "--timeout-ms",
+            "20000",
+          ],
+        ],
+        steps: [
+          { id: "detect", status: "completed" },
+          { id: "plan", status: "completed" },
+          { id: "apply", status: "completed" },
+          { id: "hook-reconciliation", status: "failed" },
+          { id: "observer-restart", status: "skipped" },
+          { id: "host-handoff", status: "skipped" },
+        ],
+      },
+    });
+    expect(JSON.stringify(result.output)).not.toContain("/resolved/provider/path");
+  });
+
+  it("reports but never executes explicit takeover while resuming a current build", async () => {
+    const fixture = probeFixture("installer-binary", { planStatus: "current" });
+    const commands: ExternalCommandInput[] = [];
+    const result = await runUpdateCommand(["--no-handoff", "--json"], commandOptions(), {
+      probes: [fixture.probe],
+      buildInfo: testBuildInfo,
+      commandRunner: async (input) => {
+        commands.push(input);
+        return {
+          command: input.command,
+          args: input.args ?? [],
+          stdout: JSON.stringify({
+            provider: "codex",
+            status: "ownership-conflict",
+            changed: false,
+            verified: false,
+            followUp: { action: "run-explicit-takeover" },
+          }),
+          stderr: "",
+          exitCode: 1,
+        };
+      },
+    });
+
+    expect(commands.map(({ args }) => args)).toEqual([
+      ["--config", "/tmp/config.toml", "hooks", "reconcile", "codex"],
+    ]);
+    expect(result).toMatchObject({
+      code: 1,
+      output: {
+        status: "failed",
+        error: { code: "UPDATE_HOOK_OWNERSHIP_CONFLICT" },
+        recoveryCommands: [
+          [
+            "/opt/stn",
+            "--config",
+            "/tmp/config.toml",
+            "hooks",
+            "install",
+            "codex",
+            "--yes",
+            "--takeover",
+          ],
+          ["/opt/stn", "--config", "/tmp/config.toml", "hooks", "reconcile", "codex"],
+          [
+            "/opt/stn",
+            "--config",
+            "/tmp/config.toml",
+            "observer",
+            "start",
+            "--timeout-ms",
+            "20000",
+          ],
+        ],
+      },
+    });
+  });
+
+  it("describes current-build Observer convergence failures without claiming an install", async () => {
+    const fixture = probeFixture("installer-binary", { planStatus: "current" });
+    const result = await runUpdateCommand(["--no-handoff", "--json"], commandOptions(), {
+      probes: [fixture.probe],
+      buildInfo: testBuildInfo,
+      commandRunner: async (input) => {
+        if (input.args?.includes("hooks") === true) return commandResult(input);
         throw new Error("observer failed");
       },
     });
 
-    expect(result.code).toBe(1);
-    expect(result.output).toMatchObject({
-      status: "failed",
-      error: { code: "UPDATE_RUNTIME_CROSSOVER_FAILED" },
-      recoveryCommands: [
-        [
-          "/opt/stn",
-          "--config",
-          "/tmp/config.toml",
-          "observer",
-          "restart",
-          "--timeout-ms",
-          "20000",
+    expect(result).toMatchObject({
+      code: 1,
+      output: {
+        status: "failed",
+        error: {
+          code: "UPDATE_RUNTIME_CROSSOVER_FAILED",
+          message: "Station could not complete runtime convergence for the current build.",
+        },
+        recoveryCommands: [
+          [
+            "/opt/stn",
+            "--config",
+            "/tmp/config.toml",
+            "observer",
+            "start",
+            "--timeout-ms",
+            "20000",
+          ],
         ],
-      ],
+      },
     });
+    expect(JSON.stringify(result.output)).not.toContain("installed the new build");
+  });
+
+  it("retains the Observer and pending Host recovery sequence after install", async () => {
+    const fixture = probeFixture("installer-binary");
+    const liveHost = await createLiveHostFixture({ hostBuildVersion: "0.9.0" });
+    try {
+      const result = await runUpdateCommand(
+        ["--json"],
+        liveHostCommandOptions(liveHost.state.config),
+        {
+          probes: [fixture.probe],
+          buildInfo: testBuildInfo,
+          hostDeps: liveHost.hostDeps,
+          commandRunner: async (input) => {
+            if (input.args?.includes("hooks") === true) return commandResult(input);
+            throw new Error("observer failed");
+          },
+        },
+      );
+
+      expect(result.code).toBe(1);
+      expect(result.output).toMatchObject({
+        status: "failed",
+        error: { code: "UPDATE_RUNTIME_CROSSOVER_FAILED" },
+        recoveryCommands: [
+          [
+            "/opt/stn",
+            "--config",
+            "/tmp/config.toml",
+            "observer",
+            "restart",
+            "--timeout-ms",
+            "20000",
+          ],
+          [
+            "/opt/stn",
+            "--config",
+            "/tmp/config.toml",
+            "host",
+            "handoff",
+            "--fidelity",
+            "processes",
+          ],
+        ],
+      });
+    } finally {
+      await liveHost.close();
+    }
   });
 
   it("strictly retains a successor Observer lifecycle cause and startup evidence", async () => {
@@ -295,17 +613,20 @@ describe("stn update command", () => {
     const result = await runUpdateCommand(["--json"], commandOptions(), {
       probes: [fixture.probe],
       buildInfo: testBuildInfo,
-      commandRunner: async (input) => ({
-        command: input.command,
-        args: input.args ?? [],
-        stdout: JSON.stringify({
-          status: "unhealthy",
-          paths: observerCommandPaths(),
-          ...lifecycleFailure,
-        }),
-        stderr: "",
-        exitCode: 1,
-      }),
+      commandRunner: async (input) => {
+        if (input.args?.includes("hooks") === true) return commandResult(input);
+        return {
+          command: input.command,
+          args: input.args ?? [],
+          stdout: JSON.stringify({
+            status: "unhealthy",
+            paths: observerCommandPaths(),
+            ...lifecycleFailure,
+          }),
+          stderr: "",
+          exitCode: 1,
+        };
+      },
     });
 
     expect(result).toMatchObject({
@@ -350,6 +671,7 @@ describe("stn update command", () => {
           { id: "detect", status: "completed" },
           { id: "plan", status: "completed" },
           { id: "apply", status: "failed" },
+          { id: "hook-reconciliation", status: "skipped" },
           { id: "observer-restart", status: "skipped" },
           { id: "host-handoff", status: "skipped" },
         ],
@@ -427,6 +749,7 @@ describe("stn update command", () => {
 
       expect(result.output).toMatchObject({ status: "updated" });
       expect(commands.map(({ args }) => args)).toEqual([
+        ["--config", "/tmp/config.toml", "hooks", "reconcile", "codex"],
         ["--config", "/tmp/config.toml", "observer", "restart", "--timeout-ms", "20000"],
         ["--config", "/tmp/config.toml", "host", "handoff", "--fidelity", "processes"],
       ]);
@@ -488,7 +811,7 @@ describe("stn update command", () => {
           hostDeps: liveHost.hostDeps,
           commandRunner: async (input) => {
             commandCount += 1;
-            if (commandCount === 2) throw new Error("handoff failed");
+            if (commandCount === 3) throw new Error("handoff failed");
             return commandResult(input);
           },
         },
@@ -505,6 +828,7 @@ describe("stn update command", () => {
             { id: "detect", status: "completed" },
             { id: "plan", status: "completed" },
             { id: "apply", status: "completed" },
+            { id: "hook-reconciliation", status: "completed" },
             { id: "observer-restart", status: "completed" },
             { id: "host-handoff", status: "failed" },
           ],
@@ -615,22 +939,36 @@ function missingProbe(channel: UpdateChannelId): UpdateChannelProbe {
   return { channel, detectAndPlan: async () => undefined };
 }
 
-function commandResult(input: ExternalCommandInput): ExternalCommandResult {
-  const observerRestart =
-    input.args?.includes("observer") === true && input.args.includes("restart");
+function commandResult(
+  input: ExternalCommandInput,
+  observerVersion?: string,
+): ExternalCommandResult {
+  const hookReconciliation =
+    input.args?.includes("hooks") === true && input.args.includes("reconcile");
+  const observerCrossover =
+    input.args?.includes("observer") === true &&
+    (input.args.includes("start") || input.args.includes("restart"));
   return {
     command: input.command,
     args: input.args ?? [],
-    stdout: observerRestart
+    stdout: hookReconciliation
       ? JSON.stringify({
-          status: "running",
-          socketPath: config.observer.socketPath,
-          health: {
-            schemaVersion: STATION_SCHEMA_VERSION,
-            status: "healthy",
-          },
+          provider: "codex",
+          status: "healthy",
+          changed: false,
+          verified: true,
         })
-      : "",
+      : observerCrossover
+        ? JSON.stringify({
+            status: "running",
+            socketPath: config.observer.socketPath,
+            health: {
+              schemaVersion: STATION_SCHEMA_VERSION,
+              status: "healthy",
+              ...(observerVersion === undefined ? {} : { version: observerVersion }),
+            },
+          })
+        : "",
     stderr: "",
     exitCode: 0,
   };
@@ -648,7 +986,9 @@ function observerCommandPaths() {
   };
 }
 
-async function createLiveHostFixture(options: { listError?: Error } = {}) {
+async function createLiveHostFixture(
+  options: { listError?: Error; hostBuildVersion?: string } = {},
+) {
   const state = await createTempState();
   const socketPath = stationHostSocketPath(state.config);
   const server = await listenUnixSocket({ socketPath, onConnection: () => undefined });
@@ -658,7 +998,7 @@ async function createLiveHostFixture(options: { listError?: Error } = {}) {
         health: async () => ({
           ok: true,
           protocolVersion: HOST_PROTOCOL_VERSION,
-          buildVersion: "1.0.0",
+          buildVersion: options.hostBuildVersion ?? "1.0.0",
         }),
         list: async () => {
           if (options.listError !== undefined) throw options.listError;

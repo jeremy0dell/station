@@ -20,6 +20,7 @@ import {
   createObserverEventBus,
   createObserverLifecycleClient,
   createSqliteObserverPersistence,
+  type ObserverProcessEvidenceSource,
   openObserverSqlite,
   type PersistenceHealthSource,
   ProviderRegistry,
@@ -103,6 +104,56 @@ describe("observer protocol server", () => {
     }
   });
 
+  it("does not report generic attach ready when startup cancellation wins", async () => {
+    const { dir, socketPath } = await createTempSocketPath();
+    const fixture = createObserverFixture(socketPath);
+    const server = await startObserverServer({
+      socketPath,
+      api: fixture.api,
+      clock: fixture.clock,
+    });
+    const originalSigtermListeners = new Set(process.listeners("SIGTERM"));
+    const startupReadinessSink = { ready: vi.fn() };
+    const providerRegistryFactory = vi.fn();
+
+    try {
+      await expect(
+        runObserverMain(
+          [
+            "--socket",
+            socketPath,
+            "--state-dir",
+            join(dir, "cancelled-attach-state"),
+            "--startup-timeout-ms",
+            "1000",
+          ],
+          {
+            providerRegistryFactory,
+            buildVersion: observerBuildVersion,
+            startupReadinessSink,
+            incumbentLifecycle: {
+              health: async () => {
+                const startupListener = process
+                  .listeners("SIGTERM")
+                  .find((listener) => !originalSigtermListeners.has(listener));
+                expect(startupListener).toBeDefined();
+                startupListener?.();
+                return fixture.api.health();
+              },
+              stop: fixture.api.stop,
+              socketListening: async () => true,
+            },
+          },
+        ),
+      ).rejects.toMatchObject({ code: "OBSERVER_STARTUP_CANCELLED" });
+      expect(startupReadinessSink.ready).not.toHaveBeenCalled();
+      expect(providerRegistryFactory).not.toHaveBeenCalled();
+    } finally {
+      await server.close();
+      fixture.sqlite.close();
+    }
+  });
+
   it("refuses inaccessible ownership before providers or runtime state are created", async () => {
     const { dir, socketPath } = await createTempSocketPath();
     const fixture = createObserverFixture(socketPath);
@@ -145,6 +196,219 @@ describe("observer protocol server", () => {
     }
   });
 
+  it("preserves a verified incumbent when successor hook preparation fails", async () => {
+    const { dir, socketPath } = await createTempSocketPath();
+    const fixture = createObserverFixture(socketPath);
+    const server = await startObserverServer({
+      socketPath,
+      api: fixture.api,
+      clock: fixture.clock,
+    });
+    const incumbentIdentity = createObserverProcessIdentity({
+      pid: process.pid,
+      processToken: "00000000-0000-4000-8000-000000000001",
+      version: observerBuildVersion,
+      socketPath,
+    });
+    let incumbentListening = true;
+    const stop = vi.fn(async () => {
+      incumbentListening = false;
+      await server.close();
+      return {
+        schemaVersion: "0.11.0" as const,
+        stopped: true,
+        at: now,
+      };
+    });
+    const processEvidence: ObserverProcessEvidenceSource = {
+      readObserverProcess: (pid) =>
+        pid === incumbentIdentity.pid
+          ? {
+              pid,
+              argv: [process.execPath, "__observer", "--socket", socketPath],
+              executablePath: process.execPath,
+              startToken: incumbentIdentity.osStartTime,
+              processToken: incumbentIdentity.processToken,
+              buildVersion: incumbentIdentity.version,
+              socketPath,
+            }
+          : undefined,
+      socketHolders: () => (incumbentListening ? [incumbentIdentity.pid] : []),
+      processStartToken: (pid) =>
+        incumbentListening && pid === incumbentIdentity.pid
+          ? incumbentIdentity.osStartTime
+          : undefined,
+      readProcessIdentity: async () => ({ ...incumbentIdentity }),
+      signal: () => "sent",
+    };
+    const harness = new FakeHarnessProvider({ id: "codex", now });
+    harness.reconcileHooks = vi.fn(async () => ({
+      provider: "codex",
+      status: "post-write-doctor-failed",
+      changed: true,
+      verified: false,
+      error: {
+        tag: "CodexHookSetupError",
+        code: "CODEX_HOOK_POST_WRITE_DOCTOR_FAILED",
+        message: "Codex hook writes were not verified by provider doctor.",
+        provider: "codex",
+      },
+      followUp: { action: "run-doctor" },
+    }));
+    const providerRegistryFactory = vi.fn(
+      () =>
+        new ProviderRegistry({
+          worktree: new FakeWorktreeProvider({ now }),
+          terminal: new FakeTerminalProvider({ now }),
+          harnesses: [harness],
+        }),
+    );
+    const candidateBuildVersion = `0.0.1+station.${"b".repeat(64)}`;
+
+    try {
+      const failure = await runObserverMain(
+        [
+          "--socket",
+          socketPath,
+          "--state-dir",
+          join(dir, "candidate-state"),
+          "--startup-timeout-ms",
+          "10000",
+        ],
+        {
+          providerRegistryFactory,
+          processEvidence,
+          buildVersion: candidateBuildVersion,
+          incumbentLifecycle: {
+            health: () => fixture.api.health(),
+            stop,
+            socketListening: async () => incumbentListening,
+          },
+        },
+      ).catch((error: unknown) => error);
+
+      expect({
+        code: (failure as { code?: string }).code,
+        message: (failure as { message?: string }).message,
+        causeCode: (failure as { cause?: { code?: string } }).cause?.code,
+      }).toEqual({
+        code: "OBSERVER_HANDOFF_REFUSED",
+        message: "The incumbent Observer could not be replaced safely.",
+        causeCode: "CODEX_HOOK_POST_WRITE_DOCTOR_FAILED",
+      });
+      expect(providerRegistryFactory).toHaveBeenCalledOnce();
+      expect(harness.reconcileHooks).toHaveBeenCalledOnce();
+      expect(stop).not.toHaveBeenCalled();
+      await expect(probeObserverSocket(socketPath)).resolves.toMatchObject({
+        status: "listening",
+      });
+    } finally {
+      await server.close().catch(() => undefined);
+      fixture.sqlite.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("defers a post-commit signal until the replacement owns startup cleanup", async () => {
+    const { dir, socketPath } = await createTempSocketPath();
+    const fixture = createObserverFixture(socketPath);
+    const server = await startObserverServer({
+      socketPath,
+      api: fixture.api,
+      clock: fixture.clock,
+    });
+    const incumbentIdentity = createObserverProcessIdentity({
+      pid: process.pid,
+      processToken: "00000000-0000-4000-8000-000000000001",
+      version: observerBuildVersion,
+      socketPath,
+    });
+    const originalSigtermListeners = new Set(process.listeners("SIGTERM"));
+    let incumbentListening = true;
+    const stop = vi.fn(async () => {
+      const startupListener = process
+        .listeners("SIGTERM")
+        .find((listener) => !originalSigtermListeners.has(listener));
+      expect(startupListener).toBeDefined();
+      startupListener?.();
+      incumbentListening = false;
+      await server.close();
+      return {
+        schemaVersion: "0.11.0" as const,
+        stopped: true,
+        at: now,
+      };
+    });
+    const processEvidence: ObserverProcessEvidenceSource = {
+      readObserverProcess: (pid) =>
+        pid === incumbentIdentity.pid
+          ? {
+              pid,
+              argv: [process.execPath, "__observer", "--socket", socketPath],
+              executablePath: process.execPath,
+              startToken: incumbentIdentity.osStartTime,
+              processToken: incumbentIdentity.processToken,
+              buildVersion: incumbentIdentity.version,
+              socketPath,
+            }
+          : undefined,
+      socketHolders: () => (incumbentListening ? [incumbentIdentity.pid] : []),
+      processStartToken: (pid) =>
+        incumbentListening && pid === incumbentIdentity.pid
+          ? incumbentIdentity.osStartTime
+          : undefined,
+      readProcessIdentity: async () => ({ ...incumbentIdentity }),
+      signal: (_pid, signal) => (signal === 0 && !incumbentListening ? "absent" : "sent"),
+    };
+    const harness = new FakeHarnessProvider({ id: "codex", now });
+    harness.reconcileHooks = vi.fn(async () => ({
+      provider: "codex",
+      status: "healthy",
+      changed: false,
+      verified: true,
+    }));
+    const candidateStateDir = join(dir, "post-commit-signal-state");
+
+    try {
+      await expect(
+        runObserverMain(
+          [
+            "--socket",
+            socketPath,
+            "--state-dir",
+            candidateStateDir,
+            "--startup-timeout-ms",
+            "10000",
+          ],
+          {
+            providerRegistryFactory: () =>
+              new ProviderRegistry({
+                worktree: new FakeWorktreeProvider({ now }),
+                terminal: new FakeTerminalProvider({ now }),
+                harnesses: [harness],
+              }),
+            processEvidence,
+            buildVersion: `0.0.1+station.${"b".repeat(64)}`,
+            incumbentLifecycle: {
+              health: () => fixture.api.health(),
+              stop,
+              socketListening: async () => incumbentListening,
+            },
+          },
+        ),
+      ).resolves.toBe(0);
+
+      expect(stop).toHaveBeenCalledOnce();
+      expect(harness.reconcileHooks).toHaveBeenCalledOnce();
+      await expect(access(join(candidateStateDir, "observer.sqlite"))).resolves.toBeUndefined();
+      await expect(access(socketPath)).rejects.toMatchObject({ code: "ENOENT" });
+    } finally {
+      await server.close().catch(() => undefined);
+      fixture.sqlite.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("rejects a post-bind publication failure with its original cause after cleanup", async () => {
     const { dir, socketPath } = await createTempSocketPath();
     const stateDir = join(dir, "publication-failure-state");
@@ -168,6 +432,101 @@ describe("observer protocol server", () => {
 
     expect(failure).toMatchObject({ code: expect.stringMatching(/EISDIR|ENOTDIR/u) });
     await expect(access(socketPath)).rejects.toMatchObject({ code: "ENOENT" });
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  it("reconciles configured hooks under the boot claim before runtime publication", async () => {
+    const { dir, socketPath } = await createTempSocketPath();
+    const stateDir = join(dir, "hook-reconciliation-state");
+    const reconciliationStarted = deferred();
+    const releaseReconciliation = deferred();
+    const harness = new FakeHarnessProvider({ id: "codex", now });
+    harness.reconcileHooks = async () => {
+      reconciliationStarted.resolve();
+      await releaseReconciliation.promise;
+      return {
+        provider: "codex",
+        status: "repaired",
+        changed: true,
+        verified: true,
+      };
+    };
+    const runtime = runObserverMain(
+      ["--socket", socketPath, "--state-dir", stateDir, "--startup-timeout-ms", "2000"],
+      {
+        providerRegistryFactory: () =>
+          new ProviderRegistry({
+            worktree: new FakeWorktreeProvider({ now }),
+            terminal: new FakeTerminalProvider({ now }),
+            harnesses: [harness],
+          }),
+        buildVersion: observerBuildVersion,
+      },
+    );
+    const client = createObserverClient({ socketPath, requestId: ids("hook-reconcile") });
+
+    try {
+      await reconciliationStarted.promise;
+      await expect(access(socketPath)).rejects.toMatchObject({ code: "ENOENT" });
+      await expect(access(`${socketPath}.pid`)).rejects.toMatchObject({ code: "ENOENT" });
+      await expect(access(join(stateDir, "observer.sqlite"))).rejects.toMatchObject({
+        code: "ENOENT",
+      });
+      releaseReconciliation.resolve();
+      await vi.waitFor(
+        async () => {
+          await expect(probeObserverSocket(socketPath)).resolves.toMatchObject({
+            status: "listening",
+          });
+        },
+        { timeout: 2000 },
+      );
+      await expect(client.health()).resolves.toMatchObject({ status: "healthy" });
+    } finally {
+      releaseReconciliation.resolve();
+      await client.stop().catch(() => undefined);
+      await runtime.catch(() => undefined);
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("fails startup without publishing runtime state when hook repair is unverified", async () => {
+    const { dir, socketPath } = await createTempSocketPath();
+    const stateDir = join(dir, "hook-reconciliation-failure-state");
+    const harness = new FakeHarnessProvider({ id: "codex", now });
+    harness.reconcileHooks = async () => ({
+      provider: "codex",
+      status: "post-write-doctor-failed",
+      changed: true,
+      verified: false,
+      error: {
+        tag: "CodexHookSetupError",
+        code: "CODEX_HOOK_POST_WRITE_DOCTOR_FAILED",
+        message: "Codex hook writes were not verified by provider doctor.",
+        provider: "codex",
+      },
+      followUp: { action: "run-doctor" },
+    });
+
+    await expect(
+      runObserverMain(
+        ["--socket", socketPath, "--state-dir", stateDir, "--startup-timeout-ms", "2000"],
+        {
+          providerRegistryFactory: () =>
+            new ProviderRegistry({
+              worktree: new FakeWorktreeProvider({ now }),
+              terminal: new FakeTerminalProvider({ now }),
+              harnesses: [harness],
+            }),
+          buildVersion: observerBuildVersion,
+        },
+      ),
+    ).rejects.toMatchObject({ code: "CODEX_HOOK_POST_WRITE_DOCTOR_FAILED" });
+    await expect(access(socketPath)).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(access(`${socketPath}.pid`)).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(access(join(stateDir, "observer.sqlite"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
     await rm(dir, { recursive: true, force: true });
   });
 

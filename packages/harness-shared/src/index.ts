@@ -25,10 +25,12 @@ export {
 } from "./launch.js";
 export {
   type CommonHarnessProviderOptions,
+  type CommonHookReconciliationOptions,
   createTerminalBoundHarnessProvider,
   harnessCommand,
   harnessHealth,
   harnessHookDoctorOptions,
+  harnessHookReconciliationOptions,
   harnessHooksStatusFrom,
   type TerminalBoundHarnessCommandDefinition,
   type TerminalBoundHarnessProviderSpec,

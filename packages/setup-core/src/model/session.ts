@@ -45,6 +45,7 @@ export type SetupSessionBlockReason =
   | "preflight-failed"
   | "preflight-incomplete"
   | "config-write-failed"
+  | "tracking-failed"
   | "observer-activation-failed";
 
 export type SetupSessionCompletedOperationOutcome = SetupOperationCompletedOutcome & {

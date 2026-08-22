@@ -124,6 +124,12 @@ Normalized events are `HarnessEventReport` / `HarnessEventObservation`
     eagerly re-probes that provider only when current health is `unavailable`.
     The authoritative probe result updates health; startup traffic never assigns
     `healthy`, `idle`, or turn readiness directly.
+12. **Hook health is read-only evidence.** Consumers such as diagnostics and
+    status presentation may read the strict provider-neutral `hookHealth()`
+    result but must never turn that read into reconciliation. Mutation is a
+    separate provider-owned capability invoked only by authorized setup,
+    update, startup, launch, or resume orchestration; hook signals themselves
+    never repair installation state.
 
 ## Target Taxonomy (HarnessSignal)
 

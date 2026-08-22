@@ -1,4 +1,6 @@
-import { mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
+import { constants } from "node:fs";
+import { chmod, mkdtemp, open, readFile, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -35,6 +37,7 @@ const BUILD_B = "b".repeat(64);
 
 const docSpec = (scriptPath: string) => ({
   readOptionalFile: readViaOps,
+  inspectOptionalFile: inspectViaOps,
   configPath: "", // set per call
   hookScriptPath: scriptPath,
   parseDocument: (source: string): Doc => (source.trim() ? (JSON.parse(source) as Doc) : {}),
@@ -59,6 +62,7 @@ const docSpec = (scriptPath: string) => ({
 });
 
 let readViaOps: (path: string) => Promise<string>;
+let inspectViaOps: ReturnType<typeof createHookSetupFileOps>["inspectOptionalFile"];
 
 describe("runtime hookSetup", () => {
   let root: string;
@@ -78,6 +82,7 @@ describe("runtime hookSetup", () => {
     };
     ops = createHookSetupFileOps(createError);
     readViaOps = ops.readOptionalFile;
+    inspectViaOps = ops.inspectOptionalFile;
   });
 
   describe("shellQuote / commandLine", () => {
@@ -387,6 +392,164 @@ describe("runtime hookSetup", () => {
       expect(replan.changed).toBe(true);
     });
 
+    it("begins one durable mutation before backups or artifact writes", async () => {
+      const configPath = join(root, "config.json");
+      const scriptPath = join(root, "hook.sh");
+      const expectedScript = expectedProviderHookScript({ provider: "codex" });
+      const plan = await planConfigScriptHook({
+        ...docSpec(scriptPath),
+        configPath,
+        expectedScript,
+      });
+      const events: string[] = [];
+      const trackedOps = {
+        ...ops,
+        backupIfPresent: async (path: string) => {
+          events.push("backup");
+          return ops.backupIfPresent(path);
+        },
+        writeHookConfig: async (path: string, contents: string) => {
+          events.push("write-config");
+          return ops.writeHookConfig(path, contents);
+        },
+        writeHookScript: async (path: string, contents: string) => {
+          events.push("write-script");
+          return ops.writeHookScript(path, contents);
+        },
+      };
+
+      await installConfigScriptHook({
+        configPath,
+        hookScriptPath: scriptPath,
+        after: plan.after,
+        expectedScript,
+        configChanged: plan.configChanged,
+        scriptChanged: plan.scriptChanged,
+        fileOps: trackedOps,
+        beginMutation: () => events.push("begin"),
+        onMutationCommitted: () => events.push("committed"),
+      });
+
+      expect(events).toEqual([
+        "begin",
+        "backup",
+        "write-script",
+        "committed",
+        "write-config",
+        "committed",
+      ]);
+    });
+
+    it("keeps the prior config byte-stable when script publication fails", async () => {
+      const configPath = join(root, "config.json");
+      const scriptPath = join(root, "hook.sh");
+      const expectedScript = expectedProviderHookScript({ provider: "codex" });
+      const before = `${JSON.stringify({ PreToolUse: "/old/hook.sh" }, null, 2)}\n`;
+      await writeFile(configPath, before, "utf8");
+      const plan = await planConfigScriptHook({
+        ...docSpec(scriptPath),
+        configPath,
+        expectedScript,
+      });
+      const events: string[] = [];
+      let backupPath: string | undefined;
+      const trackedOps = {
+        ...ops,
+        backupIfPresent: async (path: string) => {
+          events.push("backup");
+          backupPath = await ops.backupIfPresent(path);
+          return backupPath;
+        },
+        writeHookScript: async () => {
+          events.push("write-script");
+          throw new Error("forced script publication failure");
+        },
+        writeHookConfig: async (path: string, contents: string) => {
+          events.push("write-config");
+          return ops.writeHookConfig(path, contents);
+        },
+      };
+
+      await expect(
+        installConfigScriptHook({
+          configPath,
+          hookScriptPath: scriptPath,
+          after: plan.after,
+          expectedScript,
+          configChanged: plan.configChanged,
+          scriptChanged: plan.scriptChanged,
+          fileOps: trackedOps,
+          beginMutation: () => events.push("begin"),
+          onMutationCommitted: () => events.push("committed"),
+        }),
+      ).rejects.toThrow("forced script publication failure");
+
+      expect(events).toEqual(["begin", "backup", "write-script"]);
+      await expect(readFile(configPath, "utf8")).resolves.toBe(before);
+      await expect(readFile(backupPath as string, "utf8")).resolves.toBe(before);
+    });
+
+    it.each([0o600, 0o777])("repairs hook script mode %# to exact 0700", async (mode) => {
+      const configPath = join(root, "config.json");
+      const scriptPath = join(root, "hook.sh");
+      const expectedScript = expectedProviderHookScript({ provider: "codex" });
+      const spec = { ...docSpec(scriptPath), configPath };
+      const initial = await planConfigScriptHook({ ...spec, expectedScript });
+      await installConfigScriptHook({
+        configPath,
+        hookScriptPath: scriptPath,
+        after: initial.after,
+        expectedScript,
+        configChanged: initial.configChanged,
+        scriptChanged: initial.scriptChanged,
+        fileOps: ops,
+      });
+      await chmod(scriptPath, mode);
+
+      const drift = await planConfigScriptHook({ ...spec, expectedScript });
+      expect(drift).toMatchObject({ configChanged: false, scriptChanged: true, changed: true });
+      await installConfigScriptHook({
+        configPath,
+        hookScriptPath: scriptPath,
+        after: drift.after,
+        expectedScript,
+        configChanged: drift.configChanged,
+        scriptChanged: drift.scriptChanged,
+        fileOps: ops,
+      });
+
+      expect((await stat(scriptPath)).mode & 0o777).toBe(0o700);
+      await expect(planConfigScriptHook({ ...spec, expectedScript })).resolves.toMatchObject({
+        configChanged: false,
+        scriptChanged: false,
+        changed: false,
+      });
+    });
+
+    it("classifies an existing empty script as unknown-owner", async () => {
+      const configPath = join(root, "config.json");
+      const scriptPath = join(root, "hook.sh");
+      const requested = providerHookArtifactOwner("/station/bin/stn-ingress", {
+        version: "0.0.0",
+        compiled: true,
+        buildIdentity: BUILD_A,
+      });
+      await writeFile(scriptPath, "", { mode: 0o700 });
+
+      const plan = await planConfigScriptHook({
+        ...docSpec(scriptPath),
+        configPath,
+        expectedScript: expectedProviderHookScript({
+          provider: "codex",
+          options: { artifactOwner: requested },
+        }),
+        provider: "codex",
+        artifactOwner: requested,
+      });
+
+      expect(plan.ownership).toEqual({ status: "unknown-owner", requested });
+    });
+
     it("re-reads ownership before mutation and refuses a raced owner change", async () => {
       const configPath = join(root, "config.json");
       const scriptPath = join(root, "hook.sh");
@@ -490,6 +653,33 @@ describe("runtime hookSetup", () => {
       await expect(stat(scriptPath)).rejects.toMatchObject({ code: "ENOENT" });
     });
 
+    it("reports each completed uninstall artifact mutation", async () => {
+      const configPath = join(root, "config.json");
+      const scriptPath = join(root, "hook.sh");
+      const expectedScript = expectedProviderHookScript({ provider: "claude" });
+      const spec = { ...docSpec(scriptPath), configPath };
+      const install = await planConfigScriptHook({ ...spec, expectedScript });
+      await installConfigScriptHook({
+        configPath,
+        hookScriptPath: scriptPath,
+        after: install.after,
+        expectedScript,
+        configChanged: install.configChanged,
+        scriptChanged: install.scriptChanged,
+        fileOps: ops,
+      });
+      const onMutationCommitted = vi.fn();
+
+      const removed = await uninstallConfigScriptHook({
+        ...spec,
+        fileOps: ops,
+        onMutationCommitted,
+      });
+
+      expect(removed).toMatchObject({ configChanged: true, scriptRemoved: true, changed: true });
+      expect(onMutationCommitted).toHaveBeenCalledTimes(2);
+    });
+
     it("keeps the script when an unrelated event still points at it", async () => {
       const configPath = join(root, "config.json");
       const scriptPath = join(root, "hook.sh");
@@ -546,8 +736,8 @@ describe("runtime hookSetup", () => {
       await expect(ops.backupIfPresent(join(filePath, "nested"))).rejects.toMatchObject({
         operation: "metadata",
       });
-      // path exists (a directory) -> copyFile of a directory -> backup
-      await expect(ops.backupIfPresent(dirPath)).rejects.toMatchObject({ operation: "backup" });
+      // A nonregular source is rejected before any backup read.
+      await expect(ops.backupIfPresent(dirPath)).rejects.toMatchObject({ operation: "metadata" });
     });
 
     it("treats an absent file as no backup, not an error", async () => {
@@ -567,6 +757,34 @@ describe("runtime hookSetup", () => {
         vi.useRealTimers();
       }
     });
+
+    it("follows a live symlink to a regular hook artifact", async () => {
+      const targetPath = join(root, "target-hook");
+      const linkPath = join(root, "linked-hook");
+      await writeFile(targetPath, "#!/bin/sh\n", { mode: 0o700 });
+      await symlink(targetPath, linkPath);
+
+      await expect(ops.inspectOptionalFile(linkPath)).resolves.toEqual({
+        status: "regular",
+        contents: "#!/bin/sh\n",
+        mode: 0o700,
+      });
+    });
+
+    it("rejects a FIFO as nonregular without waiting for a writer", async () => {
+      const fifoPath = join(root, "hook-fifo");
+      createFifo(fifoPath);
+
+      await expect(
+        withFifoRescue(fifoPath, () => ops.inspectOptionalFile(fifoPath)),
+      ).resolves.toEqual({ status: "nonregular" });
+      await expect(
+        withFifoRescue(fifoPath, () => ops.readOptionalFile(fifoPath)),
+      ).rejects.toMatchObject({ operation: "read" });
+      await expect(
+        withFifoRescue(fifoPath, () => ops.backupIfPresent(fifoPath)),
+      ).rejects.toMatchObject({ operation: "metadata" });
+    });
   });
 
   describe("assignBackupPaths", () => {
@@ -584,3 +802,25 @@ describe("runtime hookSetup", () => {
     });
   });
 });
+
+function createFifo(path: string): void {
+  const result = spawnSync("mkfifo", [path], { encoding: "utf8" });
+  if (result.status !== 0) {
+    throw new Error(`mkfifo failed: ${result.stderr}`);
+  }
+}
+
+async function withFifoRescue<T>(fifoPath: string, operation: () => Promise<T>): Promise<T> {
+  const startedAt = Date.now();
+  const rescue = setTimeout(() => {
+    void open(fifoPath, constants.O_WRONLY)
+      .then((handle) => handle.close())
+      .catch(() => undefined);
+  }, 500);
+  try {
+    return await operation();
+  } finally {
+    clearTimeout(rescue);
+    expect(Date.now() - startedAt).toBeLessThan(250);
+  }
+}

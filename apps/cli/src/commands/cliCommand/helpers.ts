@@ -1,5 +1,10 @@
 import type { StationConfig } from "@station/config";
-import type { ProviderHookArtifactOwner, SafeError } from "@station/contracts";
+import {
+  type ProviderHookArtifactOwner,
+  ProviderHookReconciliationResultSchema,
+  providerHookReconciliationSucceeded,
+  type SafeError,
+} from "@station/contracts";
 import type { CliCommandRunContext } from "./types.js";
 
 export type LoadedCommandOptions = {
@@ -44,6 +49,10 @@ export function loadedConfigCommandOptions(
 }
 
 export function hookCommandExitCode(result: object): number {
+  const reconciliation = ProviderHookReconciliationResultSchema.safeParse(result);
+  if (reconciliation.success) {
+    return providerHookReconciliationSucceeded(reconciliation.data) ? 0 : 1;
+  }
   return "status" in result && result.status === "warn" ? 1 : 0;
 }
 

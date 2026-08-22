@@ -96,7 +96,10 @@ export function createSessionForkHandler(options: CreateSessionForkHandlerOption
       })) ??
       project.defaults.harness;
     const harness = resolveHarnessProviderOrThrow(options.providers, harnessProviderId);
-    await options.launchPreflight(harnessProviderId, context.signal);
+    await options.launchPreflight(harnessProviderId, {
+      signal: context.signal,
+      beginMutation: context.beginCommit,
+    });
 
     const sessionId = idFactory.sessionId();
     const runtime = {

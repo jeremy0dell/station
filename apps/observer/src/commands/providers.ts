@@ -1,6 +1,7 @@
 import type {
   HarnessHooksStatus,
   HarnessProvider,
+  ProviderDoctorContext,
   SafeError,
   TerminalProvider,
 } from "@station/contracts";
@@ -49,19 +50,22 @@ export function resolveHarnessProviderOrThrow(
  */
 export async function assertHooksInstalledOrThrow(
   provider: HarnessProvider,
-  options: { stationConfigPath?: string } = {},
+  options: Pick<ProviderDoctorContext, "signal" | "stationConfigPath" | "timeoutMs"> = {},
 ): Promise<void> {
   if (provider.hooksStatus === undefined) {
     return;
   }
   let status: HarnessHooksStatus;
   try {
-    status = await provider.hooksStatus(
-      options.stationConfigPath === undefined
-        ? undefined
-        : { stationConfigPath: options.stationConfigPath },
-    );
-  } catch {
+    const context: ProviderDoctorContext = {};
+    if (options.stationConfigPath !== undefined) {
+      context.stationConfigPath = options.stationConfigPath;
+    }
+    if (options.signal !== undefined) context.signal = options.signal;
+    if (options.timeoutMs !== undefined) context.timeoutMs = options.timeoutMs;
+    status = await provider.hooksStatus(Object.keys(context).length === 0 ? undefined : context);
+  } catch (cause) {
+    if (options.signal?.aborted) throw options.signal.reason ?? cause;
     const doctorCommand = providerHookCommand(provider.id, "doctor", options.stationConfigPath);
     const error: SafeError = {
       tag: "HarnessProviderError",

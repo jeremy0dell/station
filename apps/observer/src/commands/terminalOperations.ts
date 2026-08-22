@@ -58,7 +58,10 @@ export async function ensureAgentWorkspace(
   } & TerminalOperationRuntime,
 ): Promise<void> {
   throwIfAborted(input.context.signal);
-  await input.launchPreflight(input.harness.id, input.context.signal);
+  await input.launchPreflight(input.harness.id, {
+    signal: input.context.signal,
+    beginMutation: input.context.beginCommit,
+  });
   const runtime = operationRuntime(input);
   let opened: Awaited<ReturnType<TerminalProvider["openWorkspace"]>> | undefined;
 

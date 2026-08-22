@@ -1423,13 +1423,13 @@ describe("guided setup command", () => {
     );
 
     expect(result.code).toBe(0);
-    expect(order).toEqual(["activate", "hook:worktrunk", "hook:codex", "hook:opencode"]);
+    expect(order).toEqual(["hook:worktrunk", "hook:codex", "hook:opencode", "activate"]);
     expect(fs.files[configPath]).toContain("use_lifecycle_hooks = true");
     expect(fs.files[configPath].match(/install_hooks = true/g)).toHaveLength(2);
     expect(calls.some((call) => (call.args ?? []).includes("hooks"))).toBe(false);
   });
 
-  it("uses fresh tracking evidence after a later hook installer reports failure", async () => {
+  it("blocks Observer activation when a required hook installer reports failure", async () => {
     const root = await tempRoot(tempRoots);
     const repo = join(root, "repo");
     const configPath = join(root, "home/.config/station/config.toml");
@@ -1487,15 +1487,15 @@ describe("guided setup command", () => {
     );
 
     const output = chunks.join("");
-    expect(result.code).toBe(0);
-    expect(activations).toBe(1);
+    expect(result.code).toBe(1);
+    expect(activations).toBe(0);
     expect(fs.files[configPath]).toContain("use_lifecycle_hooks = true");
     expect(output).toContain("Hook install failed.");
-    expect(output).toContain("Observer configuration active.");
-    expect(output).toContain("Core setup complete.");
+    expect(output).not.toContain("Observer configuration active.");
+    expect(output).not.toContain("Core setup complete.");
   });
 
-  it("continues after one agent hook fails and retries enabled hooks on the next run", async () => {
+  it("stops after one required hook fails and retries enabled hooks on the next run", async () => {
     const root = await tempRoot(tempRoots);
     const repo = join(root, "repo");
     const homeDir = join(root, "home");

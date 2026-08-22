@@ -1,0 +1,174 @@
+import {
+  type HarnessProvider,
+  type ProviderHookReconciliationContext,
+  type ProviderHookReconciliationResult,
+  type ProviderId,
+  providerHookReconciliationSucceeded,
+  type SafeError,
+  SafeErrorSchema,
+} from "@station/contracts";
+import { toSafeError } from "../diagnostics/errors.js";
+import type { ProviderRegistry } from "../providers/registry.js";
+import { resolveHarnessProviderOrThrow } from "./providers.js";
+
+export type ReconcileHarnessHooksOptions = {
+  providers: ProviderRegistry;
+  providerId: ProviderId;
+  stationConfigPath?: string | undefined;
+  signal?: AbortSignal | undefined;
+  timeoutMs?: number | undefined;
+  beginMutation?: (() => void) | undefined;
+};
+
+/**
+ * USE CASE
+ *
+ * Requests one provider-owned reconciliation and rejects every unverified enabled outcome.
+ */
+export async function reconcileHarnessHooksOrThrow(
+  options: ReconcileHarnessHooksOptions,
+): Promise<ProviderHookReconciliationResult> {
+  const provider = resolveHarnessProviderOrThrow(options.providers, options.providerId);
+  return reconcileProviderHooksOrThrow(provider, providerReconciliationContext(options));
+}
+
+/**
+ * USE CASE
+ *
+ * Reconciles every composed provider capability within the caller's startup budget before Observer
+ * health is published.
+ */
+export async function reconcileConfiguredHarnessHooksOrThrow(options: {
+  providers: ProviderRegistry;
+  stationConfigPath?: string | undefined;
+  signal?: AbortSignal | undefined;
+  timeoutMs?: number | undefined;
+}): Promise<ProviderHookReconciliationResult[]> {
+  const results: ProviderHookReconciliationResult[] = [];
+  const deadline =
+    options.timeoutMs === undefined
+      ? undefined
+      : performance.now() + Math.max(0, options.timeoutMs);
+  for (const provider of options.providers.harnesses.values()) {
+    throwIfHookReconciliationAborted(options.signal);
+    const timeoutMs = remainingHookReconciliationMs(deadline);
+    const context = providerReconciliationContext({
+      ...options,
+      ...(timeoutMs === undefined ? {} : { timeoutMs }),
+    });
+    results.push(await reconcileProviderHooksOrThrow(provider, context));
+  }
+  return results;
+}
+
+async function reconcileProviderHooksOrThrow(
+  provider: HarnessProvider,
+  context: ProviderHookReconciliationContext | undefined,
+): Promise<ProviderHookReconciliationResult> {
+  if (provider.reconcileHooks === undefined) {
+    return {
+      provider: provider.id,
+      status: "unsupported",
+      changed: false,
+      verified: false,
+    };
+  }
+
+  let result: ProviderHookReconciliationResult;
+  try {
+    result = await provider.reconcileHooks(context);
+  } catch (error) {
+    if (context?.signal?.aborted) {
+      throw context.signal.reason ?? error;
+    }
+    if (hookReconciliationTimedOut(error)) throw error;
+    throw toSafeError(error, {
+      tag: "HarnessProviderError",
+      code: "HARNESS_HOOK_RECONCILIATION_FAILED",
+      message: "Configured harness hooks could not be reconciled.",
+      provider: provider.id,
+    });
+  }
+
+  if (providerHookReconciliationSucceeded(result)) return result;
+  throw reconciliationError(result);
+}
+
+function throwIfHookReconciliationAborted(signal: AbortSignal | undefined): void {
+  if (signal?.aborted) {
+    throw signal.reason ?? new Error("Harness hook reconciliation was cancelled.");
+  }
+}
+
+function remainingHookReconciliationMs(deadline: number | undefined): number | undefined {
+  if (deadline === undefined) return undefined;
+  const remaining = deadline - performance.now();
+  if (remaining > 0) return remaining;
+  const error: SafeError = {
+    tag: "TimeoutError",
+    code: "HARNESS_HOOK_RECONCILIATION_TIMEOUT",
+    message: "Configured harness hook reconciliation exceeded its startup budget.",
+  };
+  throw Object.assign(new Error(error.message), error);
+}
+
+function hookReconciliationTimedOut(error: unknown): boolean {
+  const parsed = SafeErrorSchema.safeParse(error);
+  return parsed.success && parsed.data.code.endsWith("_TIMEOUT");
+}
+
+function providerReconciliationContext(input: {
+  stationConfigPath?: string | undefined;
+  signal?: AbortSignal | undefined;
+  timeoutMs?: number | undefined;
+  beginMutation?: (() => void) | undefined;
+}): ProviderHookReconciliationContext | undefined {
+  const context: ProviderHookReconciliationContext = {};
+  if (input.stationConfigPath !== undefined) context.stationConfigPath = input.stationConfigPath;
+  if (input.signal !== undefined) context.signal = input.signal;
+  if (input.timeoutMs !== undefined) context.timeoutMs = input.timeoutMs;
+  if (input.beginMutation !== undefined) context.beginMutation = input.beginMutation;
+  return Object.keys(context).length === 0 ? undefined : context;
+}
+
+function reconciliationError(
+  result: Extract<
+    ProviderHookReconciliationResult,
+    {
+      status:
+        | "ownership-conflict"
+        | "write-failed"
+        | "post-write-doctor-failed"
+        | "inspection-failed";
+    }
+  >,
+): SafeError {
+  const error: SafeError =
+    "error" in result
+      ? { ...result.error }
+      : {
+          tag: "HarnessProviderError",
+          code: "HARNESS_HOOK_OWNERSHIP_CONFLICT",
+          message: "Configured harness hooks are owned by another runtime.",
+          provider: result.provider,
+        };
+  if (error.provider === undefined) error.provider = result.provider;
+  if (error.hint === undefined) error.hint = followUpHint(result.provider, result.followUp.action);
+  return error;
+}
+
+function followUpHint(
+  provider: ProviderId,
+  action: "enable-hooks" | "run-doctor" | "run-explicit-takeover" | "retry",
+): string {
+  switch (action) {
+    case "enable-hooks":
+      return `Enable configured hook installation for ${provider}, then retry.`;
+    case "run-doctor":
+      return `Use ${provider} provider hook doctor, correct the reported issue, then retry.`;
+    case "run-explicit-takeover":
+      return `Use the explicit ${provider} provider hook install takeover flow only to transfer ownership, then retry.`;
+    case "retry":
+      return `Retry ${provider} hook reconciliation after correcting the write failure.`;
+  }
+}

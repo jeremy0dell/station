@@ -532,16 +532,132 @@
       ]
     },
     {
+      "path": "apps/observer/src/commands/harnessHookHealth.ts",
+      "exports": [
+        {
+          "name": "readHarnessHookHealth",
+          "kind": "function",
+          "role": "USE CASE",
+          "purpose": "Reads provider-neutral hook evidence without invoking any mutation capability."
+        },
+        {
+          "name": "ReadHarnessHookHealthOptions",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "./providers.js",
+          "resolvedPath": "apps/observer/src/commands/providers.ts",
+          "edgeKind": "runtime",
+          "bindings": ["resolveHarnessProviderOrThrow"]
+        },
+        {
+          "specifier": "../diagnostics/errors.js",
+          "resolvedPath": "apps/observer/src/diagnostics/errors.ts",
+          "edgeKind": "runtime",
+          "bindings": ["toSafeError"]
+        },
+        {
+          "specifier": "../providers/registry.js",
+          "resolvedPath": "apps/observer/src/providers/registry.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ProviderRegistry"]
+        },
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "runtime",
+          "bindings": ["ProviderHookHealthSchema"]
+        },
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ProviderHookHealth", "ProviderId"]
+        }
+      ]
+    },
+    {
+      "path": "apps/observer/src/commands/harnessHookReconciliation.ts",
+      "exports": [
+        {
+          "name": "reconcileConfiguredHarnessHooksOrThrow",
+          "kind": "function",
+          "role": "USE CASE",
+          "purpose": "Reconciles every composed provider capability within the caller's startup budget before Observer health is published."
+        },
+        {
+          "name": "ReconcileHarnessHooksOptions",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "reconcileHarnessHooksOrThrow",
+          "kind": "function",
+          "role": "USE CASE",
+          "purpose": "Requests one provider-owned reconciliation and rejects every unverified enabled outcome."
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "./providers.js",
+          "resolvedPath": "apps/observer/src/commands/providers.ts",
+          "edgeKind": "runtime",
+          "bindings": ["resolveHarnessProviderOrThrow"]
+        },
+        {
+          "specifier": "../diagnostics/errors.js",
+          "resolvedPath": "apps/observer/src/diagnostics/errors.ts",
+          "edgeKind": "runtime",
+          "bindings": ["toSafeError"]
+        },
+        {
+          "specifier": "../providers/registry.js",
+          "resolvedPath": "apps/observer/src/providers/registry.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ProviderRegistry"]
+        },
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "runtime",
+          "bindings": ["SafeErrorSchema", "providerHookReconciliationSucceeded"]
+        },
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "type-only",
+          "bindings": [
+            "HarnessProvider",
+            "ProviderHookReconciliationContext",
+            "ProviderHookReconciliationResult",
+            "ProviderId",
+            "SafeError"
+          ]
+        }
+      ]
+    },
+    {
       "path": "apps/observer/src/commands/harnessLaunchPreflight.ts",
       "exports": [
         {
           "name": "assertHarnessLaunchPreconditionsOrThrow",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Freshly verifies the selected harness health and hook delivery immediately before launch mutation."
+          "purpose": "Freshly verifies the selected harness health, reconciles configured hooks, and verifies delivery immediately before launch mutation."
         },
         {
           "name": "HarnessLaunchPreflight",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "HarnessLaunchPreflightContext",
           "kind": "type",
           "role": null,
           "purpose": null
@@ -559,6 +675,12 @@
           "resolvedPath": "apps/observer/src/commands/cancellation.ts",
           "edgeKind": "runtime",
           "bindings": ["throwIfAborted"]
+        },
+        {
+          "specifier": "./harnessHookReconciliation.js",
+          "resolvedPath": "apps/observer/src/commands/harnessHookReconciliation.ts",
+          "edgeKind": "runtime",
+          "bindings": ["reconcileHarnessHooksOrThrow"]
         },
         {
           "specifier": "./providers.js",
@@ -715,7 +837,13 @@
           "specifier": "@station/contracts",
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "type-only",
-          "bindings": ["HarnessHooksStatus", "HarnessProvider", "SafeError", "TerminalProvider"]
+          "bindings": [
+            "HarnessHooksStatus",
+            "HarnessProvider",
+            "ProviderDoctorContext",
+            "SafeError",
+            "TerminalProvider"
+          ]
         },
         {
           "specifier": "@station/runtime",
@@ -4528,7 +4656,7 @@
           "name": "negotiateObserverIncumbent",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Replaces an older incumbent only after corroborating its socket and process identity; probe or evidence failure refuses before any signal, preserving a typed evidence failure as the handoff refusal's cause."
+          "purpose": "Replaces an older incumbent only after corroborating its socket and process identity, completing candidate prerequisites, revalidating the incumbent, and synchronously refusing pending cancellation before committing to stop; any pre-commit failure preserves the incumbent and remains available as the typed handoff refusal's cause."
         },
         {
           "name": "ObservationStore",
@@ -5185,6 +5313,18 @@
           "purpose": null
         },
         {
+          "name": "readHarnessHookHealth",
+          "kind": "function",
+          "role": "USE CASE",
+          "purpose": "Reads provider-neutral hook evidence without invoking any mutation capability."
+        },
+        {
+          "name": "ReadHarnessHookHealthOptions",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "readObserverProcessIdentity",
           "kind": "function",
           "role": null,
@@ -5225,6 +5365,24 @@
           "kind": "type",
           "role": null,
           "purpose": null
+        },
+        {
+          "name": "reconcileConfiguredHarnessHooksOrThrow",
+          "kind": "function",
+          "role": "USE CASE",
+          "purpose": "Reconciles every composed provider capability within the caller's startup budget before Observer health is published."
+        },
+        {
+          "name": "ReconcileHarnessHooksOptions",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "reconcileHarnessHooksOrThrow",
+          "kind": "function",
+          "role": "USE CASE",
+          "purpose": "Requests one provider-owned reconciliation and rejects every unverified enabled outcome."
         },
         {
           "name": "ReconcileScheduler",
@@ -5561,6 +5719,18 @@
         {
           "specifier": "./commands/cleanup/index.js",
           "resolvedPath": "apps/observer/src/commands/cleanup/index.ts",
+          "edgeKind": "runtime",
+          "bindings": ["*"]
+        },
+        {
+          "specifier": "./commands/harnessHookHealth.js",
+          "resolvedPath": "apps/observer/src/commands/harnessHookHealth.ts",
+          "edgeKind": "runtime",
+          "bindings": ["*"]
+        },
+        {
+          "specifier": "./commands/harnessHookReconciliation.js",
+          "resolvedPath": "apps/observer/src/commands/harnessHookReconciliation.ts",
           "edgeKind": "runtime",
           "bindings": ["*"]
         },
@@ -10866,6 +11036,18 @@
       ],
       "imports": [
         {
+          "specifier": "../commands/cancellation.js",
+          "resolvedPath": "apps/observer/src/commands/cancellation.ts",
+          "edgeKind": "runtime",
+          "bindings": ["throwIfAborted"]
+        },
+        {
+          "specifier": "../commands/harnessHookReconciliation.js",
+          "resolvedPath": "apps/observer/src/commands/harnessHookReconciliation.ts",
+          "edgeKind": "runtime",
+          "bindings": ["reconcileConfiguredHarnessHooksOrThrow"]
+        },
+        {
           "specifier": "../commands/harnessLaunchPreflight.js",
           "resolvedPath": "apps/observer/src/commands/harnessLaunchPreflight.ts",
           "edgeKind": "runtime",
@@ -11344,7 +11526,7 @@
           "name": "negotiateObserverIncumbent",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Replaces an older incumbent only after corroborating its socket and process identity; probe or evidence failure refuses before any signal, preserving a typed evidence failure as the handoff refusal's cause."
+          "purpose": "Replaces an older incumbent only after corroborating its socket and process identity, completing candidate prerequisites, revalidating the incumbent, and synchronously refusing pending cancellation before committing to stop; any pre-commit failure preserves the incumbent and remains available as the typed handoff refusal's cause."
         },
         {
           "name": "observerBuildSelectorIsValid",
@@ -13294,13 +13476,20 @@
       "declaration": "runUpdateCommand",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Selects one owned install channel, preflights default live Host preservation, and crosses runtimes through the successor launcher after mutation.",
+      "purpose": "Selects one owned install channel, preflights default live Host preservation, reconciles configured hooks through the selected launcher, and only then crosses runtimes.",
       "dependencies": [
         {
           "path": "apps/cli/src/commands/update/scenario.ts",
           "declaration": "resolveUpdateScenario",
           "kind": "function",
           "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "packages/contracts/src/providerHooks.ts",
+          "declaration": "providerHookReconciliationSucceeded",
+          "kind": "function",
+          "role": "POLICY",
           "edgeKind": "runtime"
         }
       ]
@@ -14132,12 +14321,74 @@
       "dependencies": []
     },
     {
+      "path": "apps/observer/src/commands/harnessHookHealth.ts",
+      "declaration": "readHarnessHookHealth",
+      "kind": "function",
+      "role": "USE CASE",
+      "purpose": "Reads provider-neutral hook evidence without invoking any mutation capability.",
+      "dependencies": []
+    },
+    {
+      "path": "apps/observer/src/commands/harnessHookReconciliation.ts",
+      "declaration": "reconcileConfiguredHarnessHooksOrThrow",
+      "kind": "function",
+      "role": "USE CASE",
+      "purpose": "Reconciles every composed provider capability within the caller's startup budget before Observer health is published.",
+      "dependencies": [
+        {
+          "path": "packages/contracts/src/providerHooks.ts",
+          "declaration": "providerHookReconciliationSucceeded",
+          "kind": "function",
+          "role": "POLICY",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "packages/contracts/src/providers.ts",
+          "declaration": "HarnessProvider",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
+      "path": "apps/observer/src/commands/harnessHookReconciliation.ts",
+      "declaration": "reconcileHarnessHooksOrThrow",
+      "kind": "function",
+      "role": "USE CASE",
+      "purpose": "Requests one provider-owned reconciliation and rejects every unverified enabled outcome.",
+      "dependencies": [
+        {
+          "path": "packages/contracts/src/providerHooks.ts",
+          "declaration": "providerHookReconciliationSucceeded",
+          "kind": "function",
+          "role": "POLICY",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "packages/contracts/src/providers.ts",
+          "declaration": "HarnessProvider",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
       "path": "apps/observer/src/commands/harnessLaunchPreflight.ts",
       "declaration": "assertHarnessLaunchPreconditionsOrThrow",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Freshly verifies the selected harness health and hook delivery immediately before launch mutation.",
-      "dependencies": []
+      "purpose": "Freshly verifies the selected harness health, reconciles configured hooks, and verifies delivery immediately before launch mutation.",
+      "dependencies": [
+        {
+          "path": "apps/observer/src/commands/harnessHookReconciliation.ts",
+          "declaration": "reconcileHarnessHooksOrThrow",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
+        }
+      ]
     },
     {
       "path": "apps/observer/src/commands/project.ts",
@@ -15086,6 +15337,13 @@
       "purpose": "Claims boot ownership, branches on four-state socket evidence, repairs only positively stale strict pidfile evidence, selects Observer-private infrastructure from resolved runtime identity, and owns bind, pidfile, read-only duplicate inspection, ownership-aware shutdown, and exact build health publication. Successful publication notifies the injected readiness sink; startup rejection retains the original failure after best-effort cleanup.",
       "dependencies": [
         {
+          "path": "apps/observer/src/commands/harnessHookReconciliation.ts",
+          "declaration": "reconcileConfiguredHarnessHooksOrThrow",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
+        },
+        {
           "path": "apps/observer/src/commands/harnessLaunchPreflight.ts",
           "declaration": "assertHarnessLaunchPreconditionsOrThrow",
           "kind": "function",
@@ -15280,7 +15538,7 @@
       "declaration": "negotiateObserverIncumbent",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Replaces an older incumbent only after corroborating its socket and process identity; probe or evidence failure refuses before any signal, preserving a typed evidence failure as the handoff refusal's cause.",
+      "purpose": "Replaces an older incumbent only after corroborating its socket and process identity, completing candidate prerequisites, revalidating the incumbent, and synchronously refusing pending cancellation before committing to stop; any pre-commit failure preserves the incumbent and remains available as the typed handoff refusal's cause.",
       "dependencies": [
         {
           "path": "apps/observer/src/runtime/observerHandoff.ts",
@@ -15725,7 +15983,7 @@
       "declaration": "createCodexHarnessProvider",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Supplies Codex launch, discovery, hook normalization, and compatibility admission through the harness port.",
+      "purpose": "Supplies Codex launch, discovery, hook health/reconciliation, normalization, and compatibility admission through the harness port.",
       "dependencies": [
         {
           "path": "packages/contracts/src/providers.ts",
@@ -16036,6 +16294,14 @@
       "kind": "type",
       "role": "DRIVING PORT",
       "purpose": "Exposes Observer state, recovery-readiness, and coherent recovery-inventory queries, plus handshakes, ingress reports, maintenance, and lifecycle operations to external actors.",
+      "dependencies": []
+    },
+    {
+      "path": "packages/contracts/src/providerHooks.ts",
+      "declaration": "providerHookReconciliationSucceeded",
+      "kind": "function",
+      "role": "POLICY",
+      "purpose": "Decides whether a provider hook reconciliation permits its caller to continue.",
       "dependencies": []
     },
     {
