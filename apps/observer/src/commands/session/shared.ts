@@ -152,6 +152,21 @@ export function assertNoCurrentAgent(row: WorktreeRow | undefined): void {
   throw safeError(error);
 }
 
+export function freshStartSessionMismatchError(input: {
+  projectId: string;
+  worktreeId: string;
+  sessionId: string;
+}): SafeError {
+  return commandValidationError({
+    code: "SESSION_FRESH_START_STALE",
+    message: "The interrupted session changed before fresh start could begin.",
+    hint: "Refresh the dashboard and review the current session before retrying.",
+    projectId: input.projectId,
+    worktreeId: input.worktreeId,
+    sessionId: input.sessionId,
+  });
+}
+
 export function worktreeObservationFromRow(
   row: WorktreeRow,
   provider: string,

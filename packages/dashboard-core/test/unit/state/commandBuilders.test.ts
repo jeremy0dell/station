@@ -30,6 +30,26 @@ describe("TUI command builders", () => {
     });
   });
 
+  it("binds fresh start to the retained Station session", () => {
+    const snapshot = createCommandSnapshot("none");
+    const row = snapshot.rows[0];
+    const project = snapshot.projects[0];
+
+    expect(
+      buildStartAgentCommand(row, project, {
+        freshStart: { expectedSessionId: "ses_wt_web_no_agent" },
+      }),
+    ).toEqual({
+      type: "session.startAgent",
+      payload: {
+        projectId: "web",
+        worktreeId: "wt_web_no_agent",
+        terminal: { provider: "tmux", layout: "agent-build-shell", focus: false },
+        freshStart: { expectedSessionId: "ses_wt_web_no_agent" },
+      },
+    });
+  });
+
   it("maps recoverable rows to session.resumeAgent without exposing native targets", () => {
     const snapshot = createCommandSnapshot("none");
     const row = {

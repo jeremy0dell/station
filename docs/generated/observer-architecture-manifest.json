@@ -1919,6 +1919,12 @@
           "purpose": null
         },
         {
+          "name": "freshStartSessionMismatchError",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "launchHarnessInTerminal",
           "kind": "function",
           "role": null,
@@ -2130,7 +2136,7 @@
           "name": "createSessionStartAgentHandler",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Requires the selected worktree in the current Observer snapshot, then validates and preflights a fresh agent lifecycle before inheriting its canonical display title. Failed launches discard only the fresh session projection."
+          "purpose": "Serializes fresh agent launch against lifecycle mutation for one worktree. Ordinary launch seeds a new Station session, while identity-bound fresh-start consent retires the retained provider and terminal execution before launching under the same durable session identity. Failed ordinary launches discard only their seed; confirmed fresh-start failures retain canonical session state."
         },
         {
           "name": "CreateSessionStartAgentHandlerOptions",
@@ -2145,6 +2151,12 @@
           "resolvedPath": "apps/observer/src/commands/assertCommand.ts",
           "edgeKind": "runtime",
           "bindings": ["assertCommandType"]
+        },
+        {
+          "specifier": "../cleanup/index.js",
+          "resolvedPath": "apps/observer/src/commands/cleanup/index.ts",
+          "edgeKind": "runtime",
+          "bindings": ["closeSessionResources"]
         },
         {
           "specifier": "../errors.js",
@@ -2185,6 +2197,7 @@
             "defaultSessionCommandIdFactory",
             "discardSessionSeedBestEffort",
             "findProjectOrThrow",
+            "freshStartSessionMismatchError",
             "publishSessionCreated",
             "rememberedHarnessProviderForWorktree",
             "seedSession",
@@ -2242,10 +2255,22 @@
           "bindings": ["nowIso"]
         },
         {
+          "specifier": "../../worktreeMutationCoordinator.js",
+          "resolvedPath": "apps/observer/src/worktreeMutationCoordinator.ts",
+          "edgeKind": "runtime",
+          "bindings": ["createWorktreeMutationCoordinator"]
+        },
+        {
+          "specifier": "../../worktreeMutationCoordinator.js",
+          "resolvedPath": "apps/observer/src/worktreeMutationCoordinator.ts",
+          "edgeKind": "type-only",
+          "bindings": ["WorktreeMutationCoordinator"]
+        },
+        {
           "specifier": "@station/contracts",
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "type-only",
-          "bindings": ["ProviderProjectConfig"]
+          "bindings": ["ProviderProjectConfig", "SafeError", "SessionView"]
         },
         {
           "specifier": "@station/runtime",
@@ -10462,6 +10487,7 @@
           "bindings": [
             "defaultSessionCommandIdFactory",
             "findProjectOrThrow",
+            "freshStartSessionMismatchError",
             "rememberedHarnessProviderForWorktree",
             "resolveForkSessionGroupPlacement",
             "seedSession",
@@ -13924,7 +13950,7 @@
       "declaration": "createSessionStartAgentHandler",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Requires the selected worktree in the current Observer snapshot, then validates and preflights a fresh agent lifecycle before inheriting its canonical display title. Failed launches discard only the fresh session projection.",
+      "purpose": "Serializes fresh agent launch against lifecycle mutation for one worktree. Ordinary launch seeds a new Station session, while identity-bound fresh-start consent retires the retained provider and terminal execution before launching under the same durable session identity. Failed ordinary launches discard only their seed; confirmed fresh-start failures retain canonical session state.",
       "dependencies": []
     },
     {
