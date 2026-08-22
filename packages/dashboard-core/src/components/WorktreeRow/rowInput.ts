@@ -226,9 +226,14 @@ function identitySegments(
 ): RowSegment[] {
   // The cursor reuses the identity cell's leading pad cell, so a focused row
   // never shifts the shared grid geometry.
+  const normalizedSlotWidth = Math.max(1, slotWidth ?? 1);
+  const shortcut =
+    slot === undefined
+      ? `[${" ".repeat(normalizedSlotWidth)}]`
+      : `[${slot}]${" ".repeat(Math.max(0, normalizedSlotWidth - slot.length))}`;
   const segments: RowSegment[] = [
     focused === true ? textSegment("▏", { color: "cyan" }) : textSegment(" ", { color }),
-    textSegment(`[${(slot ?? "").padEnd(Math.max(1, slotWidth ?? 1), " ")}] `, { color }),
+    textSegment(`${shortcut} `, { color }),
   ];
   if (marker.kind === "throbber") {
     const throbberColor = markerColor ?? color;
