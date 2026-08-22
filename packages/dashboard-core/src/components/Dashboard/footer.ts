@@ -39,38 +39,33 @@ export type DashboardFooterLoadingModel = {
   text: string;
 };
 
-export type DashboardFooterDashboardModel = {
-  kind: "dashboard";
+export type DashboardFooterRegularModel = {
+  kind: "regular";
   text: string;
 };
 
-export type DashboardFooterShortcutInputModel = {
-  kind: "shortcutInput";
-  segments: readonly DashboardFilterFooterSegment[];
+export type DashboardFooterCommandModel = {
+  kind: "command";
+  input: string;
+  interaction: "active" | "inactive";
+  preview:
+    | { kind: "guide" }
+    | { kind: "session"; code: string }
+    | { kind: "command"; action: string }
+    | { kind: "noMatch" };
 };
 
-export type DashboardFooterPersistentFilterAppliedModel = {
-  kind: "persistentFilterApplied";
-  segments: readonly DashboardFilterFooterSegment[];
-};
-
-export type DashboardFooterPersistentFilterEditingModel = {
-  kind: "persistentFilterEditing";
-  segments: readonly DashboardFilterFooterSegment[];
-};
-
-export type DashboardFooterPersistentFilterConditionModel = {
-  kind: "persistentFilterCondition";
+export type DashboardFooterFilterModel = {
+  kind: "filter";
+  variant: "applied" | "editing" | "condition";
   segments: readonly DashboardFilterFooterSegment[];
 };
 
 export type DashboardFooterModel =
   | DashboardFooterLoadingModel
-  | DashboardFooterDashboardModel
-  | DashboardFooterShortcutInputModel
-  | DashboardFooterPersistentFilterAppliedModel
-  | DashboardFooterPersistentFilterEditingModel
-  | DashboardFooterPersistentFilterConditionModel;
+  | DashboardFooterRegularModel
+  | DashboardFooterCommandModel
+  | DashboardFooterFilterModel;
 
 export type DashboardFooterModelOptions = {
   columns: number;
@@ -130,92 +125,56 @@ export function dashboardFooterModel(options: DashboardFooterModelOptions): Dash
   }
 
   if (screen?.name === "dashboard" && screen.shortcutCodeInput !== undefined) {
-    return shortcutInputFooter(columns, screen.shortcutCodeInput);
+    return shortcutInputFooter(screen.shortcutCodeInput, "active");
+  }
+
+  if (screen?.name === "help" && screen.returnTo !== undefined) {
+    return shortcutInputFooter(screen.returnTo.shortcutCodeInput, "inactive");
   }
 
   if (persistentFilter !== undefined) {
     const appliedQuitHint = quitHint === QUIT_HINT_CLOSE ? QUIT_HINT_FILTER_CLOSE : quitHint;
-    const model: DashboardFooterPersistentFilterAppliedModel = {
-      kind: "persistentFilterApplied",
+    const model: DashboardFooterFilterModel = {
+      kind: "filter",
+      variant: "applied",
       segments: appliedFilterFooter(columns, appliedQuitHint),
     };
     return model;
   }
 
-  const model: DashboardFooterDashboardModel = {
-    kind: "dashboard",
+  const model: DashboardFooterRegularModel = {
+    kind: "regular",
     text: dashboardFooter(columns, quitHint, firstRun),
   };
   return model;
 }
 
-function shortcutInputFooter(columns: number, input: string): DashboardFooterShortcutInputModel {
-  const descriptions = dashboardShortcutDescriptions(input);
-  const candidates = descriptions.map((description) =>
-    shortcutFooterSegments(description.badge, input, description.text),
-  );
-  return {
-    kind: "shortcutInput",
-    segments: fitFooterSegmentCandidates(columns, candidates),
-  };
-}
-
-function dashboardShortcutDescriptions(input: string): readonly { badge: string; text: string }[] {
-  if (input.length === 0) {
-    return [
-      {
-        badge: " COMMAND ",
-        text: "Type 1-zzz for a session or an uppercase command  Esc close",
-      },
-      { badge: " COMMAND ", text: "1-zzz session · uppercase command · Esc close" },
-      { badge: " COMMAND ", text: "1-zzz · uppercase · Esc" },
-    ];
-  }
-
-  const invocation = dashboardShortcutInvocation(input);
-  if (invocation.kind === "session") {
-    return shortcutActionDescriptions(" SESSION ", `open session ${invocation.code}`, "run");
-  }
-  if (invocation.kind === "command") {
-    return shortcutActionDescriptions(" COMMAND ", invocation.command.label, "run");
-  }
-  return [
-    {
-      badge: " NO MATCH ",
-      text: "Use lowercase 1-zzz or one uppercase command  Backspace edit  Esc close",
-    },
-    { badge: " NO MATCH ", text: "1-zzz or uppercase  ⌫ edit  Esc close" },
-    { badge: " NO MATCH ", text: "⌫ edit · Esc" },
-  ];
-}
-
-function shortcutActionDescriptions(
-  badge: string,
-  action: string,
-  enterLabel: string,
-): readonly { badge: string; text: string }[] {
-  return [
-    {
-      badge,
-      text: `${action}  Enter ${enterLabel}  Backspace edit  Esc close`,
-    },
-    { badge, text: `${action}  ↵ ${enterLabel}  ⌫ edit  Esc close` },
-    { badge, text: `↵ ${enterLabel} · Esc` },
-  ];
-}
-
-function shortcutFooterSegments(
-  badge: string,
+function shortcutInputFooter(
   input: string,
-  description: string,
-): DashboardFilterFooterSegment[] {
-  return [
-    footerSegment(badge, "badge"),
-    footerSegment("  ", "spacer"),
-    footerSegment(`${input}▌`, "key"),
-    footerSegment("  ", "spacer"),
-    footerSegment(description, "description"),
-  ];
+  interaction: DashboardFooterCommandModel["interaction"],
+): DashboardFooterCommandModel {
+  if (input.length === 0) {
+    return { kind: "command", input, interaction, preview: { kind: "guide" } };
+  }
+  const invocation = dashboardShortcutInvocation(input);
+  switch (invocation.kind) {
+    case "session":
+      return {
+        kind: "command",
+        input,
+        interaction,
+        preview: { kind: "session", code: invocation.code },
+      };
+    case "command":
+      return {
+        kind: "command",
+        input,
+        interaction,
+        preview: { kind: "command", action: invocation.command.label },
+      };
+    case "invalid":
+      return { kind: "command", input, interaction, preview: { kind: "noMatch" } };
+  }
 }
 
 function dashboardFooter(columns: number, quitHint: string, firstRun: boolean): string {
@@ -363,9 +322,7 @@ function fitFooterCandidates(columns: number, candidates: readonly string[]): st
   return selected ?? truncateCells(candidates.at(-1) ?? "", width);
 }
 
-function persistentFilterEditingFooter(
-  columns: number,
-): DashboardFooterPersistentFilterEditingModel {
+function persistentFilterEditingFooter(columns: number): DashboardFooterFilterModel {
   const width = normalizeTextLineWidth(columns);
   const candidates: readonly (readonly DashboardFilterFooterSegment[])[] = [
     persistentFilterFooterSegments([
@@ -388,8 +345,9 @@ function persistentFilterEditingFooter(
   ];
   const selected = candidates.find((candidate) => textLineSegmentsWidth(candidate) <= width);
   const segments = selected ?? clipTextLineSegments(candidates.at(-1) ?? [], width);
-  const model: DashboardFooterPersistentFilterEditingModel = {
-    kind: "persistentFilterEditing",
+  const model: DashboardFooterFilterModel = {
+    kind: "filter",
+    variant: "editing",
     segments,
   };
   return model;
@@ -398,7 +356,7 @@ function persistentFilterEditingFooter(
 function persistentFilterConditionFooter(
   columns: number,
   stage: PersistentFilterConditionStage,
-): DashboardFooterPersistentFilterConditionModel {
+): DashboardFooterFilterModel {
   let helpers = CONDITION_VALUE_HELPERS;
   let compactHelpers = CONDITION_VALUE_COMPACT_HELPERS;
   if (stage === "field") {
@@ -410,8 +368,9 @@ function persistentFilterConditionFooter(
   const full = persistentFilterFooterSegments(helpers, " CONDITION ");
   const compact = compactConditionFooterSegments(compactHelpers);
   const segments = conditionFooterSegmentsForWidth(full, compact, width);
-  const model: DashboardFooterPersistentFilterConditionModel = {
-    kind: "persistentFilterCondition",
+  const model: DashboardFooterFilterModel = {
+    kind: "filter",
+    variant: "condition",
     segments,
   };
   return model;

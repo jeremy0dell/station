@@ -30,7 +30,11 @@ export type {
 export { dashboardFilterConditionPanelModel } from "../components/Dashboard/filterConditionPanel.js";
 export type {
   DashboardFilterFooterSegment,
+  DashboardFooterCommandModel,
+  DashboardFooterFilterModel,
+  DashboardFooterLoadingModel,
   DashboardFooterModel,
+  DashboardFooterRegularModel,
 } from "../components/Dashboard/footer.js";
 export { dashboardFooterModel } from "../components/Dashboard/footer.js";
 export { dashboardBodyTop } from "../components/Dashboard/layout.js";

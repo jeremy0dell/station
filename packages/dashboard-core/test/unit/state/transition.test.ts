@@ -97,6 +97,25 @@ describe("TUI screen transitions", () => {
     expect(invoked.state.screen).toEqual({ name: "removeWorktree", step: "chooseSlot" });
   });
 
+  it("opens Help from the command bar and resumes the exact shortcut draft", () => {
+    const state = createInitialTuiState({ initialSnapshot: createDashboardSnapshot() });
+    const armed = handleTuiKey(state, { input: "`" }).state;
+    const typed = handleTuiKey(armed, { input: "X" }).state;
+    const help = handleTuiKey(typed, { input: "?" }).state;
+
+    expect(help.screen).toEqual({
+      name: "help",
+      returnTo: { name: "dashboard", shortcutCodeInput: "X" },
+    });
+
+    const resumed = handleTuiKey(help, { input: "?" }).state;
+    expect(resumed.screen).toEqual({ name: "dashboard", shortcutCodeInput: "X" });
+    expect(handleTuiKey(resumed, { input: "\r", return: true }).state.screen).toEqual({
+      name: "removeWorktree",
+      step: "chooseSlot",
+    });
+  });
+
   it("opens rename slot selection from the dashboard and keeps refresh on Z", () => {
     const state = createInitialTuiState({ initialSnapshot: createDashboardSnapshot() });
     const rename = handleTuiKey(state, { input: "R" });

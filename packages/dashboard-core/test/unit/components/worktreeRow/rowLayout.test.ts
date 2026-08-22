@@ -96,7 +96,7 @@ describe("worktree row layout and filter semantics", () => {
     });
 
     expect(layouts.map(rowText)).toEqual([
-      expect.stringContaining("[1  ] - first"),
+      expect.stringContaining("[1]   - first"),
       expect.stringContaining("[100] ! later"),
     ]);
   });

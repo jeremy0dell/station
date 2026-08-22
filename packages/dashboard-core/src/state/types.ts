@@ -161,9 +161,14 @@ type ShortcutInputState = {
   shortcutCodeInput?: string;
 };
 
+type ShortcutHelpReturn = {
+  name: "dashboard";
+  shortcutCodeInput: string;
+};
+
 export type TuiScreen =
   | ({ name: "dashboard" } & ShortcutInputState)
-  | { name: "help" }
+  | { name: "help"; returnTo?: ShortcutHelpReturn }
   | { name: "projectMenu"; projectId: ProjectId; focus: ProjectMenuActionId }
   | {
       name: "groupMenu";
