@@ -63,32 +63,3 @@ export function widgetSettingsPanelModel(
     focus: "list",
   };
 }
-
-export type WidgetSettingsPanelLayout = {
-  top: number;
-  left: number;
-  width: number;
-  height: number;
-  innerWidth: number;
-};
-
-const PANEL_WIDTH = 48;
-const MIN_PANEL_WIDTH = 28;
-// Border pair + title + note + footer around the line list.
-const CHROME_ROWS = 5;
-
-export function widgetSettingsPanelLayout(
-  columns: number,
-  rows: number,
-  lineCount: number,
-): WidgetSettingsPanelLayout {
-  const width = Math.min(PANEL_WIDTH, Math.max(MIN_PANEL_WIDTH, columns - 2));
-  const height = Math.min(rows, CHROME_ROWS + Math.max(1, lineCount));
-  return {
-    left: Math.max(0, Math.floor((columns - width) / 2)),
-    top: Math.max(0, Math.floor((rows - height) / 2)),
-    width,
-    height,
-    innerWidth: width - 2,
-  };
-}

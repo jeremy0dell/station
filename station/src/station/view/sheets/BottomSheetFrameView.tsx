@@ -1,11 +1,10 @@
 // OpenTUI boundary: the frame anchors and constrains intrinsic sheet sections,
 // then absorbs backdrop clicks so they cannot fall through to the dashboard.
 import { TextAttributes } from "@opentui/core";
-import { useLayoutEffect, useMemo, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { toOpenTuiColor, toOpenTuiOpaqueColor, useStationTheme } from "../../../theme/index.js";
 import { useStationMouse, stationMouseProps } from "../stationMouseContext.js";
-import { SemanticScrollViewport } from "../layout/SemanticScrollViewport.js";
-import { createScrollViewportController } from "../layout/scrollViewport.js";
+import { SemanticScrollRegion } from "../layout/SemanticScrollViewport.js";
 import { SheetText } from "./parts.js";
 
 export type BottomSheetFrameViewProps = {
@@ -40,10 +39,6 @@ export function BottomSheetFrameView({
   const dispatch = useStationMouse();
   const sheetWidth = Math.max(1, Math.min(Math.max(1, columns), width ?? columns));
   const contentWidth = bottomSheetContentWidth(sheetWidth);
-  const bodyViewport = useMemo(() => createScrollViewportController<string>(), []);
-  useLayoutEffect(() => {
-    queueMicrotask(() => bodyViewport.follow(followedBodyItemId));
-  }, [bodyViewport, followedBodyItemId]);
   return (
     <box
       position="absolute"
@@ -63,7 +58,11 @@ export function BottomSheetFrameView({
         fg={toOpenTuiColor(theme.text.primary)}
         attributes={TextAttributes.BOLD}
       >{` ${title}`}</SheetText>
-      <SemanticScrollViewport controller={bodyViewport} itemIds={bodyItemIds} fill={false}>
+      <SemanticScrollRegion
+        itemIds={bodyItemIds}
+        followedItemId={followedBodyItemId}
+        fill={false}
+      >
         <box
           width={contentWidth}
           flexDirection="column"
@@ -72,7 +71,7 @@ export function BottomSheetFrameView({
         >
           {children}
         </box>
-      </SemanticScrollViewport>
+      </SemanticScrollRegion>
       {actions === undefined ? null : <box flexShrink={0}>{actions}</box>}
       {footer === undefined ? null : <box flexShrink={0}>{footer}</box>}
     </box>

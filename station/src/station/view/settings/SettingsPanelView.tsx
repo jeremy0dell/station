@@ -1,9 +1,11 @@
 import { TextAttributes } from "@opentui/core";
-import type { SettingsPanelLayout } from "@station/dashboard-core/selectors";
 import type { SettingsPanelFocus } from "@station/dashboard-core/state";
 import type { ReactNode } from "react";
 import { toOpenTuiColor, toOpenTuiOpaqueColor, useStationTheme } from "../../../theme/index.js";
 import type { StationMouseTarget } from "../../input/stationMouse.js";
+import { SemanticScrollRegion } from "../layout/SemanticScrollViewport.js";
+import { semanticItemRenderableId } from "../layout/scrollViewport.js";
+import { settingsPanelFrame } from "../layout/settingsPanelFrame.js";
 import { fit } from "../sheets/parts.js";
 import {
   stationMouseProps,
@@ -22,12 +24,12 @@ export type SettingsPanelItemView = {
 
 export type SettingsPanelDetailLayout = {
   width: number;
-  height: number;
   focused: boolean;
 };
 
 export type SettingsPanelViewProps = {
-  layout: SettingsPanelLayout;
+  columns: number;
+  rows: number;
   focus: SettingsPanelFocus;
   title: string;
   compactDetailTitle: string;
@@ -38,7 +40,8 @@ export type SettingsPanelViewProps = {
 };
 
 export function SettingsPanelView({
-  layout,
+  columns,
+  rows,
   focus,
   title,
   compactDetailTitle,
@@ -49,55 +52,126 @@ export function SettingsPanelView({
 }: SettingsPanelViewProps) {
   const theme = useStationTheme();
   const dispatch = useStationMouse();
-  const singlePane = layout.paneMode === "single";
+  const frame = settingsPanelFrame(columns, rows);
+  const singlePane = frame.paneMode === "single";
   const showList = !singlePane || focus === "list";
   const showDetail = !singlePane || focus === "detail";
-  const listWidth = singlePane ? layout.innerWidth : layout.leftWidth;
-  const detailWidth = singlePane ? layout.innerWidth : layout.rightWidth;
+  const listWidth = singlePane ? frame.innerWidth : frame.listWidth;
+  const detailWidth = singlePane ? frame.innerWidth : frame.detailWidth;
   const visibleTitle = singlePane && showDetail ? compactDetailTitle : title;
+  const listItemIds = items.map((item) => settingsListItemId(item.id));
+  const activeListItem = items.find((item) => item.active);
+  const followedListItemId =
+    focus === "list" && activeListItem !== undefined
+      ? settingsListItemId(activeListItem.id)
+      : undefined;
 
   return (
     <box
       position="absolute"
-      top={layout.top}
-      left={layout.left}
-      width={layout.width}
-      height={layout.height}
+      top={0}
+      left={0}
+      width={Math.max(1, columns)}
+      height={Math.max(1, rows)}
       zIndex={10}
-      border
-      borderColor={toOpenTuiColor(theme.interaction.hairline)}
-      backgroundColor={toOpenTuiOpaqueColor(theme.surfaces.settings)}
-      flexDirection="column"
+      alignItems="center"
+      justifyContent="center"
       {...stationMouseProps(dispatch, { kind: "sheetBackdrop" })}
     >
-      <text fg={toOpenTuiColor(theme.text.primary)} attributes={TextAttributes.BOLD}>
-        {fit(` ${visibleTitle}`, layout.innerWidth)}
-      </text>
-      <box flexDirection="row" width={layout.innerWidth} height={layout.contentHeight}>
-        {showList ? (
-          <box flexDirection="column" width={listWidth}>
-            <SettingsPanelList
-              header={listHeader}
-              focused={focus === "list"}
-              items={items}
-              width={listWidth}
-            />
-          </box>
-        ) : null}
-        {!singlePane ? <SettingsPanelDivider height={layout.contentHeight} /> : null}
-        {showDetail ? (
-          <box flexDirection="column" width={detailWidth}>
-            {renderDetail({
-              width: detailWidth,
-              height: layout.contentHeight,
-              focused: focus === "detail",
-            })}
-          </box>
-        ) : null}
+      <box
+        width={frame.width}
+        height={frame.height}
+        border
+        borderColor={toOpenTuiColor(theme.interaction.hairline)}
+        backgroundColor={toOpenTuiOpaqueColor(theme.surfaces.settings)}
+        flexDirection="column"
+      >
+        <text
+          flexShrink={0}
+          fg={toOpenTuiColor(theme.text.primary)}
+          attributes={TextAttributes.BOLD}
+        >
+          {fit(` ${visibleTitle}`, frame.innerWidth)}
+        </text>
+        <box
+          flexDirection="row"
+          width={frame.innerWidth}
+          flexGrow={1}
+          flexShrink={1}
+          flexBasis={0}
+          minHeight={0}
+        >
+          {showList ? (
+            <box flexDirection="column" width={listWidth} flexShrink={1} minHeight={0}>
+              <SemanticScrollRegion
+                itemIds={listItemIds}
+                followedItemId={followedListItemId}
+                fill
+              >
+                <SettingsPanelList
+                  header={listHeader}
+                  focused={focus === "list"}
+                  items={items}
+                  width={listWidth}
+                />
+              </SemanticScrollRegion>
+            </box>
+          ) : null}
+          {!singlePane ? <SettingsPanelDivider /> : null}
+          {showDetail ? (
+            <box flexDirection="column" width={detailWidth} flexShrink={1} minHeight={0}>
+              {renderDetail({ width: detailWidth, focused: focus === "detail" })}
+            </box>
+          ) : null}
+        </box>
+        <text
+          flexShrink={0}
+          fg={toOpenTuiColor(theme.text.primary)}
+          attributes={TextAttributes.DIM}
+        >
+          {fit(` ${footer}`, frame.innerWidth)}
+        </text>
       </box>
-      <text fg={toOpenTuiColor(theme.text.primary)} attributes={TextAttributes.DIM}>
-        {fit(` ${footer}`, layout.innerWidth)}
-      </text>
+    </box>
+  );
+}
+
+export function SettingsPanelDetailView({
+  width,
+  title,
+  focused,
+  danger = false,
+  bodyItemIds = [],
+  followedBodyItemId,
+  children,
+  actions,
+  footer,
+}: {
+  width: number;
+  title: string;
+  focused: boolean;
+  danger?: boolean;
+  bodyItemIds?: readonly string[];
+  followedBodyItemId?: string;
+  children: ReactNode;
+  actions?: ReactNode;
+  footer?: ReactNode;
+}) {
+  return (
+    <box width={width} height="100%" flexDirection="column" minHeight={0}>
+      <box flexShrink={0}>
+        <SettingsPaneHeader label={title} width={width} focused={focused} danger={danger} />
+      </box>
+      <SemanticScrollRegion
+        itemIds={bodyItemIds}
+        followedItemId={followedBodyItemId}
+        viewportId={`station-settings-detail:${title}`}
+        fill
+      >
+        {children}
+      </SemanticScrollRegion>
+      {actions === undefined ? null : <box flexShrink={0}>{actions}</box>}
+      {footer === undefined ? null : <box flexShrink={0}>{footer}</box>}
     </box>
   );
 }
@@ -129,6 +203,7 @@ function SettingsPanelItemRow({ item, width }: { item: SettingsPanelItemView; wi
   const [hover, setHover] = useStationHoverState();
   return (
     <text
+      id={semanticItemRenderableId(settingsListItemId(item.id))}
       fg={toOpenTuiColor(
         item.danger
           ? theme.status.danger
@@ -179,15 +254,18 @@ export function SettingsPaneHeader({
   );
 }
 
-function SettingsPanelDivider({ height }: { height: number }) {
+function SettingsPanelDivider() {
   const theme = useStationTheme();
   return (
-    <box flexDirection="column" width={1}>
-      {Array.from({ length: height }, (_, row) => (
-        <text key={row} fg={toOpenTuiColor(theme.text.muted)}>
-          │
-        </text>
-      ))}
-    </box>
+    <box
+      width={1}
+      alignSelf="stretch"
+      border={["left"]}
+      borderColor={toOpenTuiColor(theme.text.muted)}
+    />
   );
+}
+
+function settingsListItemId(itemId: string): string {
+  return `settings-list:${itemId}`;
 }

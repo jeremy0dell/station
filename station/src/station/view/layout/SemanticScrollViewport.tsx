@@ -1,6 +1,40 @@
 import type { ScrollBoxRenderable } from "@opentui/core";
-import { useLayoutEffect, useRef, type ReactNode } from "react";
-import type { ScrollViewportController } from "./scrollViewport.js";
+import { useEffect, useLayoutEffect, useMemo, useRef, type ReactNode } from "react";
+import {
+  createScrollViewportController,
+  type ScrollViewportController,
+} from "./scrollViewport.js";
+
+/** Scroll region for overlays whose geometry is wholly renderer-owned. */
+export function SemanticScrollRegion<ItemId extends string>({
+  itemIds,
+  followedItemId,
+  children,
+  fill = true,
+  viewportId,
+}: {
+  itemIds: readonly ItemId[];
+  followedItemId?: ItemId;
+  children: ReactNode;
+  fill?: boolean;
+  viewportId?: string;
+}) {
+  const controller = useMemo(() => createScrollViewportController<ItemId>(), []);
+  useEffect(() => {
+    controller.follow(followedItemId);
+    queueMicrotask(controller.reflow);
+  }, [controller, followedItemId]);
+  return (
+    <SemanticScrollViewport
+      controller={controller}
+      itemIds={itemIds}
+      fill={fill}
+      viewportId={viewportId}
+    >
+      {children}
+    </SemanticScrollViewport>
+  );
+}
 
 /** Flex-sized viewport that binds semantic item identities to OpenTUI scroll geometry. */
 export function SemanticScrollViewport<ItemId extends string>({
@@ -8,12 +42,14 @@ export function SemanticScrollViewport<ItemId extends string>({
   itemIds,
   children,
   fill = true,
+  viewportId,
 }: {
   controller: ScrollViewportController<ItemId>;
   itemIds: readonly ItemId[];
   children: ReactNode;
   /** Fill a definite parent height; intrinsic overlays leave this false and only shrink at max-height. */
   fill?: boolean;
+  viewportId?: string;
 }) {
   const ref = useRef<ScrollBoxRenderable>(null);
   const itemIdsRef = useRef(itemIds);
@@ -30,6 +66,7 @@ export function SemanticScrollViewport<ItemId extends string>({
 
   return (
     <scrollbox
+      {...(viewportId === undefined ? {} : { id: viewportId })}
       ref={ref}
       width="100%"
       flexGrow={fill ? 1 : 0}
@@ -41,7 +78,10 @@ export function SemanticScrollViewport<ItemId extends string>({
       viewportCulling
       verticalScrollbarOptions={{ visible: false }}
       horizontalScrollbarOptions={{ visible: false }}
-      contentOptions={{ flexDirection: "column" }}
+      contentOptions={{
+        flexDirection: "column",
+        ...(fill ? {} : { minHeight: "auto" as const }),
+      }}
       onSizeChange={() => queueMicrotask(controller.reflow)}
       onMouseScroll={() => queueMicrotask(controller.synchronize)}
     >

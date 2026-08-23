@@ -65,12 +65,6 @@ export {
   newSessionReviewContent,
 } from "../components/NewSessionBottomSheet/content.js";
 
-export type {
-  SettingsPanelLayout,
-  SettingsPanelPaneMode,
-} from "../components/SettingsPanel/layout.js";
-export { settingsPanelLayout } from "../components/SettingsPanel/layout.js";
-
 export { textMatchSegments } from "../components/TextMatch/segments.js";
 export type { ToastBorderColorName } from "../components/ToastOverlay/content.js";
 export {
@@ -82,10 +76,7 @@ export {
 
 export { toastOverlayLayout } from "../components/ToastOverlay/layout.js";
 export type { WidgetSettingsLine } from "../components/WidgetSettingsPanel/content.js";
-export {
-  widgetSettingsPanelLayout,
-  widgetSettingsPanelModel,
-} from "../components/WidgetSettingsPanel/content.js";
+export { widgetSettingsPanelModel } from "../components/WidgetSettingsPanel/content.js";
 export type {
   RowColor,
   RowGridLayout,

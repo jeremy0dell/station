@@ -1,9 +1,9 @@
 import { TextAttributes } from "@opentui/core";
 import type { ProviderId } from "@station/contracts";
 import {
+  clipCells,
   selectNewSessionHarnessChoices,
   selectProjectDefaultHarness,
-  settingsPanelLayout,
 } from "@station/dashboard-core/selectors";
 import {
   isRemoveProjectArmed,
@@ -18,14 +18,15 @@ import type {
 } from "@station/dashboard-core/state";
 import { toOpenTuiColor, useStationTheme } from "../../../theme/index.js";
 import { EditableTextInputView } from "../EditableTextInputView.js";
+import { semanticItemRenderableId } from "../layout/scrollViewport.js";
 import { AgentChoiceListView } from "../sheets/AgentChoiceListView.js";
-import { fit, SheetLine } from "../sheets/parts.js";
+import { fit } from "../sheets/parts.js";
 import {
   stationMouseProps,
   useStationHoverState,
   useStationMouse,
 } from "../stationMouseContext.js";
-import { SettingsPanelView, SettingsPaneHeader } from "./SettingsPanelView.js";
+import { SettingsPanelDetailView, SettingsPanelView } from "./SettingsPanelView.js";
 
 type ProjectSettingsScreen = Extract<DashboardScreenView, { name: "projectSettings" }>;
 type DashboardLocalRowsView = DashboardStateView["localRows"];
@@ -48,7 +49,7 @@ export function ProjectSettingsPanelView({
   localRows,
 }: ProjectSettingsPanelViewProps) {
   const project = snapshot.projects.find((candidate) => candidate.id === screen.projectId);
-  const layout = settingsPanelLayout(columns, rows);
+  const selectedAgentId = selection.get(PROJECT_SETTINGS_AGENT_LIST_ID) as ProviderId | undefined;
   const projectLabel = project?.label ?? "Project";
   const activeLabel =
     PROJECT_SETTINGS_ITEMS.find((item) => item.id === screen.activeId)?.label ?? projectLabel;
@@ -61,7 +62,8 @@ export function ProjectSettingsPanelView({
 
   return (
     <SettingsPanelView
-      layout={layout}
+      columns={columns}
+      rows={rows}
       focus={screen.focus}
       title="Project settings"
       compactDetailTitle={`${activeLabel} · ${projectLabel}`}
@@ -80,9 +82,7 @@ export function ProjectSettingsPanelView({
           width={width}
           focused={focused}
           localRows={localRows}
-          selectedAgentId={
-            selection.get(PROJECT_SETTINGS_AGENT_LIST_ID) as ProviderId | undefined
-          }
+          selectedAgentId={selectedAgentId}
         />
       )}
     />
@@ -140,28 +140,34 @@ function AgentDetail({
   const currentDefault =
     project === undefined ? undefined : selectProjectDefaultHarness(localRows, project);
   return (
-    <>
-      <SettingsPaneHeader label="Default agent" width={width} focused={focused} />
+    <SettingsPanelDetailView
+      width={width}
+      title="Default agent"
+      focused={focused}
+      bodyItemIds={choices.map((choice) => choice.value.id)}
+      followedBodyItemId={focused ? selectedAgentId : undefined}
+      footer={
+        choices.length === 0 ? undefined : (
+          <text fg={toOpenTuiColor(theme.text.primary)} attributes={TextAttributes.DIM}>
+            {fit(" ✓ current · ↑↓ ↵ · 1-9/a-z", width)}
+          </text>
+        )
+      }
+    >
       {choices.length === 0 ? (
         <text fg={toOpenTuiColor(theme.text.primary)} attributes={TextAttributes.DIM}>
           {fit(" No agents available", width)}
         </text>
       ) : (
-        <>
-          <AgentChoiceListView
-            choices={choices}
-            width={width}
-            currentId={currentDefault?.harness}
-            selectedId={focused ? selectedAgentId : undefined}
-            pending={currentDefault?.pending ?? false}
-          />
-          <SheetLine width={width}> </SheetLine>
-          <text fg={toOpenTuiColor(theme.text.primary)} attributes={TextAttributes.DIM}>
-            {fit(" ✓ current · ↑↓ ↵ · 1-9/a-z", width)}
-          </text>
-        </>
+        <AgentChoiceListView
+          choices={choices}
+          width={width}
+          currentId={currentDefault?.harness}
+          selectedId={focused ? selectedAgentId : undefined}
+          pending={currentDefault?.pending ?? false}
+        />
       )}
-    </>
+    </SettingsPanelDetailView>
   );
 }
 
@@ -178,23 +184,32 @@ function RemoveDetail({
   const armed = isRemoveProjectArmed(screen);
   const phrase = removeProjectConfirmPhrase(screen.projectId);
   return (
-    <>
-      <SettingsPaneHeader label="Remove project" width={width} focused={focused} danger />
+    <SettingsPanelDetailView
+      width={width}
+      title="Remove project"
+      focused={focused}
+      danger
+      bodyItemIds={["project-settings:remove-input"]}
+      followedBodyItemId="project-settings:remove-input"
+      actions={<RemoveButton armed={armed} width={width} />}
+    >
       <text fg={toOpenTuiColor(theme.text.primary)}>{fit(" Removes it from Station.", width)}</text>
       <text fg={toOpenTuiColor(theme.text.primary)}>
         {fit(" Worktrees & files stay on disk.", width)}
       </text>
-      <SheetLine width={width}> </SheetLine>
-      <text fg={toOpenTuiColor(theme.text.primary)} attributes={TextAttributes.DIM}>
-        {fit(` Type "${phrase}" to confirm`, width)}
-      </text>
-      <text fg={toOpenTuiColor(theme.text.primary)}>
-        {" ▸ "}
-        <EditableTextInputView {...screen.removeDraft} placeholder={phrase} />
-      </text>
-      <SheetLine width={width}> </SheetLine>
-      <RemoveButton armed={armed} width={width} />
-    </>
+      <box flexDirection="column" marginTop={1} marginBottom={1}>
+        <text fg={toOpenTuiColor(theme.text.primary)} attributes={TextAttributes.DIM}>
+          {fit(` Type "${phrase}" to confirm`, width)}
+        </text>
+        <text
+          id={semanticItemRenderableId("project-settings:remove-input")}
+          fg={toOpenTuiColor(theme.text.primary)}
+        >
+          {" ▸ "}
+          <EditableTextInputView {...screen.removeDraft} placeholder={phrase} />
+        </text>
+      </box>
+    </SettingsPanelDetailView>
   );
 }
 
@@ -204,7 +219,7 @@ function RemoveButton({ armed, width }: { armed: boolean; width: number }) {
   const dispatch = useStationMouse();
   const [hover, setHover] = useStationHoverState();
   const hot = armed && hover;
-  const label = "[ Remove project (R) ]".slice(0, Math.max(0, width - 1));
+  const label = clipCells("[ Remove project (R) ]", Math.max(0, width - 1));
   return (
     <box flexDirection="row">
       <text> </text>

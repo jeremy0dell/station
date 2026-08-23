@@ -1,7 +1,10 @@
 import { TextAttributes, type ColorInput } from "@opentui/core";
 import type { DashboardScreenView, DashboardStateView, WidgetSettingsFocus } from "@station/dashboard-core/state";
-import { widgetSettingsPanelLayout, widgetSettingsPanelModel } from "@station/dashboard-core/selectors";
+import { widgetSettingsPanelModel } from "@station/dashboard-core/selectors";
 import type { WidgetSettingsLine } from "@station/dashboard-core/selectors";
+import { SemanticScrollRegion } from "../layout/SemanticScrollViewport.js";
+import { semanticItemRenderableId } from "../layout/scrollViewport.js";
+import { widgetSettingsFrame } from "../layout/settingsPanelFrame.js";
 import { fit } from "../sheets/parts.js";
 import { toOpenTuiColor, toOpenTuiOpaqueColor, useStationTheme } from "../../../theme/index.js";
 import {
@@ -31,53 +34,71 @@ export function WidgetSettingsPanelView({
   const surfaceBackground = toOpenTuiOpaqueColor(theme.surfaces.settings);
   const dispatch = useStationMouse();
   const model = widgetSettingsPanelModel(screen, widgets, widgetsPersisted);
-  const { top, left, width, height, innerWidth } = widgetSettingsPanelLayout(
-    columns,
-    rows,
-    model.lines.length,
-  );
+  const frame = widgetSettingsFrame(columns, rows);
+  const itemIds = model.lines.map(widgetLineId);
+  const followedItemId = model.lines.find(isActiveWidgetLine);
   return (
     <box
       position="absolute"
-      top={top}
-      left={left}
-      width={width}
-      height={height}
+      top={0}
+      left={0}
+      width={Math.max(1, columns)}
+      height={Math.max(1, rows)}
       zIndex={10}
-      border
-      borderColor={toOpenTuiColor(theme.interaction.hairline)}
-      backgroundColor={surfaceBackground}
-      flexDirection="column"
+      alignItems="center"
+      justifyContent="center"
       {...stationMouseProps(dispatch, { kind: "sheetBackdrop" })}
     >
-      <text
-        fg={toOpenTuiColor(theme.text.primary)}
-        bg={surfaceBackground}
-        attributes={TextAttributes.BOLD}
-        {...UNSELECTABLE_TEXT}
+      <box
+        width={frame.width}
+        maxHeight={frame.maxHeight}
+        border
+        borderColor={toOpenTuiColor(theme.interaction.hairline)}
+        backgroundColor={surfaceBackground}
+        flexDirection="column"
       >
-        {fit(` ${model.title}`, innerWidth)}
-      </text>
-      <text fg={toOpenTuiColor(theme.text.muted)} bg={surfaceBackground} {...UNSELECTABLE_TEXT}>
-        {fit(` ${model.note}`, innerWidth)}
-      </text>
-      {model.lines.map((line) => (
-        <PanelLine
-          key={lineKey(line)}
-          line={line}
-          width={innerWidth}
-          focus={model.focus}
-          surfaceBackground={surfaceBackground}
-        />
-      ))}
-      <text
-        fg={toOpenTuiColor(theme.text.primary)}
-        bg={surfaceBackground}
-        attributes={TextAttributes.DIM}
-        {...UNSELECTABLE_TEXT}
-      >
-        {fit(` ${model.footer}`, innerWidth)}
-      </text>
+        <text
+          flexShrink={0}
+          fg={toOpenTuiColor(theme.text.primary)}
+          bg={surfaceBackground}
+          attributes={TextAttributes.BOLD}
+          {...UNSELECTABLE_TEXT}
+        >
+          {fit(` ${model.title}`, frame.innerWidth)}
+        </text>
+        <text
+          flexShrink={0}
+          fg={toOpenTuiColor(theme.text.muted)}
+          bg={surfaceBackground}
+          {...UNSELECTABLE_TEXT}
+        >
+          {fit(` ${model.note}`, frame.innerWidth)}
+        </text>
+        <SemanticScrollRegion
+          itemIds={itemIds}
+          followedItemId={followedItemId === undefined ? undefined : widgetLineId(followedItemId)}
+          fill={false}
+        >
+          {model.lines.map((line) => (
+            <PanelLine
+              key={lineKey(line)}
+              line={line}
+              width={frame.innerWidth}
+              focus={model.focus}
+              surfaceBackground={surfaceBackground}
+            />
+          ))}
+        </SemanticScrollRegion>
+        <text
+          flexShrink={0}
+          fg={toOpenTuiColor(theme.text.primary)}
+          bg={surfaceBackground}
+          attributes={TextAttributes.DIM}
+          {...UNSELECTABLE_TEXT}
+        >
+          {fit(` ${model.footer}`, frame.innerWidth)}
+        </text>
+      </box>
     </box>
   );
 }
@@ -90,6 +111,21 @@ function lineKey(line: WidgetSettingsLine): string {
     return `pick:${line.index}`;
   }
   return line.kind;
+}
+
+function widgetLineId(line: WidgetSettingsLine): string {
+  return `widget-settings:${lineKey(line)}`;
+}
+
+function isActiveWidgetLine(line: WidgetSettingsLine): boolean {
+  switch (line.kind) {
+    case "widget":
+    case "add":
+    case "pickerChoice":
+      return line.active;
+    case "empty":
+      return false;
+  }
 }
 
 function PanelLine({
@@ -108,7 +144,12 @@ function PanelLine({
   const [hover, setHover] = useStationHoverState();
   if (line.kind === "empty") {
     return (
-      <text fg={toOpenTuiColor(theme.text.muted)} bg={surfaceBackground} {...UNSELECTABLE_TEXT}>
+      <text
+        id={semanticItemRenderableId(widgetLineId(line))}
+        fg={toOpenTuiColor(theme.text.muted)}
+        bg={surfaceBackground}
+        {...UNSELECTABLE_TEXT}
+      >
         {fit(`   ${line.label}`, width)}
       </text>
     );
@@ -116,6 +157,7 @@ function PanelLine({
   if (line.kind === "add") {
     return (
       <text
+        id={semanticItemRenderableId(widgetLineId(line))}
         fg={toOpenTuiColor(theme.action.primary)}
         bg={hover ? toOpenTuiColor(theme.interaction.hover) : surfaceBackground}
         {...UNSELECTABLE_TEXT}
@@ -137,6 +179,7 @@ function PanelLine({
     }
     return (
       <text
+        id={semanticItemRenderableId(widgetLineId(line))}
         fg={toOpenTuiColor(line.active ? theme.action.primary : theme.text.primary)}
         bg={background}
         {...UNSELECTABLE_TEXT}
@@ -159,7 +202,7 @@ function PanelLine({
     rowColor = toOpenTuiColor(theme.text.primary);
   }
   return (
-    <box flexDirection="row">
+    <box id={semanticItemRenderableId(widgetLineId(line))} flexDirection="row">
       <text
         fg={rowColor}
         bg={hover && !dimmed ? toOpenTuiColor(theme.interaction.hover) : surfaceBackground}

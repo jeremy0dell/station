@@ -18,6 +18,23 @@ export function intersectingSemanticItems<ItemId extends string>(
     .map((item) => item.id);
 }
 
+/** Cell delta that reveals a semantic box; oversized boxes align their leading edge. */
+export function semanticRevealDelta(
+  viewport: { readonly top: number; readonly bottom: number },
+  item: { readonly top: number; readonly bottom: number },
+): number {
+  const itemHeight = item.bottom - item.top;
+  const viewportHeight = viewport.bottom - viewport.top;
+  if (itemHeight >= viewportHeight) {
+    return item.bottom > viewport.top && item.top < viewport.bottom
+      ? 0
+      : item.top - viewport.top;
+  }
+  if (item.top < viewport.top) return item.top - viewport.top;
+  if (item.bottom > viewport.bottom) return item.bottom - viewport.bottom;
+  return 0;
+}
+
 export function semanticItemRenderableId(id: string): string {
   return `station-semantic-item:${id}`;
 }
@@ -79,8 +96,12 @@ export function createScrollViewportController<
     if (item === undefined) return;
     const viewportTop = viewport.viewport.y;
     const viewportBottom = viewportTop + viewport.viewport.height;
-    if (item.bottom > viewportTop && item.top < viewportBottom) return;
-    viewport.scrollChildIntoView(semanticItemRenderableId(followedId));
+    const delta = semanticRevealDelta(
+      { top: viewportTop, bottom: viewportBottom },
+      item,
+    );
+    if (delta === 0) return;
+    viewport.scrollBy(delta);
   };
   const reflow = (): void => {
     revealFollowedItem();
@@ -138,7 +159,7 @@ export function createScrollViewportController<
     follow: (itemId): void => {
       followedId = itemId;
       if (itemId === undefined) return;
-      viewport?.scrollChildIntoView(semanticItemRenderableId(itemId));
+      revealFollowedItem();
       synchronize();
     },
     itemTop: (itemId): number | undefined => {
