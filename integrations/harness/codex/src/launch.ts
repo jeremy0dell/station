@@ -117,8 +117,19 @@ function buildCodexResumeLaunchPlan(
   const configuredProfile = request.profile ?? options.defaultProfile;
   const hookProfile = options.defaultHookProfile;
   const profile = hookProfile ?? configuredProfile;
+  const permissionMode = request.permissionMode ?? options.defaultPermissionMode;
+  const approvalPolicy = request.approvalPolicy ?? options.defaultApprovalPolicy;
+  const sandboxMode = request.sandboxMode ?? options.defaultSandboxMode;
+  const yolo = isYoloPermissionMode({ permissionMode, approvalPolicy, sandboxMode });
+  const providerPermissionMode = yolo ? "yolo" : permissionMode;
   const args = ["resume", "--cd", request.worktree.path];
-  appendCodexOptions(args, { profile });
+  appendCodexOptions(args, {
+    profile,
+    permissionMode: providerPermissionMode,
+    approvalPolicy: yolo ? undefined : approvalPolicy,
+    sandboxMode: yolo ? undefined : sandboxMode,
+    noAltScreen: options.noAltScreen,
+  });
   args.push(request.resume.target.id);
   if (request.initialPrompt !== undefined) {
     args.push(request.initialPrompt);
@@ -133,7 +144,20 @@ function buildCodexResumeLaunchPlan(
   if (profile !== undefined) {
     providerDataInput.profile = profile;
   }
-  const providerData = codexProviderData(providerDataInput, { configuredProfile, hookProfile });
+  if (providerPermissionMode !== undefined) {
+    providerDataInput.permissionMode = providerPermissionMode;
+  }
+  if (!yolo && approvalPolicy !== undefined) {
+    providerDataInput.approvalPolicy = approvalPolicy;
+  }
+  if (!yolo && sandboxMode !== undefined) {
+    providerDataInput.sandboxMode = sandboxMode;
+  }
+  const providerData = codexProviderData(providerDataInput, {
+    configuredProfile,
+    hookProfile,
+    noAltScreen: options.noAltScreen,
+  });
 
   return {
     provider: "codex",
