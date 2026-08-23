@@ -1,5 +1,9 @@
 import type { StationConfig } from "@station/config";
-import type { SafeError, UpdateReapRecoveryPreflight } from "@station/contracts";
+import type {
+  SafeError,
+  UpdateCommandReport,
+  UpdateReapRecoveryPreflight,
+} from "@station/contracts";
 import {
   STATION_SCHEMA_VERSION,
   UpdateCommandReportSchema,
@@ -1317,6 +1321,249 @@ describe("stn update convergence", () => {
 
   it.each([
     {
+      name: "wrong channel",
+      mutate: (report: UpdateCommandReport) => {
+        report.channel = "dev-checkout";
+      },
+    },
+    {
+      name: "incumbent evaluator",
+      mutate: (report: UpdateCommandReport) => {
+        report.initial.evaluator = "incumbent-cli";
+      },
+    },
+    {
+      name: "old installed artifact with the pinned target",
+      mutate: (report: UpdateCommandReport) => {
+        report.current = { version: "1.0.0" };
+        report.initial.preflight.installed = { version: "1.0.0" };
+        report.initial.plan.selectedTarget.buildIdentity = { status: "not-yet-provable" };
+      },
+    },
+    {
+      name: "wrong installed revision",
+      mutate: (report: UpdateCommandReport) => {
+        report.current = { version: "2.0.0", revision: "unexpected-revision" };
+        report.initial.preflight.installed = report.current;
+        report.initial.plan.selectedTarget.buildIdentity = { status: "not-yet-provable" };
+      },
+    },
+    {
+      name: "advanced child target",
+      mutate: (report: UpdateCommandReport) => {
+        const advanced = { version: "3.0.0" };
+        report.target = advanced;
+        report.initial.preflight.target = advanced;
+        report.initial.plan.selectedTarget.artifact = advanced;
+        report.initial.plan.selectedTarget.buildIdentity = { status: "not-yet-provable" };
+      },
+    },
+  ])("rejects strict successor ownership with $name", async ({ mutate }) => {
+    const outer = probe("update-available");
+    const outerRunner = vi.fn(async (input: ExternalCommandInput) => {
+      if (!input.args?.includes("update")) return commandResult(input);
+      const report = await successfulSuccessorReport(input);
+      mutate(report);
+      return externalResult(input, JSON.stringify(report), 0);
+    });
+
+    const result = await runUpdateCommand(["--json"], options(), {
+      probes: [outer.probe],
+      buildInfo: build(identityA, "1.0.0"),
+      convergenceInspection: inspection(preflight("1.0.0", "2.0.0")),
+      commandRunner: outerRunner,
+    });
+
+    expect(result).toMatchObject({
+      code: 1,
+      output: {
+        status: "failed",
+        artifactApplication: { status: "applied" },
+        error: { code: "UPDATE_SUCCESSOR_BOUNDARY_FAILED" },
+        result: { kind: "execution-failed", stage: "successor-boundary" },
+      },
+    });
+  });
+
+  it.each([
+    {
+      name: "old post-action installed artifact",
+      mutate: (report: UpdateCommandReport) => {
+        if (report.result.kind !== "current-runtime-execution") {
+          throw new Error("expected successor runtime fixture");
+        }
+        report.result.postAction.preflight.installed = { version: "1.0.0" };
+      },
+    },
+    {
+      name: "unknown post-action build identity",
+      mutate: (report: UpdateCommandReport) => {
+        if (report.result.kind !== "current-runtime-execution") {
+          throw new Error("expected successor runtime fixture");
+        }
+        report.result.postAction.plan.selectedTarget.buildIdentity = {
+          status: "not-yet-provable",
+        };
+      },
+    },
+    {
+      name: "contradictory post-action build identity",
+      mutate: (report: UpdateCommandReport) => {
+        if (report.result.kind !== "current-runtime-execution") {
+          throw new Error("expected successor runtime fixture");
+        }
+        report.result.postAction.plan.selectedTarget.buildIdentity = {
+          status: "known",
+          value: identityA,
+        };
+      },
+    },
+    {
+      name: "wrong post-action target and selected artifact",
+      mutate: (report: UpdateCommandReport) => {
+        if (report.result.kind !== "current-runtime-execution") {
+          throw new Error("expected successor runtime fixture");
+        }
+        const wrong = { version: "3.0.0" };
+        report.result.postAction.preflight.target = wrong;
+        report.result.postAction.plan.selectedTarget.artifact = wrong;
+      },
+    },
+  ])("rejects strict successor post-action evidence with $name", async ({ mutate }) => {
+    const outer = probe("update-available");
+    const outerRunner = vi.fn(async (input: ExternalCommandInput) => {
+      if (!input.args?.includes("update")) return commandResult(input);
+      const child = await successorRuntimeResult(input);
+      const report = UpdateCommandReportSchema.parse(JSON.parse(child.stdout));
+      mutate(report);
+      return externalResult(input, JSON.stringify(report), 0);
+    });
+
+    const result = await runUpdateCommand(["--json"], options(), {
+      probes: [outer.probe],
+      buildInfo: build(identityA, "1.0.0"),
+      convergenceInspection: inspection(preflight("1.0.0", "2.0.0")),
+      commandRunner: outerRunner,
+    });
+
+    expect(result).toMatchObject({
+      code: 1,
+      output: {
+        status: "failed",
+        error: { code: "UPDATE_SUCCESSOR_BOUNDARY_FAILED" },
+        result: { kind: "execution-failed", stage: "successor-boundary" },
+      },
+    });
+  });
+
+  it("rejects a pinned successor dry-run preview even when it reports current and exits zero", async () => {
+    const outer = probe("update-available");
+    const outerRunner = vi.fn(async (input: ExternalCommandInput) =>
+      input.args?.includes("update") ? successorPreviewResult(input) : commandResult(input),
+    );
+
+    const result = await runUpdateCommand(["--json"], options(), {
+      probes: [outer.probe],
+      buildInfo: build(identityA, "1.0.0"),
+      convergenceInspection: inspection(preflight("1.0.0", "2.0.0")),
+      commandRunner: outerRunner,
+    });
+
+    expect(result).toMatchObject({
+      code: 1,
+      output: {
+        status: "failed",
+        error: { code: "UPDATE_SUCCESSOR_BOUNDARY_FAILED" },
+        result: { kind: "execution-failed", stage: "successor-boundary" },
+      },
+    });
+  });
+
+  it("rejects a strict pinned deferred report from the successor boundary", async () => {
+    const outer = probe(
+      "update-available",
+      "1.0.0",
+      "2.0.0",
+      ["brew", "upgrade", "station"],
+      "homebrew",
+    );
+    const outerRunner = vi.fn(async (input: ExternalCommandInput) =>
+      input.args?.includes("update") ? pinnedDeferredSuccessorResult(input) : commandResult(input),
+    );
+
+    const result = await runUpdateCommand(
+      ["--json", "--channel", "homebrew", "--drive-package-manager"],
+      options(),
+      {
+        probes: [outer.probe],
+        buildInfo: build(identityA, "1.0.0"),
+        convergenceInspection: inspection(preflight("1.0.0", "2.0.0")),
+        commandRunner: outerRunner,
+      },
+    );
+
+    expect(result).toMatchObject({
+      code: 1,
+      output: {
+        status: "failed",
+        error: { code: "UPDATE_SUCCESSOR_BOUNDARY_FAILED" },
+        result: { kind: "execution-failed", stage: "successor-boundary" },
+      },
+    });
+  });
+
+  it("rejects nested successor runtime execution even when every pinned fact is coherent", async () => {
+    const outer = probe("update-available");
+    const outerRunner = vi.fn(async (input: ExternalCommandInput) =>
+      input.args?.includes("update") ? nestedSuccessorExecutionResult(input) : commandResult(input),
+    );
+
+    const result = await runUpdateCommand(["--json"], options(), {
+      probes: [outer.probe],
+      buildInfo: build(identityA, "1.0.0"),
+      convergenceInspection: inspection(preflight("1.0.0", "2.0.0")),
+      commandRunner: outerRunner,
+    });
+
+    expect(result).toMatchObject({
+      code: 1,
+      output: {
+        status: "failed",
+        error: { code: "UPDATE_SUCCESSOR_BOUNDARY_FAILED" },
+        result: { kind: "execution-failed", stage: "successor-boundary" },
+      },
+    });
+  });
+
+  it.each([
+    { name: "malformed", stdout: "{not-json" },
+    { name: "truncated", stdout: '{"schemaVersion":4' },
+    { name: "multiple JSON values", stdout: "{}\n{}" },
+  ])("rejects $name successor stdout as a boundary failure", async ({ stdout }) => {
+    const outer = probe("update-available");
+    const outerRunner = vi.fn(async (input: ExternalCommandInput) =>
+      input.args?.includes("update") ? externalResult(input, stdout, 0) : commandResult(input),
+    );
+
+    const result = await runUpdateCommand(["--json"], options(), {
+      probes: [outer.probe],
+      buildInfo: build(identityA, "1.0.0"),
+      convergenceInspection: inspection(preflight("1.0.0", "2.0.0")),
+      commandRunner: outerRunner,
+    });
+
+    expect(result).toMatchObject({
+      code: 1,
+      output: {
+        status: "failed",
+        error: { code: "UPDATE_SUCCESSOR_BOUNDARY_FAILED" },
+        result: { kind: "execution-failed", stage: "successor-boundary" },
+      },
+    });
+  });
+
+  it.each([
+    {
       disposition: "blocked" as const,
       successorPreflight: preflight("2.0.0", "2.0.0", {
         observer: {
@@ -1947,19 +2194,148 @@ async function successorResult(
   successorPreflight: UpdateReapRecoveryPreflight,
   forcedExitCode?: 0 | 1,
 ): Promise<ExternalCommandResult> {
+  return successorResultFromInspections(input, [successorPreflight], forcedExitCode);
+}
+
+async function successorResultFromInspections(
+  input: ExternalCommandInput,
+  successorPreflights: UpdateReapRecoveryPreflight[],
+  forcedExitCode?: 0 | 1,
+): Promise<ExternalCommandResult> {
   const successor = probe("current", "2.0.0", "2.0.0");
   const updateIndex = input.args?.indexOf("update") ?? -1;
   if (updateIndex < 0 || input.args === undefined) throw new Error("missing successor update argv");
   const nested = await runUpdateCommand(input.args.slice(updateIndex + 1), options(), {
     probes: [successor.probe],
     buildInfo: build(identityB, "2.0.0"),
-    convergenceInspection: inspection(successorPreflight),
+    convergenceInspection: sequenceInspection(successorPreflights),
     commandRunner: commandResult,
   });
   return externalResult(
     input,
     JSON.stringify(nested.output),
     forcedExitCode === undefined ? nested.code : forcedExitCode,
+  );
+}
+
+async function successfulSuccessorReport(
+  input: ExternalCommandInput,
+): Promise<UpdateCommandReport> {
+  const child = await successorResult(
+    input,
+    preflight("2.0.0", "2.0.0", {
+      observer: matchingObserver(identityB),
+      host: matchingHost(identityB),
+    }),
+  );
+  return UpdateCommandReportSchema.parse(JSON.parse(child.stdout));
+}
+
+function successorRuntimeResult(input: ExternalCommandInput): Promise<ExternalCommandResult> {
+  return successorResultFromInspections(input, [
+    preflight("2.0.0", "2.0.0", {
+      observer: {
+        ...matchingObserver(identityA),
+        relation: "different",
+      },
+      host: matchingHost(identityB),
+    }),
+    preflight("2.0.0", "2.0.0", {
+      observer: matchingObserver(identityB),
+      host: matchingHost(identityB),
+    }),
+  ]);
+}
+
+async function successorPreviewResult(input: ExternalCommandInput): Promise<ExternalCommandResult> {
+  const successor = probe("current", "2.0.0", "2.0.0");
+  const updateIndex = input.args?.indexOf("update") ?? -1;
+  if (updateIndex < 0 || input.args === undefined) throw new Error("missing successor update argv");
+  const nested = await runUpdateCommand(
+    [...input.args.slice(updateIndex + 1), "--dry-run"],
+    options(),
+    {
+      probes: [successor.probe],
+      buildInfo: build(identityB, "2.0.0"),
+      convergenceInspection: inspection(
+        preflight("2.0.0", "2.0.0", {
+          observer: matchingObserver(identityB),
+          host: matchingHost(identityB),
+        }),
+      ),
+      commandRunner: commandResult,
+    },
+  );
+  return externalResult(input, JSON.stringify(nested.output), nested.code);
+}
+
+async function pinnedDeferredSuccessorResult(
+  input: ExternalCommandInput,
+): Promise<ExternalCommandResult> {
+  const deferred = probe(
+    "update-available",
+    "1.0.0",
+    "2.0.0",
+    ["brew", "upgrade", "station"],
+    "homebrew",
+  );
+  const nested = await runUpdateCommand(["--json", "--channel", "homebrew"], options(), {
+    probes: [deferred.probe],
+    buildInfo: build(identityA, "1.0.0"),
+    convergenceInspection: inspection(preflight("1.0.0", "2.0.0")),
+    commandRunner: commandResult,
+  });
+  const report = reportFrom(nested);
+  const pinned = { version: "2.0.0" };
+  report.current = pinned;
+  report.target = pinned;
+  report.initial.evaluator = "successor-cli";
+  report.initial.preflight.installed = pinned;
+  report.initial.preflight.target = pinned;
+  report.initial.plan.selectedTarget.artifact = pinned;
+  report.initial.plan.selectedTarget.buildIdentity = { status: "known", value: identityB };
+  return externalResult(
+    input,
+    JSON.stringify(UpdateCommandReportSchema.parse(report)),
+    nested.code,
+  );
+}
+
+async function nestedSuccessorExecutionResult(
+  input: ExternalCommandInput,
+): Promise<ExternalCommandResult> {
+  const nestedOuter = probe("update-available");
+  const nested = await runUpdateCommand(["--json"], options(), {
+    probes: [nestedOuter.probe],
+    buildInfo: build(identityA, "1.0.0"),
+    convergenceInspection: inspection(preflight("1.0.0", "2.0.0")),
+    commandRunner: async (nestedInput) =>
+      nestedInput.args?.includes("update")
+        ? successorResult(
+            nestedInput,
+            preflight("2.0.0", "2.0.0", {
+              observer: matchingObserver(identityB),
+              host: matchingHost(identityB),
+            }),
+          )
+        : commandResult(nestedInput),
+  });
+  const report = reportFrom(nested);
+  if (report.result.kind !== "successor-runtime-execution") {
+    throw new Error("expected nested successor execution fixture");
+  }
+  const pinned = { version: "2.0.0" };
+  report.current = pinned;
+  report.initial.evaluator = "successor-cli";
+  report.initial.preflight.installed = pinned;
+  report.initial.plan.selectedTarget.buildIdentity = { status: "known", value: identityB };
+  const artifactAudit = report.result.actionAudits[0];
+  if (artifactAudit === undefined) throw new Error("missing artifact audit fixture");
+  artifactAudit.executor = "successor-cli";
+  return externalResult(
+    input,
+    JSON.stringify(UpdateCommandReportSchema.parse(report)),
+    nested.code,
   );
 }
 

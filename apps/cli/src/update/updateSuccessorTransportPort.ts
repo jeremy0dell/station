@@ -12,7 +12,8 @@ export type UpdateSuccessorTransportInput = {
 /**
  * DRIVEN PORT
  *
- * Executes one pinned successor evaluator and returns its strict public v4 update report.
+ * Executes one pinned successor evaluator and returns a strict v4 report only after exact selected
+ * channel, artifact, immutable build, evaluator, result-kind, and exit-status validation.
  */
 export interface UpdateSuccessorTransportPort {
   run(input: UpdateSuccessorTransportInput): Promise<UpdateCommandReport>;

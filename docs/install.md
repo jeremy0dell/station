@@ -384,7 +384,12 @@ does not rerun latest discovery, remote pagination, or target availability
 checks after the artifact is committed. It then performs a fresh inspection,
 executes its own safe hook, Observer, Host, and reconcile decisions in canonical
 order, and verifies a final no-op plan. Current-artifact actions stay with the
-current launcher. Host execution cannot change action after inspection: idle
+current launcher. The incumbent accepts the successor result only when its
+channel, installed and target artifacts, every nested convergence artifact,
+`successor-cli` evaluator, and one known immutable build identity still match
+the inherited pin. Preview, deferral, nested artifact application, malformed
+JSON, and report/exit contradictions fail as successor-boundary errors. Host
+execution cannot change action after inspection: idle
 replacement requires the exact Host build commitment to remain empty and never
 falls through to handoff, while handoff requires the exact non-empty immutable
 inventory and never falls through to replacement. A typed drift refusal causes

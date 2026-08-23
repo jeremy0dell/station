@@ -14765,7 +14765,7 @@
       "declaration": "createUpdateSuccessorTransportAdapter",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Owns pinned successor argv, strict JSON transport, redaction, and child exit consistency.",
+      "purpose": "Owns pinned successor argv, strict JSON transport, exact target-ownership validation, redaction, and child exit consistency.",
       "dependencies": [
         {
           "path": "apps/cli/src/update/publicUpdateReportAdapter.ts",
@@ -14795,7 +14795,7 @@
       "declaration": "UpdateSuccessorTransportPort",
       "kind": "interface",
       "role": "DRIVEN PORT",
-      "purpose": "Executes one pinned successor evaluator and returns its strict public v4 update report.",
+      "purpose": "Executes one pinned successor evaluator and returns a strict v4 report only after exact selected channel, artifact, immutable build, evaluator, result-kind, and exit-status validation.",
       "dependencies": []
     },
     {
