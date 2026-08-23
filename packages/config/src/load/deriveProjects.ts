@@ -5,6 +5,7 @@ import { ConfigDefaultsSchema, ProjectDefaultsSchema } from "../schema.js";
 import type { MutableRecord } from "./common.js";
 import { isRecord } from "./common.js";
 import { ConfigError, validationError } from "./errors.js";
+import { expandConfigPaths } from "./expandPaths.js";
 import { resolveConfigPath } from "./paths.js";
 
 type DeriveProjectOptions = { configPath: string; configDir: string; homeDir: string };
@@ -40,20 +41,14 @@ export function deriveProjectConfig(
     });
   }
 
-  const observer = isRecord(normalizedConfig.observer)
-    ? expandObserverPaths(normalizedConfig.observer, options)
-    : normalizedConfig.observer;
-  const worktree = isRecord(normalizedConfig.worktree)
-    ? expandWorktreePaths(normalizedConfig.worktree, options)
-    : normalizedConfig.worktree;
+  const expandedConfig = expandConfigPaths(normalizedConfig, options);
+  const worktree = expandedConfig.worktree;
   const globalWorktrunkManagedRoot = globalManagedRoot(worktree);
   const globalWorktrunkProjectDefaults = globalProjectWorktrunkDefaults(worktree);
   const managedRootSegments = projectManagedRootSegments(rawProjects);
 
   return {
-    ...normalizedConfig,
-    observer,
-    worktree,
+    ...expandedConfig,
     projects: rawProjects.map((project) =>
       deriveSingleProject(
         project,
@@ -164,70 +159,6 @@ function deriveProjectWorktrunk(
   }
 
   return worktrunk;
-}
-
-function expandObserverPaths(
-  observer: MutableRecord,
-  options: { configDir: string; homeDir: string },
-): MutableRecord {
-  const expandedObserver = { ...observer };
-
-  if (typeof observer.socketPath === "string") {
-    expandedObserver.socketPath = resolveConfigPath(
-      observer.socketPath,
-      options.homeDir,
-      options.configDir,
-    );
-  }
-
-  if (typeof observer.stateDir === "string") {
-    expandedObserver.stateDir = resolveConfigPath(
-      observer.stateDir,
-      options.homeDir,
-      options.configDir,
-    );
-  }
-
-  return expandedObserver;
-}
-
-function expandWorktreePaths(
-  worktree: MutableRecord,
-  options: { configDir: string; homeDir: string },
-): MutableRecord {
-  const worktrunk = isRecord(worktree.worktrunk)
-    ? expandWorktrunkPaths(worktree.worktrunk, options)
-    : worktree.worktrunk;
-
-  return {
-    ...worktree,
-    ...(worktrunk === undefined ? {} : { worktrunk }),
-  };
-}
-
-function expandWorktrunkPaths(
-  worktrunk: MutableRecord,
-  options: { configDir: string; homeDir: string },
-): MutableRecord {
-  const expandedWorktrunk = { ...worktrunk };
-
-  if (typeof worktrunk.configPath === "string") {
-    expandedWorktrunk.configPath = resolveConfigPath(
-      worktrunk.configPath,
-      options.homeDir,
-      options.configDir,
-    );
-  }
-
-  if (typeof worktrunk.managedRoot === "string") {
-    expandedWorktrunk.managedRoot = resolveConfigPath(
-      worktrunk.managedRoot,
-      options.homeDir,
-      options.configDir,
-    );
-  }
-
-  return expandedWorktrunk;
 }
 
 function globalManagedRoot(worktree: unknown): string | undefined {

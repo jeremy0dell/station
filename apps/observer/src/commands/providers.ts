@@ -3,6 +3,8 @@ import type {
   HarnessProvider,
   ProviderDoctorContext,
   SafeError,
+  TerminalPlacementPort,
+  TerminalPlacementRequest,
   TerminalProvider,
 } from "@station/contracts";
 import { commandLine } from "@station/runtime";
@@ -23,6 +25,33 @@ export function resolveTerminalProviderOrThrow(
     provider: providerId,
   };
   throw error;
+}
+
+/** Reject terminal lifecycle commands unless the selected adapter owns placement proof. */
+export function resolveTerminalPlacementPortOrThrow(
+  providers: ProviderRegistry,
+  providerId: string,
+  request: TerminalPlacementRequest,
+): TerminalPlacementPort {
+  resolveTerminalProviderOrThrow(providers, providerId);
+  if (request.intent === "sibling" && request.source.provider !== providerId) {
+    throw {
+      tag: "TerminalProviderError",
+      code: "TERMINAL_PLACEMENT_PROVIDER_MISMATCH",
+      message: "The placement source and selected terminal provider do not match.",
+      provider: providerId,
+    } satisfies SafeError;
+  }
+  const placement = providers.terminalPlacements.get(providerId);
+  if (placement?.supportedIntents.includes(request.intent)) {
+    return placement;
+  }
+  throw {
+    tag: "TerminalProviderError",
+    code: "TERMINAL_PLACEMENT_UNSUPPORTED",
+    message: "The requested terminal provider does not support this session placement.",
+    provider: providerId,
+  } satisfies SafeError;
 }
 
 export function resolveHarnessProviderOrThrow(

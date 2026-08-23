@@ -73,6 +73,7 @@ export function popupCommandInput(
 ): TmuxCommandInput {
   const input: TmuxCommandInput = {
     command,
+    inheritTmuxEnvironment: true,
   };
   if (options.runner !== undefined) {
     input.runner = options.runner;
@@ -189,12 +190,15 @@ export async function resolveCurrentTmuxClientId(
   if (input.env.TMUX === undefined || input.env.TMUX.length === 0) {
     return undefined;
   }
-  return resolveTmuxOption(input, {
-    args: ["display-message", "-p", "#{client_name}"],
-    operation: "provider.tmux.popup.currentClient",
-    message: "tmux failed to resolve the current client for the station popup.",
-    timeoutMessage: "tmux current client lookup timed out.",
-  });
+  return resolveTmuxOption(
+    { ...input, inheritTmuxEnvironment: true },
+    {
+      args: ["display-message", "-p", "#{client_name}"],
+      operation: "provider.tmux.popup.currentClient",
+      message: "tmux failed to resolve the current client for the station popup.",
+      timeoutMessage: "tmux current client lookup timed out.",
+    },
+  );
 }
 
 export async function resolveCurrentTmuxClient(
@@ -203,11 +207,14 @@ export async function resolveCurrentTmuxClient(
   if (input.env.TMUX === undefined || input.env.TMUX.length === 0) {
     return undefined;
   }
-  const value = await resolveTmuxOption(input, {
-    args: ["display-message", "-p", "#{client_pid}\t#{client_name}\t#{client_session}"],
-    operation: "provider.tmux.popup.currentClientIdentity",
-    message: "tmux failed to resolve the current client identity for the station popup.",
-    timeoutMessage: "tmux current client identity lookup timed out.",
-  });
+  const value = await resolveTmuxOption(
+    { ...input, inheritTmuxEnvironment: true },
+    {
+      args: ["display-message", "-p", "#{client_pid}\t#{client_name}\t#{client_session}"],
+      operation: "provider.tmux.popup.currentClientIdentity",
+      message: "tmux failed to resolve the current client identity for the station popup.",
+      timeoutMessage: "tmux current client identity lookup timed out.",
+    },
+  );
   return value === undefined ? undefined : parseTmuxClientIdentity(value);
 }

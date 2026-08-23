@@ -102,6 +102,7 @@ describeRealCursor("real Cursor session.create launch lane", () => {
         createPath: () => worktreePath,
       }),
       terminal,
+      terminalPlacements: [terminal.placement],
       harnesses: [
         createCursorHarnessProvider({
           command: shimPath,
@@ -145,6 +146,7 @@ describeRealCursor("real Cursor session.create launch lane", () => {
             provider: "tmux",
             layout: "agent-build-shell",
           },
+          placement: { intent: "detached" },
         },
       });
       await queue.drain();

@@ -28,6 +28,7 @@
       "sessionPrefix": "station",
       "topology": "workbench",
       "workbenchSession": "station",
+      "workbenchSocketPath": "~/.local/state/station/tmux.sock",
       "windowNaming": "project-branch",
       "primaryAgentPane": true,
       "popupWidth": "50%",

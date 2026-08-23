@@ -3,6 +3,7 @@ import type {
   HarnessEventReport,
   ProviderHookEvent,
   StationCommand,
+  TerminalCallerContextRequest,
 } from "@station/contracts";
 import { STATION_SCHEMA_VERSION } from "@station/contracts";
 import {
@@ -19,9 +20,10 @@ import { createTempSocketPath } from "../../../../tests/support/sockets";
 import { createFakeObserverApi, emptySnapshot, ids, protocolTestNow } from "../support/fixtures.js";
 
 describe("protocol client/server", () => {
-  it("routes health, snapshot, dispatch, get, reconcile, and hook ingestion over a socket", async () => {
+  it("routes health, recovery, current session, snapshot, dispatch, get, reconcile, and hook ingestion over a socket", async () => {
     const { socketPath } = await createTempSocketPath();
     const commands = new Map<string, CommandRecord>();
+    const currentCallers: TerminalCallerContextRequest[] = [];
     const snapshot = emptySnapshot();
     const api = createFakeObserverApi({
       snapshot,
@@ -96,6 +98,19 @@ describe("protocol client/server", () => {
         return { commandId: record.id, accepted: true, status: "accepted" };
       },
       getCommand: async (commandId) => commands.get(commandId),
+      getCurrentSessionContext: async (caller) => {
+        currentCallers.push(caller);
+        return {
+          source: {
+            provider: "tmux",
+            targetId: "tmux:generation:$1:@2:%3",
+            generation: "generation",
+            authorityId: "authority",
+            expiresAt: protocolTestNow,
+          },
+          presentation: "presented",
+        };
+      },
     });
     const server = await startProtocolServer({ socketPath, api });
     const client = createObserverClient({ socketPath, requestId: ids("req") });
@@ -146,6 +161,15 @@ describe("protocol client/server", () => {
         },
       ],
     });
+    const caller: TerminalCallerContextRequest = {
+      process: { pid: 4321, startToken: "process-start" },
+      claims: { TMUX: "/tmp/tmux.sock,123,0", TMUX_PANE: "%3" },
+    };
+    await expect(client.getCurrentSessionContext(caller)).resolves.toMatchObject({
+      source: { provider: "tmux", authorityId: "authority" },
+      presentation: "presented",
+    });
+    expect(currentCallers).toEqual([caller]);
 
     const command: StationCommand = {
       type: "worktree.create",

@@ -139,6 +139,7 @@ export const TmuxConfigSchema = z
     sessionPrefix: nonEmptyStringSchema.optional(),
     topology: z.enum(["workbench"]).optional(),
     workbenchSession: nonEmptyStringSchema.optional(),
+    workbenchSocketPath: nonEmptyStringSchema.optional(),
     windowNaming: z.enum(["project-branch"]).optional(),
     primaryAgentPane: z.boolean().optional(),
     popupWidth: nonEmptyStringSchema.optional(),

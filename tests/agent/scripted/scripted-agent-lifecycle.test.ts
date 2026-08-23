@@ -176,6 +176,7 @@ describe("scripted agent lifecycle", () => {
     const providers = new ProviderRegistry({
       worktree: worktreeProvider,
       terminal,
+      terminalPlacements: [terminal.placement],
       harnesses: [provider],
     });
     const core = createObserverCore({
@@ -205,6 +206,7 @@ describe("scripted agent lifecycle", () => {
         branch: "task",
         harness: { provider: "scripted", mode: "interactive" },
         terminal: { provider: "fake-terminal", layout: "agent-build-shell" },
+        placement: { intent: "detached" },
       },
     });
     await queue.drain();

@@ -820,6 +820,12 @@
           "purpose": null
         },
         {
+          "name": "resolveTerminalPlacementPortOrThrow",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "resolveTerminalProviderOrThrow",
           "kind": "function",
           "role": null,
@@ -842,6 +848,8 @@
             "HarnessProvider",
             "ProviderDoctorContext",
             "SafeError",
+            "TerminalPlacementPort",
+            "TerminalPlacementRequest",
             "TerminalProvider"
           ]
         },
@@ -1436,7 +1444,7 @@
           "name": "createSessionCreateHandler",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Preflights the selected harness, creates a session worktree on its generated branch, durably seeds its independent title with optional atomic root Group placement or inline Group creation, and launches its primary agent; cleanup removes owned placement only after verified rollback."
+          "purpose": "Preflights the selected harness, creates a session worktree on its generated branch, durably seeds its independent title with optional atomic root Group placement or inline Group creation, and launches its primary agent only after explicit placement authorization before worktree mutation and revalidation before terminal mutation; rollback removes only state owned by this command."
         },
         {
           "name": "CreateSessionCreateHandlerOptions",
@@ -1462,7 +1470,11 @@
           "specifier": "../providers.js",
           "resolvedPath": "apps/observer/src/commands/providers.ts",
           "edgeKind": "runtime",
-          "bindings": ["resolveHarnessProviderOrThrow", "resolveTerminalProviderOrThrow"]
+          "bindings": [
+            "resolveHarnessProviderOrThrow",
+            "resolveTerminalPlacementPortOrThrow",
+            "resolveTerminalProviderOrThrow"
+          ]
         },
         {
           "specifier": "../queue.js",
@@ -1484,6 +1496,7 @@
             "defaultSessionCommandIdFactory",
             "discardSessionSeedBestEffort",
             "findProjectOrThrow",
+            "isTerminalCleanupUncertain",
             "publishSessionCreated",
             "removeWorktreeBestEffort",
             "runProviderMutation",
@@ -1555,7 +1568,7 @@
           "name": "createSessionForkHandler",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Resolves and preflights the selected harness, forks an existing worktree onto an internal branch, and atomically seeds its title with the source session's current Group when requested before launching a fresh agent; cleanup retires only fork-owned state after verified rollback."
+          "purpose": "Resolves and preflights the selected harness, forks an existing worktree onto an internal branch, and atomically seeds its title with the source session's current Group when requested before launching a fresh agent with pre-mutation placement authorization and provider-side revalidation immediately before terminal mutation; cleanup retires only fork-owned state after verified rollback."
         },
         {
           "name": "CreateSessionForkHandlerOptions",
@@ -1581,7 +1594,11 @@
           "specifier": "../providers.js",
           "resolvedPath": "apps/observer/src/commands/providers.ts",
           "edgeKind": "runtime",
-          "bindings": ["resolveHarnessProviderOrThrow", "resolveTerminalProviderOrThrow"]
+          "bindings": [
+            "resolveHarnessProviderOrThrow",
+            "resolveTerminalPlacementPortOrThrow",
+            "resolveTerminalProviderOrThrow"
+          ]
         },
         {
           "specifier": "../queue.js",
@@ -1604,6 +1621,7 @@
             "defaultSessionCommandIdFactory",
             "discardSessionSeedBestEffort",
             "findProjectOrThrow",
+            "isTerminalCleanupUncertain",
             "publishSessionCreated",
             "rememberedHarnessProviderForWorktree",
             "removeWorktreeBestEffort",
@@ -2053,6 +2071,12 @@
           "purpose": null
         },
         {
+          "name": "isTerminalCleanupUncertain",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "launchHarnessInTerminal",
           "kind": "function",
           "role": null,
@@ -2247,7 +2271,12 @@
           "specifier": "@station/runtime",
           "resolvedPath": "packages/runtime/src/index.ts",
           "edgeKind": "runtime",
-          "bindings": ["runRuntimeBoundary", "systemClock", "toIsoTimestamp"]
+          "bindings": [
+            "runRuntimeBoundary",
+            "safeErrorFromUnknown",
+            "systemClock",
+            "toIsoTimestamp"
+          ]
         },
         {
           "specifier": "@station/runtime",
@@ -2658,8 +2687,8 @@
         {
           "name": "ensureAgentWorkspace",
           "kind": "function",
-          "role": null,
-          "purpose": null
+          "role": "USE CASE",
+          "purpose": "Opens and launches an agent workspace. When placement is supplied, the terminal adapter alone revalidates the authority immediately before target mutation; failures close only the target opened by this invocation and never fall back to a current, recent, or focused terminal."
         },
         {
           "name": "focusTerminal",
@@ -2743,10 +2772,14 @@
             "BuildHarnessLaunchRequest",
             "HarnessProvider",
             "HarnessResumeOptions",
+            "OpenPlacedWorkspaceResult",
+            "OpenWorkspaceResult",
             "ProviderProjectConfig",
             "SafeError",
             "SessionView",
             "TerminalFocusOrigin",
+            "TerminalPlacementPort",
+            "TerminalPlacementRequest",
             "TerminalProvider",
             "TerminalState",
             "TerminalTargetObservation",
@@ -2758,7 +2791,7 @@
           "specifier": "@station/runtime",
           "resolvedPath": "packages/runtime/src/index.ts",
           "edgeKind": "runtime",
-          "bindings": ["systemClock", "toIsoTimestamp"]
+          "bindings": ["safeErrorFromUnknown", "systemClock", "toIsoTimestamp"]
         },
         {
           "specifier": "@station/runtime",
@@ -4560,8 +4593,8 @@
         {
           "name": "ensureAgentWorkspace",
           "kind": "function",
-          "role": null,
-          "purpose": null
+          "role": "USE CASE",
+          "purpose": "Opens and launches an agent workspace. When placement is supplied, the terminal adapter alone revalidates the authority immediately before target mutation; failures close only the target opened by this invocation and never fall back to a current, recent, or focused terminal."
         },
         {
           "name": "EventAndObservationIngressDedupeResult",
@@ -9313,6 +9346,7 @@
             "ProviderHookAdapter",
             "ProviderId",
             "RepositoryProvider",
+            "TerminalPlacementPort",
             "TerminalProvider",
             "WorktreeProvider"
           ]
@@ -10614,6 +10648,12 @@
           "resolvedPath": "apps/observer/src/runtime/reconcileScheduler.ts",
           "edgeKind": "type-only",
           "bindings": ["CreateReconcileSchedulerOptions"]
+        },
+        {
+          "specifier": "./sessionContext.js",
+          "resolvedPath": "apps/observer/src/runtime/sessionContext.ts",
+          "edgeKind": "runtime",
+          "bindings": ["resolveCurrentSessionContext"]
         },
         {
           "specifier": "./spoolDrain.js",
@@ -12425,6 +12465,41 @@
       ]
     },
     {
+      "path": "apps/observer/src/runtime/sessionContext.ts",
+      "exports": [
+        {
+          "name": "resolveCurrentSessionContext",
+          "kind": "function",
+          "role": "USE CASE",
+          "purpose": "Resolves one caller's terminal claim into an adapter-validated authority and correlates its exact public target with the canonical session snapshot. Raw claims and provider proof stay inside the terminal adapter; ambiguous, absent, stale, or mismatched claims fail closed."
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "../providers/registry.js",
+          "resolvedPath": "apps/observer/src/providers/registry.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ProviderRegistry"]
+        },
+        {
+          "specifier": "../reconcile/core.js",
+          "resolvedPath": "apps/observer/src/reconcile/core.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ObserverCore"]
+        },
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "type-only",
+          "bindings": [
+            "CurrentSessionContext",
+            "TerminalCallerContextRequest",
+            "TerminalPlacementPort"
+          ]
+        }
+      ]
+    },
+    {
       "path": "apps/observer/src/runtime/socketOwnership.ts",
       "exports": [
         {
@@ -13272,6 +13347,29 @@
         {
           "path": "integrations/terminal/tmux/src/popup/index.ts",
           "declaration": "openTmuxPopup",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "packages/protocol/src/client.ts",
+          "declaration": "createObserverClient",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
+      "path": "apps/cli/src/commands/session.ts",
+      "declaration": "runSessionCommand",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Collects the invoking process identity and composition-supplied terminal claims for the Observer's provider-bound current-session query. The command does not know provider claim keys.",
+      "dependencies": [
+        {
+          "path": "apps/cli/src/observerProcess.ts",
+          "declaration": "startObserver",
           "kind": "function",
           "role": "ADAPTER",
           "edgeKind": "runtime"
@@ -14158,7 +14256,7 @@
       "declaration": "createProviderRegistry",
       "kind": "function",
       "role": "COMPOSITION ROOT",
-      "purpose": "Constructs concrete provider adapters, including the packaged Pi extension path plus canonical provider-hook launcher and artifact owner supplied by CLI composition, and assigns their Observer roles.",
+      "purpose": "Constructs concrete provider adapters, including the packaged Pi extension path plus canonical provider-hook launcher and artifact owner supplied by CLI composition, and assigns their Observer roles. Terminal placement authority remains in those adapters; Observer use cases receive only the driven port.",
       "dependencies": [
         {
           "path": "integrations/harness/claude/src/provider.ts",
@@ -14233,6 +14331,13 @@
         {
           "path": "packages/contracts/src/providers.ts",
           "declaration": "RepositoryProvider",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        },
+        {
+          "path": "packages/contracts/src/providers.ts",
+          "declaration": "TerminalPlacementPort",
           "kind": "interface",
           "role": "DRIVEN PORT",
           "edgeKind": "type-only"
@@ -14762,16 +14867,32 @@
       "declaration": "createSessionCreateHandler",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Preflights the selected harness, creates a session worktree on its generated branch, durably seeds its independent title with optional atomic root Group placement or inline Group creation, and launches its primary agent; cleanup removes owned placement only after verified rollback.",
-      "dependencies": []
+      "purpose": "Preflights the selected harness, creates a session worktree on its generated branch, durably seeds its independent title with optional atomic root Group placement or inline Group creation, and launches its primary agent only after explicit placement authorization before worktree mutation and revalidation before terminal mutation; rollback removes only state owned by this command.",
+      "dependencies": [
+        {
+          "path": "apps/observer/src/commands/terminalOperations.ts",
+          "declaration": "ensureAgentWorkspace",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
+        }
+      ]
     },
     {
       "path": "apps/observer/src/commands/session/fork.ts",
       "declaration": "createSessionForkHandler",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Resolves and preflights the selected harness, forks an existing worktree onto an internal branch, and atomically seeds its title with the source session's current Group when requested before launching a fresh agent; cleanup retires only fork-owned state after verified rollback.",
-      "dependencies": []
+      "purpose": "Resolves and preflights the selected harness, forks an existing worktree onto an internal branch, and atomically seeds its title with the source session's current Group when requested before launching a fresh agent with pre-mutation placement authorization and provider-side revalidation immediately before terminal mutation; cleanup retires only fork-owned state after verified rollback.",
+      "dependencies": [
+        {
+          "path": "apps/observer/src/commands/terminalOperations.ts",
+          "declaration": "ensureAgentWorkspace",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
+        }
+      ]
     },
     {
       "path": "apps/observer/src/commands/session/importRecoveryHandle.ts",
@@ -14805,6 +14926,13 @@
       "purpose": "Serializes recovery with close for one worktree, binds to its canonical open Station session when present, then validates and preflights provider-native resume. Explicit imported handles may seed their absent session identity; ended or contradictory local lifecycle is never reopened. Failed cleanup discards only a session seeded by this command.",
       "dependencies": [
         {
+          "path": "apps/observer/src/commands/terminalOperations.ts",
+          "declaration": "ensureAgentWorkspace",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
+        },
+        {
           "path": "apps/observer/src/sessionRecovery.ts",
           "declaration": "resolveSessionRecovery",
           "kind": "function",
@@ -14819,7 +14947,15 @@
       "kind": "function",
       "role": "USE CASE",
       "purpose": "Serializes fresh agent launch against lifecycle mutation for one worktree. Ordinary launch seeds a new Station session, while identity-bound fresh-start consent retires the retained provider and terminal execution before launching under the same durable session identity. Failed ordinary launches discard only their seed; confirmed fresh-start failures retain canonical session state.",
-      "dependencies": []
+      "dependencies": [
+        {
+          "path": "apps/observer/src/commands/terminalOperations.ts",
+          "declaration": "ensureAgentWorkspace",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
+        }
+      ]
     },
     {
       "path": "apps/observer/src/commands/sessionGroups.ts",
@@ -14831,6 +14967,43 @@
         {
           "path": "apps/observer/src/persistence/ports.ts",
           "declaration": "SessionGroupStore",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
+      "path": "apps/observer/src/commands/terminalOperations.ts",
+      "declaration": "ensureAgentWorkspace",
+      "kind": "function",
+      "role": "USE CASE",
+      "purpose": "Opens and launches an agent workspace. When placement is supplied, the terminal adapter alone revalidates the authority immediately before target mutation; failures close only the target opened by this invocation and never fall back to a current, recent, or focused terminal.",
+      "dependencies": [
+        {
+          "path": "apps/observer/src/stationLogger.ts",
+          "declaration": "StationLogger",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        },
+        {
+          "path": "packages/contracts/src/providers.ts",
+          "declaration": "HarnessProvider",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        },
+        {
+          "path": "packages/contracts/src/providers.ts",
+          "declaration": "TerminalPlacementPort",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        },
+        {
+          "path": "packages/contracts/src/providers.ts",
+          "declaration": "TerminalProvider",
           "kind": "interface",
           "role": "DRIVEN PORT",
           "edgeKind": "type-only"
@@ -15430,6 +15603,13 @@
         {
           "path": "apps/observer/src/runtime/reconcileExecutor.ts",
           "declaration": "runReconcile",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/observer/src/runtime/sessionContext.ts",
+          "declaration": "resolveCurrentSessionContext",
           "kind": "function",
           "role": "USE CASE",
           "edgeKind": "runtime"
@@ -16050,6 +16230,22 @@
       ]
     },
     {
+      "path": "apps/observer/src/runtime/sessionContext.ts",
+      "declaration": "resolveCurrentSessionContext",
+      "kind": "function",
+      "role": "USE CASE",
+      "purpose": "Resolves one caller's terminal claim into an adapter-validated authority and correlates its exact public target with the canonical session snapshot. Raw claims and provider proof stay inside the terminal adapter; ambiguous, absent, stale, or mismatched claims fail closed.",
+      "dependencies": [
+        {
+          "path": "packages/contracts/src/providers.ts",
+          "declaration": "TerminalPlacementPort",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
       "path": "apps/observer/src/runtime/spoolDrain.ts",
       "declaration": "createSpoolDrainer",
       "kind": "function",
@@ -16430,6 +16626,22 @@
       ]
     },
     {
+      "path": "integrations/terminal/tmux/src/placement/service.ts",
+      "declaration": "TmuxPlacementService",
+      "kind": "class",
+      "role": "ADAPTER",
+      "purpose": "Proves caller-owned tmux topology on one configured endpoint and applies one-shot sibling or source-free detached placement with exact rollback authority.",
+      "dependencies": [
+        {
+          "path": "packages/contracts/src/providers.ts",
+          "declaration": "TerminalPlacementPort",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
       "path": "integrations/terminal/tmux/src/popup/fastBinding.ts",
       "declaration": "buildManagedFastPopupRunShellCommand",
       "kind": "function",
@@ -16452,6 +16664,13 @@
       "role": "ADAPTER",
       "purpose": "Translates Station terminal operations into tmux-owned topology, durable process launch, and commands.",
       "dependencies": [
+        {
+          "path": "integrations/terminal/tmux/src/placement/service.ts",
+          "declaration": "TmuxPlacementService",
+          "kind": "class",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
         {
           "path": "packages/contracts/src/providers.ts",
           "declaration": "TerminalProvider",
@@ -16529,7 +16748,7 @@
       "declaration": "ObserverApi",
       "kind": "type",
       "role": "DRIVING PORT",
-      "purpose": "Exposes Observer state, recovery-readiness, coherent recovery-inventory, and read-only recovery-assessment queries, plus handshakes, ingress reports, maintenance, and lifecycle operations to external actors.",
+      "purpose": "Exposes Observer state, recovery-readiness, coherent recovery-inventory, read-only recovery-assessment, and transient current-session queries, plus handshakes, ingress reports, maintenance, and lifecycle operations to external actors.",
       "dependencies": []
     },
     {
@@ -16574,10 +16793,18 @@
     },
     {
       "path": "packages/contracts/src/providers.ts",
+      "declaration": "TerminalPlacementPort",
+      "kind": "interface",
+      "role": "DRIVEN PORT",
+      "purpose": "Resolves a caller claim into provider-private proof and a short-lived public authority. Claims are merely hints from process environment; adapters prove live topology and bounded process ancestry before minting authority. A presented placement is validated once before worktree mutation and again in `openPlacedWorkspace` immediately before terminal mutation. Implementations must reject expiry, generation change, topology mismatch, and unknown intent; they must never fall back to a current, recent, focused, or configured target.",
+      "dependencies": []
+    },
+    {
+      "path": "packages/contracts/src/providers.ts",
       "declaration": "TerminalProvider",
       "kind": "interface",
       "role": "DRIVEN PORT",
-      "purpose": "Supplies terminal topology and lifecycle through provider-owned target identities without exposing provider mechanics.",
+      "purpose": "Supplies ordinary terminal topology and lifecycle through provider-owned target identities without exposing provider mechanics. Caller-relative placement is a separate optional role.",
       "dependencies": []
     },
     {

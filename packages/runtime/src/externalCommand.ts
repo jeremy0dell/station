@@ -34,6 +34,8 @@ export type ExternalCommandRunner = (input: ExternalCommandInput) => Promise<Ext
 export type ExternalCommandInput = {
   command: string;
   args?: string[];
+  /** Optional safe rendering of args for diagnostics; execution still uses `args`. */
+  displayArgs?: string[];
   cwd?: string;
   env?: Record<string, string>;
   unsetEnv?: readonly string[];
@@ -266,7 +268,10 @@ export async function resolveExecutablePath(
 
 export function externalCommandErrorFromUnknown(
   error: unknown,
-  input: Pick<ExternalCommandInput, "command" | "args" | "cwd" | "env" | "unsetEnv">,
+  input: Pick<
+    ExternalCommandInput,
+    "command" | "args" | "displayArgs" | "cwd" | "env" | "unsetEnv"
+  >,
   cwdMissing = false,
 ): ExternalCommandError {
   const fallback = externalCommandFallback("EXTERNAL_COMMAND_FAILED", "External command failed.");
@@ -356,8 +361,10 @@ function externalCommandMessage(error: unknown, safeError: RuntimeSafeError): st
   return isAbortLikeError(error) ? "External command was aborted." : safeError.message;
 }
 
-function formatCommandForError(input: Pick<ExternalCommandInput, "command" | "args">): string {
-  const parts = [input.command, ...(input.args ?? [])];
+function formatCommandForError(
+  input: Pick<ExternalCommandInput, "command" | "args" | "displayArgs">,
+): string {
+  const parts = [input.command, ...(input.displayArgs ?? input.args ?? [])];
   const redacted: string[] = [];
 
   for (let index = 0; index < parts.length; index += 1) {

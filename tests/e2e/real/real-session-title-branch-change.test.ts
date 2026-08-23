@@ -89,8 +89,8 @@ describeReal("real session title branch change", () => {
         terminal: {
           provider: "tmux",
           layout: "agent-build-shell",
-          focus: false,
         },
+        placement: { intent: "detached" },
         initialPrompt: sentinel.prompt,
       },
     };

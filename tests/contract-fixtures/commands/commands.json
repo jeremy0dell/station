@@ -58,9 +58,9 @@
       },
       "terminal": {
         "provider": "tmux",
-        "layout": "agent-build-shell",
-        "focus": true
+        "layout": "agent-build-shell"
       },
+      "placement": { "intent": "detached" },
       "group": {
         "kind": "existing",
         "groupId": "grp_cache"
@@ -144,9 +144,9 @@
       },
       "terminal": {
         "provider": "tmux",
-        "layout": "default",
-        "focus": false
+        "layout": "default"
       },
+      "placement": { "intent": "detached" },
       "initialPrompt": "Continue from the forked state."
     }
   },

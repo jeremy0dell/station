@@ -83,6 +83,7 @@ describe("full session lifecycle e2e", () => {
         createPath: () => worktreePath,
       }),
       terminal,
+      terminalPlacements: [terminal.placement],
       harnesses: [harness],
     });
     const core = createObserverCore({ config, providers, persistence, clock });
@@ -122,7 +123,8 @@ describe("full session lifecycle e2e", () => {
           branch: "task",
           group: { kind: "create", name: "Scripted work" },
           harness: { provider: "scripted", mode: "interactive" },
-          terminal: { provider: "fake-terminal", layout: "agent-build-shell", focus: false },
+          terminal: { provider: "fake-terminal", layout: "agent-build-shell" },
+          placement: { intent: "detached" },
           initialPrompt: "Complete the file task.",
         },
       });

@@ -39,9 +39,11 @@ describe("session.create debug bundle diagnostics", () => {
     const eventBus = createObserverEventBus();
     const logger = createObserverLogger({ stateDir, clock });
     const queue = createCommandQueue({ persistence, clock, idFactory: ids, eventBus, logger });
+    const terminal = new FakeTerminalProvider({ now });
     const providers = new ProviderRegistry({
       worktree: new FakeWorktreeProvider({ now }),
-      terminal: new FakeTerminalProvider({ now }),
+      terminal,
+      terminalPlacements: [terminal.placement],
       harnesses: [
         new FakeHarnessProvider({
           now,
@@ -81,6 +83,7 @@ describe("session.create debug bundle diagnostics", () => {
         branch: "success",
         harness: { provider: "fake-harness" },
         terminal: { provider: "fake-terminal" },
+        placement: { intent: "detached" },
       },
     });
     await queue.drain();
@@ -130,6 +133,7 @@ describe("session.create debug bundle diagnostics", () => {
     const eventBus = createObserverEventBus();
     const logger = createObserverLogger({ stateDir, clock });
     const queue = createCommandQueue({ persistence, clock, idFactory: ids, eventBus, logger });
+    const terminal = new FakeTerminalProvider({ now });
     const providers = new ProviderRegistry({
       worktree: new FakeWorktreeProvider({
         now,
@@ -142,7 +146,8 @@ describe("session.create debug bundle diagnostics", () => {
           },
         },
       }),
-      terminal: new FakeTerminalProvider({ now }),
+      terminal,
+      terminalPlacements: [terminal.placement],
       harnesses: [new FakeHarnessProvider({ now })],
     });
     const config = configFor(root, stateDir);
@@ -168,6 +173,7 @@ describe("session.create debug bundle diagnostics", () => {
         branch: "broken",
         harness: { provider: "fake-harness" },
         terminal: { provider: "fake-terminal" },
+        placement: { intent: "detached" },
       },
     });
     await queue.drain();

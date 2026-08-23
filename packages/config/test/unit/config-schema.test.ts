@@ -33,6 +33,7 @@ describe("config schemas", () => {
     expect(parsed.projects[0]?.recoveryBreadcrumbs).toEqual({
       location: "external",
     });
+    expect(parsed.terminal?.tmux?.workbenchSocketPath).toBe("~/.local/state/station/tmux.sock");
   });
 
   it("exports ProjectConfig as a focused project-level schema", async () => {
@@ -174,11 +175,13 @@ describe("config schemas", () => {
       terminal: {
         tmux: {
           command: "/opt/homebrew/bin/tmux",
+          workbenchSocketPath: "/tmp/station-tmux.sock",
         },
       },
     });
 
     expect(config.terminal?.tmux?.command).toBe("/opt/homebrew/bin/tmux");
+    expect(config.terminal?.tmux?.workbenchSocketPath).toBe("/tmp/station-tmux.sock");
     expect(
       StationConfigSchema.safeParse({
         ...config,

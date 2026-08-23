@@ -42,6 +42,7 @@ describe("diagnostic evidence index", () => {
                 branch: "feature/wt",
                 harness: { provider: "fake-harness" },
                 terminal: { provider: "fake-terminal" },
+                placement: { intent: "detached" },
               },
             },
             status: "failed",

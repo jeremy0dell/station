@@ -1,9 +1,31 @@
+import { createHash } from "node:crypto";
 import type { ExternalCommandInput } from "@station/runtime";
 import { describe, expect, it } from "vitest";
-import { tmuxListTargetsFormat } from "../../src/parse";
+import {
+  tmuxListTargetsFormat,
+  tmuxPaneProofFormat,
+  tmuxPrimaryPaneIdentityFormat,
+} from "../../src/parse";
 import { TmuxProvider } from "../../src/provider";
 import { buildWorkbenchWindowName } from "../../src/topology";
 import { tmuxCommandResult } from "../support/commands";
+
+const proofSocketPath = "/tmp/station-provider-test.sock";
+const proofGeneration = createHash("sha256")
+  .update(
+    JSON.stringify({
+      socketPath: proofSocketPath,
+      device: "1",
+      inode: "2",
+      serverPid: 10,
+      serverStartToken: "server",
+    }),
+  )
+  .digest("hex");
+
+function mutableTargetId(sessionId = "$1", windowId = "@1", paneId = "%2") {
+  return `tmux:${proofGeneration}:${sessionId}:${windowId}:${paneId}`;
+}
 
 const now = "2026-05-21T12:00:00.000Z";
 const project = {
@@ -41,7 +63,7 @@ const paneTarget = `${windowTarget}.0`;
 
 describe("TmuxProvider", () => {
   it("declares the reference tmux capabilities", () => {
-    const provider = new TmuxProvider();
+    const provider = createTestProvider();
 
     expect(provider.id).toBe("tmux");
     expect(provider.capabilities()).toEqual({
@@ -56,8 +78,32 @@ describe("TmuxProvider", () => {
     });
   });
 
+  it("routes ordinary provider commands through the configured endpoint", async () => {
+    const calls: ExternalCommandInput[] = [];
+    const provider = createTestProvider({
+      config: { workbenchSocketPath: proofSocketPath },
+      runner: async (input) => {
+        calls.push(input);
+        return tmuxCommandResult(input, input.args?.includes("-V") ? "tmux 3.5" : "");
+      },
+    });
+
+    await expect(provider.health()).resolves.toMatchObject({ status: "healthy" });
+    await expect(provider.listTargets()).resolves.toEqual([]);
+    expect(calls).toHaveLength(2);
+    expect(
+      calls.every((call) => call.args?.slice(0, 2).join(" ") === `-S ${proofSocketPath}`),
+    ).toBe(true);
+    expect(
+      calls.every(
+        (call) =>
+          call.unsetEnv?.includes("TMUX") === true && call.unsetEnv?.includes("TMUX_PANE") === true,
+      ),
+    ).toBe(true);
+  });
+
   it("keeps provider health errors lean while command evidence stays internal", async () => {
-    const provider = new TmuxProvider({
+    const provider = createTestProvider({
       clock: { now: () => new Date(now) },
       runner: async () => {
         throw Object.assign(new Error("failed"), { code: 1, stderr: "tmux probe failed" });
@@ -78,7 +124,7 @@ describe("TmuxProvider", () => {
 
   it("opens or reuses a workbench window and binds the primary pane identity", async () => {
     const calls: ExternalCommandInput[] = [];
-    const provider = new TmuxProvider({
+    const provider = createTestProvider({
       clock: { now: () => new Date(now) },
       runner: async (input) => {
         calls.push(input);
@@ -103,7 +149,7 @@ describe("TmuxProvider", () => {
     ).resolves.toMatchObject({
       target: {
         provider: "tmux",
-        targetId: "tmux:station:@7:%8",
+        targetId: mutableTargetId("$1", "@7", "%8"),
         projectId: "web",
         worktreeId: "wt_web_feature",
         sessionId: "ses_web_feature",
@@ -131,13 +177,13 @@ describe("TmuxProvider", () => {
       ],
       ["set-option", "-p", "-t", paneTarget, "@station.role", "main-agent"],
       ["set-option", "-p", "-t", paneTarget, "@station.harness", "codex"],
-      ["display-message", "-p", "-t", paneTarget, "#{session_name}\t#{window_id}\t#{pane_id}"],
+      ["display-message", "-p", "-t", paneTarget, tmuxPrimaryPaneIdentityFormat],
     ]);
   });
 
   it("appends new workbench windows to an existing tmux session", async () => {
     const calls: ExternalCommandInput[] = [];
-    const provider = new TmuxProvider({
+    const provider = createTestProvider({
       clock: { now: () => new Date(now) },
       runner: async (input) => {
         calls.push(input);
@@ -164,7 +210,7 @@ describe("TmuxProvider", () => {
       }),
     ).resolves.toMatchObject({
       target: {
-        targetId: "tmux:station:@9:%10",
+        targetId: mutableTargetId("$1", "@9", "%10"),
       },
     });
 
@@ -177,7 +223,7 @@ describe("TmuxProvider", () => {
         "-d",
         "-P",
         "-F",
-        "#{session_name}\t#{window_id}\t#{pane_id}",
+        tmuxPrimaryPaneIdentityFormat,
         "-t",
         "station:",
         "-n",
@@ -201,7 +247,7 @@ describe("TmuxProvider", () => {
       ],
       ["set-option", "-p", "-t", "%10", "@station.role", "main-agent"],
       ["set-option", "-p", "-t", "%10", "@station.harness", "codex"],
-      ["display-message", "-p", "-t", "%10", "#{session_name}\t#{window_id}\t#{pane_id}"],
+      ["display-message", "-p", "-t", "%10", tmuxPrimaryPaneIdentityFormat],
     ]);
   });
 
@@ -227,7 +273,7 @@ describe("TmuxProvider", () => {
       forceHash: true,
     });
     expect(forcedWindowName).toBe(collidingWindowName);
-    const provider = new TmuxProvider({
+    const provider = createTestProvider({
       clock: { now: () => new Date(now) },
       runner: async (input) => {
         calls.push(input);
@@ -239,8 +285,9 @@ describe("TmuxProvider", () => {
             input,
             [
               "station",
-              "@stale",
-              "%stale",
+              "$1",
+              "@12",
+              "%13",
               "1",
               "0",
               "",
@@ -277,12 +324,12 @@ describe("TmuxProvider", () => {
       }),
     ).resolves.toMatchObject({
       target: {
-        targetId: "tmux:station:@new:%new",
+        targetId: mutableTargetId("$1", "@20", "%30"),
         worktreeId: collidingWorktree.id,
         providerData: {
           windowName: forcedWindowName,
-          windowTarget: "station:@new",
-          paneTarget: "%new",
+          windowTarget: "station:@20",
+          paneTarget: "%30",
         },
       },
     });
@@ -292,7 +339,7 @@ describe("TmuxProvider", () => {
       "-d",
       "-P",
       "-F",
-      "#{session_name}\t#{window_id}\t#{pane_id}",
+      tmuxPrimaryPaneIdentityFormat,
       "-t",
       "station:",
       "-n",
@@ -304,7 +351,7 @@ describe("TmuxProvider", () => {
       "set-option",
       "-w",
       "-t",
-      "station:@new",
+      "station:@20",
       "@station.worktree_id",
       collidingWorktree.id,
     ]);
@@ -312,7 +359,7 @@ describe("TmuxProvider", () => {
       "set-option",
       "-p",
       "-t",
-      "%new",
+      "%30",
       "@station.role",
       "main-agent",
     ]);
@@ -326,6 +373,46 @@ describe("TmuxProvider", () => {
     ]);
   });
 
+  it("keeps a generation-qualified identity when every pane is stale", async () => {
+    const calls: ExternalCommandInput[] = [];
+    const provider = createTestProvider({
+      clock: { now: () => new Date(now) },
+      runner: async (input) => {
+        calls.push(input);
+        if (input.args?.[0] === "list-panes") {
+          return tmuxCommandResult(
+            input,
+            [
+              "station",
+              "$1",
+              "@1",
+              "%2",
+              "0",
+              "1",
+              "0",
+              "/tmp/station/web/feature",
+              "100",
+              "zsh",
+              "stale-window",
+              "ses_stale",
+              "web",
+              "wt_stale",
+              "/tmp/station/web/feature",
+              "main-agent",
+              "codex",
+            ].join("\t"),
+          );
+        }
+        return tmuxCommandResult(input, "");
+      },
+    });
+
+    const [target] = await provider.listTargets();
+    expect(target?.id).toBe(mutableTargetId("$1", "@1", "%2"));
+    await expect(provider.closeTarget(target?.id ?? "")).resolves.toBeUndefined();
+    expect(calls.at(-1)?.args?.[0]).toBe("if-shell");
+  });
+
   it("reuses an existing workbench pane by stored worktree path during name transitions", async () => {
     const calls: ExternalCommandInput[] = [];
     const transitionedWorktree = {
@@ -334,7 +421,7 @@ describe("TmuxProvider", () => {
       branch: "feature/auth",
       path: "/tmp/station/web/feature-auth",
     };
-    const provider = new TmuxProvider({
+    const provider = createTestProvider({
       clock: { now: () => new Date(now) },
       runner: async (input) => {
         calls.push(input);
@@ -346,8 +433,9 @@ describe("TmuxProvider", () => {
             input,
             [
               "station",
-              "@old",
-              "%old",
+              "$1",
+              "@10",
+              "%11",
               "1",
               "0",
               "",
@@ -365,7 +453,7 @@ describe("TmuxProvider", () => {
           );
         }
         if (input.args?.[0] === "display-message") {
-          return tmuxCommandResult(input, "station\t@old\t%old");
+          return tmuxCommandResult(input, "station\t@10\t%11");
         }
         return tmuxCommandResult(input, "");
       },
@@ -381,12 +469,12 @@ describe("TmuxProvider", () => {
       }),
     ).resolves.toMatchObject({
       target: {
-        targetId: "tmux:station:@old:%old",
+        targetId: mutableTargetId("$1", "@10", "%11"),
         worktreeId: transitionedWorktree.id,
         providerData: {
           windowName: "web-feature-auth",
-          windowTarget: "station:@old",
-          paneTarget: "%old",
+          windowTarget: "station:@10",
+          paneTarget: "%11",
         },
       },
     });
@@ -396,7 +484,7 @@ describe("TmuxProvider", () => {
       "set-option",
       "-w",
       "-t",
-      "station:@old",
+      "station:@10",
       "@station.worktree_id",
       transitionedWorktree.id,
     ]);
@@ -404,7 +492,7 @@ describe("TmuxProvider", () => {
       "set-option",
       "-p",
       "-t",
-      "%old",
+      "%11",
       "@station.role",
       "main-agent",
     ]);
@@ -412,7 +500,7 @@ describe("TmuxProvider", () => {
 
   it("does not let cwd fallback override a stored worktree path mismatch", async () => {
     const calls: ExternalCommandInput[] = [];
-    const provider = new TmuxProvider({
+    const provider = createTestProvider({
       clock: { now: () => new Date(now) },
       runner: async (input) => {
         calls.push(input);
@@ -427,8 +515,9 @@ describe("TmuxProvider", () => {
             input,
             [
               "station",
-              "@old",
-              "%old",
+              "$1",
+              "@14",
+              "%15",
               "1",
               "0",
               "",
@@ -462,11 +551,11 @@ describe("TmuxProvider", () => {
       }),
     ).resolves.toMatchObject({
       target: {
-        targetId: "tmux:station:@fresh:%fresh",
+        targetId: mutableTargetId("$1", "@20", "%30"),
         worktreeId: worktree.id,
         providerData: {
-          windowTarget: "station:@fresh",
-          paneTarget: "%fresh",
+          windowTarget: "station:@20",
+          paneTarget: "%30",
         },
       },
     });
@@ -476,7 +565,7 @@ describe("TmuxProvider", () => {
       "-d",
       "-P",
       "-F",
-      "#{session_name}\t#{window_id}\t#{pane_id}",
+      tmuxPrimaryPaneIdentityFormat,
       "-t",
       "station:",
       "-n",
@@ -488,7 +577,7 @@ describe("TmuxProvider", () => {
       "set-option",
       "-w",
       "-t",
-      "station:@fresh",
+      "station:@20",
       "@station.worktree_path",
       worktree.path,
     ]);
@@ -496,7 +585,7 @@ describe("TmuxProvider", () => {
       "set-option",
       "-p",
       "-t",
-      "%fresh",
+      "%30",
       "@station.role",
       "main-agent",
     ]);
@@ -510,9 +599,33 @@ describe("TmuxProvider", () => {
     ]);
   });
 
+  it("does not create a duplicate window when existing-pane output is malformed", async () => {
+    const calls: ExternalCommandInput[] = [];
+    const provider = createTestProvider({
+      runner: async (input) => {
+        calls.push(input);
+        if (input.args?.[0] === "list-panes") {
+          return tmuxCommandResult(input, "station\tmalformed");
+        }
+        return tmuxCommandResult(input, "");
+      },
+    });
+
+    await expect(
+      provider.openWorkspace({
+        project,
+        worktree,
+        harness: "codex",
+        layout: "agent-shell",
+        sessionId: "ses_web_feature",
+      }),
+    ).rejects.toMatchObject({ code: "TERMINAL_OPEN_FAILED", provider: "tmux" });
+    expect(calls.map((call) => call.args?.[0])).not.toContain("new-window");
+  });
+
   it("lists targets using an explicit tmux format", async () => {
     const calls: ExternalCommandInput[] = [];
-    const provider = new TmuxProvider({
+    const provider = createTestProvider({
       clock: { now: () => new Date(now) },
       runner: async (input) => {
         calls.push(input);
@@ -520,6 +633,7 @@ describe("TmuxProvider", () => {
           input,
           [
             "station",
+            "$1",
             "@1",
             "%2",
             "1",
@@ -532,6 +646,7 @@ describe("TmuxProvider", () => {
             "ses_web_feature",
             "web",
             "wt_web_feature",
+            "/tmp/station/web/feature",
             "main-agent",
             "codex",
           ].join("\t"),
@@ -541,7 +656,7 @@ describe("TmuxProvider", () => {
 
     await expect(provider.listTargets()).resolves.toEqual([
       expect.objectContaining({
-        id: "tmux:station:@1:%2",
+        id: mutableTargetId("$1", "@1", "%2"),
         worktreeId: "wt_web_feature",
         provider: "tmux",
       }),
@@ -565,7 +680,7 @@ describe("TmuxProvider", () => {
     ["Linux", "no server running on /tmp/tmux-1000/default"],
   ])("treats %s no-server output as empty topology without retry", async (_platform, stderr) => {
     let calls = 0;
-    const provider = new TmuxProvider({
+    const provider = createTestProvider({
       runner: async () => {
         calls += 1;
         throw Object.assign(new Error("tmux has no server"), { code: 1, stderr });
@@ -588,7 +703,7 @@ describe("TmuxProvider", () => {
     ],
   ])("does not normalize %s while listing targets", async (_case, code, stderr) => {
     let calls = 0;
-    const provider = new TmuxProvider({
+    const provider = createTestProvider({
       runner: async () => {
         calls += 1;
         throw Object.assign(new Error("tmux list failed"), { code, stderr });
@@ -603,8 +718,8 @@ describe("TmuxProvider", () => {
     expect(calls).toBe(2);
   });
 
-  it("maps stale target focus to a typed TerminalProviderError", async () => {
-    const provider = new TmuxProvider({
+  it("refuses an unqualified target identity before terminal mutation", async () => {
+    const provider = createTestProvider({
       runner: async () => {
         throw Object.assign(new Error("can't find pane"), { code: 1, stderr: "can't find pane" });
       },
@@ -612,14 +727,14 @@ describe("TmuxProvider", () => {
 
     await expect(provider.focusTarget("tmux:station:@missing:%missing")).rejects.toMatchObject({
       tag: "TerminalProviderError",
-      code: "TERMINAL_TARGET_MISSING",
+      code: "TERMINAL_TARGET_INVALID",
       provider: "tmux",
     });
   });
 
   it("focuses the originating tmux client before selecting the workbench window and pane", async () => {
     const calls: ExternalCommandInput[] = [];
-    const provider = new TmuxProvider({
+    const provider = createTestProvider({
       runner: async (input) => {
         calls.push(input);
         return tmuxCommandResult(input, "");
@@ -627,7 +742,7 @@ describe("TmuxProvider", () => {
     });
 
     await expect(
-      provider.focusTarget("tmux:station:@1:%2", {
+      provider.focusTarget(mutableTargetId(), {
         origin: {
           provider: "tmux",
           clientId: "client_1",
@@ -635,16 +750,16 @@ describe("TmuxProvider", () => {
       }),
     ).resolves.toBeUndefined();
 
-    expect(calls.map((call) => call.args)).toEqual([
-      ["switch-client", "-c", "client_1", "-t", "station"],
-      ["select-window", "-t", "station:@1"],
-      ["select-pane", "-t", "%2"],
-    ]);
+    const mutation = calls.at(-1)?.args?.join(" ") ?? "";
+    expect(mutation).toContain('"switch-client" "-c" "client_1"');
+    expect(mutation).toContain('"select-window"');
+    expect(mutation).toContain('"select-pane"');
+    expect(calls.at(-1)?.args?.[0]).toBe("if-shell");
   });
 
   it("resolves the popup focus client live when the origin omits clientId", async () => {
     const calls: ExternalCommandInput[] = [];
-    const provider = new TmuxProvider({
+    const provider = createTestProvider({
       runner: async (input) => {
         calls.push(input);
         const args = input.args ?? [];
@@ -658,20 +773,19 @@ describe("TmuxProvider", () => {
     });
 
     await expect(
-      provider.focusTarget("tmux:station:@1:%2", { origin: { provider: "tmux" } }),
+      provider.focusTarget(mutableTargetId(), { origin: { provider: "tmux" } }),
     ).resolves.toBeUndefined();
 
-    expect(calls.map((call) => call.args)).toEqual([
-      ["show-options", "-gqv", "@station_popup_focus_client"],
-      ["switch-client", "-c", "client_live", "-t", "station"],
-      ["select-window", "-t", "station:@1"],
-      ["select-pane", "-t", "%2"],
-    ]);
+    expect(calls[0]?.args).toEqual(["show-options", "-gqv", "@station_popup_focus_client"]);
+    const mutation = calls.at(-1)?.args?.join(" ") ?? "";
+    expect(mutation).toContain('"switch-client" "-c" "client_live"');
+    expect(mutation).toContain('"select-window"');
+    expect(mutation).toContain('"select-pane"');
   });
 
   it("skips the client switch when no popup focus client is registered", async () => {
     const calls: ExternalCommandInput[] = [];
-    const provider = new TmuxProvider({
+    const provider = createTestProvider({
       runner: async (input) => {
         calls.push(input);
         return tmuxCommandResult(input, "");
@@ -679,19 +793,37 @@ describe("TmuxProvider", () => {
     });
 
     await expect(
-      provider.focusTarget("tmux:station:@1:%2", { origin: { provider: "tmux" } }),
+      provider.focusTarget(mutableTargetId(), { origin: { provider: "tmux" } }),
     ).resolves.toBeUndefined();
 
-    expect(calls.map((call) => call.args)).toEqual([
-      ["show-options", "-gqv", "@station_popup_focus_client"],
-      ["select-window", "-t", "station:@1"],
-      ["select-pane", "-t", "%2"],
-    ]);
+    expect(calls[0]?.args).toEqual(["show-options", "-gqv", "@station_popup_focus_client"]);
+    expect(calls.at(-1)?.args?.[0]).toBe("if-shell");
+    expect(calls.at(-1)?.args?.join(" ")).toContain('"select-window"');
+  });
+
+  it("keeps popup client lookup on the invoking endpoint when workbench is configured", async () => {
+    const calls: ExternalCommandInput[] = [];
+    const provider = createTestProvider({
+      config: { workbenchSocketPath: proofSocketPath },
+      runner: async (input) => {
+        calls.push(input);
+        if (input.args?.[0] === "show-options") {
+          return tmuxCommandResult(input, "client_invoking\n");
+        }
+        return tmuxCommandResult(input, "");
+      },
+    });
+
+    await expect(
+      provider.focusTarget(mutableTargetId(), { origin: { provider: "tmux" } }),
+    ).resolves.toBeUndefined();
+    expect(calls[0]?.args).toEqual(["show-options", "-gqv", "@station_popup_focus_client"]);
+    expect(calls.at(-1)?.args?.slice(0, 2)).toEqual(["-S", proofSocketPath]);
   });
 
   it("launches a structured harness plan in the primary agent pane", async () => {
     const calls: ExternalCommandInput[] = [];
-    const provider = new TmuxProvider({
+    const provider = createTestProvider({
       clock: { now: () => new Date(now) },
       runner: async (input) => {
         calls.push(input);
@@ -705,7 +837,7 @@ describe("TmuxProvider", () => {
         worktree,
         terminalTarget: {
           provider: "tmux",
-          targetId: "tmux:station:@web-feature-login:%web-feature-login-main",
+          targetId: mutableTargetId(),
           projectId: "web",
           worktreeId: "wt_web_feature",
           sessionId: "ses_web_feature",
@@ -730,42 +862,24 @@ describe("TmuxProvider", () => {
       }),
     ).resolves.toMatchObject({
       started: true,
-      terminalTargetId: "tmux:station:@web-feature-login:%web-feature-login-main",
+      terminalTargetId: mutableTargetId(),
       agentEndpointId: "%web-feature-login-main",
     });
 
-    expect(calls.map((call) => call.args)).toEqual([
-      ["set-option", "-p", "-t", "station:web-feature-login.0", "remain-on-exit", "on"],
-      [
-        "respawn-pane",
-        "-k",
-        "-t",
-        "station:web-feature-login.0",
-        "-c",
-        "/tmp/station/web/feature",
-        "-e",
-        "STATION_SESSION_ID=ses_web_feature",
-        "-e",
-        "STATION_TOKEN=value with spaces",
-        "codex --cd '/tmp/station/web/feature'",
-      ],
-      [
-        "display-message",
-        "-p",
-        "-t",
-        "station:web-feature-login.0",
-        "#{pane_dead}\t#{pane_dead_status}\t#{pane_current_command}",
-      ],
-    ]);
+    expect(calls.map((call) => call.args?.[0])).toEqual(["if-shell", "if-shell"]);
+    expect(calls[0]?.args?.join(" ")).toContain('"set-option"');
+    expect(calls[0]?.args?.join(" ")).toContain('"respawn-pane"');
+    expect(calls[0]?.args?.join(" ")).toContain("STATION_TOKEN=value with spaces");
+    expect(calls[1]?.args?.join(" ")).toContain("pane_dead");
   });
 
   it("maps an immediately exited harness process to a typed launch error", async () => {
     const calls: ExternalCommandInput[] = [];
-    const provider = new TmuxProvider({
+    const provider = createTestProvider({
       clock: { now: () => new Date(now) },
       runner: async (input) => {
         calls.push(input);
-        if (input.args?.[0] === "display-message") {
+        if (input.args?.[0] === "if-shell" && input.args.join(" ").includes("pane_dead")) {
           return tmuxCommandResult(input, "1\t2\tcodex");
         }
         return tmuxCommandResult(input, "");
@@ -778,7 +892,7 @@ describe("TmuxProvider", () => {
         worktree,
         terminalTarget: {
           provider: "tmux",
-          targetId: "tmux:station:@web-feature-login:%web-feature-login-main",
+          targetId: mutableTargetId(),
           projectId: "web",
           worktreeId: "wt_web_feature",
           sessionId: "ses_web_feature",
@@ -807,16 +921,12 @@ describe("TmuxProvider", () => {
       hint: expect.stringContaining("exit status 2"),
     });
 
-    expect(calls.map((call) => call.args?.[0])).toEqual([
-      "set-option",
-      "respawn-pane",
-      "display-message",
-    ]);
+    expect(calls.map((call) => call.args?.[0])).toEqual(["if-shell", "if-shell"]);
   });
 
   it("aborts tmux subprocesses on timeout with a typed error", async () => {
     let aborted = false;
-    const provider = new TmuxProvider({
+    const provider = createTestProvider({
       timeoutMs: 5,
       runner: async (input) =>
         new Promise((_, reject) => {
@@ -836,7 +946,7 @@ describe("TmuxProvider", () => {
 
   it("maps launch timeout to a typed terminal provider error", async () => {
     let aborted = false;
-    const provider = new TmuxProvider({
+    const provider = createTestProvider({
       timeoutMs: 5,
       runner: async (input) =>
         new Promise((_, reject) => {
@@ -853,7 +963,7 @@ describe("TmuxProvider", () => {
         worktree,
         terminalTarget: {
           provider: "tmux",
-          targetId: "tmux:station:@web-feature-login:%web-feature-login-main",
+          targetId: mutableTargetId(),
           projectId: "web",
           worktreeId: "wt_web_feature",
           sessionId: "ses_web_feature",
@@ -876,3 +986,103 @@ describe("TmuxProvider", () => {
     expect(aborted).toBe(true);
   });
 });
+
+function createTestProvider(
+  options: ConstructorParameters<typeof TmuxProvider>[0] = {},
+): TmuxProvider {
+  const runner = options.runner;
+  const identities = new Map<
+    string,
+    { sessionId: string; sessionName: string; windowId: string; paneId: string }
+  >();
+  const stableWindows = new Map<string, string>();
+  const stablePanes = new Map<string, string>();
+  const stableWindow = (value: string) => {
+    if (/^@\d+$/u.test(value)) return value;
+    const existing = stableWindows.get(value);
+    if (existing !== undefined) return existing;
+    const next = `@${20 + stableWindows.size}`;
+    stableWindows.set(value, next);
+    return next;
+  };
+  const stablePane = (value: string) => {
+    if (/^%\d+$/u.test(value)) return value;
+    const existing = stablePanes.get(value);
+    if (existing !== undefined) return existing;
+    const next = `%${30 + stablePanes.size}`;
+    stablePanes.set(value, next);
+    return next;
+  };
+  return new TmuxProvider({
+    ...options,
+    socketEvidence: () => ({ device: "1", inode: "2" }),
+    processEvidence: {
+      read: (pid) => {
+        if (pid === 10) return { pid, parentPid: 1, startToken: "server" };
+        if (pid === 100) return { pid, parentPid: 1, startToken: "pane" };
+        return undefined;
+      },
+    },
+    ...(runner === undefined
+      ? {}
+      : {
+          runner: async (input: ExternalCommandInput) => {
+            const args = input.args ?? [];
+            if (args.at(-1) === tmuxPaneProofFormat) {
+              const targetIndex = args.indexOf("-t");
+              const paneId = targetIndex < 0 ? "%2" : (args[targetIndex + 1] ?? "%2");
+              const identity = identities.get(paneId) ?? {
+                sessionId: "$1",
+                sessionName: "station",
+                windowId: "@1",
+                paneId,
+              };
+              return tmuxCommandResult(
+                input,
+                [
+                  proofSocketPath,
+                  "10",
+                  identity.sessionId,
+                  identity.sessionName,
+                  identity.windowId,
+                  identity.paneId,
+                  "100",
+                  "",
+                  "",
+                ].join("\t"),
+              );
+            }
+            const result = await runner(input);
+            if (args.includes(tmuxPrimaryPaneIdentityFormat)) {
+              const fields = result.stdout.trim().split("\t");
+              const sessionName = fields.length === 3 ? fields[0] : fields[1];
+              const originalWindow = fields.length === 3 ? fields[1] : fields[2];
+              const originalPane = fields.length === 3 ? fields[2] : fields[3];
+              if (
+                sessionName !== undefined &&
+                originalWindow !== undefined &&
+                originalPane !== undefined
+              ) {
+                const identity = {
+                  sessionId: "$1",
+                  sessionName,
+                  windowId: stableWindow(originalWindow),
+                  paneId: stablePane(originalPane),
+                };
+                identities.set(identity.paneId, identity);
+                return tmuxCommandResult(
+                  input,
+                  [
+                    identity.sessionId,
+                    identity.sessionName,
+                    identity.windowId,
+                    identity.paneId,
+                  ].join("\t"),
+                );
+              }
+            }
+            return result;
+          },
+        }),
+  });
+}
