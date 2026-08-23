@@ -1370,7 +1370,12 @@ async function verifyBareLaunches(input) {
 }
 
 function assertUpdateReport(report, input, installedBinary, configPath) {
-  assertEqual(report.schemaVersion, 2, `${input.name} update schema`);
+  assertEqual(report.schemaVersion, 3, `${input.name} update schema`);
+  assertEqual(
+    report.recoveryPreflight,
+    undefined,
+    `${input.name} ordinary update omits reap recovery preflight`,
+  );
   assertEqual(report.channel, "installer-binary", `${input.name} update channel`);
   const refusal = input.busyHost && input.options.busyHostOutcome === "preserved-refusal";
   assertEqual(report.status, refusal ? "failed" : "updated", `${input.name} update status`);
