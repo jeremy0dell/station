@@ -104,9 +104,13 @@ describe("update Host runtime adapter", () => {
       schemaVersion: 1 as const,
       action: "update-converge" as const,
       requestedAction: options.command.action,
+      ...(options.command.action === "handoff"
+        ? { requestedFidelity: options.command.fidelity }
+        : {}),
       status: "completed" as const,
       receipt: {
         ensuredBy: "handoff" as const,
+        fidelity: options.command.action === "handoff" ? options.command.fidelity : "processes",
         validatedCommitment: options.command.commitment,
         actualInventory: options.command.commitment.incumbent.inventory,
         handoffReceipt: options.command.commitment.incumbent.inventory,

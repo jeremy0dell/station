@@ -934,6 +934,7 @@ describe("ensureStationHostRunning", () => {
         handoffAdopt: {
           adopted: ["pty-1"],
           failed: [],
+          fidelity: "processes",
           receipt: {
             terminals: [
               {
@@ -1456,12 +1457,66 @@ describe("ensureStationHostRunning", () => {
       status: "completed",
       receipt: {
         ensuredBy: "handoff",
+        fidelity: "processes",
         handoffReceipt: { terminals: terminalIdentities(manifest) },
       },
     });
     expect(stopIfIdle).not.toHaveBeenCalled();
     expect(beginHandoff).toHaveBeenCalledOnce();
     expect(spawnHost).toHaveBeenCalledOnce();
+  });
+
+  it("refuses and restores a live handoff when the Host acknowledges another fidelity", async () => {
+    const socket = await liveSocket();
+    const manifest = oneEntryHandoffManifest("pty-1");
+    const abortHandoff = vi.fn(async () => ({ adopted: ["pty-1"], failed: [] }));
+    const completeHandoff = vi.fn();
+    const spawnHost = vi.fn();
+    try {
+      const result = await convergeStationHostForUpdate(
+        {
+          socketPath: socket.socketPath,
+          stateDir: tmpdir(),
+          hostCommand: ["bun", "/tmp/hostMain.ts"],
+          command: convergenceCommand("handoff", terminalIdentities(manifest)),
+        },
+        {
+          clientFactory: () =>
+            fakeClient({
+              health: async () => ({
+                ok: true,
+                protocolVersion: HOST_PROTOCOL_VERSION,
+                buildVersion: "older-build",
+              }),
+              recoveryInventory: async () => ({
+                buildIdentity: incumbentBuildIdentity,
+                ptys: recoveryPtys(manifest),
+              }),
+              beginHandoff: async () => ({
+                manifest,
+                fidelity: "screen",
+                released: ["pty-1"],
+                skipped: [],
+              }),
+              abortHandoff,
+              completeHandoff,
+            }),
+          spawnHost,
+        },
+      );
+
+      expect(result).toMatchObject({
+        requestedAction: "handoff",
+        requestedFidelity: "processes",
+        status: "stale",
+        error: { code: "HOST_CONVERGENCE_PLAN_DRIFT" },
+      });
+      expect(abortHandoff).toHaveBeenCalledOnce();
+      expect(completeHandoff).not.toHaveBeenCalled();
+      expect(spawnHost).not.toHaveBeenCalled();
+    } finally {
+      await socket.close();
+    }
   });
 
   it("returns absent without starting a Host when the planned incumbent disappeared", async () => {

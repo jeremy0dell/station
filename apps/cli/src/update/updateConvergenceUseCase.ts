@@ -46,14 +46,17 @@ export type UpdateConvergencePorts = {
   successor: UpdateSuccessorTransportPort;
 };
 
-type InFlightUpdateAction = Pick<UpdateExecutedAction, "phase" | "action" | "provider">;
+type InFlightUpdateAction = Pick<
+  UpdateExecutedAction,
+  "phase" | "action" | "provider" | "fidelity"
+>;
 
 /**
  * USE CASE
  *
  * Resolves the install owner, inspects all live state, plans convergence, executes only safe typed
- * actions, and verifies a fresh no-op plan. Host actions retain the plan's exact build and immutable
- * PTY commitment without action fallback. Artifact application remains channel-owned; destructive
+ * actions, and verifies a fresh no-op plan. Host actions retain the plan's exact build, immutable
+ * PTY commitment, and handoff fidelity without fallback. Artifact application remains channel-owned; destructive
  * Station process-group authorization, journaling, and reaping remain exclusively owned by #641.
  */
 export async function runUpdateConvergence(
@@ -408,18 +411,25 @@ async function executeCurrentRuntime(
     const host = initial.plan.components.host;
     if (host.action === "handoff" || host.action === "replace-idle") {
       const commitment = hostConvergenceCommitment(initial);
+      const plannedFidelity =
+        host.action === "handoff" ? requiredHandoffFidelity(host.fidelity) : undefined;
       inFlightAction = {
         phase: "host-convergence",
         action: host.action,
+        ...(plannedFidelity === undefined ? {} : { fidelity: plannedFidelity }),
       };
       const hostResult =
         host.action === "handoff"
-          ? await ports.host.handoffHost(request.handoff ?? "processes", commitment)
+          ? await ports.host.handoffHost(requiredHandoffFidelity(plannedFidelity), commitment)
           : await ports.host.replaceIdleHost(commitment);
-      if (hostResult.requestedAction !== host.action) {
+      if (
+        hostResult.requestedAction !== host.action ||
+        hostResult.requestedFidelity !== plannedFidelity
+      ) {
         throw updateErrorFromUnknown(undefined, {
           code: "UPDATE_HOST_CONVERGENCE_ACTION_MISMATCH",
-          message: "Host convergence returned an outcome for a different planned action.",
+          message:
+            "Host convergence returned an outcome for a different planned action or fidelity.",
         });
       }
       switch (hostResult.status) {
@@ -435,6 +445,7 @@ async function executeCurrentRuntime(
             phase: "host-convergence",
             action: host.action,
             status: "skipped",
+            ...(plannedFidelity === undefined ? {} : { fidelity: plannedFidelity }),
           });
           throw updateErrorFromUnknown(undefined, {
             code: "UPDATE_HOST_CONVERGENCE_SUPERSEDED",
@@ -450,11 +461,13 @@ async function executeCurrentRuntime(
             inFlightAction = {
               phase: "terminal-convergence",
               action: "preserve-via-handoff",
+              fidelity: plannedFidelity,
             };
             const expectedTerminals =
               initial.preflight.host.status === "inspected" ? initial.preflight.host.terminals : [];
             if (
               hostReceipt.ensuredBy !== "handoff" ||
+              hostReceipt.fidelity !== plannedFidelity ||
               !ptyLifetimeIdentitySetsMatch(expectedTerminals, hostReceipt.handoffReceipt.terminals)
             ) {
               throw updateErrorFromUnknown(undefined, {
@@ -466,6 +479,7 @@ async function executeCurrentRuntime(
               phase: "terminal-convergence",
               action: "preserve-via-handoff",
               status: "completed",
+              fidelity: plannedFidelity,
               handoffReceipt: hostReceipt.handoffReceipt,
             });
           } else if (hostReceipt.ensuredBy !== "idle-replace") {
@@ -478,6 +492,7 @@ async function executeCurrentRuntime(
             phase: "host-convergence",
             action: host.action,
             status: "completed",
+            ...(plannedFidelity === undefined ? {} : { fidelity: plannedFidelity }),
           });
           inFlightAction = undefined;
           break;
@@ -665,6 +680,15 @@ function hostConvergenceCommitment(evidence: UpdateEvidencePlan): UpdateHostConv
       buildIdentity: targetBuild.value,
     },
   };
+}
+
+function requiredHandoffFidelity(
+  fidelity: "processes" | "screen" | undefined,
+): "processes" | "screen" {
+  if (fidelity === undefined) {
+    throw new Error("Host handoff plan is missing its exact fidelity commitment.");
+  }
+  return fidelity;
 }
 
 function committedHostValue(

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { SafeErrorSchema } from "./errors.js";
-import { PtyHandoffReceiptSchema } from "./hostHandoff.js";
+import { HostHandoffFidelitySchema, PtyHandoffReceiptSchema } from "./hostHandoff.js";
 import { ProviderHookReconciliationResultSchema } from "./providerHooks.js";
 import { compareCodeUnitStrings, nonEmptyStringSchema } from "./shared.js";
 import { type UpdateArtifact, UpdateArtifactSchema } from "./updateArtifact.js";
@@ -135,19 +135,39 @@ const terminalDecisionSchema = z
   .object({
     action: z.enum(["no-op", "preserve-via-handoff", "reap-required", "blocked"]),
     reason: UpdateConvergenceReasonSchema,
+    fidelity: HostHandoffFidelitySchema.optional(),
     liveCount: z.number().int().nonnegative(),
     recoverableCount: z.number().int().nonnegative(),
     nonResumableCount: z.number().int().nonnegative(),
     unknownRecoveryCount: z.number().int().nonnegative(),
   })
-  .strict();
+  .strict()
+  .superRefine((decision, context) => {
+    if ((decision.action === "preserve-via-handoff") !== (decision.fidelity !== undefined)) {
+      context.addIssue({
+        code: "custom",
+        path: ["fidelity"],
+        message: "Terminal handoff decisions require exactly one fidelity commitment.",
+      });
+    }
+  });
 
 const hostDecisionSchema = z
   .object({
     action: z.enum(["no-op", "replace-idle", "handoff", "leave-in-place", "await-reap", "blocked"]),
     reason: UpdateConvergenceReasonSchema,
+    fidelity: HostHandoffFidelitySchema.optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((decision, context) => {
+    if ((decision.action === "handoff") !== (decision.fidelity !== undefined)) {
+      context.addIssue({
+        code: "custom",
+        path: ["fidelity"],
+        message: "Host handoff decisions require exactly one fidelity commitment.",
+      });
+    }
+  });
 
 const recoveryDecisionSchema = z
   .object({
@@ -215,6 +235,15 @@ export const UpdateConvergencePlanSchema = z
         message: "Hook decisions must be unique and sorted by code unit.",
       });
     }
+    const hostFidelity = plan.components.host.fidelity;
+    const terminalFidelity = plan.components.terminals.fidelity;
+    if (hostFidelity !== terminalFidelity) {
+      context.addIssue({
+        code: "custom",
+        path: ["components", "terminals", "fidelity"],
+        message: "Host and terminal handoff decisions must commit to the same fidelity.",
+      });
+    }
   });
 export type UpdateConvergencePlan = z.infer<typeof UpdateConvergencePlanSchema>;
 
@@ -246,6 +275,7 @@ const executedActionSchema = z
     status: z.enum(["completed", "failed", "skipped"]),
     provider: nonEmptyStringSchema.optional(),
     hookResult: ProviderHookReconciliationResultSchema.optional(),
+    fidelity: HostHandoffFidelitySchema.optional(),
     handoffReceipt: PtyHandoffReceiptSchema.optional(),
   })
   .strict()
@@ -270,6 +300,16 @@ const executedActionSchema = z
         code: "custom",
         path: ["hookResult"],
         message: "Only hook reconciliation actions may carry hook results.",
+      });
+    }
+    const handoffAction =
+      (action.phase === "terminal-convergence" && action.action === "preserve-via-handoff") ||
+      (action.phase === "host-convergence" && action.action === "handoff");
+    if (handoffAction !== (action.fidelity !== undefined)) {
+      context.addIssue({
+        code: "custom",
+        path: ["fidelity"],
+        message: "Handoff action audits require exactly one fidelity commitment.",
       });
     }
     const terminalHandoff =

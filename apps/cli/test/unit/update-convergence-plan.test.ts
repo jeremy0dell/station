@@ -236,7 +236,9 @@ describe("update convergence planning policy", () => {
     expect(afterNonPreservableReap.components.host).toEqual({
       action: "handoff",
       reason: "busy-handoff",
+      fidelity: "processes",
     });
+    expect(afterNonPreservableReap.components.terminals.fidelity).toBe("processes");
     expect(afterNonPreservableReap.components.recovery).toEqual({
       relevance: "not-required",
       status: "not-required",

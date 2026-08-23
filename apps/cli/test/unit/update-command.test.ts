@@ -427,7 +427,7 @@ describe("stn update convergence", () => {
       }),
     ]);
     const runner = vi.fn(commandResult);
-    const result = await runUpdateCommand(["--json"], options(), {
+    const result = await runUpdateCommand(["--handoff=screen", "--json"], options(), {
       probes: [fixture.probe],
       buildInfo: build(identityA, "1.0.0"),
       convergenceInspection: inspect,
@@ -443,15 +443,39 @@ describe("stn update convergence", () => {
         phase: "terminal-convergence",
         action: "preserve-via-handoff",
         status: "completed",
+        fidelity: "screen",
         handoffReceipt: { terminals: [terminalIdentity()] },
       },
-      { phase: "host-convergence", action: "handoff", status: "completed" },
+      {
+        phase: "host-convergence",
+        action: "handoff",
+        status: "completed",
+        fidelity: "screen",
+      },
       { phase: "runtime-reconcile", action: "run", status: "completed" },
       { phase: "verification", action: "reinspect", status: "completed" },
     ]);
     const serialized = JSON.stringify(report);
     expect(serialized).not.toContain("/tmp/station-host.sock");
     expect(serialized).not.toContain("Live handoff completed.");
+    expect(report.initial.plan.components).toMatchObject({
+      host: { action: "handoff", fidelity: "screen" },
+      terminals: { action: "preserve-via-handoff", fidelity: "screen" },
+    });
+    expect(textFor(result)).toContain("host: handoff (busy-handoff) fidelity=screen");
+    expect(textFor(result)).toContain(
+      "terminal-convergence: preserve-via-handoff completed fidelity=screen",
+    );
+    const contradictoryAudit = structuredClone(report);
+    if (contradictoryAudit.result.kind !== "current-runtime-execution") {
+      throw new Error("expected cloned runtime execution");
+    }
+    const hostAudit = contradictoryAudit.result.actionAudits[0].actions.find(
+      (action) => action.phase === "host-convergence",
+    );
+    if (hostAudit === undefined) throw new Error("missing Host handoff audit");
+    hostAudit.fidelity = "processes";
+    expect(UpdateCommandReportSchema.safeParse(contradictoryAudit).success).toBe(false);
     expect(
       runner.mock.calls.some(([input]) => (input as ExternalCommandInput).args?.includes("host")),
     ).toBe(false);
@@ -520,14 +544,14 @@ describe("stn update convergence", () => {
       }),
       finalEvidence,
     ]);
-    const result = await runUpdateCommand(["--json"], options(), {
+    const result = await runUpdateCommand(["--handoff=screen", "--json"], options(), {
       probes: [fixture.probe],
       buildInfo: build(identityA, "1.0.0"),
       convergenceInspection: inspect,
       commandRunner: commandResult,
       host: successfulHostRuntime({
-        handoffHost: async (_fidelity, commitment) =>
-          hostStoppedResult("handoff", "stale", commitment),
+        handoffHost: async (fidelity, commitment) =>
+          hostStoppedResult("handoff", "stale", commitment, fidelity),
       }),
     });
     const report = reportFrom(result);
@@ -541,7 +565,14 @@ describe("stn update convergence", () => {
         finalInspection: { status: "completed", evidence: { preflight: finalEvidence } },
         actionAudits: [
           {
-            actions: [{ phase: "host-convergence", action: "handoff", status: "failed" }],
+            actions: [
+              {
+                phase: "host-convergence",
+                action: "handoff",
+                status: "failed",
+                fidelity: "screen",
+              },
+            ],
           },
         ],
       },
@@ -549,6 +580,7 @@ describe("stn update convergence", () => {
     const serialized = JSON.stringify(report);
     expect(serialized).not.toContain('"action":"replace-idle","status":"completed"');
     expect(serialized).not.toContain('"action":"preserve-via-handoff","status":"completed"');
+    expect(textFor(result)).toContain("host-convergence: handoff failed fidelity=screen");
   });
 
   it("stops and re-inspects without mutation when the planned Host disappeared", async () => {
@@ -620,6 +652,7 @@ describe("stn update convergence", () => {
           schemaVersion: 1,
           action: "update-converge",
           requestedAction: "handoff",
+          requestedFidelity: "processes",
           status: "already-converged",
           validatedCommitment: commitment,
           actualInventory: commitment.incumbent.inventory,
@@ -646,7 +679,12 @@ describe("stn update convergence", () => {
       throw new Error("expected superseded execution failure");
     }
     expect(report.result.actionAudits[0].actions).toEqual([
-      { phase: "host-convergence", action: "handoff", status: "skipped" },
+      {
+        phase: "host-convergence",
+        action: "handoff",
+        status: "skipped",
+        fidelity: "processes",
+      },
     ]);
   });
 
@@ -658,13 +696,14 @@ describe("stn update convergence", () => {
       host: differentHost(identityB, [bridge]),
       terminalDispositions: [disposition("preservable", "recoverable")],
     });
-    const result = await runUpdateCommand(["--json"], options(), {
+    const result = await runUpdateCommand(["--handoff=screen", "--json"], options(), {
       probes: [fixture.probe],
       buildInfo: build(identityA, "1.0.0"),
       convergenceInspection: inspection(evidence),
       commandRunner: commandResult,
       host: successfulHostRuntime({
-        handoffHost: async () => {
+        handoffHost: async (fidelity) => {
+          expect(fidelity).toBe("screen");
           throw new Error("Host handoff failed");
         },
       }),
@@ -676,8 +715,14 @@ describe("stn update convergence", () => {
     });
     if (report.result.kind !== "execution-failed") throw new Error("expected failure result");
     expect(report.result.actionAudits[0]?.actions).toEqual([
-      { phase: "host-convergence", action: "handoff", status: "failed" },
+      {
+        phase: "host-convergence",
+        action: "handoff",
+        status: "failed",
+        fidelity: "screen",
+      },
     ]);
+    expect(textFor(result)).toContain("host-convergence: handoff failed fidelity=screen");
   });
 
   it("attributes reconcile failure after Host handoff to runtime reconcile", async () => {
@@ -708,9 +753,15 @@ describe("stn update convergence", () => {
         phase: "terminal-convergence",
         action: "preserve-via-handoff",
         status: "completed",
+        fidelity: "processes",
         handoffReceipt: { terminals: [terminalIdentity()] },
       },
-      { phase: "host-convergence", action: "handoff", status: "completed" },
+      {
+        phase: "host-convergence",
+        action: "handoff",
+        status: "completed",
+        fidelity: "processes",
+      },
       { phase: "runtime-reconcile", action: "run", status: "failed" },
     ]);
   });
@@ -726,6 +777,7 @@ describe("stn update convergence", () => {
       kind: "duplicate" as const,
     },
     { name: "action-switched", kind: "action-switched" as const },
+    { name: "fidelity-switched", kind: "fidelity-switched" as const },
   ])("rejects a $name Host convergence receipt", async ({ kind }) => {
     const fixture = probe("current");
     const bridge = terminal("bridge-releasable");
@@ -751,14 +803,16 @@ describe("stn update convergence", () => {
               ? { ...exact, receipt: undefined }
               : kind === "action-switched"
                 ? { ...exact, receipt: { ...exact.receipt, ensuredBy: "idle-replace" } }
-                : {
-                    ...exact,
-                    receipt: {
-                      ...exact.receipt,
-                      actualInventory: { terminals },
-                      handoffReceipt: { terminals },
-                    },
-                  }
+                : kind === "fidelity-switched"
+                  ? { ...exact, receipt: { ...exact.receipt, fidelity: "screen" } }
+                  : {
+                      ...exact,
+                      receipt: {
+                        ...exact.receipt,
+                        actualInventory: { terminals },
+                        handoffReceipt: { terminals },
+                      },
+                    }
           ) as never;
         },
       }),
@@ -1323,9 +1377,15 @@ describe("stn update convergence", () => {
         phase: "terminal-convergence",
         action: "preserve-via-handoff",
         status: "completed",
+        fidelity: "processes",
         handoffReceipt: { terminals: [terminalIdentity()] },
       },
-      { phase: "host-convergence", action: "handoff", status: "completed" },
+      {
+        phase: "host-convergence",
+        action: "handoff",
+        status: "completed",
+        fidelity: "processes",
+      },
       { phase: "runtime-reconcile", action: "run", status: "completed" },
       { phase: "verification", action: "reinspect", status: "failed" },
     ]);
@@ -2456,15 +2516,18 @@ function terminalIdentity(identity = "1") {
 function completedHostResult(
   action: "replace-idle" | "handoff",
   commitment: UpdateHostConvergenceCommitment,
+  fidelity: "processes" | "screen" = "processes",
 ) {
   const terminals = commitment.incumbent.inventory.terminals;
   return {
     schemaVersion: 1 as const,
     action: "update-converge" as const,
     requestedAction: action,
+    ...(action === "handoff" ? { requestedFidelity: fidelity } : {}),
     status: "completed" as const,
     receipt: {
       ensuredBy: action === "handoff" ? ("handoff" as const) : ("idle-replace" as const),
+      ...(action === "handoff" ? { fidelity } : {}),
       validatedCommitment: commitment,
       actualInventory: { terminals },
       ...(action === "handoff" ? { handoffReceipt: { terminals } } : {}),
@@ -2476,11 +2539,13 @@ function hostStoppedResult(
   requestedAction: "replace-idle" | "handoff",
   status: "absent" | "stale" | "failed",
   _commitment: UpdateHostConvergenceCommitment,
+  fidelity: "processes" | "screen" = "processes",
 ) {
   return {
     schemaVersion: 1 as const,
     action: "update-converge" as const,
     requestedAction,
+    ...(requestedAction === "handoff" ? { requestedFidelity: fidelity } : {}),
     status,
     error: {
       tag: "TerminalProviderError",
@@ -2502,8 +2567,8 @@ function successfulHostRuntime(
         completedHostResult("replace-idle", commitment)),
     handoffHost:
       overrides.handoffHost ??
-      (async (_fidelity: "processes" | "screen", commitment: UpdateHostConvergenceCommitment) =>
-        completedHostResult("handoff", commitment)),
+      (async (fidelity: "processes" | "screen", commitment: UpdateHostConvergenceCommitment) =>
+        completedHostResult("handoff", commitment, fidelity)),
   };
 }
 

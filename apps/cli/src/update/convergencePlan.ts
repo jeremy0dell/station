@@ -214,11 +214,13 @@ function hostAndTerminalDecisions(
     (terminal) => terminal.handoff === "non-preservable",
   );
   if (destructiveDispositions.length === 0) {
+    const fidelity = input.handoffFidelity;
     return {
-      host: { action: "handoff", reason: "busy-handoff" },
+      host: { action: "handoff", reason: "busy-handoff", fidelity },
       terminals: {
         action: "preserve-via-handoff",
         reason: "all-bridge-releasable",
+        fidelity,
         ...baseTerminals,
       },
       recovery: { relevance: "not-required", status: "not-required" },

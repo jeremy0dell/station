@@ -525,6 +525,18 @@ function validateV4Result(
           "Audited action must match the action authorized by its convergence phase.",
         );
       }
+      const plannedFidelity =
+        action.phase === "terminal-convergence"
+          ? evidence.plan.components.terminals.fidelity
+          : action.phase === "host-convergence"
+            ? evidence.plan.components.host.fidelity
+            : undefined;
+      if (action.fidelity !== plannedFidelity) {
+        digestMismatch(
+          [...path, "actions", index, "fidelity"],
+          "Audited handoff fidelity must match the exact authorized convergence decision.",
+        );
+      }
       if (action.handoffReceipt !== undefined) {
         const terminals =
           evidence.preflight.host.status === "inspected" ? evidence.preflight.host.terminals : [];
@@ -952,6 +964,7 @@ type ExpectedAuditAction = {
   phase: UpdateActionAudit["actions"][number]["phase"];
   action: UpdateActionAudit["actions"][number]["action"];
   provider?: string;
+  fidelity?: "processes" | "screen";
 };
 
 function executableRuntimeActions(evidence: UpdateEvidencePlan): ExpectedAuditAction[] {
@@ -966,11 +979,20 @@ function executableRuntimeActions(evidence: UpdateEvidencePlan): ExpectedAuditAc
     actions.push({ phase: "observer-convergence", action: observer.action });
   }
   if (evidence.plan.components.terminals.action === "preserve-via-handoff") {
-    actions.push({ phase: "terminal-convergence", action: "preserve-via-handoff" });
+    const fidelity = evidence.plan.components.terminals.fidelity;
+    actions.push({
+      phase: "terminal-convergence",
+      action: "preserve-via-handoff",
+      ...(fidelity === undefined ? {} : { fidelity }),
+    });
   }
   const host = evidence.plan.components.host;
   if (host.action === "replace-idle" || host.action === "handoff") {
-    actions.push({ phase: "host-convergence", action: host.action });
+    actions.push({
+      phase: "host-convergence",
+      action: host.action,
+      ...(host.fidelity === undefined ? {} : { fidelity: host.fidelity }),
+    });
   }
   if (evidence.plan.components.reconcile.action === "run") {
     actions.push({ phase: "runtime-reconcile", action: "run" });
@@ -989,7 +1011,8 @@ function auditActionIdentityMatches(
     expected !== undefined &&
     actual.phase === expected.phase &&
     actual.action === expected.action &&
-    actual.provider === expected.provider
+    actual.provider === expected.provider &&
+    actual.fidelity === expected.fidelity
   );
 }
 

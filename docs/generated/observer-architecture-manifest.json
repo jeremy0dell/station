@@ -14690,7 +14690,7 @@
       "declaration": "runUpdateConvergence",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Resolves the install owner, inspects all live state, plans convergence, executes only safe typed actions, and verifies a fresh no-op plan. Host actions retain the plan's exact build and immutable PTY commitment without action fallback. Artifact application remains channel-owned; destructive Station process-group authorization, journaling, and reaping remain exclusively owned by #641.",
+      "purpose": "Resolves the install owner, inspects all live state, plans convergence, executes only safe typed actions, and verifies a fresh no-op plan. Host actions retain the plan's exact build, immutable PTY commitment, and handoff fidelity without fallback. Artifact application remains channel-owned; destructive Station process-group authorization, journaling, and reaping remain exclusively owned by #641.",
       "dependencies": [
         {
           "path": "apps/cli/src/update/convergenceDigest.ts",
@@ -14734,7 +14734,7 @@
       "declaration": "createUpdateHostRuntimeAdapter",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Translates the update Host port into direct typed socket inspection and constrained Station Host convergence. No update action passes through CLI text or generic handoff behavior.",
+      "purpose": "Translates the update Host port into direct typed socket inspection and constrained Station Host convergence with exact fidelity receipts. No update action passes through CLI text or generic handoff behavior.",
       "dependencies": [
         {
           "path": "apps/cli/src/update/runtimeBuildRelation.ts",
@@ -14757,7 +14757,7 @@
       "declaration": "UpdateHostRuntimePort",
       "kind": "interface",
       "role": "DRIVEN PORT",
-      "purpose": "Supplies one update-owned Host inspection and phase-constrained mutations bound to the selected build and exact immutable terminal inventory.",
+      "purpose": "Supplies one update-owned Host inspection and phase-constrained mutations bound to the selected build, exact immutable terminal inventory, and authorized handoff fidelity.",
       "dependencies": []
     },
     {
@@ -16707,7 +16707,7 @@
       "declaration": "convergeStationHostForUpdate",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Executes one update-authorized Host action only while the exact committed incumbent build and immutable PTY inventory remain current; it never switches between idle replacement and handoff. Disappearance and drift do not spawn, while an exact target and inventory return a non-mutating already-converged outcome.",
+      "purpose": "Executes one update-authorized Host action only while the exact committed incumbent build and immutable PTY inventory remain current; live handoff also requires exact requested and acknowledged fidelity. It never switches between idle replacement and handoff. Disappearance and drift do not spawn, while an exact target and inventory return a non-mutating already-converged outcome.",
       "dependencies": [
         {
           "path": "packages/protocol/src/transport.ts",

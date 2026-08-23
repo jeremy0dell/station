@@ -248,6 +248,7 @@ describe("runHostCommand", () => {
       handoffAdopt: {
         adopted: ["pty-1"],
         failed: [],
+        fidelity: "screen" as const,
         receipt: {
           terminals: [
             {

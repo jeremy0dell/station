@@ -41,6 +41,23 @@ describe("update convergence digest", () => {
     expect(digest(base)).not.toBe(digest(base, preflightWithTerminal("pty-instance-2")));
   });
 
+  it("changes when identical live handoff evidence selects processes versus screen fidelity", () => {
+    const evidence = handoffPreflight();
+    const privateEvidence = { selectedRecoveryHandles: [] };
+    const processes = digest(privateEvidence, evidence, "processes");
+    const screen = digest(privateEvidence, evidence, "screen");
+
+    expect(processes).not.toBe(screen);
+    expect(planFor(evidence, "processes").components).toMatchObject({
+      host: { action: "handoff", fidelity: "processes" },
+      terminals: { action: "preserve-via-handoff", fidelity: "processes" },
+    });
+    expect(planFor(evidence, "screen").components).toMatchObject({
+      host: { action: "handoff", fidelity: "screen" },
+      terminals: { action: "preserve-via-handoff", fidelity: "screen" },
+    });
+  });
+
   it("is stable across display-only SafeError message changes", () => {
     const first = unknownObserverPreflight("first private path /tmp/a");
     const second = unknownObserverPreflight("second private path /tmp/b");
@@ -87,14 +104,19 @@ describe("update convergence digest", () => {
 function digest(
   privateEvidence: UpdateConvergencePrivateEvidence,
   preflight: UpdateReapRecoveryPreflight = basePreflight(),
+  handoffFidelity: "processes" | "screen" = "processes",
 ): string {
-  const draft = planUpdateConvergence({
+  const draft = planFor(preflight, handoffFidelity);
+  return updateConvergenceDigest({ draft, preflight, privateEvidence }).value;
+}
+
+function planFor(preflight: UpdateReapRecoveryPreflight, handoffFidelity: "processes" | "screen") {
+  return planUpdateConvergence({
     selectedTarget: { artifact, buildIdentity: { status: "known", value: identity } },
     artifactAction: "no-op",
-    handoffFidelity: "processes",
+    handoffFidelity,
     preflight,
   });
-  return updateConvergenceDigest({ draft, preflight, privateEvidence }).value;
 }
 
 function basePreflight(): UpdateReapRecoveryPreflight {
@@ -148,6 +170,21 @@ function preflightWithTerminal(ptyInstanceId: string): UpdateReapRecoveryPreflig
         reasons: ["session_recovery_unknown"],
       },
     ],
+  };
+}
+
+function handoffPreflight(): UpdateReapRecoveryPreflight {
+  const evidence = preflightWithTerminal("pty-instance-1");
+  if (evidence.host.status !== "inspected") throw new Error("missing Host digest fixture");
+  return {
+    ...evidence,
+    host: {
+      ...evidence.host,
+      buildVersion: "0.9.0",
+      buildIdentity: "b".repeat(64),
+      relation: "different",
+      compatibility: "replace",
+    },
   };
 }
 

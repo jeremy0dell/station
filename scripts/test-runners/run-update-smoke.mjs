@@ -2234,6 +2234,11 @@ function assertHostConvergenceAudit(report, input, expected) {
     `${input.name} planned Host action`,
   );
   assertEqual(
+    successor.plan.components.host.fidelity,
+    expected.hostAction === "handoff" ? "processes" : undefined,
+    `${input.name} planned Host handoff fidelity`,
+  );
+  assertEqual(
     successor.plan.selectedTarget.buildIdentity.status,
     "known",
     `${input.name} successor target build identity status`,
@@ -2256,7 +2261,12 @@ function assertHostConvergenceAudit(report, input, expected) {
   const hostAction = audit.actions.find((action) => action.phase === "host-convergence");
   assertDeepEqual(
     hostAction,
-    { phase: "host-convergence", action: expected.hostAction, status: "completed" },
+    {
+      phase: "host-convergence",
+      action: expected.hostAction,
+      status: "completed",
+      ...(expected.hostAction === "handoff" ? { fidelity: "processes" } : {}),
+    },
     `${input.name} parsed Host command receipt audit`,
   );
   const terminalAction = audit.actions.find((action) => action.phase === "terminal-convergence");
@@ -2274,6 +2284,11 @@ function assertHostConvergenceAudit(report, input, expected) {
     "bridge-releasable",
     `${input.name} planned bridge handoff support`,
   );
+  assertEqual(
+    successor.plan.components.terminals.fidelity,
+    "processes",
+    `${input.name} planned terminal handoff fidelity`,
+  );
   assertDeepEqual(
     successor.preflight.host.terminals.map((terminal) => ({
       terminalTargetId: terminal.terminalTargetId,
@@ -2289,6 +2304,7 @@ function assertHostConvergenceAudit(report, input, expected) {
       phase: "terminal-convergence",
       action: "preserve-via-handoff",
       status: "completed",
+      fidelity: "processes",
       handoffReceipt: { terminals: [expected.terminalIdentity] },
     },
     `${input.name} parsed handoff receipt matches the action audit`,

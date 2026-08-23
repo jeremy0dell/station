@@ -52,7 +52,7 @@ export type StationHostHandle =
       /** How this ensure call obtained a usable host. */
       ensuredBy: StationHostEnsuredBy;
       /** Present only for handoff; its receipt names every immutable adopted PTY lifetime. */
-      handoffAdopt?: StationHostHandoffAdoptReport;
+      handoffAdopt?: StationHostHandoffAdoptReport & { fidelity: HostHandoffFidelity };
     }
   | { status: "unavailable"; socketPath: string; error: SafeError };
 
@@ -112,6 +112,7 @@ type IncumbentHostDecision =
   | {
       outcome: "start-with-handoff";
       manifest: PtyHandoffManifest;
+      fidelity: HostHandoffFidelity;
     }
   | { outcome: "already-converged" }
   | { outcome: "running" }
@@ -137,9 +138,9 @@ export async function ensureStationHostRunning(
  * ADAPTER
  *
  * Executes one update-authorized Host action only while the exact committed incumbent build and
- * immutable PTY inventory remain current; it never switches between idle replacement and handoff.
- * Disappearance and drift do not spawn, while an exact target and inventory return a non-mutating
- * already-converged outcome.
+ * immutable PTY inventory remain current; live handoff also requires exact requested and
+ * acknowledged fidelity. It never switches between idle replacement and handoff. Disappearance and
+ * drift do not spawn, while an exact target and inventory return a non-mutating already-converged outcome.
  */
 export async function convergeStationHostForUpdate(
   options: ConvergeStationHostForUpdateOptions,
@@ -167,6 +168,9 @@ export async function convergeStationHostForUpdate(
       schemaVersion: 1,
       action: "update-converge",
       requestedAction,
+      ...(options.command.action === "handoff"
+        ? { requestedFidelity: options.command.fidelity }
+        : {}),
       status: drifted ? (probe.status === "absent" ? "absent" : "stale") : "failed",
       error: handle.error,
     });
@@ -177,6 +181,9 @@ export async function convergeStationHostForUpdate(
       schemaVersion: 1,
       action: "update-converge",
       requestedAction: options.command.action,
+      ...(options.command.action === "handoff"
+        ? { requestedFidelity: options.command.fidelity }
+        : {}),
       status: "already-converged",
       validatedCommitment: options.command.commitment,
       actualInventory: options.command.commitment.incumbent.inventory,
@@ -189,6 +196,9 @@ export async function convergeStationHostForUpdate(
         schemaVersion: 1,
         action: "update-converge",
         requestedAction: options.command.action,
+        ...(options.command.action === "handoff"
+          ? { requestedFidelity: options.command.fidelity }
+          : {}),
         status: "failed",
         error: stationHostSafeError(
           "HOST_CONVERGENCE_PLAN_DRIFT",
@@ -196,12 +206,16 @@ export async function convergeStationHostForUpdate(
         ),
       });
     }
-    const terminals = handle.ensuredBy === "handoff" ? handle.handoffAdopt?.receipt.terminals : [];
-    if (terminals === undefined) {
+    const handoffAdopt = handle.ensuredBy === "handoff" ? handle.handoffAdopt : undefined;
+    const terminals = handoffAdopt?.receipt.terminals ?? [];
+    if (handle.ensuredBy === "handoff" && handoffAdopt === undefined) {
       return UpdateHostConvergenceCommandResultSchema.parse({
         schemaVersion: 1,
         action: "update-converge",
         requestedAction: options.command.action,
+        ...(options.command.action === "handoff"
+          ? { requestedFidelity: options.command.fidelity }
+          : {}),
         status: "failed",
         error: stationHostSafeError(
           "HOST_HANDOFF_MANIFEST_INVALID",
@@ -213,12 +227,16 @@ export async function convergeStationHostForUpdate(
       schemaVersion: 1,
       action: "update-converge",
       requestedAction: options.command.action,
+      ...(options.command.action === "handoff"
+        ? { requestedFidelity: options.command.fidelity }
+        : {}),
       status: "completed",
       receipt: {
         ensuredBy: handle.ensuredBy,
+        ...(handoffAdopt === undefined ? {} : { fidelity: handoffAdopt.fidelity }),
         validatedCommitment: options.command.commitment,
         actualInventory: { terminals },
-        ...(handle.ensuredBy === "handoff" ? { handoffReceipt: handle.handoffAdopt?.receipt } : {}),
+        ...(handoffAdopt === undefined ? {} : { handoffReceipt: handoffAdopt.receipt }),
       },
     });
   } finally {
@@ -287,6 +305,8 @@ async function ensureStationHostRunningInternal(
   }
   const handoffManifest =
     incumbent.outcome === "start-with-handoff" ? incumbent.manifest : undefined;
+  const handoffFidelity =
+    incumbent.outcome === "start-with-handoff" ? incumbent.fidelity : undefined;
   const ensuredBy =
     incumbent.outcome === "start-with-handoff" ? ("handoff" as const) : incumbent.ensuredBy;
 
@@ -348,6 +368,9 @@ async function ensureStationHostRunningInternal(
       return { status: "unavailable", socketPath, error: ready.error };
     }
     if (handoffManifest !== undefined) {
+      if (handoffFidelity === undefined) {
+        throw new Error("Host handoff manifest is missing its validated fidelity.");
+      }
       const adopted = await adoptHandoffManifest(client, handoffManifest);
       if (!adopted.ok) {
         disposeOwned();
@@ -358,7 +381,7 @@ async function ensureStationHostRunningInternal(
         socketPath,
         client,
         ensuredBy: "handoff",
-        handoffAdopt: adopted.report,
+        handoffAdopt: { ...adopted.report, fidelity: handoffFidelity },
       };
     }
     return { status: "running", socketPath, client, ensuredBy };
@@ -546,45 +569,22 @@ async function tryLiveHandoff(input: {
     };
   }
 
+  if (begun.fidelity !== input.fidelity) {
+    return rejectBegunHandoffForPlanDrift(
+      input.client,
+      begun.manifest,
+      "The Host acknowledged a different handoff fidelity than the convergence plan authorized.",
+    );
+  }
+
   if (input.expectedInventory !== undefined) {
     const begunInventory = ptyLifetimeIdentitiesFromManifest(begun.manifest);
     if (!ptyLifetimeIdentitySetsMatch(input.expectedInventory, begunInventory)) {
-      try {
-        const abort = await input.client.abortHandoff();
-        if (restoredEveryManifestEntry(abort, begun.manifest)) {
-          return {
-            outcome: "unavailable",
-            error: hostConvergencePlanDrift(
-              "The Host immutable terminal inventory changed while live handoff was beginning.",
-            ),
-          };
-        }
-        return {
-          outcome: "unavailable",
-          error: parkedHandoffFailure(
-            hostConvergencePlanDrift(
-              "The Host immutable terminal inventory changed while live handoff was beginning.",
-            ),
-            stationHostSafeError(
-              "HOST_HANDOFF_MANIFEST_INVALID",
-              "Incumbent Host restoration did not recover every parked terminal.",
-            ),
-          ),
-        };
-      } catch (abortError) {
-        return {
-          outcome: "unavailable",
-          error: parkedHandoffFailure(
-            hostConvergencePlanDrift(
-              "The Host immutable terminal inventory changed while live handoff was beginning.",
-            ),
-            stationHostErrorFromUnknown(abortError, {
-              code: "HOST_HANDOFF_INVALID_STATE",
-              message: "Incumbent Host restoration could not be confirmed after inventory drift.",
-            }),
-          ),
-        };
-      }
+      return rejectBegunHandoffForPlanDrift(
+        input.client,
+        begun.manifest,
+        "The Host immutable terminal inventory changed while live handoff was beginning.",
+      );
     }
   }
 
@@ -629,7 +629,7 @@ async function tryLiveHandoff(input: {
 
   try {
     await waitForSocketRelease(input.socketPath, input.timeoutMs);
-    return { outcome: "start-with-handoff", manifest: begun.manifest };
+    return { outcome: "start-with-handoff", manifest: begun.manifest, fidelity: begun.fidelity };
   } catch (error) {
     return {
       outcome: "unavailable",
@@ -637,6 +637,41 @@ async function tryLiveHandoff(input: {
         stationHostErrorFromUnknown(error, {
           code: "HOST_UNREACHABLE",
           message: "Completed Station host handoff did not release the incumbent socket.",
+        }),
+      ),
+    };
+  }
+}
+
+async function rejectBegunHandoffForPlanDrift(
+  client: StationHostClient,
+  manifest: PtyHandoffManifest,
+  message: string,
+): Promise<IncumbentHostDecision> {
+  const drift = hostConvergencePlanDrift(message);
+  try {
+    const abort = await client.abortHandoff();
+    if (restoredEveryManifestEntry(abort, manifest)) {
+      return { outcome: "unavailable", error: drift };
+    }
+    return {
+      outcome: "unavailable",
+      error: parkedHandoffFailure(
+        drift,
+        stationHostSafeError(
+          "HOST_HANDOFF_MANIFEST_INVALID",
+          "Incumbent Host restoration did not recover every parked terminal.",
+        ),
+      ),
+    };
+  } catch (abortError) {
+    return {
+      outcome: "unavailable",
+      error: parkedHandoffFailure(
+        drift,
+        stationHostErrorFromUnknown(abortError, {
+          code: "HOST_HANDOFF_INVALID_STATE",
+          message: "Incumbent Host restoration could not be confirmed after handoff plan drift.",
         }),
       ),
     };

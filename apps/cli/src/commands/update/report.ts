@@ -62,8 +62,8 @@ function renderUpdateReport(report: UpdateCommandReport): string {
   }
   lines.push(
     `observer: ${encodeUpdateTerminalText(plan.components.observer.action)} (${encodeUpdateTerminalText(plan.components.observer.reason)})`,
-    `host: ${encodeUpdateTerminalText(plan.components.host.action)} (${encodeUpdateTerminalText(plan.components.host.reason)})`,
-    `terminals: ${encodeUpdateTerminalText(plan.components.terminals.action)} (${encodeUpdateTerminalText(plan.components.terminals.reason)}); live=${plan.components.terminals.liveCount} recoverable=${plan.components.terminals.recoverableCount} non-resumable=${plan.components.terminals.nonResumableCount} unknown=${plan.components.terminals.unknownRecoveryCount}`,
+    `host: ${encodeUpdateTerminalText(plan.components.host.action)} (${encodeUpdateTerminalText(plan.components.host.reason)})${fidelityText(plan.components.host.fidelity)}`,
+    `terminals: ${encodeUpdateTerminalText(plan.components.terminals.action)} (${encodeUpdateTerminalText(plan.components.terminals.reason)})${fidelityText(plan.components.terminals.fidelity)}; live=${plan.components.terminals.liveCount} recoverable=${plan.components.terminals.recoverableCount} non-resumable=${plan.components.terminals.nonResumableCount} unknown=${plan.components.terminals.unknownRecoveryCount}`,
     `recovery: ${encodeUpdateTerminalText(plan.components.recovery.relevance)}/${encodeUpdateTerminalText(plan.components.recovery.status)}`,
     `reconcile: ${encodeUpdateTerminalText(plan.components.reconcile.action)} (${encodeUpdateTerminalText(plan.components.reconcile.reason)})`,
     "ordered convergence phases:",
@@ -93,7 +93,7 @@ function renderUpdateReport(report: UpdateCommandReport): string {
           action.provider === undefined
             ? ""
             : ` provider=${encodeUpdateTerminalText(action.provider)}`
-        }`,
+        }${fidelityText(action.fidelity)}`,
       );
     }
   }
@@ -132,6 +132,10 @@ function renderUpdateReport(report: UpdateCommandReport): string {
     }
   }
   return `${lines.join("\n")}\n`;
+}
+
+function fidelityText(fidelity: "processes" | "screen" | undefined): string {
+  return fidelity === undefined ? "" : ` fidelity=${encodeUpdateTerminalText(fidelity)}`;
 }
 
 function actionAudits(report: UpdateCommandReport) {

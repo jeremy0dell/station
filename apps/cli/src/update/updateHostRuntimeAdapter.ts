@@ -45,7 +45,8 @@ export type UpdateHostRuntimeAdapterDeps = {
  * ADAPTER
  *
  * Translates the update Host port into direct typed socket inspection and constrained Station Host
- * convergence. No update action passes through CLI text or generic handoff behavior.
+ * convergence with exact fidelity receipts. No update action passes through CLI text or generic
+ * handoff behavior.
  */
 export function createUpdateHostRuntimeAdapter(
   options: UpdateHostRuntimeAdapterOptions,
@@ -69,7 +70,7 @@ export function createUpdateHostRuntimeAdapter(
       build.buildIdentity !== command.commitment.target.buildIdentity
     ) {
       return staleResult(
-        command.action,
+        command,
         "The executing Station CLI does not match the selected target Host build commitment.",
       );
     }
@@ -200,13 +201,14 @@ function hostUnknown(
 }
 
 function staleResult(
-  requestedAction: UpdateHostConvergenceCommand["action"],
+  command: UpdateHostConvergenceCommand,
   message: string,
 ): UpdateHostConvergenceCommandResult {
   return UpdateHostConvergenceCommandResultSchema.parse({
     schemaVersion: 1,
     action: "update-converge",
-    requestedAction,
+    requestedAction: command.action,
+    ...(command.action === "handoff" ? { requestedFidelity: command.fidelity } : {}),
     status: "stale",
     error: stationHostSafeError("HOST_CONVERGENCE_PLAN_DRIFT", message),
   });

@@ -10,7 +10,7 @@ import type {
  * DRIVEN PORT
  *
  * Supplies one update-owned Host inspection and phase-constrained mutations bound to the selected
- * build and exact immutable terminal inventory.
+ * build, exact immutable terminal inventory, and authorized handoff fidelity.
  */
 export interface UpdateHostRuntimePort {
   inspect(artifacts: {

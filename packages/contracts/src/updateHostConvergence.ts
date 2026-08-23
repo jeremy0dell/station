@@ -83,6 +83,7 @@ export const UpdateHostConvergenceCommandSchema = z
   });
 export type UpdateHostConvergenceCommand = z.infer<typeof UpdateHostConvergenceCommandSchema>;
 
+/** Exact build, inventory, action, and acknowledged fidelity proof from constrained Host mutation. */
 export const UpdateHostConvergenceReceiptSchema = z
   .discriminatedUnion("ensuredBy", [
     z
@@ -95,6 +96,7 @@ export const UpdateHostConvergenceReceiptSchema = z
     z
       .object({
         ensuredBy: z.literal("handoff"),
+        fidelity: HostHandoffFidelitySchema,
         validatedCommitment: UpdateHostConvergenceCommitmentSchema,
         actualInventory: HostPtyInventoryCommitmentSchema,
         handoffReceipt: PtyHandoffReceiptSchema,
@@ -143,6 +145,7 @@ export const UpdateHostConvergenceCommandResultSchema = z
         schemaVersion: z.literal(1),
         action: z.literal("update-converge"),
         requestedAction: z.enum(["replace-idle", "handoff"]),
+        requestedFidelity: HostHandoffFidelitySchema.optional(),
         status: z.literal("completed"),
         receipt: UpdateHostConvergenceReceiptSchema,
       })
@@ -152,6 +155,7 @@ export const UpdateHostConvergenceCommandResultSchema = z
         schemaVersion: z.literal(1),
         action: z.literal("update-converge"),
         requestedAction: z.enum(["replace-idle", "handoff"]),
+        requestedFidelity: HostHandoffFidelitySchema.optional(),
         status: z.literal("already-converged"),
         validatedCommitment: UpdateHostConvergenceCommitmentSchema,
         actualInventory: HostPtyInventoryCommitmentSchema,
@@ -162,12 +166,20 @@ export const UpdateHostConvergenceCommandResultSchema = z
         schemaVersion: z.literal(1),
         action: z.literal("update-converge"),
         requestedAction: z.enum(["replace-idle", "handoff"]),
+        requestedFidelity: HostHandoffFidelitySchema.optional(),
         status: z.enum(["absent", "stale", "failed"]),
         error: SafeErrorSchema,
       })
       .strict(),
   ])
   .superRefine((result, context) => {
+    if ((result.requestedAction === "handoff") !== (result.requestedFidelity !== undefined)) {
+      context.addIssue({
+        code: "custom",
+        path: ["requestedFidelity"],
+        message: "Host handoff results must retain the exact requested fidelity.",
+      });
+    }
     if (
       result.status === "completed" &&
       ((result.requestedAction === "replace-idle" && result.receipt.ensuredBy !== "idle-replace") ||
@@ -177,6 +189,17 @@ export const UpdateHostConvergenceCommandResultSchema = z
         code: "custom",
         path: ["receipt", "ensuredBy"],
         message: "Host convergence receipt must identify the exact requested action.",
+      });
+    }
+    if (
+      result.status === "completed" &&
+      result.receipt.ensuredBy === "handoff" &&
+      result.receipt.fidelity !== result.requestedFidelity
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["receipt", "fidelity"],
+        message: "Host handoff receipt fidelity must match the exact requested fidelity.",
       });
     }
     if (

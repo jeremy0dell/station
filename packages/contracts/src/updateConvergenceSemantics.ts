@@ -319,18 +319,19 @@ function expectedHostAlternatives(
     (terminal) => terminal.handoff === "non-preservable",
   );
   if (destructive.length === 0) {
-    return [
-      noHandoff,
-      {
-        host: { action: "handoff", reason: "busy-handoff" },
+    const handoffAlternatives = (["processes", "screen"] as const).map(
+      (fidelity): HostTerminalRecoveryDecision => ({
+        host: { action: "handoff", reason: "busy-handoff", fidelity },
         terminals: {
           action: "preserve-via-handoff",
           reason: "all-bridge-releasable",
+          fidelity,
           ...counts,
         },
         recovery: { relevance: "not-required", status: "not-required" },
-      },
-    ];
+      }),
+    );
+    return [noHandoff, ...handoffAlternatives];
   }
   if (destructive.some((terminal) => terminal.reapRecovery === "unknown")) {
     return [
@@ -417,10 +418,14 @@ function hookDecisionsMatch(
 }
 
 function decisionMatches(
-  actual: { action: string; reason: string },
-  expected: { action: string; reason: string },
+  actual: { action: string; reason: string; fidelity?: "processes" | "screen" | undefined },
+  expected: { action: string; reason: string; fidelity?: "processes" | "screen" | undefined },
 ): boolean {
-  return actual.action === expected.action && actual.reason === expected.reason;
+  return (
+    actual.action === expected.action &&
+    actual.reason === expected.reason &&
+    actual.fidelity === expected.fidelity
+  );
 }
 
 function artifactsMatch(
