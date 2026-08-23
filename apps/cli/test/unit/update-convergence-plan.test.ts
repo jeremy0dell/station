@@ -111,6 +111,59 @@ describe("update convergence planning policy", () => {
 
   it.each([
     {
+      admission: "candidate-wins" as const,
+      expected: { status: "actionable", action: "restart", reason: "different-build" },
+    },
+    {
+      admission: "incumbent-wins" as const,
+      expected: { status: "blocked", action: "blocked", reason: "singleton-refused" },
+    },
+    {
+      admission: "refused" as const,
+      expected: { status: "blocked", action: "blocked", reason: "singleton-refused" },
+    },
+  ])("applies exact singleton admission $admission independently from different-build relation", ({
+    admission,
+    expected,
+  }) => {
+    const result = evaluate(
+      preflight({ observer: differentObserver(admission), host: matchingHost() }),
+    );
+    expect({
+      status: result.status,
+      action: result.components.observer.action,
+      reason: result.components.observer.reason,
+    }).toEqual(expected);
+  });
+
+  it("assigns an uninstalled target Observer to successor reinspection without restart authority", () => {
+    const evidence = preflight({
+      observer: differentObserver("not-yet-provable"),
+    });
+    evidence.installed = { version: "0.9.0", revision: "revision-0" };
+    const result = planUpdateConvergence({
+      selectedTarget: { artifact, buildIdentity: { status: "not-yet-provable" } },
+      artifactAction: "apply",
+      preflight: evidence,
+    });
+
+    expect(result).toMatchObject({
+      status: "actionable",
+      components: {
+        observer: { action: "reinspect", reason: "target-artifact-may-change" },
+      },
+      phases: expect.arrayContaining([
+        {
+          id: "observer-convergence",
+          action: "reinspect",
+          reason: "target-artifact-may-change",
+        },
+      ]),
+    });
+  });
+
+  it.each([
+    {
       name: "unknown runtime evidence",
       preflight: preflight({
         observer: {
@@ -365,7 +418,7 @@ function preflight(
   overrides: Partial<UpdateReapRecoveryPreflight> = {},
 ): UpdateReapRecoveryPreflight {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     boundary: { authorization: "none", actions: "not-included", digest: "not-included" },
     installed: artifact,
     target: artifact,
@@ -387,6 +440,7 @@ function matchingObserver(
     status: "exact",
     buildVersion: `1.0.0+station.${buildIdentity}`,
     relation: "matching-target",
+    replacementAdmission: "exact-build",
     health,
     recovery:
       recovery === "assessed"
@@ -407,8 +461,19 @@ function matchingObserver(
   };
 }
 
-function differentObserver(): UpdateReapRecoveryPreflight["observer"] {
-  return { ...matchingObserver(), buildVersion: "0.9.0", relation: "different" };
+function differentObserver(
+  replacementAdmission:
+    | "candidate-wins"
+    | "incumbent-wins"
+    | "refused"
+    | "not-yet-provable" = "candidate-wins",
+): UpdateReapRecoveryPreflight["observer"] {
+  return {
+    ...matchingObserver(),
+    buildVersion: "0.9.0",
+    relation: "different",
+    replacementAdmission,
+  };
 }
 
 function restartableObserverDrift(): UpdateReapRecoveryPreflight["observer"] {

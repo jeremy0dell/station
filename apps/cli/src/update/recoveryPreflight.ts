@@ -9,8 +9,11 @@ import {
   type UpdateArtifact,
   type UpdateReapHostEvidence,
   type UpdateReapObserverEvidence,
+  type UpdateReapObserverEvidenceV1,
   type UpdateReapRecoveryPreflight,
   UpdateReapRecoveryPreflightSchema,
+  type UpdateReapRecoveryPreflightV1,
+  UpdateReapRecoveryPreflightV1Schema,
   type UpdateReapTerminalDisposition,
   type UpdateReapTerminalDispositionReason,
   updateReapEvidenceIsComplete,
@@ -97,9 +100,9 @@ export async function runUpdateRecoveryPreflight(input: {
   installed: UpdateArtifact;
   target: UpdateArtifact;
   ports: UpdateRecoveryPreflightPorts;
-}): Promise<UpdateReapRecoveryPreflight> {
+}): Promise<UpdateReapRecoveryPreflightV1> {
   // #665 callers receive only the public projection of the validated convergence aggregate.
-  return (await inspectUpdateConvergencePreflight(input)).preflight;
+  return projectRecoveryPreflightV1((await inspectUpdateConvergencePreflight(input)).preflight);
 }
 
 /**
@@ -134,7 +137,7 @@ export async function inspectUpdateConvergencePreflight(input: {
     terminalDispositions,
   };
   const preflight = UpdateReapRecoveryPreflightSchema.parse({
-    schemaVersion: 1,
+    schemaVersion: 2,
     boundary: {
       authorization: "none",
       actions: "not-included",
@@ -436,7 +439,7 @@ export function redactedPreflightError(
 }
 
 /** Deterministic terminal-first text presentation shared by update dry-run and TUI callers. */
-export function renderUpdateRecoveryPreflight(preflight: UpdateReapRecoveryPreflight): string {
+export function renderUpdateRecoveryPreflight(preflight: UpdateReapRecoveryPreflightV1): string {
   const lines = [
     "recovery preflight (facts only; authorizes no action)",
     `installed: ${artifactText(preflight.installed)}`,
@@ -509,10 +512,33 @@ function artifactText(artifact: UpdateArtifact): string {
     : `${terminalText(artifact.version)} (${terminalText(artifact.revision)})`;
 }
 
-function observerText(observer: UpdateReapObserverEvidence): string {
+function observerText(observer: UpdateReapObserverEvidenceV1): string {
   if (observer.status === "absent") return "absent";
   if (observer.status === "unknown") return `unknown (${observer.reason})`;
   return `exact build=${terminalText(observer.buildVersion)} relation=${observer.relation} health=${observer.health} recovery=${observer.recovery.status}`;
+}
+
+function projectRecoveryPreflightV1(
+  preflight: UpdateReapRecoveryPreflight,
+): UpdateReapRecoveryPreflightV1 {
+  return UpdateReapRecoveryPreflightV1Schema.parse({
+    ...preflight,
+    schemaVersion: 1,
+    observer: projectObserverEvidenceV1(preflight.observer),
+  });
+}
+
+function projectObserverEvidenceV1(
+  observer: UpdateReapObserverEvidence,
+): UpdateReapObserverEvidenceV1 {
+  if (observer.status !== "exact") return observer;
+  return {
+    status: "exact",
+    buildVersion: observer.buildVersion,
+    relation: observer.relation,
+    health: observer.health,
+    recovery: observer.recovery,
+  };
 }
 
 function hostText(host: UpdateReapHostEvidence): string {

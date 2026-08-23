@@ -30,7 +30,7 @@ const terminalDisposition = {
   reasons: [],
 };
 const preflightBase = {
-  schemaVersion: 1 as const,
+  schemaVersion: 2 as const,
   boundary: {
     authorization: "none" as const,
     actions: "not-included" as const,
@@ -42,6 +42,7 @@ const preflightBase = {
     status: "exact" as const,
     buildVersion: `2.0.0+station.${buildIdentity}`,
     relation: "matching-target" as const,
+    replacementAdmission: "exact-build" as const,
     health: "healthy" as const,
     recovery: {
       status: "unknown" as const,
@@ -261,6 +262,15 @@ describe("strict v4 convergence semantics", () => {
           action: "no-op",
           reason: "matching-unhealthy",
         }),
+    ],
+    [
+      "Observer singleton admission",
+      (report: UpdateCommandReport) => {
+        const observer = report.initial.preflight.observer;
+        if (observer.status !== "exact") throw new Error("missing exact Observer fixture");
+        observer.relation = "different";
+        observer.replacementAdmission = "incumbent-wins";
+      },
     ],
     [
       "terminal action",

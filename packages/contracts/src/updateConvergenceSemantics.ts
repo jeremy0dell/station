@@ -233,7 +233,20 @@ function expectedObserverDecision(
   if (observer.relation === "unknown") {
     return { action: "blocked", reason: "identity-incomplete" };
   }
-  if (observer.relation === "different") return { action: "restart", reason: "different-build" };
+  if (observer.relation === "different") {
+    switch (observer.replacementAdmission) {
+      case "candidate-wins":
+        return { action: "restart", reason: "different-build" };
+      case "not-yet-provable":
+        return { action: "reinspect", reason: "target-artifact-may-change" };
+      case "incumbent-wins":
+      case "refused":
+        return { action: "blocked", reason: "singleton-refused" };
+      case "exact-build":
+      case "unknown":
+        return { action: "blocked", reason: "identity-incomplete" };
+    }
+  }
   return observer.health === "healthy"
     ? { action: "no-op", reason: "matching-healthy" }
     : { action: "restart", reason: "matching-unhealthy" };

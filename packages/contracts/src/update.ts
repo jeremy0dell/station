@@ -17,8 +17,8 @@ import {
   UpdateEvidencePlanSchema,
 } from "./updateConvergence.js";
 import {
-  type UpdateReapRecoveryPreflight,
-  UpdateReapRecoveryPreflightSchema,
+  type UpdateReapRecoveryPreflightV1,
+  UpdateReapRecoveryPreflightV1Schema,
 } from "./updateRecoveryPreflight.js";
 
 export const UpdateChannelIdSchema = z.enum([
@@ -217,7 +217,7 @@ export type UpdateCommandReportV3 = UpdateCommandReportCore & {
   schemaVersion: 3;
   steps: UpdateCommandStep[];
   hookReconciliation?: ProviderHookReconciliationResult;
-  recoveryPreflight?: UpdateReapRecoveryPreflight;
+  recoveryPreflight?: UpdateReapRecoveryPreflightV1;
 };
 
 /** Legacy strict report parser for #639's non-authorizing recovery facts. */
@@ -227,7 +227,7 @@ export const UpdateCommandReportV3Schema: z.ZodType<UpdateCommandReportV3> = z
     ...updateCommandReportCoreShape,
     steps: z.array(UpdateCommandStepSchema),
     hookReconciliation: ProviderHookReconciliationResultSchema.optional(),
-    recoveryPreflight: UpdateReapRecoveryPreflightSchema.optional(),
+    recoveryPreflight: UpdateReapRecoveryPreflightV1Schema.optional(),
   })
   .strict()
   .superRefine((report, context) => {

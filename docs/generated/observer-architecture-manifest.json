@@ -14442,7 +14442,7 @@
       "declaration": "planUpdateConvergence",
       "kind": "function",
       "role": "POLICY",
-      "purpose": "Converts one #665 aggregate inspection into a deterministic, provider-neutral convergence plan. Evidence is admitted per component and action: facts irrelevant to a safe action do not block it.",
+      "purpose": "Converts one #665 aggregate inspection into a deterministic, provider-neutral convergence plan. Evidence is admitted per component and action: facts irrelevant to a safe action do not block it, and Observer restart requires a selected candidate admitted by singleton ordering.",
       "dependencies": []
     },
     {
@@ -14593,7 +14593,7 @@
       "declaration": "createUpdateRecoveryPreflightPorts",
       "kind": "function",
       "role": "COMPOSITION ROOT",
-      "purpose": "Binds recovery preflight to read-only local process evidence, Observer protocol queries, strict Host inventory, and the provider-neutral hook-health use case. Observer public evidence and its CLI-private ownership sidecar are captured together. No lifecycle or repair capability is exposed through these ports.",
+      "purpose": "Binds recovery preflight to read-only local process evidence, Observer protocol queries, strict Host inventory, and the provider-neutral hook-health use case. Observer public evidence and its CLI-private ownership sidecar are captured together, while the existing singleton classifier supplies replacement admission independently from target-build relation. No lifecycle or repair capability is exposed through these ports.",
       "dependencies": [
         {
           "path": "apps/cli/src/observerProcess.ts",

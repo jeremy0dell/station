@@ -15,10 +15,22 @@ import {
   SessionRecoveryAssessmentReasonsSchema,
 } from "./recoveryAssessment.js";
 import { compareCodeUnitStrings, nonEmptyStringSchema } from "./shared.js";
-import { UpdateArtifactSchema } from "./updateArtifact.js";
+import { type UpdateArtifact, UpdateArtifactSchema } from "./updateArtifact.js";
 
 export const UpdateRuntimeBuildRelationSchema = z.enum(["matching-target", "different", "unknown"]);
 export type UpdateRuntimeBuildRelation = z.infer<typeof UpdateRuntimeBuildRelationSchema>;
+
+export const UpdateObserverReplacementAdmissionSchema = z.enum([
+  "exact-build",
+  "candidate-wins",
+  "incumbent-wins",
+  "refused",
+  "not-yet-provable",
+  "unknown",
+]);
+export type UpdateObserverReplacementAdmission = z.infer<
+  typeof UpdateObserverReplacementAdmissionSchema
+>;
 
 const unknownObserverSchema = z
   .object({
@@ -151,18 +163,56 @@ const observerRecoveryEvidenceSchema = z.discriminatedUnion("status", [
     .strict(),
 ]);
 
+const absentObserverSchema = z.object({ status: z.literal("absent") }).strict();
+const exactObserverEvidenceV1Schema = z
+  .object({
+    status: z.literal("exact"),
+    buildVersion: nonEmptyStringSchema,
+    relation: UpdateRuntimeBuildRelationSchema,
+    health: z.enum(["healthy", "degraded", "unavailable"]),
+    recovery: observerRecoveryEvidenceSchema,
+  })
+  .strict();
+
+/** Legacy #665 Observer evidence retained unchanged for strict update-report v3 parsing. */
+export const UpdateReapObserverEvidenceV1Schema = z.discriminatedUnion("status", [
+  absentObserverSchema,
+  unknownObserverSchema,
+  exactObserverEvidenceV1Schema,
+]);
+export type UpdateReapObserverEvidenceV1 = z.infer<typeof UpdateReapObserverEvidenceV1Schema>;
+
 export const UpdateReapObserverEvidenceSchema = z.discriminatedUnion("status", [
-  z.object({ status: z.literal("absent") }).strict(),
+  absentObserverSchema,
   unknownObserverSchema,
   z
     .object({
       status: z.literal("exact"),
       buildVersion: nonEmptyStringSchema,
       relation: UpdateRuntimeBuildRelationSchema,
+      replacementAdmission: UpdateObserverReplacementAdmissionSchema,
       health: z.enum(["healthy", "degraded", "unavailable"]),
       recovery: observerRecoveryEvidenceSchema,
     })
-    .strict(),
+    .strict()
+    .superRefine((observer, context) => {
+      const valid =
+        (observer.relation === "matching-target" &&
+          observer.replacementAdmission === "exact-build") ||
+        (observer.relation === "different" &&
+          (observer.replacementAdmission === "candidate-wins" ||
+            observer.replacementAdmission === "incumbent-wins" ||
+            observer.replacementAdmission === "refused" ||
+            observer.replacementAdmission === "not-yet-provable")) ||
+        (observer.relation === "unknown" && observer.replacementAdmission === "unknown");
+      if (!valid) {
+        context.addIssue({
+          code: "custom",
+          path: ["replacementAdmission"],
+          message: "Observer replacement admission must agree with its immutable build relation.",
+        });
+      }
+    }),
 ]);
 export type UpdateReapObserverEvidence = z.infer<typeof UpdateReapObserverEvidenceSchema>;
 
@@ -239,113 +289,155 @@ export const UpdateReapTerminalDispositionSchema = PtyLifetimeIdentitySchema.ext
 export type UpdateReapTerminalDisposition = z.infer<typeof UpdateReapTerminalDispositionSchema>;
 
 type UpdateReapEvidenceSet = {
-  observer: UpdateReapObserverEvidence;
+  observer: UpdateReapObserverEvidence | UpdateReapObserverEvidenceV1;
   host: UpdateReapHostEvidence;
   hookProviderIds: ProviderId[];
   hooks: z.infer<typeof ProviderHookHealthSchema>[];
   terminalDispositions: UpdateReapTerminalDisposition[];
 };
 
+const updateReapBoundarySchema = z
+  .object({
+    authorization: z.literal("none"),
+    actions: z.literal("not-included"),
+    digest: z.literal("not-included"),
+  })
+  .strict();
+
+const updateReapPreflightCommonShape = {
+  boundary: updateReapBoundarySchema,
+  installed: UpdateArtifactSchema,
+  target: UpdateArtifactSchema,
+  host: UpdateReapHostEvidenceSchema,
+  hookProviderIds: z.array(ProviderIdSchema),
+  hooks: z.array(ProviderHookHealthSchema),
+  terminalDispositions: z.array(UpdateReapTerminalDispositionSchema),
+  evidenceComplete: z.boolean(),
+} as const;
+
+const updateReapRecoveryPreflightV1BaseSchema = z
+  .object({
+    schemaVersion: z.literal(1),
+    ...updateReapPreflightCommonShape,
+    observer: UpdateReapObserverEvidenceV1Schema,
+  })
+  .strict();
+
+const updateReapRecoveryPreflightBaseSchema = z
+  .object({
+    schemaVersion: z.literal(2),
+    ...updateReapPreflightCommonShape,
+    observer: UpdateReapObserverEvidenceSchema,
+  })
+  .strict();
+
+type AnyUpdateReapRecoveryPreflight =
+  | z.infer<typeof updateReapRecoveryPreflightV1BaseSchema>
+  | z.infer<typeof updateReapRecoveryPreflightBaseSchema>;
+
+/** Legacy #665 aggregate retained unchanged for strict update-report v3 compatibility. */
+export const UpdateReapRecoveryPreflightV1Schema =
+  updateReapRecoveryPreflightV1BaseSchema.superRefine(refineUpdateReapRecoveryPreflight);
+export type UpdateReapRecoveryPreflightV1 = z.infer<typeof UpdateReapRecoveryPreflightV1Schema>;
+
 /**
  * Strict, redaction-safe recovery facts and dispositions for one update target. This payload is
  * non-authorizing: #640 owns executable actions and digests, and #641 owns destructive execution.
  */
-export const UpdateReapRecoveryPreflightSchema = z
-  .object({
-    schemaVersion: z.literal(1),
-    boundary: z
-      .object({
-        authorization: z.literal("none"),
-        actions: z.literal("not-included"),
-        digest: z.literal("not-included"),
-      })
-      .strict(),
-    installed: UpdateArtifactSchema,
-    target: UpdateArtifactSchema,
-    observer: UpdateReapObserverEvidenceSchema,
-    host: UpdateReapHostEvidenceSchema,
-    hookProviderIds: z.array(ProviderIdSchema),
-    hooks: z.array(ProviderHookHealthSchema),
-    terminalDispositions: z.array(UpdateReapTerminalDispositionSchema),
-    evidenceComplete: z.boolean(),
-  })
-  .strict()
-  .superRefine((preflight, context) => {
-    if (!strictlySortedStrings(preflight.hookProviderIds)) {
-      context.addIssue({
-        code: "custom",
-        path: ["hookProviderIds"],
-        message: "Hook provider ids must be unique and deterministically sorted.",
-      });
+export const UpdateReapRecoveryPreflightSchema = updateReapRecoveryPreflightBaseSchema.superRefine(
+  (preflight, context) => {
+    refineUpdateReapRecoveryPreflight(preflight, context);
+    if (preflight.observer.status === "exact" && preflight.observer.relation === "different") {
+      const targetInstalled = updateArtifactsMatch(preflight.installed, preflight.target);
+      if ((preflight.observer.replacementAdmission === "not-yet-provable") !== !targetInstalled) {
+        context.addIssue({
+          code: "custom",
+          path: ["observer", "replacementAdmission"],
+          message:
+            "Observer replacement admission is not yet provable exactly when the selected artifact is not installed.",
+        });
+      }
     }
-    const hookProviders = preflight.hooks.map((hook) => hook.provider);
-    if (!strictlySortedStrings(hookProviders)) {
-      context.addIssue({
-        code: "custom",
-        path: ["hooks"],
-        message: "Hook evidence must be unique and deterministically sorted.",
-      });
-    }
-    if (
-      hookProviders.length !== preflight.hookProviderIds.length ||
-      hookProviders.some((provider, index) => provider !== preflight.hookProviderIds[index])
-    ) {
-      context.addIssue({
-        code: "custom",
-        path: ["hooks"],
-        message: "Every requested hook provider must have exactly one matching evidence result.",
-      });
-    }
-    if (
-      preflight.observer.status === "exact" &&
-      preflight.observer.recovery.status === "assessed" &&
-      preflight.observer.recovery.assessment.providerCapabilities.some(
-        (capability) => !preflight.hookProviderIds.includes(capability.provider),
-      )
-    ) {
-      context.addIssue({
-        code: "custom",
-        path: ["hookProviderIds"],
-        message: "Every assessed recovery provider must have hook evidence.",
-      });
-    }
-
-    if (
-      preflight.host.status === "inspected" &&
-      !strictlySortedTerminals(preflight.host.terminals)
-    ) {
-      context.addIssue({
-        code: "custom",
-        path: ["host", "terminals"],
-        message: "Host terminals must be unique and deterministically sorted.",
-      });
-    }
-
-    if (!strictlySortedTerminals(preflight.terminalDispositions)) {
-      context.addIssue({
-        code: "custom",
-        path: ["terminalDispositions"],
-        message: "Terminal dispositions must be unique and deterministically sorted.",
-      });
-    }
-
-    if (!updateTerminalEvidenceSetsMatch(preflight.host, preflight.terminalDispositions)) {
-      context.addIssue({
-        code: "custom",
-        path: ["terminalDispositions"],
-        message:
-          "Every inspected Host terminal must have exactly one identity- and handoff-matched disposition.",
-      });
-    }
-    if (preflight.evidenceComplete !== updateReapEvidenceIsComplete(preflight)) {
-      context.addIssue({
-        code: "custom",
-        path: ["evidenceComplete"],
-        message: "Evidence completeness must match the typed preflight facts.",
-      });
-    }
-  });
+  },
+);
 export type UpdateReapRecoveryPreflight = z.infer<typeof UpdateReapRecoveryPreflightSchema>;
+
+function refineUpdateReapRecoveryPreflight(
+  preflight: AnyUpdateReapRecoveryPreflight,
+  context: z.RefinementCtx,
+): void {
+  if (!strictlySortedStrings(preflight.hookProviderIds)) {
+    context.addIssue({
+      code: "custom",
+      path: ["hookProviderIds"],
+      message: "Hook provider ids must be unique and deterministically sorted.",
+    });
+  }
+  const hookProviders = preflight.hooks.map((hook) => hook.provider);
+  if (!strictlySortedStrings(hookProviders)) {
+    context.addIssue({
+      code: "custom",
+      path: ["hooks"],
+      message: "Hook evidence must be unique and deterministically sorted.",
+    });
+  }
+  if (
+    hookProviders.length !== preflight.hookProviderIds.length ||
+    hookProviders.some((provider, index) => provider !== preflight.hookProviderIds[index])
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["hooks"],
+      message: "Every requested hook provider must have exactly one matching evidence result.",
+    });
+  }
+  if (
+    preflight.observer.status === "exact" &&
+    preflight.observer.recovery.status === "assessed" &&
+    preflight.observer.recovery.assessment.providerCapabilities.some(
+      (capability) => !preflight.hookProviderIds.includes(capability.provider),
+    )
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["hookProviderIds"],
+      message: "Every assessed recovery provider must have hook evidence.",
+    });
+  }
+  if (preflight.host.status === "inspected" && !strictlySortedTerminals(preflight.host.terminals)) {
+    context.addIssue({
+      code: "custom",
+      path: ["host", "terminals"],
+      message: "Host terminals must be unique and deterministically sorted.",
+    });
+  }
+  if (!strictlySortedTerminals(preflight.terminalDispositions)) {
+    context.addIssue({
+      code: "custom",
+      path: ["terminalDispositions"],
+      message: "Terminal dispositions must be unique and deterministically sorted.",
+    });
+  }
+  if (!updateTerminalEvidenceSetsMatch(preflight.host, preflight.terminalDispositions)) {
+    context.addIssue({
+      code: "custom",
+      path: ["terminalDispositions"],
+      message:
+        "Every inspected Host terminal must have exactly one identity- and handoff-matched disposition.",
+    });
+  }
+  if (preflight.evidenceComplete !== updateReapEvidenceIsComplete(preflight)) {
+    context.addIssue({
+      code: "custom",
+      path: ["evidenceComplete"],
+      message: "Evidence completeness must match the typed preflight facts.",
+    });
+  }
+}
+
+function updateArtifactsMatch(left: UpdateArtifact, right: UpdateArtifact): boolean {
+  return left.version === right.version && left.revision === right.revision;
+}
 
 function strictlySortedTerminals(
   terminals: readonly {

@@ -77,7 +77,7 @@ describe("registered stn update command", () => {
           }),
           convergenceInspection: async ({ installed, target }) => ({
             preflight: {
-              schemaVersion: 1,
+              schemaVersion: 2,
               boundary: {
                 authorization: "none",
                 actions: "not-included",

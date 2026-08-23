@@ -5,6 +5,8 @@ import { ProviderRegistry } from "@station/observer/internal";
 import type { createObserverClient } from "@station/protocol";
 import { FakeHarnessProvider, FakeTerminalProvider, FakeWorktreeProvider } from "@station/testing";
 import { describe, expect, it, vi } from "vitest";
+import { planUpdateConvergence } from "../../src/update/convergencePlan.js";
+import { inspectUpdateConvergencePreflight } from "../../src/update/recoveryPreflight.js";
 import { createUpdateRecoveryPreflightPorts } from "../../src/update/recoveryPreflightAdapters";
 
 const now = "2026-08-21T12:00:00.000Z";
@@ -144,6 +146,7 @@ describe("createUpdateRecoveryPreflightPorts", () => {
       status: "exact",
       buildVersion: identity.version,
       relation: "different",
+      replacementAdmission: "not-yet-provable",
       recovery: { status: "assessed" },
     });
     expect(readObserverProcess).toHaveBeenCalledTimes(2);
@@ -341,60 +344,124 @@ describe("createUpdateRecoveryPreflightPorts", () => {
   });
 
   it("compares an Observer immutable selector when the installed target has no revision", async () => {
-    const runningBuildSelector = `1.0.0+station.${"a".repeat(64)}`;
-    const runningIdentity = { ...identity, version: runningBuildSelector };
     const currentArtifacts = {
       installed: { version: "1.0.0" },
       target: { version: "1.0.0" },
     };
     const cases = [
-      { currentBuildSelector: runningBuildSelector, expectedRelation: "matching-target" },
       {
+        runningBuildSelector: `1.0.0+station.${"a".repeat(64)}`,
+        currentBuildSelector: `1.0.0+station.${"a".repeat(64)}`,
+        expectedRelation: "matching-target",
+        expectedAdmission: "exact-build",
+      },
+      {
+        runningBuildSelector: `1.0.0+station.${"a".repeat(64)}`,
         currentBuildSelector: `1.0.0+station.${"b".repeat(64)}`,
         expectedRelation: "different",
+        expectedAdmission: "candidate-wins",
+      },
+      {
+        runningBuildSelector: `1.0.0+station.${"b".repeat(64)}`,
+        currentBuildSelector: `1.0.0+station.${"a".repeat(64)}`,
+        expectedRelation: "different",
+        expectedAdmission: "refused",
+      },
+      {
+        runningBuildSelector: `1.1.0+station.${"b".repeat(64)}`,
+        currentBuildSelector: `1.0.0+station.${"a".repeat(64)}`,
+        expectedRelation: "different",
+        expectedAdmission: "incumbent-wins",
       },
     ] as const;
 
     for (const testCase of cases) {
-      const ports = createUpdateRecoveryPreflightPorts({
-        config: testConfig(),
-        providers: providerRegistry(),
+      const ports = exactObserverPorts({
         currentObserverBuildVersion: testCase.currentBuildSelector,
-        observerStatus: async () => ({
-          status: "running",
-          paths: observerPaths(),
-          health: {
-            schemaVersion: STATION_SCHEMA_VERSION,
-            status: "healthy",
-            pid: runningIdentity.pid,
-            startedAt: now,
-            version: runningBuildSelector,
-            socketPath,
-          },
-        }),
-        readObserverIdentity: async () => runningIdentity,
-        observerIdentitySource: {
-          processStartToken: () => runningIdentity.osStartTime,
-          readObserverProcess: () => ({
-            ...processEntry,
-            buildVersion: runningBuildSelector,
-          }),
-        },
-        observerDeps: {
-          clientFactory: () =>
-            ({
-              getSessionRecoveryAssessment: async () => emptyAssessment(),
-            }) as ReturnType<typeof createObserverClient>,
-        },
-        inspectHost: async () => ({ status: "absent" }),
+        runningBuildVersion: testCase.runningBuildSelector,
       });
 
       await expect(
         ports.inspectObserver(currentArtifacts).then((inspection) => inspection.evidence),
-      ).resolves.toMatchObject({ status: "exact", relation: testCase.expectedRelation });
+      ).resolves.toMatchObject({
+        status: "exact",
+        relation: testCase.expectedRelation,
+        replacementAdmission: testCase.expectedAdmission,
+      });
     }
   });
+
+  it("carries a newer incumbent singleton decision from aggregate inspection into the plan", async () => {
+    const buildIdentity = "a".repeat(64);
+    const selected = { version: "1.0.0" };
+    const ports = exactObserverPorts({
+      currentObserverBuildVersion: `1.0.0+station.${buildIdentity}`,
+      runningBuildVersion: `1.1.0+station.${"b".repeat(64)}`,
+    });
+    const inspection = await inspectUpdateConvergencePreflight({
+      installed: selected,
+      target: selected,
+      ports,
+    });
+    const plan = planUpdateConvergence({
+      selectedTarget: {
+        artifact: selected,
+        buildIdentity: { status: "known", value: buildIdentity },
+      },
+      artifactAction: "no-op",
+      preflight: inspection.preflight,
+    });
+
+    expect(inspection.preflight.observer).toMatchObject({
+      status: "exact",
+      relation: "different",
+      replacementAdmission: "incumbent-wins",
+    });
+    expect(plan).toMatchObject({
+      status: "blocked",
+      components: { observer: { action: "blocked", reason: "singleton-refused" } },
+    });
+  });
 });
+
+function exactObserverPorts(input: {
+  currentObserverBuildVersion: string;
+  runningBuildVersion: string;
+}) {
+  const runningIdentity = { ...identity, version: input.runningBuildVersion };
+  return createUpdateRecoveryPreflightPorts({
+    config: testConfig(),
+    providers: providerRegistry(),
+    currentObserverBuildVersion: input.currentObserverBuildVersion,
+    observerStatus: async () => ({
+      status: "running",
+      paths: observerPaths(),
+      health: {
+        schemaVersion: STATION_SCHEMA_VERSION,
+        status: "healthy",
+        pid: runningIdentity.pid,
+        startedAt: now,
+        version: input.runningBuildVersion,
+        socketPath,
+      },
+    }),
+    readObserverIdentity: async () => runningIdentity,
+    observerIdentitySource: {
+      processStartToken: () => runningIdentity.osStartTime,
+      readObserverProcess: () => ({
+        ...processEntry,
+        buildVersion: input.runningBuildVersion,
+      }),
+    },
+    observerDeps: {
+      clientFactory: () =>
+        ({
+          getSessionRecoveryAssessment: async () => emptyAssessment(),
+        }) as ReturnType<typeof createObserverClient>,
+    },
+    inspectHost: async () => ({ status: "absent" }),
+  });
+}
 
 function providerRegistry(): ProviderRegistry {
   const harness = Object.assign(new FakeHarnessProvider({ id: "codex" }), {

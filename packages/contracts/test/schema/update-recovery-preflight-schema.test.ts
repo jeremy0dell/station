@@ -1,11 +1,12 @@
 import {
   UpdateReapRecoveryPreflightSchema,
+  UpdateReapRecoveryPreflightV1Schema,
   updateReapEvidenceIsComplete,
 } from "@station/contracts";
 import { describe, expect, it } from "vitest";
 
 const preflight = {
-  schemaVersion: 1 as const,
+  schemaVersion: 2 as const,
   boundary: {
     authorization: "none" as const,
     actions: "not-included" as const,
@@ -17,6 +18,7 @@ const preflight = {
     status: "exact" as const,
     buildVersion: "1.0.0+station.observer",
     relation: "different" as const,
+    replacementAdmission: "not-yet-provable" as const,
     health: "healthy" as const,
     recovery: {
       status: "assessed" as const,
@@ -87,6 +89,24 @@ describe("UpdateReapRecoveryPreflightSchema", () => {
     expect(updateReapEvidenceIsComplete(preflight)).toBe(true);
   });
 
+  it("keeps legacy v1 fieldless admission separate from strict v2 evidence", () => {
+    const legacy = {
+      ...preflight,
+      schemaVersion: 1 as const,
+      observer: {
+        status: "exact" as const,
+        buildVersion: preflight.observer.buildVersion,
+        relation: preflight.observer.relation,
+        health: preflight.observer.health,
+        recovery: preflight.observer.recovery,
+      },
+    };
+
+    expect(UpdateReapRecoveryPreflightV1Schema.parse(legacy)).toEqual(legacy);
+    expect(UpdateReapRecoveryPreflightSchema.safeParse(legacy).success).toBe(false);
+    expect(UpdateReapRecoveryPreflightV1Schema.safeParse(preflight).success).toBe(false);
+  });
+
   it("strictly admits restartable installed-executable drift without treating it as complete", () => {
     const restartable = {
       ...preflight,
@@ -120,6 +140,19 @@ describe("UpdateReapRecoveryPreflightSchema", () => {
           ...restartable.observer,
           reason: "identity-mismatch",
         },
+      }).success,
+    ).toBe(false);
+  });
+
+  it.each([
+    ["matching-target", "candidate-wins"],
+    ["different", "exact-build"],
+    ["unknown", "incumbent-wins"],
+  ] as const)("rejects contradictory Observer relation %s and replacement admission %s", (relation, replacementAdmission) => {
+    expect(
+      UpdateReapRecoveryPreflightSchema.safeParse({
+        ...preflight,
+        observer: { ...preflight.observer, relation, replacementAdmission },
       }).success,
     ).toBe(false);
   });

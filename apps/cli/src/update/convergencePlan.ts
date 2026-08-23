@@ -21,7 +21,8 @@ export type UpdateConvergencePlanDraft = Omit<UpdateConvergencePlan, "digest">;
  * POLICY
  *
  * Converts one #665 aggregate inspection into a deterministic, provider-neutral convergence plan.
- * Evidence is admitted per component and action: facts irrelevant to a safe action do not block it.
+ * Evidence is admitted per component and action: facts irrelevant to a safe action do not block it,
+ * and Observer restart requires a selected candidate admitted by singleton ordering.
  */
 export function planUpdateConvergence(
   input: UpdateConvergencePlanInput,
@@ -133,7 +134,20 @@ function observerDecision(
   if (observer.relation === "unknown") {
     return { action: "blocked", reason: "identity-incomplete" };
   }
-  if (observer.relation === "different") return { action: "restart", reason: "different-build" };
+  if (observer.relation === "different") {
+    switch (observer.replacementAdmission) {
+      case "candidate-wins":
+        return { action: "restart", reason: "different-build" };
+      case "not-yet-provable":
+        return { action: "reinspect", reason: "target-artifact-may-change" };
+      case "incumbent-wins":
+      case "refused":
+        return { action: "blocked", reason: "singleton-refused" };
+      case "exact-build":
+      case "unknown":
+        return { action: "blocked", reason: "identity-incomplete" };
+    }
+  }
   return observer.health === "healthy"
     ? { action: "no-op", reason: "matching-healthy" }
     : { action: "restart", reason: "matching-unhealthy" };

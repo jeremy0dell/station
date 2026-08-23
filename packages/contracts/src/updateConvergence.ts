@@ -126,7 +126,7 @@ const hookDecisionSchema = z
 
 const observerDecisionSchema = z
   .object({
-    action: z.enum(["no-op", "start", "restart", "blocked"]),
+    action: z.enum(["no-op", "start", "restart", "reinspect", "blocked"]),
     reason: UpdateConvergenceReasonSchema,
   })
   .strict();

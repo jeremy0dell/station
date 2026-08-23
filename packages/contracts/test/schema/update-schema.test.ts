@@ -81,12 +81,14 @@ const reportV1 = {
 const digest = "a".repeat(64);
 const currentPreflight = {
   ...recoveryPreflight,
+  schemaVersion: 2 as const,
   installed: reportCore.target,
   observer: {
     status: "exact" as const,
     buildVersion:
       "0.0.1-local+station.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     relation: "matching-target" as const,
+    replacementAdmission: "exact-build" as const,
     health: "healthy" as const,
     recovery: {
       status: "unknown" as const,
@@ -201,6 +203,34 @@ describe("update command schemas", () => {
     for (const report of [reportV1, reportV2, reportV3, reportV4]) {
       expect(CompatibleUpdateCommandReportSchema.parse(report)).toEqual(report);
     }
+  });
+
+  it("parses legacy v3 exact Observer evidence without v4 singleton admission", () => {
+    const legacy = {
+      ...reportV3,
+      recoveryPreflight: {
+        ...recoveryPreflight,
+        observer: {
+          status: "exact" as const,
+          buildVersion:
+            "0.0.0-local+station.bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          relation: "different" as const,
+          health: "healthy" as const,
+          recovery: {
+            status: "unknown" as const,
+            reason: "api-unavailable" as const,
+            error: {
+              tag: "UpdatePreflightError",
+              code: "RECOVERY_UNAVAILABLE",
+              message: "Unavailable.",
+            },
+          },
+        },
+      },
+    };
+
+    expect(UpdateCommandReportV3Schema.parse(legacy)).toEqual(legacy);
+    expect(CompatibleUpdateCommandReportSchema.parse(legacy)).toEqual(legacy);
   });
 
   it("retains normalized failure evidence without requiring unavailable post-action inspection", () => {

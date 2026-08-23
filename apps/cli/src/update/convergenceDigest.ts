@@ -113,6 +113,7 @@ function canonicalObserver(observer: UpdateReapRecoveryPreflight["observer"]): C
     status: "exact",
     buildVersion: observer.buildVersion,
     relation: observer.relation,
+    replacementAdmission: observer.replacementAdmission,
     health: observer.health,
     recovery:
       observer.recovery.status === "unknown"

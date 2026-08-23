@@ -357,6 +357,54 @@ describe("stn update convergence", () => {
     expect(runner.mock.calls[0]?.[0].args).toEqual(expect.arrayContaining(["observer", "restart"]));
   });
 
+  it("stops without mutation when singleton admission preserves a newer Observer", async () => {
+    const fixture = probe("current");
+    const inspect = inspection(
+      preflight("1.0.0", "1.0.0", {
+        observer: {
+          ...matchingObserver(identityB),
+          buildVersion: `2.0.0+station.${identityB}`,
+          relation: "different",
+          replacementAdmission: "incumbent-wins",
+        },
+        host: matchingHost(identityA),
+      }),
+    );
+    const runner = vi.fn(commandResult);
+    const result = await runUpdateCommand(["--json"], options(), {
+      probes: [fixture.probe],
+      buildInfo: build(identityA, "1.0.0"),
+      convergenceInspection: inspect,
+      commandRunner: runner,
+    });
+
+    expect(result).toMatchObject({
+      code: 1,
+      output: {
+        status: "blocked",
+        artifactApplication: { status: "not-required" },
+        initial: {
+          preflight: {
+            observer: {
+              relation: "different",
+              replacementAdmission: "incumbent-wins",
+            },
+          },
+          plan: {
+            status: "blocked",
+            components: {
+              observer: { action: "blocked", reason: "singleton-refused" },
+            },
+          },
+        },
+        result: { kind: "non-mutating-stop", disposition: "blocked" },
+      },
+    });
+    expect(inspect).toHaveBeenCalledOnce();
+    expect(fixture.apply).not.toHaveBeenCalled();
+    expect(runner).not.toHaveBeenCalled();
+  });
+
   it("returns already-converged without running actions for a healthy matching runtime", async () => {
     const fixture = probe("current");
     const runner = vi.fn();
@@ -2371,7 +2419,7 @@ function preflight(
   overrides: Partial<UpdateReapRecoveryPreflight> = {},
 ): UpdateReapRecoveryPreflight {
   const evidence: UpdateReapRecoveryPreflight = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     boundary: { authorization: "none", actions: "not-included", digest: "not-included" },
     installed: { version: installed },
     target: { version: target },
@@ -2395,6 +2443,7 @@ function matchingObserver(
     status: "exact",
     buildVersion: `1.0.0+station.${identity}`,
     relation: "matching-target",
+    replacementAdmission: "exact-build",
     health: "healthy",
     recovery:
       recovery === "assessed"
@@ -2683,6 +2732,7 @@ function successorRuntimeResult(input: ExternalCommandInput): Promise<ExternalCo
       observer: {
         ...matchingObserver(identityA),
         relation: "different",
+        replacementAdmission: "candidate-wins",
       },
       host: matchingHost(identityB),
     }),

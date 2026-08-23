@@ -41,6 +41,22 @@ describe("update convergence digest", () => {
     expect(digest(base)).not.toBe(digest(base, preflightWithTerminal("pty-instance-2")));
   });
 
+  it("binds Observer singleton replacement admission", () => {
+    const privateEvidence: UpdateConvergencePrivateEvidence = {
+      observer: {
+        pid: 42,
+        osStartTime: "os-start-1",
+        processToken: "11111111-1111-4111-8111-111111111111",
+        buildSelector: `0.9.0+station.${"b".repeat(64)}`,
+      },
+      selectedRecoveryHandles: [],
+    };
+
+    expect(digest(privateEvidence, observerAdmissionPreflight("candidate-wins"))).not.toBe(
+      digest(privateEvidence, observerAdmissionPreflight("incumbent-wins")),
+    );
+  });
+
   it("changes when identical live handoff evidence selects processes versus screen fidelity", () => {
     const evidence = handoffPreflight();
     const privateEvidence = { selectedRecoveryHandles: [] };
@@ -97,7 +113,7 @@ describe("update convergence digest", () => {
         { sessionId: "session-\ud83d\ude89", selectedHandleId: "station-handle-\ud83d\ude80" },
       ],
     });
-    expect(astral).toBe("52cdd5e85c814b6a790ddf94129048fac59d1ad31cdfa9ea0909d5cb65478f17");
+    expect(astral).toBe("dfb77ecfa4bb2f8794210fc367adaab06ca2f03911ff2b70c19403b8c756576a");
   });
 });
 
@@ -121,7 +137,7 @@ function planFor(preflight: UpdateReapRecoveryPreflight, handoffFidelity: "proce
 
 function basePreflight(): UpdateReapRecoveryPreflight {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     boundary: { authorization: "none", actions: "not-included", digest: "not-included" },
     installed: artifact,
     target: artifact,
@@ -170,6 +186,30 @@ function preflightWithTerminal(ptyInstanceId: string): UpdateReapRecoveryPreflig
         reasons: ["session_recovery_unknown"],
       },
     ],
+  };
+}
+
+function observerAdmissionPreflight(
+  replacementAdmission: "candidate-wins" | "incumbent-wins",
+): UpdateReapRecoveryPreflight {
+  return {
+    ...basePreflight(),
+    observer: {
+      status: "exact",
+      buildVersion: `0.9.0+station.${"b".repeat(64)}`,
+      relation: "different",
+      replacementAdmission,
+      health: "healthy",
+      recovery: {
+        status: "assessed",
+        assessment: {
+          schemaVersion: 1,
+          resumeEnabled: true,
+          providerCapabilities: [],
+          sessions: [],
+        },
+      },
+    },
   };
 }
 

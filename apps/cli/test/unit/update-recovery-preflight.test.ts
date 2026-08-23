@@ -170,8 +170,10 @@ describe("runUpdateRecoveryPreflight", () => {
       target: { version: "1.1.0" },
       ports: aggregatePorts(observerInspection(observer)),
     });
+    expect(publicProjection.schemaVersion).toBe(1);
     expect(JSON.stringify(publicProjection)).not.toContain("private-session-a");
     expect(JSON.stringify(publicProjection)).not.toContain("processToken");
+    expect(JSON.stringify(publicProjection)).not.toContain("replacementAdmission");
   });
 
   it.each([
@@ -289,6 +291,7 @@ describe("runUpdateRecoveryPreflight", () => {
             status: "exact",
             buildVersion: "1.0.0",
             relation: "different",
+            replacementAdmission: "not-yet-provable",
             health: "degraded",
             recovery: {
               status: "unknown",
@@ -307,6 +310,7 @@ describe("runUpdateRecoveryPreflight", () => {
     });
 
     expect(result).toMatchObject({
+      schemaVersion: 1,
       observer: { status: "exact", recovery: { status: "unknown" } },
       terminalDispositions: [
         {
@@ -318,6 +322,7 @@ describe("runUpdateRecoveryPreflight", () => {
       ],
       evidenceComplete: false,
     });
+    expect(JSON.stringify(result)).not.toContain("replacementAdmission");
   });
 
   it("keeps restartable executable drift distinct from complete recovery evidence", async () => {
@@ -447,6 +452,7 @@ function observerEvidence(value: UpdateReapRecoveryAssessment): UpdateReapObserv
     status: "exact",
     buildVersion: "1.0.0",
     relation: "different",
+    replacementAdmission: "not-yet-provable",
     health: "healthy",
     recovery: { status: "assessed", assessment: value },
   };

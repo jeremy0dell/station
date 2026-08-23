@@ -44,8 +44,9 @@ export type CreateUpdateRecoveryPreflightPortsOptions = {
  *
  * Binds recovery preflight to read-only local process evidence, Observer protocol queries, strict
  * Host inventory, and the provider-neutral hook-health use case. Observer public evidence and its
- * CLI-private ownership sidecar are captured together. No lifecycle or repair capability is
- * exposed through these ports.
+ * CLI-private ownership sidecar are captured together, while the existing singleton classifier
+ * supplies replacement admission independently from target-build relation. No lifecycle or repair
+ * capability is exposed through these ports.
  */
 export function createUpdateRecoveryPreflightPorts(
   options: CreateUpdateRecoveryPreflightPortsOptions,
@@ -219,15 +220,17 @@ async function inspectObserverRecoveryEvidence(input: {
     );
   }
 
+  const relation = classifyUpdateRuntimeBuildRelation({
+    runningDisplayVersion: parseStationObserverBuildVersion(health.version).version,
+    runningBuildIdentity: health.version,
+    currentBuildIdentity: input.currentObserverBuildVersion,
+    artifacts: input.artifacts,
+  });
   const exact: Extract<UpdateReapObserverEvidence, { status: "exact" }> = {
     status: "exact",
     buildVersion: health.version,
-    relation: classifyUpdateRuntimeBuildRelation({
-      runningDisplayVersion: parseStationObserverBuildVersion(health.version).version,
-      runningBuildIdentity: health.version,
-      currentBuildIdentity: input.currentObserverBuildVersion,
-      artifacts: input.artifacts,
-    }),
+    relation,
+    replacementAdmission: observerReplacementAdmission(input, health, relation),
     health: health.status,
     recovery:
       assessment === undefined
@@ -254,6 +257,32 @@ async function inspectObserverRecoveryEvidence(input: {
         assessment === undefined ? [] : selectedStationRecoveryHandles(assessment),
     },
   };
+}
+
+function observerReplacementAdmission(
+  input: Pick<
+    Parameters<typeof inspectObserverRecoveryEvidence>[0],
+    "artifacts" | "currentObserverBuildVersion"
+  >,
+  health: Extract<Awaited<ReturnType<typeof getObserverStatus>>, { status: "running" }>["health"],
+  relation: Extract<UpdateReapObserverEvidence, { status: "exact" }>["relation"],
+): Extract<UpdateReapObserverEvidence, { status: "exact" }>["replacementAdmission"] {
+  if (relation === "unknown") return "unknown";
+  if (relation === "matching-target") return "exact-build";
+  if (!artifactsMatch(input.artifacts.installed, input.artifacts.target)) {
+    // The installed CLI cannot classify singleton admission for an artifact it has not applied.
+    return "not-yet-provable";
+  }
+  const decision = classifyObserverHealth(health, input.currentObserverBuildVersion);
+  if (decision.action === "replace") return "candidate-wins";
+  if (decision.action === "attach" && decision.reason === "incumbent-wins") {
+    return "incumbent-wins";
+  }
+  return "refused";
+}
+
+function artifactsMatch(left: UpdateArtifact, right: UpdateArtifact): boolean {
+  return left.version === right.version && left.revision === right.revision;
 }
 
 function restartableInstalledPathReplacement(
