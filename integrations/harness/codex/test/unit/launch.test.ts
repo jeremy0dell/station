@@ -274,6 +274,78 @@ describe("buildCodexLaunchPlan", () => {
     });
   });
 
+  it("preserves full-access permission defaults on interactive resume plans", () => {
+    const plan = buildCodexLaunchPlan(
+      {
+        ...request(),
+        resume: {
+          target: { kind: "native-session", id: "codex_session_123" },
+          previousSessionId: "ses_web_task",
+          recoveryHandleId: "rec_codex",
+        },
+      },
+      {
+        defaultPermissionMode: "yolo",
+        defaultApprovalPolicy: "on-request",
+        defaultSandboxMode: "workspace-write",
+        noAltScreen: true,
+      },
+    );
+
+    expect(plan.args).toEqual([
+      "resume",
+      "--cd",
+      "/tmp/station/web/task",
+      "--dangerously-bypass-approvals-and-sandbox",
+      "--no-alt-screen",
+      "codex_session_123",
+      "Review the task.",
+    ]);
+    expect(plan.args).not.toContain("--sandbox");
+    expect(plan.args).not.toContain("--ask-for-approval");
+    expect(plan.providerData).toMatchObject({
+      permissionMode: "yolo",
+      noAltScreen: true,
+      resume: true,
+      resumeTargetKind: "native-session",
+    });
+  });
+
+  it("preserves explicit sandbox and approval defaults on interactive resume plans", () => {
+    const plan = buildCodexLaunchPlan(
+      {
+        ...request(),
+        resume: {
+          target: { kind: "native-session", id: "codex_session_123" },
+          previousSessionId: "ses_web_task",
+          recoveryHandleId: "rec_codex",
+        },
+      },
+      {
+        defaultApprovalPolicy: "on-request",
+        defaultSandboxMode: "workspace-write",
+      },
+    );
+
+    expect(plan.args).toEqual([
+      "resume",
+      "--cd",
+      "/tmp/station/web/task",
+      "--sandbox",
+      "workspace-write",
+      "--ask-for-approval",
+      "on-request",
+      "codex_session_123",
+      "Review the task.",
+    ]);
+    expect(plan.providerData).toMatchObject({
+      approvalPolicy: "on-request",
+      sandboxMode: "workspace-write",
+      resume: true,
+      resumeTargetKind: "native-session",
+    });
+  });
+
   it("preserves the station hook profile on interactive resume plans", () => {
     const plan = buildCodexLaunchPlan(
       {
