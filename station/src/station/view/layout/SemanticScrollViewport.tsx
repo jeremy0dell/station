@@ -72,7 +72,7 @@ export function SemanticScrollViewport<ItemId extends string>({
       flexGrow={fill ? 1 : 0}
       flexShrink={1}
       {...(fill ? { flexBasis: 0 } : {})}
-      minHeight={0}
+      minHeight={fill ? 0 : 1}
       scrollX={false}
       scrollY
       viewportCulling

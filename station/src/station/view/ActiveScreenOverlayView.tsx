@@ -10,8 +10,6 @@ import { ProjectChoiceSheetView } from "./sheets/ProjectChoiceSheetView.js";
 import { ProjectDefaultAgentSheetView } from "./sheets/ProjectDefaultAgentSheetView.js";
 import { GroupSettingsPanelView } from "./settings/GroupSettingsPanelView.js";
 import { ProjectSettingsPanelView } from "./settings/ProjectSettingsPanelView.js";
-import { GroupMenuView } from "./GroupMenuView.js";
-import { ProjectMenuView } from "./ProjectMenuView.js";
 import { WidgetSettingsPanelView } from "./settings/WidgetSettingsPanelView.js";
 import { RenameSessionSheetView } from "./sheets/RenameSessionSheetView.js";
 import { RemoveSessionSheetView } from "./sheets/RemoveSessionSheetView.js";
@@ -32,8 +30,6 @@ export type ActiveScreenOverlayViewProps = {
   widgets?: DashboardStateView["widgets"];
   /** False when widget edits cannot be written back to config.toml. */
   widgetsPersisted?: boolean;
-  /** Absolute row containing the visible dashboard header that owns an open menu. */
-  menuAnchorTop?: number;
 };
 
 export function ActiveScreenOverlayView(props: ActiveScreenOverlayViewProps) {
@@ -42,11 +38,13 @@ export function ActiveScreenOverlayView(props: ActiveScreenOverlayViewProps) {
   const behavior = tuiScreenBehavior(screen);
   const conditionPanelActive =
     screen.name === "persistentFilter" && screen.conditionEditor !== undefined;
+  const dashboardMenuActive = screen.name === "projectMenu" || screen.name === "groupMenu";
+  const dashboardOwnedOverlay = conditionPanelActive || dashboardMenuActive;
   const overlay = renderActiveScreenOverlay(props);
 
   return (
     <>
-      {behavior.clickAway !== undefined && !conditionPanelActive ? (
+      {behavior.clickAway !== undefined && !dashboardOwnedOverlay ? (
         <box
           position="absolute"
           left={0}
@@ -71,9 +69,7 @@ function renderActiveScreenOverlay({
   localRows,
   widgets = [],
   widgetsPersisted = true,
-  menuAnchorTop = 0,
 }: ActiveScreenOverlayViewProps): ReactNode {
-  const menuViewport = { columns, rows, anchorTop: menuAnchorTop };
   switch (screen.name) {
     case "dashboard":
       return null;
@@ -83,9 +79,8 @@ function renderActiveScreenOverlay({
     case "help":
       return <HelpOverlayView columns={columns} rows={rows} />;
     case "projectMenu":
-      return <ProjectMenuView screen={screen} viewport={menuViewport} />;
     case "groupMenu":
-      return <GroupMenuView snapshot={snapshot} screen={screen} viewport={menuViewport} />;
+      return null;
     case "createGroup":
       return <CreateGroupSheetView screen={screen} columns={columns} rows={rows} />;
     case "moveToGroup":

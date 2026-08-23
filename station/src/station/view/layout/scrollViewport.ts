@@ -41,7 +41,6 @@ export function semanticItemRenderableId(id: string): string {
 
 export type ScrollViewportController<ItemId extends string> = {
   readonly visibility: { visibleItemIds(): readonly ItemId[] | undefined };
-  setCoordinateRoot(root: Renderable | undefined): void;
   attach(viewport: ScrollBoxRenderable, itemIds: readonly ItemId[]): void;
   detach(viewport: ScrollBoxRenderable): void;
   reflow(): void;
@@ -51,7 +50,6 @@ export type ScrollViewportController<ItemId extends string> = {
   scrollBy(cells: number): void;
   scrollPage(direction: -1 | 1): void;
   follow(itemId: ItemId | undefined): void;
-  itemTop(itemId: ItemId): number | undefined;
 };
 
 /**
@@ -62,7 +60,6 @@ export function createScrollViewportController<
   ItemId extends string,
 >(): ScrollViewportController<ItemId> {
   let viewport: ScrollBoxRenderable | undefined;
-  let coordinateRoot: Renderable | undefined;
   let layoutOwner: BaseRenderable | undefined;
   let orderedIds: readonly ItemId[] = [];
   let visibleIds: readonly ItemId[] | undefined;
@@ -118,9 +115,6 @@ export function createScrollViewportController<
 
   return {
     visibility: { visibleItemIds: () => visibleIds },
-    setCoordinateRoot: (root): void => {
-      coordinateRoot = root;
-    },
     attach: (nextViewport, itemIds): void => {
       layoutOwner?.off("layout-changed", scheduleReflow);
       viewport = nextViewport;
@@ -161,12 +155,6 @@ export function createScrollViewportController<
       if (itemId === undefined) return;
       revealFollowedItem();
       synchronize();
-    },
-    itemTop: (itemId): number | undefined => {
-      const item = geometryFor(itemId);
-      return item === undefined || viewport === undefined
-        ? undefined
-        : item.top - (coordinateRoot?.y ?? viewport.y);
     },
   };
 }

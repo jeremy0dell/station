@@ -1,6 +1,7 @@
 import { TextAttributes } from "@opentui/core";
 import {
   dashboardTableHeaderModel,
+  dashboardRowIds,
   dashboardRowGridInput,
   fleetCountsLabel,
   emptyProjectLabel,
@@ -42,6 +43,8 @@ import {
   type DashboardScrollController,
 } from "./layout/scrollViewport.js";
 import { DashboardFilterConditionView } from "./DashboardFilterConditionView.js";
+import { GroupMenuView } from "./GroupMenuView.js";
+import { ProjectMenuView } from "./ProjectMenuView.js";
 
 const DASHBOARD_LAYOUT_BOUNDARY_ID = "station-dashboard-layout-boundary";
 
@@ -95,6 +98,24 @@ export function DashboardView({
   }, [layout, viewState.dashboardFocus?.rowId]);
   const conditionPanelActive =
     screen.name === "persistentFilter" && screen.conditionEditor !== undefined;
+  const dashboardMenuActive = screen.name === "projectMenu" || screen.name === "groupMenu";
+  const dashboardOwnedOverlayActive = conditionPanelActive || dashboardMenuActive;
+  const menuRowId =
+    screen.name === "projectMenu"
+      ? dashboardRowIds.project(screen.projectId)
+      : screen.name === "groupMenu"
+        ? dashboardRowIds.group(screen.groupId)
+        : undefined;
+  const menuAnchorRenderableId =
+    menuRowId !== undefined && tree.rowById.has(menuRowId)
+      ? semanticItemRenderableId(menuRowId)
+      : undefined;
+  const menuGroup =
+    screen.name === "groupMenu"
+      ? snapshot.sessionGroups.find(
+          (group) => group.id === screen.groupId && group.projectId === screen.projectId,
+        )
+      : undefined;
   return (
     <box
       id={DASHBOARD_LAYOUT_BOUNDARY_ID}
@@ -106,7 +127,7 @@ export function DashboardView({
       paddingRight={1}
       position="relative"
     >
-      {conditionPanelActive ? (
+      {dashboardOwnedOverlayActive ? (
         <box
           position="absolute"
           top={0}
@@ -114,7 +135,9 @@ export function DashboardView({
           width="100%"
           height="100%"
           zIndex={9}
-          backgroundColor={toOpenTuiColor(theme.filter.conditionBackdrop)}
+          {...(conditionPanelActive
+            ? { backgroundColor: toOpenTuiColor(theme.filter.conditionBackdrop) }
+            : {})}
           {...stationMouseProps(dispatch, { kind: "screenBackdrop" })}
         />
       ) : null}
@@ -154,6 +177,23 @@ export function DashboardView({
       )}
       <DashboardScrollIndicatorView direction="below" overflow={slots.sessionOverflow} />
       <Divider columns={contentColumns} />
+      {screen.name === "projectMenu" && menuAnchorRenderableId !== undefined ? (
+        <ProjectMenuView
+          screen={screen}
+          boundaryId={DASHBOARD_LAYOUT_BOUNDARY_ID}
+          anchorRenderableId={menuAnchorRenderableId}
+        />
+      ) : null}
+      {screen.name === "groupMenu" &&
+      menuAnchorRenderableId !== undefined &&
+      menuGroup !== undefined ? (
+        <GroupMenuView
+          screen={screen}
+          groupName={menuGroup.name}
+          boundaryId={DASHBOARD_LAYOUT_BOUNDARY_ID}
+          anchorRenderableId={menuAnchorRenderableId}
+        />
+      ) : null}
     </box>
   );
 }

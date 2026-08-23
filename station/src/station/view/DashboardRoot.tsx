@@ -2,13 +2,11 @@
 // between the loading/waiting/unavailable bodies and the live dashboard —
 // mirroring apps/tui's App.tsx branch for the popup posture, including the
 // toast overlay, kind-specific expiry timers, and explicit error dismissal.
-import type { BoxRenderable } from "@opentui/core";
-import { useCallback, useEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { useStore } from "zustand/react";
 import type { DashboardActions, DashboardStateSource } from "@station/dashboard-core/runtime";
 import {
   commandPromptRows,
-  dashboardRowIds,
   snapshotLoadingLines,
 } from "@station/dashboard-core/selectors";
 import {
@@ -28,7 +26,6 @@ import {
 import { ToastOverlayView } from "./ToastOverlayView.js";
 import { toOpenTuiColor, useStationTheme } from "../../theme/index.js";
 import type { DashboardScrollController } from "./layout/scrollViewport.js";
-import { useDashboardVisibleRows } from "./layout/DashboardScrollViewport.js";
 
 export type DashboardRootProps = {
   state: DashboardStateSource;
@@ -74,12 +71,6 @@ export function DashboardRoot({
   const backgroundHoverEnabled =
     hoverEnabled && tuiScreenBehavior(screen).dashboardHoverEnabled;
   const wasToastHiddenByScreen = useRef(toastHiddenByScreen);
-  const setCoordinateRoot = useCallback(
-    (root: BoxRenderable | null) => layout.setCoordinateRoot(root ?? undefined),
-    [layout],
-  );
-  useDashboardVisibleRows(layout);
-
   useEffect(() => {
     const wasHidden = wasToastHiddenByScreen.current;
     wasToastHiddenByScreen.current = toastHiddenByScreen;
@@ -143,19 +134,8 @@ export function DashboardRoot({
     ...(persistentFilter === undefined ? {} : { persistentFilter }),
     ...(dashboardFocus === undefined ? {} : { dashboardFocus }),
   };
-  const menuRowId =
-    screen.name === "projectMenu"
-      ? dashboardRowIds.project(screen.projectId)
-      : screen.name === "groupMenu"
-        ? dashboardRowIds.group(screen.groupId)
-        : undefined;
-  const menuAnchorTop =
-    menuRowId === undefined
-      ? undefined
-      : layout.itemTop(menuRowId);
-
   return (
-    <box ref={setCoordinateRoot} width="100%" flexGrow={1} minHeight={0} flexDirection="column">
+    <box width="100%" flexGrow={1} minHeight={0} flexDirection="column">
       <StationHoverProvider value={backgroundHoverEnabled}>
         <DashboardView
           snapshot={snapshot}
@@ -177,7 +157,6 @@ export function DashboardRoot({
         localRows={localRows}
         widgets={liveWidgets}
         widgetsPersisted={widgetsPersisted}
-        {...(menuAnchorTop === undefined ? {} : { menuAnchorTop })}
       />
     </box>
   );

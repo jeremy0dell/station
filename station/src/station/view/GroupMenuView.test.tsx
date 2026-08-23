@@ -15,14 +15,25 @@ describe("GroupMenuView", () => {
       "group_design_refresh",
     );
     if (opened.screen.name !== "groupMenu") throw new Error("Group menu did not open.");
-    const viewport = { columns: 40, rows: 12, anchorTop: 2 };
+    const menuScreen = opened.screen;
+    const group = snapshot.sessionGroups.find(
+      (candidate) => candidate.id === menuScreen.groupId,
+    );
+    if (group === undefined) throw new Error("Group fixture is missing.");
+    const boundaryId = "group-menu-test-boundary";
+    const anchorRenderableId = "group-menu-test-anchor";
     const setup = await testRender(
       <StationThemeProvider theme={nativeStationTheme}>
-        <GroupMenuView
-          snapshot={snapshot}
-          screen={opened.screen}
-          viewport={viewport}
-        />
+        <box id={boundaryId} width={40} height={12} flexDirection="column">
+          <box height={2} flexShrink={0} />
+          <box id={anchorRenderableId} height={1} flexShrink={0} />
+          <GroupMenuView
+            screen={menuScreen}
+            groupName={group.name}
+            boundaryId={boundaryId}
+            anchorRenderableId={anchorRenderableId}
+          />
+        </box>
       </StationThemeProvider>,
       { width: 40, height: 12 },
     );
