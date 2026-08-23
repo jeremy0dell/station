@@ -4,6 +4,7 @@ import {
   UpdateCommandReportSchema,
   type UpdateEvidencePlan,
   updateCommandReportStatus,
+  updateInstallOwnersMatch,
 } from "@station/contracts";
 import { type ExternalCommandRunner, runExternalCommand } from "@station/runtime";
 import type { ExecutableArgv } from "../selfExec.js";
@@ -49,6 +50,9 @@ async function runSuccessor(
     ...(input.target.revision === undefined
       ? []
       : ["--internal-selected-target-revision", input.target.revision]),
+    ...(input.managerCommand === undefined
+      ? []
+      : ["--internal-selected-manager-command", JSON.stringify(input.managerCommand)]),
     ...(input.handoff === undefined
       ? ["--no-handoff"]
       : input.handoff === "processes"
@@ -93,6 +97,10 @@ function assertPinnedSuccessorReport(
   }
 
   const evidence = successorEvidence(report);
+  const inheritedInstallOwner = {
+    owner: input.channel,
+    ...(input.managerCommand === undefined ? {} : { managerCommand: input.managerCommand }),
+  };
   let buildIdentity: string | undefined;
   for (const entry of evidence) {
     if (
@@ -100,7 +108,9 @@ function assertPinnedSuccessorReport(
       !artifactsMatch(entry.evidence.preflight.installed, input.target) ||
       !artifactsMatch(entry.evidence.preflight.target, input.target) ||
       !artifactsMatch(entry.evidence.plan.selectedTarget.artifact, input.target) ||
-      entry.evidence.plan.selectedTarget.buildIdentity.status !== "known"
+      entry.evidence.plan.selectedTarget.buildIdentity.status !== "known" ||
+      entry.evidence.plan.installation.action !== "no-op" ||
+      !updateInstallOwnersMatch(entry.evidence.plan.installation, inheritedInstallOwner)
     ) {
       throw new Error(`Successor ${entry.name} did not retain exact target-owned evidence.`);
     }

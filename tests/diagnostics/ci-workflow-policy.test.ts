@@ -439,7 +439,7 @@ describe("hosted CI policy", () => {
     }
   });
 
-  it("separates legacy transition, v4 Host convergence, redaction, and reap planning", () => {
+  it("uses only the current update contract for convergence release gates", () => {
     const release = read(".github/workflows/release.yml");
     const promotion = read(".github/workflows/promote-release.yml");
     const updateSmoke = read("scripts/test-runners/run-update-smoke.mjs");
@@ -458,49 +458,52 @@ describe("hosted CI policy", () => {
       createDraft.indexOf("release-candidate-input-"),
     );
     expect(createDraft).toContain("targetBuildIdentity: $targetBuildIdentity");
-    expect(installDraft).toContain("Fetch staged update assets and exact predecessor");
+    expect(installDraft).toContain("Fetch staged update assets");
     expect(installDraft).toContain("actions/download-artifact@");
     expect(installDraft).toContain('awk -F= -v name="$name"');
     expect(installDraft).toContain('cmp candidate/SHA256SUMS "$release_dir/SHA256SUMS"');
     expect(installDraft).not.toContain("select(.name == $name)");
     expect(installDraft).toContain('--target-release-dir "$RUNNER_TEMP/update-release"');
     expect(installDraft).toContain('--target-build-identity "$target_build_identity"');
-    expect(installDraft).toContain("Prove compatible transition from the exact predecessor");
-    expect(installDraft).toContain("--incumbent-contract legacy-compatible");
-    expect(installDraft).toContain("Prove v4 Host convergence against the staged target");
-    expect(installDraft).toContain("Prove v4 public-report redaction against the staged target");
-    expect(installDraft).toContain("Prove v4 pre-mutation reap-required against the staged target");
-    expect(installDraft).toContain('--incumbent-binary "$RUNNER_TEMP/v4-update-incumbent"');
-    expect(installDraft).toContain('pnpm build:binary -- --version "$v4_incumbent_version"');
-    expect(installDraft.match(/pnpm smoke:update/g)).toHaveLength(4);
-    const compatibleTransition = between(
-      installDraft,
-      "Prove compatible transition from the exact predecessor",
-      "Prove v4 Host convergence against the staged target",
+    expect(installDraft).toContain(
+      "Prove current-contract no-Host convergence against the staged target",
     );
-    expect(compatibleTransition).toContain("--scenarios no-host");
-    expect(compatibleTransition).not.toContain("--busy-host-outcome pre-mutation-reap-required");
+    expect(installDraft).toContain("Prove current Host convergence against the staged target");
+    expect(installDraft).toContain(
+      "Prove current public-report redaction against the staged target",
+    );
+    expect(installDraft).toContain(
+      "Prove current pre-mutation reap-required against the staged target",
+    );
+    expect(installDraft).toContain('--incumbent-binary "$RUNNER_TEMP/current-update-incumbent"');
+    expect(installDraft).toContain('pnpm build:binary -- --version "$current_incumbent_version"');
+    expect(installDraft).not.toContain("--incumbent-contract");
+    expect(installDraft.match(/pnpm smoke:update/g)).toHaveLength(4);
+    const noHost = between(
+      installDraft,
+      "Prove current-contract no-Host convergence against the staged target",
+      "Prove current Host convergence against the staged target",
+    );
+    expect(noHost).toContain("--scenarios no-host");
+    expect(noHost).not.toContain("--busy-host-outcome pre-mutation-reap-required");
     const hostConvergence = between(
       installDraft,
-      "Prove v4 Host convergence against the staged target",
-      "Prove v4 public-report redaction against the staged target",
+      "Prove current Host convergence against the staged target",
+      "Prove current public-report redaction against the staged target",
     );
     expect(hostConvergence).toContain("--scenarios host-convergence");
-    expect(hostConvergence).not.toContain("--incumbent-contract legacy-compatible");
     const redaction = between(
       installDraft,
-      "Prove v4 public-report redaction against the staged target",
-      "Prove v4 pre-mutation reap-required against the staged target",
+      "Prove current public-report redaction against the staged target",
+      "Prove current pre-mutation reap-required against the staged target",
     );
     expect(redaction).toContain("--scenarios redaction");
-    expect(redaction).not.toContain("--incumbent-contract legacy-compatible");
     const reapRequired = between(
       installDraft,
-      "Prove v4 pre-mutation reap-required against the staged target",
+      "Prove current pre-mutation reap-required against the staged target",
       "Verify lock refusal and same-version retry",
     );
     expect(reapRequired).toContain("--scenarios reap-required");
-    expect(reapRequired).not.toContain("--incumbent-contract legacy-compatible");
     expect(accepted).toContain('test "$current_ids" = "$(cat candidate/asset-ids.txt)"');
     expect(accepted).not.toContain(": > candidate/asset-ids.txt");
 
@@ -512,16 +515,11 @@ describe("hosted CI policy", () => {
     expect(promote.indexOf('test "$freshest_previous" = "$previous_tag"')).toBeLessThan(
       promote.indexOf("-F draft=false"),
     );
-    expect(publicInstall).toContain("Install exact public predecessor");
-    expect(publicInstall).toContain('--public-target-tag "$TAG"');
-    expect(publicInstall).toContain('--target-build-identity "$TARGET_BUILD_IDENTITY"');
-    expect(publicInstall).toContain("--scenarios no-host");
-    expect(publicInstall).toContain("--incumbent-contract legacy-compatible");
-    expect(updateSmoke).toContain("CompatibleUpdateCommandReportSchema.parse(rawReport)");
-    expect(updateSmoke).toContain("function assertLegacyUpdateReport");
+    expect(publicInstall).not.toContain("smoke:update");
+    expect(publicInstall).not.toContain("Install exact public predecessor");
+    expect(updateSmoke).toContain("UpdateCommandReportSchema.parse(rawReport)");
     expect(updateSmoke).toContain("post-apply latest discovery is forbidden");
     expect(updateSmoke).toContain("denyPostApplyLatest");
-    expect(updateSmoke).toContain("function assertTargetCurrentReport");
     expect(updateSmoke).toContain('hostMode: "idle"');
     expect(updateSmoke).toContain('hostMode: "busy-bridge"');
     expect(updateSmoke).toContain('hostMode: "busy-nonbridge"');
@@ -532,9 +530,6 @@ describe("hosted CI policy", () => {
     expect(updateSmoke).toContain("function assertPublicRedactionOutput");
     expect(updateSmoke).toContain("raw-provider-payload-");
     expect(updateSmoke).toContain("redactionControlCharacters()");
-    expect(updateSmoke).toContain(
-      "--incumbent-contract legacy-compatible requires --scenarios no-host and full-handoff.",
-    );
     expect(promotion).toContain(
       "Confirm macOS pre-mutation reap-required kept incumbent artifact, Observer, Host, and PTY inventory unchanged with no target UI/artifact crossover",
     );
@@ -602,7 +597,7 @@ describe("hosted CI policy", () => {
     expect(packageJson.scripts["test:ci:binary"]).toContain(
       "pnpm smoke:update -- --incumbent-binary station/dist/bin/stn",
     );
-    expect(packageJson.scripts["test:ci:binary"]).toContain("--scenarios v4-gate");
+    expect(packageJson.scripts["test:ci:binary"]).toContain("--scenarios current-gate");
     expect(packageJson.scripts["test:ci:station"]).toContain("test:pty:bun");
     expect(lefthook).toContain("run: node scripts/run-without-git-locals.mjs pnpm test:pre-push");
     expect(testing).toContain("The pre-push hook is intentionally lint-only");

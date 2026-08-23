@@ -1,6 +1,9 @@
 import {
+  deriveUpdateReapPreviewConsequences,
   hostConvergenceCommitmentsMatch,
   type ObserverLifecycleFailure,
+  type ProviderHookFollowUp,
+  type ProviderHookReconciliationResult,
   providerHookReconciliationSucceeded,
   ptyLifetimeIdentitySetsMatch,
   type UpdateActionAudit,
@@ -12,6 +15,8 @@ import {
   type UpdateExecutedAction,
   type UpdateFinalInspection,
   type UpdateHostConvergenceCommitment,
+  type UpdateInstallMutation,
+  updateInstallMutationsMatch,
 } from "@station/contracts";
 import { publicSafeErrorFromUnknown, type StationBuildInfo } from "@station/runtime";
 import {
@@ -25,6 +30,7 @@ import { planUpdateConvergence, type UpdateArtifactPlanAction } from "./converge
 import {
   type UpdateConvergenceInspectionPort,
   type UpdateConvergencePreflightInspection,
+  type UpdateConvergencePrivateEvidence,
   validateUpdateConvergenceInspection,
 } from "./recoveryPreflight.js";
 import { nonExecutedPhases } from "./updateCommandStatusPolicy.js";
@@ -51,13 +57,33 @@ type InFlightUpdateAction = Pick<
   "phase" | "action" | "provider" | "fidelity"
 >;
 
+type InspectedUpdatePlan = {
+  evidence: UpdateEvidencePlan;
+  privateEvidence: UpdateConvergencePrivateEvidence;
+};
+
+type FailedHookReconciliation = Extract<
+  ProviderHookReconciliationResult,
+  {
+    status:
+      | "ownership-conflict"
+      | "write-failed"
+      | "post-write-doctor-failed"
+      | "inspection-failed";
+  }
+>;
+
+class ObserverExecutionPlanStaleError extends Error {}
+
 /**
  * USE CASE
  *
- * Resolves the install owner, inspects all live state, plans convergence, executes only safe typed
- * actions, and verifies a fresh no-op plan. Host actions retain the plan's exact build, immutable
- * PTY commitment, and handoff fidelity without fallback. Artifact application remains channel-owned; destructive
- * Station process-group authorization, journaling, and reaping remain exclusively owned by #641.
+ * Resolves and binds the exact install owner/action, inspects all live state, plans convergence,
+ * executes only safe typed actions, and verifies a fresh no-op plan. Host actions retain the plan's
+ * exact build, immutable PTY commitment, and handoff fidelity without fallback. Observer mutation
+ * first revalidates the private process and selected-handle commitment retained from the inspected
+ * plan. Artifact application remains channel-owned; destructive Station process-group
+ * authorization, journaling, and reaping remain exclusively owned by #641.
  */
 export async function runUpdateConvergence(
   request: UpdateConvergenceRequest,
@@ -74,6 +100,9 @@ export async function runUpdateConvergence(
           probes: ports.probes,
           target: request.successorTarget,
           ...(request.channel === undefined ? {} : { requested: request.channel }),
+          ...(request.successorManagerCommand === undefined
+            ? {}
+            : { options: { inheritedManagerCommand: request.successorManagerCommand } }),
         });
   validatePackageManagerRequest(selected, request);
 
@@ -83,7 +112,7 @@ export async function runUpdateConvergence(
   const build = ports.buildInfo();
   validateSuccessorTarget(request, current, build);
   const artifactAction = artifactActionFor(selected, request);
-  const initial = await inspectAndPlan({
+  const initialInspection = await inspectAndPlanWithPrivate({
     evaluator: request.evaluator,
     current,
     target,
@@ -93,6 +122,7 @@ export async function runUpdateConvergence(
     request,
     ports,
   });
+  const initial = initialInspection.evidence;
 
   if (request.mode === "preview") {
     const result: UpdateConvergenceResult = {
@@ -108,6 +138,7 @@ export async function runUpdateConvergence(
             },
           }
         : {}),
+      ...(request.reap ? { reapConsequences: deriveUpdateReapPreviewConsequences(initial) } : {}),
     };
     return finishReport({
       selected,
@@ -181,7 +212,15 @@ export async function runUpdateConvergence(
 
   return artifactAction === "apply"
     ? applyThenConverge(selected, current, target, initial, request, ports)
-    : executeCurrentRuntime(selected, current, target, initial, request, ports);
+    : executeCurrentRuntime(
+        selected,
+        current,
+        target,
+        initial,
+        initialInspection.privateEvidence,
+        request,
+        ports,
+      );
 }
 
 async function applyThenConverge(
@@ -196,21 +235,37 @@ async function applyThenConverge(
   const artifactAudit: UpdateActionAudit = {
     executor: request.evaluator,
     planDigest: initial.plan.digest.value,
-    actions: [{ phase: "artifact-application", action: "apply", status: "completed" }],
+    actions: [
+      {
+        phase: "artifact-application",
+        action: "apply",
+        status: "completed",
+        installation: initial.plan.installation,
+      },
+    ],
   };
   let applied: Awaited<ReturnType<PlannedUpdateChannel["apply"]>>;
   try {
+    const selectedMutation = installMutation(selected, "apply");
+    if (!updateInstallMutationsMatch(initial.plan.installation, selectedMutation)) {
+      throw new Error("The selected install owner or mutation changed after planning.");
+    }
     applied = await selected.apply({ drivePackageManager: request.packageManager === "drive" });
+    if (applied.channel !== initial.plan.installation.owner || applied.status === "deferred") {
+      throw new Error("The install owner returned an outcome outside the exact planned mutation.");
+    }
   } catch (error) {
     artifactAudit.actions[0] = {
       phase: "artifact-application",
       action: "apply",
       status: "failed",
+      installation: initial.plan.installation,
     };
     const safe = updateErrorFromUnknown(error, {
       code: "UPDATE_ARTIFACT_APPLICATION_FAILED",
       message: "Station could not apply the selected artifact.",
     });
+    const channelRecovery = selected.applyRecoveryCommands?.(error);
     return finishReport({
       selected,
       current,
@@ -224,25 +279,10 @@ async function applyThenConverge(
         finalInspection: { status: "not-attempted", reason: "artifact-application-failed" },
       },
       error: safe,
-      recoveryCommands: recoveryCommands(selected, request, ports),
-    });
-  }
-  if (applied.status === "deferred") {
-    return finishReport({
-      selected,
-      current,
-      target,
-      artifactApplication: managerAwareArtifactApplication("deferred", selected),
-      initial,
-      result: {
-        kind: "deferred",
-        planDigest: initial.plan.digest.value,
-        phases: initial.plan.phases.map((phase) => ({
-          id: phase.id,
-          status: phase.id === "artifact-application" ? "deferred" : "not-executed",
-        })),
-      },
-      warnings: applied.warnings,
+      recoveryCommands:
+        channelRecovery === undefined
+          ? recoveryCommands(selected, request, ports)
+          : [...channelRecovery],
     });
   }
   if (applied.successorCli === undefined) {
@@ -273,6 +313,9 @@ async function applyThenConverge(
       launcher: applied.successorCli,
       channel: selected.channel,
       target,
+      ...(initial.plan.installation.managerCommand === undefined
+        ? {}
+        : { managerCommand: initial.plan.installation.managerCommand }),
       ...(request.handoff === undefined ? {} : { handoff: request.handoff }),
     });
     const successorAudits = auditsFrom(successorReport);
@@ -345,6 +388,7 @@ async function executeCurrentRuntime(
   current: UpdateArtifact,
   target: UpdateArtifact,
   initial: UpdateEvidencePlan,
+  initialPrivateEvidence: UpdateConvergencePrivateEvidence,
   request: UpdateConvergenceRequest,
   ports: UpdateConvergencePorts,
 ): Promise<UpdateCommandReport> {
@@ -358,6 +402,7 @@ async function executeCurrentRuntime(
     actions,
   };
   try {
+    const hookFailures: FailedHookReconciliation[] = [];
     for (const hook of initial.plan.components.hooks) {
       if (hook.action !== "reconcile") continue;
       inFlightAction = {
@@ -375,14 +420,19 @@ async function executeCurrentRuntime(
         hookResult: result,
       });
       if (!succeeded) {
-        throw result.status === "ownership-conflict"
-          ? updateErrorFromUnknown(undefined, {
-              code: "UPDATE_HOOK_OWNERSHIP_CONFLICT",
-              message: "Configured provider hooks are owned by another installation.",
-            })
-          : result.error;
+        hookFailures.push(result);
       }
       inFlightAction = undefined;
+    }
+    if (hookFailures.length > 0) {
+      const first = hookFailures[0];
+      if (first === undefined) throw new Error("Missing failed hook reconciliation result.");
+      throw first.status === "ownership-conflict"
+        ? updateErrorFromUnknown(undefined, {
+            code: "UPDATE_HOOK_OWNERSHIP_CONFLICT",
+            message: "Configured provider hooks are owned by another installation.",
+          })
+        : first.error;
     }
     const observer = initial.plan.components.observer;
     if (observer.action === "start" || observer.action === "restart") {
@@ -390,6 +440,12 @@ async function executeCurrentRuntime(
         phase: "observer-convergence",
         action: observer.action,
       };
+      await revalidateObserverExecutionSidecar({
+        current,
+        target,
+        expected: initialPrivateEvidence,
+        ports,
+      });
       observerLifecycleFailure = await ports.runtime.convergeObserver(
         selected.plan.currentCli,
         observer.action,
@@ -508,7 +564,9 @@ async function executeCurrentRuntime(
       inFlightAction = undefined;
     }
   } catch (error) {
-    let failedAction = actions.at(-1);
+    let failedAction = actions.findLast(
+      (action) => action.status === "failed" || action.status === "skipped",
+    );
     if (failedAction?.status !== "failed" && failedAction?.status !== "skipped") {
       // Descriptive phases such as terminal convergence must not shift the identity of the
       // concrete mutation that failed.
@@ -517,7 +575,10 @@ async function executeCurrentRuntime(
           cause: error,
         });
       }
-      failedAction = { ...inFlightAction, status: "failed" };
+      failedAction = {
+        ...inFlightAction,
+        status: error instanceof ObserverExecutionPlanStaleError ? "skipped" : "failed",
+      };
       actions.push(failedAction);
     }
     const safe = updateErrorFromUnknown(error, {
@@ -553,7 +614,7 @@ async function executeCurrentRuntime(
               ? {}
               : { startupEvidence: observerLifecycleFailure.startupEvidence }),
           }),
-      recoveryCommands: recoveryCommands(selected, request, ports),
+      recoveryCommands: runtimeFailureRecoveryCommands(selected, request, ports, actions),
     });
   }
 
@@ -713,6 +774,19 @@ async function inspectAndPlan(input: {
   request: UpdateConvergenceRequest;
   ports: UpdateConvergencePorts;
 }): Promise<UpdateEvidencePlan> {
+  return (await inspectAndPlanWithPrivate(input)).evidence;
+}
+
+async function inspectAndPlanWithPrivate(input: {
+  evaluator: "incumbent-cli" | "successor-cli";
+  current: UpdateArtifact;
+  target: UpdateArtifact;
+  selected: PlannedUpdateChannel;
+  artifactAction: UpdateArtifactPlanAction;
+  build: StationBuildInfo;
+  request: UpdateConvergenceRequest;
+  ports: UpdateConvergencePorts;
+}): Promise<InspectedUpdatePlan> {
   const inspection = await runInspection(input.current, input.target, input.ports);
   const selectedTarget = {
     artifact: input.target,
@@ -723,7 +797,7 @@ async function inspectAndPlan(input: {
   };
   const draft = planUpdateConvergence({
     selectedTarget,
-    artifactAction: input.artifactAction,
+    installation: installMutation(input.selected, input.artifactAction),
     ...(input.request.handoff === undefined ? {} : { handoffFidelity: input.request.handoff }),
     preflight: inspection.preflight,
   });
@@ -732,7 +806,55 @@ async function inspectAndPlan(input: {
     preflight: inspection.preflight,
     privateEvidence: inspection.privateEvidence,
   });
-  return { evaluator: input.evaluator, preflight: inspection.preflight, plan };
+  return {
+    evidence: { evaluator: input.evaluator, preflight: inspection.preflight, plan },
+    privateEvidence: inspection.privateEvidence,
+  };
+}
+
+async function revalidateObserverExecutionSidecar(input: {
+  current: UpdateArtifact;
+  target: UpdateArtifact;
+  expected: UpdateConvergencePrivateEvidence;
+  ports: UpdateConvergencePorts;
+}): Promise<void> {
+  const actual = (await runInspection(input.current, input.target, input.ports)).privateEvidence;
+  if (!observerPrivateEvidenceMatches(input.expected, actual)) {
+    throw new ObserverExecutionPlanStaleError(
+      "Observer ownership or selected recovery evidence changed after convergence planning.",
+    );
+  }
+}
+
+function observerPrivateEvidenceMatches(
+  expected: UpdateConvergencePrivateEvidence,
+  actual: UpdateConvergencePrivateEvidence,
+): boolean {
+  const expectedObserver = expected.observer;
+  const actualObserver = actual.observer;
+  if ((expectedObserver === undefined) !== (actualObserver === undefined)) return false;
+  if (
+    expectedObserver !== undefined &&
+    actualObserver !== undefined &&
+    (expectedObserver.pid !== actualObserver.pid ||
+      expectedObserver.osStartTime !== actualObserver.osStartTime ||
+      expectedObserver.processToken !== actualObserver.processToken ||
+      expectedObserver.buildSelector !== actualObserver.buildSelector ||
+      expectedObserver.socketPath !== actualObserver.socketPath)
+  ) {
+    return false;
+  }
+  return (
+    expected.selectedRecoveryHandles.length === actual.selectedRecoveryHandles.length &&
+    expected.selectedRecoveryHandles.every((handle, index) => {
+      const candidate = actual.selectedRecoveryHandles[index];
+      return (
+        candidate !== undefined &&
+        candidate.sessionId === handle.sessionId &&
+        candidate.selectedHandleId === handle.selectedHandleId
+      );
+    })
+  );
 }
 
 async function runInspection(
@@ -850,6 +972,17 @@ function artifactActionFor(
   return "apply";
 }
 
+function installMutation(
+  selected: PlannedUpdateChannel,
+  action: UpdateArtifactPlanAction,
+): UpdateInstallMutation {
+  const mutation: UpdateInstallMutation = { owner: selected.channel, action };
+  if (selected.plan.managerCommand !== undefined) {
+    mutation.managerCommand = selected.plan.managerCommand;
+  }
+  return mutation;
+}
+
 function managerAwareArtifactApplication(
   status: "preview" | "deferred",
   selected: PlannedUpdateChannel,
@@ -934,10 +1067,57 @@ function recoveryCommands(
   request: UpdateConvergenceRequest,
   ports: UpdateConvergencePorts,
 ) {
-  return ports.runtime.recoveryCommands({
+  return ports.runtime.recoveryCommands(recoveryCommandInput(selected, request));
+}
+
+function runtimeFailureRecoveryCommands(
+  selected: PlannedUpdateChannel,
+  request: UpdateConvergenceRequest,
+  ports: UpdateConvergencePorts,
+  actions: readonly UpdateExecutedAction[],
+) {
+  const failures = actions.flatMap((action) => {
+    if (
+      action.phase !== "hook-reconciliation" ||
+      action.status !== "failed" ||
+      action.provider === undefined ||
+      action.hookResult === undefined
+    ) {
+      return [];
+    }
+    const followUp = failedHookFollowUp(action.hookResult);
+    return followUp === undefined ? [] : [{ provider: action.provider, followUp }];
+  });
+  return failures.length === 0
+    ? recoveryCommands(selected, request, ports)
+    : ports.runtime.hookFailureRecoveryCommands({
+        ...recoveryCommandInput(selected, request),
+        failures,
+      });
+}
+
+function failedHookFollowUp(
+  result: NonNullable<UpdateExecutedAction["hookResult"]>,
+): ProviderHookFollowUp | undefined {
+  switch (result.status) {
+    case "ownership-conflict":
+    case "write-failed":
+    case "post-write-doctor-failed":
+    case "inspection-failed":
+      return result.followUp;
+    case "configured-disabled":
+    case "unsupported":
+    case "healthy":
+    case "repaired":
+      return undefined;
+  }
+}
+
+function recoveryCommandInput(selected: PlannedUpdateChannel, request: UpdateConvergenceRequest) {
+  return {
     cli: selected.plan.currentCli,
     channel: selected.channel,
     drivePackageManager: request.packageManager === "drive",
     ...(request.handoff === undefined ? {} : { handoff: request.handoff }),
-  });
+  };
 }

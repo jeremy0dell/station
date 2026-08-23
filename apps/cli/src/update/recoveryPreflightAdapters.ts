@@ -252,6 +252,7 @@ async function inspectObserverRecoveryEvidence(input: {
         osStartTime: identity.osStartTime,
         processToken: identity.processToken,
         buildSelector: identity.version,
+        socketPath: identity.socketPath,
       },
       selectedRecoveryHandles:
         assessment === undefined ? [] : selectedStationRecoveryHandles(assessment),
@@ -320,6 +321,7 @@ function restartableInstalledPathReplacement(
         osStartTime: identity.osStartTime,
         processToken: identity.processToken,
         buildSelector: identity.version,
+        socketPath: identity.socketPath,
       },
       selectedRecoveryHandles: [],
     },

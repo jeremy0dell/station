@@ -3,7 +3,7 @@ import { nonEmptyStringSchema } from "./shared.js";
 
 export type UpdateArtifact = { version: string; revision?: string };
 
-/** Strict installed or target Station build identity shared by update report versions. */
+/** Strict installed or target Station build identity used by the current update contract. */
 export const UpdateArtifactSchema = z
   .object({
     version: nonEmptyStringSchema,

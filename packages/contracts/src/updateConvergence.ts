@@ -1,13 +1,27 @@
 import { z } from "zod";
 import { SafeErrorSchema } from "./errors.js";
-import { HostHandoffFidelitySchema, PtyHandoffReceiptSchema } from "./hostHandoff.js";
+import {
+  comparePtyLifetimeIdentities,
+  HostHandoffFidelitySchema,
+  PtyHandoffReceiptSchema,
+} from "./hostHandoff.js";
 import { ProviderHookReconciliationResultSchema } from "./providerHooks.js";
 import { compareCodeUnitStrings, nonEmptyStringSchema } from "./shared.js";
 import { type UpdateArtifact, UpdateArtifactSchema } from "./updateArtifact.js";
-import { updateConvergenceSemanticIssues } from "./updateConvergenceSemantics.js";
-import { UpdateReapRecoveryPreflightSchema } from "./updateRecoveryPreflight.js";
+import {
+  deriveUpdateReapPreviewConsequences,
+  updateConvergenceSemanticIssues,
+  updateReapPreviewConsequencesMatch,
+} from "./updateConvergenceSemantics.js";
+import { UpdateInstallMutationSchema } from "./updateInstall.js";
+import {
+  UpdateReapRecoveryPreflightSchema,
+  UpdateReapTerminalDispositionSchema,
+} from "./updateRecoveryPreflight.js";
 
 const buildIdentitySchema = z.string().regex(/^[0-9a-f]{64}$/u);
+
+export { deriveUpdateReapPreviewConsequences, updateReapPreviewConsequencesMatch };
 
 export const UpdateSelectedTargetSchema = z
   .object({
@@ -176,6 +190,33 @@ const recoveryDecisionSchema = z
   })
   .strict();
 
+const updateReapPreviewTerminalSchema = UpdateReapTerminalDispositionSchema.extend({
+  ownership: z.literal("station"),
+  requiredAction: z.enum(["preserve", "reap", "blocked"]),
+}).strict();
+
+export const UpdateReapPreviewConsequencesSchema = z
+  .object({
+    authorization: z.literal("none"),
+    execution: z.literal("not-included"),
+    recovery: recoveryDecisionSchema,
+    terminals: z.array(updateReapPreviewTerminalSchema),
+  })
+  .strict()
+  .superRefine((consequences, context) => {
+    consequences.terminals.forEach((terminal, index) => {
+      const previous = consequences.terminals[index - 1];
+      if (previous !== undefined && comparePtyLifetimeIdentities(previous, terminal) >= 0) {
+        context.addIssue({
+          code: "custom",
+          path: ["terminals", index],
+          message: "Reap-preview terminals must be unique and canonically ordered.",
+        });
+      }
+    });
+  });
+export type UpdateReapPreviewConsequences = z.infer<typeof UpdateReapPreviewConsequencesSchema>;
+
 const reconcileDecisionSchema = z
   .object({
     action: z.enum(["no-op", "run", "blocked"]),
@@ -196,6 +237,7 @@ export const UpdateConvergencePlanSchema = z
   .object({
     schemaVersion: z.literal(1),
     selectedTarget: UpdateSelectedTargetSchema,
+    installation: UpdateInstallMutationSchema,
     status: UpdateConvergencePlanStatusSchema,
     digest: UpdateConvergenceDigestSchema,
     components: z
@@ -275,6 +317,7 @@ const executedActionSchema = z
     status: z.enum(["completed", "failed", "skipped"]),
     provider: nonEmptyStringSchema.optional(),
     hookResult: ProviderHookReconciliationResultSchema.optional(),
+    installation: UpdateInstallMutationSchema.optional(),
     fidelity: HostHandoffFidelitySchema.optional(),
     handoffReceipt: PtyHandoffReceiptSchema.optional(),
   })
@@ -300,6 +343,18 @@ const executedActionSchema = z
         code: "custom",
         path: ["hookResult"],
         message: "Only hook reconciliation actions may carry hook results.",
+      });
+    }
+    const artifactApplication =
+      action.phase === "artifact-application" && action.action === "apply";
+    if (
+      artifactApplication !== (action.installation !== undefined) ||
+      (action.installation !== undefined && action.installation.action !== action.action)
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["installation"],
+        message: "Artifact application audits require the exact selected install mutation.",
       });
     }
     const handoffAction =
@@ -347,7 +402,10 @@ export const UpdateActionAuditSchema = z
           message: "Executed actions must retain canonical phase order.",
         });
       }
-      if (previous?.status === "failed") {
+      if (
+        previous?.status === "failed" &&
+        !(previous.phase === "hook-reconciliation" && action.phase === "hook-reconciliation")
+      ) {
         context.addIssue({
           code: "custom",
           path: ["actions", index],
@@ -437,6 +495,7 @@ export const UpdateConvergenceResultSchema = z.discriminatedUnion("kind", [
       planDigest: buildIdentitySchema,
       phases: nonExecutedPhasesSchema,
       verification: UpdateVerificationSchema.optional(),
+      reapConsequences: UpdateReapPreviewConsequencesSchema.optional(),
     })
     .strict(),
   z

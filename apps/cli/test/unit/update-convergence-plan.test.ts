@@ -143,7 +143,7 @@ describe("update convergence planning policy", () => {
     evidence.installed = { version: "0.9.0", revision: "revision-0" };
     const result = planUpdateConvergence({
       selectedTarget: { artifact, buildIdentity: { status: "not-yet-provable" } },
-      artifactAction: "apply",
+      installation: { owner: "installer-binary", action: "apply" },
       preflight: evidence,
     });
 
@@ -195,7 +195,11 @@ describe("update convergence planning policy", () => {
   ])("keeps $name visible while artifact deferral controls status", (testCase) => {
     const result = planUpdateConvergence({
       selectedTarget: { artifact, buildIdentity: { status: "known", value: buildIdentity } },
-      artifactAction: "defer",
+      installation: {
+        owner: "homebrew",
+        action: "defer",
+        managerCommand: ["brew", "upgrade", "station"],
+      },
       handoffFidelity: "processes",
       preflight: testCase.preflight,
     });
@@ -215,7 +219,7 @@ describe("update convergence planning policy", () => {
     });
     const result = planUpdateConvergence({
       selectedTarget: { artifact, buildIdentity: { status: "known", value: buildIdentity } },
-      artifactAction: "no-op",
+      installation: { owner: "installer-binary", action: "no-op" },
       preflight: evidence,
     });
     expect(result.status).toBe("intentionally-incomplete");
@@ -408,7 +412,7 @@ describe("update convergence planning policy", () => {
 function evaluate(evidence: UpdateReapRecoveryPreflight) {
   return planUpdateConvergence({
     selectedTarget: { artifact, buildIdentity: { status: "known", value: buildIdentity } },
-    artifactAction: "no-op",
+    installation: { owner: "installer-binary", action: "no-op" },
     handoffFidelity: "processes",
     preflight: evidence,
   });

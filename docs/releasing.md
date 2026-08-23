@@ -20,13 +20,9 @@ The tag starts `.github/workflows/release.yml`. That workflow runs standard CI,
 builds the four native targets, creates a six-asset draft, exercises the stamped
 draft installer, binds the exact numeric asset IDs and shared target build
 identity, and records an immutable `accepted-release-candidate-*` artifact. The
-macOS candidate lane selects the newest complete immutable predecessor and
-runs four distinct transitions. The exact published predecessor uses the
-compatible v1-v4 report parser; for a pre-v4 predecessor, the no-Host lane
-validates its legacy artifact-update semantics and then requires the installed
-target to emit a strict v4 `current` report with verified convergence. It never
-attributes a v4 plan or pre-mutation guarantee to that legacy binary. A separate
-synthetic-version v4 incumbent first proves real old-idle-Host replacement and
+macOS candidate lane runs four current-contract transitions from a composed
+synthetic-version incumbent. The no-Host lane proves artifact application and
+successor-owned verified convergence. The Host lanes prove real old-idle-Host replacement and
 old bridge-backed live handoff, including exact PIDs, immutable build identities,
 PTY identity, output continuity, typed receipt audit, and a fresh final no-op
 plan. A separate real successor hook-failure lane seeds distinct token, private
@@ -35,8 +31,8 @@ canaries and requires both strict JSON and default text to retain only sanitized
 error envelopes and stable codes. Its distinct non-bridge lane must stop before
 mutation with `pre-mutation-reap-required`
 while preserving the incumbent artifact and runtime.
-Post-promotion public checks repeat the compatible exact-predecessor
-no-Host transition and target-v4 verification.
+Post-promotion checks verify the exact-tag installer independently; update
+convergence is accepted only through the current strict report boundary.
 The tag workflow never publishes the draft automatically.
 
 Do not begin manual acceptance until the workflow succeeds. Treat the workflow,

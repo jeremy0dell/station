@@ -1,6 +1,6 @@
 import { readdir, readFile, realpath } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
-import type { UpdateArtifact } from "@station/contracts";
+import { type UpdateArtifact, updateCommandArgvMatch } from "@station/contracts";
 import {
   type ExternalCommandRunner,
   normalizeCancellationError,
@@ -56,7 +56,7 @@ export type NpmGlobalUpdateChannelDeps = {
  * ADAPTER
  *
  * Translates npm's global package and bin ownership into a pinned package-manager update.
- * Installed-target proof reads the active package only and does not invoke `npm view`.
+ * Installed-target proof validates inherited exact argv from the active package without `npm view`.
  */
 export function createNpmGlobalUpdateChannel(
   deps: NpmGlobalUpdateChannelDeps,
@@ -90,12 +90,25 @@ export function createNpmGlobalUpdateChannel(
       ) {
         return undefined;
       }
+      const managerCommand = [
+        detection.npmPath,
+        "install",
+        "--global",
+        `${detection.packageName}@${target.version}`,
+      ] as const;
+      if (
+        options.inheritedManagerCommand !== undefined &&
+        !updateCommandArgvMatch(options.inheritedManagerCommand, managerCommand)
+      ) {
+        return undefined;
+      }
       return {
         channel,
         status: "current",
         currentVersion: target.version,
         targetVersion: target.version,
         currentCli: [detection.executablePath],
+        managerCommand: options.inheritedManagerCommand ?? managerCommand,
       };
     },
     async apply(plan, options = {}) {

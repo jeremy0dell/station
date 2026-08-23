@@ -268,16 +268,20 @@ Auto-starting `snapshot`, `doctor`, `command`, `reconcile`, `observe`, and
 `debug bundle` boundaries preserve failures as the strict `{ error, cause?,
 startupEvidence? }` lifecycle envelope instead of flattening them into prose.
 Setup activation retains the same fields in its failed operation/session
-outcome. Update report schema version 4 separates artifact application from
-live runtime convergence while the compatible parser retains strict version 1,
-2, and 3 readers. Every resolved target is inspected, including same-version
+outcome. The single current strict update report separates artifact application
+from live runtime convergence; older report shapes and schema values are rejected.
+Every resolved target is inspected, including same-version
 and same-revision updates. `initial` carries the redacted #665 aggregate and its
 typed plan; `result` distinguishes preview, package-manager deferral,
 non-mutating stop, current-CLI execution, successor-CLI execution, and failure.
 Successful actions retain an ordered audit and a fresh post-action aggregate.
 Only a verified converged no-op plan can produce `current` or `updated`.
 Observer start or restart output is parsed through its strict command-result
-schema and checked against the process exit status. A typed lifecycle failure
+schema and checked against the process exit status, admitted health, configured
+socket, complete PID/start/version identity, and selected immutable build. The
+private Observer ownership and selected-handle commitment is also freshly
+revalidated immediately before mutation; drift fails without a lifecycle action.
+A typed lifecycle failure
 retains its sanitized `cause` (falling back to its lifecycle `error`) and bounded,
 redacted `startupEvidence` as separate report and text fields; an incumbent
 report preserves those fields when the failure came from its successor CLI.

@@ -5,6 +5,7 @@ import type {
   UpdateChannelId,
   UpdateCommandArgv,
   UpdateDetectionBase,
+  UpdateInstalledTargetOptions,
   UpdateOperationOptions,
   UpdatePlanBase,
 } from "./updateChannel.js";
@@ -22,7 +23,7 @@ export type UpdateChannelProbe = {
   detectAndPlan(options?: UpdateOperationOptions): Promise<PlannedUpdateChannel | undefined>;
   proveInstalledTarget(
     target: UpdateArtifact,
-    options?: UpdateOperationOptions,
+    options?: UpdateInstalledTargetOptions,
   ): Promise<PlannedUpdateChannel | undefined>;
 };
 export type UpdateDiscoveryProbe = Pick<UpdateChannelProbe, "channel" | "detectAndPlan">;
@@ -71,7 +72,7 @@ export async function selectInstalledUpdateChannel(input: {
   probes: readonly UpdateChannelProbe[];
   target: UpdateArtifact;
   requested?: UpdateChannelId;
-  options?: UpdateOperationOptions;
+  options?: UpdateInstalledTargetOptions;
 }): Promise<PlannedUpdateChannel> {
   return selectMatchingChannel(input, (probe) =>
     probe.proveInstalledTarget(input.target, input.options),

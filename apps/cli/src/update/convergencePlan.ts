@@ -1,16 +1,17 @@
 import {
   compareCodeUnitStrings,
   type UpdateConvergencePlan,
+  type UpdateInstallMutation,
   type UpdateReapRecoveryPreflight,
   type UpdateSelectedTarget,
   updateTerminalEvidenceSetsMatch,
 } from "@station/contracts";
 
-export type UpdateArtifactPlanAction = "no-op" | "apply" | "defer";
+export type UpdateArtifactPlanAction = UpdateInstallMutation["action"];
 
 export type UpdateConvergencePlanInput = {
   selectedTarget: UpdateSelectedTarget;
-  artifactAction: UpdateArtifactPlanAction;
+  installation: UpdateInstallMutation;
   handoffFidelity?: "processes" | "screen";
   preflight: UpdateReapRecoveryPreflight;
 };
@@ -20,13 +21,15 @@ export type UpdateConvergencePlanDraft = Omit<UpdateConvergencePlan, "digest">;
 /**
  * POLICY
  *
- * Converts one #665 aggregate inspection into a deterministic, provider-neutral convergence plan.
+ * Converts one exact install commitment and #665 aggregate inspection into a deterministic,
+ * provider-neutral convergence plan.
  * Evidence is admitted per component and action: facts irrelevant to a safe action do not block it,
  * and Observer restart requires a selected candidate admitted by singleton ordering.
  */
 export function planUpdateConvergence(
   input: UpdateConvergencePlanInput,
 ): UpdateConvergencePlanDraft {
+  const artifactAction = input.installation.action;
   const hooks = input.preflight.hooks
     .map((hook): UpdateConvergencePlan["components"]["hooks"][number] => {
       switch (hook.status) {
@@ -35,7 +38,7 @@ export function planUpdateConvergence(
         case "unsupported":
           return { provider: hook.provider, action: "no-op", reason: "unsupported" };
         case "healthy":
-          return input.artifactAction === "apply"
+          return artifactAction === "apply"
             ? {
                 provider: hook.provider,
                 action: "reconcile",
@@ -77,7 +80,7 @@ export function planUpdateConvergence(
       : { action: "no-op", reason: "no-runtime-change" };
 
   const status = planStatus({
-    artifactAction: input.artifactAction,
+    artifactAction,
     hasBlockedComponent,
     hasRuntimeAction,
     hooks,
@@ -93,21 +96,18 @@ export function planUpdateConvergence(
   return {
     schemaVersion: 1,
     selectedTarget: input.selectedTarget,
+    installation: input.installation,
     status,
     components: { hooks, observer, terminals, host, recovery, reconcile, verification },
     phases: [
       {
         id: "artifact-application",
         action:
-          input.artifactAction === "apply"
-            ? "apply"
-            : input.artifactAction === "defer"
-              ? "defer"
-              : "no-op",
+          artifactAction === "apply" ? "apply" : artifactAction === "defer" ? "defer" : "no-op",
         reason:
-          input.artifactAction === "apply"
+          artifactAction === "apply"
             ? "channel-apply"
-            : input.artifactAction === "defer"
+            : artifactAction === "defer"
               ? "manager-deferred"
               : "already-selected",
       },

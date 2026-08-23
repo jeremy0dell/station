@@ -1,4 +1,4 @@
-import type { UpdateReapRecoveryPreflight } from "@station/contracts";
+import type { UpdateInstallMutation, UpdateReapRecoveryPreflight } from "@station/contracts";
 import { describe, expect, it } from "vitest";
 import { updateConvergenceDigest } from "../../src/update/convergenceDigest.js";
 import { planUpdateConvergence } from "../../src/update/convergencePlan.js";
@@ -27,6 +27,7 @@ describe("update convergence digest", () => {
         osStartTime: "os-start-1",
         processToken: "11111111-1111-4111-8111-111111111111",
         buildSelector: `1.0.0+station.${identity}`,
+        socketPath: "/tmp/station/observer.sock",
       },
       selectedRecoveryHandles: [],
     };
@@ -48,6 +49,7 @@ describe("update convergence digest", () => {
         osStartTime: "os-start-1",
         processToken: "11111111-1111-4111-8111-111111111111",
         buildSelector: `0.9.0+station.${"b".repeat(64)}`,
+        socketPath: "/tmp/station/observer.sock",
       },
       selectedRecoveryHandles: [],
     };
@@ -72,6 +74,33 @@ describe("update convergence digest", () => {
       host: { action: "handoff", fidelity: "screen" },
       terminals: { action: "preserve-via-handoff", fidelity: "screen" },
     });
+  });
+
+  it("binds the exact install owner, selected action, and manager argv", () => {
+    const privateEvidence = { selectedRecoveryHandles: [] };
+    const evidence = basePreflight();
+    const installer = digest(privateEvidence, evidence, "processes", {
+      owner: "installer-binary",
+      action: "no-op",
+    });
+    const checkout = digest(privateEvidence, evidence, "processes", {
+      owner: "dev-checkout",
+      action: "no-op",
+    });
+    const brew = digest(privateEvidence, evidence, "processes", {
+      owner: "homebrew",
+      action: "no-op",
+      managerCommand: ["brew", "upgrade", "station"],
+    });
+    const brewCask = digest(privateEvidence, evidence, "processes", {
+      owner: "homebrew",
+      action: "no-op",
+      managerCommand: ["brew", "upgrade", "--cask", "station"],
+    });
+
+    expect(installer).not.toBe(checkout);
+    expect(installer).not.toBe(brew);
+    expect(brew).not.toBe(brewCask);
   });
 
   it("is stable across display-only SafeError message changes", () => {
@@ -113,7 +142,7 @@ describe("update convergence digest", () => {
         { sessionId: "session-\ud83d\ude89", selectedHandleId: "station-handle-\ud83d\ude80" },
       ],
     });
-    expect(astral).toBe("dfb77ecfa4bb2f8794210fc367adaab06ca2f03911ff2b70c19403b8c756576a");
+    expect(astral).toBe("c316a3fdcf7f731e1e8035dd41a03571449263314fcba650912fb90085f4c3da");
   });
 });
 
@@ -121,15 +150,20 @@ function digest(
   privateEvidence: UpdateConvergencePrivateEvidence,
   preflight: UpdateReapRecoveryPreflight = basePreflight(),
   handoffFidelity: "processes" | "screen" = "processes",
+  installation: UpdateInstallMutation = { owner: "installer-binary", action: "no-op" },
 ): string {
-  const draft = planFor(preflight, handoffFidelity);
+  const draft = planFor(preflight, handoffFidelity, installation);
   return updateConvergenceDigest({ draft, preflight, privateEvidence }).value;
 }
 
-function planFor(preflight: UpdateReapRecoveryPreflight, handoffFidelity: "processes" | "screen") {
+function planFor(
+  preflight: UpdateReapRecoveryPreflight,
+  handoffFidelity: "processes" | "screen",
+  installation: UpdateInstallMutation = { owner: "installer-binary", action: "no-op" },
+) {
   return planUpdateConvergence({
     selectedTarget: { artifact, buildIdentity: { status: "known", value: identity } },
-    artifactAction: "no-op",
+    installation,
     handoffFidelity,
     preflight,
   });

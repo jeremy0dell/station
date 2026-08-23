@@ -58,6 +58,33 @@ describe("package-manager update channels", () => {
       targetVersion: "1.1.0",
       managerCommand: [brewPath, "upgrade", "--formula", "jeremy0dell/station/station"],
     });
+    const infoCount = commands.filter(({ args }) => args?.[0] === "info").length;
+    await expect(channel.proveInstalledTarget({ version: "1.0.0" })).resolves.toMatchObject({
+      status: "current",
+      managerCommand: [brewPath, "upgrade", "--formula", "station"],
+    });
+    await expect(
+      channel.proveInstalledTarget(
+        { version: "1.0.0" },
+        {
+          inheritedManagerCommand: [
+            brewPath,
+            "upgrade",
+            "--formula",
+            "jeremy0dell/station/station",
+          ],
+        },
+      ),
+    ).resolves.toMatchObject({
+      managerCommand: [brewPath, "upgrade", "--formula", "jeremy0dell/station/station"],
+    });
+    await expect(
+      channel.proveInstalledTarget(
+        { version: "1.0.0" },
+        { inheritedManagerCommand: [brewPath, "upgrade", "--formula", "other"] },
+      ),
+    ).resolves.toBeUndefined();
+    expect(commands.filter(({ args }) => args?.[0] === "info")).toHaveLength(infoCount);
     expect(await channel.apply(plan)).toMatchObject({
       status: "deferred",
       installedVersion: "1.0.0",
@@ -99,6 +126,20 @@ describe("package-manager update channels", () => {
       targetVersion: "1.2.0",
       managerCommand: [npmPath, "install", "--global", "@station/cli@1.2.0"],
     });
+    const viewCount = commands.filter(({ args }) => args?.[0] === "view").length;
+    await expect(channel.proveInstalledTarget({ version: "1.0.0" })).resolves.toMatchObject({
+      status: "current",
+      managerCommand: [npmPath, "install", "--global", "@station/cli@1.0.0"],
+    });
+    await expect(
+      channel.proveInstalledTarget(
+        { version: "1.0.0" },
+        {
+          inheritedManagerCommand: [npmPath, "install", "--global", "@station/cli@different"],
+        },
+      ),
+    ).resolves.toBeUndefined();
+    expect(commands.filter(({ args }) => args?.[0] === "view")).toHaveLength(viewCount);
     await channel.apply(plan);
     expect(commands.some(({ args }) => args?.[0] === "install")).toBe(false);
   });
@@ -136,6 +177,18 @@ describe("package-manager update channels", () => {
       managerCommand: [misePath, "upgrade", "station"],
       successorCli: [misePath, "exec", "--", "stn"],
     });
+    const outdatedCount = commands.filter(({ args }) => args?.[0] === "outdated").length;
+    await expect(channel.proveInstalledTarget({ version: "1.0.0" })).resolves.toMatchObject({
+      status: "current",
+      managerCommand: [misePath, "upgrade", "station"],
+    });
+    await expect(
+      channel.proveInstalledTarget(
+        { version: "1.0.0" },
+        { inheritedManagerCommand: [misePath, "upgrade", "other-tool"] },
+      ),
+    ).resolves.toBeUndefined();
+    expect(commands.filter(({ args }) => args?.[0] === "outdated")).toHaveLength(outdatedCount);
     await expect(
       channel.apply(
         { ...plan, managerCommand: [misePath, "upgrade", "another-tool"] },

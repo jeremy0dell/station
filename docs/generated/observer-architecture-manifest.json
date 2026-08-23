@@ -13188,7 +13188,7 @@
       "declaration": "runObserverCommand",
       "kind": "function",
       "role": "COMPOSITION ROOT",
-      "purpose": "Selects Observer process lifecycle and duplicate-inspection adapters for one CLI action.",
+      "purpose": "Selects Observer process lifecycle and duplicate-inspection adapters for one CLI action. Internal update mutation commitments must match this process's configured socket and immutable build.",
       "dependencies": [
         {
           "path": "apps/cli/src/observerProcess.ts",
@@ -14442,7 +14442,7 @@
       "declaration": "planUpdateConvergence",
       "kind": "function",
       "role": "POLICY",
-      "purpose": "Converts one #665 aggregate inspection into a deterministic, provider-neutral convergence plan. Evidence is admitted per component and action: facts irrelevant to a safe action do not block it, and Observer restart requires a selected candidate admitted by singleton ordering.",
+      "purpose": "Converts one exact install commitment and #665 aggregate inspection into a deterministic, provider-neutral convergence plan. Evidence is admitted per component and action: facts irrelevant to a safe action do not block it, and Observer restart requires a selected candidate admitted by singleton ordering.",
       "dependencies": []
     },
     {
@@ -14466,7 +14466,7 @@
       "declaration": "createHomebrewUpdateChannel",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Translates Homebrew Cellar or Caskroom ownership into a native brew update plan. Installed-target proof uses only the active Cellar/Caskroom path and does not request package metadata.",
+      "purpose": "Translates Homebrew Cellar or Caskroom ownership into a native brew update plan. Installed-target proof uses only the active path and validates inherited exact argv without package metadata.",
       "dependencies": [
         {
           "path": "apps/cli/src/update/updateChannel.ts",
@@ -14490,7 +14490,7 @@
       "declaration": "createMiseUpdateChannel",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Translates mise's active tool installation into its configured-range upgrade command. Installed-target proof reads the active tool only and does not invoke `mise outdated`.",
+      "purpose": "Translates mise's active tool installation into its configured-range upgrade command. Installed-target proof validates inherited exact argv from the active tool without `mise outdated`.",
       "dependencies": [
         {
           "path": "apps/cli/src/update/updateChannel.ts",
@@ -14506,7 +14506,7 @@
       "declaration": "createNpmGlobalUpdateChannel",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Translates npm's global package and bin ownership into a pinned package-manager update. Installed-target proof reads the active package only and does not invoke `npm view`.",
+      "purpose": "Translates npm's global package and bin ownership into a pinned package-manager update. Installed-target proof validates inherited exact argv from the active package without `npm view`.",
       "dependencies": [
         {
           "path": "apps/cli/src/update/updateChannel.ts",
@@ -14522,7 +14522,7 @@
       "declaration": "createPublicUpdateReport",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Projects one internal convergence outcome into the strict, redaction-safe public v4 report.",
+      "purpose": "Projects one internal convergence outcome into the strict, redaction-safe public current report.",
       "dependencies": [
         {
           "path": "apps/cli/src/update/publicUpdateReportAdapter.ts",
@@ -14538,7 +14538,7 @@
       "declaration": "sanitizePublicUpdateReport",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Defines the deterministic confidentiality decision for one strict v4 update result. Every nested SafeError and recovery argument crosses this policy, including successor and post-action evidence, without weakening report invariants or optional-field absence.",
+      "purpose": "Defines the deterministic confidentiality decision for one current strict update result. Every nested SafeError and recovery argument crosses this policy, including successor and post-action evidence, without weakening report invariants or optional-field absence.",
       "dependencies": []
     },
     {
@@ -14666,7 +14666,7 @@
       "declaration": "UpdateChannel",
       "kind": "interface",
       "role": "DRIVEN PORT",
-      "purpose": "Defines one install owner's typed detect, plan, apply, exact installed-target proof, and optional adapter-owned recovery lifecycle.",
+      "purpose": "Defines one install owner's typed detect, plan, apply, exact installed-target and inherited manager-command proof, and optional adapter-owned recovery lifecycle.",
       "dependencies": []
     },
     {
@@ -14682,7 +14682,7 @@
       "declaration": "UpdateConvergencePort",
       "kind": "interface",
       "role": "DRIVING PORT",
-      "purpose": "Offers exact-target update convergence to CLI actors without exposing its driven capabilities.",
+      "purpose": "Offers exact-target and exact-install-owner convergence to CLI actors without exposing its driven capabilities.",
       "dependencies": []
     },
     {
@@ -14690,7 +14690,7 @@
       "declaration": "runUpdateConvergence",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Resolves the install owner, inspects all live state, plans convergence, executes only safe typed actions, and verifies a fresh no-op plan. Host actions retain the plan's exact build, immutable PTY commitment, and handoff fidelity without fallback. Artifact application remains channel-owned; destructive Station process-group authorization, journaling, and reaping remain exclusively owned by #641.",
+      "purpose": "Resolves and binds the exact install owner/action, inspects all live state, plans convergence, executes only safe typed actions, and verifies a fresh no-op plan. Host actions retain the plan's exact build, immutable PTY commitment, and handoff fidelity without fallback. Observer mutation first revalidates the private process and selected-handle commitment retained from the inspected plan. Artifact application remains channel-owned; destructive Station process-group authorization, journaling, and reaping remain exclusively owned by #641.",
       "dependencies": [
         {
           "path": "apps/cli/src/update/convergenceDigest.ts",
@@ -14773,7 +14773,7 @@
       "declaration": "createUpdateRuntimeConvergenceAdapter",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Translates safe Observer, hook, and reconcile runtime actions into strict child boundaries.",
+      "purpose": "Translates safe Observer, hook, and reconcile runtime actions into strict child boundaries. Observer mutation pins the selected build and configured socket and admits only an exact healthy running result with exit zero; typed hook and Observer failures require exit one.",
       "dependencies": [
         {
           "path": "apps/cli/src/update/updateRuntimeConvergencePort.ts",
@@ -14796,7 +14796,7 @@
       "declaration": "UpdateRuntimeConvergencePort",
       "kind": "interface",
       "role": "DRIVEN PORT",
-      "purpose": "Defines safe Observer, hook, and reconcile child mutations plus recovery argv for update convergence.",
+      "purpose": "Defines exact-target Observer mutation, provider hook reconciliation, runtime reconcile, and ordered channel-neutral recovery guidance for update convergence. Observer success requires the admitted build and configured socket; hook failures retain provider-owned follow-up intent without granting automatic takeover.",
       "dependencies": []
     },
     {
@@ -14834,7 +14834,7 @@
       "declaration": "UpdateSuccessorTransportPort",
       "kind": "interface",
       "role": "DRIVEN PORT",
-      "purpose": "Executes one pinned successor evaluator and returns a strict v4 report only after exact selected channel, artifact, immutable build, evaluator, result-kind, and exit-status validation.",
+      "purpose": "Executes one pinned successor evaluator and returns a current strict report only after exact selected channel, exact install owner command, artifact, immutable build, evaluator, result-kind, and exit-status validation.",
       "dependencies": []
     },
     {

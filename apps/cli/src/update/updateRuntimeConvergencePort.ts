@@ -1,6 +1,7 @@
 import type {
   HostHandoffFidelity,
   ObserverLifecycleFailure,
+  ProviderHookFollowUp,
   ProviderHookReconciliationResult,
   UpdateChannelId,
   UpdateCommandArgv,
@@ -14,11 +15,17 @@ export type UpdateRecoveryCommandInput = {
   handoff?: HostHandoffFidelity;
 };
 
+export type UpdateHookFailureRecoveryInput = UpdateRecoveryCommandInput & {
+  failures: readonly { provider: string; followUp: ProviderHookFollowUp }[];
+};
+
 /**
  * DRIVEN PORT
  *
- * Defines safe Observer, hook, and reconcile child mutations plus recovery argv for update
- * convergence.
+ * Defines exact-target Observer mutation, provider hook reconciliation, runtime reconcile, and
+ * ordered channel-neutral recovery guidance for update convergence. Observer success requires the
+ * admitted build and configured socket; hook failures retain provider-owned follow-up intent
+ * without granting automatic takeover.
  */
 export interface UpdateRuntimeConvergencePort {
   reconcileHook(cli: ExecutableArgv, provider: string): Promise<ProviderHookReconciliationResult>;
@@ -27,5 +34,6 @@ export interface UpdateRuntimeConvergencePort {
     action: "start" | "restart",
   ): Promise<ObserverLifecycleFailure | undefined>;
   reconcile(cli: ExecutableArgv): Promise<void>;
+  hookFailureRecoveryCommands(input: UpdateHookFailureRecoveryInput): UpdateCommandArgv[];
   recoveryCommands(input: UpdateRecoveryCommandInput): UpdateCommandArgv[];
 }

@@ -1,6 +1,5 @@
 import {
   UpdateReapRecoveryPreflightSchema,
-  UpdateReapRecoveryPreflightV1Schema,
   updateReapEvidenceIsComplete,
 } from "@station/contracts";
 import { describe, expect, it } from "vitest";
@@ -89,8 +88,8 @@ describe("UpdateReapRecoveryPreflightSchema", () => {
     expect(updateReapEvidenceIsComplete(preflight)).toBe(true);
   });
 
-  it("keeps legacy v1 fieldless admission separate from strict v2 evidence", () => {
-    const legacy = {
+  it("rejects old schema values and the removed fieldless Observer shape", () => {
+    const oldShape = {
       ...preflight,
       schemaVersion: 1 as const,
       observer: {
@@ -102,9 +101,13 @@ describe("UpdateReapRecoveryPreflightSchema", () => {
       },
     };
 
-    expect(UpdateReapRecoveryPreflightV1Schema.parse(legacy)).toEqual(legacy);
-    expect(UpdateReapRecoveryPreflightSchema.safeParse(legacy).success).toBe(false);
-    expect(UpdateReapRecoveryPreflightV1Schema.safeParse(preflight).success).toBe(false);
+    expect(UpdateReapRecoveryPreflightSchema.safeParse(oldShape).success).toBe(false);
+    expect(
+      UpdateReapRecoveryPreflightSchema.safeParse({
+        ...preflight,
+        observer: oldShape.observer,
+      }).success,
+    ).toBe(false);
   });
 
   it("strictly admits restartable installed-executable drift without treating it as complete", () => {

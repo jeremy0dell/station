@@ -151,7 +151,7 @@ describe("runUpdateRecoveryPreflight", () => {
     expect(serialized).not.toContain("providerData");
   });
 
-  it("constructs one coherent aggregate while projecting only public #665 evidence", async () => {
+  it("constructs one coherent aggregate and returns its current public evidence", async () => {
     const observer = observerEvidence(
       assessment([sessionAssessment("session-a", "recoverable", [])]),
     );
@@ -162,7 +162,7 @@ describe("runUpdateRecoveryPreflight", () => {
     });
 
     expect(aggregate.privateEvidence).toMatchObject({
-      observer: { buildSelector: "1.0.0" },
+      observer: { buildSelector: "1.0.0", socketPath: "/tmp/station/observer.sock" },
       selectedRecoveryHandles: [{ sessionId: "session-a", selectedHandleId: "private-session-a" }],
     });
     const publicProjection = await runUpdateRecoveryPreflight({
@@ -170,10 +170,10 @@ describe("runUpdateRecoveryPreflight", () => {
       target: { version: "1.1.0" },
       ports: aggregatePorts(observerInspection(observer)),
     });
-    expect(publicProjection.schemaVersion).toBe(1);
+    expect(publicProjection.schemaVersion).toBe(2);
+    expect(publicProjection.observer).toMatchObject({ replacementAdmission: "not-yet-provable" });
     expect(JSON.stringify(publicProjection)).not.toContain("private-session-a");
     expect(JSON.stringify(publicProjection)).not.toContain("processToken");
-    expect(JSON.stringify(publicProjection)).not.toContain("replacementAdmission");
   });
 
   it.each([
@@ -310,7 +310,7 @@ describe("runUpdateRecoveryPreflight", () => {
     });
 
     expect(result).toMatchObject({
-      schemaVersion: 1,
+      schemaVersion: 2,
       observer: { status: "exact", recovery: { status: "unknown" } },
       terminalDispositions: [
         {
@@ -322,7 +322,6 @@ describe("runUpdateRecoveryPreflight", () => {
       ],
       evidenceComplete: false,
     });
-    expect(JSON.stringify(result)).not.toContain("replacementAdmission");
   });
 
   it("keeps restartable executable drift distinct from complete recovery evidence", async () => {
@@ -483,6 +482,7 @@ function observerInspection(evidence: UpdateReapObserverEvidence) {
               osStartTime: "Fri Aug 21 12:00:00 2026",
               processToken: "123e4567-e89b-42d3-a456-426614174000",
               buildSelector: exactBuild,
+              socketPath: "/tmp/station/observer.sock",
             },
           }),
       selectedRecoveryHandles,

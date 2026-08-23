@@ -1,4 +1,8 @@
-import type { UpdateConvergencePlan } from "./updateConvergence.js";
+import type {
+  UpdateConvergencePlan,
+  UpdateEvidencePlan,
+  UpdateReapPreviewConsequences,
+} from "./updateConvergence.js";
 import {
   type UpdateReapRecoveryPreflight,
   updateTerminalEvidenceSetsMatch,
@@ -8,6 +12,56 @@ export type UpdateConvergenceSemanticIssue = {
   path: Array<string | number>;
   message: string;
 };
+
+/** Projects redaction-safe, non-authorizing terminal consequences for `update --dry-run --reap`. */
+export function deriveUpdateReapPreviewConsequences(
+  evidence: UpdateEvidencePlan,
+): UpdateReapPreviewConsequences {
+  return {
+    authorization: "none",
+    execution: "not-included",
+    recovery: evidence.plan.components.recovery,
+    terminals: evidence.preflight.terminalDispositions.map((terminal) => ({
+      ...terminal,
+      ownership: "station" as const,
+      requiredAction:
+        terminal.handoff === "preservable"
+          ? "preserve"
+          : terminal.handoff === "non-preservable"
+            ? "reap"
+            : "blocked",
+    })),
+  };
+}
+
+export function updateReapPreviewConsequencesMatch(
+  left: UpdateReapPreviewConsequences,
+  right: UpdateReapPreviewConsequences,
+): boolean {
+  return (
+    left.authorization === right.authorization &&
+    left.execution === right.execution &&
+    left.recovery.relevance === right.recovery.relevance &&
+    left.recovery.status === right.recovery.status &&
+    left.terminals.length === right.terminals.length &&
+    left.terminals.every((terminal, index) => {
+      const other = right.terminals[index];
+      return (
+        other !== undefined &&
+        terminal.terminalTargetId === other.terminalTargetId &&
+        terminal.ptyId === other.ptyId &&
+        terminal.ptyInstanceId === other.ptyInstanceId &&
+        terminal.sessionId === other.sessionId &&
+        terminal.handoff === other.handoff &&
+        terminal.reapRecovery === other.reapRecovery &&
+        terminal.ownership === other.ownership &&
+        terminal.requiredAction === other.requiredAction &&
+        terminal.reasons.length === other.reasons.length &&
+        terminal.reasons.every((reason, reasonIndex) => reason === other.reasons[reasonIndex])
+      );
+    })
+  );
+}
 
 type HostTerminalRecoveryDecision = Pick<
   UpdateConvergencePlan["components"],
@@ -39,23 +93,24 @@ export function updateConvergenceSemanticIssues(input: {
     });
   }
 
-  const artifactAction = artifactPhase?.action;
+  const artifactAction = plan.installation.action;
   const artifactPhaseValid = artifactSelected
-    ? artifactAction === "no-op" && artifactPhase.reason === "already-selected"
-    : (artifactAction === "apply" && artifactPhase.reason === "channel-apply") ||
-      (artifactAction === "defer" && artifactPhase.reason === "manager-deferred");
+    ? artifactAction === "no-op" &&
+      artifactPhase.action === "no-op" &&
+      artifactPhase.reason === "already-selected"
+    : (artifactAction === "apply" &&
+        artifactPhase.action === "apply" &&
+        artifactPhase.reason === "channel-apply") ||
+      (artifactAction === "defer" &&
+        artifactPhase.action === "defer" &&
+        artifactPhase.reason === "manager-deferred");
   if (!artifactPhaseValid) {
     issues.push({
       path: ["plan", "phases", 0],
       message: "Artifact phase action and reason must follow installed and selected artifacts.",
     });
   }
-  const effectiveArtifactAction =
-    !artifactSelected && artifactAction === "defer"
-      ? "defer"
-      : !artifactSelected && artifactAction === "apply"
-        ? "apply"
-        : "no-op";
+  const effectiveArtifactAction = artifactSelected ? "no-op" : artifactAction;
 
   const hooks = expectedHookDecisions(preflight, effectiveArtifactAction);
   if (!hookDecisionsMatch(plan.components.hooks, hooks)) {

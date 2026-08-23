@@ -14,6 +14,7 @@ import {
 } from "./publicUpdateReportAdapter.js";
 import type { UpdateCommandArgv } from "./updateChannel.js";
 import type {
+  UpdateHookFailureRecoveryInput,
   UpdateRecoveryCommandInput,
   UpdateRuntimeConvergencePort,
 } from "./updateRuntimeConvergencePort.js";
@@ -23,12 +24,16 @@ const OBSERVER_CROSSOVER_TIMEOUT_MS = 20_000;
 export type UpdateRuntimeConvergenceAdapterOptions = {
   configPath?: string;
   commandRunner?: ExternalCommandRunner;
+  observerSocketPath: string;
+  observerBuildSelector: string;
 };
 
 /**
  * ADAPTER
  *
  * Translates safe Observer, hook, and reconcile runtime actions into strict child boundaries.
+ * Observer mutation pins the selected build and configured socket and admits only an exact healthy
+ * running result with exit zero; typed hook and Observer failures require exit one.
  */
 export function createUpdateRuntimeConvergenceAdapter(
   options: UpdateRuntimeConvergenceAdapterOptions,
@@ -46,7 +51,15 @@ export function createUpdateRuntimeConvergenceAdapter(
           action,
           "--timeout-ms",
           String(OBSERVER_CROSSOVER_TIMEOUT_MS),
+          "--internal-update-expected-socket",
+          options.observerSocketPath,
+          "--internal-update-expected-build-selector",
+          options.observerBuildSelector,
         ]),
+        {
+          socketPath: options.observerSocketPath,
+          buildSelector: options.observerBuildSelector,
+        },
         options.commandRunner,
       ),
     reconcile: (cli) =>
@@ -54,6 +67,7 @@ export function createUpdateRuntimeConvergenceAdapter(
         stationCommand(cli, options.configPath, ["reconcile", "--reason", "update-convergence"]),
         options.commandRunner,
       ),
+    hookFailureRecoveryCommands: (input) => hookFailureRecoveryCommands(input, options.configPath),
     recoveryCommands: (input) => recoveryCommands(input, options.configPath),
   };
 }
@@ -97,6 +111,7 @@ async function runMutationCommand(
 
 async function runObserverMutation(
   command: UpdateCommandArgv,
+  expected: { socketPath: string; buildSelector: string },
   runner: ExternalCommandRunner | undefined,
 ): Promise<ObserverLifecycleFailure | undefined> {
   const [executable, ...args] = command;
@@ -116,7 +131,14 @@ async function runObserverMutation(
     parsed.status === "running",
     "Observer convergence",
   );
-  if (disposition === "success") return undefined;
+  if (disposition === "success") {
+    if (parsed.status !== "running" || !observerRunningResultMatches(parsed, expected)) {
+      throw new Error(
+        "Observer convergence did not prove admitted health and the exact configured identity.",
+      );
+    }
+    return undefined;
+  }
   if (parsed.status !== "running") {
     const failure: ObserverLifecycleFailure = { error: parsed.error };
     if (parsed.cause !== undefined) failure.cause = parsed.cause;
@@ -124,6 +146,23 @@ async function runObserverMutation(
     return sanitizePublicObserverLifecycleFailure(ObserverLifecycleFailureSchema.parse(failure));
   }
   throw new Error("Observer convergence result contradicted its process exit status.");
+}
+
+function observerRunningResultMatches(
+  result: Extract<
+    ReturnType<typeof ObserverRestartCommandResultSchema.parse>,
+    { status: "running" }
+  >,
+  expected: { socketPath: string; buildSelector: string },
+): boolean {
+  return (
+    result.socketPath === expected.socketPath &&
+    result.health.status === "healthy" &&
+    result.health.socketPath === expected.socketPath &&
+    result.health.pid !== undefined &&
+    result.health.startedAt !== undefined &&
+    result.health.version === expected.buildSelector
+  );
 }
 
 function typedChildDisposition(
@@ -168,4 +207,38 @@ function recoveryCommands(
           : [`--handoff=${input.handoff}`]),
     ]),
   ];
+}
+
+function hookFailureRecoveryCommands(
+  input: UpdateHookFailureRecoveryInput,
+  configPath: string | undefined,
+): UpdateCommandArgv[] {
+  const providerCommands = input.failures.map(({ provider, followUp }) => {
+    switch (followUp.action) {
+      case "enable-hooks":
+        return stationCommand(input.cli, configPath, ["hooks", "install", provider, "--yes"]);
+      case "run-doctor":
+        return stationCommand(input.cli, configPath, ["hooks", "doctor", provider]);
+      case "run-explicit-takeover":
+        return stationCommand(input.cli, configPath, [
+          "hooks",
+          "install",
+          provider,
+          "--yes",
+          "--takeover",
+        ]);
+      case "retry":
+        return stationCommand(input.cli, configPath, ["hooks", "reconcile", provider]);
+    }
+    return assertNever(followUp.action);
+  });
+  return [
+    ...providerCommands,
+    stationCommand(input.cli, configPath, ["reconcile", "--reason", "update-convergence"]),
+    ...recoveryCommands(input, configPath),
+  ];
+}
+
+function assertNever(value: never): never {
+  throw new Error(`Unexpected hook follow-up: ${String(value)}`);
 }

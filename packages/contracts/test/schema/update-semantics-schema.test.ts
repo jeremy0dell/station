@@ -1,6 +1,6 @@
 import {
   type UpdateCommandReport,
-  UpdateCommandReportV4Schema,
+  UpdateCommandReportSchema,
   type UpdateConvergencePhase,
 } from "@station/contracts";
 import { describe, expect, it } from "vitest";
@@ -70,6 +70,7 @@ const convergedPlan = {
     artifact: target,
     buildIdentity: { status: "known" as const, value: buildIdentity },
   },
+  installation: { owner: "installer-binary" as const, action: "no-op" as const },
   status: "converged" as const,
   digest: {
     algorithm: "sha256" as const,
@@ -126,7 +127,7 @@ const convergedPlan = {
     },
   ],
 };
-const convergedReport = UpdateCommandReportV4Schema.parse({
+const convergedReport = UpdateCommandReportSchema.parse({
   schemaVersion: 4,
   channel: "installer-binary",
   status: "current",
@@ -195,7 +196,7 @@ const actionablePlan = {
     },
   ],
 };
-const successfulExecutionReport = UpdateCommandReportV4Schema.parse({
+const successfulExecutionReport = UpdateCommandReportSchema.parse({
   ...convergedReport,
   initial: {
     evaluator: "successor-cli",
@@ -227,7 +228,7 @@ const successfulExecutionReport = UpdateCommandReportV4Schema.parse({
   },
 });
 
-describe("strict v4 convergence semantics", () => {
+describe("current strict convergence semantics", () => {
   it.each([
     [
       "hook action",
@@ -349,7 +350,7 @@ describe("strict v4 convergence semantics", () => {
   ] as const)("rejects a one-field %s contradiction", (_name, mutate) => {
     const report = structuredClone(convergedReport);
     mutate(report);
-    expect(UpdateCommandReportV4Schema.safeParse(report).success).toBe(false);
+    expect(UpdateCommandReportSchema.safeParse(report).success).toBe(false);
   });
 
   it.each(
@@ -374,7 +375,7 @@ describe("strict v4 convergence semantics", () => {
     const phase = report.initial.plan.phases[phaseIndex];
     if (phase === undefined) throw new Error("missing test phase");
     mutate(phase);
-    expect(UpdateCommandReportV4Schema.safeParse(report).success).toBe(false);
+    expect(UpdateCommandReportSchema.safeParse(report).success).toBe(false);
   });
 
   it.each([
@@ -419,7 +420,7 @@ describe("strict v4 convergence semantics", () => {
   ])("rejects fabricated convergence with $name evidence", ({ mutate }) => {
     const report = structuredClone(convergedReport);
     mutate(report);
-    expect(UpdateCommandReportV4Schema.safeParse(report).success).toBe(false);
+    expect(UpdateCommandReportSchema.safeParse(report).success).toBe(false);
   });
 
   it.each([
@@ -483,7 +484,7 @@ describe("strict v4 convergence semantics", () => {
   ])("rejects successful execution audit with $name", ({ mutate }) => {
     const report = structuredClone(successfulExecutionReport);
     mutate(report);
-    expect(UpdateCommandReportV4Schema.safeParse(report).success).toBe(false);
+    expect(UpdateCommandReportSchema.safeParse(report).success).toBe(false);
   });
 
   it("admits failed or skipped actions only as the exact final execution-failed stage", () => {
@@ -501,12 +502,12 @@ describe("strict v4 convergence semantics", () => {
         finalInspection: { status: "completed", evidence: convergedReport.initial },
       };
       report.error = { tag: "UpdateError", code: "VERIFY_FAILED", message: "Failed." };
-      expect(UpdateCommandReportV4Schema.parse(report)).toEqual(report);
+      expect(UpdateCommandReportSchema.parse(report)).toEqual(report);
 
       const wrongStage = structuredClone(report);
       if (wrongStage.result.kind !== "execution-failed") throw new Error("expected failure");
       wrongStage.result.stage = "runtime-reconcile";
-      expect(UpdateCommandReportV4Schema.safeParse(wrongStage).success).toBe(false);
+      expect(UpdateCommandReportSchema.safeParse(wrongStage).success).toBe(false);
     }
   });
 });

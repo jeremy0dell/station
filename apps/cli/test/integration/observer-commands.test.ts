@@ -182,6 +182,46 @@ describe("CLI observer commands", () => {
     ).rejects.toThrow("--timeout-ms must be a positive integer.");
   });
 
+  it.each([
+    {
+      name: "configured socket drift",
+      args: (socketPath: string) => [
+        "start",
+        "--internal-update-expected-socket",
+        `${socketPath}.stale`,
+        "--internal-update-expected-build-selector",
+        zeroBuildVersion,
+      ],
+      message: "configured Observer socket changed",
+    },
+    {
+      name: "executing build drift",
+      args: (socketPath: string) => [
+        "restart",
+        "--internal-update-expected-socket",
+        socketPath,
+        "--internal-update-expected-build-selector",
+        requestedBuildVersion,
+      ],
+      message: "executing Observer build differs",
+    },
+  ])("rejects internal update $name before lifecycle mutation", async (testCase) => {
+    const fixture = await createTempState();
+    const spawnObserver = vi.fn();
+
+    await expect(
+      runObserverCommand(
+        testCase.args(fixture.socketPath),
+        { config: fixture.config },
+        {
+          buildVersion: zeroBuildVersion,
+          spawnObserver,
+        },
+      ),
+    ).rejects.toThrow(testCase.message);
+    expect(spawnObserver).not.toHaveBeenCalled();
+  });
+
   it("returns a failing CLI result when a legacy incumbent cannot be handed off safely", async () => {
     const fixture = await createTempState();
     const configPath = await writeConfigToml(fixture.root, fixture.config);

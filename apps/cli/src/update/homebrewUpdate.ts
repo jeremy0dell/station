@@ -1,6 +1,6 @@
 import { realpath } from "node:fs/promises";
 import { relative, resolve } from "node:path";
-import type { UpdateArtifact } from "@station/contracts";
+import type { UpdateArtifact, UpdateCommandArgv } from "@station/contracts";
 import {
   type ExternalCommandRunner,
   normalizeCancellationError,
@@ -15,7 +15,11 @@ import {
   type PackageManagerUpdateReport,
   sameUpdateCommand,
 } from "./packageManagerUpdate.js";
-import type { UpdateChannel, UpdateOperationOptions } from "./updateChannel.js";
+import type {
+  UpdateChannel,
+  UpdateInstalledTargetOptions,
+  UpdateOperationOptions,
+} from "./updateChannel.js";
 import { updateErrorFromUnknown } from "./updateError.js";
 
 const channel = "homebrew" as const;
@@ -67,7 +71,7 @@ export type HomebrewUpdateChannelDeps = {
  * ADAPTER
  *
  * Translates Homebrew Cellar or Caskroom ownership into a native brew update plan. Installed-target
- * proof uses only the active Cellar/Caskroom path and does not request package metadata.
+ * proof uses only the active path and validates inherited exact argv without package metadata.
  */
 export function createHomebrewUpdateChannel(
   deps: HomebrewUpdateChannelDeps,
@@ -105,6 +109,7 @@ export function createHomebrewUpdateChannel(
         currentVersion: target.version,
         targetVersion: target.version,
         currentCli: [installed.executablePath],
+        managerCommand: options.inheritedManagerCommand ?? installed.managerCommand,
       };
     },
     async apply(plan, options = {}) {
@@ -145,8 +150,15 @@ export function createHomebrewUpdateChannel(
 
 async function detectInstalledHomebrew(
   deps: HomebrewUpdateChannelDeps,
-  options: UpdateOperationOptions,
-): Promise<{ currentVersion: string; executablePath: string } | undefined> {
+  options: UpdateInstalledTargetOptions,
+): Promise<
+  | {
+      currentVersion: string;
+      executablePath: string;
+      managerCommand: UpdateCommandArgv;
+    }
+  | undefined
+> {
   const brewPath = await resolveExecutablePath(
     "brew",
     deps.pathEnv === undefined ? {} : { pathEnv: deps.pathEnv },
@@ -161,7 +173,23 @@ async function detectInstalledHomebrew(
     if (ownership === undefined || (await realpath(executablePath)) !== runtimePath) {
       return undefined;
     }
-    return { currentVersion: ownership.version, executablePath };
+    const localManagerCommand = [
+      brewPath,
+      "upgrade",
+      ownership.kind === "formula" ? "--formula" : "--cask",
+      ownership.name,
+    ] as const;
+    if (
+      options.inheritedManagerCommand !== undefined &&
+      !installedHomebrewCommandMatches(options.inheritedManagerCommand, localManagerCommand)
+    ) {
+      return undefined;
+    }
+    return {
+      currentVersion: ownership.version,
+      executablePath,
+      managerCommand: options.inheritedManagerCommand ?? localManagerCommand,
+    };
   } catch (error) {
     const cancellation = normalizeCancellationError(error);
     if (cancellation !== undefined) throw cancellation;
@@ -170,6 +198,21 @@ async function detectInstalledHomebrew(
       message: "Homebrew installation ownership could not be inspected.",
     });
   }
+}
+
+function installedHomebrewCommandMatches(
+  inherited: readonly [string, ...string[]],
+  local: readonly [string, "upgrade", "--formula" | "--cask", string],
+): boolean {
+  const inheritedPackage = inherited[3];
+  return (
+    inherited.length === local.length &&
+    inherited[0] === local[0] &&
+    inherited[1] === local[1] &&
+    inherited[2] === local[2] &&
+    inheritedPackage !== undefined &&
+    inheritedPackage.split("/").at(-1) === local[3]
+  );
 }
 
 async function detectHomebrew(

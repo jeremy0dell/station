@@ -1,8 +1,9 @@
-import { stationBuildInfo } from "@station/runtime";
+import { stationBuildInfo, stationObserverBuildVersion } from "@station/runtime";
 import {
   type CreateProviderRegistryOptions,
   createProviderRegistry,
 } from "../../observerProviders.js";
+import { resolveObserverPaths } from "../../paths.js";
 import { createDefaultUpdateProbes } from "../../update/defaultUpdateProbes.js";
 import { createPublicUpdateReport } from "../../update/publicUpdateReportAdapter.js";
 import { inspectUpdateConvergencePreflight } from "../../update/recoveryPreflight.js";
@@ -116,6 +117,8 @@ export function createUpdateCommandDeps(
   }
   const commandRunner = overrides?.commandRunner;
   const adapterOptions = {
+    observerSocketPath: resolveObserverPaths(loaded.config).socketPath,
+    observerBuildSelector: stationObserverBuildVersion(buildInfo()),
     ...(loaded.configPath === undefined ? {} : { configPath: loaded.configPath }),
     ...(commandRunner === undefined ? {} : { commandRunner }),
   };

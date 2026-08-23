@@ -1,4 +1,8 @@
-import { type UpdateCommandReport, UpdateCommandReportSchema } from "@station/contracts";
+import {
+  deriveUpdateReapPreviewConsequences,
+  type UpdateCommandReport,
+  UpdateCommandReportSchema,
+} from "@station/contracts";
 import { shellQuote } from "@station/runtime";
 import type { CliRunResult } from "../../cliTypes.js";
 import { sanitizePublicUpdateReport } from "../../update/publicUpdateReportAdapter.js";
@@ -52,6 +56,8 @@ function renderUpdateReport(report: UpdateCommandReport): string {
     `plan evaluator: ${encodeUpdateTerminalText(report.initial.evaluator)}`,
     `plan digest: ${encodeUpdateTerminalText(plan.digest.value)}`,
     `plan status: ${encodeUpdateTerminalText(plan.status)}`,
+    `install owner: ${encodeUpdateTerminalText(plan.installation.owner)}`,
+    `install action: ${encodeUpdateTerminalText(plan.installation.action)}`,
     "hooks:",
   );
   if (plan.components.hooks.length === 0) lines.push("  none configured");
@@ -93,8 +99,26 @@ function renderUpdateReport(report: UpdateCommandReport): string {
           action.provider === undefined
             ? ""
             : ` provider=${encodeUpdateTerminalText(action.provider)}`
-        }${fidelityText(action.fidelity)}`,
+        }${fidelityText(action.fidelity)}${installationText(action.installation)}`,
       );
+    }
+  }
+  const consequences = nonMutatingTerminalConsequences(report);
+  if (consequences !== undefined) {
+    lines.push("terminal consequences:");
+    lines.push(
+      `  recovery: ${encodeUpdateTerminalText(consequences.recovery.relevance)}/${encodeUpdateTerminalText(consequences.recovery.status)}`,
+    );
+    if (consequences.terminals.length === 0) lines.push("  none");
+    for (const terminal of consequences.terminals) {
+      const recovery =
+        terminal.reapRecovery === "non-resumable" ? "NON-RESUMABLE" : terminal.reapRecovery;
+      lines.push(
+        `  ${encodeUpdateTerminalText(terminal.terminalTargetId)} pty=${encodeUpdateTerminalText(terminal.ptyId)}/${encodeUpdateTerminalText(terminal.ptyInstanceId)} session=${encodeUpdateTerminalText(terminal.sessionId)} owner=${encodeUpdateTerminalText(terminal.ownership)} action=${encodeUpdateTerminalText(terminal.requiredAction)} handoff=${encodeUpdateTerminalText(terminal.handoff)} reap-recovery=${encodeUpdateTerminalText(recovery)}`,
+      );
+      if (terminal.reasons.length > 0) {
+        lines.push(`    reasons: ${terminal.reasons.map(encodeUpdateTerminalText).join(", ")}`);
+      }
     }
   }
   const final = finalEvidence(report);
@@ -136,6 +160,19 @@ function renderUpdateReport(report: UpdateCommandReport): string {
 
 function fidelityText(fidelity: "processes" | "screen" | undefined): string {
   return fidelity === undefined ? "" : ` fidelity=${encodeUpdateTerminalText(fidelity)}`;
+}
+
+function installationText(
+  installation: UpdateCommandReport["initial"]["plan"]["installation"] | undefined,
+): string {
+  if (installation === undefined) return "";
+  const managerCommand =
+    installation.managerCommand === undefined
+      ? ""
+      : ` manager-command=${installation.managerCommand
+          .map((value) => shellQuote(encodeUpdateTerminalText(value)))
+          .join(" ")}`;
+  return ` owner=${encodeUpdateTerminalText(installation.owner)}${managerCommand}`;
 }
 
 function actionAudits(report: UpdateCommandReport) {
@@ -187,6 +224,21 @@ function nonMutatingResultPhases(report: UpdateCommandReport) {
     case "deferred":
     case "non-mutating-stop":
       return report.result.phases;
+    case "already-converged":
+    case "current-runtime-execution":
+    case "successor-runtime-execution":
+    case "execution-failed":
+      return undefined;
+  }
+}
+
+function nonMutatingTerminalConsequences(report: UpdateCommandReport) {
+  switch (report.result.kind) {
+    case "preview":
+      return report.result.reapConsequences ?? deriveUpdateReapPreviewConsequences(report.initial);
+    case "deferred":
+    case "non-mutating-stop":
+      return deriveUpdateReapPreviewConsequences(report.initial);
     case "already-converged":
     case "current-runtime-execution":
     case "successor-runtime-execution":

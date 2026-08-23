@@ -157,6 +157,7 @@ describe("createUpdateRecoveryPreflightPorts", () => {
         osStartTime: identity.osStartTime,
         processToken: identity.processToken,
         buildSelector: identity.version,
+        socketPath: identity.socketPath,
       },
       selectedRecoveryHandles: [{ sessionId: "session-a", selectedHandleId: "private-handle-a" }],
     });
@@ -299,6 +300,7 @@ describe("createUpdateRecoveryPreflightPorts", () => {
           pid: identity.pid,
           processToken: identity.processToken,
           buildSelector: incumbentBuild,
+          socketPath: identity.socketPath,
         },
         selectedRecoveryHandles: [],
       },
@@ -408,7 +410,7 @@ describe("createUpdateRecoveryPreflightPorts", () => {
         artifact: selected,
         buildIdentity: { status: "known", value: buildIdentity },
       },
-      artifactAction: "no-op",
+      installation: { owner: "installer-binary", action: "no-op" },
       preflight: inspection.preflight,
     });
 

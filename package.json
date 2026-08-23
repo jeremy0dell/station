@@ -89,7 +89,7 @@
     "test:env:docker": "node scripts/test-runners/run-setup-container.mjs",
     "test:ci:fast": "pnpm build && pnpm test:unit && pnpm test:contracts && pnpm test:diagnostics && pnpm test:agent:scripted",
     "test:ci:station": "pnpm --dir station typecheck && pnpm --dir station test && pnpm --dir station test:pty && pnpm --dir station test:pty:bun && pnpm test:e2e:host-upgrade",
-    "test:ci:binary": "pnpm build:binary -- --version 0.0.0-local && pnpm smoke:binary -- --expected-version 0.0.0-local && pnpm smoke:update -- --incumbent-binary station/dist/bin/stn --incumbent-version 0.0.0-local --target-source-version 0.0.1-local --scenarios v4-gate",
+    "test:ci:binary": "pnpm build:binary -- --version 0.0.0-local && pnpm smoke:binary -- --expected-version 0.0.0-local && pnpm smoke:update -- --incumbent-binary station/dist/bin/stn --incumbent-version 0.0.0-local --target-source-version 0.0.1-local --scenarios current-gate",
     "test:all": "pnpm build && pnpm typecheck && pnpm lint && pnpm test:unit && pnpm test:contracts && pnpm test:integration && pnpm test:diagnostics && pnpm test:agent:scripted && pnpm test:e2e:setup && pnpm test:e2e:observer && pnpm smoke:install",
     "test:pre-push": "pnpm lint"
   },

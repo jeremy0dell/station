@@ -169,6 +169,7 @@ function handoffPlan(fidelity: "processes" | "screen") {
       artifact: { version: "2.0.0" },
       buildIdentity: { status: "known" as const, value: "b".repeat(64) },
     },
+    installation: { owner: "installer-binary" as const, action: "no-op" as const },
     status: "actionable" as const,
     digest: {
       algorithm: "sha256" as const,

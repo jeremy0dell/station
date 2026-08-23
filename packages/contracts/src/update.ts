@@ -2,38 +2,26 @@ import { z } from "zod";
 import { type SafeError, SafeErrorSchema } from "./errors.js";
 import { ptyLifetimeIdentitySetsMatch } from "./hostHandoff.js";
 import { type ObserverStartupEvidence, ObserverStartupEvidenceSchema } from "./observer.js";
-import {
-  type ProviderHookReconciliationResult,
-  ProviderHookReconciliationResultSchema,
-  providerHookReconciliationSucceeded,
-} from "./providerHooks.js";
-import { nonEmptyStringSchema, safeTextSchema } from "./shared.js";
+import { providerHookReconciliationSucceeded } from "./providerHooks.js";
 import { type UpdateArtifact, UpdateArtifactSchema } from "./updateArtifact.js";
 import {
+  deriveUpdateReapPreviewConsequences,
   type UpdateActionAudit,
   type UpdateConvergenceResult,
   UpdateConvergenceResultSchema,
   type UpdateEvidencePlan,
   UpdateEvidencePlanSchema,
+  updateReapPreviewConsequencesMatch,
 } from "./updateConvergence.js";
 import {
-  type UpdateReapRecoveryPreflightV1,
-  UpdateReapRecoveryPreflightV1Schema,
-} from "./updateRecoveryPreflight.js";
-
-export const UpdateChannelIdSchema = z.enum([
-  "installer-binary",
-  "dev-checkout",
-  "homebrew",
-  "npm-global",
-  "mise",
-]);
-
-export type UpdateChannelId = z.infer<typeof UpdateChannelIdSchema>;
-
-export const UpdateCommandArgvSchema = z.tuple([nonEmptyStringSchema], z.string());
-
-export type UpdateCommandArgv = readonly [command: string, ...args: string[]];
+  type UpdateChannelId,
+  UpdateChannelIdSchema,
+  type UpdateCommandArgv,
+  UpdateCommandArgvSchema,
+  updateCommandArgvMatch,
+  updateInstallMutationsMatch,
+  updateInstallOwnersMatch,
+} from "./updateInstall.js";
 
 export type UpdateArtifactApplication =
   | { status: "not-required" }
@@ -76,188 +64,7 @@ export const UpdateArtifactApplicationSchema: z.ZodType<UpdateArtifactApplicatio
     return application;
   });
 
-export const UpdateCommandStepIdSchema = z.enum([
-  "detect",
-  "plan",
-  "apply",
-  "hook-reconciliation",
-  "observer-restart",
-  "host-handoff",
-]);
-
-export const UpdateCommandStepStatusSchema = z.enum([
-  "completed",
-  "planned",
-  "deferred",
-  "skipped",
-  "failed",
-]);
-
-export type UpdateCommandStepStatus = z.infer<typeof UpdateCommandStepStatusSchema>;
-
-export type UpdateCommandStep = {
-  id: z.infer<typeof UpdateCommandStepIdSchema>;
-  status: UpdateCommandStepStatus;
-  detail: string;
-  command?: UpdateCommandArgv;
-};
-
-export const UpdateCommandStepSchema: z.ZodType<UpdateCommandStep> = z
-  .object({
-    id: UpdateCommandStepIdSchema,
-    status: UpdateCommandStepStatusSchema,
-    detail: safeTextSchema,
-    command: UpdateCommandArgvSchema.optional(),
-  })
-  .strict()
-  .transform(
-    (step): UpdateCommandStep => ({
-      id: step.id,
-      status: step.status,
-      detail: step.detail,
-      ...(step.command === undefined ? {} : { command: step.command }),
-    }),
-  );
-
-type UpdateCommandReportCore = {
-  channel: UpdateChannelId;
-  status: "current" | "planned" | "updated" | "deferred" | "failed";
-  current: UpdateArtifact;
-  target: UpdateArtifact;
-  warnings: SafeError[];
-  recoveryCommands: UpdateCommandArgv[];
-  error?: SafeError;
-  cause?: SafeError;
-  startupEvidence?: ObserverStartupEvidence;
-};
-
-const UpdateCommandStepV1IdSchema = z.enum([
-  "detect",
-  "plan",
-  "apply",
-  "observer-restart",
-  "host-handoff",
-]);
-
-const UpdateCommandStepV1Schema = z
-  .object({
-    id: UpdateCommandStepV1IdSchema,
-    status: UpdateCommandStepStatusSchema,
-    detail: safeTextSchema,
-    command: UpdateCommandArgvSchema.optional(),
-  })
-  .strict()
-  .transform((step) => ({
-    id: step.id,
-    status: step.status,
-    detail: step.detail,
-    ...(step.command === undefined ? {} : { command: step.command }),
-  }));
-
-const updateCommandReportCoreShape = {
-  channel: UpdateChannelIdSchema,
-  status: z.enum(["current", "planned", "updated", "deferred", "failed"]),
-  current: UpdateArtifactSchema,
-  target: UpdateArtifactSchema,
-  warnings: z.array(SafeErrorSchema),
-  recoveryCommands: z.array(UpdateCommandArgvSchema),
-  error: SafeErrorSchema.optional(),
-  cause: SafeErrorSchema.optional(),
-  startupEvidence: ObserverStartupEvidenceSchema.optional(),
-} as const;
-
-export type UpdateCommandReportV1 = UpdateCommandReportCore & {
-  schemaVersion: 1;
-  steps: z.infer<typeof UpdateCommandStepV1Schema>[];
-};
-
-/** Strict parser for the original update report retained for compatible consumers. */
-export const UpdateCommandReportV1Schema: z.ZodType<UpdateCommandReportV1> = z
-  .object({
-    schemaVersion: z.literal(1),
-    ...updateCommandReportCoreShape,
-    steps: z.array(UpdateCommandStepV1Schema),
-  })
-  .strict()
-  .transform(
-    (report): UpdateCommandReportV1 => ({
-      schemaVersion: report.schemaVersion,
-      ...updateCommandReportCore(report),
-      steps: report.steps,
-    }),
-  );
-
-export type UpdateCommandReportV2 = UpdateCommandReportCore & {
-  schemaVersion: 2;
-  steps: UpdateCommandStep[];
-  hookReconciliation?: ProviderHookReconciliationResult;
-};
-
-/** Strict parser for #637's provider-hook reconciliation report. */
-export const UpdateCommandReportV2Schema: z.ZodType<UpdateCommandReportV2> = z
-  .object({
-    schemaVersion: z.literal(2),
-    ...updateCommandReportCoreShape,
-    steps: z.array(UpdateCommandStepSchema),
-    hookReconciliation: ProviderHookReconciliationResultSchema.optional(),
-  })
-  .strict()
-  .transform(
-    (report): UpdateCommandReportV2 => ({
-      schemaVersion: report.schemaVersion,
-      ...updateCommandReportCore(report),
-      steps: report.steps,
-      ...(report.hookReconciliation === undefined
-        ? {}
-        : { hookReconciliation: report.hookReconciliation }),
-    }),
-  );
-
-export type UpdateCommandReportV3 = UpdateCommandReportCore & {
-  schemaVersion: 3;
-  steps: UpdateCommandStep[];
-  hookReconciliation?: ProviderHookReconciliationResult;
-  recoveryPreflight?: UpdateReapRecoveryPreflightV1;
-};
-
-/** Legacy strict report parser for #639's non-authorizing recovery facts. */
-export const UpdateCommandReportV3Schema: z.ZodType<UpdateCommandReportV3> = z
-  .object({
-    schemaVersion: z.literal(3),
-    ...updateCommandReportCoreShape,
-    steps: z.array(UpdateCommandStepSchema),
-    hookReconciliation: ProviderHookReconciliationResultSchema.optional(),
-    recoveryPreflight: UpdateReapRecoveryPreflightV1Schema.optional(),
-  })
-  .strict()
-  .superRefine((report, context) => {
-    if (
-      report.recoveryPreflight !== undefined &&
-      (!updateArtifactsMatch(report.current, report.recoveryPreflight.installed) ||
-        !updateArtifactsMatch(report.target, report.recoveryPreflight.target))
-    ) {
-      context.addIssue({
-        code: "custom",
-        path: ["recoveryPreflight"],
-        message: "Recovery preflight artifacts must match the enclosing update report.",
-      });
-    }
-  })
-  .transform(
-    (report): UpdateCommandReportV3 => ({
-      schemaVersion: report.schemaVersion,
-      ...updateCommandReportCore(report),
-      steps: report.steps,
-      ...(report.hookReconciliation === undefined
-        ? {}
-        : { hookReconciliation: report.hookReconciliation }),
-      ...(report.recoveryPreflight === undefined
-        ? {}
-        : { recoveryPreflight: report.recoveryPreflight }),
-    }),
-  );
-
-export const UpdateCommandReportV4StatusSchema = z.enum([
+export const UpdateCommandReportStatusSchema = z.enum([
   "current",
   "planned",
   "updated",
@@ -271,7 +78,7 @@ export const UpdateCommandReportV4StatusSchema = z.enum([
 export type UpdateCommandReport = {
   schemaVersion: 4;
   channel: UpdateChannelId;
-  status: z.infer<typeof UpdateCommandReportV4StatusSchema>;
+  status: z.infer<typeof UpdateCommandReportStatusSchema>;
   current: UpdateArtifact;
   target: UpdateArtifact;
   artifactApplication: UpdateArtifactApplication;
@@ -285,11 +92,11 @@ export type UpdateCommandReport = {
 };
 
 /** Current strict machine-readable update report with separate artifact and runtime truth. */
-export const UpdateCommandReportV4Schema: z.ZodType<UpdateCommandReport> = z
+export const UpdateCommandReportSchema: z.ZodType<UpdateCommandReport> = z
   .object({
     schemaVersion: z.literal(4),
     channel: UpdateChannelIdSchema,
-    status: UpdateCommandReportV4StatusSchema,
+    status: UpdateCommandReportStatusSchema,
     current: UpdateArtifactSchema,
     target: UpdateArtifactSchema,
     artifactApplication: UpdateArtifactApplicationSchema,
@@ -306,7 +113,8 @@ export const UpdateCommandReportV4Schema: z.ZodType<UpdateCommandReport> = z
     if (
       !updateArtifactsMatch(report.current, report.initial.preflight.installed) ||
       !updateArtifactsMatch(report.target, report.initial.preflight.target) ||
-      !updateArtifactsMatch(report.target, report.initial.plan.selectedTarget.artifact)
+      !updateArtifactsMatch(report.target, report.initial.plan.selectedTarget.artifact) ||
+      report.initial.plan.installation.owner !== report.channel
     ) {
       context.addIssue({
         code: "custom",
@@ -336,7 +144,7 @@ export const UpdateCommandReportV4Schema: z.ZodType<UpdateCommandReport> = z
       context.addIssue({
         code: "custom",
         path: ["error"],
-        message: "Only execution-failed v4 results require a top-level SafeError.",
+        message: "Only execution-failed results require a top-level SafeError.",
       });
     }
     const managerOwned =
@@ -351,7 +159,10 @@ export const UpdateCommandReportV4Schema: z.ZodType<UpdateCommandReport> = z
         (report.artifactApplication.status === "preview" ||
           report.artifactApplication.status === "deferred") &&
         managerCommand === undefined) ||
-      (!managerOwned && managerCommand !== undefined)
+      (!managerOwned && managerCommand !== undefined) ||
+      ((report.artifactApplication.status === "preview" ||
+        report.artifactApplication.status === "deferred") &&
+        !updateCommandArgvMatch(managerCommand, report.initial.plan.installation.managerCommand))
     ) {
       context.addIssue({
         code: "custom",
@@ -360,17 +171,20 @@ export const UpdateCommandReportV4Schema: z.ZodType<UpdateCommandReport> = z
           "Manager-owned preview or deferral must retain the exact manager command, which is forbidden elsewhere.",
       });
     }
+    const observerLifecycleStage =
+      report.result.kind === "execution-failed" && report.result.stage === "observer-convergence";
     if (
-      report.result.kind !== "execution-failed" &&
+      !observerLifecycleStage &&
       (report.cause !== undefined || report.startupEvidence !== undefined)
     ) {
       context.addIssue({
         code: "custom",
         path: [report.cause !== undefined ? "cause" : "startupEvidence"],
-        message: "Observer lifecycle evidence belongs only to execution-failed v4 results.",
+        message:
+          "Observer lifecycle evidence belongs only to an observer-convergence execution failure.",
       });
     }
-    validateV4Result(report, context);
+    validateUpdateResult(report, context);
   })
   .transform((report): UpdateCommandReport => {
     const result: UpdateCommandReport = {
@@ -391,55 +205,11 @@ export const UpdateCommandReportV4Schema: z.ZodType<UpdateCommandReport> = z
     return result;
   });
 
-export const UpdateCommandReportSchema = UpdateCommandReportV4Schema;
-
-export type CompatibleUpdateCommandReport =
-  | UpdateCommandReportV1
-  | UpdateCommandReportV2
-  | UpdateCommandReportV3
-  | UpdateCommandReport;
-
-/** Explicit compatible parser for persisted or piped reports from versions 1 through 4. */
-export const CompatibleUpdateCommandReportSchema: z.ZodType<CompatibleUpdateCommandReport> =
-  z.union([
-    UpdateCommandReportV1Schema,
-    UpdateCommandReportV2Schema,
-    UpdateCommandReportV3Schema,
-    UpdateCommandReportV4Schema,
-  ]);
-
 function updateArtifactsMatch(left: UpdateArtifact, right: UpdateArtifact): boolean {
   return left.version === right.version && left.revision === right.revision;
 }
 
-function updateCommandReportCore(report: {
-  channel: UpdateChannelId;
-  status: UpdateCommandReportCore["status"];
-  current: UpdateArtifact;
-  target: UpdateArtifact;
-  warnings: SafeError[];
-  recoveryCommands: UpdateCommandArgv[];
-  error?: SafeError | undefined;
-  cause?: SafeError | undefined;
-  startupEvidence?: ObserverStartupEvidence | undefined;
-}): UpdateCommandReportCore {
-  const core: UpdateCommandReportCore = {
-    channel: report.channel,
-    status: report.status,
-    current: report.current,
-    target: report.target,
-    warnings: report.warnings,
-    recoveryCommands: report.recoveryCommands,
-  };
-  if (report.error !== undefined) core.error = report.error;
-  if (report.cause !== undefined) core.cause = report.cause;
-  if (report.startupEvidence !== undefined) {
-    core.startupEvidence = report.startupEvidence;
-  }
-  return core;
-}
-
-/** Derives v4 public status exclusively from artifact state and typed convergence verification. */
+/** Derives public status exclusively from artifact state and typed convergence verification. */
 export function updateCommandReportStatus(
   report: Pick<UpdateCommandReport, "artifactApplication" | "initial" | "result">,
 ): UpdateCommandReport["status"] {
@@ -487,7 +257,7 @@ function assertNever(value: never): never {
   throw new Error(`Unexpected update report variant: ${String(value)}`);
 }
 
-function validateV4Result(
+function validateUpdateResult(
   report: Pick<
     UpdateCommandReport,
     "artifactApplication" | "current" | "initial" | "result" | "status" | "target"
@@ -501,7 +271,10 @@ function validateV4Result(
     evidence: UpdateEvidencePlan,
     path: Array<string | number>,
   ): void => {
-    if (!updateArtifactsMatch(evidence.preflight.target, report.target)) {
+    if (
+      !updateArtifactsMatch(evidence.preflight.target, report.target) ||
+      evidence.plan.installation.owner !== report.initial.plan.installation.owner
+    ) {
       digestMismatch(path, "Inspected convergence evidence must retain the selected target.");
     }
   };
@@ -535,6 +308,16 @@ function validateV4Result(
         digestMismatch(
           [...path, "actions", index, "fidelity"],
           "Audited handoff fidelity must match the exact authorized convergence decision.",
+        );
+      }
+      if (
+        action.phase === "artifact-application" &&
+        (action.installation === undefined ||
+          !updateInstallMutationsMatch(action.installation, evidence.plan.installation))
+      ) {
+        digestMismatch(
+          [...path, "actions", index, "installation"],
+          "Audited artifact application must retain the exact planned install mutation.",
         );
       }
       if (action.handoffReceipt !== undefined) {
@@ -584,6 +367,39 @@ function validateV4Result(
     path: Array<string | number>,
   ): void => {
     validateAudit(evidence, audit, path);
+    const expected = executableRuntimeActions(evidence);
+    if (stage === "hook-reconciliation") {
+      const hookActions = expected.filter((action) => action.phase === "hook-reconciliation");
+      if (
+        audit.actions.length !== hookActions.length ||
+        audit.actions.some(
+          (action, index) =>
+            !auditActionIdentityMatches(action, hookActions[index]) ||
+            (action.status !== "completed" && action.status !== "failed"),
+        ) ||
+        !audit.actions.some((action) => action.status === "failed")
+      ) {
+        digestMismatch(
+          [...path, "actions"],
+          "Hook failure audit must retain every provider exactly once in canonical order and at least one typed failure.",
+        );
+      }
+      audit.actions.forEach((action, index) => {
+        if (action.status === "completed") {
+          validateCompletedHookResult(action, [...path, "actions", index], digestMismatch);
+        } else if (
+          action.hookResult !== undefined &&
+          (action.hookResult.provider !== action.provider ||
+            providerHookReconciliationSucceeded(action.hookResult))
+        ) {
+          digestMismatch(
+            [...path, "actions", index],
+            "Failed hook reconciliation must retain one failed typed provider result.",
+          );
+        }
+      });
+      return;
+    }
     const finalAction = audit.actions.at(-1);
     if (
       finalAction === undefined ||
@@ -602,7 +418,6 @@ function validateV4Result(
         "Only the final action in a failure audit may be failed or skipped.",
       );
     }
-    const expected = executableRuntimeActions(evidence);
     const finalExpectedIndex = expected.findIndex((action) =>
       auditActionIdentityMatches(finalAction, action),
     );
@@ -713,7 +528,12 @@ function validateV4Result(
           (report.initial.plan.status !== "converged" ||
             report.result.verification.status !== "converged" ||
             report.result.verification.source !== "initial" ||
-            report.result.verification.planDigest !== initialDigest))
+            report.result.verification.planDigest !== initialDigest)) ||
+        (report.result.reapConsequences !== undefined &&
+          !updateReapPreviewConsequencesMatch(
+            report.result.reapConsequences,
+            deriveUpdateReapPreviewConsequences(report.initial),
+          ))
       ) {
         digestMismatch(
           ["result"],
@@ -752,6 +572,10 @@ function validateV4Result(
         report.artifactApplication.status !== "not-required" ||
         report.initial.plan.status !== "actionable" ||
         report.result.postAction.evaluator !== report.initial.evaluator ||
+        !updateInstallMutationsMatch(
+          report.result.postAction.plan.installation,
+          report.initial.plan.installation,
+        ) ||
         report.result.verification.source !== "post-action"
       ) {
         digestMismatch(["result", "actionAudits"], "Runtime audit must execute the initial plan.");
@@ -785,6 +609,15 @@ function validateV4Result(
         report.result.successor.evaluator !== "successor-cli" ||
         report.result.postAction.evaluator !== "successor-cli" ||
         report.result.successor.plan.selectedTarget.buildIdentity.status !== "known" ||
+        report.result.successor.plan.installation.action !== "no-op" ||
+        !updateInstallOwnersMatch(
+          report.initial.plan.installation,
+          report.result.successor.plan.installation,
+        ) ||
+        !updateInstallMutationsMatch(
+          report.result.postAction.plan.installation,
+          report.result.successor.plan.installation,
+        ) ||
         report.result.verification.source !== expectedVerificationSource ||
         (successorAudit === undefined &&
           (report.result.successor.plan.status === "actionable" ||
@@ -1049,7 +882,9 @@ function validateArtifactAudit(
     audit.actions.length !== 1 ||
     action?.phase !== "artifact-application" ||
     action.action !== "apply" ||
-    action.status !== status
+    action.status !== status ||
+    action.installation === undefined ||
+    !updateInstallMutationsMatch(action.installation, evidence.plan.installation)
   ) {
     addIssue(path, `Artifact audit must contain the exact ${status} selected apply action.`);
   }

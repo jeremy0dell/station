@@ -31,4 +31,5 @@ export * from "./update.js";
 export * from "./updateArtifact.js";
 export * from "./updateConvergence.js";
 export * from "./updateHostConvergence.js";
+export * from "./updateInstall.js";
 export * from "./updateRecoveryPreflight.js";

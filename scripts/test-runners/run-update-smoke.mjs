@@ -22,10 +22,7 @@ import {
 import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import {
-  CompatibleUpdateCommandReportSchema,
-  UpdateCommandReportSchema,
-} from "../../packages/contracts/dist/index.js";
+import { UpdateCommandReportSchema } from "../../packages/contracts/dist/index.js";
 import {
   createObserverClient,
   readUnixSocketHolderPids,
@@ -331,7 +328,7 @@ function updateSmokeScenarios(options) {
       return [nonBridgeReap];
     case "redaction":
       return [redactionFailure];
-    case "v4-gate":
+    case "current-gate":
       return [idleHost, bridgeHandoff, nonBridgeReap, redactionFailure];
     case "full":
       return options.busyHostOutcome === "pre-mutation-reap-required"
@@ -610,7 +607,7 @@ async function runScenario(input) {
           currentTag: `v${input.options.incumbentVersion}`,
           target: input.target,
           installedBinaryPath: join(installDir, "stn"),
-          denyPostApplyLatest: input.options.incumbentContract !== "legacy-compatible",
+          denyPostApplyLatest: true,
         });
   const tmuxPath = findExecutable("tmux", process.env.PATH);
   const tmuxAudit = await prepareTmuxAudit(scenarioRoot, tmuxPath);
@@ -759,26 +756,10 @@ async function runScenario(input) {
           );
     assertEqual(updateResult.code, expectedUpdateCode, `${input.name} update exit code`);
     const rawReport = parseJson(updateResult.stdout, `${input.name} update report`);
-    const report =
-      input.options.incumbentContract === "legacy-compatible"
-        ? CompatibleUpdateCommandReportSchema.parse(rawReport)
-        : UpdateCommandReportSchema.parse(rawReport);
+    const report = UpdateCommandReportSchema.parse(rawReport);
     assertUpdateReport(report, input);
     if (expectedUpdateCode === 0) {
       assertNoMismatch(updateResult.stderr, `${input.name} update stderr`);
-    }
-    if (input.options.incumbentContract === "legacy-compatible") {
-      const targetResult = await run(installedBinary, ["update", "--json"], {
-        env,
-        timeoutMs: childTimeoutMs,
-      });
-      assertNoMismatch(targetResult.stderr, `${input.name} target-current stderr`);
-      assertTargetCurrentReport(
-        UpdateCommandReportSchema.parse(
-          parseJson(targetResult.stdout, `${input.name} target-current report`),
-        ),
-        input,
-      );
     }
     if (transportDir !== undefined) {
       await assertExactTransportRequests(transportDir, input);
@@ -1412,19 +1393,7 @@ async function assertExactTransportRequests(transportDir, input) {
           releaseDownloadUrl(input.target.tag, "SHA256SUMS"),
           releaseDownloadUrl(input.target.tag, archiveName),
           releaseDownloadUrl(input.target.tag, "SHA256SUMS"),
-          ...(input.options.incumbentContract === "legacy-compatible"
-            ? [
-                releaseApiTagUrl(input.target.tag),
-                "https://api.github.com/repos/jeremy0dell/station/releases?per_page=100&page=1",
-              ]
-            : []),
         ]),
-    ...(input.options.incumbentContract === "legacy-compatible"
-      ? [
-          releaseApiTagUrl(input.target.tag),
-          "https://api.github.com/repos/jeremy0dell/station/releases?per_page=100&page=1",
-        ]
-      : []),
   ].sort();
   assertDeepEqual(actual, expected, `${input.name} exact update transport requests`);
 }
@@ -2002,10 +1971,6 @@ async function verifyBareLaunches(input) {
 }
 
 function assertUpdateReport(report, input) {
-  if (report.schemaVersion !== 4) {
-    assertLegacyUpdateReport(report, input);
-    return;
-  }
   assertEqual(report.schemaVersion, 4, `${input.name} update schema`);
   assertEqual(report.channel, "installer-binary", `${input.name} update channel`);
   const refusal = input.expectedOutcome === "pre-mutation-reap-required";
@@ -2092,98 +2057,6 @@ function assertNoPrivateReportFields(serialized, label) {
       throw new Error(`${label} update report leaked private field ${privateField}.`);
     }
   }
-}
-
-function assertLegacyUpdateReport(report, input) {
-  if (input.options.incumbentContract !== "legacy-compatible") {
-    throw new Error(`${input.name} accepted a legacy report outside the transition lane.`);
-  }
-  assertEqual(input.hostMode, "absent", `${input.name} legacy transition has no Host`);
-  assertEqual(report.channel, "installer-binary", `${input.name} legacy update channel`);
-  assertEqual(report.status, "updated", `${input.name} legacy artifact outcome`);
-  assertEqual(
-    report.current?.version,
-    input.options.incumbentVersion,
-    `${input.name} legacy current`,
-  );
-  assertEqual(report.target?.version, input.target.version, `${input.name} legacy target`);
-  assertDeepEqual(report.warnings, [], `${input.name} legacy update warnings`);
-  assertDeepEqual(report.recoveryCommands, [], `${input.name} legacy recovery commands`);
-  assertEqual(report.error, undefined, `${input.name} legacy update error`);
-  assertEqual(report.artifactApplication, undefined, `${input.name} legacy artifact model absent`);
-  assertEqual(report.initial, undefined, `${input.name} legacy convergence plan absent`);
-  assertEqual(report.result, undefined, `${input.name} legacy convergence result absent`);
-  const stepById = new Map(report.steps.map((step) => [step.id, step]));
-  for (const id of ["detect", "plan", "apply", "observer-restart"]) {
-    assertEqual(stepById.get(id)?.status, "completed", `${input.name} legacy ${id} step`);
-  }
-  assertEqual(stepById.get("host-handoff")?.status, "skipped", `${input.name} legacy Host step`);
-  if (report.schemaVersion === 2 || report.schemaVersion === 3) {
-    assertDeepEqual(
-      report.hookReconciliation,
-      {
-        provider: "codex",
-        status: "configured-disabled",
-        changed: false,
-        verified: false,
-        followUp: { action: "enable-hooks" },
-      },
-      `${input.name} legacy hook reconciliation`,
-    );
-    assertEqual(
-      stepById.get("hook-reconciliation")?.status,
-      "completed",
-      `${input.name} legacy hook step`,
-    );
-  }
-  if (report.schemaVersion === 3) {
-    assertEqual(
-      report.recoveryPreflight,
-      undefined,
-      `${input.name} ordinary legacy update omits recovery preflight`,
-    );
-  }
-}
-
-function assertTargetCurrentReport(report, input) {
-  assertEqual(report.schemaVersion, 4, `${input.name} installed target schema`);
-  assertEqual(report.channel, "installer-binary", `${input.name} installed target channel`);
-  assertEqual(report.status, "current", `${input.name} installed target status`);
-  assertEqual(
-    report.current?.version,
-    input.target.version,
-    `${input.name} installed target current`,
-  );
-  assertEqual(
-    report.target?.version,
-    input.target.version,
-    `${input.name} installed target selected`,
-  );
-  assertEqual(
-    report.artifactApplication?.status,
-    "not-required",
-    `${input.name} installed target artifact state`,
-  );
-  const verifiedEvidence =
-    report.result.kind === "already-converged"
-      ? report.initial
-      : report.result.kind === "current-runtime-execution"
-        ? report.result.postAction
-        : undefined;
-  if (verifiedEvidence === undefined) {
-    throw new Error(`${input.name} installed target did not produce verified convergence.`);
-  }
-  assertEqual(
-    verifiedEvidence.plan.status,
-    "converged",
-    `${input.name} installed target no-op plan`,
-  );
-  assertEqual(
-    report.result.verification.status,
-    "converged",
-    `${input.name} installed target verification`,
-  );
-  assertFreshNoOpPlan(verifiedEvidence, report.result.verification, input.name);
 }
 
 function assertFreshNoOpPlan(evidence, verification, name) {
@@ -2580,7 +2453,6 @@ function parseArgs(argv) {
         "--public-target-tag",
         "--scenarios",
         "--busy-host-outcome",
-        "--incumbent-contract",
       ].includes(key)
     ) {
       throw new Error(`Unknown update smoke flag: ${key}`);
@@ -2636,10 +2508,10 @@ function parseArgs(argv) {
     scenarios !== "bridge-handoff" &&
     scenarios !== "reap-required" &&
     scenarios !== "redaction" &&
-    scenarios !== "v4-gate"
+    scenarios !== "current-gate"
   ) {
     throw new Error(
-      "--scenarios must be full, no-host, host-convergence, idle-replacement, bridge-handoff, reap-required, redaction, or v4-gate.",
+      "--scenarios must be full, no-host, host-convergence, idle-replacement, bridge-handoff, reap-required, redaction, or current-gate.",
     );
   }
   const explicitBusyHostOutcome = values.get("--busy-host-outcome");
@@ -2653,31 +2525,18 @@ function parseArgs(argv) {
   if (scenarios === "no-host" && busyHostOutcome === "pre-mutation-reap-required") {
     throw new Error("--busy-host-outcome pre-mutation-reap-required requires --scenarios full.");
   }
-  const incumbentContract = values.get("--incumbent-contract") ?? "v4";
-  if (incumbentContract !== "v4" && incumbentContract !== "legacy-compatible") {
-    throw new Error("--incumbent-contract must be v4 or legacy-compatible.");
-  }
-  if (
-    incumbentContract === "legacy-compatible" &&
-    (scenarios !== "no-host" || busyHostOutcome !== "full-handoff")
-  ) {
-    throw new Error(
-      "--incumbent-contract legacy-compatible requires --scenarios no-host and full-handoff.",
-    );
-  }
   return {
     incumbentBinary: resolve(incumbentBinary),
     incumbentVersion,
     target,
     scenarios,
     busyHostOutcome,
-    incumbentContract,
     keepTemp,
   };
 }
 
 function updateSmokeUsage() {
-  return "Usage: run-update-smoke.mjs --incumbent-binary <path> --incumbent-version <version> (--target-source-version <version> | --target-release-dir <path> --target-tag <tag> --target-build-identity <64-hex> | --public-target-tag <tag> --target-build-identity <64-hex>) [--scenarios full|no-host|host-convergence|idle-replacement|bridge-handoff|reap-required|redaction|v4-gate] [--busy-host-outcome full-handoff|pre-mutation-reap-required] [--incumbent-contract v4|legacy-compatible] [--keep-temp]";
+  return "Usage: run-update-smoke.mjs --incumbent-binary <path> --incumbent-version <version> (--target-source-version <version> | --target-release-dir <path> --target-tag <tag> --target-build-identity <64-hex> | --public-target-tag <tag> --target-build-identity <64-hex>) [--scenarios full|no-host|host-convergence|idle-replacement|bridge-handoff|reap-required|redaction|current-gate] [--busy-host-outcome full-handoff|pre-mutation-reap-required] [--keep-temp]";
 }
 
 function assertBuildIdentity(value, label) {

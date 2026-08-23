@@ -164,24 +164,6 @@ const observerRecoveryEvidenceSchema = z.discriminatedUnion("status", [
 ]);
 
 const absentObserverSchema = z.object({ status: z.literal("absent") }).strict();
-const exactObserverEvidenceV1Schema = z
-  .object({
-    status: z.literal("exact"),
-    buildVersion: nonEmptyStringSchema,
-    relation: UpdateRuntimeBuildRelationSchema,
-    health: z.enum(["healthy", "degraded", "unavailable"]),
-    recovery: observerRecoveryEvidenceSchema,
-  })
-  .strict();
-
-/** Legacy #665 Observer evidence retained unchanged for strict update-report v3 parsing. */
-export const UpdateReapObserverEvidenceV1Schema = z.discriminatedUnion("status", [
-  absentObserverSchema,
-  unknownObserverSchema,
-  exactObserverEvidenceV1Schema,
-]);
-export type UpdateReapObserverEvidenceV1 = z.infer<typeof UpdateReapObserverEvidenceV1Schema>;
-
 export const UpdateReapObserverEvidenceSchema = z.discriminatedUnion("status", [
   absentObserverSchema,
   unknownObserverSchema,
@@ -289,7 +271,7 @@ export const UpdateReapTerminalDispositionSchema = PtyLifetimeIdentitySchema.ext
 export type UpdateReapTerminalDisposition = z.infer<typeof UpdateReapTerminalDispositionSchema>;
 
 type UpdateReapEvidenceSet = {
-  observer: UpdateReapObserverEvidence | UpdateReapObserverEvidenceV1;
+  observer: UpdateReapObserverEvidence;
   host: UpdateReapHostEvidence;
   hookProviderIds: ProviderId[];
   hooks: z.infer<typeof ProviderHookHealthSchema>[];
@@ -315,14 +297,6 @@ const updateReapPreflightCommonShape = {
   evidenceComplete: z.boolean(),
 } as const;
 
-const updateReapRecoveryPreflightV1BaseSchema = z
-  .object({
-    schemaVersion: z.literal(1),
-    ...updateReapPreflightCommonShape,
-    observer: UpdateReapObserverEvidenceV1Schema,
-  })
-  .strict();
-
 const updateReapRecoveryPreflightBaseSchema = z
   .object({
     schemaVersion: z.literal(2),
@@ -330,15 +304,6 @@ const updateReapRecoveryPreflightBaseSchema = z
     observer: UpdateReapObserverEvidenceSchema,
   })
   .strict();
-
-type AnyUpdateReapRecoveryPreflight =
-  | z.infer<typeof updateReapRecoveryPreflightV1BaseSchema>
-  | z.infer<typeof updateReapRecoveryPreflightBaseSchema>;
-
-/** Legacy #665 aggregate retained unchanged for strict update-report v3 compatibility. */
-export const UpdateReapRecoveryPreflightV1Schema =
-  updateReapRecoveryPreflightV1BaseSchema.superRefine(refineUpdateReapRecoveryPreflight);
-export type UpdateReapRecoveryPreflightV1 = z.infer<typeof UpdateReapRecoveryPreflightV1Schema>;
 
 /**
  * Strict, redaction-safe recovery facts and dispositions for one update target. This payload is
@@ -363,7 +328,7 @@ export const UpdateReapRecoveryPreflightSchema = updateReapRecoveryPreflightBase
 export type UpdateReapRecoveryPreflight = z.infer<typeof UpdateReapRecoveryPreflightSchema>;
 
 function refineUpdateReapRecoveryPreflight(
-  preflight: AnyUpdateReapRecoveryPreflight,
+  preflight: z.infer<typeof updateReapRecoveryPreflightBaseSchema>,
   context: z.RefinementCtx,
 ): void {
   if (!strictlySortedStrings(preflight.hookProviderIds)) {

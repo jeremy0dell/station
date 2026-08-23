@@ -1,5 +1,6 @@
 import type { StationConfig } from "@station/config";
 import type { ObserverHealth, ObserverStopReceipt } from "@station/contracts";
+import { stationObserverBuildVersion } from "@station/runtime";
 import { parsePositiveIntegerOption } from "../args.js";
 import {
   type ExactObserverBuildStatus,
@@ -38,10 +39,19 @@ export type ObserverCommandOptions = {
   reapDeps?: ObserverReapDeps;
 };
 
+type ParsedObserverArgs = {
+  action: string;
+  timeoutMs?: number;
+  force: boolean;
+  expectedSocket?: string;
+  expectedBuildSelector?: string;
+};
+
 /**
  * COMPOSITION ROOT
  *
- * Selects Observer process lifecycle and duplicate-inspection adapters for one CLI action.
+ * Selects Observer process lifecycle and duplicate-inspection adapters for one CLI action. Internal
+ * update mutation commitments must match this process's configured socket and immutable build.
  */
 export async function runObserverCommand(
   args: string[],
@@ -51,6 +61,7 @@ export async function runObserverCommand(
   const parsed = parseObserverArgs(args, options.timeoutMs);
   const action = parsed.action;
   const paths = resolveObserverPaths(options.config);
+  assertInternalUpdateCommitment(parsed, paths, deps);
   const runtimeOptions = {
     ...options,
     paths,
@@ -98,13 +109,15 @@ export function parseObserverCommandAction(args: string[]): string {
   return parseObserverArgs(args, undefined).action;
 }
 
-function parseObserverArgs(
-  args: string[],
-  timeoutMs: number | undefined,
-): { action: string; timeoutMs?: number; force: boolean } {
+function parseObserverArgs(args: string[], timeoutMs: number | undefined): ParsedObserverArgs {
   const parsed = takeTimeoutOption(args, timeoutMs);
-  const force = parsed.args.includes("--force") || parsed.args.includes("--yes");
-  const rest = parsed.args.filter((arg) => arg !== "--force" && arg !== "--yes");
+  const expectedSocket = takeInternalUpdateOption(parsed.args, "--internal-update-expected-socket");
+  const expectedBuild = takeInternalUpdateOption(
+    expectedSocket.args,
+    "--internal-update-expected-build-selector",
+  );
+  const force = expectedBuild.args.includes("--force") || expectedBuild.args.includes("--yes");
+  const rest = expectedBuild.args.filter((arg) => arg !== "--force" && arg !== "--yes");
 
   const flag = rest.find((arg) => arg.startsWith("--"));
   if (flag !== undefined) {
@@ -114,12 +127,51 @@ function parseObserverArgs(
     throw new Error(`Unknown observer option: ${rest[1] ?? ""}`);
   }
 
-  const result: { action: string; timeoutMs?: number; force: boolean } = {
+  const result: ParsedObserverArgs = {
     action: rest[0] ?? "status",
     force,
   };
   if (parsed.timeoutMs !== undefined) result.timeoutMs = parsed.timeoutMs;
+  if (expectedSocket.value !== undefined) result.expectedSocket = expectedSocket.value;
+  if (expectedBuild.value !== undefined) {
+    result.expectedBuildSelector = expectedBuild.value;
+  }
   return result;
+}
+
+function takeInternalUpdateOption(
+  args: string[],
+  option: string,
+): { args: string[]; value?: string } {
+  const index = args.indexOf(option);
+  if (index === -1) return { args };
+  const value = args[index + 1];
+  if (value === undefined || value.length === 0) {
+    throw new Error(`${option} requires a value.`);
+  }
+  return { args: [...args.slice(0, index), ...args.slice(index + 2)], value };
+}
+
+function assertInternalUpdateCommitment(
+  parsed: {
+    action: string;
+    expectedSocket?: string;
+    expectedBuildSelector?: string;
+  },
+  paths: ObserverPaths,
+  deps: ObserverProcessDeps,
+): void {
+  if (parsed.expectedSocket === undefined && parsed.expectedBuildSelector === undefined) return;
+  if (parsed.action !== "start" && parsed.action !== "restart") {
+    throw new Error("Internal update commitments are valid only for Observer start or restart.");
+  }
+  if (parsed.expectedSocket !== paths.socketPath) {
+    throw new Error("The configured Observer socket changed after update convergence planning.");
+  }
+  const buildSelector = deps.buildVersion ?? stationObserverBuildVersion();
+  if (parsed.expectedBuildSelector !== buildSelector) {
+    throw new Error("The executing Observer build differs from the selected update target.");
+  }
 }
 
 function takeTimeoutOption(

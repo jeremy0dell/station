@@ -238,37 +238,6 @@ jobs:
             target: darwin-arm64
     runs-on: ${{ matrix.runner }}
     steps:
-      - if: runner.os == 'macOS'
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          ref: ${{ inputs.tag }}
-      - if: runner.os == 'macOS'
-        uses: ./.github/actions/setup-ci
-      - name: Build public update harness
-        if: runner.os == 'macOS'
-        run: |
-          command -v tmux >/dev/null 2>&1 || brew install tmux
-          pnpm build
-      - name: Install exact public predecessor
-        if: runner.os == 'macOS'
-        env:
-          PREVIOUS_TAG: ${{ needs.promote.outputs.previous_tag }}
-        run: |
-          predecessor_installer="$RUNNER_TEMP/previous-install.sh"
-          env -u GH_TOKEN -u GITHUB_TOKEN -u GH_ENTERPRISE_TOKEN -u GITHUB_ENTERPRISE_TOKEN \
-            curl --disable --fail --silent --show-error --location \
-              --proto '=https' --proto-redir '=https' --tlsv1.2 \
-              --output "$predecessor_installer" \
-              "https://github.com/$GITHUB_REPOSITORY/releases/download/$PREVIOUS_TAG/install.sh"
-          grep -Fx "embedded_version=\"$PREVIOUS_TAG\"" "$predecessor_installer"
-          previous_home="$RUNNER_TEMP/update-incumbent-home"
-          previous_bin="$RUNNER_TEMP/update-incumbent/bin"
-          mkdir -p "$previous_home"
-          HOME="$previous_home" \
-            XDG_DATA_HOME="$previous_home/.local/share" \
-            /bin/sh "$predecessor_installer" --install-dir "$previous_bin"
-          test "$("$previous_bin/stn" --version)" = "${PREVIOUS_TAG#v}"
       - name: Download exact-tag public installer
         env:
           TAG: ${{ inputs.tag }}
@@ -326,17 +295,3 @@ jobs:
             test "$(stat -f '%Lp' "$receipt_path")" = 600
           fi
           test -f "$data_home/station/LICENSE"
-      - name: Verify public update discovery and converged runtime
-        if: runner.os == 'macOS'
-        env:
-          PREVIOUS_TAG: ${{ needs.promote.outputs.previous_tag }}
-          TAG: ${{ inputs.tag }}
-          TARGET_BUILD_IDENTITY: ${{ needs.promote.outputs.target_build_identity }}
-        run: |
-          pnpm smoke:update -- \
-            --incumbent-binary "$RUNNER_TEMP/update-incumbent/bin/stn" \
-            --incumbent-version "${PREVIOUS_TAG#v}" \
-            --public-target-tag "$TAG" \
-            --target-build-identity "$TARGET_BUILD_IDENTITY" \
-            --scenarios no-host \
-            --incumbent-contract legacy-compatible

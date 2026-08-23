@@ -1,6 +1,6 @@
 import { realpath } from "node:fs/promises";
 import { resolve } from "node:path";
-import type { UpdateArtifact } from "@station/contracts";
+import { type UpdateArtifact, updateCommandArgvMatch } from "@station/contracts";
 import {
   type ExternalCommandRunner,
   isSafeError,
@@ -60,7 +60,7 @@ export type MiseUpdateChannelDeps = {
  * ADAPTER
  *
  * Translates mise's active tool installation into its configured-range upgrade command.
- * Installed-target proof reads the active tool only and does not invoke `mise outdated`.
+ * Installed-target proof validates inherited exact argv from the active tool without `mise outdated`.
  */
 export function createMiseUpdateChannel(
   deps: MiseUpdateChannelDeps,
@@ -89,12 +89,20 @@ export function createMiseUpdateChannel(
       ) {
         return undefined;
       }
+      const managerCommand = [detection.misePath, "upgrade", detection.tool] as const;
+      if (
+        options.inheritedManagerCommand !== undefined &&
+        !updateCommandArgvMatch(options.inheritedManagerCommand, managerCommand)
+      ) {
+        return undefined;
+      }
       return {
         channel,
         status: "current",
         currentVersion: target.version,
         targetVersion: target.version,
         currentCli: [detection.misePath, "exec", "--", "stn"],
+        managerCommand: options.inheritedManagerCommand ?? managerCommand,
       };
     },
     async apply(plan, options = {}) {

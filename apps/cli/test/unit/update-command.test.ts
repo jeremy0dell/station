@@ -8,12 +8,14 @@ import type {
 import {
   STATION_SCHEMA_VERSION,
   UpdateCommandReportSchema,
+  updateCommandArgvMatch,
   updateReapEvidenceIsComplete,
 } from "@station/contracts";
 import {
   type ExternalCommandInput,
   type ExternalCommandResult,
   stationBuildInfo,
+  stationObserverBuildVersion,
 } from "@station/runtime";
 import { describe, expect, it, vi } from "vitest";
 import type { CliRunOptions } from "../../src/cliTypes.js";
@@ -44,6 +46,8 @@ function runUpdateCommand(
   if (convergenceInspection === undefined) throw new Error("missing test convergence inspection");
   const buildInfo = overrides.buildInfo ?? stationBuildInfo;
   const adapterOptions = {
+    observerSocketPath: config.observer.socketPath,
+    observerBuildSelector: stationObserverBuildVersion(buildInfo()),
     ...(commandOptions.configPath === undefined ? {} : { configPath: commandOptions.configPath }),
     ...(overrides.commandRunner === undefined ? {} : { commandRunner: overrides.commandRunner }),
   };
@@ -80,6 +84,40 @@ describe("stn update convergence", () => {
       runUpdateCommand(["--internal-successor-evaluator"], options(), {
         probes: [{ channel: "installer-binary", detectAndPlan }],
         convergenceInspection: inspection(preflight("1.0.0", "1.0.0")),
+      }),
+    ).rejects.toThrow("Usage: stn update");
+    expect(detectAndPlan).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    {
+      name: "manager owner without inherited argv",
+      args: [
+        "--internal-successor-evaluator",
+        "--internal-selected-target-version",
+        "2.0.0",
+        "--channel",
+        "homebrew",
+      ],
+    },
+    {
+      name: "native owner with manager argv",
+      args: [
+        "--internal-successor-evaluator",
+        "--internal-selected-target-version",
+        "2.0.0",
+        "--internal-selected-manager-command",
+        JSON.stringify(["brew", "upgrade", "station"]),
+        "--channel",
+        "installer-binary",
+      ],
+    },
+  ])("rejects a pinned successor with $name", async ({ args }) => {
+    const detectAndPlan = vi.fn();
+    await expect(
+      runUpdateCommand(args, options(), {
+        probes: [{ channel: "installer-binary", detectAndPlan }],
+        convergenceInspection: inspection(preflight("2.0.0", "2.0.0")),
       }),
     ).rejects.toThrow("Usage: stn update");
     expect(detectAndPlan).not.toHaveBeenCalled();
@@ -132,6 +170,64 @@ describe("stn update convergence", () => {
     const text = textFor(result);
     expect(text).toContain(nonMutatingPhaseText("not-executed"));
     expect(text).not.toContain("verified plan:");
+    expect(fixture.apply).not.toHaveBeenCalled();
+    expect(runner).not.toHaveBeenCalled();
+  });
+
+  it("previews exact Station-owned reap consequences without authorizing or executing them", async () => {
+    const fixture = probe("update-available");
+    const runner = vi.fn();
+    const nonResumable = disposition("non-preservable", "non-resumable");
+    const result = await runUpdateCommand(["--dry-run", "--reap", "--json"], options(), {
+      probes: [fixture.probe],
+      buildInfo: build(identityA, "1.0.0"),
+      convergenceInspection: inspection(
+        preflight("1.0.0", "2.0.0", {
+          observer: matchingObserver(identityA),
+          host: differentHost(identityA, [terminal("non-releasable")]),
+          terminalDispositions: [nonResumable],
+        }),
+      ),
+      commandRunner: runner,
+    });
+    const report = reportFrom(result);
+
+    expect(result.code).toBe(1);
+    expect(report).toMatchObject({
+      status: "reap-required",
+      artifactApplication: { status: "preview" },
+      initial: {
+        plan: {
+          status: "reap-required",
+          installation: { owner: "installer-binary", action: "apply" },
+        },
+      },
+      result: {
+        kind: "preview",
+        reapConsequences: {
+          authorization: "none",
+          execution: "not-included",
+          recovery: { relevance: "destructive-follow-up", status: "complete" },
+          terminals: [
+            {
+              ...nonResumable,
+              ownership: "station",
+              requiredAction: "reap",
+            },
+          ],
+        },
+      },
+    });
+    if (report.result.kind !== "preview") throw new Error("expected preview result");
+    expect(report.result.phases.every((phase) => phase.status === "not-executed")).toBe(true);
+    expect(report.result).not.toHaveProperty("actionAudits");
+    expect(textFor(result)).toContain(nonMutatingPhaseText("not-executed"));
+    expect(textFor(result)).toContain("terminal consequences:");
+    expect(textFor(result)).toContain("recovery: destructive-follow-up/complete");
+    expect(textFor(result)).toContain(
+      "terminal-1 pty=pty-1/pty-instance-1 session=session-1 owner=station action=reap handoff=non-preservable reap-recovery=NON-RESUMABLE",
+    );
+    expect(textFor(result)).toContain("reasons: session_non_resumable");
     expect(fixture.apply).not.toHaveBeenCalled();
     expect(runner).not.toHaveBeenCalled();
   });
@@ -286,13 +382,24 @@ describe("stn update convergence", () => {
     expect(runner).not.toHaveBeenCalled();
     expect(textFor(result)).toContain("status: deferred");
     expect(textFor(result)).toContain(nonMutatingPhaseText("deferred"));
+    expect(textFor(result)).toContain("terminal consequences:");
+    const disposition = evidence.terminalDispositions[0];
+    if (disposition !== undefined) {
+      expect(textFor(result)).toContain(
+        `session=${disposition.sessionId} owner=station action=${
+          disposition.handoff === "preservable" ? "preserve" : "reap"
+        }`,
+      );
+    }
     expect(textFor(result)).not.toContain("verified plan:");
   });
 
   it("starts an absent runtime, reconciles, and reports current only after a verified no-op plan", async () => {
     const fixture = probe("current");
+    const absent = preflight("1.0.0", "1.0.0");
     const inspect = sequenceInspection([
-      preflight("1.0.0", "1.0.0"),
+      absent,
+      absent,
       preflight("1.0.0", "1.0.0", {
         observer: matchingObserver(identityA),
         evidenceComplete: false,
@@ -318,7 +425,7 @@ describe("stn update convergence", () => {
         },
       },
     });
-    expect(inspect).toHaveBeenCalledTimes(2);
+    expect(inspect).toHaveBeenCalledTimes(3);
     expect(fixture.apply).not.toHaveBeenCalled();
     expect(runner.mock.calls.map(([input]) => (input as ExternalCommandInput).args)).toEqual([
       expect.arrayContaining(["observer", "start"]),
@@ -328,8 +435,12 @@ describe("stn update convergence", () => {
 
   it("executes a health-pinned Observer restart after installed executable replacement", async () => {
     const fixture = probe("current");
+    const restartable = preflight("1.0.0", "1.0.0", {
+      observer: restartableObserverDrift(),
+    });
     const inspect = sequenceInspection([
-      preflight("1.0.0", "1.0.0", { observer: restartableObserverDrift() }),
+      restartable,
+      restartable,
       preflight("1.0.0", "1.0.0", { observer: matchingObserver(identityA) }),
     ]);
     const runner = vi.fn(commandResult);
@@ -355,6 +466,125 @@ describe("stn update convergence", () => {
       },
     });
     expect(runner.mock.calls[0]?.[0].args).toEqual(expect.arrayContaining(["observer", "restart"]));
+  });
+
+  it("stops before mutation when an Observer appears after an absent plan", async () => {
+    const fixture = probe("current");
+    const absent = preflight("1.0.0", "1.0.0");
+    const appeared = preflight("1.0.0", "1.0.0", {
+      observer: matchingObserver(identityA),
+    });
+    const runner = vi.fn(commandResult);
+    const result = await runUpdateCommand(["--json"], options(), {
+      probes: [fixture.probe],
+      buildInfo: build(identityA, "1.0.0"),
+      convergenceInspection: sequenceInspection([absent, appeared]),
+      commandRunner: runner,
+    });
+
+    expect(result).toMatchObject({
+      code: 1,
+      output: {
+        status: "failed",
+        result: {
+          kind: "execution-failed",
+          stage: "observer-convergence",
+          actionAudits: [
+            {
+              actions: [{ phase: "observer-convergence", action: "start", status: "skipped" }],
+            },
+          ],
+        },
+      },
+    });
+    expect(runner).not.toHaveBeenCalled();
+  });
+
+  it("stops before mutation when the exact Observer ownership tuple changes", async () => {
+    const fixture = probe("current");
+    const incumbent = preflight("1.0.0", "1.0.0", {
+      observer: {
+        ...matchingObserver(identityB),
+        relation: "different",
+        replacementAdmission: "candidate-wins",
+      },
+    });
+    const before = privateEvidence(incumbent);
+    const afterObserver = before.observer;
+    if (afterObserver === undefined) throw new Error("missing Observer freshness fixture");
+    const inspect = vi
+      .fn()
+      .mockResolvedValueOnce({ preflight: incumbent, privateEvidence: before })
+      .mockResolvedValue({
+        preflight: incumbent,
+        privateEvidence: {
+          ...before,
+          observer: {
+            ...afterObserver,
+            processToken: "22222222-2222-4222-8222-222222222222",
+          },
+        },
+      });
+    const runner = vi.fn(commandResult);
+    const result = await runUpdateCommand(["--json"], options(), {
+      probes: [fixture.probe],
+      buildInfo: build(identityA, "1.0.0"),
+      convergenceInspection: inspect,
+      commandRunner: runner,
+    });
+
+    expect(result).toMatchObject({
+      code: 1,
+      output: {
+        result: {
+          kind: "execution-failed",
+          stage: "observer-convergence",
+          actionAudits: [{ actions: [{ action: "restart", status: "skipped" }] }],
+        },
+      },
+    });
+    expect(runner).not.toHaveBeenCalled();
+  });
+
+  it("stops before Observer mutation when the selected Station recovery handle changes", async () => {
+    const fixture = probe("current");
+    const incumbent = preflight("1.0.0", "1.0.0", {
+      observer: observerWithSelectedRecoveryHandle(identityB),
+      hookProviderIds: ["codex"],
+      hooks: [{ provider: "codex", status: "healthy" }],
+    });
+    const before = privateEvidence(incumbent);
+    const inspect = vi
+      .fn()
+      .mockResolvedValueOnce({ preflight: incumbent, privateEvidence: before })
+      .mockResolvedValue({
+        preflight: incumbent,
+        privateEvidence: {
+          ...before,
+          selectedRecoveryHandles: [
+            { sessionId: "session-recovery", selectedHandleId: "replacement-station-handle" },
+          ],
+        },
+      });
+    const runner = vi.fn(commandResult);
+    const result = await runUpdateCommand(["--json"], options(), {
+      probes: [fixture.probe],
+      buildInfo: build(identityA, "1.0.0"),
+      convergenceInspection: inspect,
+      commandRunner: runner,
+    });
+
+    expect(result).toMatchObject({
+      code: 1,
+      output: {
+        result: {
+          kind: "execution-failed",
+          stage: "observer-convergence",
+          actionAudits: [{ actions: [{ action: "restart", status: "skipped" }] }],
+        },
+      },
+    });
+    expect(runner).not.toHaveBeenCalled();
   });
 
   it("stops without mutation when singleton admission preserves a newer Observer", async () => {
@@ -1068,6 +1298,124 @@ describe("stn update convergence", () => {
     expect(text).not.toContain("\u001b]8;;https://example.invalid");
   });
 
+  it.each([
+    {
+      name: "ownership conflict",
+      result: {
+        provider: "codex",
+        status: "ownership-conflict",
+        changed: false,
+        verified: false,
+        followUp: { action: "run-explicit-takeover" },
+      },
+      command: ["hooks", "install", "codex", "--yes", "--takeover"],
+    },
+    {
+      name: "write failure",
+      result: {
+        provider: "codex",
+        status: "write-failed",
+        changed: false,
+        verified: false,
+        error: { tag: "HookError", code: "HOOK_WRITE_FAILED", message: "Write failed." },
+        followUp: { action: "retry" },
+      },
+      command: ["hooks", "reconcile", "codex"],
+    },
+    {
+      name: "doctor failure",
+      result: {
+        provider: "codex",
+        status: "post-write-doctor-failed",
+        changed: true,
+        verified: false,
+        error: { tag: "HookError", code: "HOOK_DOCTOR_FAILED", message: "Doctor failed." },
+        followUp: { action: "run-doctor" },
+      },
+      command: ["hooks", "doctor", "codex"],
+    },
+  ])("preserves typed $name recovery guidance in JSON and text", async (testCase) => {
+    const fixture = probe("current");
+    const evidence = preflight("1.0.0", "1.0.0", {
+      observer: matchingObserver(identityA),
+      host: matchingHost(identityA),
+      hookProviderIds: ["codex"],
+      hooks: [{ provider: "codex", status: "needs-repair", reason: "owned-drift" }],
+    });
+    const result = await runUpdateCommand(["--json"], options(), {
+      probes: [fixture.probe],
+      buildInfo: build(identityA, "1.0.0"),
+      convergenceInspection: inspection(evidence),
+      commandRunner: async (input) =>
+        input.args?.includes("hooks")
+          ? externalResult(input, JSON.stringify(testCase.result), 1)
+          : commandResult(input),
+    });
+    const report = reportFrom(result);
+
+    expect(report.recoveryCommands.map((command) => command.slice(3))).toEqual([
+      testCase.command,
+      ["reconcile", "--reason", "update-convergence"],
+      ["update", "--channel", "installer-binary"],
+    ]);
+    const text = textFor(result);
+    expect(text).toContain(testCase.command.join(" "));
+    expect(text).toContain("reconcile --reason update-convergence");
+  });
+
+  it("orders recovery guidance for every failed provider deterministically", async () => {
+    const fixture = probe("current");
+    const evidence = preflight("1.0.0", "1.0.0", {
+      observer: matchingObserver(identityA),
+      host: matchingHost(identityA),
+      hookProviderIds: ["claude", "codex"],
+      hooks: [
+        { provider: "claude", status: "needs-repair", reason: "missing" },
+        { provider: "codex", status: "needs-repair", reason: "owned-drift" },
+      ],
+    });
+    const result = await runUpdateCommand(["--json"], options(), {
+      probes: [fixture.probe],
+      buildInfo: build(identityA, "1.0.0"),
+      convergenceInspection: inspection(evidence),
+      commandRunner: async (input) => {
+        const provider = input.args?.at(-1);
+        return input.args?.includes("hooks")
+          ? externalResult(
+              input,
+              JSON.stringify({
+                provider,
+                status: "write-failed",
+                changed: false,
+                verified: false,
+                error: { tag: "HookError", code: "HOOK_WRITE_FAILED", message: "Failed." },
+                followUp: { action: provider === "claude" ? "run-doctor" : "retry" },
+              }),
+              1,
+            )
+          : commandResult(input);
+      },
+    });
+    const report = reportFrom(result);
+
+    expect(report.recoveryCommands.map((command) => command.slice(3))).toEqual([
+      ["hooks", "doctor", "claude"],
+      ["hooks", "reconcile", "codex"],
+      ["reconcile", "--reason", "update-convergence"],
+      ["update", "--channel", "installer-binary"],
+    ]);
+    if (report.result.kind !== "execution-failed") throw new Error("expected hook failure");
+    expect(report.result.actionAudits[0]?.actions.map((action) => action.provider)).toEqual([
+      "claude",
+      "codex",
+    ]);
+    const text = textFor(result);
+    const claudeDoctor = text.indexOf("hooks doctor claude");
+    const codexRetry = text.indexOf("hooks reconcile codex");
+    expect(claudeDoctor).toBeGreaterThanOrEqual(0);
+    expect(codexRetry).toBeGreaterThan(claudeDoctor);
+  });
+
   it("hands #641 a fresh pre-mutation reap-required target plan before artifact application", async () => {
     const fixture = probe("update-available");
     const result = await runUpdateCommand(["--json"], options(), {
@@ -1102,6 +1450,9 @@ describe("stn update convergence", () => {
     });
     expect(reportFrom(result).result).not.toHaveProperty("actionAudits");
     expect(textFor(result)).toContain(nonMutatingPhaseText("not-executed"));
+    expect(textFor(result)).toContain("terminal consequences:");
+    expect(textFor(result)).toContain("owner=station action=reap");
+    expect(textFor(result)).toContain("reap-recovery=NON-RESUMABLE");
     expect(textFor(result)).not.toContain("verified plan:");
     expect(fixture.apply).not.toHaveBeenCalled();
   });
@@ -1182,7 +1533,41 @@ describe("stn update convergence", () => {
     });
     expect(reportFrom(result).result).not.toHaveProperty("actionAudits");
     expect(textFor(result)).toContain(nonMutatingPhaseText("not-executed"));
+    expect(textFor(result)).toContain("terminal consequences:");
     expect(textFor(result)).not.toContain("verified plan:");
+  });
+
+  it("renders the exact blocked terminal and recovery consequence without mutation", async () => {
+    const fixture = probe("current");
+    const runner = vi.fn();
+    const result = await runUpdateCommand(["--json"], options(), {
+      probes: [fixture.probe],
+      buildInfo: build(identityA, "1.0.0"),
+      convergenceInspection: inspection(
+        preflight("1.0.0", "1.0.0", {
+          observer: matchingObserver(identityA),
+          host: differentHost(identityB, [terminal("unknown")]),
+          terminalDispositions: [disposition("unknown", "unknown")],
+        }),
+      ),
+      commandRunner: runner,
+    });
+
+    expect(result).toMatchObject({
+      code: 1,
+      output: {
+        status: "blocked",
+        result: { kind: "non-mutating-stop", disposition: "blocked" },
+      },
+    });
+    expect(textFor(result)).toContain(nonMutatingPhaseText("not-executed"));
+    expect(textFor(result)).toContain("recovery: destructive-follow-up/incomplete");
+    expect(textFor(result)).toContain(
+      "session=session-1 owner=station action=blocked handoff=unknown reap-recovery=unknown",
+    );
+    expect(textFor(result)).toContain("reasons: session_recovery_unknown");
+    expect(fixture.apply).not.toHaveBeenCalled();
+    expect(runner).not.toHaveBeenCalled();
   });
 
   it("represents current artifact plus busy old Host plus --no-handoff as intentionally incomplete", async () => {
@@ -1211,6 +1596,8 @@ describe("stn update convergence", () => {
     });
     expect(reportFrom(result).result).not.toHaveProperty("actionAudits");
     expect(textFor(result)).toContain(nonMutatingPhaseText("not-executed"));
+    expect(textFor(result)).toContain("terminal consequences:");
+    expect(textFor(result)).toContain("owner=station action=preserve");
     expect(textFor(result)).not.toContain("verified plan:");
   });
 
@@ -1303,6 +1690,84 @@ describe("stn update convergence", () => {
   });
 
   it.each([
+    {
+      name: "wrong socket",
+      result: (input: ExternalCommandInput) => {
+        const running = observerRunningResult(input);
+        return { ...running, socketPath: "/tmp/wrong-observer.sock" };
+      },
+    },
+    {
+      name: "missing pid identity",
+      result: (input: ExternalCommandInput) => {
+        const running = observerRunningResult(input);
+        return { ...running, health: { ...running.health, pid: undefined } };
+      },
+    },
+    {
+      name: "missing OS-start identity",
+      result: (input: ExternalCommandInput) => {
+        const running = observerRunningResult(input);
+        return { ...running, health: { ...running.health, startedAt: undefined } };
+      },
+    },
+    {
+      name: "missing version identity",
+      result: (input: ExternalCommandInput) => {
+        const running = observerRunningResult(input);
+        return { ...running, health: { ...running.health, version: undefined } };
+      },
+    },
+    {
+      name: "missing health socket identity",
+      result: (input: ExternalCommandInput) => {
+        const running = observerRunningResult(input);
+        return { ...running, health: { ...running.health, socketPath: undefined } };
+      },
+    },
+    {
+      name: "unavailable health",
+      result: (input: ExternalCommandInput) => {
+        const running = observerRunningResult(input);
+        return { ...running, health: { ...running.health, status: "unavailable" as const } };
+      },
+    },
+    {
+      name: "wrong immutable build selector",
+      result: (input: ExternalCommandInput) => {
+        const running = observerRunningResult(input);
+        return { ...running, health: { ...running.health, version: "wrong-selector" } };
+      },
+    },
+  ])("rejects an exit-zero Observer result with $name before downstream mutation", async (testCase) => {
+    const fixture = probe("current");
+    const absent = preflight("1.0.0", "1.0.0");
+    const runner = vi.fn(async (input: ExternalCommandInput) =>
+      input.args?.includes("observer")
+        ? externalResult(input, JSON.stringify(testCase.result(input)), 0)
+        : commandResult(input),
+    );
+    const result = await runUpdateCommand(["--json"], options(), {
+      probes: [fixture.probe],
+      buildInfo: build(identityA, "1.0.0"),
+      convergenceInspection: sequenceInspection([absent, absent]),
+      commandRunner: runner,
+    });
+
+    expect(result).toMatchObject({
+      code: 1,
+      output: {
+        result: { kind: "execution-failed", stage: "observer-convergence" },
+      },
+    });
+    expect(
+      runner.mock.calls.some(([input]) =>
+        (input as ExternalCommandInput).args?.includes("reconcile"),
+      ),
+    ).toBe(false);
+  });
+
+  it.each([
     { label: "exit 2", exitCode: 2 },
     { label: "signal-like exit 143", exitCode: 143 },
   ])("rejects Observer failure JSON returned with $label", async ({ exitCode }) => {
@@ -1345,6 +1810,10 @@ describe("stn update convergence", () => {
     const fixture = probe("current");
     const inspect = vi
       .fn()
+      .mockResolvedValueOnce({
+        preflight: preflight("1.0.0", "1.0.0"),
+        privateEvidence: privateEvidence(),
+      })
       .mockResolvedValueOnce({
         preflight: preflight("1.0.0", "1.0.0"),
         privateEvidence: privateEvidence(),
@@ -1473,6 +1942,46 @@ describe("stn update convergence", () => {
     expect(reportFrom(result).result).not.toHaveProperty("postAction");
   });
 
+  it("preserves channel-owned dev-checkout recovery after a partial preparation failure", async () => {
+    const recovery = [
+      ["pnpm", "install", "--frozen-lockfile"],
+      ["pnpm", "build"],
+      ["pnpm", "--dir", "station", "link", "--global"],
+    ] as const;
+    const fixture = probe(
+      "update-available",
+      "1.0.0",
+      "2.0.0",
+      undefined,
+      "dev-checkout",
+      () => recovery,
+    );
+    fixture.apply.mockRejectedValueOnce({
+      tag: "UpdateError",
+      code: "UPDATE_DEV_CHECKOUT_PREPARE_FAILED",
+      message: "The checkout fast-forwarded but preparation failed.",
+    });
+    const result = await runUpdateCommand(["--json"], options(), {
+      probes: [fixture.probe],
+      buildInfo: build(identityA, "1.0.0"),
+      convergenceInspection: inspection(preflight("1.0.0", "2.0.0")),
+    });
+    const report = reportFrom(result);
+
+    expect(report).toMatchObject({
+      status: "failed",
+      channel: "dev-checkout",
+      artifactApplication: { status: "failed" },
+      recoveryCommands: recovery,
+    });
+    const text = textFor(result);
+    expect(text.indexOf("pnpm install --frozen-lockfile")).toBeLessThan(text.indexOf("pnpm build"));
+    expect(text.indexOf("pnpm build")).toBeLessThan(
+      text.indexOf("pnpm --dir station link --global"),
+    );
+    expect(text).not.toContain("stn update --channel dev-checkout");
+  });
+
   it("attributes an already-converged child initial inspection to the successor", async () => {
     const outer = probe("update-available");
     const outerRunner = vi.fn(async (input: ExternalCommandInput) =>
@@ -1544,6 +2053,7 @@ describe("stn update convergence", () => {
     const latestDiscovery = vi.fn(ordinaryDiscovery);
     successor.probe.detectAndPlan = latestDiscovery;
     const successorInspect = sequenceInspection([
+      preflight("2.0.0", "2.0.0"),
       preflight("2.0.0", "2.0.0"),
       preflight("2.0.0", "2.0.0", { observer: matchingObserver(identityB) }),
     ]);
@@ -1695,6 +2205,18 @@ describe("stn update convergence", () => {
       },
     },
     {
+      name: "wrong install owner",
+      mutate: (report: UpdateCommandReport) => {
+        report.initial.plan.installation = { owner: "dev-checkout", action: "no-op" };
+      },
+    },
+    {
+      name: "wrong install action",
+      mutate: (report: UpdateCommandReport) => {
+        report.initial.plan.installation.action = "apply";
+      },
+    },
+    {
       name: "incumbent evaluator",
       mutate: (report: UpdateCommandReport) => {
         report.initial.evaluator = "incumbent-cli";
@@ -1818,6 +2340,89 @@ describe("stn update convergence", () => {
       code: 1,
       output: {
         status: "failed",
+        error: { code: "UPDATE_SUCCESSOR_BOUNDARY_FAILED" },
+        result: { kind: "execution-failed", stage: "successor-boundary" },
+      },
+    });
+  });
+
+  it("audits the exact package-manager action and accepts only the matching successor owner", async () => {
+    const managerCommand = ["brew", "upgrade", "station"] as const;
+    const outer = probe("update-available", "1.0.0", "2.0.0", managerCommand, "homebrew");
+    const outerRunner = vi.fn(async (input: ExternalCommandInput) =>
+      input.args?.includes("update")
+        ? managerSuccessorResult(input, managerCommand)
+        : commandResult(input),
+    );
+
+    const result = await runUpdateCommand(
+      ["--json", "--channel", "homebrew", "--drive-package-manager"],
+      options(),
+      {
+        probes: [outer.probe],
+        buildInfo: build(identityA, "1.0.0"),
+        convergenceInspection: inspection(preflight("1.0.0", "2.0.0")),
+        commandRunner: outerRunner,
+      },
+    );
+    const report = reportFrom(result);
+
+    expect(result.code).toBe(0);
+    expect(report.status).toBe("updated");
+    if (report.result.kind !== "successor-runtime-execution") {
+      throw new Error("expected successor execution result");
+    }
+    expect(report.result.actionAudits[0]?.actions).toEqual([
+      {
+        phase: "artifact-application",
+        action: "apply",
+        status: "completed",
+        installation: { owner: "homebrew", action: "apply", managerCommand },
+      },
+    ]);
+    expect(report.result.successor.plan.installation).toEqual({
+      owner: "homebrew",
+      action: "no-op",
+      managerCommand,
+    });
+    const wrongAudit = structuredClone(report);
+    if (wrongAudit.result.kind !== "successor-runtime-execution") {
+      throw new Error("expected successor execution result");
+    }
+    const installation = wrongAudit.result.actionAudits[0]?.actions[0]?.installation;
+    if (installation === undefined) throw new Error("missing exact install audit");
+    installation.managerCommand = ["brew", "upgrade", "different-package"];
+    expect(UpdateCommandReportSchema.safeParse(wrongAudit).success).toBe(false);
+    expect(textFor(result)).toContain(
+      "artifact-application: apply completed owner=homebrew manager-command=brew upgrade station",
+    );
+  });
+
+  it("rejects a successor whose exact package-manager argv differs from the inherited plan", async () => {
+    const managerCommand = ["brew", "upgrade", "station"] as const;
+    const outer = probe("update-available", "1.0.0", "2.0.0", managerCommand, "homebrew");
+    const outerRunner = vi.fn(async (input: ExternalCommandInput) =>
+      input.args?.includes("update")
+        ? managerSuccessorResult(input, ["brew", "upgrade", "other-station"])
+        : commandResult(input),
+    );
+
+    const result = await runUpdateCommand(
+      ["--json", "--channel", "homebrew", "--drive-package-manager"],
+      options(),
+      {
+        probes: [outer.probe],
+        buildInfo: build(identityA, "1.0.0"),
+        convergenceInspection: inspection(preflight("1.0.0", "2.0.0")),
+        commandRunner: outerRunner,
+      },
+    );
+
+    expect(result).toMatchObject({
+      code: 1,
+      output: {
+        status: "failed",
+        artifactApplication: { status: "applied" },
         error: { code: "UPDATE_SUCCESSOR_BOUNDARY_FAILED" },
         result: { kind: "execution-failed", stage: "successor-boundary" },
       },
@@ -2165,6 +2770,47 @@ describe("stn update convergence", () => {
     expect(JSON.stringify(report)).not.toContain(secret);
   });
 
+  it("rejects malicious successor lifecycle evidence attributed to another failure stage", async () => {
+    const outer = probe("update-available");
+    const successor = probe("current", "2.0.0", "2.0.0");
+    const outerRunner = vi.fn(async (input: ExternalCommandInput) => {
+      if (!input.args?.includes("update")) return commandResult(input);
+      const nested = await runUpdateCommand(
+        input.args.slice(input.args.indexOf("update") + 1),
+        options(),
+        {
+          probes: [successor.probe],
+          buildInfo: build(identityB, "2.0.0"),
+          convergenceInspection: inspection(preflight("2.0.0", "2.0.0")),
+          commandRunner: async (successorInput) =>
+            successorInput.args?.includes("observer")
+              ? observerFailureResult(successorInput, "malicious-stage")
+              : commandResult(successorInput),
+        },
+      );
+      const child = structuredClone(nested.output) as UpdateCommandReport;
+      if (child.result.kind !== "execution-failed") throw new Error("expected child failure");
+      child.result.stage = "runtime-reconcile";
+      return externalResult(input, JSON.stringify(child), nested.code);
+    });
+    const result = await runUpdateCommand(["--json"], options(), {
+      probes: [outer.probe],
+      buildInfo: build(identityA, "1.0.0"),
+      convergenceInspection: inspection(preflight("1.0.0", "2.0.0")),
+      commandRunner: outerRunner,
+    });
+
+    expect(result).toMatchObject({
+      code: 1,
+      output: {
+        result: { kind: "execution-failed", stage: "successor-boundary" },
+        error: { code: "UPDATE_SUCCESSOR_BOUNDARY_FAILED" },
+      },
+    });
+    expect(reportFrom(result)).not.toHaveProperty("cause");
+    expect(reportFrom(result)).not.toHaveProperty("startupEvidence");
+  });
+
   it("renders hostile successor warnings without emitting terminal controls", async () => {
     const outer = probe("update-available");
     const successor = probe("current", "2.0.0", "2.0.0");
@@ -2336,6 +2982,15 @@ describe("stn update convergence", () => {
       hint: `retry after ${sanitizedSensitive}`,
     });
     expect(report.recoveryCommands).toEqual([
+      ["[REDACTED_PATH]", "--config", sanitizedSensitive, "hooks", "reconcile", "codex"],
+      [
+        "[REDACTED_PATH]",
+        "--config",
+        sanitizedSensitive,
+        "reconcile",
+        "--reason",
+        "update-convergence",
+      ],
       [
         "[REDACTED_PATH]",
         "--config",
@@ -2407,6 +3062,7 @@ function probe(
   target = "2.0.0",
   managerCommand?: readonly [string, ...string[]],
   channel: UpdateChannelProbe["channel"] = "installer-binary",
+  applyRecoveryCommands?: (error: unknown) => readonly (readonly [string, ...string[]])[],
 ) {
   const apply = vi.fn(async () => ({
     channel,
@@ -2429,24 +3085,38 @@ function probe(
         ...(managerCommand === undefined ? {} : { managerCommand }),
       },
       apply,
+      ...(applyRecoveryCommands === undefined ? {} : { applyRecoveryCommands }),
     }),
-    proveInstalledTarget: async (selectedTarget) => ({
-      channel,
-      plan: {
+    proveInstalledTarget: async (selectedTarget, operationOptions = {}) => {
+      if (
+        operationOptions.inheritedManagerCommand !== undefined &&
+        !updateCommandArgvMatch(operationOptions.inheritedManagerCommand, managerCommand)
+      ) {
+        return undefined;
+      }
+      return {
         channel,
-        status: "current",
-        currentVersion: selectedTarget.version,
-        targetVersion: selectedTarget.version,
-        currentCli: ["/opt/stn-current"],
-        ...(selectedTarget.revision === undefined
-          ? {}
-          : {
-              currentRevision: selectedTarget.revision,
-              targetRevision: selectedTarget.revision,
-            }),
-      },
-      apply,
-    }),
+        plan: {
+          channel,
+          status: "current",
+          currentVersion: selectedTarget.version,
+          targetVersion: selectedTarget.version,
+          currentCli: ["/opt/stn-current"],
+          ...(managerCommand === undefined
+            ? {}
+            : {
+                managerCommand: operationOptions.inheritedManagerCommand ?? managerCommand,
+              }),
+          ...(selectedTarget.revision === undefined
+            ? {}
+            : {
+                currentRevision: selectedTarget.revision,
+                targetRevision: selectedTarget.revision,
+              }),
+        },
+        apply,
+      };
+    },
   };
   return { probe, apply };
 }
@@ -2489,6 +3159,7 @@ function privateEvidence(
       osStartTime: "Fri Aug 21 12:00:00 2026",
       processToken: "123e4567-e89b-42d3-a456-426614174000",
       buildSelector,
+      socketPath: config.observer.socketPath,
     };
   }
   return evidence;
@@ -2558,6 +3229,41 @@ function restartableObserverDrift(): UpdateReapRecoveryPreflight["observer"] {
   };
 }
 
+function observerWithSelectedRecoveryHandle(
+  identity: string,
+): UpdateReapRecoveryPreflight["observer"] {
+  return {
+    ...matchingObserver(identity),
+    relation: "different",
+    replacementAdmission: "candidate-wins",
+    recovery: {
+      status: "assessed",
+      assessment: {
+        schemaVersion: 1,
+        resumeEnabled: true,
+        providerCapabilities: [{ provider: "codex", status: "enabled" }],
+        sessions: [
+          {
+            sessionId: "session-recovery",
+            projectId: "project-recovery",
+            worktreeId: "worktree-recovery",
+            lifecycle: "open",
+            harnessProvider: "codex",
+            disposition: "recoverable",
+            reasons: [],
+            handleResolution: {
+              kind: "selected",
+              eligibleHandleCount: 1,
+              rejectedHandleCount: 0,
+              rejectedReasons: [],
+            },
+          },
+        ],
+      },
+    },
+  };
+}
+
 function matchingHost(
   identity: string,
   terminals: Extract<
@@ -2591,7 +3297,10 @@ function differentHost(
   };
 }
 
-function terminal(handoffSupport: "bridge-releasable" | "non-releasable", identity = "1") {
+function terminal(
+  handoffSupport: "bridge-releasable" | "non-releasable" | "unknown",
+  identity = "1",
+) {
   return {
     kind: "agent" as const,
     terminalTargetId: `terminal-${identity}`,
@@ -2607,7 +3316,7 @@ function terminal(handoffSupport: "bridge-releasable" | "non-releasable", identi
 }
 
 function disposition(
-  handoff: "preservable" | "non-preservable",
+  handoff: "preservable" | "non-preservable" | "unknown",
   reapRecovery: "recoverable" | "non-resumable" | "unknown",
   identity = "1",
 ) {
@@ -2630,7 +3339,7 @@ function disposition(
 function commandResult(input: ExternalCommandInput): Promise<ExternalCommandResult> {
   return Promise.resolve(
     input.args?.includes("observer")
-      ? externalResult(input, JSON.stringify(observerRunningResult()), 0)
+      ? externalResult(input, JSON.stringify(observerRunningResult(input)), 0)
       : externalResult(input, "", 0),
   );
 }
@@ -2712,16 +3421,43 @@ function runtimePort(): UpdateRuntimeConvergencePort {
     }),
     convergeObserver: async () => undefined,
     reconcile: async () => undefined,
+    hookFailureRecoveryCommands: () => [],
     recoveryCommands: () => [],
   };
 }
 
-function observerRunningResult() {
+function observerRunningResult(input?: ExternalCommandInput) {
+  const expectedSocket = internalUpdateOption(
+    input,
+    "--internal-update-expected-socket",
+    config.observer.socketPath,
+  );
+  const expectedBuild = internalUpdateOption(
+    input,
+    "--internal-update-expected-build-selector",
+    `1.0.0+station.${identityA}`,
+  );
   return {
     status: "running" as const,
-    socketPath: "/tmp/station/observer.sock",
-    health: { schemaVersion: STATION_SCHEMA_VERSION, status: "healthy" as const },
+    socketPath: expectedSocket,
+    health: {
+      schemaVersion: STATION_SCHEMA_VERSION,
+      status: "healthy" as const,
+      pid: 4242,
+      startedAt: "2026-08-21T16:00:00.000Z",
+      version: expectedBuild,
+      socketPath: expectedSocket,
+    },
   };
+}
+
+function internalUpdateOption(
+  input: ExternalCommandInput | undefined,
+  option: string,
+  fallback: string,
+): string {
+  const index = input?.args?.indexOf(option) ?? -1;
+  return index < 0 ? fallback : (input?.args?.[index + 1] ?? fallback);
 }
 
 function observerFailureResult(input: ExternalCommandInput, secret: string): ExternalCommandResult {
@@ -2807,18 +3543,43 @@ async function successfulSuccessorReport(
   return UpdateCommandReportSchema.parse(JSON.parse(child.stdout));
 }
 
+async function managerSuccessorResult(
+  input: ExternalCommandInput,
+  managerCommand: readonly [string, ...string[]],
+): Promise<ExternalCommandResult> {
+  const successor = probe("current", "2.0.0", "2.0.0", managerCommand, "homebrew");
+  const updateIndex = input.args?.indexOf("update") ?? -1;
+  if (updateIndex < 0 || input.args === undefined) throw new Error("missing successor update argv");
+  const nested = await runUpdateCommand(input.args.slice(updateIndex + 1), options(), {
+    probes: [successor.probe],
+    buildInfo: build(identityB, "2.0.0"),
+    convergenceInspection: inspection(
+      preflight("2.0.0", "2.0.0", {
+        observer: matchingObserver(identityB),
+        host: matchingHost(identityB),
+      }),
+    ),
+    commandRunner: commandResult,
+  });
+  return externalResult(input, JSON.stringify(nested.output), nested.code);
+}
+
 function successorRuntimeResult(input: ExternalCommandInput): Promise<ExternalCommandResult> {
+  const restarting = preflight("2.0.0", "2.0.0", {
+    observer: {
+      ...matchingObserver(identityA),
+      relation: "different",
+      replacementAdmission: "candidate-wins",
+    },
+    host: matchingHost(identityB),
+  });
   return successorResultFromInspections(input, [
+    restarting,
+    restarting,
     preflight("2.0.0", "2.0.0", {
       observer: {
-        ...matchingObserver(identityA),
-        relation: "different",
-        replacementAdmission: "candidate-wins",
+        ...matchingObserver(identityB),
       },
-      host: matchingHost(identityB),
-    }),
-    preflight("2.0.0", "2.0.0", {
-      observer: matchingObserver(identityB),
       host: matchingHost(identityB),
     }),
   ]);

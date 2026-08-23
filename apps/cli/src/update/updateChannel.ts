@@ -36,10 +36,15 @@ export type UpdateOperationOptions = {
   drivePackageManager?: boolean;
 };
 
+export type UpdateInstalledTargetOptions = UpdateOperationOptions & {
+  inheritedManagerCommand?: UpdateCommandArgv;
+};
+
 /**
  * DRIVEN PORT
  *
- * Defines one install owner's typed detect, plan, apply, exact installed-target proof, and optional adapter-owned recovery lifecycle.
+ * Defines one install owner's typed detect, plan, apply, exact installed-target and inherited
+ * manager-command proof, and optional adapter-owned recovery lifecycle.
  */
 export interface UpdateChannel<
   Detection extends UpdateDetectionBase = UpdateDetectionBase,
@@ -49,10 +54,10 @@ export interface UpdateChannel<
   readonly id: UpdateChannelId;
   detect(options?: UpdateOperationOptions): Promise<Detection | undefined>;
   plan(detection: Detection, options?: UpdateOperationOptions): Promise<Plan>;
-  /** Proves local ownership of an already-installed pinned target without remote/latest discovery. */
+  /** Proves local ownership and inherited manager argv for a pinned target without latest discovery. */
   proveInstalledTarget(
     target: UpdateArtifact,
-    options?: UpdateOperationOptions,
+    options?: UpdateInstalledTargetOptions,
   ): Promise<UpdatePlanBase | undefined>;
   apply(plan: Plan, options?: UpdateOperationOptions): Promise<Report>;
   applyRecoveryCommands?(plan: Plan, error: unknown): readonly UpdateCommandArgv[] | undefined;

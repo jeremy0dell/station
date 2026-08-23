@@ -293,10 +293,13 @@ generic executable or argv mismatch, lower builds, and other identity mismatches
 remain blocked, and this exception never authorizes automatic signals or
 destructive reaping.
 
-Dry-run v4 output retains the selected artifact, redacted aggregate, typed
-component decisions, SHA-256 plan digest, and seven ordered convergence phases,
-all explicitly marked non-executed. `--dry-run --reap` is the recovery-focused
-spelling for reviewing non-resumable consequences. The public JSON and text
+Dry-run output retains the selected artifact, exact install owner and action,
+redacted aggregate, typed component decisions, SHA-256 plan digest, and seven
+ordered convergence phases, all explicitly marked non-executed. `--dry-run
+--reap` reviews every exact Station-owned terminal and session disposition,
+whether #641 would need to preserve, reap, or block on it, and the correlated
+recovery completeness or non-resumable consequence. It grants no authorization
+and performs no action. The public JSON and text
 never include Observer process tokens, opaque Station recovery-handle IDs,
 provider-native payloads, or destructive process-group targets. Private
 ownership and selected Station-handle facts can change the digest, but the hash
@@ -351,9 +354,11 @@ supported public Station distribution channels; it preserves manager ownership
 for installations that already use them. The aggregate inspection and typed
 component decisions remain visible when application is deferred, but deferral
 controls the terminal status and every runtime phase remains non-executed. The
-strict v4 artifact application field retains that exact argv for manager-owned
-preview and deferral only; both JSON and text preserve it, with text using safe
-shell quoting. Use `--channel <id>` to resolve an
+strict artifact application field retains that exact argv for manager-owned
+preview and deferral only; every convergence plan and digest binds the selected
+owner, mutation action, and exact manager argv, and an executed artifact action
+audits the same typed commitment. Both JSON and text preserve public argv, with
+text using safe shell quoting. Use `--channel <id>` to resolve an
 ambiguous installation, but explicit selection never bypasses ownership proof.
 
 Dev-checkout preparation runs after every fast-forward rather than guessing from
@@ -382,14 +387,17 @@ a signal.
 
 When artifact application is admitted, the owning channel applies it and the
 exact successor launcher proves the incumbent-selected artifact and revision
-are now current through the owning channel's local installed-target proof. It
+are now current through the owning channel's local installed-target proof. The
+incumbent also pins the selected channel and exact manager argv; a manager-owned
+successor validates that inherited argv against the active local package or tool
+before using it in its no-op artifact context. It
 does not rerun latest discovery, remote pagination, or target availability
 checks after the artifact is committed. It then performs a fresh inspection,
 executes its own safe hook, Observer, Host, and reconcile decisions in canonical
 order, and verifies a final no-op plan. Current-artifact actions stay with the
 current launcher. The incumbent accepts the successor result only when its
-channel, installed and target artifacts, every nested convergence artifact,
-`successor-cli` evaluator, and one known immutable build identity still match
+channel, install owner/action and manager argv, installed and target artifacts,
+every nested convergence artifact, `successor-cli` evaluator, and one known immutable build identity still match
 the inherited pin. Preview, deferral, nested artifact application, malformed
 JSON, and report/exit contradictions fail as successor-boundary errors. Host
 execution cannot change action after inspection: idle
@@ -401,7 +409,13 @@ completed. A live Host handoff also requires a strict receipt containing
 the exact planned `{ terminalTargetId, ptyId, ptyInstanceId }` set and final
 inspection must retain that set; absence is not treated as an unevidenced
 natural exit.
-The v4 report retains the initial evidence, every executed plan digest and
+Observer execution likewise cannot act from a stale inspection. Immediately
+before start or restart, the CLI re-inspects and requires the exact planned PID,
+OS start, process token, build selector, configured socket, and selected Station
+recovery handle set. The child then admits success only for a healthy running
+Observer with that exact socket and immutable build identity. Any drift or
+incomplete result stops before Host or reconcile mutation.
+The current report retains the initial evidence, every executed plan digest and
 action audit, successor evidence when applicable, and the final verified
 aggregate. `current` and `updated` mean both artifact and required live runtime
 components are proven converged; successful commands alone cannot produce
@@ -409,6 +423,14 @@ either status. `planned` is reserved for dry-run preview; after mutation, a
 fresh plan with remaining actions is a verification failure with nonzero exit.
 A verified install or Git fast-forward is not rolled back after a later runtime
 failure.
+
+Artifact failure recovery remains install-channel owned when the channel has an
+exact repair sequence. In particular, a partially advanced development checkout
+prints its frozen install, build, relink, and update sequence in order instead of
+substituting a generic retry that could misread the revision as repaired. Hook
+failures retain each provider's doctor, retry, or explicit-takeover guidance in
+stable provider order; Station prints takeover as operator guidance and never
+executes it automatically.
 
 Current compiled binaries, including immutable `.5.2`, use in-process Bun PTYs
 and therefore take the pre-mutation `reap-required` path when busy. Source mode

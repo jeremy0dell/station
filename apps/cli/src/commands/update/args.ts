@@ -1,4 +1,9 @@
-import type { HostHandoffFidelity, UpdateArtifact } from "@station/contracts";
+import {
+  type HostHandoffFidelity,
+  type UpdateArtifact,
+  type UpdateCommandArgv,
+  UpdateCommandArgvSchema,
+} from "@station/contracts";
 import { type UpdateChannelId, updateChannelIds } from "../../update/updateChannel.js";
 import type { UpdateConvergenceRequest } from "../../update/updateConvergencePort.js";
 
@@ -22,6 +27,7 @@ export function parseUpdateRequest(args: readonly string[]): UpdateRequest {
   let evaluator: UpdateRequest["evaluator"] = "incumbent-cli";
   let successorTargetVersion: string | undefined;
   let successorTargetRevision: string | undefined;
+  let successorManagerCommand: UpdateCommandArgv | undefined;
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
     if (arg === "--channel") {
@@ -72,6 +78,20 @@ export function parseUpdateRequest(args: readonly string[]): UpdateRequest {
       index += 1;
       continue;
     }
+    if (arg === "--internal-selected-manager-command") {
+      if (successorManagerCommand !== undefined) throw new Error(updateUsage);
+      const value = args[index + 1];
+      if (value === undefined || value.length === 0 || value.startsWith("--")) {
+        throw new Error(updateUsage);
+      }
+      try {
+        successorManagerCommand = UpdateCommandArgvSchema.parse(JSON.parse(value));
+      } catch {
+        throw new Error(updateUsage);
+      }
+      index += 1;
+      continue;
+    }
     if (arg === "--drive-package-manager") {
       if (packageManager === "drive") {
         throw new Error("--drive-package-manager may be provided only once.");
@@ -106,9 +126,14 @@ export function parseUpdateRequest(args: readonly string[]): UpdateRequest {
       "stn update --reap is not an execution mode yet. Use --dry-run --reap to inspect non-resumable consequences without mutation.",
     );
   }
+  const managerOwnedChannel =
+    channel === "homebrew" || channel === "npm-global" || channel === "mise";
   if (
     (evaluator === "successor-cli") !== (successorTargetVersion !== undefined) ||
-    (successorTargetRevision !== undefined && successorTargetVersion === undefined)
+    (successorTargetRevision !== undefined && successorTargetVersion === undefined) ||
+    (successorManagerCommand !== undefined && evaluator !== "successor-cli") ||
+    (evaluator === "successor-cli" &&
+      (channel === undefined || managerOwnedChannel !== (successorManagerCommand !== undefined)))
   ) {
     throw new Error(updateUsage);
   }
@@ -128,5 +153,6 @@ export function parseUpdateRequest(args: readonly string[]): UpdateRequest {
     evaluator,
     ...(handoff === undefined ? {} : { handoff }),
     ...(successorTarget === undefined ? {} : { successorTarget }),
+    ...(successorManagerCommand === undefined ? {} : { successorManagerCommand }),
   };
 }

@@ -437,11 +437,11 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           command -v tmux >/dev/null 2>&1 || brew install tmux
-          v4_incumbent_version="0.0.0-0.v4-smoke.${GITHUB_RUN_ID}.${GITHUB_RUN_ATTEMPT}"
-          pnpm build:binary -- --version "$v4_incumbent_version"
-          cp station/dist/bin/stn "$RUNNER_TEMP/v4-update-incumbent"
-          chmod 0755 "$RUNNER_TEMP/v4-update-incumbent"
-          printf 'V4_SMOKE_INCUMBENT_VERSION=%s\n' "$v4_incumbent_version" >> "$GITHUB_ENV"
+          current_incumbent_version="0.0.0-0.current-smoke.${GITHUB_RUN_ID}.${GITHUB_RUN_ATTEMPT}"
+          pnpm build:binary -- --version "$current_incumbent_version"
+          cp station/dist/bin/stn "$RUNNER_TEMP/current-update-incumbent"
+          chmod 0755 "$RUNNER_TEMP/current-update-incumbent"
+          printf 'CURRENT_SMOKE_INCUMBENT_VERSION=%s\n' "$current_incumbent_version" >> "$GITHUB_ENV"
       - name: Fetch tagged installer
         env:
           GH_HOST: github.com
@@ -463,11 +463,10 @@ jobs:
           /bin/sh -n "$installer"
           grep -Fx "embedded_version=\"$TAG\"" "$installer"
           chmod 0700 "$installer"
-      - name: Fetch staged update assets and exact predecessor
+      - name: Fetch staged update assets
         if: runner.os == 'macOS'
         env:
           GH_TOKEN: ${{ github.token }}
-          PREVIOUS_TAG: ${{ needs.validate.outputs.previous_tag }}
           RELEASE_ID: ${{ needs['create-draft'].outputs.release_id }}
           TAG: ${{ needs.validate.outputs.tag }}
           TARGET: ${{ matrix.target }}
@@ -489,21 +488,6 @@ jobs:
             grep -E "  (install\\.sh|stn-v$target_version-$TARGET\\.tar\\.gz)$" SHA256SUMS |
               sha256sum -c -
           )
-
-          predecessor_installer="$RUNNER_TEMP/previous-install.sh"
-          env -u GH_TOKEN -u GITHUB_TOKEN -u GH_ENTERPRISE_TOKEN -u GITHUB_ENTERPRISE_TOKEN \
-            curl --disable --fail --silent --show-error --location \
-              --proto '=https' --proto-redir '=https' --tlsv1.2 \
-              --output "$predecessor_installer" \
-              "https://github.com/$GITHUB_REPOSITORY/releases/download/$PREVIOUS_TAG/install.sh"
-          grep -Fx "embedded_version=\"$PREVIOUS_TAG\"" "$predecessor_installer"
-          previous_home="$RUNNER_TEMP/update-incumbent-home"
-          previous_bin="$RUNNER_TEMP/update-incumbent/bin"
-          mkdir -p "$previous_home"
-          HOME="$previous_home" \
-            XDG_DATA_HOME="$previous_home/.local/share" \
-            /bin/sh "$predecessor_installer" --install-dir "$previous_bin"
-          test "$("$previous_bin/stn" --version)" = "${PREVIOUS_TAG#v}"
       - name: Seed existing installation
         run: |
           install_home="$RUNNER_TEMP/install-home"
@@ -579,56 +563,54 @@ jobs:
             PATH="$bin_dir:$runtime_path" \
             stn --version)"
           test "$actual" = "$EXPECTED_VERSION"
-      - name: Prove compatible transition from the exact predecessor
+      - name: Prove current-contract no-Host convergence against the staged target
         if: runner.os == 'macOS'
         env:
-          PREVIOUS_TAG: ${{ needs.validate.outputs.previous_tag }}
           TAG: ${{ needs.validate.outputs.tag }}
         run: |
           target_build_identity="$(jq -er .targetBuildIdentity candidate/manifest.json)"
           pnpm smoke:update -- \
-            --incumbent-binary "$RUNNER_TEMP/update-incumbent/bin/stn" \
-            --incumbent-version "${PREVIOUS_TAG#v}" \
+            --incumbent-binary "$RUNNER_TEMP/current-update-incumbent" \
+            --incumbent-version "$CURRENT_SMOKE_INCUMBENT_VERSION" \
             --target-release-dir "$RUNNER_TEMP/update-release" \
             --target-tag "$TAG" \
             --target-build-identity "$target_build_identity" \
-            --scenarios no-host \
-            --incumbent-contract legacy-compatible
-      - name: Prove v4 Host convergence against the staged target
+            --scenarios no-host
+      - name: Prove current Host convergence against the staged target
         if: runner.os == 'macOS'
         env:
           TAG: ${{ needs.validate.outputs.tag }}
         run: |
           target_build_identity="$(jq -er .targetBuildIdentity candidate/manifest.json)"
           pnpm smoke:update -- \
-            --incumbent-binary "$RUNNER_TEMP/v4-update-incumbent" \
-            --incumbent-version "$V4_SMOKE_INCUMBENT_VERSION" \
+            --incumbent-binary "$RUNNER_TEMP/current-update-incumbent" \
+            --incumbent-version "$CURRENT_SMOKE_INCUMBENT_VERSION" \
             --target-release-dir "$RUNNER_TEMP/update-release" \
             --target-tag "$TAG" \
             --target-build-identity "$target_build_identity" \
             --scenarios host-convergence
-      - name: Prove v4 public-report redaction against the staged target
+      - name: Prove current public-report redaction against the staged target
         if: runner.os == 'macOS'
         env:
           TAG: ${{ needs.validate.outputs.tag }}
         run: |
           target_build_identity="$(jq -er .targetBuildIdentity candidate/manifest.json)"
           pnpm smoke:update -- \
-            --incumbent-binary "$RUNNER_TEMP/v4-update-incumbent" \
-            --incumbent-version "$V4_SMOKE_INCUMBENT_VERSION" \
+            --incumbent-binary "$RUNNER_TEMP/current-update-incumbent" \
+            --incumbent-version "$CURRENT_SMOKE_INCUMBENT_VERSION" \
             --target-release-dir "$RUNNER_TEMP/update-release" \
             --target-tag "$TAG" \
             --target-build-identity "$target_build_identity" \
             --scenarios redaction
-      - name: Prove v4 pre-mutation reap-required against the staged target
+      - name: Prove current pre-mutation reap-required against the staged target
         if: runner.os == 'macOS'
         env:
           TAG: ${{ needs.validate.outputs.tag }}
         run: |
           target_build_identity="$(jq -er .targetBuildIdentity candidate/manifest.json)"
           pnpm smoke:update -- \
-            --incumbent-binary "$RUNNER_TEMP/v4-update-incumbent" \
-            --incumbent-version "$V4_SMOKE_INCUMBENT_VERSION" \
+            --incumbent-binary "$RUNNER_TEMP/current-update-incumbent" \
+            --incumbent-version "$CURRENT_SMOKE_INCUMBENT_VERSION" \
             --target-release-dir "$RUNNER_TEMP/update-release" \
             --target-tag "$TAG" \
             --target-build-identity "$target_build_identity" \

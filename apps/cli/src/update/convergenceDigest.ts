@@ -91,6 +91,14 @@ function canonicalPlan(plan: UpdateConvergencePlanDraft): CanonicalValue {
             }
           : { status: "not-yet-provable" },
     },
+    installation: {
+      owner: plan.installation.owner,
+      action: plan.installation.action,
+      managerCommand:
+        plan.installation.managerCommand === undefined
+          ? null
+          : [...plan.installation.managerCommand],
+    },
     status: plan.status,
     components: plan.components as unknown as CanonicalRecord,
     phases: plan.phases as unknown as CanonicalValue[],

@@ -33,7 +33,7 @@ const homeRelativePathPattern = /(?<![A-Za-z0-9_])~[\\/][^\s"'<>|]+/gu;
 /**
  * ADAPTER
  *
- * Projects one internal convergence outcome into the strict, redaction-safe public v4 report.
+ * Projects one internal convergence outcome into the strict, redaction-safe public current report.
  */
 export function createPublicUpdateReport(input: PublicUpdateReportInput): UpdateCommandReport {
   const core = {
@@ -78,7 +78,7 @@ export function createPublicUpdateReport(input: PublicUpdateReportInput): Update
 /**
  * ADAPTER
  *
- * Defines the deterministic confidentiality decision for one strict v4 update result. Every nested
+ * Defines the deterministic confidentiality decision for one current strict update result. Every nested
  * SafeError and recovery argument crosses this policy, including successor and post-action
  * evidence, without weakening report invariants or optional-field absence.
  */
