@@ -36,17 +36,10 @@ export type StationPopupLayout = {
 const DEFAULT_POPUP_PERCENT = 60;
 const MIN_POPUP_WIDTH = 60;
 const MIN_POPUP_HEIGHT = 16;
-/**
- * One reserved row at the very top. Originally the header lived here; the
- * header is now the floating DynamicStationButton (zero layout), so this is a
- * thin top margin that keeps the popup off the top edge (and clear of the
- * collapsed button in the corner).
- */
-const HEADER_ROWS = 1;
 
 /**
- * Centered popup, sized by config percentages, clamped to the 60x16 minimum the
- * dashboard's row solver and help panel need (and to small-terminal area).
+ * Renderer-boundary popup geometry, sized by config percentages and clamped to
+ * its minimum presentation size and the terminal canvas.
  */
 export function stationPopupLayout(
   terminalWidth: number,
@@ -54,7 +47,7 @@ export function stationPopupLayout(
   options: { widthPercent?: number; heightPercent?: number } = {},
 ): StationPopupLayout {
   const availableWidth = Math.max(1, terminalWidth);
-  const availableHeight = Math.max(1, terminalHeight - HEADER_ROWS);
+  const availableHeight = Math.max(1, terminalHeight);
   const widthFraction = (options.widthPercent ?? DEFAULT_POPUP_PERCENT) / 100;
   const heightFraction = (options.heightPercent ?? DEFAULT_POPUP_PERCENT) / 100;
   const width = Math.min(
@@ -67,7 +60,7 @@ export function stationPopupLayout(
   );
   return {
     left: Math.max(0, Math.floor((availableWidth - width) / 2)),
-    top: HEADER_ROWS + Math.max(0, Math.floor((availableHeight - height) / 2)),
+    top: Math.max(0, Math.floor((availableHeight - height) / 2)),
     width,
     height,
   };

@@ -318,7 +318,7 @@ degrades to defaults plus a diagnostic — it never crashes the daemon.
 | `scroll_on_output` | `freeze` \| `shift` \| `follow` | `freeze` | Scroll behavior while scrolled up. `freeze` preserves visible lines; `shift` preserves distance from bottom; `follow` snaps to live. At the bottom, all modes track live. |
 | `scrollback_lines` | int 0-10000 | `10000` | Normal-buffer history retained by each native pane. Lower values reduce per-pane memory and resize-reflow work; `0` disables pane scrollback. Existing screens keep their current depth; changes apply to newly created screens. |
 | `overlay_width_percent` | int 10-100 | `60` | Width of the native Station overlay as a percentage of the terminal width, still clamped to the minimum dashboard size and available space. |
-| `overlay_height_percent` | int 10-100 | `60` | Height of the native Station overlay as a percentage of the terminal height below the header row, still clamped to the minimum dashboard size and available space. |
+| `overlay_height_percent` | int 10-100 | `60` | Height of the native Station overlay as a percentage of the terminal height, still clamped to the minimum dashboard size and available space. |
 | `welcome_on_boot` | bool | `true` | Show the welcome screen over the restored layout on cold boot. `false` boots straight in. |
 | `automations` | `Automation[]` | one `see-diff` automation | Named, user-triggerable pane layouts in the pane context menu. Omit the key to keep the built-in `see-diff`; set `automations = []` to disable it. Automation ids must be unique. |
 
