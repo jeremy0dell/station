@@ -98,13 +98,13 @@ FLEET  ● 0 ready  ⠋ 3 working  ! 1 needs you  x 1 exited  ○ 6 idle  1 · 1
 
 exports[`modal flow golden frames renders the Group menu above a short viewport 1`] = `
 "  ┌─Design refresh───────────┐
-FL│▸Quick session           Q│
-──│ New session…            N│
-  │──────────────────────────│
- ▼│ Group settings…         S│
-╭ │──────────────────────────│
-▼ │ Remove Group…           R│
-──└──────────────────────────┘
+FL│ New session…            N│
+──│──────────────────────────│
+  │ Group settings…         S│
+ ▼│──────────────────────────│
+╭ │▸Remove Group…           R│
+▼ └──────────────────────────┘
+───────────────────────────── 
 ↵ activate  N new  ⇥ next  /… 
 "
 `;
@@ -284,11 +284,11 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0
 ▏ FILTER /▏               10/10 matches 
 ┌────────────────────────────────┐] [▾] 
 │[←] STATUS CONDITION         [×]│      
-│  5 [ ] Idle                    │t     
-│  6 [ ] Exited                  │      
-│▸ 7 [ ] No agent                │g     
-│  Done (Enter)                  │      
-└────────────────────────────────┘───── 
+│  6 [ ] Exited                  │t     
+│▸ 7 [ ] No agent                │      
+│  Done (Enter)                  │g     
+└────────────────────────────────┘      
+─────────────────────────────────────── 
  CONDITION  ← fields Sp toggle Esc clo… 
 "
 `;
@@ -734,7 +734,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
  [9] ○ api-cache                          opencode  idle           +14 -6 #5 x1 
  [a] ? metadata-refresh                   opencode  unknown           +3 -1 #10 
                                                                                 
-Rename: ↑↓ move · ↵ choose · 1-9/a-z or click                     [sh] [qs] [▾] 
+Rename: ↑↓ move · ↵ choose · 1-9/a-z or click                                   
                                                                                 
 ─────────────────────────────────────────────────────────────────────────────── 
 ↵ activate  N new  ⇥ next  / filter  X delete  ? help  Q/esc:close              

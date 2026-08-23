@@ -5,7 +5,6 @@ import {
   toastBorderColor,
   toastCopyText,
   toastDetail,
-  toastOverlayLayout,
   toastTitle,
  } from "@station/dashboard-core/selectors";
 import type { TuiToastEntry } from "@station/dashboard-core/state";
@@ -21,18 +20,14 @@ import { useStationHoverState, useStationMouse, stationMouseProps } from "./stat
 
 export type ToastOverlayViewProps = {
   columns: number;
-  rows: number;
   toast: TuiToastEntry | undefined;
-  promptRows: number;
   hiddenByScreen: boolean;
   onCopyNotice: (text: string) => void;
 };
 
 export function ToastOverlayView({
   columns,
-  rows,
   toast,
-  promptRows,
   hiddenByScreen,
   onCopyNotice,
 }: ToastOverlayViewProps) {
@@ -43,22 +38,18 @@ export function ToastOverlayView({
   }
 
   const detail = toastDetail(toast);
-  const layout = toastOverlayLayout({
-    columns,
-    rows,
-    promptRows,
-  });
-  if (layout === undefined) {
-    return null;
-  }
+  const geometry = toastSurfaceGeometry(columns);
+  // This is local breathing room inside the notice region; dashboard chrome is outside the parent.
+  const visualBottomInset = 1;
 
   return (
     <box
       position="absolute"
-      left={layout.left}
-      bottom={layout.bottom}
-      width={layout.width}
-      maxHeight={layout.maxHeight}
+      id="station-toast-surface"
+      right={geometry.inset}
+      bottom={visualBottomInset}
+      width={geometry.width}
+      maxHeight="100%"
       zIndex={20}
       border
       overflow="hidden"
@@ -93,6 +84,15 @@ export function ToastOverlayView({
       </box>
     </box>
   );
+}
+
+function toastSurfaceGeometry(columns: number): { width: number; inset: number } {
+  const available = Math.max(1, Math.floor(columns));
+  const inset = available >= 5 ? 2 : 0;
+  return {
+    width: Math.max(1, Math.min(72, available - inset * 2)),
+    inset,
+  };
 }
 
 function ToastCopyControl({ text, onCopy }: { text: string; onCopy: (text: string) => void }) {

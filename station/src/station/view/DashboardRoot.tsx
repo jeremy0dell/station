@@ -2,13 +2,10 @@
 // between the loading/waiting/unavailable bodies and the live dashboard —
 // mirroring apps/tui's App.tsx branch for the popup posture, including the
 // toast overlay, kind-specific expiry timers, and explicit error dismissal.
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { useStore } from "zustand/react";
 import type { DashboardActions, DashboardStateSource } from "@station/dashboard-core/runtime";
-import {
-  commandPromptRows,
-  snapshotLoadingLines,
-} from "@station/dashboard-core/selectors";
+import { snapshotLoadingLines } from "@station/dashboard-core/selectors";
 import {
   activeTuiToast,
   isTuiToastHiddenByScreen,
@@ -16,9 +13,8 @@ import {
   tuiScreenBehavior,
  } from "@station/dashboard-core/state";
 import { ActiveScreenOverlayView } from "./ActiveScreenOverlayView.js";
-import { CommandPromptView } from "./CommandPromptView.js";
-import { DashboardFooterView } from "./DashboardFooterView.js";
-import { DashboardView, Divider } from "./DashboardView.js";
+import { DashboardChromeView } from "./DashboardChromeView.js";
+import { DashboardView } from "./DashboardView.js";
 import {
   StationHoverProvider,
   useStationHoverEnabled,
@@ -93,9 +89,7 @@ export function DashboardRoot({
   const toastOverlay = (
     <ToastOverlayView
       columns={columns}
-      rows={rows}
       toast={activeToast}
-      promptRows={commandPromptRows(screen)}
       hiddenByScreen={toastHiddenByScreen}
       onCopyNotice={onCopyNotice}
     />
@@ -104,22 +98,24 @@ export function DashboardRoot({
   if (loading || snapshot === undefined) {
     // Keep both root branches padding-free because OpenTUI retains a removed inset during reconciliation.
     return (
-      <box width="100%" flexGrow={1} flexDirection="column">
-        <box flexDirection="column" flexGrow={1}>
-          {snapshotLoadingLines(loading, observerConnectionStatus).map((line, index) => (
-            <text
-              key={`${index}:${line.text}`}
-              fg={toOpenTuiColor(
-                line.color === "gray" ? theme.text.muted : theme.text.primary,
-              )}
-            >
-              {line.text}
-            </text>
-          ))}
-        </box>
-        <Divider columns={contentColumns} />
-        <DashboardFooterView state={state} columns={contentColumns} />
-        {toastOverlay}
+      <box width="100%" flexGrow={1} minHeight={0} flexDirection="column">
+        <StationHoverProvider value={backgroundHoverEnabled}>
+          <DashboardNoticeRegion overlay={toastOverlay}>
+            <box flexDirection="column" flexGrow={1} minHeight={0}>
+              {snapshotLoadingLines(loading, observerConnectionStatus).map((line, index) => (
+                <text
+                  key={`${index}:${line.text}`}
+                  fg={toOpenTuiColor(
+                    line.color === "gray" ? theme.text.muted : theme.text.primary,
+                  )}
+                >
+                  {line.text}
+                </text>
+              ))}
+            </box>
+          </DashboardNoticeRegion>
+          <DashboardChromeView state={state} screen={screen} columns={contentColumns} />
+        </StationHoverProvider>
       </box>
     );
   }
@@ -137,16 +133,16 @@ export function DashboardRoot({
   return (
     <box width="100%" flexGrow={1} minHeight={0} flexDirection="column">
       <StationHoverProvider value={backgroundHoverEnabled}>
-        <DashboardView
-          snapshot={snapshot}
-          viewState={viewState}
-          screen={screen}
-          layout={layout}
-          columns={columns}
-        />
-        <DashboardFooterView state={state} columns={contentColumns} />
-        <CommandPromptView screen={screen} />
-        {toastOverlay}
+        <DashboardNoticeRegion overlay={toastOverlay}>
+          <DashboardView
+            snapshot={snapshot}
+            viewState={viewState}
+            screen={screen}
+            layout={layout}
+            columns={columns}
+          />
+        </DashboardNoticeRegion>
+        <DashboardChromeView state={state} screen={screen} columns={contentColumns} />
       </StationHoverProvider>
       <ActiveScreenOverlayView
         snapshot={snapshot}
@@ -158,6 +154,29 @@ export function DashboardRoot({
         widgets={liveWidgets}
         widgetsPersisted={widgetsPersisted}
       />
+    </box>
+  );
+}
+
+function DashboardNoticeRegion({
+  children,
+  overlay,
+}: {
+  children: ReactNode;
+  overlay: ReactNode;
+}) {
+  return (
+    <box
+      id="station-dashboard-notice-region"
+      width="100%"
+      flexGrow={1}
+      minHeight={0}
+      flexDirection="column"
+      position="relative"
+      overflow="hidden"
+    >
+      {children}
+      {overlay}
     </box>
   );
 }

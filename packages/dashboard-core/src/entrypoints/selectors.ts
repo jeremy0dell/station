@@ -7,9 +7,9 @@
  * mutation, lifecycle, or effects live here.
  */
 
+export type { CommandPromptModel } from "../components/Dashboard/content.js";
 export {
-  commandPromptLineForScreen,
-  commandPromptRows,
+  commandPromptForScreen,
   emptyProjectLabel,
   FIRST_RUN_BODY_LABEL,
   fleetCountsLabel,
@@ -73,8 +73,6 @@ export {
   toastDetail,
   toastTitle,
 } from "../components/ToastOverlay/content.js";
-
-export { toastOverlayLayout } from "../components/ToastOverlay/layout.js";
 export type { WidgetSettingsLine } from "../components/WidgetSettingsPanel/content.js";
 export { widgetSettingsPanelModel } from "../components/WidgetSettingsPanel/content.js";
 export type {

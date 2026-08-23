@@ -43,6 +43,7 @@ import {
   type DashboardScrollController,
 } from "./layout/scrollViewport.js";
 import { DashboardFilterConditionView } from "./DashboardFilterConditionView.js";
+import { DashboardDividerView } from "./DashboardDividerView.js";
 import { GroupMenuView } from "./GroupMenuView.js";
 import { ProjectMenuView } from "./ProjectMenuView.js";
 
@@ -145,7 +146,7 @@ export function DashboardView({
       {firstRun ? null : (
         <FleetBar summary={fleet} counts={snapshot.counts} columns={contentColumns} />
       )}
-      <Divider columns={contentColumns} />
+      <DashboardDividerView />
       <box
         flexShrink={0}
         position="relative"
@@ -176,7 +177,6 @@ export function DashboardView({
         </DashboardScrollViewport>
       )}
       <DashboardScrollIndicatorView direction="below" overflow={slots.sessionOverflow} />
-      <Divider columns={contentColumns} />
       {screen.name === "projectMenu" && menuAnchorRenderableId !== undefined ? (
         <ProjectMenuView
           screen={screen}
@@ -196,11 +196,6 @@ export function DashboardView({
       ) : null}
     </box>
   );
-}
-
-export function Divider({ columns }: { columns: number }) {
-  const theme = useStationTheme();
-  return <text flexShrink={0} fg={toOpenTuiColor(theme.text.muted)}>{"─".repeat(Math.max(1, columns))}</text>;
 }
 
 // Pinned fleet triage bar: glyph + colour reinforce each status lane. ready/

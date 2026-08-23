@@ -157,8 +157,15 @@ const CASES: ModalCase[] = [
     keys: [],
     size: { width: 30, height: 9 },
     snapshot: groupedManyProjectsSnapshot,
-    prepare: (state) => openGroupMenu(state, "group_design_refresh"),
-    expect: ["Quick session", "New session…", "Group settings…", "Remove Group…"],
+    prepare: (state) => {
+      let opened = openGroupMenu(state, "group_design_refresh");
+      for (let index = 0; index < 3; index += 1) {
+        opened = handleTuiKey(opened, { input: "", downArrow: true }).state;
+      }
+      return opened;
+    },
+    expect: ["New session…", "Group settings…", "Remove Group…"],
+    reject: ["Quick session"],
   },
   {
     name: "create group sheet",

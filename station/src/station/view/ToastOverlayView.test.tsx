@@ -34,6 +34,59 @@ afterEach(() => {
 });
 
 describe("ToastOverlayView actions", () => {
+  it("keeps a wrapped prompt and notice in disjoint structural regions through resize", async () => {
+    const { runtime } = makeStationTestRuntime({ snapshot: manyProjectsSnapshot() });
+    runtime.start();
+    runtime.actions.handleKey({ input: "R" });
+    const setup = await testRender(
+      <StationThemeProvider theme={nativeStationTheme}>
+        <DashboardRoot
+          state={runtime.state}
+          actions={runtime.actions}
+          layout={runtime.layout}
+          columns={28}
+          rows={16}
+          onCopyNotice={() => {}}
+        />
+      </StationThemeProvider>,
+      { width: 28, height: 16 },
+    );
+    teardowns.push(() => setup.renderer.destroy());
+    await act(async () => {
+      runtime.actions.pushToast(NOTICE);
+      await Promise.resolve();
+    });
+    await setup.flush();
+
+    const prompt = setup.renderer.root.findDescendantById("station-command-prompt");
+    const chrome = setup.renderer.root.findDescendantById("station-dashboard-chrome");
+    const toast = setup.renderer.root.findDescendantById("station-toast-surface");
+    expect(prompt?.height).toBeGreaterThan(1);
+    expect(chrome).toBeDefined();
+    expect(toast).toBeDefined();
+    if (chrome === undefined || toast === undefined) {
+      throw new Error("dashboard chrome and toast surface must render");
+    }
+    expect(toast.y + toast.height).toBeLessThanOrEqual(chrome.y);
+
+    await act(async () => {
+      setup.renderer.resize(22, 12);
+      await setup.flush();
+      await setup.renderOnce();
+    });
+    expect(toast.y + toast.height).toBeLessThanOrEqual(chrome.y);
+    expect(setup.captureCharFrame()).toContain("Rename:");
+
+    await act(async () => {
+      setup.renderer.resize(22, 5);
+      await setup.flush();
+      await setup.renderOnce();
+    });
+    const footer = setup.renderer.root.findDescendantById("station-dashboard-footer");
+    expect(footer?.height).toBe(1);
+    expect((footer?.y ?? 5) + (footer?.height ?? 0)).toBeLessThanOrEqual(5);
+  });
+
   it("keeps drag selection inert and copies the complete readable notice explicitly", async () => {
     const fixture = await renderNotice();
     const message = cellFor(fixture.frame(), "Worktrunk failed");

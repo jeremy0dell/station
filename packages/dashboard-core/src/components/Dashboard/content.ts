@@ -177,25 +177,14 @@ export function observerHeaderStatusForConnection(
   return undefined;
 }
 
-export type CommandPromptLine = { text: string; color: "yellow" | "red" };
+export type CommandPromptModel = { text: string; tone: "warning" | "danger" };
 
-/**
- * The prompt line per screen (the special-cased rename-slot and
- * remove-confirm lines), flattened to text+color so render adapters only
- * render. Lives beside commandPromptRows, which guards the same screens.
- */
-export function commandPromptLineForScreen(
+/** Semantic prompt content for screens that augment the dashboard chrome. */
+export function commandPromptForScreen(
   screen: DashboardScreenView,
-): CommandPromptLine | undefined {
+): CommandPromptModel | undefined {
   if (screen.name === "renameSession" && screen.step === "chooseSlot") {
-    return { text: "Rename: ↑↓ move · ↵ choose · 1-9/a-z or click", color: "yellow" };
+    return { text: "Rename: ↑↓ move · ↵ choose · 1-9/a-z or click", tone: "warning" };
   }
   return undefined;
-}
-
-export function commandPromptRows(screen: DashboardScreenView): number {
-  if (screen.name === "renameSession" && screen.step === "chooseSlot") {
-    return 2;
-  }
-  return 0;
 }
