@@ -1,16 +1,8 @@
 import type { HostHandoffFidelity, UpdateArtifact } from "@station/contracts";
 import { type UpdateChannelId, updateChannelIds } from "../../update/updateChannel.js";
+import type { UpdateConvergenceRequest } from "../../update/updateConvergencePort.js";
 
-export type UpdateRequest = {
-  channel?: UpdateChannelId;
-  mode: "preview" | "apply";
-  output: "text" | "json";
-  packageManager: "defer" | "drive";
-  handoff?: HostHandoffFidelity;
-  reap: boolean;
-  evaluator: "incumbent-cli" | "successor-cli";
-  successorTarget?: UpdateArtifact;
-};
+export type UpdateRequest = UpdateConvergenceRequest & { output: "text" | "json" };
 
 const updateUsage =
   "Usage: stn update [--channel <installer-binary|dev-checkout|homebrew|npm-global|mise>] [--dry-run] [--reap] [--json] [--drive-package-manager] [--handoff[=processes|screen] | --no-handoff]";

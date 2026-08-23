@@ -5,18 +5,65 @@ import {
   UpdateCommandReportSchema,
   updateReapEvidenceIsComplete,
 } from "@station/contracts";
-import type { ExternalCommandInput, ExternalCommandResult } from "@station/runtime";
+import {
+  type ExternalCommandInput,
+  type ExternalCommandResult,
+  stationBuildInfo,
+} from "@station/runtime";
 import { describe, expect, it, vi } from "vitest";
+import type { CliRunOptions } from "../../src/cliTypes.js";
 import { updateCommandResult } from "../../src/commands/update/report.js";
-import { runUpdateCommand } from "../../src/commands/update.js";
+import * as updateCommandAdapter from "../../src/commands/update.js";
 import type { UpdateChannelProbe } from "../../src/update/channelDetection.js";
+import { createDefaultUpdateProbes } from "../../src/update/defaultUpdateProbes.js";
+import { createPublicUpdateReport } from "../../src/update/publicUpdateReportAdapter.js";
 import type { UpdateConvergencePrivateEvidence } from "../../src/update/recoveryPreflight.js";
+import { runUpdateConvergence } from "../../src/update/updateConvergenceUseCase.js";
+import { createUpdateRuntimeConvergenceAdapter } from "../../src/update/updateRuntimeConvergenceAdapter.js";
+import { createUpdateSuccessorTransportAdapter } from "../../src/update/updateSuccessorTransportAdapter.js";
 
 const config = {
   observer: { socketPath: `/tmp/station-update-command-${process.pid}/observer.sock` },
 } as StationConfig;
 const identityA = "a".repeat(64);
 const identityB = "b".repeat(64);
+
+function runUpdateCommand(
+  args: readonly string[],
+  commandOptions: ReturnType<typeof options>,
+  overrides: NonNullable<CliRunOptions["updateDeps"]>,
+) {
+  const convergenceInspection = overrides.convergenceInspection;
+  if (convergenceInspection === undefined) throw new Error("missing test convergence inspection");
+  const buildInfo = overrides.buildInfo ?? stationBuildInfo;
+  const adapterOptions = {
+    ...(commandOptions.configPath === undefined ? {} : { configPath: commandOptions.configPath }),
+    ...(overrides.commandRunner === undefined ? {} : { commandRunner: overrides.commandRunner }),
+  };
+  const ports = {
+    convergenceInspection,
+    buildInfo,
+    probes:
+      overrides.probes ??
+      createDefaultUpdateProbes(commandOptions, {
+        buildInfo,
+        ...(overrides.executablePath === undefined
+          ? {}
+          : { executablePath: overrides.executablePath }),
+        ...(overrides.commandRunner === undefined
+          ? {}
+          : { commandRunner: overrides.commandRunner }),
+      }),
+    publicReport: overrides.publicReport ?? { create: createPublicUpdateReport },
+    runtime: overrides.runtime ?? createUpdateRuntimeConvergenceAdapter(adapterOptions),
+    successor: overrides.successor ?? createUpdateSuccessorTransportAdapter(adapterOptions),
+  };
+  return updateCommandAdapter.runUpdateCommand(args, {
+    convergence: overrides.convergence ?? {
+      run: (request) => runUpdateConvergence(request, ports),
+    },
+  });
+}
 
 describe("stn update convergence", () => {
   it("requires an explicit selected target for the internal successor evaluator", async () => {
@@ -74,7 +121,9 @@ describe("stn update convergence", () => {
     if (output.result.kind !== "preview") throw new Error("expected preview result");
     expect(output.result.phases).toHaveLength(7);
     expect(output.result.phases.every((phase) => phase.status === "not-executed")).toBe(true);
-    expect(textFor(result)).not.toContain("verified plan:");
+    const text = textFor(result);
+    expect(text).toContain(nonMutatingPhaseText("not-executed"));
+    expect(text).not.toContain("verified plan:");
     expect(fixture.apply).not.toHaveBeenCalled();
     expect(runner).not.toHaveBeenCalled();
   });
@@ -228,6 +277,7 @@ describe("stn update convergence", () => {
     expect(fixture.apply).not.toHaveBeenCalled();
     expect(runner).not.toHaveBeenCalled();
     expect(textFor(result)).toContain("status: deferred");
+    expect(textFor(result)).toContain(nonMutatingPhaseText("deferred"));
     expect(textFor(result)).not.toContain("verified plan:");
   });
 
@@ -606,6 +656,44 @@ describe("stn update convergence", () => {
     });
   });
 
+  it("renders a hostile hook child failure without emitting terminal controls", async () => {
+    const fixture = probe("current");
+    const sensitive = `hook failed${hostileControls()}forged hook line`;
+    const evidence = preflight("1.0.0", "1.0.0", {
+      observer: matchingObserver(identityA),
+      host: matchingHost(identityA),
+      hookProviderIds: ["codex"],
+      hooks: [{ provider: "codex", status: "needs-repair", reason: "owned-drift" }],
+    });
+    const result = await runUpdateCommand([], options(), {
+      probes: [fixture.probe],
+      buildInfo: build(identityA, "1.0.0"),
+      convergenceInspection: inspection(evidence),
+      commandRunner: async (input) =>
+        input.args?.includes("hooks")
+          ? externalResult(
+              input,
+              JSON.stringify({
+                provider: "codex",
+                status: "write-failed",
+                changed: false,
+                verified: false,
+                error: sensitiveSafeError("HOOK_CHILD_CONTROL", sensitive),
+                followUp: { action: "retry" },
+              }),
+              1,
+            )
+          : commandResult(input),
+    });
+    const text = textOutput(result);
+
+    expect(result.code).toBe(1);
+    expect(text).toContain("hook-reconciliation: reconcile failed provider=codex");
+    expect(text).toContain("UPDATE_RUNTIME_CONVERGENCE_FAILED");
+    expect(text).not.toContain(hostileControls());
+    expect(text).not.toContain("\u001b]8;;https://example.invalid");
+  });
+
   it("hands #641 a fresh pre-mutation reap-required target plan before artifact application", async () => {
     const fixture = probe("update-available");
     const result = await runUpdateCommand(["--json"], options(), {
@@ -639,6 +727,7 @@ describe("stn update convergence", () => {
       },
     });
     expect(reportFrom(result).result).not.toHaveProperty("actionAudits");
+    expect(textFor(result)).toContain(nonMutatingPhaseText("not-executed"));
     expect(textFor(result)).not.toContain("verified plan:");
     expect(fixture.apply).not.toHaveBeenCalled();
   });
@@ -718,6 +807,7 @@ describe("stn update convergence", () => {
       },
     });
     expect(reportFrom(result).result).not.toHaveProperty("actionAudits");
+    expect(textFor(result)).toContain(nonMutatingPhaseText("not-executed"));
     expect(textFor(result)).not.toContain("verified plan:");
   });
 
@@ -746,6 +836,7 @@ describe("stn update convergence", () => {
       },
     });
     expect(reportFrom(result).result).not.toHaveProperty("actionAudits");
+    expect(textFor(result)).toContain(nonMutatingPhaseText("not-executed"));
     expect(textFor(result)).not.toContain("verified plan:");
   });
 
@@ -1207,6 +1298,42 @@ describe("stn update convergence", () => {
     expect(JSON.stringify(report)).not.toContain(secret);
   });
 
+  it("renders hostile successor warnings without emitting terminal controls", async () => {
+    const outer = probe("update-available");
+    const successor = probe("current", "2.0.0", "2.0.0");
+    const sensitive = `successor warning${hostileControls()}forged successor line`;
+    const outerRunner = vi.fn(async (input: ExternalCommandInput) => {
+      if (!input.args?.includes("update")) return commandResult(input);
+      const updateIndex = input.args.indexOf("update");
+      const nested = await runUpdateCommand(input.args.slice(updateIndex + 1), options(), {
+        probes: [successor.probe],
+        buildInfo: build(identityB, "2.0.0"),
+        convergenceInspection: inspection(
+          preflight("2.0.0", "2.0.0", {
+            observer: matchingObserver(identityB),
+            host: matchingHost(identityB),
+          }),
+        ),
+        commandRunner: commandResult,
+      });
+      const childReport = reportFrom(nested);
+      childReport.warnings.push(sensitiveSafeError("SUCCESSOR_CONTROL", sensitive));
+      return externalResult(input, JSON.stringify(childReport), nested.code);
+    });
+    const result = await runUpdateCommand([], options(), {
+      probes: [outer.probe],
+      buildInfo: build(identityA, "1.0.0"),
+      convergenceInspection: inspection(preflight("1.0.0", "2.0.0")),
+      commandRunner: outerRunner,
+    });
+    const text = textOutput(result);
+
+    expect(result.code).toBe(0);
+    expect(text).toContain("warning: successor warning");
+    expect(text).not.toContain(hostileControls());
+    expect(text).not.toContain("\u001b]8;;https://example.invalid");
+  });
+
   it("deeply sanitizes every nested successor SafeError before JSON and text presentation", async () => {
     const outer = probe("update-available");
     const successor = probe("current", "2.0.0", "2.0.0");
@@ -1365,6 +1492,24 @@ function textFor(result: Awaited<ReturnType<typeof runUpdateCommand>>): string {
   const rendered = updateCommandResult(reportFrom(result), "text").output;
   if (typeof rendered !== "string") throw new Error("expected update text output");
   return rendered;
+}
+
+function textOutput(result: Awaited<ReturnType<typeof runUpdateCommand>>): string {
+  if (typeof result.output !== "string") throw new Error("expected default update text output");
+  return result.output;
+}
+
+function nonMutatingPhaseText(artifactStatus: "not-executed" | "deferred"): string {
+  return [
+    "result convergence phases:",
+    `  artifact-application: ${artifactStatus}`,
+    "  hook-reconciliation: not-executed",
+    "  observer-convergence: not-executed",
+    "  terminal-convergence: not-executed",
+    "  host-convergence: not-executed",
+    "  runtime-reconcile: not-executed",
+    "  verification: not-executed",
+  ].join("\n");
 }
 
 function build(buildIdentity: string, version: string) {
@@ -1670,6 +1815,10 @@ function sensitiveSafeError(code: string, sensitive: string): SafeError {
     message: sensitive,
     hint: `retry after ${sensitive}`,
   };
+}
+
+function hostileControls(): string {
+  return "\n\u0000\u0007\u001b]8;;https://example.invalid\u0007link\u001b]8;;\u0007\u001b[31m\u007f\u0085\u009b31m\u2028\u2029";
 }
 
 async function successorResult(

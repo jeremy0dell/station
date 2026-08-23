@@ -304,6 +304,13 @@ reveals none of those values and grants no mutation or signal authority.
 `--reap` without `--dry-run` is rejected before update detection; destructive
 execution remains owned by issue #641.
 
+Text output also lists the seven result-phase outcomes for preview, deferral,
+blocked, reap-required, and intentionally-incomplete results. Every phase is
+explicitly `not-executed`, except artifact application is `deferred` for a
+manager-owned deferral. Child warnings and failures are rendered through the
+same terminal-safe encoder, so embedded line breaks, terminal controls, and
+Unicode line separators cannot create forged status or action lines.
+
 The supported channel IDs are:
 
 - `installer-binary`: requires the exact installer receipt above, verifies a

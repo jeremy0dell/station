@@ -13286,6 +13286,64 @@
       ]
     },
     {
+      "path": "apps/cli/src/commands/registry/update.ts",
+      "declaration": "createUpdateCommandDeps",
+      "kind": "function",
+      "role": "COMPOSITION ROOT",
+      "purpose": "Wires the selected install-channel probes, aggregate inspection, runtime children, and pinned successor transport used by the update convergence use case.",
+      "dependencies": [
+        {
+          "path": "apps/cli/src/observerProviders.ts",
+          "declaration": "createProviderRegistry",
+          "kind": "function",
+          "role": "COMPOSITION ROOT",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/update/publicUpdateReportAdapter.ts",
+          "declaration": "createPublicUpdateReport",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/update/recoveryPreflight.ts",
+          "declaration": "inspectUpdateConvergencePreflight",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/update/recoveryPreflightAdapters.ts",
+          "declaration": "createUpdateRecoveryPreflightPorts",
+          "kind": "function",
+          "role": "COMPOSITION ROOT",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/update/updateConvergenceUseCase.ts",
+          "declaration": "runUpdateConvergence",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/update/updateRuntimeConvergenceAdapter.ts",
+          "declaration": "createUpdateRuntimeConvergenceAdapter",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/update/updateSuccessorTransportAdapter.ts",
+          "declaration": "createUpdateSuccessorTransportAdapter",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
       "path": "apps/cli/src/commands/setup/adapters/config.ts",
       "declaration": "createSetupConfigAdapter",
       "kind": "function",
@@ -13599,60 +13657,47 @@
       "path": "apps/cli/src/commands/update.ts",
       "declaration": "runUpdateCommand",
       "kind": "function",
-      "role": "USE CASE",
-      "purpose": "Resolves the install owner, inspects all live state, plans convergence, executes only safe typed actions, and verifies a fresh no-op plan. Artifact application remains channel-owned; destructive Station process-group authorization, journaling, and reaping remain exclusively owned by #641.",
+      "role": "ADAPTER",
+      "purpose": "Translates update arguments and one strict convergence report into the shared CLI result.",
       "dependencies": [
         {
           "path": "apps/cli/src/commands/update/report.ts",
-          "declaration": "updateCommandExitCode",
+          "declaration": "updateCommandResult",
           "kind": "function",
-          "role": "POLICY",
-          "edgeKind": "runtime"
-        },
-        {
-          "path": "apps/cli/src/update/convergenceDigest.ts",
-          "declaration": "attachUpdateConvergenceDigest",
-          "kind": "function",
-          "role": "POLICY",
-          "edgeKind": "runtime"
-        },
-        {
-          "path": "apps/cli/src/update/convergencePlan.ts",
-          "declaration": "planUpdateConvergence",
-          "kind": "function",
-          "role": "POLICY",
-          "edgeKind": "runtime"
-        },
-        {
-          "path": "apps/cli/src/update/publicUpdateReport.ts",
-          "declaration": "sanitizePublicUpdateReport",
-          "kind": "function",
-          "role": "POLICY",
-          "edgeKind": "runtime"
-        },
-        {
-          "path": "apps/cli/src/update/recoveryPreflight.ts",
-          "declaration": "validateUpdateConvergenceInspection",
-          "kind": "function",
-          "role": "POLICY",
-          "edgeKind": "runtime"
-        },
-        {
-          "path": "packages/contracts/src/providerHooks.ts",
-          "declaration": "providerHookReconciliationSucceeded",
-          "kind": "function",
-          "role": "POLICY",
+          "role": "ADAPTER",
           "edgeKind": "runtime"
         }
       ]
     },
     {
       "path": "apps/cli/src/commands/update/report.ts",
-      "declaration": "updateCommandExitCode",
+      "declaration": "updateCommandResult",
       "kind": "function",
-      "role": "POLICY",
-      "purpose": "Maps the strict update disposition to the CLI process contract shared by the presenter and successor-child boundary.",
-      "dependencies": []
+      "role": "ADAPTER",
+      "purpose": "Presents one strict public update report as JSON or terminal-safe text with its process status.",
+      "dependencies": [
+        {
+          "path": "apps/cli/src/update/publicUpdateReportAdapter.ts",
+          "declaration": "sanitizePublicUpdateReport",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/update/updateCommandStatusPolicy.ts",
+          "declaration": "updateCommandExitCode",
+          "kind": "function",
+          "role": "POLICY",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/update/updateTerminalText.ts",
+          "declaration": "encodeUpdateTerminalText",
+          "kind": "function",
+          "role": "POLICY",
+          "edgeKind": "runtime"
+        }
+      ]
     },
     {
       "path": "apps/cli/src/ingress/command.ts",
@@ -14473,10 +14518,26 @@
       ]
     },
     {
-      "path": "apps/cli/src/update/publicUpdateReport.ts",
+      "path": "apps/cli/src/update/publicUpdateReportAdapter.ts",
+      "declaration": "createPublicUpdateReport",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Projects one internal convergence outcome into the strict, redaction-safe public v4 report.",
+      "dependencies": [
+        {
+          "path": "apps/cli/src/update/publicUpdateReportAdapter.ts",
+          "declaration": "sanitizePublicUpdateReport",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
+      "path": "apps/cli/src/update/publicUpdateReportAdapter.ts",
       "declaration": "sanitizePublicUpdateReport",
       "kind": "function",
-      "role": "POLICY",
+      "role": "ADAPTER",
       "purpose": "Defines the deterministic confidentiality decision for one strict v4 update result. Every nested SafeError crosses this policy, including successor and post-action evidence, without weakening report invariants or optional-field absence.",
       "dependencies": []
     },
@@ -14598,6 +14659,151 @@
       "kind": "interface",
       "role": "DRIVEN PORT",
       "purpose": "Defines one install owner's typed detect, plan, apply, exact installed-target proof, and optional adapter-owned recovery lifecycle.",
+      "dependencies": []
+    },
+    {
+      "path": "apps/cli/src/update/updateCommandStatusPolicy.ts",
+      "declaration": "updateCommandExitCode",
+      "kind": "function",
+      "role": "POLICY",
+      "purpose": "Maps a strict update disposition to the process exit contract shared by parent and successor.",
+      "dependencies": []
+    },
+    {
+      "path": "apps/cli/src/update/updateConvergencePort.ts",
+      "declaration": "UpdateConvergencePort",
+      "kind": "interface",
+      "role": "DRIVING PORT",
+      "purpose": "Offers exact-target update convergence to CLI actors without exposing its driven capabilities.",
+      "dependencies": []
+    },
+    {
+      "path": "apps/cli/src/update/updateConvergenceUseCase.ts",
+      "declaration": "runUpdateConvergence",
+      "kind": "function",
+      "role": "USE CASE",
+      "purpose": "Resolves the install owner, inspects all live state, plans convergence, executes only safe typed actions, and verifies a fresh no-op plan. Artifact application remains channel-owned; destructive Station process-group authorization, journaling, and reaping remain exclusively owned by #641.",
+      "dependencies": [
+        {
+          "path": "apps/cli/src/update/convergenceDigest.ts",
+          "declaration": "attachUpdateConvergenceDigest",
+          "kind": "function",
+          "role": "POLICY",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/update/convergencePlan.ts",
+          "declaration": "planUpdateConvergence",
+          "kind": "function",
+          "role": "POLICY",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/update/recoveryPreflight.ts",
+          "declaration": "validateUpdateConvergenceInspection",
+          "kind": "function",
+          "role": "POLICY",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/update/updatePublicReportPort.ts",
+          "declaration": "UpdatePublicReportPort",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        },
+        {
+          "path": "packages/contracts/src/providerHooks.ts",
+          "declaration": "providerHookReconciliationSucceeded",
+          "kind": "function",
+          "role": "POLICY",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
+      "path": "apps/cli/src/update/updatePublicReportPort.ts",
+      "declaration": "UpdatePublicReportPort",
+      "kind": "interface",
+      "role": "DRIVEN PORT",
+      "purpose": "Defines the strict redaction-safe public report projection required by update convergence.",
+      "dependencies": []
+    },
+    {
+      "path": "apps/cli/src/update/updateRuntimeConvergenceAdapter.ts",
+      "declaration": "createUpdateRuntimeConvergenceAdapter",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Translates typed safe runtime actions into strict Host, Observer, hook, and reconcile children.",
+      "dependencies": [
+        {
+          "path": "apps/cli/src/update/updateRuntimeConvergencePort.ts",
+          "declaration": "UpdateRuntimeConvergencePort",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        },
+        {
+          "path": "packages/contracts/src/providerHooks.ts",
+          "declaration": "providerHookReconciliationSucceeded",
+          "kind": "function",
+          "role": "POLICY",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
+      "path": "apps/cli/src/update/updateRuntimeConvergencePort.ts",
+      "declaration": "UpdateRuntimeConvergencePort",
+      "kind": "interface",
+      "role": "DRIVEN PORT",
+      "purpose": "Defines the safe child-command mutations and recovery argv required by update convergence.",
+      "dependencies": []
+    },
+    {
+      "path": "apps/cli/src/update/updateSuccessorTransportAdapter.ts",
+      "declaration": "createUpdateSuccessorTransportAdapter",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Owns pinned successor argv, strict JSON transport, redaction, and child exit consistency.",
+      "dependencies": [
+        {
+          "path": "apps/cli/src/update/publicUpdateReportAdapter.ts",
+          "declaration": "sanitizePublicUpdateReport",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/update/updateCommandStatusPolicy.ts",
+          "declaration": "updateCommandExitCode",
+          "kind": "function",
+          "role": "POLICY",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/update/updateSuccessorTransportPort.ts",
+          "declaration": "UpdateSuccessorTransportPort",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
+      "path": "apps/cli/src/update/updateSuccessorTransportPort.ts",
+      "declaration": "UpdateSuccessorTransportPort",
+      "kind": "interface",
+      "role": "DRIVEN PORT",
+      "purpose": "Executes one pinned successor evaluator and returns its strict public v4 update report.",
+      "dependencies": []
+    },
+    {
+      "path": "apps/cli/src/update/updateTerminalText.ts",
+      "declaration": "encodeUpdateTerminalText",
+      "kind": "function",
+      "role": "POLICY",
+      "purpose": "Encodes untrusted update text so one value cannot emit controls or create another terminal line.",
       "dependencies": []
     },
     {

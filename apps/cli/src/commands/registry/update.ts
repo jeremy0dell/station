@@ -1,9 +1,15 @@
+import { stationBuildInfo } from "@station/runtime";
 import {
   type CreateProviderRegistryOptions,
   createProviderRegistry,
 } from "../../observerProviders.js";
+import { createDefaultUpdateProbes } from "../../update/defaultUpdateProbes.js";
+import { createPublicUpdateReport } from "../../update/publicUpdateReportAdapter.js";
 import { inspectUpdateConvergencePreflight } from "../../update/recoveryPreflight.js";
 import { createUpdateRecoveryPreflightPorts } from "../../update/recoveryPreflightAdapters.js";
+import { runUpdateConvergence } from "../../update/updateConvergenceUseCase.js";
+import { createUpdateRuntimeConvergenceAdapter } from "../../update/updateRuntimeConvergenceAdapter.js";
+import { createUpdateSuccessorTransportAdapter } from "../../update/updateSuccessorTransportAdapter.js";
 import { loadedConfigCommandOptions } from "../cliCommand/helpers.js";
 import type { CliCommandNode, CliCommandRunContext } from "../cliCommand/types.js";
 import { runUpdateCommand, type UpdateCommandDeps } from "../update.js";
@@ -57,25 +63,22 @@ export const updateCliCommand: CliCommandNode = {
 
 async function runUpdateCliCommand(context: CliCommandRunContext) {
   const loaded = loadedConfigCommandOptions(context);
-  return runUpdateCommand(
-    context.args,
-    {
-      config: loaded.config,
-      cliEntryPath: context.cliEntryPath,
-      ...(loaded.configPath === undefined ? {} : { configPath: loaded.configPath }),
-      ...(context.options.env === undefined ? {} : { env: context.options.env }),
-    },
-    updateDeps(context, loaded),
-  );
+  return runUpdateCommand(context.args, createUpdateCommandDeps(context, loaded));
 }
 
-// Every resolved target receives one aggregate inspection; mutation capabilities stay separate.
-function updateDeps(
+/**
+ * COMPOSITION ROOT
+ *
+ * Wires the selected install-channel probes, aggregate inspection, runtime children, and pinned
+ * successor transport used by the update convergence use case.
+ */
+export function createUpdateCommandDeps(
   context: CliCommandRunContext,
   loaded: ReturnType<typeof loadedConfigCommandOptions>,
 ): UpdateCommandDeps {
-  const hostDeps = context.options.updateDeps?.hostDeps ?? context.options.hostDeps;
-  const configuredInspection = context.options.updateDeps?.convergenceInspection;
+  const overrides = context.options.updateDeps;
+  const hostDeps = overrides?.hostDeps ?? context.options.hostDeps;
+  const configuredInspection = overrides?.convergenceInspection;
   let convergenceInspection = configuredInspection;
   if (convergenceInspection === undefined) {
     const registryOptions: CreateProviderRegistryOptions = {};
@@ -98,9 +101,41 @@ function updateDeps(
     const ports = createUpdateRecoveryPreflightPorts(preflightOptions);
     convergenceInspection = (input) => inspectUpdateConvergencePreflight({ ...input, ports });
   }
+  const buildInfo = overrides?.buildInfo ?? stationBuildInfo;
+  const commandRunner = overrides?.commandRunner;
+  const adapterOptions = {
+    ...(loaded.configPath === undefined ? {} : { configPath: loaded.configPath }),
+    ...(commandRunner === undefined ? {} : { commandRunner }),
+  };
+  const probes =
+    overrides?.probes ??
+    createDefaultUpdateProbes(
+      {
+        cliEntryPath: context.cliEntryPath,
+        ...(context.options.env === undefined ? {} : { env: context.options.env }),
+      },
+      {
+        buildInfo,
+        ...(overrides?.executablePath === undefined
+          ? {}
+          : { executablePath: overrides.executablePath }),
+        ...(commandRunner === undefined ? {} : { commandRunner }),
+      },
+    );
+  const runtime = overrides?.runtime ?? createUpdateRuntimeConvergenceAdapter(adapterOptions);
+  const successor = overrides?.successor ?? createUpdateSuccessorTransportAdapter(adapterOptions);
+  const publicReport = overrides?.publicReport ?? { create: createPublicUpdateReport };
   return {
-    ...context.options.updateDeps,
-    convergenceInspection,
-    ...(hostDeps === undefined ? {} : { hostDeps }),
+    convergence: overrides?.convergence ?? {
+      run: (request) =>
+        runUpdateConvergence(request, {
+          convergenceInspection,
+          probes,
+          buildInfo,
+          publicReport,
+          runtime,
+          successor,
+        }),
+    },
   };
 }

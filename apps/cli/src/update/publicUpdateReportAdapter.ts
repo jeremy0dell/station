@@ -16,8 +16,11 @@ import {
   type UpdateReapHostEvidence,
   type UpdateReapObserverEvidence,
   type UpdateReapRecoveryPreflight,
+  updateCommandReportStatus,
 } from "@station/contracts";
-import { redactString } from "@station/observability";
+import { redact, redactString } from "@station/observability";
+import { publicSafeErrorFromUnknown } from "@station/runtime";
+import type { PublicUpdateReportInput } from "./updatePublicReportPort.js";
 
 const publicPathReplacement = "[REDACTED_PATH]";
 const publicControlReplacement = "[REDACTED_CONTROL]";
@@ -27,7 +30,52 @@ const absoluteWindowsPathPattern = /(?<![A-Za-z0-9_])[A-Za-z]:\\[^\s"'<>|]+/gu;
 const homeRelativePathPattern = /(?<![A-Za-z0-9_])~[\\/][^\s"'<>|]+/gu;
 
 /**
- * POLICY
+ * ADAPTER
+ *
+ * Projects one internal convergence outcome into the strict, redaction-safe public v4 report.
+ */
+export function createPublicUpdateReport(input: PublicUpdateReportInput): UpdateCommandReport {
+  const core = {
+    schemaVersion: 4 as const,
+    channel: input.selected.channel,
+    current: input.current,
+    target: input.target,
+    artifactApplication: input.artifactApplication,
+    initial: input.initial,
+    result: input.result,
+    warnings: (input.warnings ?? []).map((warning) =>
+      publicSafeErrorFromUnknown(warning, {
+        tag: warning.tag,
+        code: warning.code,
+        message: warning.message,
+      }),
+    ),
+    recoveryCommands: input.recoveryCommands ?? [],
+  };
+  const report: UpdateCommandReport = { ...core, status: updateCommandReportStatus(core) };
+  if (input.error !== undefined) {
+    report.error = publicSafeErrorFromUnknown(input.error, {
+      tag: input.error.tag,
+      code: input.error.code,
+      message: input.error.message,
+    });
+  }
+  if (input.cause !== undefined) {
+    const cause = publicSafeErrorFromUnknown(input.cause, {
+      tag: input.cause.tag,
+      code: input.cause.code,
+      message: input.cause.message,
+    });
+    report.cause = redact(cause).value;
+  }
+  if (input.startupEvidence !== undefined) {
+    report.startupEvidence = redact(input.startupEvidence).value;
+  }
+  return sanitizePublicUpdateReport(report);
+}
+
+/**
+ * ADAPTER
  *
  * Defines the deterministic confidentiality decision for one strict v4 update result. Every nested
  * SafeError crosses this policy, including successor and post-action evidence, without weakening

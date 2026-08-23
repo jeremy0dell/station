@@ -1,4 +1,5 @@
 import type { ProviderHookArtifactOwner } from "@station/contracts";
+import type { ExternalCommandRunner } from "@station/runtime";
 import type { HostCommandDeps } from "./commands/host/index.js";
 import type { NotifyCommandDeps } from "./commands/notify.js";
 import type { ObserveCommandDeps } from "./commands/observe/index.js";
@@ -8,6 +9,7 @@ import type { TuiCommandDeps } from "./commands/tui.js";
 import type { UpdateCommandDeps } from "./commands/update.js";
 import type { CliEnv } from "./env.js";
 import type { ObserverProcessDeps } from "./observerProcess.js";
+import type { UpdateConvergencePorts } from "./update/updateConvergenceUseCase.js";
 
 export type CliRunResult = {
   code: number;
@@ -25,7 +27,12 @@ export type CliRunOptions = {
   notifyDeps?: NotifyCommandDeps;
   observeDeps?: ObserveCommandDeps;
   setupDeps?: SetupCommandDeps;
-  updateDeps?: Partial<UpdateCommandDeps>;
+  updateDeps?: Partial<UpdateCommandDeps> &
+    Partial<UpdateConvergencePorts> & {
+      executablePath?: string;
+      commandRunner?: ExternalCommandRunner;
+      hostDeps?: HostCommandDeps;
+    };
   providerHookIngressLauncher?: string;
   providerHookArtifactOwner?: ProviderHookArtifactOwner;
 };
