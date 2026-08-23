@@ -2,28 +2,28 @@
 
 exports[`modal flow golden frames renders the help overlay 1`] = `
 "                                                                                
-FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
-────────╭──────────────────────────────────────────────────────────────╮─────── 
-       S│                         station help                         │FF · PR 
- ▼ stati│  Ctrl-O     open/close project view                          │qs] [▾] 
- [1] ○ c│  Ctrl-Q     quit Station                                     │6 #70 ✓ 
- [2] - d│  Ctrl-\\     split pane right                                 │        
- [3] ○ p│  Ctrl-^     split pane below (Ctrl-6)                        │  #73 ✓ 
- [4] + s│  Ctrl-]     focus next pane                                  │        
- [5] ⠋ s│  Ctrl-/     close split pane (Ctrl-_)                        │6 #76 … 
-        │  Enter/Sp   open project view on welcome                     │        
- ▼ obser│  Esc/↑↓     context menu close/move                          │qs] [▾] 
- [6] x b│  Enter/Sp   context menu select                              │   #8 ✓ 
- [7] ⠋ p│                     station project view                     │8 #16 … 
- [8] ○ t│  ↑/↓        move cursor · wheel scroll                       │-1 #4 ✓ 
-        │  ↵          open focused session                             │        
- ▼ scrip│  tab        next session needing you                         │qs] [▾] 
- [9] ○ a│  G/M        quick group/move to group                        │6 #5 x1 
- [a] ? m│  / ↵ Esc Q  edit/apply/cancel-clear/retain-close filter      │ -1 #10 
-        │  Tab S/P/A  build filter conditions · F applies builder      │        
- ▼ empty│  1-9/a-z    open visible session or toggle condition         │qs] [▾] 
-        ╰──────────────────────────────────────────────────────────────╯        
-─────────────────────────────────────────────────────────────────────────────── 
+FLEET  ●╭──────────────────────────────────────────────────────────────╮ 4 idle 
+────────│                         station help                         │─────── 
+       S│  Ctrl-O       open/close project view                        │FF · PR 
+ ▼ stati│  Ctrl-Q       quit Station                                   │qs] [▾] 
+ [1] ○ c│  Ctrl-\\       split pane right                               │6 #70 ✓ 
+ [2] - d│  Ctrl-^       split pane below (Ctrl-6)                      │        
+ [3] ○ p│  Ctrl-]       focus next pane                                │  #73 ✓ 
+ [4] + s│  Ctrl-/       close split pane (Ctrl-_)                      │        
+ [5] ⠋ s│  Enter/Sp     open project view on welcome                   │6 #76 … 
+        │  Esc/↑↓       context menu close/move                        │        
+ ▼ obser│  Enter/Sp     context menu select                            │qs] [▾] 
+ [6] x b│                     station project view                     │   #8 ✓ 
+ [7] ⠋ p│  ↑/↓          move cursor · wheel scroll                     │8 #16 … 
+ [8] ○ t│  ↵            open focused session                           │-1 #4 ✓ 
+        │  tab          next session needing you                       │        
+ ▼ scrip│  G/M          quick group/move to group                      │qs] [▾] 
+ [9] ○ a│  / ↵ Esc Q    edit/apply/cancel-clear/retain-close filter    │6 #5 x1 
+ [a] ? m│  Tab S/P/A    build filter conditions · F applies builder    │ -1 #10 
+        │  1-9/a-z      open visible session or toggle condition       │        
+ ▼ empty│  N/A/R/C/F/P  new/add/rename/fold/fork/settings              │qs] [▾] 
+        │  W            widgets                                        │        
+────────╰──────────────────────────────────────────────────────────────╯─────── 
 ↵ activate  N new  ⇥ next  / filter  X delete  ? help  Q/esc:close              
 "
 `;

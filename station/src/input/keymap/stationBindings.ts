@@ -270,9 +270,14 @@ export function createStationKeymap(
 
 export function stationKeymapHelp() {
   return [workspaceLayer, welcomeLayer, contextMenuLayer]
-    .flatMap((layer) => layer.bindings.flatMap((binding) => binding.help ?? []))
+    .flatMap((layer) =>
+      layer.bindings.flatMap((binding) => {
+        const help = binding.help;
+        return help === undefined ? [] : [{ id: `${layer.id}:${help.order}`, ...help }];
+      }),
+    )
     .sort((left, right) => left.order - right.order)
-    .map(({ key, description }) => ({ key, description }));
+    .map(({ id, key, description }) => ({ id, key, description }));
 }
 
 /**

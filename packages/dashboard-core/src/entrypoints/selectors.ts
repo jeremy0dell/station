@@ -56,10 +56,6 @@ export type {
 } from "../components/GroupSettingsPanel/content.js";
 export { groupSettingsPanelModel } from "../components/GroupSettingsPanel/content.js";
 export {
-  helpPanelLayout,
-  helpPanelLines,
-} from "../components/HelpOverlay/helpPanel.js";
-export {
   newSessionEditGroupDraftContent,
   newSessionEditNameContent,
   newSessionReviewContent,
