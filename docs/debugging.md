@@ -275,7 +275,17 @@ Auto-starting `snapshot`, `doctor`, `command`, `reconcile`, `observe`, and
 startupEvidence? }` lifecycle envelope instead of flattening them into prose.
 Setup activation retains the same fields in its failed operation/session
 outcome. Update report schema version 2 adds the provider-neutral
-`hookReconciliation` result and `hook-reconciliation` step. A same-version
+`hookReconciliation` result and `hook-reconciliation` step. Schema version 3
+adds the optional `recoveryPreflight` assessment; compatible readers retain
+explicit version 1 and version 2 parsers instead of accepting version backports.
+Use `stn update --dry-run --reap --json` to collect the redacted aggregate
+Observer, Host, terminal, retained-session, resume-capability, handle-count,
+and hook-health evidence without changing runtime state. The public projection
+omits recovery inventory, provider-native state, and executable handle IDs.
+Unknown or drifting identity remains typed in the report, including an exact
+live Observer whose socket is missing and a legacy Host whose same-version
+revision cannot be proved. Non-resumable dispositions are explicit. The
+assessment contains no executable action or digest. A same-version
 dry-run reports planned hook and Observer convergence plus enabled Host
 preservation evaluation, but runs no hook, Observer, or Host command. A
 same-version apply resumes an interrupted crossover through the

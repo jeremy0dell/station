@@ -7,10 +7,11 @@ import {
   createStationHostClient,
   type HostHealthResult,
   type HostListEntry,
+  type HostPtyHandoffSupport,
   type StationHostClient,
 } from "@station/host";
 import { probeUnixSocket } from "@station/protocol";
-import { stationBuildInfo } from "@station/runtime";
+import { isSafeError, stationBuildInfo } from "@station/runtime";
 import { ensureStationHostRunning } from "@station/terminal";
 import { resolveObserverPaths } from "../../paths.js";
 import { selfExecArgv } from "../../selfExec.js";
@@ -24,14 +25,19 @@ export type HostCommandDeps = {
   expectedBuildVersion?: string;
 };
 
+export type HostInspectionEntry = HostListEntry & {
+  handoffSupport?: HostPtyHandoffSupport;
+};
+
 export type HostStatusResult = {
   action: "status";
   socketPath: string;
   probe: string;
   health?: HostHealthResult;
   compatibility?: ReturnType<typeof classifyHostCompatibility>;
+  buildIdentity?: string;
   livePtyCount?: number;
-  ptys?: HostListEntry[];
+  ptys?: HostInspectionEntry[];
   handoffEligible?: boolean;
   error?: string;
 };
@@ -155,7 +161,20 @@ async function runHostStatus(input: {
         ? input.clientFactory(input.socketPath, compatibility.runningBuildVersion)
         : client;
     try {
-      const ptys = await inventoryClient.list();
+      let ptys: HostInspectionEntry[];
+      if (inventoryClient.recoveryInventory === undefined) {
+        ptys = await inventoryClient.list();
+      } else {
+        try {
+          const recovery = await inventoryClient.recoveryInventory();
+          result.buildIdentity = recovery.buildIdentity;
+          ptys = recovery.ptys;
+        } catch (error) {
+          if (!isSafeError(error) || error.code !== "HOST_BAD_REQUEST") throw error;
+          // Older protocol-v8 Hosts do not implement the additive recovery query.
+          ptys = await inventoryClient.list();
+        }
+      }
       result.ptys = ptys;
       result.livePtyCount = ptys.length;
       result.handoffEligible = compatibility.action === "replace" && ptys.length > 0;

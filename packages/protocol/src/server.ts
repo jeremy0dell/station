@@ -163,6 +163,9 @@ async function routeSingleResponseRequest(
       case "session.recoveryInventory": {
         return await api.getSessionRecoveryInventory();
       }
+      case "session.recoveryAssessment": {
+        return await api.getSessionRecoveryAssessment();
+      }
       case "session.current": {
         const params = SessionCurrentParamsSchema.parse(request.params);
         return await api.getCurrentSessionContext(params);

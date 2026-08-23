@@ -20,7 +20,7 @@ import { createTempSocketPath } from "../../../../tests/support/sockets";
 import { createFakeObserverApi, emptySnapshot, ids, protocolTestNow } from "../support/fixtures.js";
 
 describe("protocol client/server", () => {
-  it("routes health, current session, snapshot, dispatch, get, reconcile, and hook ingestion over a socket", async () => {
+  it("routes health, recovery, current session, snapshot, dispatch, get, reconcile, and hook ingestion over a socket", async () => {
     const { socketPath } = await createTempSocketPath();
     const commands = new Map<string, CommandRecord>();
     const currentCallers: TerminalCallerContextRequest[] = [];
@@ -48,6 +48,41 @@ describe("protocol client/server", () => {
             targetKind: "session-file",
             observedAt: protocolTestNow,
             lastSeenAt: protocolTestNow,
+          },
+        ],
+      }),
+      getSessionRecoveryAssessment: async () => ({
+        schemaVersion: 1,
+        inventory: {
+          schemaVersion: 1,
+          sessions: [
+            {
+              id: "session-protocol",
+              projectId: "web",
+              worktreeId: "worktree-protocol",
+              lifecycle: "ended",
+              createdAt: protocolTestNow,
+              lastSeenAt: protocolTestNow,
+            },
+          ],
+          recoveryHandles: [],
+        },
+        resumeEnabled: false,
+        providerCapabilities: [],
+        sessions: [
+          {
+            sessionId: "session-protocol",
+            projectId: "web",
+            worktreeId: "worktree-protocol",
+            lifecycle: "ended",
+            disposition: "not-applicable",
+            reasons: ["station_session_ended"],
+            handleResolution: {
+              kind: "none",
+              eligibleHandleCount: 0,
+              rejectedHandleCount: 0,
+              reasons: ["no_recovery_handles", "station_session_ended"],
+            },
           },
         ],
       }),
@@ -112,6 +147,17 @@ describe("protocol client/server", () => {
           targetKind: "session-file",
           observedAt: protocolTestNow,
           lastSeenAt: protocolTestNow,
+        },
+      ],
+    });
+    await expect(client.getSessionRecoveryAssessment()).resolves.toMatchObject({
+      schemaVersion: 1,
+      resumeEnabled: false,
+      sessions: [
+        {
+          sessionId: "session-protocol",
+          disposition: "not-applicable",
+          reasons: ["station_session_ended"],
         },
       ],
     });

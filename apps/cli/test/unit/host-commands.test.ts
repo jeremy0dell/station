@@ -1,5 +1,5 @@
 import { stationHostSocketPath } from "@station/config";
-import { HOST_PROTOCOL_VERSION } from "@station/host";
+import { HOST_PROTOCOL_VERSION, stationHostSafeError } from "@station/host";
 import { listenUnixSocket } from "@station/protocol";
 import { describe, expect, it, vi } from "vitest";
 import { createTempState } from "../../../../tests/support/temp-projects";
@@ -37,6 +37,17 @@ describe("runHostCommand", () => {
                 }
                 return [{ ptyId: "pty-1", pid: 42, alive: true }];
               },
+              recoveryInventory: async () => ({
+                buildIdentity: "older-build-identity",
+                ptys: [
+                  {
+                    ptyId: "pty-1",
+                    pid: 42,
+                    alive: true,
+                    handoffSupport: { kind: "bridge-releasable" },
+                  },
+                ],
+              }),
               dispose,
             } as never;
           },
@@ -49,9 +60,51 @@ describe("runHostCommand", () => {
         livePtyCount: 1,
         handoffEligible: true,
         compatibility: { action: "replace" },
+        buildIdentity: "older-build-identity",
+        ptys: [{ handoffSupport: { kind: "bridge-releasable" } }],
       });
       expect(requestedBuilds).toEqual([requestingBuild, "older-build"]);
       expect(dispose).toHaveBeenCalledTimes(2);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("falls back to protocol-v8 host.list when recovery inventory is unavailable", async () => {
+    const fixture = await createTempState();
+    const socketPath = stationHostSocketPath(fixture.config);
+    const server = await listenUnixSocket({ socketPath, onConnection: () => undefined });
+    const list = vi.fn(async () => [{ ptyId: "pty-legacy", pid: 42, alive: true }]);
+    try {
+      const result = await runHostCommand(
+        ["status"],
+        { config: fixture.config },
+        {
+          expectedBuildVersion: requestingBuild,
+          clientFactory: () =>
+            ({
+              health: async () => ({
+                ok: true,
+                protocolVersion: HOST_PROTOCOL_VERSION,
+                buildVersion: requestingBuild,
+              }),
+              recoveryInventory: async () => {
+                throw stationHostSafeError("HOST_BAD_REQUEST", "unknown method");
+              },
+              list,
+              dispose: () => undefined,
+            }) as never,
+        },
+      );
+
+      expect(result).toMatchObject({
+        action: "status",
+        probe: "listening",
+        livePtyCount: 1,
+        ptys: [{ ptyId: "pty-legacy" }],
+      });
+      expect(result).not.toHaveProperty("buildIdentity");
+      expect(list).toHaveBeenCalledOnce();
     } finally {
       await server.close();
     }

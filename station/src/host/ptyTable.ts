@@ -10,6 +10,7 @@ import {
   type HostListEntry,
   type HostPtyIdentity,
   type HostPtyRef,
+  type HostRecoveryInventoryEntry,
   type HostSpawnParams,
   type HostSpawnResult,
   isSameHostPtyIdentity,
@@ -36,6 +37,7 @@ import {
   type PtyEntryInit,
 } from "./ptyEntry.js";
 import {
+  classifyPtyHandoffSupport,
   createPtyHandoff,
   type PtyAdoptionReport,
   type PtyHandoffReleaseReport,
@@ -103,7 +105,10 @@ export type PtySnapshot = {
 export type PtyTable = {
   /** Reuse only identical targets; failed activation frees both indexes and disposes new resources. */
   spawn(params: HostSpawnParams): PtySpawnOutcome;
+  /** List exact protocol-v8 PTY lifetimes without exporting or parking them. */
   list(): HostListEntry[];
+  /** Add read-only handoff support for the separately negotiated recovery query. */
+  recoveryInventory(): HostRecoveryInventoryEntry[];
   snapshot(ptyId: string): PtySnapshot;
   /**
    * Register the live sink before capturing raw history or semantic state, so
@@ -172,6 +177,18 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
       sessionId: params.sessionId,
       worktreePath: params.worktreePath,
       harnessProvider: params.harnessProvider,
+    };
+  }
+
+  function listEntry(entry: PtyEntry): HostListEntry {
+    return {
+      ...entry.identity,
+      ptyId: entry.ptyId,
+      ptyInstanceId: entry.ptyInstanceId,
+      pid: entry.terminal.pid,
+      alive: !entry.exited,
+      cols: entry.cols,
+      rows: entry.rows,
     };
   }
 
@@ -649,19 +666,16 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
     },
 
     list() {
-      const list: HostListEntry[] = [];
-      for (const entry of entriesByPtyId.values()) {
-        list.push({
-          ...entry.identity,
-          ptyId: entry.ptyId,
-          ptyInstanceId: entry.ptyInstanceId,
-          pid: entry.terminal.pid,
-          alive: !entry.exited,
-          cols: entry.cols,
-          rows: entry.rows,
-        });
-      }
-      return list;
+      return Array.from(entriesByPtyId.values(), listEntry);
+    },
+
+    recoveryInventory() {
+      return Array.from(entriesByPtyId.values(), (entry): HostRecoveryInventoryEntry => {
+        return {
+          ...listEntry(entry),
+          handoffSupport: classifyPtyHandoffSupport({ entry, orphanBridges }),
+        };
+      });
     },
 
     snapshot(ptyId) {

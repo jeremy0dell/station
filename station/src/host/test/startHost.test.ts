@@ -19,6 +19,7 @@ import { type StationHostInstance, startStationHost } from "../startHost.js";
 // startStationHost only calls logger.log; a no-op keeps the host test off the FS.
 const noopLogger = { log: async () => undefined } as never;
 const TEST_HOST_BUILD = "test-host-build";
+const TEST_HOST_IDENTITY = "test-host-build-identity";
 
 let host: StationHostInstance | undefined;
 
@@ -38,6 +39,7 @@ async function startOnTempSocket(
     logger: noopLogger,
     // Keep hermetic unit runs off checkout build-identity verification.
     buildVersion: TEST_HOST_BUILD,
+    buildIdentity: TEST_HOST_IDENTITY,
     ...(ptyTableOptions === undefined ? {} : { ptyTableOptions }),
   });
   return socketPath;
@@ -210,6 +212,16 @@ describe("startStationHost", () => {
       const listed = await client.list();
       expect(listed).toHaveLength(1);
       expect(listed[0]).toMatchObject({ ptyId, worktreeId: "wt-1", alive: true });
+      expect(listed[0]).not.toHaveProperty("handoffSupport");
+      await expect(client.recoveryInventory?.()).resolves.toMatchObject({
+        buildIdentity: TEST_HOST_IDENTITY,
+        ptys: [
+          {
+            ptyId,
+            handoffSupport: { kind: "non-releasable", reason: "no-bridge-transport" },
+          },
+        ],
+      });
 
       const attachment = await client.attach(attachExpectation(spawned), "controller");
       await attachment.write("ls\n");

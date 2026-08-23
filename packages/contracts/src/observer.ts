@@ -35,6 +35,7 @@ import {
   ProviderHealthSchema,
   TerminalOutputCompatibilitySchema,
 } from "./providers.js";
+import type { ObserverRecoveryAssessment } from "./recoveryAssessment.js";
 import type { ObserverRecoveryInventory } from "./recoveryInventory.js";
 import type { SessionRecoveryReadiness } from "./sessionRecovery.js";
 import {
@@ -372,8 +373,9 @@ export type WorktreeCancelRemovalResult = z.infer<typeof WorktreeCancelRemovalRe
 /**
  * DRIVING PORT
  *
- * Exposes Observer state, recovery-readiness, and coherent recovery-inventory queries,
- * plus handshakes, ingress reports, maintenance, and lifecycle operations to external actors.
+ * Exposes Observer state, recovery-readiness, coherent recovery-inventory, read-only
+ * recovery-assessment, and transient current-session queries, plus handshakes, ingress reports,
+ * maintenance, and lifecycle operations to external actors.
  */
 export type ObserverApi = {
   health(): Promise<ObserverHealth>;
@@ -381,6 +383,7 @@ export type ObserverApi = {
   getSnapshot(options?: { includeDebug?: boolean }): Promise<StationSnapshot>;
   getSessionRecoveryReadiness(): Promise<SessionRecoveryReadiness>;
   getSessionRecoveryInventory(): Promise<ObserverRecoveryInventory>;
+  getSessionRecoveryAssessment(): Promise<ObserverRecoveryAssessment>;
   /** Resolve transient untrusted caller claims without retaining raw claim or provider proof. */
   getCurrentSessionContext(
     caller: z.infer<typeof TerminalCallerContextRequestSchema>,

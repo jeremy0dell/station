@@ -6,7 +6,11 @@ import {
   PtyHandoffManifestSchema,
   type PtyScrollbackExport,
 } from "@station/contracts";
-import { type HostPtyIdentity, StationHostProviderError } from "@station/host";
+import {
+  type HostPtyHandoffSupport,
+  type HostPtyIdentity,
+  StationHostProviderError,
+} from "@station/host";
 import type { StationTerminalProcess, StationTerminalSize } from "../terminal/types.js";
 import {
   bridgeControlSocketPath,
@@ -223,6 +227,30 @@ type BuildEntryResult =
   | { kind: "entry"; entry: PtyHandoffEntry }
   | { kind: "skipped"; reason: string };
 
+/**
+ * POLICY
+ *
+ * Classifies whether one live PTY transport can leave its current Host without termination.
+ * The same checks drive read-only inventory and release admission so preflight cannot advertise a
+ * weaker bridge path than handoff will accept.
+ */
+export function classifyPtyHandoffSupport(input: {
+  entry: Pick<PtyEntry, "terminal">;
+  orphanBridges: PtyTableOrphanOptions | undefined;
+  requireRelease?: boolean;
+}): HostPtyHandoffSupport {
+  if (input.entry.terminal.bridgePid === undefined) {
+    return { kind: "non-releasable", reason: "no-bridge-transport" };
+  }
+  if (input.orphanBridges === undefined) {
+    return { kind: "non-releasable", reason: "orphan-mode-disabled" };
+  }
+  if (input.requireRelease !== false && input.entry.terminal.releaseToOrphan === undefined) {
+    return { kind: "non-releasable", reason: "release-unsupported" };
+  }
+  return { kind: "bridge-releasable" };
+}
+
 async function tryBuildHandoffEntry(input: {
   entry: PtyEntry;
   fidelity: HostHandoffFidelity;
@@ -231,19 +259,18 @@ async function tryBuildHandoffEntry(input: {
   emit: Emit;
 }): Promise<BuildEntryResult> {
   const { entry, fidelity, orphanBridges, requireRelease, emit } = input;
+  const support = classifyPtyHandoffSupport({
+    entry,
+    orphanBridges,
+    requireRelease,
+  });
+  if (support.kind === "non-releasable") {
+    emit("pty.handoff.export-skipped", { ptyId: entry.ptyId, reason: support.reason });
+    return { kind: "skipped", reason: support.reason };
+  }
   const bridgePid = entry.terminal.bridgePid;
   if (bridgePid === undefined || orphanBridges === undefined) {
-    const reason = bridgePid === undefined ? "no-bridge-transport" : "orphan-mode-disabled";
-    emit("pty.handoff.export-skipped", { ptyId: entry.ptyId, reason });
-    return { kind: "skipped", reason };
-  }
-  // Export may snapshot bridge-backed rows; live park requires releaseToOrphan.
-  if (requireRelease && entry.terminal.releaseToOrphan === undefined) {
-    emit("pty.handoff.export-skipped", {
-      ptyId: entry.ptyId,
-      reason: "release-unsupported",
-    });
-    return { kind: "skipped", reason: "release-unsupported" };
+    throw new Error("Bridge-releasable handoff support requires bridge and orphan evidence.");
   }
 
   const snapshot = entry.ring.snapshot();

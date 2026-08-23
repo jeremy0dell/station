@@ -37,6 +37,13 @@ export function createFakeObserverApi(
       sessions: [],
       recoveryHandles: [],
     }),
+    getSessionRecoveryAssessment: async () => ({
+      schemaVersion: 1,
+      inventory: { schemaVersion: 1, sessions: [], recoveryHandles: [] },
+      resumeEnabled: true,
+      providerCapabilities: [],
+      sessions: [],
+    }),
     getCurrentSessionContext: async () => ({
       source: {
         provider: "fake-terminal",
