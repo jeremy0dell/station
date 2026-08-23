@@ -1,3 +1,4 @@
+import { HostHandoffCommandResultSchema } from "@station/contracts";
 import { loadedConfigCommandOptions } from "../cliCommand/helpers.js";
 import type { CliCommandNode, CliCommandRunContext } from "../cliCommand/types.js";
 import { parseHostArgs } from "../host/args.js";
@@ -64,13 +65,15 @@ async function runHostCliCommand(context: CliCommandRunContext) {
     const parsed = parseHostArgs(context.args);
     const commandOptions: HostCommandOptions = { config: options.config };
     const result = await runHostCommand(context.args, commandOptions, context.options.hostDeps);
+    const strictResult =
+      result.action === "handoff" ? HostHandoffCommandResultSchema.parse(result) : result;
     const failed =
-      (result.action === "handoff" &&
-        (result.status === "refused" || result.status === "unavailable")) ||
-      (result.action === "status" && result.probe !== "listening");
+      (strictResult.action === "handoff" &&
+        (strictResult.status === "refused" || strictResult.status === "unavailable")) ||
+      (strictResult.action === "status" && strictResult.probe !== "listening");
     return {
       code: failed ? 1 : 0,
-      output: parsed.output === "json" ? result : hostCommandSummary(result),
+      output: parsed.output === "json" ? strictResult : hostCommandSummary(strictResult),
       outputFormat: parsed.output,
     };
   } catch (error) {

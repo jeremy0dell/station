@@ -12,7 +12,7 @@ describe("update Host runtime adapter", () => {
       {
         health: { ok: true as const, protocolVersion: 8, buildVersion: "1.1.0" },
         compatibility: { action: "reuse" as const },
-        expected: { buildVersion: "1.1.0", relation: "unknown", compatibility: "reuse" },
+        expected: { buildVersion: "1.1.0", relation: "unknown", compatibility: "refuse" },
       },
       {
         health: { ok: true as const, protocolVersion: 8 },

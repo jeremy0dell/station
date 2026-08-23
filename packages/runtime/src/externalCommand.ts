@@ -43,6 +43,12 @@ export type ExternalCommandInput = {
   signal?: AbortSignal;
   allowedExitCodes?: number[];
   stdio?: "pipe" | "inherit";
+  /** One bounded private payload written to an inherited child descriptor, never argv or env. */
+  inheritedInput?: {
+    fd: number;
+    data: string;
+    maxBytes: number;
+  };
 };
 
 export type ResolveExecutablePathOptions = {
@@ -119,9 +125,18 @@ export async function runExternalCommand(
   throw externalCommandErrorFromUnknown(result.error, input);
 }
 
+/**
+ * ADAPTER
+ *
+ * Executes one bounded child process with captured output. Private inherited input uses a dedicated
+ * one-shot descriptor and never enters argv, environment, diagnostics, or normalized errors.
+ */
 export async function nodeExternalCommandRunner(
   input: ExternalCommandInput,
 ): Promise<ExternalCommandResult> {
+  if (input.inheritedInput !== undefined) {
+    return nodeExternalCommandRunnerWithInheritedInput(input);
+  }
   if (input.stdio === "inherit") {
     return nodeExternalCommandRunnerWithInheritedStdio(input);
   }
@@ -142,6 +157,84 @@ export async function nodeExternalCommandRunner(
     stderr: result.stderr,
     exitCode: 0,
   };
+}
+
+async function nodeExternalCommandRunnerWithInheritedInput(
+  input: ExternalCommandInput,
+): Promise<ExternalCommandResult> {
+  const inherited = input.inheritedInput;
+  if (inherited === undefined) {
+    throw new Error("Inherited-input runner requires one descriptor payload.");
+  }
+  if (input.stdin !== undefined || input.stdio === "inherit") {
+    throw new Error("Inherited-input runner requires captured output and no stdin payload.");
+  }
+  if (
+    !Number.isInteger(inherited.fd) ||
+    inherited.fd < 3 ||
+    Buffer.byteLength(inherited.data, "utf8") > inherited.maxBytes
+  ) {
+    throw new Error("Inherited-input descriptor or payload is invalid.");
+  }
+  const args = input.args ?? [];
+  return new Promise((resolve, reject) => {
+    const stdio: Array<"ignore" | "pipe"> = ["ignore", "pipe", "pipe"];
+    while (stdio.length <= inherited.fd) stdio.push("ignore");
+    stdio[inherited.fd] = "pipe";
+    const child = spawn(input.command, args, {
+      cwd: input.cwd,
+      env: externalCommandEnvironment(input),
+      signal: input.signal,
+      stdio,
+    });
+    let stdout = "";
+    let stderr = "";
+    let settled = false;
+    const maxOutputChars = input.maxOutputChars ?? 64 * 1024;
+    const settle = (callback: () => void) => {
+      if (settled) return;
+      settled = true;
+      callback();
+    };
+    const capture = (stream: NodeJS.ReadableStream | null, target: "stdout" | "stderr") => {
+      stream?.setEncoding("utf8");
+      stream?.on("data", (chunk: string) => {
+        if (target === "stdout") stdout += chunk;
+        else stderr += chunk;
+        if (stdout.length + stderr.length > maxOutputChars) {
+          child.kill();
+          settle(() => reject(new Error("External command output exceeded its configured bound.")));
+        }
+      });
+    };
+    capture(child.stdout, "stdout");
+    capture(child.stderr, "stderr");
+    child.on("error", (error) => settle(() => reject(error)));
+    child.on("close", (exitCode, signal) => {
+      settle(() => {
+        if (exitCode === 0) {
+          resolve({ command: input.command, args, stdout, stderr, exitCode: 0 });
+          return;
+        }
+        reject(
+          Object.assign(new Error("External command failed."), {
+            ...(exitCode === null ? {} : { exitCode }),
+            ...(signal === null ? {} : { signal }),
+            stdout,
+            stderr,
+          }),
+        );
+      });
+    });
+    const privatePipe = child.stdio[inherited.fd];
+    if (privatePipe === undefined || privatePipe === null || !("end" in privatePipe)) {
+      child.kill();
+      settle(() => reject(new Error("Inherited child input pipe was unavailable.")));
+      return;
+    }
+    // The parent closes its write end immediately after the one request so the child can require EOF.
+    privatePipe.end(inherited.data, "utf8");
+  });
 }
 
 async function nodeExternalCommandRunnerWithInheritedStdio(

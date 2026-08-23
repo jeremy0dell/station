@@ -191,6 +191,26 @@ describe("runtime external command boundary", () => {
     });
   });
 
+  it("writes one bounded private inherited-descriptor payload without exposing it on failure", async () => {
+    const privateCanary = "private-observer-commitment-canary";
+    const result = await runExternalCommand({
+      command: process.execPath,
+      args: [
+        "-e",
+        "const fs=require('node:fs');const value=fs.readFileSync(3,'utf8');fs.closeSync(3);process.stdout.write(value)",
+      ],
+      inheritedInput: { fd: 3, data: privateCanary, maxBytes: 128 },
+    });
+    expect(result.stdout).toBe(privateCanary);
+
+    const error = await runExternalCommand({
+      command: process.execPath,
+      args: ["-e", "process.exit(1)"],
+      inheritedInput: { fd: 3, data: privateCanary, maxBytes: 128 },
+    }).catch((cause: unknown) => cause);
+    expect(JSON.stringify(error)).not.toContain(privateCanary);
+  });
+
   it("keeps external command normalization idempotent", () => {
     const first = externalCommandErrorFromUnknown(
       {

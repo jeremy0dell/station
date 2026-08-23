@@ -21,6 +21,7 @@ import {
   classifyHostCompatibility,
   createStationHostClient,
   HOST_PROTOCOL_VERSION,
+  type HostCompatibilityIdentity,
   type HostHealthResult,
   isStationHostCompatibilityError,
   type StationHostClient,
@@ -269,9 +270,9 @@ async function ensureStationHostRunningInternal(
       ),
     };
   }
-  // A caller-supplied client is shared and long-lived (the provider reuses it), so
-  // only a client WE created is disposed on a failure path.
-  const ownsClient = deps.clientFactory === undefined;
+  // Update convergence factories are per-call and always owned here; ordinary provider-injected
+  // clients remain shared because the terminal provider reuses them after this admission call.
+  const ownsClient = convergence !== undefined || deps.clientFactory === undefined;
   const client = (deps.clientFactory ?? defaultClientFactory)(socketPath, expectedBuildVersion);
   const disposeOwned = () => {
     if (ownsClient) {
@@ -424,12 +425,22 @@ async function negotiateIncumbentHost(input: {
       ),
     };
   }
+  const incumbentIdentity = hostCompatibilityIdentity(health);
+  if (input.convergence !== undefined && incumbentIdentity === undefined) {
+    return {
+      outcome: "unavailable",
+      error: hostConvergencePlanDrift(
+        "Executable Host convergence requires the exact incumbent protocol and build identity.",
+      ),
+    };
+  }
 
   if (input.convergence !== undefined) {
     const commitment = await classifyHostConvergenceCommitment(
       input.client,
       health,
       input.convergence,
+      incumbentIdentity,
     );
     if (commitment.status === "already-converged") return { outcome: "already-converged" };
     if (commitment.status === "stale") return { outcome: "unavailable", error: commitment.error };
@@ -494,13 +505,14 @@ async function negotiateIncumbentHost(input: {
       timeoutMs: input.timeoutMs,
       refusal: compatibilityError,
       expectedInventory: input.convergence.commitment.incumbent.inventory.terminals,
+      incumbentIdentity: requireHostCompatibilityIdentity(incumbentIdentity),
     });
   }
 
   try {
     // stopIfIdle makes the empty check and draining transition atomic; spawn
     // waits for release so no connectable incumbent is ever unlinked.
-    await input.client.stopIfIdle(input.expectedBuildVersion);
+    await input.client.stopIfIdle(input.expectedBuildVersion, incumbentIdentity);
     await waitForSocketRelease(input.socketPath, input.timeoutMs);
     return { outcome: "start", ensuredBy: "idle-replace" };
   } catch (error) {
@@ -520,6 +532,7 @@ async function negotiateIncumbentHost(input: {
         socketPath: input.socketPath,
         timeoutMs: input.timeoutMs,
         refusal: error,
+        incumbentIdentity: requireHostCompatibilityIdentity(incumbentIdentity),
       });
     }
     return {
@@ -545,10 +558,15 @@ async function tryLiveHandoff(input: {
   timeoutMs: number;
   refusal: SafeError;
   expectedInventory?: readonly PtyLifetimeIdentity[];
+  incumbentIdentity: HostCompatibilityIdentity;
 }): Promise<IncumbentHostDecision> {
   let begun: Awaited<ReturnType<StationHostClient["beginHandoff"]>>;
   try {
-    begun = await input.client.beginHandoff(input.expectedBuildVersion, input.fidelity);
+    begun = await input.client.beginHandoff(
+      input.expectedBuildVersion,
+      input.fidelity,
+      input.incumbentIdentity,
+    );
   } catch (error) {
     if (input.expectedInventory !== undefined) {
       return {
@@ -575,6 +593,7 @@ async function tryLiveHandoff(input: {
       input.client,
       begun.manifest,
       "The Host acknowledged a different handoff fidelity than the convergence plan authorized.",
+      input.incumbentIdentity,
     );
   }
 
@@ -585,19 +604,20 @@ async function tryLiveHandoff(input: {
         input.client,
         begun.manifest,
         "The Host immutable terminal inventory changed while live handoff was beginning.",
+        input.incumbentIdentity,
       );
     }
   }
 
   try {
-    await input.client.completeHandoff();
+    await input.client.completeHandoff(input.incumbentIdentity);
   } catch (error) {
     const handoffFailure = stationHostErrorFromUnknown(error, {
       code: "HOST_UNREACHABLE",
       message: "Station host live handoff could not be completed safely.",
     });
     try {
-      const abort = await input.client.abortHandoff();
+      const abort = await input.client.abortHandoff(input.incumbentIdentity);
       if (restoredEveryManifestEntry(abort, begun.manifest)) {
         return {
           outcome: "unavailable",
@@ -648,10 +668,11 @@ async function rejectBegunHandoffForPlanDrift(
   client: StationHostClient,
   manifest: PtyHandoffManifest,
   message: string,
+  incumbentIdentity: HostCompatibilityIdentity,
 ): Promise<IncumbentHostDecision> {
   const drift = hostConvergencePlanDrift(message);
   try {
-    const abort = await client.abortHandoff();
+    const abort = await client.abortHandoff(incumbentIdentity);
     if (restoredEveryManifestEntry(abort, manifest)) {
       return { outcome: "unavailable", error: drift };
     }
@@ -683,16 +704,25 @@ async function classifyHostConvergenceCommitment(
   client: StationHostClient,
   health: HostHealthResult,
   command: UpdateHostConvergenceCommand,
+  incumbentIdentity: HostCompatibilityIdentity | undefined,
 ): Promise<
   { status: "incumbent" } | { status: "already-converged" } | { status: "stale"; error: SafeError }
 > {
+  if (incumbentIdentity === undefined) {
+    return {
+      status: "stale",
+      error: hostConvergencePlanDrift(
+        "The planned incumbent Host does not expose an exact lifecycle compatibility identity.",
+      ),
+    };
+  }
   const expected = command.commitment.incumbent;
   let actual: {
     buildIdentity: string | undefined;
     terminals: PtyLifetimeIdentity[];
   };
   try {
-    actual = await readCommittedHostInventory(client);
+    actual = await readCommittedHostInventory(client, incumbentIdentity);
   } catch {
     return {
       status: "stale",
@@ -730,14 +760,17 @@ async function classifyHostConvergenceCommitment(
   return { status: "incumbent" };
 }
 
-async function readCommittedHostInventory(client: StationHostClient): Promise<{
+async function readCommittedHostInventory(
+  client: StationHostClient,
+  incumbentIdentity: HostCompatibilityIdentity,
+): Promise<{
   buildIdentity: string | undefined;
   terminals: PtyLifetimeIdentity[];
 }> {
-  const recoveryInventory = client.lifecycleRecoveryInventory ?? client.recoveryInventory;
+  const recoveryInventory = client.lifecycleRecoveryInventory;
   if (recoveryInventory !== undefined) {
     try {
-      const inventory = await recoveryInventory();
+      const inventory = await recoveryInventory(incumbentIdentity);
       return {
         buildIdentity: inventory.buildIdentity,
         terminals: inventory.ptys
@@ -748,11 +781,34 @@ async function readCommittedHostInventory(client: StationHostClient): Promise<{
       if (!isSafeError(error) || error.code !== "HOST_BAD_REQUEST") throw error;
     }
   }
-  const ptys = await (client.lifecycleList ?? client.list)();
+  const lifecycleList = client.lifecycleList;
+  if (lifecycleList === undefined) {
+    throw hostConvergencePlanDrift(
+      "The Host client cannot read incumbent inventory with a committed lifecycle identity.",
+    );
+  }
+  const ptys = await lifecycleList(incumbentIdentity);
   return {
     buildIdentity: undefined,
     terminals: ptys.map(ptyLifetimeIdentityFromEntry).sort(comparePtyLifetimeIdentities),
   };
+}
+
+function hostCompatibilityIdentity(
+  health: HostHealthResult,
+): HostCompatibilityIdentity | undefined {
+  return health.buildVersion === undefined
+    ? undefined
+    : { protocolVersion: health.protocolVersion, buildVersion: health.buildVersion };
+}
+
+function requireHostCompatibilityIdentity(
+  identity: HostCompatibilityIdentity | undefined,
+): HostCompatibilityIdentity {
+  if (identity !== undefined) return identity;
+  throw hostConvergencePlanDrift(
+    "Host lifecycle mutation requires an exact incumbent protocol and build identity.",
+  );
 }
 
 function committedValueMatches(

@@ -13175,6 +13175,13 @@
       "purpose": "Drives Station host inspection and opt-in live handoff from the CLI without routing through Observer application code. User handoff retains its ordinary ensure policy.",
       "dependencies": [
         {
+          "path": "packages/station-host/src/client.ts",
+          "declaration": "createStationHostClient",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
           "path": "packages/station-host/src/protocol.ts",
           "declaration": "classifyHostCompatibility",
           "kind": "function",
@@ -14518,6 +14525,14 @@
       ]
     },
     {
+      "path": "apps/cli/src/update/publicUpdateIdentityProjector.ts",
+      "declaration": "projectPublicUpdateReportIdentities",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Projects every public opaque identity through one namespace-aware, order-preserving alias table. Existing aliases remain stable when a successor report crosses the parent boundary again.",
+      "dependencies": []
+    },
+    {
       "path": "apps/cli/src/update/publicUpdateReportAdapter.ts",
       "declaration": "createPublicUpdateReport",
       "kind": "function",
@@ -14539,7 +14554,15 @@
       "kind": "function",
       "role": "ADAPTER",
       "purpose": "Defines the deterministic confidentiality decision for one current strict update result. Every nested SafeError and recovery argument crosses this policy, including successor and post-action evidence, without weakening report invariants or optional-field absence.",
-      "dependencies": []
+      "dependencies": [
+        {
+          "path": "apps/cli/src/update/publicUpdateIdentityProjector.ts",
+          "declaration": "projectPublicUpdateReportIdentities",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        }
+      ]
     },
     {
       "path": "apps/cli/src/update/recoveryPreflight.ts",
@@ -14587,6 +14610,64 @@
       "role": "POLICY",
       "purpose": "Admits one strict convergence inspection only when its selected artifacts and public/private Observer and recovery identities correspond exactly.",
       "dependencies": []
+    },
+    {
+      "path": "apps/cli/src/update/recoveryPreflightAdapters.ts",
+      "declaration": "createUpdateObserverMutationInspectionPort",
+      "kind": "function",
+      "role": "COMPOSITION ROOT",
+      "purpose": "Binds the update-only Observer mutation guard to the same local identity and recovery assessment adapters used by aggregate preflight, without exposing Host, hook, or mutation capabilities.",
+      "dependencies": [
+        {
+          "path": "apps/cli/src/observerProcess.ts",
+          "declaration": "getObserverStatus",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/update/recoveryPreflightAdapters.ts",
+          "declaration": "UpdateObserverMutationInspectionPort",
+          "kind": "type",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        },
+        {
+          "path": "apps/cli/src/update/runtimeBuildRelation.ts",
+          "declaration": "classifyUpdateRuntimeBuildRelation",
+          "kind": "function",
+          "role": "POLICY",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/observer/src/runtime/observerProcessEvidence.ts",
+          "declaration": "createLocalObserverProcessEvidence",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/observer/src/runtime/observerProcessIdentity.ts",
+          "declaration": "ObserverProcessIdentityEvidenceSource",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        },
+        {
+          "path": "apps/observer/src/runtime/observerProcessIdentity.ts",
+          "declaration": "verifyObserverProcessIdentity",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "packages/protocol/src/client.ts",
+          "declaration": "createObserverClient",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        }
+      ]
     },
     {
       "path": "apps/cli/src/update/recoveryPreflightAdapters.ts",
@@ -14652,6 +14733,14 @@
           "edgeKind": "runtime"
         }
       ]
+    },
+    {
+      "path": "apps/cli/src/update/recoveryPreflightAdapters.ts",
+      "declaration": "UpdateObserverMutationInspectionPort",
+      "kind": "type",
+      "role": "DRIVEN PORT",
+      "purpose": "Re-inspects the exact public and private Observer ownership aggregate immediately before one update lifecycle mutation, using the same evidence sources as ordinary convergence preflight.",
+      "dependencies": []
     },
     {
       "path": "apps/cli/src/update/runtimeBuildRelation.ts",
@@ -14749,6 +14838,13 @@
           "kind": "interface",
           "role": "DRIVEN PORT",
           "edgeKind": "type-only"
+        },
+        {
+          "path": "packages/station-host/src/client.ts",
+          "declaration": "createStationHostClient",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
         }
       ]
     },
@@ -14804,8 +14900,15 @@
       "declaration": "createUpdateSuccessorTransportAdapter",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Owns pinned successor argv, strict JSON transport, exact target-ownership validation, redaction, and child exit consistency.",
+      "purpose": "Owns pinned successor argv, strict JSON transport, exact target and canonical provider-set validation, redaction, and child exit consistency.",
       "dependencies": [
+        {
+          "path": "apps/cli/src/update/convergencePlan.ts",
+          "declaration": "planUpdateConvergence",
+          "kind": "function",
+          "role": "POLICY",
+          "edgeKind": "runtime"
+        },
         {
           "path": "apps/cli/src/update/publicUpdateReportAdapter.ts",
           "declaration": "sanitizePublicUpdateReport",
@@ -14834,7 +14937,7 @@
       "declaration": "UpdateSuccessorTransportPort",
       "kind": "interface",
       "role": "DRIVEN PORT",
-      "purpose": "Executes one pinned successor evaluator and returns a current strict report only after exact selected channel, exact install owner command, artifact, immutable build, evaluator, result-kind, and exit-status validation.",
+      "purpose": "Executes one pinned successor evaluator and returns a current strict report only after exact selected channel, exact install owner command, artifact, immutable build, canonical hook-provider set, evaluator, result-kind, and exit-status validation.",
       "dependencies": []
     },
     {
@@ -16717,6 +16820,13 @@
           "edgeKind": "runtime"
         },
         {
+          "path": "packages/station-host/src/client.ts",
+          "declaration": "createStationHostClient",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
           "path": "packages/station-host/src/protocol.ts",
           "declaration": "classifyHostCompatibility",
           "kind": "function",
@@ -16740,6 +16850,13 @@
           "edgeKind": "runtime"
         },
         {
+          "path": "packages/station-host/src/client.ts",
+          "declaration": "createStationHostClient",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
           "path": "packages/station-host/src/protocol.ts",
           "declaration": "classifyHostCompatibility",
           "kind": "function",
@@ -16758,6 +16875,13 @@
         {
           "path": "packages/protocol/src/transport.ts",
           "declaration": "probeUnixSocket",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "packages/station-host/src/client.ts",
+          "declaration": "createStationHostClient",
           "kind": "function",
           "role": "ADAPTER",
           "edgeKind": "runtime"
@@ -17050,6 +17174,14 @@
       "dependencies": []
     },
     {
+      "path": "packages/runtime/src/externalCommand.ts",
+      "declaration": "nodeExternalCommandRunner",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Executes one bounded child process with captured output. Private inherited input uses a dedicated one-shot descriptor and never enters argv, environment, diagnostics, or normalized errors.",
+      "dependencies": []
+    },
+    {
       "path": "packages/runtime/src/hookSetup.ts",
       "declaration": "classifyProviderHookArtifactOwnership",
       "kind": "function",
@@ -17252,11 +17384,27 @@
       "dependencies": []
     },
     {
+      "path": "packages/station-host/src/client.ts",
+      "declaration": "createStationHostClient",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Translates typed Host operations into one multiplexed NDJSON connection. Update lifecycle calls can bind an exact predecessor protocol and build identity until closure; a reconnect then mints only the configured target identity.",
+      "dependencies": []
+    },
+    {
       "path": "packages/station-host/src/protocol.ts",
       "declaration": "classifyHostCompatibility",
       "kind": "function",
       "role": "POLICY",
       "purpose": "Decide host reuse, idle replace eligibility, or refuse from opaque health without inferring SemVer compatibility. Live handoff is only considered when this returns `replace`; protocol mismatch stays a visible refuse.",
+      "dependencies": []
+    },
+    {
+      "path": "packages/station-host/src/server.ts",
+      "declaration": "serveHostConnection",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Dispatch host requests concurrently so long-lived `host.attach` streams do not block write/resize/detach on the same multiplexed socket. The first non-health request binds one exact protocol, build, and diagnostic client identity to the connection; teardown then classifies every attachment before the client witness closes.",
       "dependencies": []
     }
   ]

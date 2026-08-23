@@ -125,6 +125,17 @@ export type ObserverProcessOptions = {
   startupDeadlineMs?: number;
   observerCommand?: ExecutableArgv;
   onStartupProgress?: (message: string) => void;
+  /** Update-only lifecycle guard retained in memory after private ownership reinspection. */
+  updateLifecycleGuard?:
+    | { status: "absent" }
+    | {
+        status: "incumbent";
+        pid: number;
+        version: string;
+        socketPath: string;
+      };
+  /** Rechecks the private update commitment after health sampling and before lifecycle mutation. */
+  beforeUpdateLifecycleMutation?: () => Promise<void>;
 };
 
 /** Timed child-start result with causal and bounded evidence kept outside the outer SafeError. */

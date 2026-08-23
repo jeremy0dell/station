@@ -8,6 +8,7 @@ import {
 } from "@station/contracts";
 import { type ExternalCommandRunner, runExternalCommand } from "@station/runtime";
 import type { ExecutableArgv } from "../selfExec.js";
+import { planUpdateConvergence } from "./convergencePlan.js";
 import { sanitizePublicUpdateReport } from "./publicUpdateReportAdapter.js";
 import type { UpdateCommandArgv } from "./updateChannel.js";
 import { updateCommandExitCode } from "./updateCommandStatusPolicy.js";
@@ -19,13 +20,14 @@ import type {
 export type UpdateSuccessorTransportAdapterOptions = {
   configPath?: string;
   commandRunner?: ExternalCommandRunner;
+  observerBootLogPath: string;
 };
 
 /**
  * ADAPTER
  *
- * Owns pinned successor argv, strict JSON transport, exact target-ownership validation, redaction,
- * and child exit consistency.
+ * Owns pinned successor argv, strict JSON transport, exact target and canonical provider-set
+ * validation, redaction, and child exit consistency.
  */
 export function createUpdateSuccessorTransportAdapter(
   options: UpdateSuccessorTransportAdapterOptions,
@@ -71,7 +73,7 @@ async function runSuccessor(
     options.commandRunner,
   );
   const parsed = UpdateCommandReportSchema.parse(JSON.parse(result.stdout));
-  assertPinnedSuccessorReport(parsed, input);
+  assertPinnedSuccessorReport(parsed, input, options.observerBootLogPath);
   const derivedStatus = updateCommandReportStatus(parsed);
   if (
     parsed.status !== derivedStatus ||
@@ -85,6 +87,7 @@ async function runSuccessor(
 function assertPinnedSuccessorReport(
   report: UpdateCommandReport,
   input: UpdateSuccessorTransportInput,
+  observerBootLogPath: string,
 ): void {
   if (report.channel !== input.channel) {
     throw new Error("Successor update report did not retain the selected update channel.");
@@ -121,6 +124,16 @@ function assertPinnedSuccessorReport(
       );
     }
     buildIdentity = evidenceBuildIdentity;
+    assertExpectedHookProviders(entry.evidence, input.expectedHookProviders, entry.name);
+    assertInheritedHandoffPolicy(entry.evidence, input.handoff);
+  }
+  assertExpectedHookAudits(report, input.expectedHookProviders);
+
+  if (
+    report.startupEvidence !== undefined &&
+    report.startupEvidence.bootLogPath !== observerBootLogPath
+  ) {
+    throw new Error("Successor Observer startup evidence named another configured boot log.");
   }
 
   switch (report.result.kind) {
@@ -147,6 +160,95 @@ function assertPinnedSuccessorReport(
       throw new Error(
         "Successor update returned a result kind forbidden at the internal boundary.",
       );
+  }
+}
+
+function assertExpectedHookProviders(
+  evidence: UpdateEvidencePlan,
+  expected: readonly string[],
+  label: string,
+): void {
+  const providerLists = [
+    { name: "preflight provider inventory", values: evidence.preflight.hookProviderIds },
+    { name: "hook inspection", values: evidence.preflight.hooks.map((hook) => hook.provider) },
+    { name: "hook plan", values: evidence.plan.components.hooks.map((hook) => hook.provider) },
+  ];
+  for (const providerList of providerLists) {
+    if (!stringListsMatch(providerList.values, expected)) {
+      throw new Error(
+        `Successor ${label} ${providerList.name} changed the predecessor's canonical provider set.`,
+      );
+    }
+  }
+}
+
+function assertExpectedHookAudits(
+  report: UpdateCommandReport,
+  expectedProviders: readonly string[],
+): void {
+  const expectedActions = report.initial.plan.components.hooks
+    .filter((hook) => hook.action === "reconcile")
+    .map((hook) => hook.provider);
+  for (const audit of audits(report)) {
+    if (audit.executor !== "successor-cli") {
+      throw new Error("Successor action audit was attributed to another evaluator.");
+    }
+    const actualActions: string[] = [];
+    for (const action of audit.actions) {
+      if (action.phase !== "hook-reconciliation") continue;
+      if (action.provider === undefined) {
+        throw new Error("Successor hook audit omitted its canonical provider identity.");
+      }
+      actualActions.push(action.provider);
+    }
+    if (
+      !stringListsMatch(actualActions, expectedActions) ||
+      actualActions.some((provider) => !expectedProviders.includes(provider))
+    ) {
+      throw new Error("Successor action audit changed its exact planned hook-provider set.");
+    }
+  }
+}
+
+function audits(report: UpdateCommandReport) {
+  switch (report.result.kind) {
+    case "current-runtime-execution":
+    case "successor-runtime-execution":
+    case "execution-failed":
+      return report.result.actionAudits;
+    case "already-converged":
+    case "preview":
+    case "deferred":
+    case "non-mutating-stop":
+      return [];
+  }
+}
+
+function stringListsMatch(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
+}
+
+function assertInheritedHandoffPolicy(
+  evidence: UpdateEvidencePlan,
+  handoff: UpdateSuccessorTransportInput["handoff"],
+): void {
+  const expected = planUpdateConvergence({
+    selectedTarget: evidence.plan.selectedTarget,
+    installation: evidence.plan.installation,
+    ...(handoff === undefined ? {} : { handoffFidelity: handoff }),
+    preflight: evidence.preflight,
+  });
+  const actualHost = evidence.plan.components.host;
+  const actualTerminals = evidence.plan.components.terminals;
+  if (
+    actualHost.action !== expected.components.host.action ||
+    actualHost.reason !== expected.components.host.reason ||
+    actualHost.fidelity !== expected.components.host.fidelity ||
+    actualTerminals.action !== expected.components.terminals.action ||
+    actualTerminals.reason !== expected.components.terminals.reason ||
+    actualTerminals.fidelity !== expected.components.terminals.fidelity
+  ) {
+    throw new Error("Successor update evidence changed the inherited Host handoff policy.");
   }
 }
 

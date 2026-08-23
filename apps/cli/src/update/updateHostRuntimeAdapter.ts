@@ -144,16 +144,22 @@ function publicHostEvidence(
     );
   }
 
+  const relation = classifyUpdateRuntimeBuildRelation({
+    runningDisplayVersion: inspection.health.buildVersion,
+    runningBuildIdentity: inspection.buildIdentity,
+    currentBuildIdentity,
+    artifacts,
+  });
   const evidence: Extract<UpdateReapHostEvidence, { status: "inspected" }> = {
     status: "inspected",
     protocolVersion: inspection.health.protocolVersion,
-    relation: classifyUpdateRuntimeBuildRelation({
-      runningDisplayVersion: inspection.health.buildVersion,
-      runningBuildIdentity: inspection.buildIdentity,
-      currentBuildIdentity,
-      artifacts,
-    }),
-    compatibility: inspection.compatibility.action,
+    relation,
+    compatibility:
+      relation === "matching-target"
+        ? inspection.compatibility.action
+        : relation === "different" && inspection.compatibility.action !== "refuse"
+          ? "replace"
+          : "refuse",
     terminals: inspection.ptys.map(redactedHostTerminal).sort(compareHostTerminal),
   };
   if (inspection.health.buildVersion !== undefined) {

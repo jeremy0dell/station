@@ -1,3 +1,7 @@
+import {
+  formatStationObserverBuildIdentity,
+  parseStationObserverBuildIdentity,
+} from "./stationBuildIdentity.js";
 import type {
   UpdateConvergencePlan,
   UpdateEvidencePlan,
@@ -92,6 +96,7 @@ export function updateConvergenceSemanticIssues(input: {
       message: "Selected target build knowledge must match the installed artifact.",
     });
   }
+  validateRuntimeBuildClaims(preflight, plan, issues);
 
   const artifactAction = plan.installation.action;
   const artifactPhaseValid = artifactSelected
@@ -228,6 +233,69 @@ export function updateConvergenceSemanticIssues(input: {
     }
   });
   return issues;
+}
+
+function validateRuntimeBuildClaims(
+  preflight: UpdateReapRecoveryPreflight,
+  plan: UpdateConvergencePlan,
+  issues: UpdateConvergenceSemanticIssue[],
+): void {
+  if (plan.selectedTarget.buildIdentity.status !== "known") return;
+  const targetVersion = plan.selectedTarget.artifact.version;
+  const targetBuildIdentity = plan.selectedTarget.buildIdentity.value;
+  const targetObserverSelector = formatStationObserverBuildIdentity(
+    targetVersion,
+    targetBuildIdentity,
+  );
+  const observer = preflight.observer;
+  if (observer.status === "exact") {
+    const parsed = parseStationObserverBuildIdentity(observer.buildVersion);
+    const exactTarget =
+      observer.buildVersion === targetObserverSelector &&
+      parsed.version === targetVersion &&
+      parsed.buildIdentity === targetBuildIdentity;
+    const expectedRelation = exactTarget ? "matching-target" : "different";
+    if (observer.relation !== expectedRelation) {
+      issues.push({
+        path: ["preflight", "observer", "relation"],
+        message:
+          "Observer build relation must follow the selected display version and immutable selector.",
+      });
+    }
+    if (exactTarget !== (observer.replacementAdmission === "exact-build")) {
+      issues.push({
+        path: ["preflight", "observer", "replacementAdmission"],
+        message: "Observer exact-build admission requires the exact selected immutable selector.",
+      });
+    }
+  }
+
+  const host = preflight.host;
+  if (host.status !== "inspected") return;
+  const completeIdentity = host.buildVersion !== undefined && host.buildIdentity !== undefined;
+  const exactTarget =
+    host.buildVersion === targetVersion && host.buildIdentity === targetBuildIdentity;
+  const expectedRelation = exactTarget
+    ? "matching-target"
+    : completeIdentity
+      ? "different"
+      : "unknown";
+  if (host.relation !== expectedRelation) {
+    issues.push({
+      path: ["preflight", "host", "relation"],
+      message: "Host build relation must follow the selected display and immutable build identity.",
+    });
+  }
+  const compatibilityValid =
+    (expectedRelation === "matching-target" && host.compatibility !== "replace") ||
+    (expectedRelation === "different" && host.compatibility !== "reuse") ||
+    (expectedRelation === "unknown" && host.compatibility === "refuse");
+  if (!compatibilityValid) {
+    issues.push({
+      path: ["preflight", "host", "compatibility"],
+      message: "Host compatibility must fail closed unless exact selected build reuse is proven.",
+    });
+  }
 }
 
 function expectedHookDecisions(

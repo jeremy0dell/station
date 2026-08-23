@@ -1,4 +1,5 @@
 import { stationBuildInfo, stationObserverBuildVersion } from "@station/runtime";
+import { observerBootLogPath } from "../../observerProcess/spawn.js";
 import {
   type CreateProviderRegistryOptions,
   createProviderRegistry,
@@ -116,9 +117,11 @@ export function createUpdateCommandDeps(
     convergenceInspection = (input) => inspectUpdateConvergencePreflight({ ...input, ports });
   }
   const commandRunner = overrides?.commandRunner;
+  const observerPaths = resolveObserverPaths(loaded.config);
   const adapterOptions = {
-    observerSocketPath: resolveObserverPaths(loaded.config).socketPath,
+    observerSocketPath: observerPaths.socketPath,
     observerBuildSelector: stationObserverBuildVersion(buildInfo()),
+    observerBootLogPath: observerBootLogPath(observerPaths),
     ...(loaded.configPath === undefined ? {} : { configPath: loaded.configPath }),
     ...(commandRunner === undefined ? {} : { commandRunner }),
   };

@@ -598,6 +598,17 @@ describe("hosted CI policy", () => {
       "pnpm smoke:update -- --incumbent-binary station/dist/bin/stn",
     );
     expect(packageJson.scripts["test:ci:binary"]).toContain("--scenarios current-gate");
+    const updateSmoke = read("scripts/test-runners/run-update-smoke.mjs");
+    const currentGate = between(updateSmoke, '    case "current-gate":', '    case "full":');
+    for (const scenario of [
+      "idleHost",
+      "bridgeHandoff",
+      "nonBridgeReap",
+      "noHost",
+      "redactionFailure",
+    ]) {
+      expect(currentGate).toContain(scenario);
+    }
     expect(packageJson.scripts["test:ci:station"]).toContain("test:pty:bun");
     expect(lefthook).toContain("run: node scripts/run-without-git-locals.mjs pnpm test:pre-push");
     expect(testing).toContain("The pre-push hook is intentionally lint-only");

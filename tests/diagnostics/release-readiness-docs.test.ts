@@ -153,6 +153,8 @@ describe("release readiness docs", () => {
     expect(singleBinary).toContain("Older report shapes are rejected");
     expect(singleBinary).toContain("source-mode bridge Host");
     expect(singleBinary).toContain("real old idle Host");
+    expect(singleBinary).toContain("five-scenario current-contract gate");
+    expect(singleBinary).toContain("`tmux-no-host`");
     expect(singleBinary).toContain("fresh final no-op plan");
     expect(singleBinary).toContain("real pinned-successor Codex hook failure");
     expect(singleBinary).toContain("exclude every raw value and");
@@ -312,7 +314,7 @@ describe("release readiness docs", () => {
     expect(releasing).toContain("old-idle-Host replacement");
     expect(releasing).toContain("old bridge-backed live handoff");
     expect(releasing).toContain("typed receipt audit");
-    expect(releasing).toContain("four current-contract transitions");
+    expect(releasing).toContain("five current-contract transitions");
     expect(releasing).toContain("real successor hook-failure lane");
     expect(releasing).toContain("terminal-control");
     expect(releasing).toContain("while preserving the incumbent artifact and runtime");

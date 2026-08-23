@@ -23,6 +23,7 @@ import {
   type HostClientIdentity,
   HostClientIdentitySchema,
   HostCloseResultSchema,
+  type HostCompatibilityIdentity,
   type HostCompleteHandoffResult,
   HostCompleteHandoffResultSchema,
   type HostControlState,
@@ -85,16 +86,22 @@ export type HostAttachment = {
 export type StationHostClient = {
   health(): Promise<HostHealthResult>;
   /** Lifecycle-only request; intentionally available before compatibility is established. */
-  stopIfIdle(requestingBuildVersion: string): Promise<HostStopIfIdleResult>;
+  stopIfIdle(
+    requestingBuildVersion: string,
+    incumbentIdentity?: HostCompatibilityIdentity,
+  ): Promise<HostStopIfIdleResult>;
   /** Lifecycle-only negotiated live handoff begin; parks bridges and returns the manifest. */
   beginHandoff(
     requestingBuildVersion: string,
     fidelity?: HostHandoffFidelity,
+    incumbentIdentity?: HostCompatibilityIdentity,
   ): Promise<HostBeginHandoffResult>;
   /** Lifecycle-only: release the socket and exit without disposing parked bridges. */
-  completeHandoff(): Promise<HostCompleteHandoffResult>;
+  completeHandoff(
+    incumbentIdentity?: HostCompatibilityIdentity,
+  ): Promise<HostCompleteHandoffResult>;
   /** Lifecycle-only: re-adopt parked bridges and resume normal serving. */
-  abortHandoff(): Promise<HostAbortHandoffResult>;
+  abortHandoff(incumbentIdentity?: HostCompatibilityIdentity): Promise<HostAbortHandoffResult>;
   /** Lifecycle-only: adopt a parked manifest on a successor host. */
   adoptRegistry(manifest: PtyHandoffManifest): Promise<HostAdoptRegistryResult>;
   spawn(params: HostSpawnParamsInput): Promise<HostSpawnResult>;
@@ -103,9 +110,11 @@ export type StationHostClient = {
   /** Read immutable Host build and PTY recovery evidence without changing protocol-v8 `host.list`. */
   recoveryInventory?(): Promise<HostRecoveryInventoryResult>;
   /** Lifecycle-only read pinned to the same connection as a later constrained Host mutation. */
-  lifecycleList?(): Promise<HostListResult["ptys"]>;
+  lifecycleList?(incumbentIdentity: HostCompatibilityIdentity): Promise<HostListResult["ptys"]>;
   /** Lifecycle-only immutable inventory read that does not require target-build reuse. */
-  lifecycleRecoveryInventory?(): Promise<HostRecoveryInventoryResult>;
+  lifecycleRecoveryInventory?(
+    incumbentIdentity: HostCompatibilityIdentity,
+  ): Promise<HostRecoveryInventoryResult>;
   focus(ptyId: string): Promise<void>;
   close(ptyId: string): Promise<{ closed: boolean }>;
   /** Attach only with an explicit role and a matching complete identity proof. */
@@ -143,6 +152,13 @@ type FrameSink = {
 
 const defaultTimeoutMs = 5000;
 
+/**
+ * ADAPTER
+ *
+ * Translates typed Host operations into one multiplexed NDJSON connection. Update lifecycle calls
+ * can bind an exact predecessor protocol and build identity until closure; a reconnect then mints
+ * only the configured target identity.
+ */
 export function createStationHostClient(options: StationHostClientOptions): StationHostClient {
   const timeoutMs = options.timeoutMs ?? defaultTimeoutMs;
   const expectedBuildVersion = options.expectedBuildVersion ?? stationBuildInfo().version;
@@ -154,6 +170,7 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
   let connecting: Promise<NdjsonConnection> | undefined;
   let compatibilityCheck: Promise<void> | undefined;
   let clientIdentity: HostClientIdentity | undefined;
+  let observedLifecycleIdentity: HostCompatibilityIdentity | undefined;
   let disposed = false;
   let nextId = 0;
 
@@ -174,6 +191,7 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
     connecting = undefined;
     compatibilityCheck = undefined;
     clientIdentity = undefined;
+    observedLifecycleIdentity = undefined;
   }
 
   async function readLoop(active: NdjsonConnection): Promise<void> {
@@ -254,6 +272,7 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
     params: unknown,
     schema: { parse(value: unknown): TResult },
     includeClientIdentity = false,
+    compatibilityIdentity?: HostCompatibilityIdentity,
   ): Promise<TResult> {
     const active = await ensureConnection();
     const id = `h${nextId++}`;
@@ -269,7 +288,17 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
       }, timeoutMs);
       pending.set(id, { resolve, reject, timer });
       active.send(
-        hostRequest(id, method, params, includeClientIdentity ? clientIdentity : undefined),
+        hostRequest(
+          id,
+          method,
+          params,
+          includeClientIdentity
+            ? clientIdentity
+            : lifecycleClientIdentity(
+                clientIdentity,
+                compatibilityIdentity ?? observedLifecycleIdentity,
+              ),
+        ),
       );
     });
     if (!response.ok) {
@@ -417,18 +446,48 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
   }
 
   return {
-    health: () => rawRequest("host.health", undefined, HostHealthResultSchema),
-    stopIfIdle: (requestingBuildVersion) =>
-      rawRequest("host.stopIfIdle", { requestingBuildVersion }, HostStopIfIdleResultSchema),
-    beginHandoff: (requestingBuildVersion, fidelity = "processes") =>
+    health: async () => {
+      const health = await rawRequest("host.health", undefined, HostHealthResultSchema);
+      if (health.buildVersion !== undefined) {
+        observedLifecycleIdentity = {
+          protocolVersion: health.protocolVersion,
+          buildVersion: health.buildVersion,
+        };
+      }
+      return health;
+    },
+    stopIfIdle: (requestingBuildVersion, incumbentIdentity) =>
+      rawRequest(
+        "host.stopIfIdle",
+        { requestingBuildVersion },
+        HostStopIfIdleResultSchema,
+        false,
+        incumbentIdentity,
+      ),
+    beginHandoff: (requestingBuildVersion, fidelity = "processes", incumbentIdentity) =>
       rawRequest(
         "host.beginHandoff",
         { requestingBuildVersion, fidelity },
         HostBeginHandoffResultSchema,
+        false,
+        incumbentIdentity,
       ),
-    completeHandoff: () =>
-      rawRequest("host.completeHandoff", undefined, HostCompleteHandoffResultSchema),
-    abortHandoff: () => rawRequest("host.abortHandoff", undefined, HostAbortHandoffResultSchema),
+    completeHandoff: (incumbentIdentity) =>
+      rawRequest(
+        "host.completeHandoff",
+        undefined,
+        HostCompleteHandoffResultSchema,
+        false,
+        incumbentIdentity,
+      ),
+    abortHandoff: (incumbentIdentity) =>
+      rawRequest(
+        "host.abortHandoff",
+        undefined,
+        HostAbortHandoffResultSchema,
+        false,
+        incumbentIdentity,
+      ),
     // Successor adopt requires matching build identity; not a lifecycle exemption.
     adoptRegistry: (manifest) =>
       request("host.adoptRegistry", { manifest }, HostAdoptRegistryResultSchema),
@@ -436,10 +495,17 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
     list: async () => (await request("host.list", undefined, HostListResultSchema)).ptys,
     recoveryInventory: () =>
       request("host.recoveryInventory", undefined, HostRecoveryInventoryResultSchema),
-    lifecycleList: async () =>
-      (await rawRequest("host.list", undefined, HostListResultSchema)).ptys,
-    lifecycleRecoveryInventory: () =>
-      rawRequest("host.recoveryInventory", undefined, HostRecoveryInventoryResultSchema),
+    lifecycleList: async (incumbentIdentity) =>
+      (await rawRequest("host.list", undefined, HostListResultSchema, false, incumbentIdentity))
+        .ptys,
+    lifecycleRecoveryInventory: (incumbentIdentity) =>
+      rawRequest(
+        "host.recoveryInventory",
+        undefined,
+        HostRecoveryInventoryResultSchema,
+        false,
+        incumbentIdentity,
+      ),
     focus: async (ptyId) => {
       await request("host.focus", { ptyId }, HostOkResultSchema);
     },
@@ -545,6 +611,14 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
       current?.close();
     },
   };
+}
+
+function lifecycleClientIdentity(
+  client: HostClientIdentity | undefined,
+  compatibility: HostCompatibilityIdentity | undefined,
+): HostClientIdentity | undefined {
+  if (client === undefined) return undefined;
+  return compatibility === undefined ? client : { ...client, ...compatibility };
 }
 
 function createClientIdentity(

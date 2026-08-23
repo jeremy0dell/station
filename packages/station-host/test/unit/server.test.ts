@@ -166,7 +166,7 @@ describe("serveHostConnection", () => {
     client.close();
   });
 
-  it("allows exact convergence reads and handoff lifecycle methods without correlation identity", async () => {
+  it("binds exact incumbent identity across convergence reads and lifecycle mutation", async () => {
     const { client, server } = inMemoryNdjsonConnectionPair();
     const calls: string[] = [];
     void serveHostConnection(server, {
@@ -201,34 +201,56 @@ describe("serveHostConnection", () => {
     });
     const responses = client.messages()[Symbol.asyncIterator]();
 
-    client.send(hostRequest("recovery", "host.recoveryInventory"));
+    client.send(hostRequest("recovery", "host.recoveryInventory", undefined, TEST_CLIENT_IDENTITY));
     expect(HostResponseSchema.parse((await responses.next()).value)).toMatchObject({
       id: "recovery",
       ok: true,
       result: { buildIdentity: "incumbent-identity", ptys: [] },
     });
     client.send(
-      hostRequest("begin", "host.beginHandoff", {
-        requestingBuildVersion: "next",
-        fidelity: "processes",
+      hostRequest("wrong-build", "host.recoveryInventory", undefined, {
+        ...TEST_CLIENT_IDENTITY,
+        buildVersion: "next-build",
       }),
+    );
+    expect(HostResponseSchema.parse((await responses.next()).value)).toMatchObject({
+      id: "wrong-build",
+      ok: false,
+      error: { code: "HOST_VERSION_INCOMPATIBLE" },
+    });
+    client.send(
+      hostRequest(
+        "begin",
+        "host.beginHandoff",
+        {
+          requestingBuildVersion: "next",
+          fidelity: "processes",
+        },
+        TEST_CLIENT_IDENTITY,
+      ),
     );
     expect(HostResponseSchema.parse((await responses.next()).value)).toMatchObject({
       id: "begin",
       ok: true,
     });
-    client.send(hostRequest("complete", "host.completeHandoff"));
+    client.send(hostRequest("complete", "host.completeHandoff", undefined, TEST_CLIENT_IDENTITY));
     expect(HostResponseSchema.parse((await responses.next()).value)).toMatchObject({
       id: "complete",
       ok: true,
     });
-    client.send(hostRequest("abort", "host.abortHandoff"));
+    client.send(hostRequest("abort", "host.abortHandoff", undefined, TEST_CLIENT_IDENTITY));
     expect(HostResponseSchema.parse((await responses.next()).value)).toMatchObject({
       id: "abort",
       ok: true,
     });
-    // adoptRegistry is identity-bound, not a lifecycle exemption.
-    client.send(hostRequest("adopt", "host.adoptRegistry", { manifest: {} }));
+    client.send(
+      hostRequest(
+        "adopt",
+        "host.adoptRegistry",
+        { manifest: {} },
+        { ...TEST_CLIENT_IDENTITY, connectionId: "changed-on-bound-connection" },
+      ),
+    );
     expect(HostResponseSchema.parse((await responses.next()).value)).toMatchObject({
       id: "adopt",
       ok: false,

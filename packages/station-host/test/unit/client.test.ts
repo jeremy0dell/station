@@ -434,16 +434,22 @@ describe("createStationHostClient", () => {
       expectedBuildVersion: "target-build",
       connect: async () => clientConn,
     });
+    const incumbentIdentity = {
+      protocolVersion: HOST_PROTOCOL_VERSION,
+      buildVersion: "incumbent-build",
+    };
 
     await expect(client.list()).rejects.toMatchObject({ code: "HOST_VERSION_INCOMPATIBLE" });
-    await expect(client.lifecycleList?.()).resolves.toMatchObject([
+    await expect(client.lifecycleList?.(incumbentIdentity)).resolves.toMatchObject([
       { ptyId: PTY_REF.ptyId, ptyInstanceId: PTY_REF.ptyInstanceId },
     ]);
-    await expect(client.lifecycleRecoveryInventory?.()).resolves.toMatchObject({
+    await expect(client.lifecycleRecoveryInventory?.(incumbentIdentity)).resolves.toMatchObject({
       buildIdentity: "incumbent-identity",
       ptys: [{ ptyId: PTY_REF.ptyId, handoffSupport: { kind: "bridge-releasable" } }],
     });
-    await expect(client.stopIfIdle("target-build")).resolves.toEqual({ stopping: true });
+    await expect(client.stopIfIdle("target-build", incumbentIdentity)).resolves.toEqual({
+      stopping: true,
+    });
     client.dispose();
   });
 
@@ -466,6 +472,14 @@ describe("createStationHostClient", () => {
     await client.list();
 
     expect(identities).toEqual([
+      {
+        protocolVersion: HOST_PROTOCOL_VERSION,
+        buildVersion: "test-build",
+        uiRunId: "ui_11111111-1111-4111-8111-111111111111",
+        rendererPid: 42,
+        clientKind: "native_renderer",
+        connectionId: "conn-test",
+      },
       {
         protocolVersion: HOST_PROTOCOL_VERSION,
         buildVersion: "test-build",

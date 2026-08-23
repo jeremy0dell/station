@@ -37,6 +37,10 @@ import { nonExecutedPhases } from "./updateCommandStatusPolicy.js";
 import type { UpdateConvergenceRequest } from "./updateConvergencePort.js";
 import { updateErrorFromUnknown } from "./updateError.js";
 import type { UpdateHostRuntimePort } from "./updateHostRuntimePort.js";
+import {
+  observerMutationPrivateEvidenceMatches,
+  type UpdateObserverMutationRequest,
+} from "./updateObserverMutationCommitment.js";
 import type { PublicUpdateReportInput, UpdatePublicReportPort } from "./updatePublicReportPort.js";
 import type { UpdateRuntimeConvergencePort } from "./updateRuntimeConvergencePort.js";
 import type { UpdateSuccessorTransportPort } from "./updateSuccessorTransportPort.js";
@@ -313,6 +317,7 @@ async function applyThenConverge(
       launcher: applied.successorCli,
       channel: selected.channel,
       target,
+      expectedHookProviders: initial.preflight.hookProviderIds,
       ...(initial.plan.installation.managerCommand === undefined
         ? {}
         : { managerCommand: initial.plan.installation.managerCommand }),
@@ -402,7 +407,7 @@ async function executeCurrentRuntime(
     actions,
   };
   try {
-    const hookFailures: FailedHookReconciliation[] = [];
+    let firstHookFailure: unknown;
     for (const hook of initial.plan.components.hooks) {
       if (hook.action !== "reconcile") continue;
       inFlightAction = {
@@ -410,30 +415,32 @@ async function executeCurrentRuntime(
         action: "reconcile",
         provider: hook.provider,
       };
-      const result = await ports.runtime.reconcileHook(selected.plan.currentCli, hook.provider);
-      const succeeded = providerHookReconciliationSucceeded(result);
-      actions.push({
-        phase: "hook-reconciliation",
-        action: "reconcile",
-        status: succeeded ? "completed" : "failed",
-        provider: hook.provider,
-        hookResult: result,
-      });
-      if (!succeeded) {
-        hookFailures.push(result);
+      try {
+        const result = await ports.runtime.reconcileHook(selected.plan.currentCli, hook.provider);
+        const succeeded = providerHookReconciliationSucceeded(result);
+        actions.push({
+          phase: "hook-reconciliation",
+          action: "reconcile",
+          status: succeeded ? "completed" : "failed",
+          provider: hook.provider,
+          hookResult: result,
+        });
+        if (!succeeded && firstHookFailure === undefined) {
+          firstHookFailure = hookFailureError(result);
+        }
+      } catch (error) {
+        actions.push({
+          phase: "hook-reconciliation",
+          action: "reconcile",
+          status: "failed",
+          provider: hook.provider,
+        });
+        if (firstHookFailure === undefined) firstHookFailure = error;
+      } finally {
+        inFlightAction = undefined;
       }
-      inFlightAction = undefined;
     }
-    if (hookFailures.length > 0) {
-      const first = hookFailures[0];
-      if (first === undefined) throw new Error("Missing failed hook reconciliation result.");
-      throw first.status === "ownership-conflict"
-        ? updateErrorFromUnknown(undefined, {
-            code: "UPDATE_HOOK_OWNERSHIP_CONFLICT",
-            message: "Configured provider hooks are owned by another installation.",
-          })
-        : first.error;
-    }
+    if (firstHookFailure !== undefined) throw firstHookFailure;
     const observer = initial.plan.components.observer;
     if (observer.action === "start" || observer.action === "restart") {
       inFlightAction = {
@@ -448,7 +455,7 @@ async function executeCurrentRuntime(
       });
       observerLifecycleFailure = await ports.runtime.convergeObserver(
         selected.plan.currentCli,
-        observer.action,
+        observerMutationRequest(initial, initialPrivateEvidence, observer.action),
       );
       if (observerLifecycleFailure !== undefined) {
         throw updateErrorFromUnknown(undefined, {
@@ -582,7 +589,9 @@ async function executeCurrentRuntime(
       };
       actions.push(failedAction);
     }
-    const safe = updateErrorFromUnknown(error, {
+    // The detailed typed child failure stays in its action result or Observer cause; the public
+    // operation error remains a boundary-owned code instead of trusting child tag/code strings.
+    const safe = updateErrorFromUnknown(undefined, {
       code: "UPDATE_RUNTIME_CONVERGENCE_FAILED",
       message: "Station could not complete safe runtime convergence.",
     });
@@ -820,43 +829,61 @@ async function revalidateObserverExecutionSidecar(input: {
   expected: UpdateConvergencePrivateEvidence;
   ports: UpdateConvergencePorts;
 }): Promise<void> {
-  const actual = (await runInspection(input.current, input.target, input.ports)).privateEvidence;
-  if (!observerPrivateEvidenceMatches(input.expected, actual)) {
+  const actual = await runInspection(input.current, input.target, input.ports);
+  const expected = observerMutationRequestFromPrivate(input.expected);
+  if (
+    !observerMutationPrivateEvidenceMatches(
+      expected,
+      actual.preflight.observer.status,
+      actual.privateEvidence,
+    )
+  ) {
     throw new ObserverExecutionPlanStaleError(
       "Observer ownership or selected recovery evidence changed after convergence planning.",
     );
   }
 }
 
-function observerPrivateEvidenceMatches(
-  expected: UpdateConvergencePrivateEvidence,
-  actual: UpdateConvergencePrivateEvidence,
-): boolean {
-  const expectedObserver = expected.observer;
-  const actualObserver = actual.observer;
-  if ((expectedObserver === undefined) !== (actualObserver === undefined)) return false;
-  if (
-    expectedObserver !== undefined &&
-    actualObserver !== undefined &&
-    (expectedObserver.pid !== actualObserver.pid ||
-      expectedObserver.osStartTime !== actualObserver.osStartTime ||
-      expectedObserver.processToken !== actualObserver.processToken ||
-      expectedObserver.buildSelector !== actualObserver.buildSelector ||
-      expectedObserver.socketPath !== actualObserver.socketPath)
-  ) {
-    return false;
-  }
-  return (
-    expected.selectedRecoveryHandles.length === actual.selectedRecoveryHandles.length &&
-    expected.selectedRecoveryHandles.every((handle, index) => {
-      const candidate = actual.selectedRecoveryHandles[index];
-      return (
-        candidate !== undefined &&
-        candidate.sessionId === handle.sessionId &&
-        candidate.selectedHandleId === handle.selectedHandleId
-      );
-    })
-  );
+function observerMutationRequest(
+  evidence: UpdateEvidencePlan,
+  privateEvidence: UpdateConvergencePrivateEvidence,
+  action: "start" | "restart",
+): UpdateObserverMutationRequest {
+  return {
+    action,
+    target: evidence.plan.selectedTarget.artifact,
+    ...observerMutationRequestFromPrivate(privateEvidence),
+    planDigest: evidence.plan.digest.value,
+  };
+}
+
+function observerMutationRequestFromPrivate(
+  privateEvidence: UpdateConvergencePrivateEvidence,
+): Pick<UpdateObserverMutationRequest, "owner" | "selectedRecoveryHandles"> {
+  const observer = privateEvidence.observer;
+  return {
+    owner:
+      observer === undefined
+        ? { status: "absent" }
+        : {
+            status: "incumbent",
+            pid: observer.pid,
+            osStartTime: observer.osStartTime,
+            processToken: observer.processToken,
+            buildSelector: observer.buildSelector,
+            socketPath: observer.socketPath,
+          },
+    selectedRecoveryHandles: privateEvidence.selectedRecoveryHandles,
+  };
+}
+
+function hookFailureError(result: FailedHookReconciliation): unknown {
+  return result.status === "ownership-conflict"
+    ? updateErrorFromUnknown(undefined, {
+        code: "UPDATE_HOOK_OWNERSHIP_CONFLICT",
+        message: "Configured provider hooks are owned by another installation.",
+      })
+    : result.error;
 }
 
 async function runInspection(
@@ -1078,6 +1105,9 @@ function runtimeFailureRecoveryCommands(
   ports: UpdateConvergencePorts,
   actions: readonly UpdateExecutedAction[],
 ) {
+  const hookFailed = actions.some(
+    (action) => action.phase === "hook-reconciliation" && action.status === "failed",
+  );
   const failures = actions.flatMap((action) => {
     if (
       action.phase !== "hook-reconciliation" ||
@@ -1090,12 +1120,12 @@ function runtimeFailureRecoveryCommands(
     const followUp = failedHookFollowUp(action.hookResult);
     return followUp === undefined ? [] : [{ provider: action.provider, followUp }];
   });
-  return failures.length === 0
-    ? recoveryCommands(selected, request, ports)
-    : ports.runtime.hookFailureRecoveryCommands({
+  return hookFailed
+    ? ports.runtime.hookFailureRecoveryCommands({
         ...recoveryCommandInput(selected, request),
         failures,
-      });
+      })
+    : recoveryCommands(selected, request, ports);
 }
 
 function failedHookFollowUp(

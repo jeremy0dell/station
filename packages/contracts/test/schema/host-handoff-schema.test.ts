@@ -126,6 +126,17 @@ describe("pty handoff receipt schema", () => {
         receipt,
       }),
     ).toMatchObject({ receipt });
+    expect(
+      HostHandoffCommandResultSchema.parse({
+        action: "handoff",
+        dryRun: false,
+        fidelity: "processes",
+        socketPath: "/state/host.sock",
+        status: "completed",
+        message: "Idle replacement completed.",
+        livePtyCount: 0,
+      }),
+    ).not.toHaveProperty("receipt");
   });
 
   it("rejects duplicate, unsorted, count-contradictory, and private receipt data", () => {
@@ -145,12 +156,40 @@ describe("pty handoff receipt schema", () => {
       livePtyCount: 2,
       receipt: { terminals: [terminal("1")] },
     };
+    const validCompleted = {
+      ...base,
+      receipt: { terminals: [terminal("1"), terminal("2")] },
+    };
     expect(HostHandoffCommandResultSchema.safeParse(base).success).toBe(false);
     expect(
       HostHandoffCommandResultSchema.safeParse({
         ...base,
         livePtyCount: 1,
         receipt: { terminals: [{ ...terminal("1"), processToken: "private" }] },
+      }).success,
+    ).toBe(false);
+    expect(
+      HostHandoffCommandResultSchema.safeParse({ ...validCompleted, dryRun: true }).success,
+    ).toBe(false);
+    expect(
+      HostHandoffCommandResultSchema.safeParse({
+        ...validCompleted,
+        dryRun: true,
+        status: "refused",
+      }).success,
+    ).toBe(false);
+    expect(
+      HostHandoffCommandResultSchema.safeParse({
+        ...validCompleted,
+        livePtyCount: undefined,
+        receipt: undefined,
+      }).success,
+    ).toBe(false);
+    expect(
+      HostHandoffCommandResultSchema.safeParse({
+        ...validCompleted,
+        livePtyCount: 0,
+        receipt: { terminals: [terminal("1")] },
       }).success,
     ).toBe(false);
   });

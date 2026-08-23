@@ -137,7 +137,11 @@ export async function startObserver(
   options: ObserverProcessOptions = {},
   deps: ObserverProcessDeps = {},
 ): Promise<ObserverStatus> {
-  return startObserverWithPolicy(options, deps);
+  return startObserverWithPolicy(
+    options,
+    deps,
+    options.updateLifecycleGuard === undefined ? undefined : "preserve",
+  );
 }
 
 async function startObserverWithPolicy(
@@ -154,6 +158,8 @@ async function startObserverWithPolicy(
   const statusTimeoutMs = remainingObserverStartBudget(timeoutMs, options.startupDeadlineMs);
   if (statusTimeoutMs <= 0) return observerStartTimedOut(paths);
   const existing = await getObserverStatus({ ...options, paths, timeoutMs: statusTimeoutMs }, deps);
+  assertUpdateLifecycleGuard(existing, options.updateLifecycleGuard);
+  await options.beforeUpdateLifecycleMutation?.();
   if (existing.status === "running") {
     const classification = classifyObserverHealth(existing.health, buildVersion);
     if (classification.action === "attach") {
@@ -621,6 +627,8 @@ export async function restartObserver(
   deps: ObserverProcessDeps = {},
 ): Promise<ObserverStatus> {
   const status = await getObserverStatus(options, deps);
+  assertUpdateLifecycleGuard(status, options.updateLifecycleGuard);
+  await options.beforeUpdateLifecycleMutation?.();
   const incumbentHealth = status.status === "running" ? status.health : undefined;
   if (status.status === "running") {
     const buildVersion = deps.buildVersion ?? stationObserverBuildVersion();
@@ -654,7 +662,18 @@ export async function restartObserver(
     }
   }
   if (status.status === "unhealthy") return status;
-  const started = await startObserver({ ...options, paths: status.paths }, deps);
+  const { beforeUpdateLifecycleMutation: _beforeUpdateLifecycleMutation, ...startOptions } =
+    options;
+  const started = await startObserver(
+    {
+      ...startOptions,
+      paths: status.paths,
+      ...(options.updateLifecycleGuard === undefined
+        ? {}
+        : { updateLifecycleGuard: { status: "absent" as const } }),
+    },
+    deps,
+  );
   if (
     started.status === "unhealthy" &&
     started.error !== undefined &&
@@ -666,6 +685,27 @@ export async function restartObserver(
     };
   }
   return started;
+}
+
+function assertUpdateLifecycleGuard(
+  status: ObserverStatus,
+  guard: ObserverProcessOptions["updateLifecycleGuard"],
+): void {
+  if (guard === undefined) return;
+  if (guard.status === "absent") {
+    if (status.status === "stopped") return;
+    throw new Error("The Observer owner changed after the update mutation was authorized.");
+  }
+  if (
+    status.status === "running" &&
+    status.health.pid === guard.pid &&
+    status.health.version === guard.version &&
+    status.paths.socketPath === guard.socketPath &&
+    (status.health.socketPath === undefined || status.health.socketPath === guard.socketPath)
+  ) {
+    return;
+  }
+  throw new Error("The Observer incumbent changed after the update mutation was authorized.");
 }
 
 function annotateReplacedIncumbent(error: SafeError, incumbent: ObserverHealth): SafeError {

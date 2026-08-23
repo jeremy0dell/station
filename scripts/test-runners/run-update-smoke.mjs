@@ -329,7 +329,7 @@ function updateSmokeScenarios(options) {
     case "redaction":
       return [redactionFailure];
     case "current-gate":
-      return [idleHost, bridgeHandoff, nonBridgeReap, redactionFailure];
+      return [idleHost, bridgeHandoff, nonBridgeReap, noHost, redactionFailure];
     case "full":
       return options.busyHostOutcome === "pre-mutation-reap-required"
         ? [nonBridgeReap, noHost, redactionFailure]
@@ -1102,7 +1102,8 @@ async function runScenario(input) {
       const raw = createStationHostClient({ socketPath: hostSocketPath, timeoutMs: 2000 });
       const health = await raw.health();
       raw.dispose();
-      if (health.buildVersion === undefined) throw new Error("Host cleanup found legacy health.");
+      if (health.buildVersion === undefined)
+        throw new Error("Host cleanup found unidentified predecessor health.");
       const client = createStationHostClient({
         socketPath: hostSocketPath,
         timeoutMs: 2000,
@@ -1519,7 +1520,7 @@ function redactionFailureCanaries(scenarioRoot, runnerIdentity) {
     pid: `pid-${runnerIdentity.pid}-redaction-${canaryNonce()}`,
     providerPayload: `raw-provider-payload-${canaryNonce()}`,
     processGroup: `process-group-${runnerIdentity.pgid}-redaction-${canaryNonce()}`,
-    terminalControl: `terminal-control-${canaryNonce()}\u001b]0;private\u0007\u001b[31m\u0085\u009b2J\u2028\u2029-end`,
+    terminalControl: `terminal-control-${canaryNonce()}\u001b]0;private\u0007\u001b[31m\u0085\u009b2J\u061c\u200e\u200f\u202a\u202e\u2066\u2069\u2028\u2029-end`,
   };
 }
 
@@ -1607,7 +1608,7 @@ function assertRedactionFailureReport(report, input, label) {
         provider: "codex",
         hookStatus: "write-failed",
         hookProvider: "codex",
-        hookErrorCode: "CODEX_HOOK_RECONCILIATION_LOCK_FAILED",
+        hookErrorCode: "UPDATE_BOUNDARY_FAILURE",
       },
     ],
     `${label} real successor action audit`,
@@ -1626,7 +1627,21 @@ function assertPublicRedactionOutput(output, canaries, label) {
     if (output.includes(character))
       throw new Error(`${label} leaked a terminal control character.`);
   }
-  for (const escaped of ["\\u0007", "\\u001b", "\\u0085", "\\u009b", "\\u2028", "\\u2029"]) {
+  for (const escaped of [
+    "\\u0007",
+    "\\u001b",
+    "\\u0085",
+    "\\u009b",
+    "\\u061c",
+    "\\u200e",
+    "\\u200f",
+    "\\u202a",
+    "\\u202e",
+    "\\u2066",
+    "\\u2069",
+    "\\u2028",
+    "\\u2029",
+  ]) {
     if (output.toLowerCase().includes(escaped)) {
       throw new Error(`${label} leaked an escaped terminal control character.`);
     }
@@ -1634,7 +1649,21 @@ function assertPublicRedactionOutput(output, canaries, label) {
 }
 
 function redactionControlCharacters() {
-  return ["\u0007", "\u001b", "\u0085", "\u009b", "\u2028", "\u2029"];
+  return [
+    "\u0007",
+    "\u001b",
+    "\u0085",
+    "\u009b",
+    "\u061c",
+    "\u200e",
+    "\u200f",
+    "\u202a",
+    "\u202e",
+    "\u2066",
+    "\u2069",
+    "\u2028",
+    "\u2029",
+  ];
 }
 
 function isolatedEnvironment(input) {

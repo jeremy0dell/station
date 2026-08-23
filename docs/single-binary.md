@@ -203,16 +203,17 @@ uses a source-mode bridge Host and requires exact PTY identity and output
 continuity through replacement; `pre-mutation-reap-required` uses the compiled
 non-bridge PTY and requires a fresh typed plan for the target while the incumbent
 artifact, Observer, Host, and PTYs remain usable and no update action has run.
-The current-contract gate also starts a real old idle Host and proves its constrained
-replacement. Both mutating Host lanes assert old and new PIDs and immutable build
-identities, the parsed action receipt/audit, and a fresh final no-op plan. The
-current-contract gate also drives a real pinned-successor Codex hook failure with distinct
-token, private path, PID, raw provider-payload, process-group, and terminal-control
-canaries. Its strict JSON and default text must exclude every raw value and
+The five-scenario current-contract gate also starts a real old idle Host and proves
+its constrained replacement. Both mutating Host lanes assert old and new PIDs,
+immutable build identities, the parsed action receipt/audit, and a fresh final no-op plan.
+The gate retains the `tmux-no-host` artifact/runtime transition and also drives
+a real pinned-successor Codex hook failure with distinct token, private path, PID,
+raw provider-payload, process-group, and terminal-control canaries. Its strict JSON
+and default text must exclude every raw value and
 control byte while retaining the sanitized failure stage and stable codes. The
 reap-required lane hands #641 the evidence needed to begin a separately
 authorized, journaled destructive transaction; the digest itself authorizes
-nothing. Release staging exercises no-Host, Host convergence,
+nothing. Release staging exercises `tmux-no-host`, both Host convergence paths,
 `pre-mutation-reap-required`, and redaction only through the current strict
 contract. Older report shapes are rejected instead of projected or reinterpreted.
 

@@ -93,9 +93,11 @@ type ConnectionState = {
 };
 
 /**
+ * ADAPTER
+ *
  * Dispatch host requests concurrently so long-lived `host.attach` streams do
  * not block write/resize/detach on the same multiplexed socket. The first
- * operational request binds one diagnostic client identity to the connection;
+ * non-health request binds one exact protocol, build, and diagnostic client identity to the connection;
  * teardown then classifies every attachment before the client witness closes.
  */
 export async function serveHostConnection(
@@ -161,13 +163,7 @@ async function handleMessage(
   const request = parsed.data;
   // Cross-build convergence reads the exact incumbent inventory on the same connection before a
   // lifecycle mutation; operational calls and successor adoption remain identity-bound.
-  const lifecycleRequest =
-    request.method === "host.health" ||
-    request.method === "host.recoveryInventory" ||
-    request.method === "host.stopIfIdle" ||
-    request.method === "host.beginHandoff" ||
-    request.method === "host.completeHandoff" ||
-    request.method === "host.abortHandoff";
+  const lifecycleRequest = request.method === "host.health";
   if (!lifecycleRequest) {
     const binding = bindClientIdentity(request.client, handlers.hostIdentity, state, logger);
     if (!binding.ok) {

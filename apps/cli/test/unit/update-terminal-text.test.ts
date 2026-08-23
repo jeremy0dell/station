@@ -2,12 +2,12 @@ import { describe, expect, it } from "vitest";
 import { encodeUpdateTerminalText } from "../../src/update/updateTerminalText.js";
 
 describe("update terminal text encoding", () => {
-  it("encodes line breaks, C0, C1, OSC, CSI, and Unicode line separators", () => {
+  it("encodes line breaks, controls, directional formatting, and Unicode separators", () => {
     const input =
-      "line\n\u0000\u0007\u001b]0;title\u0007\u001b[31m\u007f\u0085\u009b31m\u2028\u2029tail";
+      "line\n\u0000\u0007\u001b]0;title\u0007\u001b[31m\u007f\u0085\u009b31m\u061c\u200e\u200f\u202a\u202b\u202c\u202d\u202e\u2066\u2067\u2068\u2069\u2028\u2029tail";
 
     expect(encodeUpdateTerminalText(input)).toBe(
-      "line\\u000a\\u0000\\u0007\\u001b]0;title\\u0007\\u001b[31m\\u007f\\u0085\\u009b31m\\u2028\\u2029tail",
+      "line\\u000a\\u0000\\u0007\\u001b]0;title\\u0007\\u001b[31m\\u007f\\u0085\\u009b31m\\u061c\\u200e\\u200f\\u202a\\u202b\\u202c\\u202d\\u202e\\u2066\\u2067\\u2068\\u2069\\u2028\\u2029tail",
     );
   });
 

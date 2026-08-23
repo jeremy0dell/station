@@ -1,4 +1,5 @@
-import { loadedCommandOptions } from "../cliCommand/helpers.js";
+import { createUpdateObserverMutationInspectionPort } from "../../update/recoveryPreflightAdapters.js";
+import { loadedConfigCommandOptions } from "../cliCommand/helpers.js";
 import type { CliCommandNode, CliCommandRunContext } from "../cliCommand/types.js";
 import {
   observerCommandSummary,
@@ -78,9 +79,19 @@ export const observerCliCommand: CliCommandNode = {
 };
 
 async function runObserverCliCommand(context: CliCommandRunContext) {
+  const loaded = loadedConfigCommandOptions(context);
+  const commandOptions: Parameters<typeof runObserverCommand>[1] = { ...loaded };
+  if (context.args.includes("--internal-update-commitment")) {
+    commandOptions.updateMutationInspection = createUpdateObserverMutationInspectionPort({
+      config: loaded.config,
+      ...(context.options.observerDeps === undefined
+        ? {}
+        : { observerDeps: context.options.observerDeps }),
+    });
+  }
   const result = await runObserverCommand(
     context.args,
-    loadedCommandOptions(context),
+    commandOptions,
     context.options.observerDeps,
   );
   const action = parseObserverCommandAction(context.args);

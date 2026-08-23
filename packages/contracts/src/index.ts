@@ -23,6 +23,7 @@ export * from "./sessionRecovery.js";
 export * from "./setupTypes.js";
 export { compareCodeUnitStrings, textLineTerminatorPattern } from "./shared.js";
 export * from "./snapshot.js";
+export * from "./stationBuildIdentity.js";
 export * from "./terminalTargets.js";
 export * from "./tuiConfig.js";
 export * from "./tuiRendererControl.js";

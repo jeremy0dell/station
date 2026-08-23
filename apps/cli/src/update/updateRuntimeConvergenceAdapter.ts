@@ -13,6 +13,12 @@ import {
   sanitizePublicObserverLifecycleFailure,
 } from "./publicUpdateReportAdapter.js";
 import type { UpdateCommandArgv } from "./updateChannel.js";
+import {
+  encodeUpdateObserverMutationCommitment,
+  UPDATE_OBSERVER_MUTATION_FD,
+  UPDATE_OBSERVER_MUTATION_MAX_BYTES,
+  UpdateObserverMutationCommitmentSchema,
+} from "./updateObserverMutationCommitment.js";
 import type {
   UpdateHookFailureRecoveryInput,
   UpdateRecoveryCommandInput,
@@ -26,6 +32,7 @@ export type UpdateRuntimeConvergenceAdapterOptions = {
   commandRunner?: ExternalCommandRunner;
   observerSocketPath: string;
   observerBuildSelector: string;
+  observerBootLogPath: string;
 };
 
 /**
@@ -42,24 +49,30 @@ export function createUpdateRuntimeConvergenceAdapter(
     reconcileHook: (cli, provider) =>
       runHookReconciliation(
         stationCommand(cli, options.configPath, ["hooks", "reconcile", provider]),
+        provider,
         options.commandRunner,
       ),
-    convergeObserver: (cli, action) =>
+    convergeObserver: (cli, request) =>
       runObserverMutation(
         stationCommand(cli, options.configPath, [
           "observer",
-          action,
+          request.action,
           "--timeout-ms",
           String(OBSERVER_CROSSOVER_TIMEOUT_MS),
-          "--internal-update-expected-socket",
-          options.observerSocketPath,
-          "--internal-update-expected-build-selector",
-          options.observerBuildSelector,
+          "--internal-update-commitment",
         ]),
         {
           socketPath: options.observerSocketPath,
           buildSelector: options.observerBuildSelector,
+          bootLogPath: options.observerBootLogPath,
         },
+        UpdateObserverMutationCommitmentSchema.parse({
+          kind: "station-update-observer-mutation",
+          ...request,
+          targetBuildSelector: options.observerBuildSelector,
+          socketPath: options.observerSocketPath,
+          nonce: randomUUID(),
+        }),
         options.commandRunner,
       ),
     reconcile: (cli) =>
@@ -74,6 +87,7 @@ export function createUpdateRuntimeConvergenceAdapter(
 
 async function runHookReconciliation(
   command: UpdateCommandArgv,
+  expectedProvider: string,
   runner: ExternalCommandRunner | undefined,
 ): Promise<ProviderHookReconciliationResult> {
   const [executable, ...args] = command;
@@ -87,9 +101,11 @@ async function runHookReconciliation(
     },
     runner,
   );
-  const parsed = sanitizePublicHookResult(
-    ProviderHookReconciliationResultSchema.parse(JSON.parse(result.stdout)),
-  );
+  const strict = ProviderHookReconciliationResultSchema.parse(JSON.parse(result.stdout));
+  if (strict.provider !== expectedProvider) {
+    throw new Error("Hook reconciliation returned a result for a different provider.");
+  }
+  const parsed = sanitizePublicHookResult(strict, expectedProvider);
   typedChildDisposition(
     result.exitCode,
     providerHookReconciliationSucceeded(parsed),
@@ -111,7 +127,8 @@ async function runMutationCommand(
 
 async function runObserverMutation(
   command: UpdateCommandArgv,
-  expected: { socketPath: string; buildSelector: string },
+  expected: { socketPath: string; buildSelector: string; bootLogPath: string },
+  commitment: ReturnType<typeof UpdateObserverMutationCommitmentSchema.parse>,
   runner: ExternalCommandRunner | undefined,
 ): Promise<ObserverLifecycleFailure | undefined> {
   const [executable, ...args] = command;
@@ -122,6 +139,11 @@ async function runObserverMutation(
       timeoutMs: 60_000,
       maxOutputChars: 128 * 1024,
       allowedExitCodes: [1],
+      inheritedInput: {
+        fd: UPDATE_OBSERVER_MUTATION_FD,
+        data: encodeUpdateObserverMutationCommitment(commitment),
+        maxBytes: UPDATE_OBSERVER_MUTATION_MAX_BYTES,
+      },
     },
     runner,
   );
@@ -140,6 +162,12 @@ async function runObserverMutation(
     return undefined;
   }
   if (parsed.status !== "running") {
+    if (
+      parsed.startupEvidence !== undefined &&
+      parsed.startupEvidence.bootLogPath !== expected.bootLogPath
+    ) {
+      throw new Error("Observer convergence returned startup evidence for another boot log.");
+    }
     const failure: ObserverLifecycleFailure = { error: parsed.error };
     if (parsed.cause !== undefined) failure.cause = parsed.cause;
     if (parsed.startupEvidence !== undefined) failure.startupEvidence = parsed.startupEvidence;
@@ -242,3 +270,5 @@ function hookFailureRecoveryCommands(
 function assertNever(value: never): never {
   throw new Error(`Unexpected hook follow-up: ${String(value)}`);
 }
+
+import { randomUUID } from "node:crypto";

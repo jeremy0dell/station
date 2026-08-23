@@ -20,6 +20,12 @@ import {
   runObserverReap,
 } from "../observerReap.js";
 import { type ObserverPaths, resolveObserverPaths } from "../paths.js";
+import type { UpdateObserverMutationInspectionPort } from "../update/recoveryPreflightAdapters.js";
+import {
+  observerMutationPrivateEvidenceMatches,
+  readUpdateObserverMutationCommitment,
+  type UpdateObserverMutationCommitment,
+} from "../update/updateObserverMutationCommitment.js";
 
 export type ObserverCommandResult =
   | ObserverStatus
@@ -37,14 +43,15 @@ export type ObserverCommandOptions = {
   configPath?: string;
   timeoutMs?: number;
   reapDeps?: ObserverReapDeps;
+  updateMutationInspection?: UpdateObserverMutationInspectionPort;
+  readUpdateMutationCommitment?: () => UpdateObserverMutationCommitment;
 };
 
 type ParsedObserverArgs = {
   action: string;
   timeoutMs?: number;
   force: boolean;
-  expectedSocket?: string;
-  expectedBuildSelector?: string;
+  internalUpdateCommitment: boolean;
 };
 
 /**
@@ -61,12 +68,15 @@ export async function runObserverCommand(
   const parsed = parseObserverArgs(args, options.timeoutMs);
   const action = parsed.action;
   const paths = resolveObserverPaths(options.config);
-  assertInternalUpdateCommitment(parsed, paths, deps);
-  const runtimeOptions = {
-    ...options,
-    paths,
-    ...(parsed.timeoutMs === undefined ? {} : { timeoutMs: parsed.timeoutMs }),
-  };
+  const updateGuard = await authorizeInternalUpdateMutation(parsed, paths, options, deps);
+  const runtimeOptions: Parameters<typeof startObserver>[0] = { paths };
+  if (options.config !== undefined) runtimeOptions.config = options.config;
+  if (options.configPath !== undefined) runtimeOptions.configPath = options.configPath;
+  if (parsed.timeoutMs !== undefined) runtimeOptions.timeoutMs = parsed.timeoutMs;
+  if (updateGuard !== undefined) {
+    runtimeOptions.updateLifecycleGuard = updateGuard.lifecycle;
+    runtimeOptions.beforeUpdateLifecycleMutation = updateGuard.revalidate;
+  }
 
   switch (action) {
     case "reap":
@@ -111,13 +121,10 @@ export function parseObserverCommandAction(args: string[]): string {
 
 function parseObserverArgs(args: string[], timeoutMs: number | undefined): ParsedObserverArgs {
   const parsed = takeTimeoutOption(args, timeoutMs);
-  const expectedSocket = takeInternalUpdateOption(parsed.args, "--internal-update-expected-socket");
-  const expectedBuild = takeInternalUpdateOption(
-    expectedSocket.args,
-    "--internal-update-expected-build-selector",
-  );
-  const force = expectedBuild.args.includes("--force") || expectedBuild.args.includes("--yes");
-  const rest = expectedBuild.args.filter((arg) => arg !== "--force" && arg !== "--yes");
+  const internalUpdateCommitment = parsed.args.includes("--internal-update-commitment");
+  const withoutInternal = parsed.args.filter((arg) => arg !== "--internal-update-commitment");
+  const force = withoutInternal.includes("--force") || withoutInternal.includes("--yes");
+  const rest = withoutInternal.filter((arg) => arg !== "--force" && arg !== "--yes");
 
   const flag = rest.find((arg) => arg.startsWith("--"));
   if (flag !== undefined) {
@@ -130,48 +137,72 @@ function parseObserverArgs(args: string[], timeoutMs: number | undefined): Parse
   const result: ParsedObserverArgs = {
     action: rest[0] ?? "status",
     force,
+    internalUpdateCommitment,
   };
   if (parsed.timeoutMs !== undefined) result.timeoutMs = parsed.timeoutMs;
-  if (expectedSocket.value !== undefined) result.expectedSocket = expectedSocket.value;
-  if (expectedBuild.value !== undefined) {
-    result.expectedBuildSelector = expectedBuild.value;
-  }
   return result;
 }
 
-function takeInternalUpdateOption(
-  args: string[],
-  option: string,
-): { args: string[]; value?: string } {
-  const index = args.indexOf(option);
-  if (index === -1) return { args };
-  const value = args[index + 1];
-  if (value === undefined || value.length === 0) {
-    throw new Error(`${option} requires a value.`);
-  }
-  return { args: [...args.slice(0, index), ...args.slice(index + 2)], value };
-}
-
-function assertInternalUpdateCommitment(
-  parsed: {
-    action: string;
-    expectedSocket?: string;
-    expectedBuildSelector?: string;
-  },
+async function authorizeInternalUpdateMutation(
+  parsed: ParsedObserverArgs,
   paths: ObserverPaths,
+  options: ObserverCommandOptions,
   deps: ObserverProcessDeps,
-): void {
-  if (parsed.expectedSocket === undefined && parsed.expectedBuildSelector === undefined) return;
+): Promise<
+  | {
+      lifecycle: NonNullable<
+        NonNullable<Parameters<typeof startObserver>[0]>["updateLifecycleGuard"]
+      >;
+      revalidate: () => Promise<void>;
+    }
+  | undefined
+> {
+  if (!parsed.internalUpdateCommitment) return undefined;
   if (parsed.action !== "start" && parsed.action !== "restart") {
     throw new Error("Internal update commitments are valid only for Observer start or restart.");
   }
-  if (parsed.expectedSocket !== paths.socketPath) {
+  const readCommitment =
+    options.readUpdateMutationCommitment ?? readUpdateObserverMutationCommitment;
+  const commitment = readCommitment();
+  if (commitment.action !== parsed.action || commitment.socketPath !== paths.socketPath) {
     throw new Error("The configured Observer socket changed after update convergence planning.");
   }
   const buildSelector = deps.buildVersion ?? stationObserverBuildVersion();
-  if (parsed.expectedBuildSelector !== buildSelector) {
+  if (commitment.targetBuildSelector !== buildSelector) {
     throw new Error("The executing Observer build differs from the selected update target.");
   }
+  const inspect = options.updateMutationInspection;
+  if (inspect === undefined) {
+    throw new Error("Observer update mutation inspection is unavailable.");
+  }
+  const revalidate = async () => {
+    const actual = await inspect({
+      target: commitment.target,
+      targetBuildSelector: commitment.targetBuildSelector,
+    });
+    if (
+      !observerMutationPrivateEvidenceMatches(
+        commitment,
+        actual.evidence.status,
+        actual.privateEvidence,
+      )
+    ) {
+      throw new Error("Observer ownership or selected recovery handles changed before mutation.");
+    }
+  };
+  await revalidate();
+  return {
+    lifecycle:
+      commitment.owner.status === "absent"
+        ? { status: "absent" }
+        : {
+            status: "incumbent",
+            pid: commitment.owner.pid,
+            version: commitment.owner.buildSelector,
+            socketPath: commitment.owner.socketPath,
+          },
+    revalidate,
+  };
 }
 
 function takeTimeoutOption(

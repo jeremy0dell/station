@@ -2,14 +2,17 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  formatStationObserverBuildIdentity,
+  hasStationObserverBuildIdentityMarker,
+  parseStationObserverBuildIdentity,
+} from "@station/contracts";
 
 declare const STATION_BUILD_VERSION: string;
 declare const STATION_BUILD_COMPILED: boolean;
 declare const STATION_BUILD_IDENTITY: string;
 
 const BUILD_IDENTITY_PATTERN = /^[0-9a-f]{64}$/u;
-const OBSERVER_BUILD_IDENTITY_MARKER = /\+(?:[0-9A-Za-z-]+\.)*station\./u;
-const OBSERVER_BUILD_IDENTITY_PATTERN = /^(.+)([+.])station\.([0-9a-f]{64})$/u;
 const verifiedSourceBuildIdentitySlot = Symbol.for(
   "@station/runtime/verified-source-build-identity",
 );
@@ -39,14 +42,7 @@ export function stationBuildInfo(): StationBuildInfo {
 
 /** Encodes immutable identity as reserved SemVer metadata for Observer handoff evidence. */
 export function stationObserverBuildVersion(info: StationBuildInfo = stationBuildInfo()): string {
-  if (!BUILD_IDENTITY_PATTERN.test(info.buildIdentity)) {
-    throw new Error("Station build identity must be 64 lowercase hexadecimal characters.");
-  }
-  if (hasStationObserverBuildIdentityMarker(info.version)) {
-    throw new Error("Station display version must not use reserved station build metadata.");
-  }
-  const separator = info.version.includes("+") ? "." : "+";
-  return `${info.version}${separator}station.${info.buildIdentity}`;
+  return formatStationObserverBuildIdentity(info.version, info.buildIdentity);
 }
 
 /** Splits Station's reserved Observer identity suffix from the user-visible version. */
@@ -54,26 +50,10 @@ export function parseStationObserverBuildVersion(selector: string): {
   version: string;
   buildIdentity?: string;
 } {
-  const match = OBSERVER_BUILD_IDENTITY_PATTERN.exec(selector);
-  if (match === null) return { version: selector };
-  const [, version, separator, buildIdentity] = match;
-  if (
-    version === undefined ||
-    separator === undefined ||
-    buildIdentity === undefined ||
-    hasStationObserverBuildIdentityMarker(version) ||
-    (separator === "+" && version.includes("+")) ||
-    (separator === "." && !version.includes("+"))
-  ) {
-    return { version: selector };
-  }
-  return { version, buildIdentity };
+  return parseStationObserverBuildIdentity(selector);
 }
 
-/** Detects Station's reserved metadata namespace even when its identity is malformed. */
-export function hasStationObserverBuildIdentityMarker(selector: string): boolean {
-  return OBSERVER_BUILD_IDENTITY_MARKER.test(selector);
-}
+export { hasStationObserverBuildIdentityMarker };
 
 export function isCompiledBinary(): boolean {
   return typeof STATION_BUILD_COMPILED === "undefined" ? false : STATION_BUILD_COMPILED;

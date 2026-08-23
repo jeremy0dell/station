@@ -7,6 +7,7 @@ import type {
   UpdateCommandArgv,
 } from "@station/contracts";
 import type { ExecutableArgv } from "../selfExec.js";
+import type { UpdateObserverMutationRequest } from "./updateObserverMutationCommitment.js";
 
 export type UpdateRecoveryCommandInput = {
   cli: ExecutableArgv;
@@ -31,7 +32,7 @@ export interface UpdateRuntimeConvergencePort {
   reconcileHook(cli: ExecutableArgv, provider: string): Promise<ProviderHookReconciliationResult>;
   convergeObserver(
     cli: ExecutableArgv,
-    action: "start" | "restart",
+    request: UpdateObserverMutationRequest,
   ): Promise<ObserverLifecycleFailure | undefined>;
   reconcile(cli: ExecutableArgv): Promise<void>;
   hookFailureRecoveryCommands(input: UpdateHookFailureRecoveryInput): UpdateCommandArgv[];

@@ -21,6 +21,7 @@ import {
 } from "@station/contracts";
 import { redact, redactString } from "@station/observability";
 import { publicSafeErrorFromUnknown } from "@station/runtime";
+import { projectPublicUpdateReportIdentities } from "./publicUpdateIdentityProjector.js";
 import type { PublicUpdateReportInput } from "./updatePublicReportPort.js";
 
 const publicPathReplacement = "[REDACTED_PATH]";
@@ -29,6 +30,37 @@ const privateFileUrlPattern = /\bfile:\/\/\/[^\s"'<>|]+/gu;
 const absolutePosixPathPattern = /(?<![A-Za-z0-9_/])\/(?!\/)[^\s"'<>|]+/gu;
 const absoluteWindowsPathPattern = /(?<![A-Za-z0-9_])[A-Za-z]:\\[^\s"'<>|]+/gu;
 const homeRelativePathPattern = /(?<![A-Za-z0-9_])~[\\/][^\s"'<>|]+/gu;
+const publicUpdateErrorCodes = new Set([
+  "UPDATE_ARTIFACT_APPLICATION_FAILED",
+  "UPDATE_FINAL_INSPECTION_FAILED",
+  "UPDATE_HOOK_OWNERSHIP_CONFLICT",
+  "UPDATE_HOST_CONVERGENCE_ACTION_MISMATCH",
+  "UPDATE_HOST_CONVERGENCE_COMMITMENT_MISMATCH",
+  "UPDATE_HOST_CONVERGENCE_SUPERSEDED",
+  "UPDATE_PREFLIGHT_HOOK_INSPECTION_FAILED",
+  "UPDATE_PREFLIGHT_HOST_HEALTH_FAILED",
+  "UPDATE_PREFLIGHT_HOST_INACCESSIBLE",
+  "UPDATE_PREFLIGHT_HOST_INSPECTION_FAILED",
+  "UPDATE_PREFLIGHT_HOST_INVENTORY_FAILED",
+  "UPDATE_PREFLIGHT_HOST_STALE",
+  "UPDATE_PREFLIGHT_OBSERVER_EXECUTABLE_DRIFT_RESTARTABLE",
+  "UPDATE_PREFLIGHT_OBSERVER_IDENTITY_DRIFT",
+  "UPDATE_PREFLIGHT_OBSERVER_IDENTITY_MISMATCH",
+  "UPDATE_PREFLIGHT_OBSERVER_IDENTITY_MISSING",
+  "UPDATE_PREFLIGHT_OBSERVER_IDENTITY_UNAVAILABLE",
+  "UPDATE_PREFLIGHT_OBSERVER_INSPECTION_FAILED",
+  "UPDATE_PREFLIGHT_OBSERVER_PROCESS_WITHOUT_SOCKET",
+  "UPDATE_PREFLIGHT_OBSERVER_STALE",
+  "UPDATE_PREFLIGHT_OBSERVER_UNHEALTHY",
+  "UPDATE_PREFLIGHT_RECOVERY_API_FAILED",
+  "UPDATE_RUNTIME_CONVERGENCE_FAILED",
+  "UPDATE_RUNTIME_CONVERGENCE_INCOMPLETE",
+  "UPDATE_SUCCESSOR_BOUNDARY_FAILED",
+  "UPDATE_SUCCESSOR_TARGET_MISMATCH",
+  "UPDATE_SUCCESSOR_UNAVAILABLE",
+  "UPDATE_TERMINAL_CONVERGENCE_INCOMPLETE",
+  "UPDATE_TERMINAL_HANDOFF_RECEIPT_MISMATCH",
+]);
 
 /**
  * ADAPTER
@@ -93,7 +125,7 @@ export function sanitizePublicUpdateReport(input: UpdateCommandReport): UpdateCo
     artifactApplication: report.artifactApplication,
     initial: sanitizeEvidence(report.initial),
     result: sanitizeResult(report.result),
-    warnings: report.warnings.map(sanitizePublicSafeError),
+    warnings: report.warnings.map((warning) => sanitizePublicSafeError(warning)),
     recoveryCommands: report.recoveryCommands.map(sanitizePublicCommand),
   };
   if (report.error !== undefined) sanitized.error = sanitizePublicSafeError(report.error);
@@ -101,7 +133,7 @@ export function sanitizePublicUpdateReport(input: UpdateCommandReport): UpdateCo
   if (report.startupEvidence !== undefined) {
     sanitized.startupEvidence = sanitizeStartupEvidence(report.startupEvidence);
   }
-  return UpdateCommandReportSchema.parse(sanitized);
+  return projectPublicUpdateReportIdentities(UpdateCommandReportSchema.parse(sanitized));
 }
 
 function sanitizePublicCommand(command: UpdateCommandArgv): UpdateCommandArgv {
@@ -109,12 +141,20 @@ function sanitizePublicCommand(command: UpdateCommandArgv): UpdateCommandArgv {
   return [sanitizePublicErrorText(executable), ...args.map(sanitizePublicErrorText)];
 }
 
-/** Sanitizes an already-shaped SafeError while preserving its useful typed identity fields. */
-export function sanitizePublicSafeError(input: SafeError): SafeError {
+/** Canonicalizes every SafeError string before opaque correlation identities are aliased. */
+export function sanitizePublicSafeError(input: SafeError, expectedProvider?: string): SafeError {
   const error = SafeErrorSchema.parse(input);
+  if (
+    expectedProvider !== undefined &&
+    error.provider !== undefined &&
+    error.provider !== expectedProvider
+  ) {
+    throw new Error("A child SafeError named a provider outside its requested boundary.");
+  }
+  const safeCode = publicUpdateErrorCodes.has(error.code) ? error.code : "UPDATE_BOUNDARY_FAILURE";
   const sanitized: SafeError = {
-    tag: error.tag,
-    code: error.code,
+    tag: safeCode.startsWith("UPDATE_PREFLIGHT_") ? "UpdatePreflightError" : "UpdateError",
+    code: safeCode,
     message: sanitizePublicErrorText(error.message),
   };
   if (error.hint !== undefined) sanitized.hint = sanitizePublicErrorText(error.hint);
@@ -122,7 +162,9 @@ export function sanitizePublicSafeError(input: SafeError): SafeError {
   if (error.projectId !== undefined) sanitized.projectId = error.projectId;
   if (error.worktreeId !== undefined) sanitized.worktreeId = error.worktreeId;
   if (error.sessionId !== undefined) sanitized.sessionId = error.sessionId;
-  if (error.provider !== undefined) sanitized.provider = error.provider;
+  if (expectedProvider !== undefined && error.provider !== undefined) {
+    sanitized.provider = expectedProvider;
+  }
   if (error.traceId !== undefined) sanitized.traceId = error.traceId;
   if (error.diagnosticId !== undefined) sanitized.diagnosticId = error.diagnosticId;
   return SafeErrorSchema.parse(sanitized);
@@ -131,15 +173,19 @@ export function sanitizePublicSafeError(input: SafeError): SafeError {
 /** Sanitizes the strict hook child result before it can enter an action audit. */
 export function sanitizePublicHookResult(
   input: ProviderHookReconciliationResult,
+  expectedProvider: string = input.provider,
 ): ProviderHookReconciliationResult {
   const result = ProviderHookReconciliationResultSchema.parse(input);
+  if (result.provider !== expectedProvider) {
+    throw new Error("Hook reconciliation result provider changed at its public boundary.");
+  }
   switch (result.status) {
     case "write-failed":
     case "post-write-doctor-failed":
     case "inspection-failed":
       return ProviderHookReconciliationResultSchema.parse({
         ...result,
-        error: sanitizePublicSafeError(result.error),
+        error: sanitizePublicSafeError(result.error, expectedProvider),
       });
     case "configured-disabled":
     case "unsupported":
@@ -207,7 +253,7 @@ function sanitizeHost(host: UpdateReapHostEvidence): UpdateReapHostEvidence {
 
 function sanitizeHookHealth(hook: ProviderHookHealth): ProviderHookHealth {
   return hook.status === "inspection-failed"
-    ? { ...hook, error: sanitizePublicSafeError(hook.error) }
+    ? { ...hook, error: sanitizePublicSafeError(hook.error, hook.provider) }
     : hook;
 }
 
@@ -247,11 +293,16 @@ function sanitizeResult(result: UpdateConvergenceResult): UpdateConvergenceResul
 function sanitizeAudit(audit: UpdateActionAudit): UpdateActionAudit {
   return {
     ...audit,
-    actions: audit.actions.map((action) =>
-      action.hookResult === undefined
-        ? action
-        : { ...action, hookResult: sanitizePublicHookResult(action.hookResult) },
-    ),
+    actions: audit.actions.map((action) => {
+      if (action.hookResult === undefined) return action;
+      if (action.provider === undefined) {
+        throw new Error("A hook result requires its exact requested provider in the action audit.");
+      }
+      return {
+        ...action,
+        hookResult: sanitizePublicHookResult(action.hookResult, action.provider),
+      };
+    }),
   };
 }
 
@@ -268,7 +319,8 @@ function sanitizeFinalInspection(inspection: UpdateFinalInspection): UpdateFinal
 
 function sanitizeStartupEvidence(evidence: ObserverStartupEvidence): ObserverStartupEvidence {
   const sanitized: ObserverStartupEvidence = {
-    bootLogPath: redactString(evidence.bootLogPath),
+    // Direct Observer and successor adapters bind this documented path-bearing exception first.
+    bootLogPath: evidence.bootLogPath,
   };
   if (evidence.bootLogTail !== undefined) {
     sanitized.bootLogTail = sanitizePublicErrorText(evidence.bootLogTail);
@@ -288,7 +340,13 @@ function sanitizePublicErrorText(value: string): string {
     const point = character.codePointAt(0) ?? 0;
     const unsafe =
       point <= 31 || (point >= 127 && point <= 159) || point === 8232 || point === 8233;
-    if (unsafe) {
+    const directional =
+      point === 0x061c ||
+      point === 0x200e ||
+      point === 0x200f ||
+      (point >= 0x202a && point <= 0x202e) ||
+      (point >= 0x2066 && point <= 0x2069);
+    if (unsafe || directional) {
       if (!replacingControl) sanitized += publicControlReplacement;
       replacingControl = true;
       continue;

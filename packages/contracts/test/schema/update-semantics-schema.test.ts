@@ -396,6 +396,22 @@ describe("current strict convergence semantics", () => {
       },
     },
     {
+      name: "Observer from another immutable target claiming a match",
+      mutate: (report: UpdateCommandReport) => {
+        const observer = report.initial.preflight.observer;
+        if (observer.status !== "exact") throw new Error("missing exact Observer fixture");
+        observer.buildVersion = `2.0.0+station.${"c".repeat(64)}`;
+      },
+    },
+    {
+      name: "Host from another immutable target claiming reuse",
+      mutate: (report: UpdateCommandReport) => {
+        const host = report.initial.preflight.host;
+        if (host.status !== "inspected") throw new Error("missing inspected Host fixture");
+        host.buildIdentity = "c".repeat(64);
+      },
+    },
+    {
       name: "changed terminal identity",
       mutate: (report: UpdateCommandReport) => {
         const disposition = report.initial.preflight.terminalDispositions[0];

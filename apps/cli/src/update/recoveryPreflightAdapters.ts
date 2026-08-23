@@ -40,6 +40,47 @@ export type CreateUpdateRecoveryPreflightPortsOptions = {
 };
 
 /**
+ * DRIVEN PORT
+ *
+ * Re-inspects the exact public and private Observer ownership aggregate immediately before one
+ * update lifecycle mutation, using the same evidence sources as ordinary convergence preflight.
+ */
+export type UpdateObserverMutationInspectionPort = (input: {
+  target: UpdateArtifact;
+  targetBuildSelector: string;
+}) => Promise<{
+  evidence: UpdateReapObserverEvidence;
+  privateEvidence: UpdateConvergencePrivateEvidence;
+}>;
+
+/**
+ * COMPOSITION ROOT
+ *
+ * Binds the update-only Observer mutation guard to the same local identity and recovery assessment
+ * adapters used by aggregate preflight, without exposing Host, hook, or mutation capabilities.
+ */
+export function createUpdateObserverMutationInspectionPort(
+  options: Pick<
+    CreateUpdateRecoveryPreflightPortsOptions,
+    "config" | "observerDeps" | "observerIdentitySource" | "readObserverIdentity" | "observerStatus"
+  >,
+): UpdateObserverMutationInspectionPort {
+  const localObserverEvidence = createLocalObserverProcessEvidence();
+  const observerIdentitySource = options.observerIdentitySource ?? localObserverEvidence;
+  const readIdentity = options.readObserverIdentity ?? localObserverEvidence.readProcessIdentity;
+  return (input) =>
+    inspectObserverRecoveryEvidence({
+      config: options.config,
+      artifacts: { installed: input.target, target: input.target },
+      currentObserverBuildVersion: input.targetBuildSelector,
+      observerIdentitySource,
+      readIdentity,
+      readStatus: options.observerStatus ?? getObserverStatus,
+      ...(options.observerDeps === undefined ? {} : { observerDeps: options.observerDeps }),
+    });
+}
+
+/**
  * COMPOSITION ROOT
  *
  * Binds recovery preflight to read-only local process evidence, Observer protocol queries, strict

@@ -287,15 +287,15 @@ async function planHandoffDryRun(input: {
     if (compatibility.action === "refuse") {
       return {
         ...input.base,
-        status: "refused",
-        message: "Host protocol is incompatible; live handoff is refused.",
+        status: "planned",
+        message: "Dry run found incompatible Host protocol; execution would refuse handoff.",
       };
     }
     if (compatibility.action === "reuse") {
       return {
         ...input.base,
-        status: "refused",
-        message: "Host already matches this build; handoff is unnecessary.",
+        status: "planned",
+        message: "Dry run found a matching Host; execution would not require handoff.",
       };
     }
     let livePtyCount = -1;
@@ -307,8 +307,8 @@ async function planHandoffDryRun(input: {
     if (livePtyCount === 0) {
       return {
         ...input.base,
-        status: "refused",
-        message: "Host is idle; use ordinary stop-if-idle replacement instead of handoff.",
+        status: "planned",
+        message: "Dry run found an idle Host; execution would use ordinary idle replacement.",
         livePtyCount: 0,
       };
     }
@@ -321,8 +321,8 @@ async function planHandoffDryRun(input: {
   } catch (error) {
     return {
       ...input.base,
-      status: "unavailable",
-      message: error instanceof Error ? error.message : String(error),
+      status: "planned",
+      message: `Dry run could not inspect handoff: ${error instanceof Error ? error.message : String(error)}`,
     };
   } finally {
     client.dispose();

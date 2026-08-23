@@ -20,7 +20,7 @@ The tag starts `.github/workflows/release.yml`. That workflow runs standard CI,
 builds the four native targets, creates a six-asset draft, exercises the stamped
 draft installer, binds the exact numeric asset IDs and shared target build
 identity, and records an immutable `accepted-release-candidate-*` artifact. The
-macOS candidate lane runs four current-contract transitions from a composed
+macOS candidate lane runs five current-contract transitions from a composed
 synthetic-version incumbent. The no-Host lane proves artifact application and
 successor-owned verified convergence. The Host lanes prove real old-idle-Host replacement and
 old bridge-backed live handoff, including exact PIDs, immutable build identities,

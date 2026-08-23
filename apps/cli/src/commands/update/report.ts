@@ -30,8 +30,6 @@ export function updateCommandResult(
   };
 }
 
-export { updateCommandExitCode } from "../../update/updateCommandStatusPolicy.js";
-
 function renderUpdateReport(report: UpdateCommandReport): string {
   const plan = report.initial.plan;
   const lines = [

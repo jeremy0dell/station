@@ -23,10 +23,14 @@ import { updateCommandResult } from "../../src/commands/update/report.js";
 import * as updateCommandAdapter from "../../src/commands/update.js";
 import type { UpdateChannelProbe } from "../../src/update/channelDetection.js";
 import { createDefaultUpdateProbes } from "../../src/update/defaultUpdateProbes.js";
-import { createPublicUpdateReport } from "../../src/update/publicUpdateReportAdapter.js";
+import {
+  createPublicUpdateReport,
+  sanitizePublicUpdateReport,
+} from "../../src/update/publicUpdateReportAdapter.js";
 import type { UpdateConvergencePrivateEvidence } from "../../src/update/recoveryPreflight.js";
 import { runUpdateConvergence } from "../../src/update/updateConvergenceUseCase.js";
 import type { UpdateHostRuntimePort } from "../../src/update/updateHostRuntimePort.js";
+import { UpdateObserverMutationCommitmentSchema } from "../../src/update/updateObserverMutationCommitment.js";
 import { createUpdateRuntimeConvergenceAdapter } from "../../src/update/updateRuntimeConvergenceAdapter.js";
 import type { UpdateRuntimeConvergencePort } from "../../src/update/updateRuntimeConvergencePort.js";
 import { createUpdateSuccessorTransportAdapter } from "../../src/update/updateSuccessorTransportAdapter.js";
@@ -36,6 +40,8 @@ const config = {
 } as StationConfig;
 const identityA = "a".repeat(64);
 const identityB = "b".repeat(64);
+const claudeProvider = "claude";
+const codexProvider = "codex";
 
 function runUpdateCommand(
   args: readonly string[],
@@ -48,6 +54,7 @@ function runUpdateCommand(
   const adapterOptions = {
     observerSocketPath: config.observer.socketPath,
     observerBuildSelector: stationObserverBuildVersion(buildInfo()),
+    observerBootLogPath: "/tmp/station/logs/observer-boot.log",
     ...(commandOptions.configPath === undefined ? {} : { configPath: commandOptions.configPath }),
     ...(overrides.commandRunner === undefined ? {} : { commandRunner: overrides.commandRunner }),
   };
@@ -210,7 +217,7 @@ describe("stn update convergence", () => {
           recovery: { relevance: "destructive-follow-up", status: "complete" },
           terminals: [
             {
-              ...nonResumable,
+              ...publicTerminalDisposition(nonResumable),
               ownership: "station",
               requiredAction: "reap",
             },
@@ -225,7 +232,7 @@ describe("stn update convergence", () => {
     expect(textFor(result)).toContain("terminal consequences:");
     expect(textFor(result)).toContain("recovery: destructive-follow-up/complete");
     expect(textFor(result)).toContain(
-      "terminal-1 pty=pty-1/pty-instance-1 session=session-1 owner=station action=reap handoff=non-preservable reap-recovery=NON-RESUMABLE",
+      "public-terminal-00000001 pty=public-pty-00000001/public-pty-instance-00000001 session=public-session-00000001 owner=station action=reap handoff=non-preservable reap-recovery=NON-RESUMABLE",
     );
     expect(textFor(result)).toContain("reasons: session_non_resumable");
     expect(fixture.apply).not.toHaveBeenCalled();
@@ -364,7 +371,7 @@ describe("stn update convergence", () => {
     expect(report).toMatchObject({
       status: "deferred",
       artifactApplication: { status: "deferred" },
-      initial: { preflight: evidence, plan: { status: "deferred" } },
+      initial: { plan: { status: "deferred" } },
       result: { kind: "deferred" },
     });
     if (report.result.kind !== "deferred") throw new Error("expected deferred result");
@@ -386,7 +393,7 @@ describe("stn update convergence", () => {
     const disposition = evidence.terminalDispositions[0];
     if (disposition !== undefined) {
       expect(textFor(result)).toContain(
-        `session=${disposition.sessionId} owner=station action=${
+        `session=public-session-00000001 owner=station action=${
           disposition.handoff === "preservable" ? "preserve" : "reap"
         }`,
       );
@@ -722,7 +729,7 @@ describe("stn update convergence", () => {
         action: "preserve-via-handoff",
         status: "completed",
         fidelity: "screen",
-        handoffReceipt: { terminals: [terminalIdentity()] },
+        handoffReceipt: { terminals: [publicTerminalIdentity()] },
       },
       {
         phase: "host-convergence",
@@ -745,7 +752,7 @@ describe("stn update convergence", () => {
       "terminal-convergence: preserve-via-handoff completed fidelity=screen",
     );
     expect(textFor(result)).toContain(
-      "receipt: terminal-1 pty=pty-1/pty-instance-1 session=session-1",
+      "receipt: public-terminal-00000001 pty=public-pty-00000001/public-pty-instance-00000001 session=public-session-00000001",
     );
     const contradictoryAudit = structuredClone(report);
     if (contradictoryAudit.result.kind !== "current-runtime-execution") {
@@ -1061,7 +1068,7 @@ describe("stn update convergence", () => {
         action: "preserve-via-handoff",
         status: "completed",
         fidelity: "processes",
-        handoffReceipt: { terminals: [terminalIdentity()] },
+        handoffReceipt: { terminals: [publicTerminalIdentity()] },
       },
       {
         phase: "host-convergence",
@@ -1240,8 +1247,8 @@ describe("stn update convergence", () => {
       phase: "hook-reconciliation",
       action: "reconcile",
       status: "completed",
-      provider: "codex",
-      hookResult: { provider: "codex", status: "repaired" },
+      provider: codexProvider,
+      hookResult: { provider: codexProvider, status: "repaired" },
     });
   });
 
@@ -1265,7 +1272,7 @@ describe("stn update convergence", () => {
           ? externalResult(
               input,
               JSON.stringify({
-                provider: "codex",
+                provider: codexProvider,
                 status: "write-failed",
                 changed: false,
                 verified: false,
@@ -1291,7 +1298,7 @@ describe("stn update convergence", () => {
                 phase: "hook-reconciliation",
                 action: "reconcile",
                 status: "failed",
-                provider: "codex",
+                provider: codexProvider,
               },
             ],
           },
@@ -1300,6 +1307,129 @@ describe("stn update convergence", () => {
     });
     if (report.result.kind !== "execution-failed") throw new Error("expected failed result");
     expect(report.result.actionAudits[0]?.actions[0]).not.toHaveProperty("hookResult");
+  });
+
+  it.each([
+    {
+      name: "successful result",
+      exitCode: 0,
+      child: { provider: "claude", status: "repaired", changed: true, verified: true },
+    },
+    {
+      name: "typed failure",
+      exitCode: 1,
+      child: {
+        provider: "claude",
+        status: "write-failed",
+        changed: false,
+        verified: false,
+        error: { tag: "HookError", code: "HOOK_WRITE_FAILED", message: "Failed." },
+        followUp: { action: "retry" },
+      },
+    },
+  ])("rejects a hook child provider mismatch for a $name", async (testCase) => {
+    const fixture = probe("current");
+    const evidence = preflight("1.0.0", "1.0.0", {
+      observer: { status: "absent" },
+      host: { status: "absent" },
+      hookProviderIds: ["codex"],
+      hooks: [{ provider: "codex", status: "needs-repair", reason: "missing" }],
+    });
+    const runner = vi.fn(async (input: ExternalCommandInput) =>
+      input.args?.includes("hooks")
+        ? externalResult(input, JSON.stringify(testCase.child), testCase.exitCode)
+        : commandResult(input),
+    );
+    const result = await runUpdateCommand(["--json"], options(), {
+      probes: [fixture.probe],
+      buildInfo: build(identityA, "1.0.0"),
+      convergenceInspection: inspection(evidence),
+      commandRunner: runner,
+    });
+    const report = reportFrom(result);
+
+    expect(result.code).toBe(1);
+    expect(report).toMatchObject({
+      status: "failed",
+      result: {
+        kind: "execution-failed",
+        stage: "hook-reconciliation",
+        actionAudits: [
+          {
+            actions: [
+              {
+                phase: "hook-reconciliation",
+                action: "reconcile",
+                provider: codexProvider,
+                status: "failed",
+              },
+            ],
+          },
+        ],
+      },
+    });
+    if (report.result.kind !== "execution-failed") throw new Error("expected failed result");
+    expect(report.result.actionAudits[0]?.actions[0]).not.toHaveProperty("hookResult");
+    expect(runner.mock.calls.some(([input]) => input.args?.includes("observer"))).toBe(false);
+    expect(
+      runner.mock.calls.some(
+        ([input]) => input.args?.includes("reconcile") && !input.args.includes("hooks"),
+      ),
+    ).toBe(false);
+  });
+
+  it.each([
+    { name: "first", throwingProvider: "claude" },
+    { name: "middle", throwingProvider: "codex" },
+  ])("settles every planned hook after the $name child boundary throws", async (testCase) => {
+    const fixture = probe("current");
+    const providers = ["claude", "codex", "opencode"];
+    const evidence = preflight("1.0.0", "1.0.0", {
+      observer: { status: "absent" },
+      host: { status: "absent" },
+      hookProviderIds: providers,
+      hooks: providers.map((provider) => ({
+        provider,
+        status: "needs-repair" as const,
+        reason: "missing" as const,
+      })),
+    });
+    const attempted: string[] = [];
+    const result = await runUpdateCommand(["--json"], options(), {
+      probes: [fixture.probe],
+      buildInfo: build(identityA, "1.0.0"),
+      convergenceInspection: inspection(evidence),
+      commandRunner: async (input) => {
+        if (!input.args?.includes("hooks")) return commandResult(input);
+        const provider = input.args.at(-1);
+        if (provider === undefined) throw new Error("missing provider fixture");
+        attempted.push(provider);
+        if (provider === testCase.throwingProvider) throw new Error(`boundary ${provider}`);
+        return externalResult(
+          input,
+          JSON.stringify({ provider, status: "repaired", changed: true, verified: true }),
+          0,
+        );
+      },
+    });
+    const report = reportFrom(result);
+
+    expect(result.code).toBe(1);
+    expect(attempted).toEqual(providers);
+    expect(report.error).toMatchObject({ code: "UPDATE_RUNTIME_CONVERGENCE_FAILED" });
+    if (report.result.kind !== "execution-failed") throw new Error("expected failed result");
+    expect(report.result.stage).toBe("hook-reconciliation");
+    expect(report.result.finalInspection).toMatchObject({ status: "completed" });
+    expect(report.result.actionAudits[0]?.actions).toHaveLength(3);
+    expect(report.result.actionAudits[0]?.actions.map((action) => action.status)).toEqual(
+      providers.map((provider) =>
+        provider === testCase.throwingProvider ? "failed" : "completed",
+      ),
+    );
+    expect(report.recoveryCommands.map((command) => command.slice(3))).toEqual([
+      ["reconcile", "--reason", "update-convergence"],
+      ["update", "--channel", "installer-binary"],
+    ]);
   });
 
   it("renders a hostile hook child failure without emitting terminal controls", async () => {
@@ -1334,7 +1464,7 @@ describe("stn update convergence", () => {
     const text = textOutput(result);
 
     expect(result.code).toBe(1);
-    expect(text).toContain("hook-reconciliation: reconcile failed provider=codex");
+    expect(text).toContain(`hook-reconciliation: reconcile failed provider=${codexProvider}`);
     expect(text).toContain("UPDATE_RUNTIME_CONVERGENCE_FAILED");
     expect(text).not.toContain(hostileControls());
     expect(text).not.toContain("\u001b]8;;https://example.invalid");
@@ -1441,19 +1571,19 @@ describe("stn update convergence", () => {
     const report = reportFrom(result);
 
     expect(report.recoveryCommands.map((command) => command.slice(3))).toEqual([
-      ["hooks", "doctor", "claude"],
-      ["hooks", "reconcile", "codex"],
+      ["hooks", "doctor", claudeProvider],
+      ["hooks", "reconcile", codexProvider],
       ["reconcile", "--reason", "update-convergence"],
       ["update", "--channel", "installer-binary"],
     ]);
     if (report.result.kind !== "execution-failed") throw new Error("expected hook failure");
     expect(report.result.actionAudits[0]?.actions.map((action) => action.provider)).toEqual([
-      "claude",
-      "codex",
+      claudeProvider,
+      codexProvider,
     ]);
     const text = textFor(result);
-    const claudeDoctor = text.indexOf("hooks doctor claude");
-    const codexRetry = text.indexOf("hooks reconcile codex");
+    const claudeDoctor = text.indexOf(`hooks doctor ${claudeProvider}`);
+    const codexRetry = text.indexOf(`hooks reconcile ${codexProvider}`);
     expect(claudeDoctor).toBeGreaterThanOrEqual(0);
     expect(codexRetry).toBeGreaterThan(claudeDoctor);
   });
@@ -1605,7 +1735,7 @@ describe("stn update convergence", () => {
     expect(textFor(result)).toContain(nonMutatingPhaseText("not-executed"));
     expect(textFor(result)).toContain("recovery: destructive-follow-up/incomplete");
     expect(textFor(result)).toContain(
-      "session=session-1 owner=station action=blocked handoff=unknown reap-recovery=unknown",
+      "session=public-session-00000001 owner=station action=blocked handoff=unknown reap-recovery=unknown",
     );
     expect(textFor(result)).toContain("reasons: session_recovery_unknown");
     expect(fixture.apply).not.toHaveBeenCalled();
@@ -1690,7 +1820,7 @@ describe("stn update convergence", () => {
       status: "failed",
       result: { kind: "execution-failed", stage: "observer-convergence" },
       cause: {
-        code: "OBSERVER_PROCESS_EXECUTABLE_ARGV_MISMATCH",
+        code: "UPDATE_BOUNDARY_FAILURE",
         message: "Observer executable arguments did not match. API_TOKEN=[REDACTED]",
       },
       startupEvidence: {
@@ -1703,12 +1833,42 @@ describe("stn update convergence", () => {
     expect(serialized).not.toContain("raw observer stack");
     const text = textFor(result);
     expect(text).toContain(
-      "cause: Observer executable arguments did not match. API_TOKEN=[REDACTED] (OBSERVER_PROCESS_EXECUTABLE_ARGV_MISMATCH)",
+      "cause: Observer executable arguments did not match. API_TOKEN=[REDACTED] (UPDATE_BOUNDARY_FAILURE)",
     );
     expect(text).toContain("observer startup evidence:");
     expect(text).toContain("boot log: /tmp/station/logs/observer-boot.log");
     expect(text).toContain("bounded boot log tail: startup failed API_TOKEN=[REDACTED]");
     expect(text).not.toContain(secret);
+  });
+
+  it("rejects direct Observer startup evidence for another configured boot log", async () => {
+    const fixture = probe("current");
+    const runner = vi.fn(async (input: ExternalCommandInput) => {
+      if (!input.args?.includes("observer")) return commandResult(input);
+      const result = observerFailureResult(input, "private-observer-secret");
+      const parsed = JSON.parse(result.stdout) as { startupEvidence: { bootLogPath: string } };
+      parsed.startupEvidence.bootLogPath = "/tmp/another-observer-boot.log";
+      return { ...result, stdout: JSON.stringify(parsed) };
+    });
+    const result = await runUpdateCommand(["--json"], options(), {
+      probes: [fixture.probe],
+      buildInfo: build(identityA, "1.0.0"),
+      convergenceInspection: inspection(preflight("1.0.0", "1.0.0")),
+      commandRunner: runner,
+    });
+    const report = reportFrom(result);
+
+    expect(report).toMatchObject({
+      status: "failed",
+      result: { kind: "execution-failed", stage: "observer-convergence" },
+      error: { code: "UPDATE_RUNTIME_CONVERGENCE_FAILED" },
+    });
+    expect(report).not.toHaveProperty("startupEvidence");
+    expect(
+      runner.mock.calls.some(
+        ([input]) => input.args?.includes("reconcile") && !input.args.includes("observer"),
+      ),
+    ).toBe(false);
   });
 
   it("fails a contradictory Observer command result without inventing lifecycle evidence", async () => {
@@ -1937,7 +2097,7 @@ describe("stn update convergence", () => {
         action: "preserve-via-handoff",
         status: "completed",
         fidelity: "processes",
-        handoffReceipt: { terminals: [terminalIdentity()] },
+        handoffReceipt: { terminals: [publicTerminalIdentity()] },
       },
       {
         phase: "host-convergence",
@@ -2290,6 +2450,22 @@ describe("stn update convergence", () => {
         report.initial.plan.selectedTarget.buildIdentity = { status: "not-yet-provable" };
       },
     },
+    {
+      name: "Observer from another immutable build claiming matching convergence",
+      mutate: (report: UpdateCommandReport) => {
+        const observer = report.initial.preflight.observer;
+        if (observer.status !== "exact") throw new Error("missing exact Observer fixture");
+        observer.buildVersion = `2.0.0+station.${identityA}`;
+      },
+    },
+    {
+      name: "Host from another immutable build claiming matching convergence",
+      mutate: (report: UpdateCommandReport) => {
+        const host = report.initial.preflight.host;
+        if (host.status !== "inspected") throw new Error("missing inspected Host fixture");
+        host.buildIdentity = identityA;
+      },
+    },
   ])("rejects strict successor ownership with $name", async ({ mutate }) => {
     const outer = probe("update-available");
     const outerRunner = vi.fn(async (input: ExternalCommandInput) => {
@@ -2314,6 +2490,172 @@ describe("stn update convergence", () => {
         error: { code: "UPDATE_SUCCESSOR_BOUNDARY_FAILED" },
         result: { kind: "execution-failed", stage: "successor-boundary" },
       },
+    });
+  });
+
+  it.each([
+    { name: "missing provider", childProviders: [] },
+    { name: "substituted provider", childProviders: ["claude"] },
+    { name: "extra provider", childProviders: ["claude", "codex"] },
+  ])("rejects a successor with a $name identity set", async (testCase) => {
+    const outer = probe("update-available");
+    const result = await runUpdateCommand(["--json"], options(), {
+      probes: [outer.probe],
+      buildInfo: build(identityA, "1.0.0"),
+      convergenceInspection: inspection(
+        preflight("1.0.0", "2.0.0", {
+          hookProviderIds: ["codex"],
+          hooks: [{ provider: "codex", status: "healthy" }],
+        }),
+      ),
+      commandRunner: async (input) =>
+        input.args?.includes("update")
+          ? successorResult(input, providerPreflight(testCase.childProviders))
+          : commandResult(input),
+    });
+
+    expect(result).toMatchObject({
+      code: 1,
+      output: {
+        status: "failed",
+        error: { code: "UPDATE_SUCCESSOR_BOUNDARY_FAILED" },
+        result: { kind: "execution-failed", stage: "successor-boundary" },
+      },
+    });
+  });
+
+  it("accepts and preserves the exact predecessor canonical provider set", async () => {
+    const outer = probe("update-available");
+    const result = await runUpdateCommand(["--json"], options(), {
+      probes: [outer.probe],
+      buildInfo: build(identityA, "1.0.0"),
+      convergenceInspection: inspection(
+        preflight("1.0.0", "2.0.0", {
+          hookProviderIds: ["codex"],
+          hooks: [{ provider: "codex", status: "healthy" }],
+        }),
+      ),
+      commandRunner: async (input) =>
+        input.args?.includes("update")
+          ? successorResult(input, providerPreflight(["codex"]))
+          : commandResult(input),
+    });
+    const report = reportFrom(result);
+
+    expect(result.code).toBe(0);
+    if (report.result.kind !== "successor-runtime-execution") {
+      throw new Error("expected successor execution result");
+    }
+    expect(report.result.successor.preflight.hookProviderIds).toEqual(["codex"]);
+    expect(report.result.successor.preflight.hooks.map((hook) => hook.provider)).toEqual(["codex"]);
+    expect(report.result.successor.plan.components.hooks.map((hook) => hook.provider)).toEqual([
+      "codex",
+    ]);
+  });
+
+  it("rejects provider-set drift in a successor post-action inspection", async () => {
+    const outer = probe("update-available");
+    const initial = providerPreflight(["codex"], {
+      observer: {
+        ...matchingObserver(identityA),
+        relation: "different",
+        replacementAdmission: "candidate-wins",
+      },
+    });
+    const final = providerPreflight(["claude"]);
+    const result = await runUpdateCommand(["--json"], options(), {
+      probes: [outer.probe],
+      buildInfo: build(identityA, "1.0.0"),
+      convergenceInspection: inspection(
+        preflight("1.0.0", "2.0.0", {
+          hookProviderIds: ["codex"],
+          hooks: [{ provider: "codex", status: "healthy" }],
+        }),
+      ),
+      commandRunner: async (input) =>
+        input.args?.includes("update")
+          ? successorResultFromInspections(input, [initial, initial, final])
+          : commandResult(input),
+    });
+
+    expect(result).toMatchObject({
+      code: 1,
+      output: {
+        status: "failed",
+        error: { code: "UPDATE_SUCCESSOR_BOUNDARY_FAILED" },
+        result: { kind: "execution-failed", stage: "successor-boundary" },
+      },
+    });
+  });
+
+  it.each([
+    {
+      name: "no-handoff parent to handoff child",
+      parentArgs: ["--json", "--no-handoff"],
+      childHandoff: "processes" as const,
+    },
+    {
+      name: "processes parent to screen child",
+      parentArgs: ["--json"],
+      childHandoff: "screen" as const,
+    },
+    {
+      name: "handoff parent to handoff-disabled child",
+      parentArgs: ["--json"],
+      childHandoff: undefined,
+    },
+  ])("rejects inherited Host policy drift from $name", async (testCase) => {
+    const outer = probe("update-available");
+    const bridge = terminal("bridge-releasable");
+    const initial = preflight("2.0.0", "2.0.0", {
+      observer: matchingObserver(identityB),
+      host: differentHost(identityA, [bridge]),
+      terminalDispositions: [disposition("preservable", "recoverable")],
+    });
+    const final = preflight("2.0.0", "2.0.0", {
+      observer: matchingObserver(identityB),
+      host: matchingHost(identityB, [bridge]),
+      terminalDispositions: [disposition("preservable", "recoverable")],
+    });
+    const result = await runUpdateCommand(testCase.parentArgs, options(), {
+      probes: [outer.probe],
+      buildInfo: build(identityA, "1.0.0"),
+      convergenceInspection: inspection(preflight("1.0.0", "2.0.0")),
+      commandRunner: async (input) =>
+        input.args?.includes("update")
+          ? successorResultWithHandoff(input, testCase.childHandoff, [initial, final])
+          : commandResult(input),
+    });
+
+    expect(result).toMatchObject({
+      code: 1,
+      output: {
+        status: "failed",
+        error: { code: "UPDATE_SUCCESSOR_BOUNDARY_FAILED" },
+        result: { kind: "execution-failed", stage: "successor-boundary" },
+      },
+    });
+  });
+
+  it("permits a handoff-disabled successor when absent Host evidence makes handoff irrelevant", async () => {
+    const outer = probe("update-available");
+    const successorEvidence = preflight("2.0.0", "2.0.0", {
+      observer: matchingObserver(identityB),
+      host: { status: "absent" },
+    });
+    const result = await runUpdateCommand(["--json"], options(), {
+      probes: [outer.probe],
+      buildInfo: build(identityA, "1.0.0"),
+      convergenceInspection: inspection(preflight("1.0.0", "2.0.0")),
+      commandRunner: async (input) =>
+        input.args?.includes("update")
+          ? successorResultWithHandoff(input, undefined, [successorEvidence])
+          : commandResult(input),
+    });
+
+    expect(result).toMatchObject({
+      code: 0,
+      output: { status: "updated", result: { kind: "successor-runtime-execution" } },
     });
   });
 
@@ -2806,10 +3148,51 @@ describe("stn update convergence", () => {
         stage: "observer-convergence",
         successor: { evaluator: "successor-cli" },
       },
-      cause: { code: "OBSERVER_PROCESS_EXECUTABLE_ARGV_MISMATCH" },
+      cause: { code: "UPDATE_BOUNDARY_FAILURE" },
       startupEvidence: { bootLogPath: "/tmp/station/logs/observer-boot.log" },
     });
     expect(JSON.stringify(report)).not.toContain(secret);
+  });
+
+  it("rejects successor Observer startup evidence for another configured boot log", async () => {
+    const outer = probe("update-available");
+    const successor = probe("current", "2.0.0", "2.0.0");
+    const result = await runUpdateCommand(["--json"], options(), {
+      probes: [outer.probe],
+      buildInfo: build(identityA, "1.0.0"),
+      convergenceInspection: inspection(preflight("1.0.0", "2.0.0")),
+      commandRunner: async (input) => {
+        if (!input.args?.includes("update")) return commandResult(input);
+        const nested = await runUpdateCommand(
+          input.args.slice(input.args.indexOf("update") + 1),
+          options(),
+          {
+            probes: [successor.probe],
+            buildInfo: build(identityB, "2.0.0"),
+            convergenceInspection: inspection(preflight("2.0.0", "2.0.0")),
+            commandRunner: async (successorInput) =>
+              successorInput.args?.includes("observer")
+                ? observerFailureResult(successorInput, "boot-path-secret")
+                : commandResult(successorInput),
+          },
+        );
+        const child = reportFrom(nested);
+        if (child.startupEvidence === undefined)
+          throw new Error("missing startup evidence fixture");
+        child.startupEvidence.bootLogPath = "/tmp/substituted-observer-boot.log";
+        return externalResult(input, JSON.stringify(child), nested.code);
+      },
+    });
+
+    expect(result).toMatchObject({
+      code: 1,
+      output: {
+        status: "failed",
+        result: { kind: "execution-failed", stage: "successor-boundary" },
+        error: { code: "UPDATE_SUCCESSOR_BOUNDARY_FAILED" },
+      },
+    });
+    expect(reportFrom(result)).not.toHaveProperty("startupEvidence");
   });
 
   it("rejects malicious successor lifecycle evidence attributed to another failure stage", async () => {
@@ -2896,13 +3279,26 @@ describe("stn update convergence", () => {
     const privatePath = "/Users/private-user/.station/runtime.sock";
     const control = "\u001b";
     const sensitive = `API_TOKEN=${secret} path:${privatePath} control=${control}[31m`;
+    const sensitiveError = (label: string, provider?: string): SafeError => ({
+      tag: `${label}-${privatePath}`,
+      code: `${label}-${secret}`,
+      message: sensitive,
+      hint: `retry after ${sensitive}`,
+      commandId: `command-${secret}`,
+      projectId: `project-${privatePath}`,
+      worktreeId: `worktree-${secret}`,
+      sessionId: `session-${privatePath}`,
+      provider: provider ?? `provider-${secret}`,
+      traceId: `trace-${privatePath}`,
+      diagnosticId: `diagnostic-${secret}`,
+    });
     outer.apply.mockResolvedValueOnce({
       channel: "installer-binary",
       status: "updated",
       previousVersion: "1.0.0",
       installedVersion: "2.0.0",
       successorCli: ["/opt/stn-successor"],
-      warnings: [sensitiveSafeError("APPLY_WARNING", sensitive)],
+      warnings: [sensitiveError("APPLY_WARNING")],
     });
     const successorInitial = preflight("2.0.0", "2.0.0", {
       observer: matchingObserver(identityB, "unknown"),
@@ -2916,7 +3312,7 @@ describe("stn update convergence", () => {
         preflight: successorInitial,
         privateEvidence: privateEvidence(successorInitial),
       })
-      .mockRejectedValueOnce(sensitiveSafeError("FINAL_INSPECTION_PRIVATE", sensitive));
+      .mockRejectedValueOnce(sensitiveError("FINAL_INSPECTION_PRIVATE"));
     const outerRunner = vi.fn(async (input: ExternalCommandInput) => {
       if (!input.args?.includes("update")) return commandResult(input);
       const updateIndex = input.args.indexOf("update");
@@ -2939,7 +3335,7 @@ describe("stn update convergence", () => {
                     status: "write-failed",
                     changed: false,
                     verified: false,
-                    error: sensitiveSafeError("HOOK_CHILD_PRIVATE", sensitive),
+                    error: sensitiveError("HOOK_CHILD_PRIVATE", "codex"),
                     followUp: { action: "retry" },
                   }),
                   1,
@@ -2948,17 +3344,15 @@ describe("stn update convergence", () => {
         },
       );
       const childReport = reportFrom(nested);
-      childReport.warnings.push(sensitiveSafeError("SUCCESSOR_WARNING", sensitive));
+      childReport.warnings.push(sensitiveError("SUCCESSOR_WARNING"));
       if (
         childReport.initial.preflight.observer.status !== "exact" ||
         childReport.initial.preflight.observer.recovery.status !== "unknown"
       ) {
         throw new Error("expected nested recovery evidence");
       }
-      childReport.initial.preflight.observer.recovery.error = sensitiveSafeError(
-        "NESTED_RECOVERY_PRIVATE",
-        sensitive,
-      );
+      childReport.initial.preflight.observer.recovery.error =
+        sensitiveError("NESTED_RECOVERY_PRIVATE");
       if (childReport.result.kind !== "execution-failed") {
         throw new Error("expected nested execution failure");
       }
@@ -2966,34 +3360,36 @@ describe("stn update convergence", () => {
       if (hookResult?.status !== "write-failed") {
         throw new Error("expected nested hook failure");
       }
-      hookResult.error = sensitiveSafeError("HOOK_CHILD_PRIVATE", sensitive);
+      hookResult.error = sensitiveError("HOOK_CHILD_PRIVATE", hookResult.provider);
       if (childReport.result.finalInspection.status !== "failed") {
         throw new Error("expected nested final inspection failure");
       }
-      childReport.result.finalInspection.error = sensitiveSafeError(
-        "FINAL_INSPECTION_PRIVATE",
-        sensitive,
-      );
+      childReport.result.finalInspection.error = sensitiveError("FINAL_INSPECTION_PRIVATE");
       return externalResult(input, JSON.stringify(childReport), nested.code);
     });
 
     const result = await runUpdateCommand(["--json"], options(), {
       probes: [outer.probe],
       buildInfo: build(identityA, "1.0.0"),
-      convergenceInspection: inspection(preflight("1.0.0", "2.0.0")),
+      convergenceInspection: inspection(
+        preflight("1.0.0", "2.0.0", {
+          hookProviderIds: ["codex"],
+          hooks: [{ provider: "codex", status: "healthy" }],
+        }),
+      ),
       commandRunner: outerRunner,
     });
     const report = reportFrom(result);
     expect(report).toMatchObject({
       status: "failed",
-      warnings: [{ code: "APPLY_WARNING" }, { code: "SUCCESSOR_WARNING" }],
+      warnings: [{ code: "UPDATE_BOUNDARY_FAILURE" }, { code: "UPDATE_BOUNDARY_FAILURE" }],
       result: {
         kind: "execution-failed",
         stage: "hook-reconciliation",
         successor: {
           preflight: {
             observer: {
-              recovery: { error: { code: "NESTED_RECOVERY_PRIVATE" } },
+              recovery: { error: { code: "UPDATE_BOUNDARY_FAILURE" } },
             },
           },
         },
@@ -3004,14 +3400,14 @@ describe("stn update convergence", () => {
               {
                 phase: "hook-reconciliation",
                 status: "failed",
-                hookResult: { error: { code: "HOOK_CHILD_PRIVATE" } },
+                hookResult: { error: { code: "UPDATE_BOUNDARY_FAILURE" } },
               },
             ],
           },
         ],
         finalInspection: {
           status: "failed",
-          error: { code: "FINAL_INSPECTION_PRIVATE" },
+          error: { code: "UPDATE_BOUNDARY_FAILURE" },
         },
       },
     });
@@ -3019,12 +3415,13 @@ describe("stn update convergence", () => {
     const sanitizedSensitive =
       "API_TOKEN=[REDACTED] path:[REDACTED_PATH] control=[REDACTED_CONTROL][31m";
     expect(report.warnings[0]).toMatchObject({
-      code: "APPLY_WARNING",
+      code: "UPDATE_BOUNDARY_FAILURE",
       message: sanitizedSensitive,
       hint: `retry after ${sanitizedSensitive}`,
     });
+    expect(report.warnings[0]).not.toHaveProperty("provider");
     expect(report.recoveryCommands).toEqual([
-      ["[REDACTED_PATH]", "--config", sanitizedSensitive, "hooks", "reconcile", "codex"],
+      ["[REDACTED_PATH]", "--config", sanitizedSensitive, "hooks", "reconcile", codexProvider],
       [
         "[REDACTED_PATH]",
         "--config",
@@ -3046,19 +3443,31 @@ describe("stn update convergence", () => {
     expect(serialized).not.toContain(privatePath);
     expect(serialized).not.toContain(control);
     expect(serialized).not.toContain("\\u001b");
+    for (const canary of [
+      `command-${secret}`,
+      `project-${privatePath}`,
+      `worktree-${secret}`,
+      `session-${privatePath}`,
+      `provider-${secret}`,
+      `trace-${privatePath}`,
+      `diagnostic-${secret}`,
+    ]) {
+      expect(serialized).not.toContain(canary);
+    }
     expect(serialized).toContain("[REDACTED]");
     expect(serialized).toContain("[REDACTED_PATH]");
     expect(serialized).toContain("[REDACTED_CONTROL]");
 
     const text = textFor(result);
     expect(text).toContain("result: execution-failed");
-    expect(text).toContain("hook-reconciliation: reconcile failed provider=codex");
+    expect(text).toContain(`hook-reconciliation: reconcile failed provider=${codexProvider}`);
     expect(text).toContain(`warning: ${sanitizedSensitive}`);
     expect(text).toContain("recovery commands:");
     expect(text).not.toContain(secret);
     expect(text).not.toContain(privatePath);
     expect(text).not.toContain(control);
     expect(text).not.toContain("\\u001b");
+    expect(sanitizePublicUpdateReport(report)).toEqual(report);
   });
 });
 
@@ -3235,7 +3644,7 @@ function matchingObserver(
 ): UpdateReapRecoveryPreflight["observer"] {
   return {
     status: "exact",
-    buildVersion: `1.0.0+station.${identity}`,
+    buildVersion: `${displayVersion(identity)}+station.${identity}`,
     relation: "matching-target",
     replacementAdmission: "exact-build",
     health: "healthy",
@@ -3256,6 +3665,19 @@ function matchingObserver(
             error: { tag: "UpdatePreflightError", code: "RECOVERY_UNKNOWN", message: "Unknown." },
           },
   };
+}
+
+function providerPreflight(
+  providers: readonly string[],
+  overrides: Partial<UpdateReapRecoveryPreflight> = {},
+): UpdateReapRecoveryPreflight {
+  return preflight("2.0.0", "2.0.0", {
+    observer: matchingObserver(identityB),
+    host: matchingHost(identityB),
+    ...overrides,
+    hookProviderIds: [...providers],
+    hooks: providers.map((provider) => ({ provider, status: "healthy" as const })),
+  });
 }
 
 function restartableObserverDrift(): UpdateReapRecoveryPreflight["observer"] {
@@ -3315,13 +3737,17 @@ function matchingHost(
 ): UpdateReapRecoveryPreflight["host"] {
   return {
     status: "inspected",
-    buildVersion: "1.0.0",
+    buildVersion: displayVersion(identity),
     buildIdentity: identity,
     protocolVersion: 8,
     relation: "matching-target",
     compatibility: "reuse",
     terminals,
   };
+}
+
+function displayVersion(identity: string): string {
+  return identity === identityB ? "2.0.0" : "1.0.0";
 }
 
 function differentHost(
@@ -3392,6 +3818,22 @@ function terminalIdentity(identity = "1") {
     ptyId: `pty-${identity}`,
     ptyInstanceId: `pty-instance-${identity}`,
     sessionId: `session-${identity}`,
+  };
+}
+
+function publicTerminalIdentity(identity = "00000001") {
+  return {
+    terminalTargetId: `public-terminal-${identity}`,
+    ptyId: `public-pty-${identity}`,
+    ptyInstanceId: `public-pty-instance-${identity}`,
+    sessionId: `public-session-${identity}`,
+  };
+}
+
+function publicTerminalDisposition<T extends ReturnType<typeof disposition>>(value: T): T {
+  return {
+    ...value,
+    ...publicTerminalIdentity(),
   };
 }
 
@@ -3470,16 +3912,9 @@ function runtimePort(): UpdateRuntimeConvergencePort {
 }
 
 function observerRunningResult(input?: ExternalCommandInput) {
-  const expectedSocket = internalUpdateOption(
-    input,
-    "--internal-update-expected-socket",
-    config.observer.socketPath,
-  );
-  const expectedBuild = internalUpdateOption(
-    input,
-    "--internal-update-expected-build-selector",
-    `1.0.0+station.${identityA}`,
-  );
+  const commitment = observerMutationCommitment(input);
+  const expectedSocket = commitment?.socketPath ?? config.observer.socketPath;
+  const expectedBuild = commitment?.targetBuildSelector ?? `1.0.0+station.${identityA}`;
   return {
     status: "running" as const,
     socketPath: expectedSocket,
@@ -3494,13 +3929,11 @@ function observerRunningResult(input?: ExternalCommandInput) {
   };
 }
 
-function internalUpdateOption(
-  input: ExternalCommandInput | undefined,
-  option: string,
-  fallback: string,
-): string {
-  const index = input?.args?.indexOf(option) ?? -1;
-  return index < 0 ? fallback : (input?.args?.[index + 1] ?? fallback);
+function observerMutationCommitment(input: ExternalCommandInput | undefined) {
+  const payload = input?.inheritedInput?.data;
+  return payload === undefined
+    ? undefined
+    : UpdateObserverMutationCommitmentSchema.parse(JSON.parse(payload));
 }
 
 function observerFailureResult(input: ExternalCommandInput, secret: string): ExternalCommandResult {
@@ -3541,7 +3974,7 @@ function sensitiveSafeError(code: string, sensitive: string): SafeError {
 }
 
 function hostileControls(): string {
-  return "\n\u0000\u0007\u001b]8;;https://example.invalid\u0007link\u001b]8;;\u0007\u001b[31m\u007f\u0085\u009b31m\u2028\u2029";
+  return "\n\u0000\u0007\u001b]8;;https://example.invalid\u0007link\u001b]8;;\u0007\u001b[31m\u007f\u0085\u009b31m\u061c\u200e\u200f\u202a\u202b\u202c\u202d\u202e\u2066\u2067\u2068\u2069\u2028\u2029";
 }
 
 async function successorResult(
@@ -3571,6 +4004,30 @@ async function successorResultFromInspections(
     JSON.stringify(nested.output),
     forcedExitCode === undefined ? nested.code : forcedExitCode,
   );
+}
+
+async function successorResultWithHandoff(
+  input: ExternalCommandInput,
+  handoff: "processes" | "screen" | undefined,
+  successorPreflights: UpdateReapRecoveryPreflight[],
+): Promise<ExternalCommandResult> {
+  const successor = probe("current", "2.0.0", "2.0.0");
+  const updateIndex = input.args?.indexOf("update") ?? -1;
+  if (updateIndex < 0 || input.args === undefined) throw new Error("missing successor update argv");
+  const inherited = input.args
+    .slice(updateIndex + 1)
+    .filter(
+      (arg) => arg !== "--no-handoff" && arg !== "--handoff" && !arg.startsWith("--handoff="),
+    );
+  const handoffArgs =
+    handoff === undefined ? ["--no-handoff"] : handoff === "screen" ? ["--handoff=screen"] : [];
+  const nested = await runUpdateCommand([...inherited, ...handoffArgs], options(), {
+    probes: [successor.probe],
+    buildInfo: build(identityB, "2.0.0"),
+    convergenceInspection: sequenceInspection(successorPreflights),
+    commandRunner: commandResult,
+  });
+  return externalResult(input, JSON.stringify(nested.output), nested.code);
 }
 
 async function successfulSuccessorReport(

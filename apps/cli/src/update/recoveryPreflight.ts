@@ -521,7 +521,7 @@ function observerText(observer: UpdateReapObserverEvidence): string {
 function hostText(host: UpdateReapHostEvidence): string {
   if (host.status === "absent") return "absent";
   if (host.status === "unknown") return `unknown (${host.reason})`;
-  const build = host.buildVersion === undefined ? "legacy" : terminalText(host.buildVersion);
+  const build = host.buildVersion === undefined ? "unidentified" : terminalText(host.buildVersion);
   const identity = host.buildIdentity === undefined ? "unknown" : terminalText(host.buildIdentity);
   return `inspected build=${build} identity=${identity} relation=${host.relation} compatibility=${host.compatibility} terminals=${host.terminals.length}`;
 }

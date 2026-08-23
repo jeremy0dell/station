@@ -11,6 +11,7 @@ export type UpdateSuccessorTransportInput = {
   launcher: ExecutableArgv;
   channel: UpdateChannelId;
   target: UpdateArtifact;
+  expectedHookProviders: readonly string[];
   managerCommand?: UpdateCommandArgv;
   handoff?: HostHandoffFidelity;
 };
@@ -19,8 +20,8 @@ export type UpdateSuccessorTransportInput = {
  * DRIVEN PORT
  *
  * Executes one pinned successor evaluator and returns a current strict report only after exact selected
- * channel, exact install owner command, artifact, immutable build, evaluator, result-kind, and
- * exit-status validation.
+ * channel, exact install owner command, artifact, immutable build, canonical hook-provider set,
+ * evaluator, result-kind, and exit-status validation.
  */
 export interface UpdateSuccessorTransportPort {
   run(input: UpdateSuccessorTransportInput): Promise<UpdateCommandReport>;

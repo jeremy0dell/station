@@ -5,6 +5,7 @@ import { runObserverCommand } from "@station/cli/internal";
 import { listenUnixSocket } from "@station/protocol";
 import { describe, expect, it, vi } from "vitest";
 import { createTempState, writeConfigToml } from "../../../../tests/support/temp-projects";
+import { UpdateObserverMutationCommitmentSchema } from "../../src/update/updateObserverMutationCommitment.js";
 
 const now = "2026-05-20T12:00:00.000Z";
 const zeroBuildVersion = `0.0.0+station.${"0".repeat(64)}`;
@@ -185,34 +186,46 @@ describe("CLI observer commands", () => {
   it.each([
     {
       name: "configured socket drift",
-      args: (socketPath: string) => [
-        "start",
-        "--internal-update-expected-socket",
-        `${socketPath}.stale`,
-        "--internal-update-expected-build-selector",
-        zeroBuildVersion,
-      ],
+      action: "start" as const,
+      socketPath: (socketPath: string) => `${socketPath}.stale`,
+      buildSelector: zeroBuildVersion,
+      targetVersion: "0.0.0",
       message: "configured Observer socket changed",
     },
     {
       name: "executing build drift",
-      args: (socketPath: string) => [
-        "restart",
-        "--internal-update-expected-socket",
-        socketPath,
-        "--internal-update-expected-build-selector",
-        requestedBuildVersion,
-      ],
+      action: "restart" as const,
+      socketPath: (socketPath: string) => socketPath,
+      buildSelector: requestedBuildVersion,
+      targetVersion: "1.2.3",
       message: "executing Observer build differs",
     },
   ])("rejects internal update $name before lifecycle mutation", async (testCase) => {
     const fixture = await createTempState();
     const spawnObserver = vi.fn();
+    const commitment = UpdateObserverMutationCommitmentSchema.parse({
+      kind: "station-update-observer-mutation",
+      action: testCase.action,
+      target: { version: testCase.targetVersion },
+      targetBuildSelector: testCase.buildSelector,
+      socketPath: testCase.socketPath(fixture.socketPath),
+      owner: { status: "absent" },
+      selectedRecoveryHandles: [],
+      planDigest: "d".repeat(64),
+      nonce: "123e4567-e89b-42d3-a456-426614174000",
+    });
 
     await expect(
       runObserverCommand(
-        testCase.args(fixture.socketPath),
-        { config: fixture.config },
+        [testCase.action, "--internal-update-commitment"],
+        {
+          config: fixture.config,
+          readUpdateMutationCommitment: () => commitment,
+          updateMutationInspection: async () => ({
+            evidence: { status: "absent" },
+            privateEvidence: { selectedRecoveryHandles: [] },
+          }),
+        },
         {
           buildVersion: zeroBuildVersion,
           spawnObserver,

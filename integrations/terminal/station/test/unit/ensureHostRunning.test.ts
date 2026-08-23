@@ -22,6 +22,8 @@ const incumbentBuildIdentity = "a".repeat(64);
 const targetBuildIdentity = "b".repeat(64);
 
 function fakeClient(overrides: Partial<StationHostClient> = {}): StationHostClient {
+  const list = overrides.list ?? (async () => []);
+  const recoveryInventory = overrides.recoveryInventory;
   return {
     health: async () => ({
       ok: true,
@@ -44,7 +46,11 @@ function fakeClient(overrides: Partial<StationHostClient> = {}): StationHostClie
       ptyInstanceId: "instance-p",
       pid: 1,
     }),
-    list: async () => [],
+    list,
+    lifecycleList: async () => list(),
+    ...(recoveryInventory === undefined
+      ? {}
+      : { lifecycleRecoveryInventory: async () => recoveryInventory() }),
     focus: async () => undefined,
     close: async () => ({ closed: true }),
     attach: async () => {
@@ -948,7 +954,10 @@ describe("ensureStationHostRunning", () => {
           },
         },
       });
-      expect(beginHandoff).toHaveBeenCalledWith(expectedBuildVersion, "processes");
+      expect(beginHandoff).toHaveBeenCalledWith(expectedBuildVersion, "processes", {
+        protocolVersion: HOST_PROTOCOL_VERSION,
+        buildVersion: "older-build",
+      });
       expect(completeHandoff).toHaveBeenCalledOnce();
       expect(spawnHost).toHaveBeenCalledOnce();
       expect(adoptRegistry).toHaveBeenCalledWith(manifest);
@@ -1225,6 +1234,7 @@ describe("ensureStationHostRunning", () => {
     });
     const beginHandoff = vi.fn();
     const spawnHost = vi.fn();
+    const dispose = vi.fn();
     try {
       const result = await convergeStationHostForUpdate(
         {
@@ -1247,6 +1257,7 @@ describe("ensureStationHostRunning", () => {
               }),
               stopIfIdle,
               beginHandoff,
+              dispose,
             }),
           spawnHost,
         },
@@ -1259,6 +1270,7 @@ describe("ensureStationHostRunning", () => {
       expect(stopIfIdle).toHaveBeenCalledOnce();
       expect(beginHandoff).not.toHaveBeenCalled();
       expect(spawnHost).not.toHaveBeenCalled();
+      expect(dispose).toHaveBeenCalledOnce();
     } finally {
       await socket.close();
     }
@@ -1401,6 +1413,7 @@ describe("ensureStationHostRunning", () => {
       return { stopping: true as const };
     });
     const beginHandoff = vi.fn();
+    const dispose = vi.fn();
     const spawnHost = vi.fn(
       (_input: SpawnStationHostInput): ChildProcessLike => ({ pid: 999, unref: () => undefined }),
     );
@@ -1431,6 +1444,7 @@ describe("ensureStationHostRunning", () => {
             },
             stopIfIdle,
             beginHandoff,
+            dispose,
           }),
         spawnHost,
       },
@@ -1443,6 +1457,54 @@ describe("ensureStationHostRunning", () => {
     expect(stopIfIdle).toHaveBeenCalledOnce();
     expect(beginHandoff).not.toHaveBeenCalled();
     expect(spawnHost).toHaveBeenCalledOnce();
+    expect(dispose).toHaveBeenCalledOnce();
+  });
+
+  it("uses one predecessor identity for recovery-list fallback and idle replacement", async () => {
+    const socket = await liveSocket();
+    const command = convergenceCommand("replace-idle", []);
+    command.commitment.incumbent.buildIdentity = { status: "absent" };
+    let healthCalls = 0;
+    const lifecycleRecoveryInventory = vi.fn(async () => {
+      throw stationHostSafeError("HOST_BAD_REQUEST", "Predecessor has no recovery method.");
+    });
+    const lifecycleList = vi.fn(async () => []);
+    const stopIfIdle = vi.fn(async () => {
+      await socket.close();
+      return { stopping: true as const };
+    });
+    const result = await convergeStationHostForUpdate(
+      {
+        socketPath: socket.socketPath,
+        stateDir: tmpdir(),
+        hostCommand: ["bun", "/tmp/hostMain.ts"],
+        command,
+      },
+      {
+        clientFactory: () =>
+          fakeClient({
+            health: async () => ({
+              ok: true,
+              protocolVersion: HOST_PROTOCOL_VERSION,
+              buildVersion: healthCalls++ === 0 ? "older-build" : expectedBuildVersion,
+            }),
+            lifecycleRecoveryInventory,
+            lifecycleList,
+            recoveryInventory: async () => ({ buildIdentity: targetBuildIdentity, ptys: [] }),
+            stopIfIdle,
+          }),
+        spawnHost: () => ({ pid: 999, unref: () => undefined }),
+      },
+    );
+    const incumbentIdentity = {
+      protocolVersion: HOST_PROTOCOL_VERSION,
+      buildVersion: "older-build",
+    };
+
+    expect(result).toMatchObject({ status: "completed", receipt: { ensuredBy: "idle-replace" } });
+    expect(lifecycleRecoveryInventory).toHaveBeenCalledWith(incumbentIdentity);
+    expect(lifecycleList).toHaveBeenCalledWith(incumbentIdentity);
+    expect(stopIfIdle).toHaveBeenCalledWith(expectedBuildVersion, incumbentIdentity);
   });
 
   it("executes an exact busy handoff without attempting idle replacement", async () => {
@@ -1451,6 +1513,7 @@ describe("ensureStationHostRunning", () => {
     let healthCalls = 0;
     let inventoryCalls = 0;
     const stopIfIdle = vi.fn();
+    const dispose = vi.fn();
     const beginHandoff = vi.fn(async () => ({
       manifest,
       fidelity: "processes" as const,
@@ -1493,6 +1556,7 @@ describe("ensureStationHostRunning", () => {
             beginHandoff,
             completeHandoff,
             adoptRegistry: async () => ({ adopted: ["pty-1"], failed: [] }),
+            dispose,
           }),
         spawnHost,
       },
@@ -1509,6 +1573,67 @@ describe("ensureStationHostRunning", () => {
     expect(stopIfIdle).not.toHaveBeenCalled();
     expect(beginHandoff).toHaveBeenCalledOnce();
     expect(spawnHost).toHaveBeenCalledOnce();
+    expect(dispose).toHaveBeenCalledOnce();
+  });
+
+  it("uses one predecessor identity for recovery-list fallback and busy handoff", async () => {
+    const socket = await liveSocket();
+    const manifest = oneEntryHandoffManifest("pty-1");
+    const command = convergenceCommand("handoff", terminalIdentities(manifest));
+    command.commitment.incumbent.buildIdentity = { status: "absent" };
+    let healthCalls = 0;
+    const lifecycleRecoveryInventory = vi.fn(async () => {
+      throw stationHostSafeError("HOST_BAD_REQUEST", "Predecessor has no recovery method.");
+    });
+    const lifecycleList = vi.fn(async () => recoveryPtys(manifest));
+    const beginHandoff = vi.fn(async () => ({
+      manifest,
+      fidelity: "processes" as const,
+      released: ["pty-1"],
+      skipped: [],
+    }));
+    const completeHandoff = vi.fn(async () => {
+      await socket.close();
+      return { stopping: true as const };
+    });
+    const result = await convergeStationHostForUpdate(
+      {
+        socketPath: socket.socketPath,
+        stateDir: tmpdir(),
+        hostCommand: ["bun", "/tmp/hostMain.ts"],
+        command,
+      },
+      {
+        clientFactory: () =>
+          fakeClient({
+            health: async () => ({
+              ok: true,
+              protocolVersion: HOST_PROTOCOL_VERSION,
+              buildVersion: healthCalls++ === 0 ? "older-build" : expectedBuildVersion,
+            }),
+            lifecycleRecoveryInventory,
+            lifecycleList,
+            recoveryInventory: async () => ({
+              buildIdentity: targetBuildIdentity,
+              ptys: recoveryPtys(manifest),
+            }),
+            beginHandoff,
+            completeHandoff,
+            adoptRegistry: async () => ({ adopted: ["pty-1"], failed: [] }),
+          }),
+        spawnHost: () => ({ pid: 999, unref: () => undefined }),
+      },
+    );
+    const incumbentIdentity = {
+      protocolVersion: HOST_PROTOCOL_VERSION,
+      buildVersion: "older-build",
+    };
+
+    expect(result).toMatchObject({ status: "completed", receipt: { ensuredBy: "handoff" } });
+    expect(lifecycleRecoveryInventory).toHaveBeenCalledWith(incumbentIdentity);
+    expect(lifecycleList).toHaveBeenCalledWith(incumbentIdentity);
+    expect(beginHandoff).toHaveBeenCalledWith(expectedBuildVersion, "processes", incumbentIdentity);
+    expect(completeHandoff).toHaveBeenCalledWith(incumbentIdentity);
   });
 
   it("refuses and restores a live handoff when the Host acknowledges another fidelity", async () => {
@@ -1517,6 +1642,7 @@ describe("ensureStationHostRunning", () => {
     const abortHandoff = vi.fn(async () => ({ adopted: ["pty-1"], failed: [] }));
     const completeHandoff = vi.fn();
     const spawnHost = vi.fn();
+    const dispose = vi.fn();
     try {
       const result = await convergeStationHostForUpdate(
         {
@@ -1545,6 +1671,7 @@ describe("ensureStationHostRunning", () => {
               }),
               abortHandoff,
               completeHandoff,
+              dispose,
             }),
           spawnHost,
         },
@@ -1559,6 +1686,7 @@ describe("ensureStationHostRunning", () => {
       expect(abortHandoff).toHaveBeenCalledOnce();
       expect(completeHandoff).not.toHaveBeenCalled();
       expect(spawnHost).not.toHaveBeenCalled();
+      expect(dispose).toHaveBeenCalledOnce();
     } finally {
       await socket.close();
     }
@@ -1651,6 +1779,7 @@ describe("ensureStationHostRunning", () => {
     const stopIfIdle = vi.fn();
     const beginHandoff = vi.fn();
     const spawnHost = vi.fn();
+    const dispose = vi.fn();
     try {
       const result = await convergeStationHostForUpdate(
         {
@@ -1673,6 +1802,7 @@ describe("ensureStationHostRunning", () => {
               }),
               stopIfIdle,
               beginHandoff,
+              dispose,
             }),
           spawnHost,
         },
@@ -1685,6 +1815,7 @@ describe("ensureStationHostRunning", () => {
       expect(stopIfIdle).not.toHaveBeenCalled();
       expect(beginHandoff).not.toHaveBeenCalled();
       expect(spawnHost).not.toHaveBeenCalled();
+      expect(dispose).toHaveBeenCalledOnce();
     } finally {
       await socket.close();
     }
@@ -1695,6 +1826,7 @@ describe("ensureStationHostRunning", () => {
     const stopIfIdle = vi.fn();
     const beginHandoff = vi.fn();
     const spawnHost = vi.fn();
+    const dispose = vi.fn();
     try {
       const result = await convergeStationHostForUpdate(
         {
@@ -1717,6 +1849,7 @@ describe("ensureStationHostRunning", () => {
               }),
               stopIfIdle,
               beginHandoff,
+              dispose,
             }),
           spawnHost,
         },
@@ -1729,6 +1862,7 @@ describe("ensureStationHostRunning", () => {
       expect(stopIfIdle).not.toHaveBeenCalled();
       expect(beginHandoff).not.toHaveBeenCalled();
       expect(spawnHost).not.toHaveBeenCalled();
+      expect(dispose).toHaveBeenCalledOnce();
     } finally {
       await socket.close();
     }

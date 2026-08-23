@@ -120,18 +120,31 @@ export const HostHandoffCommandResultSchema = z
   })
   .strict()
   .superRefine((result, context) => {
-    if (result.receipt !== undefined) {
-      if (
-        result.status !== "completed" ||
-        result.dryRun ||
-        result.livePtyCount !== result.receipt.terminals.length
-      ) {
-        context.addIssue({
-          code: "custom",
-          path: ["receipt"],
-          message: "A handoff receipt requires a completed mutation and its exact terminal count.",
-        });
-      }
+    if ((result.status === "planned") !== result.dryRun) {
+      context.addIssue({
+        code: "custom",
+        path: ["status"],
+        message: "Only a dry-run handoff may be planned, and every dry run is planned.",
+      });
+    }
+    if (result.status === "completed" && (result.dryRun || result.livePtyCount === undefined)) {
+      context.addIssue({
+        code: "custom",
+        path: ["livePtyCount"],
+        message: "Completed handoff requires a non-dry-run exact terminal count.",
+      });
+    }
+    const receiptRequired = result.status === "completed" && (result.livePtyCount ?? 0) > 0;
+    if (
+      receiptRequired !== (result.receipt !== undefined) ||
+      (result.receipt !== undefined && result.livePtyCount !== result.receipt.terminals.length)
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["receipt"],
+        message:
+          "Completed live handoff requires one exact receipt; idle completion forbids a receipt.",
+      });
     }
   });
 export type HostHandoffCommandResult = z.infer<typeof HostHandoffCommandResultSchema>;

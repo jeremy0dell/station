@@ -148,7 +148,7 @@ describe("runHostCommand", () => {
     expect(completeHandoff).not.toHaveBeenCalled();
   });
 
-  it("dry-run refuses when the host already matches this build", async () => {
+  it("dry-run reports that a matching host needs no handoff", async () => {
     const fixture = await createTempState();
     const ensureHost = vi.fn();
     const result = await runHostCommand(
@@ -172,13 +172,14 @@ describe("runHostCommand", () => {
 
     expect(result).toMatchObject({
       action: "handoff",
-      status: "refused",
+      dryRun: true,
+      status: "planned",
     });
-    expect(String((result as { message: string }).message)).toMatch(/unnecessary/i);
+    expect(String((result as { message: string }).message)).toMatch(/not require handoff/i);
     expect(ensureHost).not.toHaveBeenCalled();
   });
 
-  it("dry-run refuses handoff on protocol major mismatch", async () => {
+  it("dry-run reports that protocol mismatch would refuse handoff", async () => {
     const fixture = await createTempState();
     const ensureHost = vi.fn();
     const result = await runHostCommand(
@@ -202,13 +203,14 @@ describe("runHostCommand", () => {
 
     expect(result).toMatchObject({
       action: "handoff",
-      status: "refused",
+      dryRun: true,
+      status: "planned",
     });
-    expect(String((result as { message: string }).message)).toMatch(/incompatible/i);
+    expect(String((result as { message: string }).message)).toMatch(/would refuse handoff/i);
     expect(ensureHost).not.toHaveBeenCalled();
   });
 
-  it("dry-run refuses handoff when the host is idle", async () => {
+  it("dry-run reports that an idle host would use replacement", async () => {
     const fixture = await createTempState();
     const ensureHost = vi.fn();
     const result = await runHostCommand(
@@ -232,9 +234,11 @@ describe("runHostCommand", () => {
 
     expect(result).toMatchObject({
       action: "handoff",
-      status: "refused",
+      dryRun: true,
+      status: "planned",
       livePtyCount: 0,
     });
+    expect(String((result as { message: string }).message)).toMatch(/idle replacement/i);
     expect(ensureHost).not.toHaveBeenCalled();
   });
 
