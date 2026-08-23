@@ -1,6 +1,7 @@
 import type { ObserverHealth, ObserverProcessIdentity } from "@station/contracts";
 import { describe, expect, it, vi } from "vitest";
 import {
+  classifyObserverBuildPrecedence,
   classifyObserverIncumbent,
   negotiateObserverIncumbent,
   type ObserverIncumbentLifecycle,
@@ -17,33 +18,68 @@ const candidate = {
 const lowerBuildIdentity = "1".repeat(64);
 const higherBuildIdentity = "e".repeat(64);
 
-describe("classifyObserverIncumbent", () => {
-  it("attaches to an exact build", () => {
-    const buildVersion = observerBuildVersion("2.0.0", lowerBuildIdentity);
-    expect(
-      classifyObserverIncumbent({
-        candidate: { ...candidate, version: buildVersion },
-        incumbent: { version: buildVersion },
-      }),
-    ).toEqual({ action: "attach", reason: "exact-build" });
+describe("classifyObserverBuildPrecedence", () => {
+  it("classifies only an exact identified selector as the exact build", () => {
+    const exact = observerBuildVersion("2.0.0", lowerBuildIdentity);
+
+    expect(precedenceFor(exact, exact)).toEqual({ outcome: "exact-build" });
+    expect(precedenceFor("2.0.0", "2.0.0")).toEqual({
+      outcome: "refused",
+      reason: "Same-version Observer reuse requires immutable build identity.",
+    });
   });
 
-  it("replaces only in the winning direction for different same-version builds", () => {
+  it("orders different immutable builds at one display version in only the admitted direction", () => {
     const lower = observerBuildVersion("2.0.0", lowerBuildIdentity);
     const higher = observerBuildVersion("2.0.0", higherBuildIdentity);
 
-    expect(decisionFor(higher, lower)).toEqual({
-      action: "replace",
-      reason: "candidate-wins",
+    expect(precedenceFor(higher, lower)).toEqual({ outcome: "candidate-precedes" });
+    expect(precedenceFor(lower, higher)).toEqual({
+      outcome: "refused",
+      reason: "A different build of this Station version already owns the Observer socket.",
     });
-    expect(decisionFor(lower, higher)).toMatchObject({ action: "refuse" });
   });
 
-  it("refuses same-version handoff when only one contender has build identity", () => {
+  it("refuses incomplete immutable identity at one display version", () => {
     const identified = observerBuildVersion("2.0.0", higherBuildIdentity);
+    const refusal = {
+      outcome: "refused",
+      reason: "Same-version Observer handoff requires build identity from both contenders.",
+    } as const;
 
-    expect(decisionFor(identified, "2.0.0")).toMatchObject({ action: "refuse" });
-    expect(decisionFor("2.0.0", identified)).toMatchObject({ action: "refuse" });
+    expect(precedenceFor(identified, "2.0.0")).toEqual(refusal);
+    expect(precedenceFor("2.0.0", identified)).toEqual(refusal);
+  });
+
+  it("orders newer and older SemVer without numeric truncation", () => {
+    expect(precedenceFor("100000000000000000000.0.0", "99999999999999999999.0.0")).toEqual({
+      outcome: "candidate-precedes",
+    });
+    expect(precedenceFor("2.0.0-rc.10", "2.0.0-rc.2")).toEqual({
+      outcome: "candidate-precedes",
+    });
+    expect(precedenceFor("1.9.9", "2.0.0")).toEqual({ outcome: "incumbent-precedes" });
+  });
+
+  it("uses both directions of the exact selector as the equal-SemVer tiebreak", () => {
+    expect(precedenceFor("2.0.0+candidate", "2.0.0+incumbent")).toEqual({
+      outcome: "incumbent-precedes",
+    });
+    expect(precedenceFor("2.0.0+incumbent", "2.0.0+candidate")).toEqual({
+      outcome: "candidate-precedes",
+    });
+  });
+
+  it("orders the public pre-alpha after the internal preview version line", () => {
+    const publicPreAlpha = observerBuildVersion("0.0.0-pre-alpha.5.16", higherBuildIdentity);
+    const internalPreview = observerBuildVersion("0.7.1-rc.8", lowerBuildIdentity);
+
+    expect(precedenceFor(publicPreAlpha, internalPreview)).toEqual({
+      outcome: "candidate-precedes",
+    });
+    expect(precedenceFor(internalPreview, publicPreAlpha)).toEqual({
+      outcome: "incumbent-precedes",
+    });
   });
 
   it.each([
@@ -54,85 +90,116 @@ describe("classifyObserverIncumbent", () => {
     `2.0.0+station.${lowerBuildIdentity}.station.${higherBuildIdentity}`,
   ])("refuses malformed reserved build identity %s", (malformed) => {
     const identified = observerBuildVersion("2.0.0", higherBuildIdentity);
-    expect(decisionFor(identified, malformed)).toMatchObject({ action: "refuse" });
-    expect(decisionFor(malformed, identified)).toMatchObject({ action: "refuse" });
+
+    expect(precedenceFor(malformed, identified)).toEqual({
+      outcome: "refused",
+      reason: "The candidate Observer build identity is invalid.",
+    });
+    expect(precedenceFor(identified, malformed)).toEqual({
+      outcome: "refused",
+      reason: "The incumbent Observer build identity is invalid.",
+    });
   });
 
-  it("refuses exact legacy reuse while retaining cross-version SemVer handoff", () => {
-    expect(decisionFor("2.0.0", "2.0.0")).toMatchObject({ action: "refuse" });
+  it("refuses invalid or absent selectors in candidate-first order", () => {
+    expect(precedenceFor("v2.0.0", undefined)).toEqual({
+      outcome: "refused",
+      reason: "The candidate Observer version is not valid SemVer.",
+    });
+    expect(precedenceFor("2.0.0", undefined)).toEqual({
+      outcome: "refused",
+      reason: "The incumbent Observer did not report a version.",
+    });
+    expect(precedenceFor("2.0.0", "v1.0.0")).toEqual({
+      outcome: "refused",
+      reason: "The incumbent Observer version is not valid SemVer.",
+    });
+  });
+});
+
+describe("classifyObserverIncumbent", () => {
+  const exactSelector = observerBuildVersion("2.0.0", lowerBuildIdentity);
+  const lowerSelector = observerBuildVersion("2.0.0", lowerBuildIdentity);
+  const higherSelector = observerBuildVersion("2.0.0", higherBuildIdentity);
+  const mappingCases: ReadonlyArray<{
+    name: string;
+    candidateSelector: string;
+    incumbent: Pick<ObserverHealth, "version" | "startedAt" | "pid">;
+    precedence: ReturnType<typeof classifyObserverBuildPrecedence>;
+    decision: ReturnType<typeof classifyObserverIncumbent>;
+  }> = [
+    {
+      name: "exact build",
+      candidateSelector: exactSelector,
+      incumbent: { version: exactSelector },
+      precedence: { outcome: "exact-build" },
+      decision: { action: "attach", reason: "exact-build" },
+    },
+    {
+      name: "candidate precedence",
+      candidateSelector: higherSelector,
+      incumbent: {
+        version: lowerSelector,
+        startedAt: "2026-07-12T11:59:59.000Z",
+        pid: 100,
+      },
+      precedence: { outcome: "candidate-precedes" },
+      decision: { action: "replace", reason: "candidate-wins" },
+    },
+    {
+      name: "incumbent precedence without mutation identity",
+      candidateSelector: "1.0.0",
+      incumbent: { version: "2.0.0" },
+      precedence: { outcome: "incumbent-precedes" },
+      decision: { action: "attach", reason: "incumbent-wins" },
+    },
+    {
+      name: "refusal passthrough",
+      candidateSelector: "2.0.0",
+      incumbent: {},
+      precedence: {
+        outcome: "refused",
+        reason: "The incumbent Observer did not report a version.",
+      },
+      decision: {
+        action: "refuse",
+        reason: "The incumbent Observer did not report a version.",
+      },
+    },
+  ];
+
+  it.each(mappingCases)("maps $name", ({ candidateSelector, incumbent, precedence, decision }) => {
     expect(
-      decisionFor(
-        observerBuildVersion("2.0.0", lowerBuildIdentity),
-        observerBuildVersion("1.9.9", higherBuildIdentity),
-      ),
-    ).toEqual({ action: "replace", reason: "candidate-wins" });
-    expect(
-      decisionFor(
-        observerBuildVersion("1.9.9", higherBuildIdentity),
-        observerBuildVersion("2.0.0", lowerBuildIdentity),
-      ),
-    ).toEqual({ action: "attach", reason: "incumbent-wins" });
-  });
-
-  it("uses strict SemVer precedence without numeric truncation", () => {
-    expect(decisionFor("100000000000000000000.0.0", "99999999999999999999.0.0")).toEqual({
-      action: "replace",
-      reason: "candidate-wins",
-    });
-    expect(decisionFor("2.0.0-rc.10", "2.0.0-rc.2")).toEqual({
-      action: "replace",
-      reason: "candidate-wins",
-    });
-    expect(decisionFor("1.9.9", "2.0.0")).toEqual({
-      action: "attach",
-      reason: "incumbent-wins",
-    });
-  });
-
-  it("orders the public pre-alpha after the internal preview version line", () => {
-    const publicPreAlpha = observerBuildVersion("0.0.0-pre-alpha.5.16", higherBuildIdentity);
-    const internalPreview = observerBuildVersion("0.7.1-rc.8", lowerBuildIdentity);
-
-    expect(decisionFor(publicPreAlpha, internalPreview)).toEqual({
-      action: "replace",
-      reason: "candidate-wins",
-    });
-    expect(decisionFor(internalPreview, publicPreAlpha)).toEqual({
-      action: "attach",
-      reason: "incumbent-wins",
-    });
-  });
-
-  it("attaches to a valid higher incumbent without mutation-only identity fields", () => {
+      classifyObserverBuildPrecedence({
+        candidateSelector,
+        incumbentSelector: incumbent.version,
+      }),
+    ).toEqual(precedence);
     expect(
       classifyObserverIncumbent({
-        candidate: { ...candidate, version: "1.0.0" },
-        incumbent: { version: "2.0.0" },
+        candidate: { ...candidate, version: candidateSelector },
+        incumbent,
       }),
-    ).toEqual({ action: "attach", reason: "incumbent-wins" });
+    ).toEqual(decision);
   });
 
-  it("uses the exact build string as a stable equal-precedence tiebreak", () => {
+  it.each([
+    { startedAt: undefined, pid: 100 },
+    { startedAt: candidate.startedAt, pid: undefined },
+  ])("refuses candidate precedence without complete incumbent process identity %#", (incumbent) => {
+    const lower = observerBuildVersion("2.0.0", lowerBuildIdentity);
+    const higher = observerBuildVersion("2.0.0", higherBuildIdentity);
+
+    expect(precedenceFor(higher, lower)).toEqual({ outcome: "candidate-precedes" });
     expect(
       classifyObserverIncumbent({
-        candidate: { ...candidate, version: "2.0.0+candidate", pid: 20 },
-        incumbent: {
-          version: "2.0.0+incumbent",
-          startedAt: candidate.startedAt,
-          pid: 30,
-        },
+        candidate: { ...candidate, version: higher },
+        incumbent: { ...incumbent, version: lower },
       }),
-    ).toEqual({ action: "attach", reason: "incumbent-wins" });
-    expect(
-      classifyObserverIncumbent({
-        candidate: { ...candidate, version: "2.0.0+incumbent", pid: 30 },
-        incumbent: {
-          version: "2.0.0+candidate",
-          startedAt: "2026-07-12T11:59:59.000Z",
-          pid: 20,
-        },
-      }),
-    ).toEqual({ action: "replace", reason: "candidate-wins" });
+    ).toEqual({
+      action: "refuse",
+      reason: "Replacing a different-build Observer requires complete incumbent identity.",
+    });
   });
 
   it("keeps parent and child equal-precedence decisions consistent", () => {
@@ -183,15 +250,6 @@ describe("classifyObserverIncumbent", () => {
     expect(classifyObserverIncumbent({ candidate: second, incumbent: first }).action).toBe(
       "replace",
     );
-  });
-
-  it.each([
-    { version: undefined, startedAt: candidate.startedAt, pid: 100 },
-    { version: "v1.0.0", startedAt: candidate.startedAt, pid: 100 },
-    { version: "1.0.0", startedAt: undefined, pid: 100 },
-    { version: "1.0.0", startedAt: candidate.startedAt, pid: undefined },
-  ])("refuses invalid or incomplete replacement identity %#", (incumbent) => {
-    expect(classifyObserverIncumbent({ candidate, incumbent }).action).toBe("refuse");
   });
 });
 
@@ -607,15 +665,8 @@ describe("negotiateObserverIncumbent", () => {
   });
 });
 
-function decisionFor(candidateVersion: string, incumbentVersion: string) {
-  return classifyObserverIncumbent({
-    candidate: { ...candidate, version: candidateVersion },
-    incumbent: {
-      version: incumbentVersion,
-      startedAt: "2026-07-12T11:00:00.000Z",
-      pid: 100,
-    },
-  });
+function precedenceFor(candidateSelector: string, incumbentSelector: string | undefined) {
+  return classifyObserverBuildPrecedence({ candidateSelector, incumbentSelector });
 }
 
 function observerBuildVersion(version: string, buildIdentity: string): string {

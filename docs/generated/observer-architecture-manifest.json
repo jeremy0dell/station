@@ -4213,10 +4213,16 @@
           "purpose": null
         },
         {
+          "name": "classifyObserverBuildPrecedence",
+          "kind": "function",
+          "role": "POLICY",
+          "purpose": "Orders Observer build selectors without process or lifecycle authority, preserving singleton SemVer, immutable-build, and public-version-line rules."
+        },
+        {
           "name": "classifyObserverIncumbent",
           "kind": "function",
           "role": "POLICY",
-          "purpose": "Selects one stable Observer build winner without process or transport I/O, refusing ambiguous same-version handoffs instead of silently reusing them."
+          "purpose": "Maps shared build precedence to singleton attach, replace, or refusal, requiring complete contender identity before admitting replacement."
         },
         {
           "name": "CleanupRuntime",
@@ -4742,6 +4748,12 @@
         },
         {
           "name": "ObserverBootClaimResult",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ObserverBuildPrecedenceResult",
           "kind": "type",
           "role": null,
           "purpose": null
@@ -11590,16 +11602,28 @@
       "path": "apps/observer/src/runtime/observerHandoff.ts",
       "exports": [
         {
+          "name": "classifyObserverBuildPrecedence",
+          "kind": "function",
+          "role": "POLICY",
+          "purpose": "Orders Observer build selectors without process or lifecycle authority, preserving singleton SemVer, immutable-build, and public-version-line rules."
+        },
+        {
           "name": "classifyObserverIncumbent",
           "kind": "function",
           "role": "POLICY",
-          "purpose": "Selects one stable Observer build winner without process or transport I/O, refusing ambiguous same-version handoffs instead of silently reusing them."
+          "purpose": "Maps shared build precedence to singleton attach, replace, or refusal, requiring complete contender identity before admitting replacement."
         },
         {
           "name": "negotiateObserverIncumbent",
           "kind": "function",
           "role": "USE CASE",
           "purpose": "Replaces an older incumbent only after corroborating its socket and process identity, completing candidate prerequisites, revalidating the incumbent, and synchronously refusing pending cancellation before committing to stop; any pre-commit failure preserves the incumbent and remains available as the typed handoff refusal's cause."
+        },
+        {
+          "name": "ObserverBuildPrecedenceResult",
+          "kind": "type",
+          "role": null,
+          "purpose": null
         },
         {
           "name": "observerBuildSelectorIsValid",
@@ -15927,11 +15951,27 @@
     },
     {
       "path": "apps/observer/src/runtime/observerHandoff.ts",
+      "declaration": "classifyObserverBuildPrecedence",
+      "kind": "function",
+      "role": "POLICY",
+      "purpose": "Orders Observer build selectors without process or lifecycle authority, preserving singleton SemVer, immutable-build, and public-version-line rules.",
+      "dependencies": []
+    },
+    {
+      "path": "apps/observer/src/runtime/observerHandoff.ts",
       "declaration": "classifyObserverIncumbent",
       "kind": "function",
       "role": "POLICY",
-      "purpose": "Selects one stable Observer build winner without process or transport I/O, refusing ambiguous same-version handoffs instead of silently reusing them.",
-      "dependencies": []
+      "purpose": "Maps shared build precedence to singleton attach, replace, or refusal, requiring complete contender identity before admitting replacement.",
+      "dependencies": [
+        {
+          "path": "apps/observer/src/runtime/observerHandoff.ts",
+          "declaration": "classifyObserverBuildPrecedence",
+          "kind": "function",
+          "role": "POLICY",
+          "edgeKind": "runtime"
+        }
+      ]
     },
     {
       "path": "apps/observer/src/runtime/observerHandoff.ts",
