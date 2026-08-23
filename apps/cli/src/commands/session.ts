@@ -42,8 +42,18 @@ export async function runSessionCommand(
   options: SessionCommandOptions = {},
   deps: ObserverProcessDeps = {},
 ): Promise<CurrentSessionContext> {
-  if (args.length !== 1 || args[0] !== "current") {
-    throw new Error(`Unknown session command: ${args[0] ?? ""}`);
+  const action = args[0];
+  if (action === undefined) {
+    throw new Error("Session command requires a subcommand. Use: stn session --help.");
+  }
+  if (action !== "current") {
+    throw new Error(`Unknown session command: ${action}. Use: stn session --help.`);
+  }
+  const unexpected = args[1];
+  if (unexpected !== undefined) {
+    throw new Error(
+      `Unexpected argument for stn session current: ${unexpected}. Use: stn session current --help.`,
+    );
   }
   const timeoutMs = options.timeoutMs ?? 30_000;
   const paths = resolveObserverPaths(options.config);

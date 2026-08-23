@@ -53,16 +53,66 @@ describe("session current command", () => {
     }
   });
 
-  it("renders help without loading config or starting Observer", async () => {
+  it("renders parent and leaf help without loading config or starting Observer", async () => {
     const spawnObserver = vi.fn();
 
-    const result = await runCli(["session", "current", "--help"], {
+    const parent = await runCli(["--config", "/missing/config.toml", "session", "--help"], {
       observerDeps: { spawnObserver },
     });
+    const leaf = await runCli(
+      ["--config", "/missing/config.toml", "session", "current", "--help"],
+      { observerDeps: { spawnObserver } },
+    );
+
+    expect(parent).toMatchObject({ code: 0, outputFormat: "text" });
+    expect(textOutput(parent)).toContain("Resolve verified context for the invoking terminal.");
+    expect(textOutput(parent)).toContain("pnpm stn session current");
+    expect(leaf).toMatchObject({ code: 0, outputFormat: "text" });
+    expect(textOutput(leaf)).toContain("Print the verified invoking terminal context as JSON.");
+    expect(textOutput(leaf)).toContain("pnpm stn session current");
+    expect(spawnObserver).not.toHaveBeenCalled();
+  });
+
+  it("documents execution, placement support, source handling, and detached placement", async () => {
+    const result = await runCli(["session", "current", "--man"]);
 
     expect(result).toMatchObject({ code: 0, outputFormat: "text" });
-    expect(result.output).toContain("stn session current");
-    expect(spawnObserver).not.toHaveBeenCalled();
+    const manual = textOutput(result);
+    expect(manual).toContain("Normal execution loads configuration");
+    expect(manual).toContain("may start or contact the Observer");
+    expect(manual).toContain("tmux is currently the only placement-capable terminal provider");
+    expect(manual).toContain("short-lived, one-shot bearer input");
+    expect(manual).toContain("raw sibling session.create or session.fork dispatch");
+    expect(manual).toContain("do not persist or log it");
+    expect(manual).toContain("Detached placement is source-free");
+    expect(manual).toContain("does not use stn session current");
+  });
+
+  it("reports missing, unknown, and extra arguments with accurate help hints", async () => {
+    const fixture = await createTempState();
+    const configPath = await writeConfigToml(fixture.root, fixture.config);
+    const spawnObserver = vi.fn();
+
+    try {
+      await expect(
+        runCli(["--config", configPath, "session"], { observerDeps: { spawnObserver } }),
+      ).rejects.toThrow("Session command requires a subcommand. Use: stn session --help.");
+      await expect(
+        runCli(["--config", configPath, "session", "create"], {
+          observerDeps: { spawnObserver },
+        }),
+      ).rejects.toThrow("Unknown session command: create. Use: stn session --help.");
+      await expect(
+        runCli(["--config", configPath, "session", "current", "--json", "later"], {
+          observerDeps: { spawnObserver },
+        }),
+      ).rejects.toThrow(
+        "Unexpected argument for stn session current: --json. Use: stn session current --help.",
+      );
+      expect(spawnObserver).not.toHaveBeenCalled();
+    } finally {
+      await fixture.cleanup();
+    }
   });
 
   it("fails with a structured error when process evidence is unavailable", async () => {
@@ -89,6 +139,11 @@ describe("session current command", () => {
     }
   });
 });
+
+function textOutput(result: { output?: unknown }): string {
+  expect(typeof result.output).toBe("string");
+  return String(result.output);
+}
 
 function runningObserverDeps(
   socketPath: string,
