@@ -3,9 +3,7 @@
 import { tuiScreenBehavior } from "@station/dashboard-core/state";
 import type { DashboardScreenView, DashboardSnapshotView, DashboardStateView } from "@station/dashboard-core/state";
 import type { ReactNode } from "react";
-import { toOpenTuiColor, useStationTheme } from "../../theme/index.js";
 import { AddProjectSheetView } from "./sheets/AddProjectSheetView.js";
-import { DashboardFilterConditionView } from "./DashboardFilterConditionView.js";
 import { HelpOverlayView } from "./HelpOverlayView.js";
 import { NewSessionSheetView } from "./sheets/NewSessionSheetView.js";
 import { ProjectChoiceSheetView } from "./sheets/ProjectChoiceSheetView.js";
@@ -40,7 +38,6 @@ export type ActiveScreenOverlayViewProps = {
 
 export function ActiveScreenOverlayView(props: ActiveScreenOverlayViewProps) {
   const { screen, columns, rows } = props;
-  const theme = useStationTheme();
   const dispatch = useStationMouse();
   const behavior = tuiScreenBehavior(screen);
   const conditionPanelActive =
@@ -49,31 +46,16 @@ export function ActiveScreenOverlayView(props: ActiveScreenOverlayViewProps) {
 
   return (
     <>
-      {behavior.clickAway !== undefined ? (
-        <>
-          <box
-            position="absolute"
-            left={0}
-            top={0}
-            width={columns}
-            height={rows}
-            zIndex={9}
-            {...stationMouseProps(dispatch, { kind: "screenBackdrop" })}
-          />
-          {/* Keep the modal help visible while the transparent full-screen layer still blocks it. */}
-          {conditionPanelActive && rows > 1 ? (
-            <box
-              position="absolute"
-              left={0}
-              top={0}
-              width={columns}
-              height={rows - 1}
-              zIndex={9}
-              backgroundColor={toOpenTuiColor(theme.filter.conditionBackdrop)}
-              {...stationMouseProps(dispatch, { kind: "screenBackdrop" })}
-            />
-          ) : null}
-        </>
+      {behavior.clickAway !== undefined && !conditionPanelActive ? (
+        <box
+          position="absolute"
+          left={0}
+          top={0}
+          width={columns}
+          height={rows}
+          zIndex={9}
+          {...stationMouseProps(dispatch, { kind: "screenBackdrop" })}
+        />
       ) : null}
       {overlay}
     </>
@@ -96,16 +78,7 @@ function renderActiveScreenOverlay({
     case "dashboard":
       return null;
     case "persistentFilter": {
-      if (screen.conditionEditor === undefined) return null;
-      const top = snapshot.projects.length === 0 ? 3 : 4;
-      return (
-        <DashboardFilterConditionView
-          screen={screen}
-          columns={columns}
-          availableRows={Math.max(4, rows - top - 1)}
-          top={top}
-        />
-      );
+      return null;
     }
     case "help":
       return <HelpOverlayView columns={columns} rows={rows} />;

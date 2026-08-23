@@ -9,8 +9,6 @@ import type {
   DashboardFilterConditionField,
   DashboardScreenView,
 } from "../../state/types.js";
-import { cellWidth, truncateCells } from "../WorktreeRow/layout.js";
-
 export type DashboardFilterConditionPanelFieldRow = {
   kind: "field";
   id: string;
@@ -58,19 +56,13 @@ export type DashboardFilterConditionPanelAction =
 export type DashboardFilterConditionPanelModel = {
   stage: "field" | "values";
   title: string;
-  width: number;
-  height: number;
   rows: readonly DashboardFilterConditionPanelRow[];
   actions: readonly DashboardFilterConditionPanelAction[];
   emptyMessage?: string;
-  hiddenAbove: number;
-  hiddenBelow: number;
 };
 
 export type DashboardFilterConditionPanelOptions = {
   screen: Extract<DashboardScreenView, { name: "persistentFilter" }>;
-  columns: number;
-  availableRows: number;
 };
 
 const BACK_ACTION: DashboardFilterConditionPanelHeaderAction = {
@@ -93,40 +85,24 @@ const DONE_ACTION: DashboardFilterConditionPanelFooterAction = {
   focused: false,
 };
 
-/** Builds a bounded, cursor-windowed panel without changing dashboard viewport row math. */
+/** Projects the complete semantic condition editor; the renderer owns clipping and geometry. */
 export function dashboardFilterConditionPanelModel(
   options: DashboardFilterConditionPanelOptions,
 ): DashboardFilterConditionPanelModel | undefined {
-  const { screen, columns, availableRows } = options;
+  const { screen } = options;
   const editor = screen.conditionEditor;
   if (editor === undefined) return undefined;
 
   const actions = conditionPanelActions(editor);
-  const actionRows = editor.stage === "field" ? 2 : 1;
-  const rowBudget = Math.max(1, Math.min(8, Math.floor(availableRows) - 3 - actionRows));
-  const allRows = conditionPanelRows(screen, editor);
-  const start = windowStart(editor.cursor, allRows.length, rowBudget);
-  const visibleRows = allRows.slice(start, start + rowBudget);
-  const hiddenAbove = start;
-  const hiddenBelow = Math.max(0, allRows.length - start - visibleRows.length);
-  const maximumLabelWidth = Math.max(0, ...visibleRows.map((row) => cellWidth(row.label)));
-  const width = Math.max(
-    1,
-    Math.min(Math.floor(columns) - 2, Math.max(34, maximumLabelWidth + 12)),
-  );
-  const rows = truncateConditionPanelRows(visibleRows, width);
+  const rows = conditionPanelRows(screen, editor);
 
   const model: DashboardFilterConditionPanelModel = {
     stage: editor.stage,
     title: conditionPanelTitle(editor),
-    width,
-    height: Math.max(1, visibleRows.length) + 3 + actionRows,
     rows,
     actions,
-    hiddenAbove,
-    hiddenBelow,
   };
-  if (visibleRows.length === 0) {
+  if (rows.length === 0) {
     model.emptyMessage = "No values available";
   }
   return model;
@@ -204,28 +180,9 @@ function conditionPanelValueRows(
   });
 }
 
-function truncateConditionPanelRows(
-  rows: readonly DashboardFilterConditionPanelRow[],
-  width: number,
-): DashboardFilterConditionPanelRow[] {
-  return rows.map((row) => {
-    const truncated: DashboardFilterConditionPanelRow = {
-      ...row,
-      label: truncateCells(row.label, Math.max(1, width - 10)),
-    };
-    return truncated;
-  });
-}
-
 function conditionSelectionSummary(values: readonly { label: string }[]): string {
   const first = values[0];
   if (first === undefined) return "Any";
   if (values.length === 1) return first.label;
   return `${first.label} +${values.length - 1}`;
-}
-
-function windowStart(cursor: number, itemCount: number, rowBudget: number): number {
-  if (itemCount <= rowBudget) return 0;
-  const centered = cursor - Math.floor(rowBudget / 2);
-  return Math.min(itemCount - rowBudget, Math.max(0, centered));
 }

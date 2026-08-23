@@ -41,6 +41,9 @@ import {
   semanticItemRenderableId,
   type DashboardScrollController,
 } from "./layout/scrollViewport.js";
+import { DashboardFilterConditionView } from "./DashboardFilterConditionView.js";
+
+const DASHBOARD_LAYOUT_BOUNDARY_ID = "station-dashboard-layout-boundary";
 
 export type DashboardViewProps = {
   snapshot: DashboardSnapshotView;
@@ -57,7 +60,9 @@ export function DashboardView({
   layout,
   columns = 80,
 }: DashboardViewProps) {
+  const theme = useStationTheme();
   const visibleRowIds = useDashboardVisibleRows(layout);
+  const dispatch = useStationMouse();
   const slots = selectDashboardSlots(snapshot, viewState, screen, visibleRowIds);
   const tree = slots.tree;
   const itemIds = useMemo(() => tree.visibleRows.map((row) => row.id), [tree.visibleRows]);
@@ -88,21 +93,52 @@ export function DashboardView({
     const focusedId = viewState.dashboardFocus?.rowId;
     queueMicrotask(() => layout.follow(focusedId));
   }, [layout, viewState.dashboardFocus?.rowId]);
+  const conditionPanelActive =
+    screen.name === "persistentFilter" && screen.conditionEditor !== undefined;
   return (
     <box
+      id={DASHBOARD_LAYOUT_BOUNDARY_ID}
       width="100%"
       flexGrow={1}
       flexShrink={1}
       minHeight={0}
       flexDirection="column"
       paddingRight={1}
+      position="relative"
     >
+      {conditionPanelActive ? (
+        <box
+          position="absolute"
+          top={0}
+          left={0}
+          width="100%"
+          height="100%"
+          zIndex={9}
+          backgroundColor={toOpenTuiColor(theme.filter.conditionBackdrop)}
+          {...stationMouseProps(dispatch, { kind: "screenBackdrop" })}
+        />
+      ) : null}
       <text flexShrink={0}> </text>
       {firstRun ? null : (
         <FleetBar summary={fleet} counts={snapshot.counts} columns={contentColumns} />
       )}
       <Divider columns={contentColumns} />
-      <DashboardTableHeaderView model={tableHeader} />
+      <box
+        flexShrink={0}
+        position="relative"
+        {...(conditionPanelActive ? { zIndex: 10 } : {})}
+      >
+        <DashboardTableHeaderView model={tableHeader} />
+        {conditionPanelActive ? (
+          <box position="absolute" top="100%" left={0}>
+            <DashboardFilterConditionView
+              screen={screen}
+              columns={contentColumns}
+              boundaryId={DASHBOARD_LAYOUT_BOUNDARY_ID}
+            />
+          </box>
+        ) : null}
+      </box>
       {firstRun ? (
         <box flexDirection="column" flexGrow={1}>
           <FirstProjectButton columns={contentColumns} />

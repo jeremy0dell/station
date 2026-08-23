@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { type BaseRenderable, rgbToHex, TextRenderable } from "@opentui/core";
+import { type BaseRenderable, type BoxRenderable, rgbToHex, TextRenderable } from "@opentui/core";
 import { MouseButtons } from "@opentui/core/testing";
 import { testRender } from "@opentui/react/test-utils";
 import type { DashboardScreenView } from "@station/dashboard-core/state";
@@ -10,12 +10,17 @@ import {
   stationColorSnapshotValue,
 } from "../../theme/index.js";
 import type { StationMouseTarget } from "../input/stationMouse.js";
-import { DashboardFilterConditionView } from "./DashboardFilterConditionView.js";
+import {
+  DashboardFilterConditionView,
+  FILTER_CONDITION_PANEL_ID,
+} from "./DashboardFilterConditionView.js";
+import { semanticItemRenderableId } from "./layout/scrollViewport.js";
 import { StationMouseProvider } from "./stationMouseContext.js";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
 
 const teardowns: Array<() => void> = [];
+const TEST_BOUNDARY_ID = "filter-condition-test-boundary";
 
 afterEach(async () => {
   await act(async () => {
@@ -46,17 +51,20 @@ function screen(
 async function renderCondition(
   conditionEditor: PersistentFilterConditionEditor,
   draftConditions: PersistentFilterScreen["draftConditions"] = defaultConditions,
+  anchorHeight = 0,
 ) {
   const targets: StationMouseTarget[] = [];
   const setup = await testRender(
     <StationThemeProvider theme={nativeStationTheme}>
       <StationMouseProvider value={(target) => targets.push(target)}>
-        <DashboardFilterConditionView
-          screen={screen(conditionEditor, draftConditions)}
-          columns={50}
-          availableRows={9}
-          top={0}
-        />
+        <box id={TEST_BOUNDARY_ID} width={50} height="100%" flexDirection="column">
+          {anchorHeight === 0 ? null : <box height={anchorHeight} flexShrink={0} />}
+          <DashboardFilterConditionView
+            screen={screen(conditionEditor, draftConditions)}
+            columns={50}
+            boundaryId={TEST_BOUNDARY_ID}
+          />
+        </box>
       </StationMouseProvider>
     </StationThemeProvider>,
     { width: 50, height: 10 },
@@ -185,6 +193,56 @@ describe("DashboardFilterConditionView", () => {
       { kind: "persistentFilterConditionAction", actionId: "done" },
       { kind: "persistentFilterConditionAction", actionId: "close" },
     ]);
+  });
+
+  it("keeps every value mounted and follows semantic focus through clipping", async () => {
+    const options = Array.from({ length: 14 }, (_, index) => ({
+      id: `project-${index}`,
+      label: `Project ${index}`,
+    }));
+    const { setup } = await renderCondition(
+      {
+        stage: "values",
+        field: "project",
+        cursor: 13,
+        options,
+        selectedIds: ["project-13"],
+      },
+      defaultConditions,
+      3,
+    );
+    await act(async () => {
+      await setup.flush();
+      await setup.renderOnce();
+    });
+
+    const frame = setup.captureCharFrame();
+    expect(frame).toContain("▸ e [✓] Project 13");
+    expect(frame).toContain("Done (Enter)");
+    expect(
+      setup.renderer.root.findDescendantById(
+        semanticItemRenderableId("value:project:project-0"),
+      ),
+    ).toBeDefined();
+    expect(
+      setup.renderer.root.findDescendantById(
+        semanticItemRenderableId("value:project:project-13"),
+      ),
+    ).toBeDefined();
+    const panel = setup.renderer.root.findDescendantById(
+      FILTER_CONDITION_PANEL_ID,
+    ) as BoxRenderable;
+    expect(panel.y).toBe(3);
+    expect(panel.height).toBeLessThanOrEqual(7);
+
+    await act(async () => {
+      setup.renderer.resize(50, 8);
+      await setup.flush();
+      await setup.renderOnce();
+    });
+    expect(panel.height).toBeLessThanOrEqual(5);
+    expect(setup.captureCharFrame()).toContain("▸ e [✓] Project 13");
+    expect(setup.captureCharFrame()).toContain("Done (Enter)");
   });
 });
 

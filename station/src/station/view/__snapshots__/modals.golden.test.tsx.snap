@@ -283,10 +283,10 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0
 ─────────────────────────────────────── 
 ▏ FILTER /▏               10/10 matches 
 ┌────────────────────────────────┐] [▾] 
-│[←] STATUS CONDITION ↑5      [×]│      
-│  6 [ ] Exited                  │t     
-│▸ 7 [ ] No agent                │      
-│  8 [ ] Unknown                 │g     
+│[←] STATUS CONDITION         [×]│      
+│  5 [ ] Idle                    │t     
+│  6 [ ] Exited                  │      
+│▸ 7 [ ] No agent                │g     
 │  Done (Enter)                  │      
 └────────────────────────────────┘───── 
  CONDITION  ← fields Sp toggle Esc clo… 

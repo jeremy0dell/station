@@ -10,36 +10,40 @@ import {
   type StationTheme,
 } from "../../theme/index.js";
 import { stationAgentStatusTone } from "../statusUi.js";
+import { filterConditionFrame } from "./layout/filterConditionFrame.js";
+import { SemanticScrollRegion } from "./layout/SemanticScrollViewport.js";
+import { semanticItemRenderableId } from "./layout/scrollViewport.js";
+import { useAncestorBoundedHeight } from "./layout/useAncestorBoundedHeight.js";
 import {
   stationMouseProps,
   useStationHoverState,
   useStationMouse,
 } from "./stationMouseContext.js";
 
+export const FILTER_CONDITION_PANEL_ID = "station-filter-condition-panel";
+
 export function DashboardFilterConditionView({
   screen,
   columns,
-  availableRows,
-  top,
+  boundaryId,
 }: {
   screen: Extract<DashboardScreenView, { name: "persistentFilter" }>;
   columns: number;
-  availableRows: number;
-  top: number;
+  boundaryId: string;
 }) {
   const theme = useStationTheme();
   const dispatch = useStationMouse();
-  const model = dashboardFilterConditionPanelModel({ screen, columns, availableRows });
+  const panelRef = useAncestorBoundedHeight(boundaryId);
+  const model = dashboardFilterConditionPanelModel({ screen });
   if (model === undefined) return null;
   const background = toOpenTuiOpaqueColor(theme.filter.conditionSurface);
-  const innerWidth = Math.max(1, model.width - 2);
+  const frame = filterConditionFrame(columns, model.rows.map((row) => row.label));
+  const followedRowId = model.rows.find((row) => row.marker === "▸")?.id;
   return (
     <box
-      position="absolute"
-      top={top}
-      left={0}
-      width={model.width}
-      height={model.height}
+      id={FILTER_CONDITION_PANEL_ID}
+      ref={panelRef}
+      width={frame.width}
       zIndex={10}
       border
       borderColor={toOpenTuiColor(theme.filter.editorRail)}
@@ -47,16 +51,32 @@ export function DashboardFilterConditionView({
       flexDirection="column"
       {...stationMouseProps(dispatch, { kind: "sheetBackdrop" })}
     >
-      <ConditionPanelHeader model={model} width={innerWidth} background={background} />
-      {model.emptyMessage === undefined ? (
-        model.rows.map((row) => (
-          <ConditionPanelRow key={row.id} row={row} width={innerWidth} background={background} />
-        ))
-      ) : (
-        <text width="100%" fg={toOpenTuiColor(theme.text.muted)} bg={background} selectable={false}>
-          {fitConditionLine(`  ${model.emptyMessage}`, innerWidth)}
-        </text>
-      )}
+      <ConditionPanelHeader model={model} width={frame.innerWidth} background={background} />
+      <SemanticScrollRegion
+        itemIds={model.rows.map((row) => row.id)}
+        followedItemId={followedRowId}
+        fill={false}
+      >
+        {model.emptyMessage === undefined ? (
+          model.rows.map((row) => (
+            <ConditionPanelRow
+              key={row.id}
+              row={row}
+              width={frame.innerWidth}
+              background={background}
+            />
+          ))
+        ) : (
+          <text
+            width="100%"
+            fg={toOpenTuiColor(theme.text.muted)}
+            bg={background}
+            selectable={false}
+          >
+            {fitConditionLine(`  ${model.emptyMessage}`, frame.innerWidth)}
+          </text>
+        )}
+      </SemanticScrollRegion>
       <ConditionPanelActions actions={model.actions} background={background} />
     </box>
   );
@@ -104,6 +124,7 @@ function ConditionPanelRow({
     );
     return (
       <text
+        id={semanticItemRenderableId(row.id)}
         width="100%"
         fg={toOpenTuiColor(theme.text.primary)}
         bg={rowBackground}
@@ -130,6 +151,7 @@ function ConditionPanelRow({
   const padding = " ".repeat(Math.max(0, width - cellWidth(prefix) - cellWidth(label)));
   return (
     <text
+      id={semanticItemRenderableId(row.id)}
       width="100%"
       fg={toOpenTuiColor(theme.text.primary)}
       bg={rowBackground}
@@ -155,7 +177,7 @@ function ConditionPanelHeader({
   width,
   background,
 }: {
-  model: { title: string; hiddenAbove: number; hiddenBelow: number; actions: readonly DashboardFilterConditionPanelAction[] };
+  model: { title: string; actions: readonly DashboardFilterConditionPanelAction[] };
   width: number;
   background: ColorInput;
 }) {
@@ -171,7 +193,7 @@ function ConditionPanelHeader({
   const actionWidth = (back === undefined ? 0 : 3) + (close === undefined ? 0 : 3);
   const titleWidth = Math.max(1, width - actionWidth);
   return (
-    <box width="100%" height={1} flexDirection="row" backgroundColor={background}>
+    <box width="100%" flexDirection="row" backgroundColor={background} flexShrink={0}>
       {back === undefined ? null : (
         <ConditionPanelHeaderAction action={back} background={background} />
       )}
@@ -236,17 +258,13 @@ function ConditionPanelActions({
     > => candidate.placement === "footer",
   );
   if (action === undefined) return null;
-  const spacerRows = action.id === "applyFilter" ? 1 : 0;
   return (
     <box
       width="100%"
-      height={spacerRows + 1}
-      flexDirection="column"
+      flexShrink={0}
+      marginTop={action.id === "applyFilter" ? 1 : 0}
       backgroundColor={background}
     >
-      {spacerRows === 0 ? null : (
-        <box width="100%" height={spacerRows} backgroundColor={background} />
-      )}
       <ConditionPanelFooterAction action={action} background={background} />
     </box>
   );
@@ -300,14 +318,8 @@ function fitConditionFieldSummary(
   return truncateCells(row.summary, width);
 }
 
-function conditionPanelTitle(model: {
-  title: string;
-  hiddenAbove: number;
-  hiddenBelow: number;
-}): string {
-  const above = model.hiddenAbove > 0 ? ` ↑${model.hiddenAbove}` : "";
-  const below = model.hiddenBelow > 0 ? ` ↓${model.hiddenBelow}` : "";
-  return ` ${model.title}${above}${below}`;
+function conditionPanelTitle(model: { title: string }): string {
+  return ` ${model.title}`;
 }
 
 function conditionRowForeground(

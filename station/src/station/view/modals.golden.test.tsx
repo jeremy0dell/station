@@ -250,7 +250,7 @@ const CASES: ModalCase[] = [
     ],
     size: { width: 40, height: 12 },
     expect: [
-      "STATUS CONDITION ↑5",
+      "STATUS CONDITION",
       "▸ 7 [ ] No agent",
       "[←]",
       "[×]",
