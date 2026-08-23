@@ -25,14 +25,17 @@ import type {
 } from "./types.js";
 
 const TmuxCallerClaimSchema = z
-  .object({
-    socketPath: z.string().min(1),
-    serverPid: z.number().int().positive(),
-    paneId: z.string().regex(/^%\d+$/u),
-  })
-  .strict();
-
-type TmuxCallerClaim = z.infer<typeof TmuxCallerClaimSchema>;
+  .tuple([
+    z.string().min(1),
+    z
+      .string()
+      .regex(/^[1-9]\d*$/u)
+      .transform(Number)
+      .pipe(z.number().int().positive().safe()),
+    z.string().regex(/^\d+$/u),
+    z.string().regex(/^%\d+$/u),
+  ])
+  .transform(([socketPath, serverPid, , paneId]) => ({ socketPath, serverPid, paneId }));
 
 export class TmuxPlacementProofReader {
   readonly #config: TmuxWorkbenchConfig;
@@ -90,19 +93,19 @@ export class TmuxPlacementProofReader {
   }
 
   async inspectPane(paneId: string): Promise<TmuxPrivateProof> {
-    const output = await this.#run(
-      ["display-message", "-p", "-t", paneId, tmuxPaneProofFormat],
-      "inspect",
-    );
-    return this.privateProof(parseTmuxPaneProof(output.stdout));
+    return this.privateProof(await this.#inspectPaneProof(paneId));
   }
 
   async inspectMutablePane(paneId: string): Promise<TmuxMutableProof> {
+    return this.mutableProof(await this.#inspectPaneProof(paneId));
+  }
+
+  async #inspectPaneProof(paneId: string): Promise<TmuxPaneProof> {
     const output = await this.#run(
       ["display-message", "-p", "-t", paneId, tmuxPaneProofFormat],
       "inspect",
     );
-    return this.mutableProof(parseTmuxPaneProof(output.stdout));
+    return parseTmuxPaneProof(output.stdout);
   }
 
   async listProofs(): Promise<TmuxPaneProof[]> {
@@ -174,30 +177,16 @@ export class TmuxPlacementProofReader {
   }
 }
 
-function parseCallerClaim(caller: TerminalCallerContextRequest): TmuxCallerClaim | undefined {
+function parseCallerClaim(
+  caller: TerminalCallerContextRequest,
+): z.infer<typeof TmuxCallerClaimSchema> | undefined {
   const tmux = caller.claims.TMUX;
   const paneId = caller.claims.TMUX_PANE;
   if (tmux === undefined && paneId === undefined) return undefined;
   if (tmux === undefined || paneId === undefined) {
     throw callerContextRejected("The tmux caller claim is incomplete.");
   }
-  const fields = tmux.split(",");
-  if (fields.length !== 3) throw callerContextRejected("The tmux caller claim is malformed.");
-  const serverPidText = fields[1];
-  const clientId = fields[2];
-  if (
-    serverPidText === undefined ||
-    !/^[1-9]\d*$/u.test(serverPidText) ||
-    clientId === undefined ||
-    !/^\d+$/u.test(clientId)
-  ) {
-    throw callerContextRejected("The tmux caller claim is malformed.");
-  }
-  const serverPid = Number(serverPidText);
-  if (!Number.isSafeInteger(serverPid)) {
-    throw callerContextRejected("The tmux caller claim is malformed.");
-  }
-  const parsed = TmuxCallerClaimSchema.safeParse({ socketPath: fields[0], serverPid, paneId });
+  const parsed = TmuxCallerClaimSchema.safeParse([...tmux.split(","), paneId]);
   if (!parsed.success) throw callerContextRejected("The tmux caller claim is malformed.");
   return parsed.data;
 }

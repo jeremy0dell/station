@@ -35,14 +35,24 @@ export function buildPlacedWorkspaceMutationArgs(
     sessionId: input.sessionTarget,
     windowNameOrId: input.bindingToken,
   });
+  const create =
+    input.create === "session"
+      ? ["new-session", "-d", "-s", input.sessionName]
+      : ["new-window", "-d", "-t", tmuxNewWindowTarget(input.sessionTarget)];
   const commands = [
-    createPlacedWorkspaceCommand(input),
+    [...create, "-n", input.bindingToken, "-c", input.cwd],
     ...stationIdentityCommands(input, provisionalWindowTarget),
-    ...workbenchConfigurationCommands(input),
+    ...(input.configureWorkbench
+      ? defaultTmuxWorkbenchSessionOptions.map((option) =>
+          tmuxSessionOptionArgs(input.sessionTarget, option),
+        )
+      : []),
     ["display-message", "-p", "-t", provisionalWindowTarget, input.proofFormat],
     ["rename-window", "-t", provisionalWindowTarget, input.windowName],
   ];
-  const mutation = flattenTmuxCommands(commands);
+  const [first, ...rest] = commands;
+  if (first === undefined) throw new Error("A placed workspace mutation requires a command.");
+  const mutation = [...first, ...rest.flatMap((command) => [";", ...command])];
   if (input.guard === undefined) return mutation;
 
   // The proof, creation, stamping, and final rename must stay in one tmux invocation.
@@ -59,31 +69,6 @@ export function buildPlacedWorkspaceMutationArgs(
   });
 }
 
-function createPlacedWorkspaceCommand(input: BuildPlacedWorkspaceMutationInput): string[] {
-  if (input.create === "session") {
-    return [
-      "new-session",
-      "-d",
-      "-s",
-      input.sessionName,
-      "-n",
-      input.bindingToken,
-      "-c",
-      input.cwd,
-    ];
-  }
-  return [
-    "new-window",
-    "-d",
-    "-t",
-    tmuxNewWindowTarget(input.sessionTarget),
-    "-n",
-    input.bindingToken,
-    "-c",
-    input.cwd,
-  ];
-}
-
 function stationIdentityCommands(
   input: BuildPlacedWorkspaceMutationInput,
   target: string,
@@ -97,17 +82,4 @@ function stationIdentityCommands(
     ["set-option", "-p", "-t", target, "@station.role", "main-agent"],
     ["set-option", "-p", "-t", target, "@station.harness", input.harness],
   ];
-}
-
-function workbenchConfigurationCommands(input: BuildPlacedWorkspaceMutationInput): string[][] {
-  if (!input.configureWorkbench) return [];
-  return defaultTmuxWorkbenchSessionOptions.map((option) =>
-    tmuxSessionOptionArgs(input.sessionTarget, option),
-  );
-}
-
-function flattenTmuxCommands(commands: readonly (readonly string[])[]): string[] {
-  const [first, ...rest] = commands;
-  if (first === undefined) throw new Error("A placed workspace mutation requires a command.");
-  return [...first, ...rest.flatMap((command) => [";", ...command])];
 }

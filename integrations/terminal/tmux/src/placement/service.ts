@@ -250,12 +250,6 @@ export class TmuxPlacementService implements TerminalPlacementPort {
     return proof;
   }
 
-  /** Rejects a mutation when a target belongs to another server generation. */
-  async validateMutableTarget(targetId: string): Promise<ReturnType<typeof parseTmuxTargetId>> {
-    await this.mutableTargetProof(targetId);
-    return this.#parseMutableTarget(targetId);
-  }
-
   #parseMutableTarget(targetId: string): ReturnType<typeof parseTmuxTargetId> {
     try {
       return parseTmuxTargetId(targetId);
@@ -319,20 +313,21 @@ function placedWorkspaceResult(
   windowName: string,
   bindingToken: string,
 ): OpenPlacedWorkspaceResult {
+  const identity = {
+    provider: "tmux" as const,
+    targetId: proof.targetId,
+    generation: proof.generation,
+  };
   const placement: ResolvedTerminalPlacement =
     request.placement.intent === "sibling"
       ? {
           intent: "sibling",
-          provider: "tmux",
-          targetId: proof.targetId,
-          generation: proof.generation,
+          ...identity,
           presentation: "presented",
         }
       : {
           intent: "detached",
-          provider: "tmux",
-          targetId: proof.targetId,
-          generation: proof.generation,
+          ...identity,
           presentation: "detached",
         };
   return {

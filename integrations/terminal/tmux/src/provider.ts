@@ -41,6 +41,7 @@ import {
   tmuxTargetObservations,
 } from "./parse.js";
 import { TmuxPlacementService } from "./placement/index.js";
+import type { TmuxMutableProof } from "./placement/types.js";
 import { resolveFocusPopupClient } from "./popup/state.js";
 import {
   buildWorkbenchWindowName,
@@ -58,6 +59,32 @@ const tmuxLaunchStatusFormat = [
   "#{pane_current_command}",
 ].join("\t");
 const tmuxGuardRejectedMarker = "__station_tmux_guard_rejected__";
+
+type TmuxRunOptions = {
+  operation: string;
+  fallback: {
+    code:
+      | "TERMINAL_CAPTURE_FAILED"
+      | "TERMINAL_CLOSE_FAILED"
+      | "TERMINAL_FOCUS_FAILED"
+      | "TERMINAL_LAUNCH_FAILED"
+      | "TERMINAL_LIST_FAILED"
+      | "TERMINAL_OPEN_FAILED"
+      | "TERMINAL_SEND_INPUT_FAILED"
+      | "TERMINAL_TMUX_UNAVAILABLE";
+    message: string;
+    hint?: string;
+  };
+  retries?: number;
+  mapErrors?: boolean;
+  shouldRetry?: (error: SafeError) => boolean;
+};
+
+type TmuxGuardedRunOptions = TmuxRunOptions & {
+  changedMessage: string;
+  rawFormatArgs?: readonly string[];
+  guardPaneProcess?: boolean;
+};
 
 export type TmuxProviderOptions = {
   command?: string;
@@ -347,40 +374,18 @@ export class TmuxProvider implements TerminalProvider {
       plan: request.launchPlan,
       cwdFallback: request.worktree.path,
     });
-    const output = await this.#run(
-      buildGuardedTmuxCommandArgs({
-        target: proof.paneId,
-        serverPid: proof.serverProcess.pid,
-        sessionId: proof.sessionId,
-        windowId: proof.windowId,
-        paneId: proof.paneId,
-        panePid: proof.panePid,
-        commands: [
-          "set-option",
-          "-p",
-          "-t",
-          paneTarget,
-          "remain-on-exit",
-          "on",
-          ";",
-          ...launchArgs,
-        ],
-        rejectionMarker: tmuxGuardRejectedMarker,
-      }),
+    await this.#runGuardedTarget(
+      proof,
+      ["set-option", "-p", "-t", paneTarget, "remain-on-exit", "on", ";", ...launchArgs],
       {
         operation: "provider.tmux.launchProcess",
         fallback: {
           code: "TERMINAL_LAUNCH_FAILED",
           message: "tmux failed to launch the harness process.",
         },
+        changedMessage: "The tmux target changed before launch.",
       },
     );
-    if (output.stdout.trim() === tmuxGuardRejectedMarker) {
-      throw new TmuxTerminalProviderError(
-        "TERMINAL_TARGET_MISSING",
-        "The tmux target changed before launch.",
-      );
-    }
     await this.#assertLaunchRunning(request, paneTarget);
     return {
       terminalTargetId: request.terminalTarget.targetId,
@@ -397,18 +402,9 @@ export class TmuxProvider implements TerminalProvider {
     paneTarget: string,
   ): Promise<void> {
     const proof = await this.placement.mutableTargetProof(request.terminalTarget.targetId);
-    const output = await this.#run(
-      buildGuardedTmuxCommandArgs({
-        target: proof.paneId,
-        serverPid: proof.serverProcess.pid,
-        sessionId: proof.sessionId,
-        windowId: proof.windowId,
-        paneId: proof.paneId,
-        panePid: proof.panePid,
-        commands: ["display-message", "-p", "-t", paneTarget, tmuxLaunchStatusFormat],
-        rawFormatArgs: [tmuxLaunchStatusFormat],
-        rejectionMarker: tmuxGuardRejectedMarker,
-      }),
+    const output = await this.#runGuardedTarget(
+      proof,
+      ["display-message", "-p", "-t", paneTarget, tmuxLaunchStatusFormat],
       {
         operation: "provider.tmux.launchProcess",
         fallback: {
@@ -416,14 +412,10 @@ export class TmuxProvider implements TerminalProvider {
           message: "tmux failed to inspect the launched harness pane.",
         },
         retries: 1,
+        rawFormatArgs: [tmuxLaunchStatusFormat],
+        changedMessage: "The tmux target changed while checking launch.",
       },
     );
-    if (output.stdout.trim() === tmuxGuardRejectedMarker) {
-      throw new TmuxTerminalProviderError(
-        "TERMINAL_TARGET_MISSING",
-        "The tmux target changed while checking launch.",
-      );
-    }
     const [paneDead = "", paneDeadStatus = "", paneCommand = ""] = output.stdout.trim().split("\t");
     if (paneDead !== "1") {
       return;
@@ -489,31 +481,14 @@ export class TmuxProvider implements TerminalProvider {
       "-t",
       target.paneId,
     );
-    const output = await this.#run(
-      buildGuardedTmuxCommandArgs({
-        target: target.paneId,
-        serverPid: target.serverProcess.pid,
-        sessionId: target.sessionId,
-        windowId: target.windowId,
-        paneId: target.paneId,
-        panePid: target.panePid,
-        commands,
-        rejectionMarker: tmuxGuardRejectedMarker,
-      }),
-      {
-        operation: "provider.tmux.focusTarget",
-        fallback: {
-          code: "TERMINAL_FOCUS_FAILED",
-          message: "tmux failed to focus the target.",
-        },
+    await this.#runGuardedTarget(target, commands, {
+      operation: "provider.tmux.focusTarget",
+      fallback: {
+        code: "TERMINAL_FOCUS_FAILED",
+        message: "tmux failed to focus the target.",
       },
-    );
-    if (output.stdout.trim() === tmuxGuardRejectedMarker) {
-      throw new TmuxTerminalProviderError(
-        "TERMINAL_TARGET_MISSING",
-        "The tmux target changed before focus.",
-      );
-    }
+      changedMessage: "The tmux target changed before focus.",
+    });
     /*
      * Client, window, and pane focus share one guard so a changed target cannot
      * receive only part of the focus operation.
@@ -522,64 +497,38 @@ export class TmuxProvider implements TerminalProvider {
 
   async closeTarget(targetId: TerminalTargetId): Promise<void> {
     const target = await this.placement.mutableTargetProof(targetId);
-    const output = await this.#run(
-      buildGuardedTmuxCommandArgs({
-        target: target.paneId,
-        serverPid: target.serverProcess.pid,
-        sessionId: target.sessionId,
-        windowId: target.windowId,
-        paneId: target.paneId,
-        panePid: target.panePid,
-        commands: [
-          "kill-window",
-          "-t",
-          tmuxWindowTarget({ sessionId: target.sessionId, windowNameOrId: target.windowId }),
-        ],
-        rejectionMarker: tmuxGuardRejectedMarker,
-      }),
+    await this.#runGuardedTarget(
+      target,
+      [
+        "kill-window",
+        "-t",
+        tmuxWindowTarget({ sessionId: target.sessionId, windowNameOrId: target.windowId }),
+      ],
       {
         operation: "provider.tmux.closeTarget",
         fallback: {
           code: "TERMINAL_CLOSE_FAILED",
           message: "tmux failed to close the workbench window.",
         },
+        changedMessage: "The tmux target changed before close.",
       },
     );
-    if (output.stdout.trim() === tmuxGuardRejectedMarker) {
-      throw new TmuxTerminalProviderError(
-        "TERMINAL_TARGET_MISSING",
-        "The tmux target changed before close.",
-      );
-    }
   }
 
   async captureTarget(targetId: TerminalTargetId): Promise<TerminalCapture> {
     const target = await this.placement.mutableTargetProof(targetId);
-    const output = await this.#run(
-      buildGuardedTmuxCommandArgs({
-        target: target.paneId,
-        serverPid: target.serverProcess.pid,
-        sessionId: target.sessionId,
-        windowId: target.windowId,
-        paneId: target.paneId,
-        panePid: target.panePid,
-        commands: ["capture-pane", "-p", "-t", target.paneId, "-S", "-80"],
-        rejectionMarker: tmuxGuardRejectedMarker,
-      }),
+    const output = await this.#runGuardedTarget(
+      target,
+      ["capture-pane", "-p", "-t", target.paneId, "-S", "-80"],
       {
         operation: "provider.tmux.captureTarget",
         fallback: {
           code: "TERMINAL_CAPTURE_FAILED",
           message: "tmux failed to capture pane output.",
         },
+        changedMessage: "The tmux target changed before capture.",
       },
     );
-    if (output.stdout.trim() === tmuxGuardRejectedMarker) {
-      throw new TmuxTerminalProviderError(
-        "TERMINAL_TARGET_MISSING",
-        "The tmux target changed before capture.",
-      );
-    }
     return {
       targetId,
       capturedAt: toIsoTimestamp(this.#clock.now()),
@@ -595,30 +544,15 @@ export class TmuxProvider implements TerminalProvider {
 
   async sendInput(targetId: TerminalTargetId, input: string): Promise<void> {
     const target = await this.placement.mutableTargetProof(targetId);
-    const output = await this.#run(
-      buildGuardedTmuxCommandArgs({
-        target: target.paneId,
-        serverPid: target.serverProcess.pid,
-        sessionId: target.sessionId,
-        windowId: target.windowId,
-        paneId: target.paneId,
-        commands: ["send-keys", "-t", target.paneId, input],
-        rejectionMarker: tmuxGuardRejectedMarker,
-      }),
-      {
-        operation: "provider.tmux.sendInput",
-        fallback: {
-          code: "TERMINAL_SEND_INPUT_FAILED",
-          message: "tmux failed to send input to the pane.",
-        },
+    await this.#runGuardedTarget(target, ["send-keys", "-t", target.paneId, input], {
+      operation: "provider.tmux.sendInput",
+      fallback: {
+        code: "TERMINAL_SEND_INPUT_FAILED",
+        message: "tmux failed to send input to the pane.",
       },
-    );
-    if (output.stdout.trim() === tmuxGuardRejectedMarker) {
-      throw new TmuxTerminalProviderError(
-        "TERMINAL_TARGET_MISSING",
-        "The tmux target changed before input.",
-      );
-    }
+      changedMessage: "The tmux target changed before input.",
+      guardPaneProcess: false,
+    });
   }
 
   async #hasSession(sessionName: string): Promise<boolean> {
@@ -740,28 +674,32 @@ export class TmuxProvider implements TerminalProvider {
     return { sessionId: parsed.sessionId, windowId: parsed.windowId, paneId: parsed.paneId };
   }
 
-  async #run(
-    args: string[],
-    options: {
-      operation: string;
-      fallback: {
-        code:
-          | "TERMINAL_CAPTURE_FAILED"
-          | "TERMINAL_CLOSE_FAILED"
-          | "TERMINAL_FOCUS_FAILED"
-          | "TERMINAL_LAUNCH_FAILED"
-          | "TERMINAL_LIST_FAILED"
-          | "TERMINAL_OPEN_FAILED"
-          | "TERMINAL_SEND_INPUT_FAILED"
-          | "TERMINAL_TMUX_UNAVAILABLE";
-        message: string;
-        hint?: string;
-      };
-      retries?: number;
-      mapErrors?: boolean;
-      shouldRetry?: (error: SafeError) => boolean;
-    },
+  async #runGuardedTarget(
+    target: TmuxMutableProof,
+    commands: readonly string[],
+    options: TmuxGuardedRunOptions,
   ) {
+    const output = await this.#run(
+      buildGuardedTmuxCommandArgs({
+        target: target.paneId,
+        serverPid: target.serverProcess.pid,
+        sessionId: target.sessionId,
+        windowId: target.windowId,
+        paneId: target.paneId,
+        ...(options.guardPaneProcess === false ? {} : { panePid: target.panePid }),
+        commands,
+        ...(options.rawFormatArgs === undefined ? {} : { rawFormatArgs: options.rawFormatArgs }),
+        rejectionMarker: tmuxGuardRejectedMarker,
+      }),
+      options,
+    );
+    if (output.stdout.trim() === tmuxGuardRejectedMarker) {
+      throw new TmuxTerminalProviderError("TERMINAL_TARGET_MISSING", options.changedMessage);
+    }
+    return output;
+  }
+
+  async #run(args: string[], options: TmuxRunOptions) {
     try {
       const input = {
         command: this.#command,

@@ -34,7 +34,8 @@ export class TmuxPlacementCleanup {
     const matches = proofs.filter(
       (proof) => proof.sessionId === target.sessionId && proof.windowId === target.windowId,
     );
-    if (matches.length === 0) return { status: "already-absent" };
+    const matchedProof = matches[0];
+    if (matchedProof === undefined) return { status: "already-absent" };
     if (
       matches.some(
         (proof) =>
@@ -42,10 +43,6 @@ export class TmuxPlacementCleanup {
       )
     ) {
       throw cleanupUncertain("The placed tmux window binding no longer matches cleanup authority.");
-    }
-    const matchedProof = matches[0];
-    if (matchedProof === undefined) {
-      throw cleanupUncertain("The placed tmux window lookup became ambiguous.");
     }
     await this.#killWindowAndConfirm({
       sessionId: target.sessionId,
@@ -77,23 +74,20 @@ export class TmuxPlacementCleanup {
       throw cleanupUncertain("The tmux server changed before partial-placement rollback.");
     }
     const matches = qualified.filter((candidate) => candidate.raw.openToken === bindingToken);
-    const windows = new Map(
-      matches.map((candidate) => [
-        `${candidate.proof.sessionId}:${candidate.proof.windowId}`,
-        candidate.proof,
-      ]),
-    );
+    const target = matches[0]?.proof;
     // Once mutation was attempted, an absent binding is not proof that no window
     // was created: stamping may have failed or a hook may have renamed it.
-    if (windows.size === 0) {
+    if (target === undefined) {
       throw cleanupUncertain("tmux could not prove that the partial placement was absent.");
     }
-    if (windows.size !== 1) {
+    if (
+      matches.some(
+        (candidate) =>
+          candidate.proof.sessionId !== target.sessionId ||
+          candidate.proof.windowId !== target.windowId,
+      )
+    ) {
       throw cleanupUncertain("The partial tmux placement token matched multiple windows.");
-    }
-    const target = windows.values().next().value;
-    if (target === undefined) {
-      throw cleanupUncertain("The partial tmux placement target disappeared during rollback.");
     }
     await this.#killWindowAndConfirm({
       sessionId: target.sessionId,
