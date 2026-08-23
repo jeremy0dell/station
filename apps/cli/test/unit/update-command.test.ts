@@ -1321,6 +1321,8 @@ describe("stn update convergence", () => {
       code: 0,
       output: {
         status: "updated",
+        current: { version: "1.0.0" },
+        target: { version: "2.0.0" },
         artifactApplication: { status: "applied" },
         initial: { evaluator: "incumbent-cli" },
         result: {
@@ -1342,6 +1344,11 @@ describe("stn update convergence", () => {
     );
     expect(successor.apply).not.toHaveBeenCalled();
     expect(latestDiscovery).not.toHaveBeenCalled();
+    const text = textFor(result);
+    expect(text).toContain("status: updated");
+    expect(text).toContain("artifact before: 1.0.0");
+    expect(text).toContain("artifact selected: 2.0.0");
+    expect(text).not.toContain("artifact installed: 1.0.0");
   });
 
   it("rejects a successful successor report returned with exit status 1", async () => {

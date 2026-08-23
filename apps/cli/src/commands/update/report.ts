@@ -33,7 +33,7 @@ function renderUpdateReport(report: UpdateCommandReport): string {
   const lines = [
     `channel: ${encodeUpdateTerminalText(report.channel)}`,
     `status: ${encodeUpdateTerminalText(report.status)}`,
-    `artifact installed: ${artifactText(report.current)}`,
+    `artifact before: ${artifactText(report.current)}`,
     `artifact selected: ${artifactText(report.target)}`,
     `artifact application: ${encodeUpdateTerminalText(report.artifactApplication.status)}`,
   ];
