@@ -2,6 +2,7 @@ import type {
   ProjectView,
   ProviderId,
   SafeError,
+  SessionFreshStartConsent,
   SessionGroupId,
   SessionGroupPlacementIntent,
   SessionId,
@@ -58,6 +59,10 @@ export type RemoveProjectCommandInput = {
   projectId: ProjectView["id"];
 };
 
+export type BuildStartAgentCommandOptions = {
+  freshStart?: SessionFreshStartConsent;
+};
+
 export type CreateSessionGroupCommandInput = {
   projectId: ProjectView["id"];
   name: string;
@@ -102,18 +107,23 @@ export type MoveSessionToGroupCommandInput = {
 export function buildStartAgentCommand(
   row: WorktreeRow,
   project: ProjectView,
+  options: BuildStartAgentCommandOptions = {},
 ): Extract<StationCommand, { type: "session.startAgent" }> {
+  const payload: Extract<StationCommand, { type: "session.startAgent" }>["payload"] = {
+    projectId: project.id,
+    worktreeId: row.id,
+    terminal: {
+      provider: project.defaults.terminal,
+      layout: commandLayout(project.defaults.layout),
+      focus: false,
+    },
+  };
+  if (options.freshStart !== undefined) {
+    payload.freshStart = options.freshStart;
+  }
   return {
     type: "session.startAgent",
-    payload: {
-      projectId: project.id,
-      worktreeId: row.id,
-      terminal: {
-        provider: project.defaults.terminal,
-        layout: commandLayout(project.defaults.layout),
-        focus: false,
-      },
-    },
+    payload,
   };
 }
 

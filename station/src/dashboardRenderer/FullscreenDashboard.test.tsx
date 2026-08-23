@@ -317,7 +317,7 @@ describe("FullscreenDashboard mouse composition", () => {
       );
     });
 
-    expect(fixture.service.waitedForCommandIds).toEqual(["cmd_tui_1", "cmd_tui_1"]);
+    expect(fixture.service.waitedForCommandIds).toEqual(["cmd_tui_1"]);
   });
 
   it("collapses a project once for a complete primary down/up click", async () => {

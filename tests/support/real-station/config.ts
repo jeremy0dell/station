@@ -1,5 +1,5 @@
-import { mkdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { chmod, mkdir, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import type { RealE2eEnvironment } from "./env";
 import { requireToolPath } from "./env";
 import type { RealTempRepo } from "./repo";
@@ -18,11 +18,12 @@ export type WriteRealStationConfigOptions = {
   repo: RealTempRepo;
   projectId?: string;
   autoStartFromHooks?: boolean;
-  harnessProvider?: "claude" | "codex" | "pi" | "opencode";
+  harnessProvider?: "claude" | "codex" | "pi" | "opencode" | "scripted";
   claudeCommand?: string;
   codexCommand?: string;
   piCommand?: string;
   opencodeCommand?: string;
+  scriptedCommand?: string;
   installClaudeHooks?: boolean;
   installCodexHooks?: boolean;
   installOpenCodeHooks?: boolean;
@@ -44,8 +45,8 @@ export async function writeRealStationConfig(
   const worktrunkConfigPath = join(options.repo.root, "worktrunk", "config.toml");
   const configPath = join(options.repo.root, "station.config.toml");
   const tmuxSession = options.tmuxSession ?? uniqueTmuxSession();
-  await mkdir(stateDir, { recursive: true });
-  await mkdir(join(options.repo.root, "run"), { recursive: true });
+  await ensurePrivateDirectory(stateDir);
+  await ensurePrivateDirectory(dirname(socketPath));
   await mkdir(join(options.repo.root, "worktrunk"), { recursive: true });
 
   const lines = [
@@ -121,7 +122,7 @@ function eventHookConfigLines(options: WriteRealStationConfigOptions): string[] 
 
 function harnessConfigLines(
   options: WriteRealStationConfigOptions,
-  harnessProvider: "claude" | "codex" | "pi" | "opencode",
+  harnessProvider: "claude" | "codex" | "pi" | "opencode" | "scripted",
 ): string[] {
   if (harnessProvider === "claude") {
     return [
@@ -155,6 +156,15 @@ function harnessConfigLines(
     ];
   }
 
+  if (harnessProvider === "scripted") {
+    return [
+      "[harness.scripted]",
+      "enabled = true",
+      `command = ${tomlString(options.scriptedCommand ?? process.execPath)}`,
+      "",
+    ];
+  }
+
   return [
     "[harness.codex]",
     "enabled = true",
@@ -164,6 +174,11 @@ function harnessConfigLines(
     `install_hooks = ${options.installCodexHooks === true ? "true" : "false"}`,
     "",
   ];
+}
+
+async function ensurePrivateDirectory(path: string): Promise<void> {
+  await mkdir(path, { recursive: true, mode: 0o700 });
+  await chmod(path, 0o700);
 }
 
 export function uniqueTmuxSession(prefix = "station-real"): string {

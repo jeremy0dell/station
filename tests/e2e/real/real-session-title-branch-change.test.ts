@@ -7,6 +7,7 @@ import {
 } from "../../support/real-station/assertions";
 import {
   createCodexBranchSwitchSentinel,
+  createRealCodexFixture,
   waitForCodexSentinel,
   writeFailureBundle,
 } from "../../support/real-station/codex";
@@ -46,22 +47,30 @@ describeReal("real session title branch change", () => {
     cleanup = new CleanupStack();
     const repo = await createRealTempRepo(env);
     cleanup.defer(repo.cleanup);
-    const config = await writeRealStationConfig({ env, repo });
+    const codex = await createRealCodexFixture({ env, repo });
+    const testEnv = codex.env;
+    const config = await writeRealStationConfig({
+      env: testEnv,
+      repo,
+      codexCommand: codex.codexCommand,
+      installCodexHooks: true,
+    });
+    await codex.installHooks(config);
     cleanup.defer(async () => {
-      await runStationJson(env, {
+      await runStationJson(testEnv, {
         configPath: config.configPath,
         args: ["observer", "stop"],
       }).catch(() => undefined);
     });
     cleanup.defer(async () => {
-      await killTmuxSession(env, config.tmuxSession);
+      await killTmuxSession(testEnv, config.tmuxSession);
     });
 
     const originalBranch = uniqueBranch("title-original");
     const agentBranch = uniqueBranch("title-agent");
     cleanup.defer(async () => {
       await removeRealWorktrunkWorktree({
-        env,
+        env: testEnv,
         config,
         repo,
         branch: [originalBranch, agentBranch],
@@ -88,7 +97,7 @@ describeReal("real session title branch change", () => {
 
     let createResult: CommandDispatchWaitResult | undefined;
     try {
-      createResult = await runStationJson<CommandDispatchWaitResult>(env, {
+      createResult = await runStationJson<CommandDispatchWaitResult>(testEnv, {
         configPath: config.configPath,
         args: ["command", "dispatch", "--stdin", "--wait", "--timeout-ms", "180000"],
         stdin: JSON.stringify(createCommand),
@@ -132,7 +141,7 @@ describeReal("real session title branch change", () => {
       expect(afterSwitch.rows.filter((candidate) => candidate.id === row.id)).toHaveLength(1);
     } catch (error) {
       await writeFailureBundle({
-        env,
+        env: testEnv,
         configPath: config.configPath,
         commandId: createResult?.receipt.commandId,
       });

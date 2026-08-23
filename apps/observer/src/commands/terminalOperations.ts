@@ -249,7 +249,7 @@ export async function focusTerminal(
   } & TerminalOperationRuntime,
 ): Promise<void> {
   try {
-    const target = await resolveTerminalTarget(input);
+    const target = await resolveTerminalTarget({ ...input, operation: "focus" });
     await runProviderMutation(
       {
         ...operationRuntime(input),
@@ -277,7 +277,11 @@ export async function focusTerminal(
   }
 }
 
-/** Resolves and closes one provider-owned target from product session/worktree identity. */
+/**
+ * Resolves and closes one provider-owned target from product session/worktree
+ * identity. Close may select stale provider targets so they can be retired;
+ * focus remains restricted to live targets.
+ */
 export async function closeTerminal(
   input: {
     terminal: TerminalProvider;
@@ -285,7 +289,7 @@ export async function closeTerminal(
   } & TerminalOperationRuntime,
 ): Promise<void> {
   try {
-    const target = await resolveTerminalTarget(input);
+    const target = await resolveTerminalTarget({ ...input, operation: "close" });
     await runProviderMutation(
       {
         ...operationRuntime(input),
@@ -344,6 +348,7 @@ async function resolveTerminalTarget(input: {
   terminal: TerminalProvider;
   subject: TerminalTargetSubject;
   context: CommandHandlerContext;
+  operation: "focus" | "close";
   clock?: RuntimeClock | undefined;
 }): Promise<TerminalTargetObservation> {
   const targets = await runProviderMutation(
@@ -368,7 +373,7 @@ async function resolveTerminalTarget(input: {
     }),
   );
   const ranked = matching
-    .map((target) => rankedTarget(target, input.subject))
+    .map((target) => rankedTarget(target, input.subject, input.operation))
     .filter((candidate): candidate is RankedTarget => candidate !== undefined)
     .sort((left, right) =>
       left.identityRank === right.identityRank
@@ -527,8 +532,9 @@ function targetMatchesSubject(input: {
 function rankedTarget(
   target: TerminalTargetObservation,
   subject: TerminalTargetSubject,
+  operation: "focus" | "close",
 ): RankedTarget | undefined {
-  const stateRank = targetStateRank(target.state);
+  const stateRank = targetStateRank(target.state, operation);
   const identityRank = targetIdentityRank(target, subject);
   return stateRank === undefined || identityRank === undefined
     ? undefined
@@ -551,7 +557,7 @@ function targetIdentityRank(
   return undefined;
 }
 
-function targetStateRank(state: TerminalState): number | undefined {
+function targetStateRank(state: TerminalState, operation: "focus" | "close"): number | undefined {
   switch (state) {
     case "open":
       return 0;
@@ -559,8 +565,9 @@ function targetStateRank(state: TerminalState): number | undefined {
       return 1;
     case "unknown":
       return 2;
-    case "none":
     case "stale":
+      return operation === "close" ? 3 : undefined;
+    case "none":
       return undefined;
   }
 }

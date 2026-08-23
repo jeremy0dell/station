@@ -175,12 +175,21 @@ export const CreateSessionPayloadSchema = z
     }
   });
 
+export const SessionFreshStartConsentSchema = z
+  .object({
+    expectedSessionId: SessionIdSchema,
+  })
+  .strict();
+
+export type SessionFreshStartConsent = z.infer<typeof SessionFreshStartConsentSchema>;
+
 export const StartAgentPayloadSchema = z
   .object({
     projectId: ProjectIdSchema,
     worktreeId: WorktreeIdSchema,
     harness: StartAgentHarnessCommandOptionsSchema.optional(),
     terminal: TerminalCommandOptionsSchema.partial().optional(),
+    freshStart: SessionFreshStartConsentSchema.optional(),
     initialPrompt: nonEmptyStringSchema.optional(),
   })
   .strict();

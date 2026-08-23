@@ -16,6 +16,7 @@ import { resolveHarnessProviderOrThrow } from "../commands/providers.js";
 import {
   defaultSessionCommandIdFactory,
   findProjectOrThrow,
+  freshStartSessionMismatchError,
   rememberedHarnessProviderForWorktree,
   resolveForkSessionGroupPlacement,
   type SessionCommandIdFactory,
@@ -174,11 +175,11 @@ async function prepareExternalLaunchForWorktree(
     freshStart !== undefined &&
     (retainedSession === undefined || retainedSession.id !== freshStart.expectedSessionId)
   ) {
-    throw freshStartSessionMismatchError(
-      params.projectId,
-      worktree.id,
-      freshStart.expectedSessionId,
-    );
+    throw freshStartSessionMismatchError({
+      projectId: params.projectId,
+      worktreeId: worktree.id,
+      sessionId: freshStart.expectedSessionId,
+    });
   }
   const recovery =
     retainedSession === undefined || freshStart !== undefined
@@ -432,22 +433,6 @@ function worktreeProjectMismatchError(projectId: string, worktreeId: string): Sa
     message: "The requested worktree belongs to a different configured project.",
     projectId,
     worktreeId,
-  };
-}
-
-function freshStartSessionMismatchError(
-  projectId: string,
-  worktreeId: string,
-  sessionId: string,
-): SafeError {
-  return {
-    tag: "CommandValidationError",
-    code: "SESSION_FRESH_START_STALE",
-    message: "The interrupted session changed before fresh start could begin.",
-    hint: "Refresh the dashboard and review the current session before retrying.",
-    projectId,
-    worktreeId,
-    sessionId,
   };
 }
 

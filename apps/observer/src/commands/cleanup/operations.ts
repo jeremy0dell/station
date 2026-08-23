@@ -32,7 +32,6 @@ export async function closeSessionResources(
     mode: "harness" | "terminal" | "all";
     force: boolean;
     context: CommandHandlerContext;
-    requireTerminalClose?: boolean | undefined;
   } & CleanupRuntime,
 ): Promise<void> {
   if (input.mode === "harness" || input.mode === "all") {
@@ -50,33 +49,25 @@ export async function closeSessionResources(
 
   if (input.mode === "terminal" || input.mode === "all") {
     if (!hasCloseableTerminalAttachment({ session: input.session, row: input.row })) {
-      if (input.requireTerminalClose !== true) {
-        return;
-      }
-      const error: SafeError = {
-        tag: "TerminalProviderError",
-        code: "TERMINAL_TARGET_MISSING",
-        message: "No terminal is open for this session.",
-        hint: "Refresh the dashboard and retry.",
-        provider:
-          input.session.terminal?.provider ??
-          input.row?.terminal?.provider ??
-          input.providers.defaultTerminalId,
-        sessionId: input.session.id,
-        worktreeId: input.session.worktreeId,
-      };
-      throw error;
+      return;
     }
     const terminalProvider =
       input.session.terminal?.provider ??
       input.row?.terminal?.provider ??
       input.providers.defaultTerminalId;
-    await closeTerminal({
-      terminal: resolveTerminalProviderOrThrow(input.providers, terminalProvider),
-      subject: terminalTargetSubjectForSession(input.session, input.row),
-      context: input.context,
-      clock: input.clock,
-    });
+    try {
+      await closeTerminal({
+        terminal: resolveTerminalProviderOrThrow(input.providers, terminalProvider),
+        subject: terminalTargetSubjectForSession(input.session, input.row),
+        context: input.context,
+        clock: input.clock,
+      });
+    } catch (error) {
+      if (terminalAlreadyRetired(error)) {
+        return;
+      }
+      throw error;
+    }
   }
 }
 
@@ -127,8 +118,8 @@ export async function closeTerminalForWorktree(
       clock: input.clock,
     });
   } catch (error) {
-    // A missing target already satisfies cleanup; force only governs destructive worktree guards.
-    if (terminalTargetMissing(error)) {
+    // An absent target already satisfies cleanup; force only governs destructive worktree guards.
+    if (terminalAlreadyRetired(error)) {
       return;
     }
     throw error;
@@ -288,7 +279,10 @@ export function canUseTerminalCloseFallbackForWorktree(row: WorktreeRow, force: 
   return hasCloseableTerminalAttachment({ row });
 }
 
-function terminalTargetMissing(error: unknown): boolean {
+function terminalAlreadyRetired(error: unknown): boolean {
   const parsed = SafeErrorSchema.safeParse(error);
-  return parsed.success && parsed.data.code === "TERMINAL_TARGET_MISSING";
+  return (
+    parsed.success &&
+    (parsed.data.code === "TERMINAL_TARGET_MISSING" || parsed.data.code === "TERMINAL_TARGET_STALE")
+  );
 }

@@ -1294,6 +1294,42 @@ describe("contract schemas", () => {
       },
       "start agent command with remembered harness and popup focus origin",
     );
+    expectParses(
+      StationCommandSchema,
+      {
+        type: "session.startAgent",
+        payload: {
+          projectId: "web",
+          worktreeId: "wt_web_feature",
+          freshStart: { expectedSessionId: "ses_web_feature" },
+        },
+      },
+      "identity-bound fresh start command",
+    );
+    expectFails(
+      StationCommandSchema,
+      {
+        type: "session.startAgent",
+        payload: {
+          projectId: "web",
+          worktreeId: "wt_web_feature",
+          freshStart: { expectedSessionId: "" },
+        },
+      },
+      "fresh start command with blank expected session id",
+    );
+    expectFails(
+      StationCommandSchema,
+      {
+        type: "session.startAgent",
+        payload: {
+          projectId: "web",
+          worktreeId: "wt_web_feature",
+          freshStart: { expectedSessionId: "ses_web_feature", force: true },
+        },
+      },
+      "fresh start command with unknown consent fields",
+    );
 
     expectParses(
       StationCommandSchema,
