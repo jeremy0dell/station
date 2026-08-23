@@ -8,6 +8,7 @@ import { createPublicUpdateReport } from "../../update/publicUpdateReportAdapter
 import { inspectUpdateConvergencePreflight } from "../../update/recoveryPreflight.js";
 import { createUpdateRecoveryPreflightPorts } from "../../update/recoveryPreflightAdapters.js";
 import { runUpdateConvergence } from "../../update/updateConvergenceUseCase.js";
+import { createUpdateHostRuntimeAdapter } from "../../update/updateHostRuntimeAdapter.js";
 import { createUpdateRuntimeConvergenceAdapter } from "../../update/updateRuntimeConvergenceAdapter.js";
 import { createUpdateSuccessorTransportAdapter } from "../../update/updateSuccessorTransportAdapter.js";
 import { loadedConfigCommandOptions } from "../cliCommand/helpers.js";
@@ -69,8 +70,8 @@ async function runUpdateCliCommand(context: CliCommandRunContext) {
 /**
  * COMPOSITION ROOT
  *
- * Wires the selected install-channel probes, aggregate inspection, runtime children, and pinned
- * successor transport used by the update convergence use case.
+ * Wires the selected install-channel probes, direct Host runtime, aggregate inspection, remaining
+ * runtime children, and pinned successor transport used by the update convergence use case.
  */
 export function createUpdateCommandDeps(
   context: CliCommandRunContext,
@@ -78,6 +79,18 @@ export function createUpdateCommandDeps(
 ): UpdateCommandDeps {
   const overrides = context.options.updateDeps;
   const hostDeps = overrides?.hostDeps ?? context.options.hostDeps;
+  const buildInfo = overrides?.buildInfo ?? stationBuildInfo;
+  const host =
+    overrides?.host ??
+    createUpdateHostRuntimeAdapter(
+      { config: loaded.config, buildInfo },
+      {
+        ...(hostDeps?.clientFactory === undefined ? {} : { clientFactory: hostDeps.clientFactory }),
+        ...(hostDeps?.resolveHostCommand === undefined
+          ? {}
+          : { resolveHostCommand: hostDeps.resolveHostCommand }),
+      },
+    );
   const configuredInspection = overrides?.convergenceInspection;
   let convergenceInspection = configuredInspection;
   if (convergenceInspection === undefined) {
@@ -92,16 +105,15 @@ export function createUpdateCommandDeps(
     const preflightOptions: Parameters<typeof createUpdateRecoveryPreflightPorts>[0] = {
       config: loaded.config,
       providers: createProviderRegistry(loaded.config, registryOptions),
+      inspectHost: host.inspect,
     };
     if (loaded.configPath !== undefined) preflightOptions.configPath = loaded.configPath;
-    if (hostDeps !== undefined) preflightOptions.hostDeps = hostDeps;
     if (context.options.observerDeps !== undefined) {
       preflightOptions.observerDeps = context.options.observerDeps;
     }
     const ports = createUpdateRecoveryPreflightPorts(preflightOptions);
     convergenceInspection = (input) => inspectUpdateConvergencePreflight({ ...input, ports });
   }
-  const buildInfo = overrides?.buildInfo ?? stationBuildInfo;
   const commandRunner = overrides?.commandRunner;
   const adapterOptions = {
     ...(loaded.configPath === undefined ? {} : { configPath: loaded.configPath }),
@@ -133,6 +145,7 @@ export function createUpdateCommandDeps(
           probes,
           buildInfo,
           publicReport,
+          host,
           runtime,
           successor,
         }),

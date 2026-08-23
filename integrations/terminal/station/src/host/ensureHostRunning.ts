@@ -12,12 +12,15 @@ import {
   ptyLifetimeIdentitySetsMatch,
   type SafeError,
   type UpdateHostConvergenceCommand,
+  type UpdateHostConvergenceCommandResult,
+  UpdateHostConvergenceCommandResultSchema,
   type UpdateHostConvergenceCommitment,
 } from "@station/contracts";
 import {
   assertHostReusable,
   classifyHostCompatibility,
   createStationHostClient,
+  HOST_PROTOCOL_VERSION,
   type HostHealthResult,
   isStationHostCompatibilityError,
   type StationHostClient,
@@ -110,6 +113,7 @@ type IncumbentHostDecision =
       outcome: "start-with-handoff";
       manifest: PtyHandoffManifest;
     }
+  | { outcome: "already-converged" }
   | { outcome: "running" }
   | { outcome: "unavailable"; error: SafeError };
 
@@ -134,11 +138,13 @@ export async function ensureStationHostRunning(
  *
  * Executes one update-authorized Host action only while the exact committed incumbent build and
  * immutable PTY inventory remain current; it never switches between idle replacement and handoff.
+ * Disappearance and drift do not spawn, while an exact target and inventory return a non-mutating
+ * already-converged outcome.
  */
 export async function convergeStationHostForUpdate(
   options: ConvergeStationHostForUpdateOptions,
   deps: EnsureStationHostDeps = {},
-): Promise<StationHostHandle> {
+): Promise<UpdateHostConvergenceCommandResult> {
   const target = options.command.commitment.target;
   const handle = await ensureStationHostRunningInternal(
     {
@@ -152,18 +158,72 @@ export async function convergeStationHostForUpdate(
     deps,
     options.command,
   );
-  if (handle.status !== "running") return handle;
+  if (handle.status !== "running") {
+    const requestedAction = options.command.action;
+    const probe = await probeUnixSocket(options.socketPath);
+    const drifted =
+      probe.status !== "listening" || handle.error.code === "HOST_CONVERGENCE_PLAN_DRIFT";
+    return UpdateHostConvergenceCommandResultSchema.parse({
+      schemaVersion: 1,
+      action: "update-converge",
+      requestedAction,
+      status: drifted ? (probe.status === "absent" ? "absent" : "stale") : "failed",
+      error: handle.error,
+    });
+  }
+  if (handle.ensuredBy === "reuse") {
+    handle.client.dispose();
+    return UpdateHostConvergenceCommandResultSchema.parse({
+      schemaVersion: 1,
+      action: "update-converge",
+      requestedAction: options.command.action,
+      status: "already-converged",
+      validatedCommitment: options.command.commitment,
+      actualInventory: options.command.commitment.incumbent.inventory,
+    });
+  }
   const expectedEnsuredBy = options.command.action === "replace-idle" ? "idle-replace" : "handoff";
-  if (handle.ensuredBy === expectedEnsuredBy) return handle;
-  handle.client.dispose();
-  return {
-    status: "unavailable",
-    socketPath: options.socketPath,
-    error: stationHostSafeError(
-      "HOST_CONVERGENCE_PLAN_DRIFT",
-      "Station Host convergence completed through an action the authorized plan did not permit.",
-    ),
-  };
+  try {
+    if (handle.ensuredBy !== expectedEnsuredBy) {
+      return UpdateHostConvergenceCommandResultSchema.parse({
+        schemaVersion: 1,
+        action: "update-converge",
+        requestedAction: options.command.action,
+        status: "failed",
+        error: stationHostSafeError(
+          "HOST_CONVERGENCE_PLAN_DRIFT",
+          "Station Host convergence completed through an action the authorized plan did not permit.",
+        ),
+      });
+    }
+    const terminals = handle.ensuredBy === "handoff" ? handle.handoffAdopt?.receipt.terminals : [];
+    if (terminals === undefined) {
+      return UpdateHostConvergenceCommandResultSchema.parse({
+        schemaVersion: 1,
+        action: "update-converge",
+        requestedAction: options.command.action,
+        status: "failed",
+        error: stationHostSafeError(
+          "HOST_HANDOFF_MANIFEST_INVALID",
+          "The successor Host did not return its exact immutable terminal receipt.",
+        ),
+      });
+    }
+    return UpdateHostConvergenceCommandResultSchema.parse({
+      schemaVersion: 1,
+      action: "update-converge",
+      requestedAction: options.command.action,
+      status: "completed",
+      receipt: {
+        ensuredBy: handle.ensuredBy,
+        validatedCommitment: options.command.commitment,
+        actualInventory: { terminals },
+        ...(handle.ensuredBy === "handoff" ? { handoffReceipt: handle.handoffAdopt?.receipt } : {}),
+      },
+    });
+  } finally {
+    handle.client.dispose();
+  }
 }
 
 async function ensureStationHostRunningInternal(
@@ -181,6 +241,15 @@ async function ensureStationHostRunningInternal(
       error: inaccessibleHostSocketError(socketPath),
     };
   }
+  if (convergence !== undefined && (probe.status === "absent" || probe.status === "stale")) {
+    return {
+      status: "unavailable",
+      socketPath,
+      error: hostConvergencePlanDrift(
+        "The planned incumbent Host is no longer listening at the committed socket.",
+      ),
+    };
+  }
   // A caller-supplied client is shared and long-lived (the provider reuses it), so
   // only a client WE created is disposed on a failure path.
   const ownsClient = deps.clientFactory === undefined;
@@ -193,14 +262,7 @@ async function ensureStationHostRunningInternal(
 
   const incumbent =
     probe.status === "absent" || probe.status === "stale"
-      ? convergence === undefined
-        ? ({ outcome: "start", ensuredBy: "start" } as const)
-        : ({
-            outcome: "unavailable",
-            error: hostConvergencePlanDrift(
-              "The planned incumbent Host is no longer listening at the committed socket.",
-            ),
-          } as const)
+      ? ({ outcome: "start", ensuredBy: "start" } as const)
       : await negotiateIncumbentHost({
           socketPath,
           expectedBuildVersion,
@@ -214,6 +276,9 @@ async function ensureStationHostRunningInternal(
           ...(convergence === undefined ? {} : { convergence }),
         });
   if (incumbent.outcome === "running") {
+    return { status: "running", socketPath, client, ensuredBy: "reuse" };
+  }
+  if (incumbent.outcome === "already-converged") {
     return { status: "running", socketPath, client, ensuredBy: "reuse" };
   }
   if (incumbent.outcome === "unavailable") {
@@ -337,14 +402,13 @@ async function negotiateIncumbentHost(input: {
   }
 
   if (input.convergence !== undefined) {
-    const commitmentError = await validateHostConvergenceCommitment(
+    const commitment = await classifyHostConvergenceCommitment(
       input.client,
       health,
       input.convergence,
     );
-    if (commitmentError !== undefined) {
-      return { outcome: "unavailable", error: commitmentError };
-    }
+    if (commitment.status === "already-converged") return { outcome: "already-converged" };
+    if (commitment.status === "stale") return { outcome: "unavailable", error: commitment.error };
   }
 
   let compatibility = classifyHostCompatibility(health, input.expectedBuildVersion);
@@ -579,21 +643,14 @@ async function tryLiveHandoff(input: {
   }
 }
 
-async function validateHostConvergenceCommitment(
+async function classifyHostConvergenceCommitment(
   client: StationHostClient,
   health: HostHealthResult,
   command: UpdateHostConvergenceCommand,
-): Promise<SafeError | undefined> {
+): Promise<
+  { status: "incumbent" } | { status: "already-converged" } | { status: "stale"; error: SafeError }
+> {
   const expected = command.commitment.incumbent;
-  if (
-    health.protocolVersion !== expected.protocolVersion ||
-    !committedValueMatches(expected.buildVersion, health.buildVersion)
-  ) {
-    return hostConvergencePlanDrift(
-      "The incumbent Host build or protocol no longer matches the authorized convergence plan.",
-    );
-  }
-
   let actual: {
     buildIdentity: string | undefined;
     terminals: PtyLifetimeIdentity[];
@@ -601,19 +658,40 @@ async function validateHostConvergenceCommitment(
   try {
     actual = await readCommittedHostInventory(client);
   } catch {
-    return hostConvergencePlanDrift(
-      "The incumbent Host immutable inventory can no longer be verified against the convergence plan.",
-    );
+    return {
+      status: "stale",
+      error: hostConvergencePlanDrift(
+        "The incumbent Host immutable inventory can no longer be verified against the convergence plan.",
+      ),
+    };
+  }
+
+  const exactInventory = ptyLifetimeIdentitySetsMatch(
+    expected.inventory.terminals,
+    actual.terminals,
+  );
+  if (
+    health.protocolVersion === HOST_PROTOCOL_VERSION &&
+    health.buildVersion === command.commitment.target.buildVersion &&
+    actual.buildIdentity === command.commitment.target.buildIdentity &&
+    exactInventory
+  ) {
+    return { status: "already-converged" };
   }
   if (
+    health.protocolVersion !== expected.protocolVersion ||
+    !committedValueMatches(expected.buildVersion, health.buildVersion) ||
     !committedValueMatches(expected.buildIdentity, actual.buildIdentity) ||
-    !ptyLifetimeIdentitySetsMatch(expected.inventory.terminals, actual.terminals)
+    !exactInventory
   ) {
-    return hostConvergencePlanDrift(
-      "The incumbent Host build or immutable terminal inventory changed after convergence planning.",
-    );
+    return {
+      status: "stale",
+      error: hostConvergencePlanDrift(
+        "The incumbent Host build or immutable terminal inventory changed after convergence planning.",
+      ),
+    };
   }
-  return undefined;
+  return { status: "incumbent" };
 }
 
 async function readCommittedHostInventory(client: StationHostClient): Promise<{

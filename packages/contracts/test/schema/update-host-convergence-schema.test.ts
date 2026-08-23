@@ -51,6 +51,16 @@ describe("update Host convergence schema", () => {
         },
       }),
     ).toMatchObject({ status: "completed", receipt: { ensuredBy: "handoff" } });
+    expect(
+      UpdateHostConvergenceCommandResultSchema.parse({
+        schemaVersion: 1,
+        action: "update-converge",
+        requestedAction: "handoff",
+        status: "already-converged",
+        validatedCommitment: busyCommitment,
+        actualInventory: busyCommitment.incumbent.inventory,
+      }),
+    ).toMatchObject({ status: "already-converged" });
   });
 
   it("rejects action switching, same-count wrong identities, and private receipt extensions", () => {
@@ -98,6 +108,16 @@ describe("update Host convergence schema", () => {
           handoffReceipt: commitment.incumbent.inventory,
           processGroups: [4242],
         },
+      }).success,
+    ).toBe(false);
+    expect(
+      UpdateHostConvergenceCommandResultSchema.safeParse({
+        schemaVersion: 1,
+        action: "update-converge",
+        requestedAction: "handoff",
+        status: "already-converged",
+        validatedCommitment: commitment,
+        actualInventory: { terminals: [terminal("1"), terminal("3")] },
       }).success,
     ).toBe(false);
   });

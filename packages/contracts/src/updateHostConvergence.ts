@@ -135,7 +135,7 @@ export const UpdateHostConvergenceReceiptSchema = z
   });
 export type UpdateHostConvergenceReceipt = z.infer<typeof UpdateHostConvergenceReceiptSchema>;
 
-/** Strict machine boundary returned by the update-only constrained Host executor. */
+/** Strict shared result returned by the update-only constrained Host executor. */
 export const UpdateHostConvergenceCommandResultSchema = z
   .discriminatedUnion("status", [
     z
@@ -152,7 +152,17 @@ export const UpdateHostConvergenceCommandResultSchema = z
         schemaVersion: z.literal(1),
         action: z.literal("update-converge"),
         requestedAction: z.enum(["replace-idle", "handoff"]),
-        status: z.enum(["drifted", "failed"]),
+        status: z.literal("already-converged"),
+        validatedCommitment: UpdateHostConvergenceCommitmentSchema,
+        actualInventory: HostPtyInventoryCommitmentSchema,
+      })
+      .strict(),
+    z
+      .object({
+        schemaVersion: z.literal(1),
+        action: z.literal("update-converge"),
+        requestedAction: z.enum(["replace-idle", "handoff"]),
+        status: z.enum(["absent", "stale", "failed"]),
         error: SafeErrorSchema,
       })
       .strict(),
@@ -169,7 +179,46 @@ export const UpdateHostConvergenceCommandResultSchema = z
         message: "Host convergence receipt must identify the exact requested action.",
       });
     }
+    if (
+      result.status === "already-converged" &&
+      !ptyLifetimeIdentitySetsMatch(
+        result.validatedCommitment.incumbent.inventory.terminals,
+        result.actualInventory.terminals,
+      )
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["actualInventory"],
+        message: "Already-converged Host evidence must retain the exact authorized inventory.",
+      });
+    }
   });
 export type UpdateHostConvergenceCommandResult = z.infer<
   typeof UpdateHostConvergenceCommandResultSchema
 >;
+
+/** Compare exact update Host commitments without relying on object serialization. */
+export function hostConvergenceCommitmentsMatch(
+  left: UpdateHostConvergenceCommitment,
+  right: UpdateHostConvergenceCommitment,
+): boolean {
+  return (
+    committedHostValuesMatch(left.incumbent.buildVersion, right.incumbent.buildVersion) &&
+    committedHostValuesMatch(left.incumbent.buildIdentity, right.incumbent.buildIdentity) &&
+    left.incumbent.protocolVersion === right.incumbent.protocolVersion &&
+    ptyLifetimeIdentitySetsMatch(
+      left.incumbent.inventory.terminals,
+      right.incumbent.inventory.terminals,
+    ) &&
+    left.target.buildVersion === right.target.buildVersion &&
+    left.target.buildIdentity === right.target.buildIdentity
+  );
+}
+
+function committedHostValuesMatch(
+  left: UpdateHostConvergenceCommitment["incumbent"]["buildVersion"],
+  right: UpdateHostConvergenceCommitment["incumbent"]["buildVersion"],
+): boolean {
+  if (left.status !== right.status) return false;
+  return left.status === "absent" || (right.status === "known" && left.value === right.value);
+}

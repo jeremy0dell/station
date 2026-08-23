@@ -546,7 +546,7 @@ function validateV4Result(
       (action) =>
         action.phase === "terminal-convergence" &&
         action.action === "preserve-via-handoff" &&
-        action.status === "completed",
+        action.status !== "failed",
     );
     if (handoff === undefined) return;
     const before =

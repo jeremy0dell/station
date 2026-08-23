@@ -25,15 +25,6 @@ describe("parseHostArgs", () => {
     expect(parseHostArgs(["handoff", "--json"])).toMatchObject({ output: "json" });
   });
 
-  it("accepts only strict stdin JSON flags for internal update convergence", () => {
-    expect(parseHostArgs(["update-converge", "--stdin", "--json"])).toEqual({
-      action: "update-converge",
-      output: "json",
-      stdin: true,
-    });
-    expect(() => parseHostArgs(["update-converge", "--json"])).toThrow(/--stdin --json/);
-  });
-
   it("rejects unknown actions, status flags, and bad fidelity", () => {
     expect(() => parseHostArgs([])).toThrow(/Usage/);
     expect(() => parseHostArgs(["status", "--dry-run"])).toThrow(/does not accept/);

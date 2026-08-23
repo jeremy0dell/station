@@ -1,4 +1,5 @@
 import {
+  hostConvergenceCommitmentsMatch,
   type ObserverLifecycleFailure,
   providerHookReconciliationSucceeded,
   ptyLifetimeIdentitySetsMatch,
@@ -29,6 +30,7 @@ import {
 import { nonExecutedPhases } from "./updateCommandStatusPolicy.js";
 import type { UpdateConvergenceRequest } from "./updateConvergencePort.js";
 import { updateErrorFromUnknown } from "./updateError.js";
+import type { UpdateHostRuntimePort } from "./updateHostRuntimePort.js";
 import type { PublicUpdateReportInput, UpdatePublicReportPort } from "./updatePublicReportPort.js";
 import type { UpdateRuntimeConvergencePort } from "./updateRuntimeConvergencePort.js";
 import type { UpdateSuccessorTransportPort } from "./updateSuccessorTransportPort.js";
@@ -39,6 +41,7 @@ export type UpdateConvergencePorts = {
   probes: readonly UpdateChannelProbe[];
   buildInfo: () => StationBuildInfo;
   publicReport: UpdatePublicReportPort;
+  host: UpdateHostRuntimePort;
   runtime: UpdateRuntimeConvergencePort;
   successor: UpdateSuccessorTransportPort;
 };
@@ -347,6 +350,7 @@ async function executeCurrentRuntime(
   const actions: UpdateExecutedAction[] = [];
   let inFlightAction: InFlightUpdateAction | undefined;
   let observerLifecycleFailure: ObserverLifecycleFailure | undefined;
+  let hostAlreadyConverged = false;
   const audit: UpdateActionAudit = {
     executor: request.evaluator,
     planDigest: initial.plan.digest.value,
@@ -409,50 +413,84 @@ async function executeCurrentRuntime(
         phase: "host-convergence",
         action: host.action,
       };
-      const hostReceipt =
+      const hostResult =
         host.action === "handoff"
-          ? await ports.runtime.handoffHost(
-              selected.plan.currentCli,
-              request.handoff ?? "processes",
-              commitment,
-            )
-          : await ports.runtime.replaceIdleHost(selected.plan.currentCli, commitment);
-      if (host.action === "handoff") {
-        inFlightAction = {
-          phase: "terminal-convergence",
-          action: "preserve-via-handoff",
-        };
-        const expectedTerminals =
-          initial.preflight.host.status === "inspected" ? initial.preflight.host.terminals : [];
-        if (
-          hostReceipt.ensuredBy !== "handoff" ||
-          !ptyLifetimeIdentitySetsMatch(expectedTerminals, hostReceipt.handoffReceipt.terminals)
-        ) {
-          throw updateErrorFromUnknown(undefined, {
-            code: "UPDATE_TERMINAL_HANDOFF_RECEIPT_MISMATCH",
-            message: "Host handoff did not acknowledge every exact planned PTY lifetime.",
-          });
-        }
-        actions.push({
-          phase: "terminal-convergence",
-          action: "preserve-via-handoff",
-          status: "completed",
-          handoffReceipt: hostReceipt.handoffReceipt,
-        });
-      } else if (hostReceipt.ensuredBy !== "idle-replace") {
+          ? await ports.host.handoffHost(request.handoff ?? "processes", commitment)
+          : await ports.host.replaceIdleHost(commitment);
+      if (hostResult.requestedAction !== host.action) {
         throw updateErrorFromUnknown(undefined, {
           code: "UPDATE_HOST_CONVERGENCE_ACTION_MISMATCH",
-          message: "Host convergence completed through an action the plan did not authorize.",
+          message: "Host convergence returned an outcome for a different planned action.",
         });
       }
-      actions.push({
-        phase: "host-convergence",
-        action: host.action,
-        status: "completed",
-      });
-      inFlightAction = undefined;
+      switch (hostResult.status) {
+        case "absent":
+        case "stale":
+        case "failed":
+          throw hostResult.error;
+        case "already-converged":
+          if (!hostConvergenceCommitmentsMatch(hostResult.validatedCommitment, commitment)) {
+            throw hostCommitmentMismatch();
+          }
+          if (host.action === "handoff") {
+            actions.push({
+              phase: "terminal-convergence",
+              action: "preserve-via-handoff",
+              status: "skipped",
+            });
+          }
+          actions.push({
+            phase: "host-convergence",
+            action: host.action,
+            status: "skipped",
+          });
+          hostAlreadyConverged = true;
+          inFlightAction = undefined;
+          break;
+        case "completed": {
+          const hostReceipt = hostResult.receipt;
+          if (!hostConvergenceCommitmentsMatch(hostReceipt.validatedCommitment, commitment)) {
+            throw hostCommitmentMismatch();
+          }
+          if (host.action === "handoff") {
+            inFlightAction = {
+              phase: "terminal-convergence",
+              action: "preserve-via-handoff",
+            };
+            const expectedTerminals =
+              initial.preflight.host.status === "inspected" ? initial.preflight.host.terminals : [];
+            if (
+              hostReceipt.ensuredBy !== "handoff" ||
+              !ptyLifetimeIdentitySetsMatch(expectedTerminals, hostReceipt.handoffReceipt.terminals)
+            ) {
+              throw updateErrorFromUnknown(undefined, {
+                code: "UPDATE_TERMINAL_HANDOFF_RECEIPT_MISMATCH",
+                message: "Host handoff did not acknowledge every exact planned PTY lifetime.",
+              });
+            }
+            actions.push({
+              phase: "terminal-convergence",
+              action: "preserve-via-handoff",
+              status: "completed",
+              handoffReceipt: hostReceipt.handoffReceipt,
+            });
+          } else if (hostReceipt.ensuredBy !== "idle-replace") {
+            throw updateErrorFromUnknown(undefined, {
+              code: "UPDATE_HOST_CONVERGENCE_ACTION_MISMATCH",
+              message: "Host convergence completed through an action the plan did not authorize.",
+            });
+          }
+          actions.push({
+            phase: "host-convergence",
+            action: host.action,
+            status: "completed",
+          });
+          inFlightAction = undefined;
+          break;
+        }
+      }
     }
-    if (initial.plan.components.reconcile.action === "run") {
+    if (!hostAlreadyConverged && initial.plan.components.reconcile.action === "run") {
       inFlightAction = {
         phase: "runtime-reconcile",
         action: "run",
@@ -544,7 +582,7 @@ async function executeCurrentRuntime(
     });
   }
   const postAction = finalInspection.evidence;
-  if (!terminalsPreservedAcrossHandoff(initial, postAction, audit)) {
+  if (!terminalsPreservedAcrossHostConvergence(initial, postAction, audit)) {
     const error = updateErrorFromUnknown(undefined, {
       code: "UPDATE_TERMINAL_CONVERGENCE_INCOMPLETE",
       message:
@@ -635,6 +673,13 @@ function committedHostValue(
   value: string | undefined,
 ): UpdateHostConvergenceCommitment["incumbent"]["buildVersion"] {
   return value === undefined ? { status: "absent" } : { status: "known", value };
+}
+
+function hostCommitmentMismatch() {
+  return updateErrorFromUnknown(undefined, {
+    code: "UPDATE_HOST_CONVERGENCE_COMMITMENT_MISMATCH",
+    message: "Host convergence did not retain the exact authorized build and inventory.",
+  });
 }
 
 async function inspectAndPlan(input: {
@@ -821,18 +866,18 @@ function artifactsMatch(left: UpdateArtifact, right: UpdateArtifact): boolean {
   return left.version === right.version && left.revision === right.revision;
 }
 
-function terminalsPreservedAcrossHandoff(
+function terminalsPreservedAcrossHostConvergence(
   initial: UpdateEvidencePlan,
   postAction: UpdateEvidencePlan,
   audit: UpdateActionAudit,
 ): boolean {
-  const handoffCompleted = audit.actions.some(
+  const terminalInventoryCommitted = audit.actions.some(
     (action) =>
       action.phase === "terminal-convergence" &&
       action.action === "preserve-via-handoff" &&
-      action.status === "completed",
+      action.status !== "failed",
   );
-  if (!handoffCompleted) return true;
+  if (!terminalInventoryCommitted) return true;
   const before =
     initial.preflight.host.status === "inspected" ? initial.preflight.host.terminals : [];
   const after =

@@ -1223,7 +1223,7 @@ describe("ensureStationHostRunning", () => {
     const beginHandoff = vi.fn();
     const spawnHost = vi.fn();
     try {
-      const handle = await convergeStationHostForUpdate(
+      const result = await convergeStationHostForUpdate(
         {
           socketPath: socket.socketPath,
           stateDir: tmpdir(),
@@ -1249,8 +1249,8 @@ describe("ensureStationHostRunning", () => {
         },
       );
 
-      expect(handle).toMatchObject({
-        status: "unavailable",
+      expect(result).toMatchObject({
+        status: "stale",
         error: { code: "HOST_CONVERGENCE_PLAN_DRIFT" },
       });
       expect(stopIfIdle).toHaveBeenCalledOnce();
@@ -1268,7 +1268,7 @@ describe("ensureStationHostRunning", () => {
     const stopIfIdle = vi.fn();
     const spawnHost = vi.fn();
     try {
-      const handle = await convergeStationHostForUpdate(
+      const result = await convergeStationHostForUpdate(
         {
           socketPath: socket.socketPath,
           stateDir: tmpdir(),
@@ -1294,8 +1294,8 @@ describe("ensureStationHostRunning", () => {
         },
       );
 
-      expect(handle).toMatchObject({
-        status: "unavailable",
+      expect(result).toMatchObject({
+        status: "stale",
         error: { code: "HOST_CONVERGENCE_PLAN_DRIFT" },
       });
       expect(beginHandoff).not.toHaveBeenCalled();
@@ -1312,7 +1312,7 @@ describe("ensureStationHostRunning", () => {
     const wrongManifest = oneEntryHandoffManifest("pty-2");
     const beginHandoff = vi.fn();
     try {
-      const handle = await convergeStationHostForUpdate(
+      const result = await convergeStationHostForUpdate(
         {
           socketPath: socket.socketPath,
           stateDir: tmpdir(),
@@ -1336,8 +1336,8 @@ describe("ensureStationHostRunning", () => {
         },
       );
 
-      expect(handle).toMatchObject({
-        status: "unavailable",
+      expect(result).toMatchObject({
+        status: "stale",
         error: { code: "HOST_CONVERGENCE_PLAN_DRIFT" },
       });
       expect(beginHandoff).not.toHaveBeenCalled();
@@ -1358,7 +1358,7 @@ describe("ensureStationHostRunning", () => {
     const spawnHost = vi.fn(
       (_input: SpawnStationHostInput): ChildProcessLike => ({ pid: 999, unref: () => undefined }),
     );
-    const handle = await convergeStationHostForUpdate(
+    const result = await convergeStationHostForUpdate(
       {
         socketPath: socket.socketPath,
         stateDir: tmpdir(),
@@ -1390,11 +1390,13 @@ describe("ensureStationHostRunning", () => {
       },
     );
 
-    expect(handle).toMatchObject({ status: "running", ensuredBy: "idle-replace" });
+    expect(result).toMatchObject({
+      status: "completed",
+      receipt: { ensuredBy: "idle-replace", actualInventory: { terminals: [] } },
+    });
     expect(stopIfIdle).toHaveBeenCalledOnce();
     expect(beginHandoff).not.toHaveBeenCalled();
     expect(spawnHost).toHaveBeenCalledOnce();
-    if (handle.status === "running") handle.client.dispose();
   });
 
   it("executes an exact busy handoff without attempting idle replacement", async () => {
@@ -1416,7 +1418,7 @@ describe("ensureStationHostRunning", () => {
     const spawnHost = vi.fn(
       (_input: SpawnStationHostInput): ChildProcessLike => ({ pid: 999, unref: () => undefined }),
     );
-    const handle = await convergeStationHostForUpdate(
+    const result = await convergeStationHostForUpdate(
       {
         socketPath: socket.socketPath,
         stateDir: tmpdir(),
@@ -1450,14 +1452,130 @@ describe("ensureStationHostRunning", () => {
       },
     );
 
-    expect(handle).toMatchObject({
-      status: "running",
-      ensuredBy: "handoff",
-      handoffAdopt: { receipt: { terminals: terminalIdentities(manifest) } },
+    expect(result).toMatchObject({
+      status: "completed",
+      receipt: {
+        ensuredBy: "handoff",
+        handoffReceipt: { terminals: terminalIdentities(manifest) },
+      },
     });
     expect(stopIfIdle).not.toHaveBeenCalled();
     expect(beginHandoff).toHaveBeenCalledOnce();
     expect(spawnHost).toHaveBeenCalledOnce();
-    if (handle.status === "running") handle.client.dispose();
+  });
+
+  it("returns absent without starting a Host when the planned incumbent disappeared", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "station-host-update-absent-"));
+    const clientFactory = vi.fn();
+    const spawnHost = vi.fn();
+    try {
+      const result = await convergeStationHostForUpdate(
+        {
+          socketPath: join(directory, "host.sock"),
+          stateDir: directory,
+          hostCommand: ["bun", "/tmp/hostMain.ts"],
+          command: convergenceCommand("replace-idle", []),
+        },
+        { clientFactory, spawnHost },
+      );
+
+      expect(result).toMatchObject({
+        status: "absent",
+        error: { code: "HOST_CONVERGENCE_PLAN_DRIFT" },
+      });
+      expect(clientFactory).not.toHaveBeenCalled();
+      expect(spawnHost).not.toHaveBeenCalled();
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("returns already-converged without mutation for the exact target and inventory", async () => {
+    const socket = await liveSocket();
+    const manifest = oneEntryHandoffManifest("pty-1");
+    const stopIfIdle = vi.fn();
+    const beginHandoff = vi.fn();
+    const spawnHost = vi.fn();
+    try {
+      const result = await convergeStationHostForUpdate(
+        {
+          socketPath: socket.socketPath,
+          stateDir: tmpdir(),
+          hostCommand: ["bun", "/tmp/hostMain.ts"],
+          command: convergenceCommand("handoff", terminalIdentities(manifest)),
+        },
+        {
+          clientFactory: () =>
+            fakeClient({
+              health: async () => ({
+                ok: true,
+                protocolVersion: HOST_PROTOCOL_VERSION,
+                buildVersion: expectedBuildVersion,
+              }),
+              recoveryInventory: async () => ({
+                buildIdentity: targetBuildIdentity,
+                ptys: recoveryPtys(manifest),
+              }),
+              stopIfIdle,
+              beginHandoff,
+            }),
+          spawnHost,
+        },
+      );
+
+      expect(result).toMatchObject({
+        status: "already-converged",
+        actualInventory: { terminals: terminalIdentities(manifest) },
+      });
+      expect(stopIfIdle).not.toHaveBeenCalled();
+      expect(beginHandoff).not.toHaveBeenCalled();
+      expect(spawnHost).not.toHaveBeenCalled();
+    } finally {
+      await socket.close();
+    }
+  });
+
+  it("returns stale without mutation when a different incumbent replaced the planned Host", async () => {
+    const socket = await liveSocket();
+    const stopIfIdle = vi.fn();
+    const beginHandoff = vi.fn();
+    const spawnHost = vi.fn();
+    try {
+      const result = await convergeStationHostForUpdate(
+        {
+          socketPath: socket.socketPath,
+          stateDir: tmpdir(),
+          hostCommand: ["bun", "/tmp/hostMain.ts"],
+          command: convergenceCommand("replace-idle", []),
+        },
+        {
+          clientFactory: () =>
+            fakeClient({
+              health: async () => ({
+                ok: true,
+                protocolVersion: HOST_PROTOCOL_VERSION,
+                buildVersion: "other-incumbent-build",
+              }),
+              recoveryInventory: async () => ({
+                buildIdentity: "c".repeat(64),
+                ptys: [],
+              }),
+              stopIfIdle,
+              beginHandoff,
+            }),
+          spawnHost,
+        },
+      );
+
+      expect(result).toMatchObject({
+        status: "stale",
+        error: { code: "HOST_CONVERGENCE_PLAN_DRIFT" },
+      });
+      expect(stopIfIdle).not.toHaveBeenCalled();
+      expect(beginHandoff).not.toHaveBeenCalled();
+      expect(spawnHost).not.toHaveBeenCalled();
+    } finally {
+      await socket.close();
+    }
   });
 });

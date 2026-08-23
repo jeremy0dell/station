@@ -6,7 +6,6 @@ import { createTempState } from "../../../../tests/support/temp-projects";
 import { runHostCommand } from "../../src/commands/host/index.js";
 
 const requestingBuild = "0.0.0-cli-request";
-const requestingBuildIdentity = "b".repeat(64);
 
 describe("runHostCommand", () => {
   it("reports status health, compatibility, and handoff eligibility", async () => {
@@ -356,82 +355,5 @@ describe("runHostCommand", () => {
       status: "unavailable",
       message: "handoff could not complete",
     });
-  });
-
-  it.each([
-    { action: "replace-idle" as const, terminals: [] },
-    {
-      action: "handoff" as const,
-      terminals: [
-        {
-          terminalTargetId: "native:wt-1",
-          ptyId: "pty-1",
-          ptyInstanceId: "instance-pty-1",
-        },
-      ],
-    },
-  ])("returns a strict exact receipt for update $action", async ({ action, terminals }) => {
-    const fixture = await createTempState();
-    const dispose = vi.fn();
-    const commitment = {
-      incumbent: {
-        buildVersion: { status: "known" as const, value: "older-build" },
-        buildIdentity: { status: "known" as const, value: "a".repeat(64) },
-        protocolVersion: HOST_PROTOCOL_VERSION,
-        inventory: { terminals },
-      },
-      target: {
-        buildVersion: requestingBuild,
-        buildIdentity: requestingBuildIdentity,
-      },
-    };
-    const command =
-      action === "handoff"
-        ? { schemaVersion: 1 as const, action, fidelity: "processes" as const, commitment }
-        : { schemaVersion: 1 as const, action, commitment };
-    const convergeHostForUpdate = vi.fn(async () => ({
-      status: "running" as const,
-      socketPath: stationHostSocketPath(fixture.config),
-      ensuredBy: action === "handoff" ? ("handoff" as const) : ("idle-replace" as const),
-      ...(action === "handoff"
-        ? {
-            handoffAdopt: {
-              adopted: ["pty-1"],
-              failed: [],
-              receipt: { terminals },
-            },
-          }
-        : {}),
-      client: { dispose },
-    }));
-
-    const result = await runHostCommand(
-      ["update-converge", "--stdin", "--json"],
-      { config: fixture.config, stdin: JSON.stringify(command) },
-      {
-        expectedBuildVersion: requestingBuild,
-        expectedBuildIdentity: requestingBuildIdentity,
-        convergeHostForUpdate: convergeHostForUpdate as never,
-        resolveHostCommand: () => ["/opt/stn", "__station-host"],
-      },
-    );
-
-    expect(result).toEqual({
-      schemaVersion: 1,
-      action: "update-converge",
-      requestedAction: action,
-      status: "completed",
-      receipt: {
-        ensuredBy: action === "handoff" ? "handoff" : "idle-replace",
-        validatedCommitment: commitment,
-        actualInventory: { terminals },
-        ...(action === "handoff" ? { handoffReceipt: { terminals } } : {}),
-      },
-    });
-    expect(convergeHostForUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({ command }),
-      expect.anything(),
-    );
-    expect(dispose).toHaveBeenCalledOnce();
   });
 });

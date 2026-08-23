@@ -5,11 +5,6 @@ import {
   type ProviderHookReconciliationResult,
   ProviderHookReconciliationResultSchema,
   providerHookReconciliationSucceeded,
-  ptyLifetimeIdentitySetsMatch,
-  type UpdateHostConvergenceCommand,
-  UpdateHostConvergenceCommandResultSchema,
-  type UpdateHostConvergenceCommitment,
-  type UpdateHostConvergenceReceipt,
 } from "@station/contracts";
 import { type ExternalCommandRunner, runExternalCommand } from "@station/runtime";
 import type { ExecutableArgv } from "../selfExec.js";
@@ -33,8 +28,7 @@ export type UpdateRuntimeConvergenceAdapterOptions = {
 /**
  * ADAPTER
  *
- * Translates safe runtime actions into strict Host, Observer, hook, and reconcile children. Host
- * children must receipt the exact requested action and authorized immutable commitment.
+ * Translates safe Observer, hook, and reconcile runtime actions into strict child boundaries.
  */
 export function createUpdateRuntimeConvergenceAdapter(
   options: UpdateRuntimeConvergenceAdapterOptions,
@@ -53,18 +47,6 @@ export function createUpdateRuntimeConvergenceAdapter(
           "--timeout-ms",
           String(OBSERVER_CROSSOVER_TIMEOUT_MS),
         ]),
-        options.commandRunner,
-      ),
-    replaceIdleHost: (cli, commitment) =>
-      runHostMutation(
-        stationCommand(cli, options.configPath, ["host", "update-converge", "--stdin", "--json"]),
-        { schemaVersion: 1, action: "replace-idle", commitment },
-        options.commandRunner,
-      ),
-    handoffHost: (cli, fidelity, commitment) =>
-      runHostMutation(
-        stationCommand(cli, options.configPath, ["host", "update-converge", "--stdin", "--json"]),
-        { schemaVersion: 1, action: "handoff", fidelity, commitment },
         options.commandRunner,
       ),
     reconcile: (cli) =>
@@ -109,64 +91,6 @@ async function runMutationCommand(
     { command: executable, args, timeoutMs: 60_000, maxOutputChars: 128 * 1024 },
     runner,
   );
-}
-
-async function runHostMutation(
-  command: UpdateCommandArgv,
-  request: UpdateHostConvergenceCommand,
-  runner: ExternalCommandRunner | undefined,
-): Promise<UpdateHostConvergenceReceipt> {
-  const [executable, ...args] = command;
-  const result = await runExternalCommand(
-    {
-      command: executable,
-      args,
-      timeoutMs: 60_000,
-      maxOutputChars: 128 * 1024,
-      allowedExitCodes: [1],
-      stdin: `${JSON.stringify(request)}\n`,
-    },
-    runner,
-  );
-  const parsed = UpdateHostConvergenceCommandResultSchema.parse(JSON.parse(result.stdout));
-  const succeeded = parsed.status === "completed";
-  if ((result.exitCode === 0) !== succeeded) {
-    throw new Error("Host convergence result contradicted its process exit status.");
-  }
-  if (parsed.requestedAction !== request.action) {
-    throw new Error("Host convergence result contradicted the requested action.");
-  }
-  if (parsed.status !== "completed") throw parsed.error;
-  if (!hostCommitmentsMatch(parsed.receipt.validatedCommitment, request.commitment)) {
-    throw new Error("Host convergence receipt did not retain the authorized commitment.");
-  }
-  return parsed.receipt;
-}
-
-function hostCommitmentsMatch(
-  left: UpdateHostConvergenceCommitment,
-  right: UpdateHostConvergenceCommitment,
-): boolean {
-  return (
-    committedValuesMatch(left.incumbent.buildVersion, right.incumbent.buildVersion) &&
-    committedValuesMatch(left.incumbent.buildIdentity, right.incumbent.buildIdentity) &&
-    left.incumbent.protocolVersion === right.incumbent.protocolVersion &&
-    ptyLifetimeIdentitySetsMatch(
-      left.incumbent.inventory.terminals,
-      right.incumbent.inventory.terminals,
-    ) &&
-    left.target.buildVersion === right.target.buildVersion &&
-    left.target.buildIdentity === right.target.buildIdentity
-  );
-}
-
-function committedValuesMatch(
-  left: UpdateHostConvergenceCommitment["incumbent"]["buildVersion"],
-  right: UpdateHostConvergenceCommitment["incumbent"]["buildVersion"],
-): boolean {
-  if (left.status !== right.status) return false;
-  if (left.status === "absent") return true;
-  return right.status === "known" && left.value === right.value;
 }
 
 async function runObserverMutation(

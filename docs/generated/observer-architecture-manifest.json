@@ -13172,15 +13172,8 @@
       "declaration": "runHostCommand",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Drive Station host inspection and opt-in live handoff from the CLI without routing through Observer application code. User handoff retains its ordinary ensure policy; update-only convergence delegates to the constrained executor and projects its exact action and immutable PTY commitment at a strict JSON boundary.",
+      "purpose": "Drives Station host inspection and opt-in live handoff from the CLI without routing through Observer application code. User handoff retains its ordinary ensure policy.",
       "dependencies": [
-        {
-          "path": "packages/protocol/src/transport.ts",
-          "declaration": "probeUnixSocket",
-          "kind": "function",
-          "role": "ADAPTER",
-          "edgeKind": "runtime"
-        },
         {
           "path": "packages/station-host/src/protocol.ts",
           "declaration": "classifyHostCompatibility",
@@ -13290,7 +13283,7 @@
       "declaration": "createUpdateCommandDeps",
       "kind": "function",
       "role": "COMPOSITION ROOT",
-      "purpose": "Wires the selected install-channel probes, aggregate inspection, runtime children, and pinned successor transport used by the update convergence use case.",
+      "purpose": "Wires the selected install-channel probes, direct Host runtime, aggregate inspection, remaining runtime children, and pinned successor transport used by the update convergence use case.",
       "dependencies": [
         {
           "path": "apps/cli/src/observerProviders.ts",
@@ -13325,6 +13318,13 @@
           "declaration": "runUpdateConvergence",
           "kind": "function",
           "role": "USE CASE",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/update/updateHostRuntimeAdapter.ts",
+          "declaration": "createUpdateHostRuntimeAdapter",
+          "kind": "function",
+          "role": "ADAPTER",
           "edgeKind": "runtime"
         },
         {
@@ -14596,13 +14596,6 @@
       "purpose": "Binds recovery preflight to read-only local process evidence, Observer protocol queries, strict Host inventory, and the provider-neutral hook-health use case. Observer public evidence and its CLI-private ownership sidecar are captured together. No lifecycle or repair capability is exposed through these ports.",
       "dependencies": [
         {
-          "path": "apps/cli/src/commands/host/index.ts",
-          "declaration": "runHostCommand",
-          "kind": "function",
-          "role": "ADAPTER",
-          "edgeKind": "runtime"
-        },
-        {
           "path": "apps/cli/src/observerProcess.ts",
           "declaration": "getObserverStatus",
           "kind": "function",
@@ -14615,6 +14608,13 @@
           "kind": "type",
           "role": "DRIVEN PORT",
           "edgeKind": "type-only"
+        },
+        {
+          "path": "apps/cli/src/update/runtimeBuildRelation.ts",
+          "declaration": "classifyUpdateRuntimeBuildRelation",
+          "kind": "function",
+          "role": "POLICY",
+          "edgeKind": "runtime"
         },
         {
           "path": "apps/observer/src/commands/harnessHookHealth.ts",
@@ -14652,6 +14652,14 @@
           "edgeKind": "runtime"
         }
       ]
+    },
+    {
+      "path": "apps/cli/src/update/runtimeBuildRelation.ts",
+      "declaration": "classifyUpdateRuntimeBuildRelation",
+      "kind": "function",
+      "role": "POLICY",
+      "purpose": "Classifies immutable runtime identity against the selected artifact without treating equal display versions as build equivalence.",
+      "dependencies": []
     },
     {
       "path": "apps/cli/src/update/updateChannel.ts",
@@ -14722,6 +14730,37 @@
       ]
     },
     {
+      "path": "apps/cli/src/update/updateHostRuntimeAdapter.ts",
+      "declaration": "createUpdateHostRuntimeAdapter",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Translates the update Host port into direct typed socket inspection and constrained Station Host convergence. No update action passes through CLI text or generic handoff behavior.",
+      "dependencies": [
+        {
+          "path": "apps/cli/src/update/runtimeBuildRelation.ts",
+          "declaration": "classifyUpdateRuntimeBuildRelation",
+          "kind": "function",
+          "role": "POLICY",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/update/updateHostRuntimePort.ts",
+          "declaration": "UpdateHostRuntimePort",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
+      "path": "apps/cli/src/update/updateHostRuntimePort.ts",
+      "declaration": "UpdateHostRuntimePort",
+      "kind": "interface",
+      "role": "DRIVEN PORT",
+      "purpose": "Supplies one update-owned Host inspection and phase-constrained mutations bound to the selected build and exact immutable terminal inventory.",
+      "dependencies": []
+    },
+    {
       "path": "apps/cli/src/update/updatePublicReportPort.ts",
       "declaration": "UpdatePublicReportPort",
       "kind": "interface",
@@ -14734,7 +14773,7 @@
       "declaration": "createUpdateRuntimeConvergenceAdapter",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Translates safe runtime actions into strict Host, Observer, hook, and reconcile children. Host children must receipt the exact requested action and authorized immutable commitment.",
+      "purpose": "Translates safe Observer, hook, and reconcile runtime actions into strict child boundaries.",
       "dependencies": [
         {
           "path": "apps/cli/src/update/updateRuntimeConvergencePort.ts",
@@ -14757,7 +14796,7 @@
       "declaration": "UpdateRuntimeConvergencePort",
       "kind": "interface",
       "role": "DRIVEN PORT",
-      "purpose": "Defines safe child-command mutations and recovery argv for update convergence. Host replacement and handoff remain distinct operations bound to one exact planned build and PTY commitment.",
+      "purpose": "Defines safe Observer, hook, and reconcile child mutations plus recovery argv for update convergence.",
       "dependencies": []
     },
     {
@@ -16668,7 +16707,7 @@
       "declaration": "convergeStationHostForUpdate",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Executes one update-authorized Host action only while the exact committed incumbent build and immutable PTY inventory remain current; it never switches between idle replacement and handoff.",
+      "purpose": "Executes one update-authorized Host action only while the exact committed incumbent build and immutable PTY inventory remain current; it never switches between idle replacement and handoff. Disappearance and drift do not spawn, while an exact target and inventory return a non-mutating already-converged outcome.",
       "dependencies": [
         {
           "path": "packages/protocol/src/transport.ts",
@@ -16692,6 +16731,29 @@
       "kind": "function",
       "role": "ADAPTER",
       "purpose": "Preserves inaccessible Host ownership and defers definite stale reclaim to the child binder while retaining compatibility-aware idle replacement and an opt-in busy-host live handoff path. Pre-commit failure restores the incumbent refusal; after completion commits, parked PTYs remain available to a successor. Adoption succeeds only with an exact PTY-id set and returns a canonical immutable-lifetime receipt.",
+      "dependencies": [
+        {
+          "path": "packages/protocol/src/transport.ts",
+          "declaration": "probeUnixSocket",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "packages/station-host/src/protocol.ts",
+          "declaration": "classifyHostCompatibility",
+          "kind": "function",
+          "role": "POLICY",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
+      "path": "integrations/terminal/station/src/host/inspectHost.ts",
+      "declaration": "inspectStationHost",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Reads one typed Host health and immutable inventory view for status and update inspection without routing through CLI presentation.",
       "dependencies": [
         {
           "path": "packages/protocol/src/transport.ts",

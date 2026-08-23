@@ -1,14 +1,7 @@
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type StationConfig, stationHostSocketPath } from "@station/config";
-import {
-  type HostHandoffCommandResult,
-  type HostHandoffFidelity,
-  type UpdateHostConvergenceCommand,
-  type UpdateHostConvergenceCommandResult,
-  UpdateHostConvergenceCommandResultSchema,
-  UpdateHostConvergenceCommandSchema,
-} from "@station/contracts";
+import type { HostHandoffCommandResult, HostHandoffFidelity } from "@station/contracts";
 import {
   classifyHostCompatibility,
   createStationHostClient,
@@ -16,11 +9,9 @@ import {
   type HostListEntry,
   type HostPtyHandoffSupport,
   type StationHostClient,
-  stationHostSafeError,
 } from "@station/host";
-import { probeUnixSocket } from "@station/protocol";
-import { isSafeError, stationBuildInfo } from "@station/runtime";
-import { convergeStationHostForUpdate, ensureStationHostRunning } from "@station/terminal";
+import { stationBuildInfo } from "@station/runtime";
+import { ensureStationHostRunning, inspectStationHost } from "@station/terminal";
 import { resolveObserverPaths } from "../../paths.js";
 import { selfExecArgv } from "../../selfExec.js";
 import { parseHostArgs } from "./args.js";
@@ -28,7 +19,6 @@ import { parseHostArgs } from "./args.js";
 export type HostCommandDeps = {
   clientFactory?: (socketPath: string, expectedBuildVersion: string) => StationHostClient;
   ensureHost?: typeof ensureStationHostRunning;
-  convergeHostForUpdate?: typeof convergeStationHostForUpdate;
   resolveHostCommand?: () => readonly [string, ...string[]];
   /** Test/composition override for the requesting Station build identity. */
   expectedBuildVersion?: string;
@@ -53,23 +43,17 @@ export type HostStatusResult = {
   error?: string;
 };
 
-export type HostCommandResult =
-  | HostStatusResult
-  | HostHandoffCommandResult
-  | UpdateHostConvergenceCommandResult;
+export type HostCommandResult = HostStatusResult | HostHandoffCommandResult;
 
 export type HostCommandOptions = {
   config: StationConfig;
-  stdin?: string;
 };
 
 /**
  * ADAPTER
  *
- * Drive Station host inspection and opt-in live handoff from the CLI without
- * routing through Observer application code. User handoff retains its ordinary ensure policy;
- * update-only convergence delegates to the constrained executor and projects its exact action and
- * immutable PTY commitment at a strict JSON boundary.
+ * Drives Station host inspection and opt-in live handoff from the CLI without routing through
+ * Observer application code. User handoff retains its ordinary ensure policy.
  */
 export async function runHostCommand(
   args: readonly string[],
@@ -79,11 +63,7 @@ export async function runHostCommand(
   const parsed = parseHostArgs(args);
   const socketPath = stationHostSocketPath(options.config);
   const stateDir = resolveObserverPaths(options.config).stateDir;
-  const processBuild =
-    deps.expectedBuildVersion === undefined ||
-    (parsed.action === "update-converge" && deps.expectedBuildIdentity === undefined)
-      ? stationBuildInfo()
-      : undefined;
+  const processBuild = deps.expectedBuildVersion === undefined ? stationBuildInfo() : undefined;
   const expectedBuildVersion = deps.expectedBuildVersion ?? processBuild?.version;
   if (expectedBuildVersion === undefined)
     throw new Error("Expected Host build version is missing.");
@@ -91,20 +71,6 @@ export async function runHostCommand(
   const clientFactory =
     deps.clientFactory ??
     ((path, build) => createStationHostClient({ socketPath: path, expectedBuildVersion: build }));
-
-  if (parsed.action === "update-converge") {
-    const command = parseUpdateHostConvergenceCommand(options.stdin);
-    return runUpdateHostConvergence({
-      command,
-      socketPath,
-      stateDir,
-      expectedBuildVersion,
-      expectedBuildIdentity,
-      clientFactory,
-      convergeHost: deps.convergeHostForUpdate ?? convergeStationHostForUpdate,
-      resolveHostCommand: deps.resolveHostCommand ?? resolveStationHostCommand,
-    });
-  }
 
   if (parsed.action === "status") {
     const statusInput: Parameters<typeof runHostStatus>[0] = {
@@ -132,9 +98,6 @@ export async function runHostCommand(
 }
 
 export function hostCommandSummary(result: HostCommandResult): string {
-  if (result.action === "update-converge") {
-    return `host convergence: ${result.status}\naction: ${result.requestedAction}\n`;
-  }
   if (result.action === "status") {
     const lines = [`socket: ${result.socketPath}`, `probe: ${result.probe}`];
     if (result.health !== undefined) {
@@ -173,165 +136,41 @@ export function hostCommandSummary(result: HostCommandResult): string {
   return `${lines.join("\n")}\n`;
 }
 
-function parseUpdateHostConvergenceCommand(
-  stdin: string | undefined,
-): UpdateHostConvergenceCommand {
-  if (stdin === undefined || stdin.trim().length === 0) {
-    throw new Error("stn host update-converge requires a strict command on stdin.");
-  }
-  return UpdateHostConvergenceCommandSchema.parse(JSON.parse(stdin));
-}
-
-async function runUpdateHostConvergence(input: {
-  command: UpdateHostConvergenceCommand;
-  socketPath: string;
-  stateDir: string;
-  expectedBuildVersion: string;
-  expectedBuildIdentity: string | undefined;
-  clientFactory: (socketPath: string, expectedBuildVersion: string) => StationHostClient;
-  convergeHost: typeof convergeStationHostForUpdate;
-  resolveHostCommand: () => readonly [string, ...string[]];
-}): Promise<UpdateHostConvergenceCommandResult> {
-  const target = input.command.commitment.target;
-  if (
-    input.expectedBuildIdentity === undefined ||
-    target.buildVersion !== input.expectedBuildVersion ||
-    target.buildIdentity !== input.expectedBuildIdentity
-  ) {
-    return UpdateHostConvergenceCommandResultSchema.parse({
-      schemaVersion: 1,
-      action: "update-converge",
-      requestedAction: input.command.action,
-      status: "drifted",
-      error: stationHostSafeError(
-        "HOST_CONVERGENCE_PLAN_DRIFT",
-        "The executing Station CLI does not match the selected target build commitment.",
-      ),
-    });
-  }
-
-  const handle = await input.convergeHost(
-    {
-      socketPath: input.socketPath,
-      stateDir: input.stateDir,
-      hostCommand: input.resolveHostCommand(),
-      command: input.command,
-    },
-    { clientFactory: input.clientFactory },
-  );
-  if (handle.status !== "running") {
-    return UpdateHostConvergenceCommandResultSchema.parse({
-      schemaVersion: 1,
-      action: "update-converge",
-      requestedAction: input.command.action,
-      status: handle.error.code === "HOST_CONVERGENCE_PLAN_DRIFT" ? "drifted" : "failed",
-      error: handle.error,
-    });
-  }
-
-  try {
-    const terminals = handle.ensuredBy === "handoff" ? handle.handoffAdopt?.receipt.terminals : [];
-    if (terminals === undefined) {
-      return UpdateHostConvergenceCommandResultSchema.parse({
-        schemaVersion: 1,
-        action: "update-converge",
-        requestedAction: input.command.action,
-        status: "failed",
-        error: stationHostSafeError(
-          "HOST_HANDOFF_MANIFEST_INVALID",
-          "The successor Host did not return its exact immutable terminal receipt.",
-        ),
-      });
-    }
-    const receipt = {
-      ensuredBy: handle.ensuredBy,
-      validatedCommitment: input.command.commitment,
-      actualInventory: { terminals },
-      ...(handle.ensuredBy === "handoff" ? { handoffReceipt: handle.handoffAdopt?.receipt } : {}),
-    };
-    return UpdateHostConvergenceCommandResultSchema.parse({
-      schemaVersion: 1,
-      action: "update-converge",
-      requestedAction: input.command.action,
-      status: "completed",
-      receipt,
-    });
-  } finally {
-    handle.client.dispose();
-  }
-}
-
 async function runHostStatus(input: {
   socketPath: string;
   expectedBuildVersion: string;
   expectedBuildIdentity?: string;
   clientFactory: (socketPath: string, expectedBuildVersion: string) => StationHostClient;
 }): Promise<HostStatusResult> {
-  const probe = await probeUnixSocket(input.socketPath);
+  const inspection = await inspectStationHost(
+    {
+      socketPath: input.socketPath,
+      expectedBuildVersion: input.expectedBuildVersion,
+      ...(input.expectedBuildIdentity === undefined
+        ? {}
+        : { expectedBuildIdentity: input.expectedBuildIdentity }),
+    },
+    { clientFactory: input.clientFactory },
+  );
   const result: HostStatusResult = {
     action: "status",
     socketPath: input.socketPath,
-    probe: probe.status,
+    probe: inspection.probe,
   };
-  if (probe.status !== "listening") {
-    result.error = "Host socket is not listening.";
-    return result;
+  if (inspection.health !== undefined) result.health = inspection.health;
+  if (inspection.compatibility !== undefined) result.compatibility = inspection.compatibility;
+  if (inspection.buildIdentity !== undefined) result.buildIdentity = inspection.buildIdentity;
+  if (inspection.ptys !== undefined) {
+    result.ptys = inspection.ptys;
+    result.livePtyCount = inspection.ptys.length;
   }
-  const client = input.clientFactory(input.socketPath, input.expectedBuildVersion);
-  try {
-    const health = await client.health();
-    result.health = health;
-    let compatibility = classifyHostCompatibility(health, input.expectedBuildVersion);
-    // Inventory stays read-only but must pass the client's exact incumbent-build gate.
-    const inventoryClient =
-      compatibility.action === "replace"
-        ? input.clientFactory(input.socketPath, compatibility.runningBuildVersion)
-        : client;
-    try {
-      let ptys: HostInspectionEntry[];
-      if (inventoryClient.recoveryInventory === undefined) {
-        ptys = await inventoryClient.list();
-      } else {
-        try {
-          const recovery = await inventoryClient.recoveryInventory();
-          result.buildIdentity = recovery.buildIdentity;
-          if (compatibility.action === "reuse" && input.expectedBuildIdentity !== undefined) {
-            compatibility =
-              recovery.buildIdentity === input.expectedBuildIdentity
-                ? compatibility
-                : { action: "replace", runningBuildVersion: input.expectedBuildVersion };
-          }
-          ptys = recovery.ptys;
-        } catch (error) {
-          if (!isSafeError(error) || error.code !== "HOST_BAD_REQUEST") throw error;
-          // Older protocol-v8 Hosts do not implement the additive recovery query.
-          ptys = await inventoryClient.list();
-        }
-      }
-      result.ptys = ptys;
-      if (
-        compatibility.action === "reuse" &&
-        input.expectedBuildIdentity !== undefined &&
-        result.buildIdentity === undefined
-      ) {
-        compatibility = { action: "refuse", reason: "legacy-health" };
-      }
-      result.compatibility = compatibility;
-      result.livePtyCount = ptys.length;
-      result.handoffEligible = compatibility.action === "replace" && ptys.length > 0;
-    } catch (error) {
-      result.error = error instanceof Error ? error.message : String(error);
-      result.handoffEligible = compatibility.action === "replace";
-    } finally {
-      if (inventoryClient !== client) inventoryClient.dispose();
-    }
-    return result;
-  } catch (error) {
-    result.error = error instanceof Error ? error.message : String(error);
-    return result;
-  } finally {
-    client.dispose();
+  if (inspection.compatibility !== undefined) {
+    result.handoffEligible =
+      inspection.compatibility.action === "replace" &&
+      (inspection.ptys === undefined || inspection.ptys.length > 0);
   }
+  if (inspection.error !== undefined) result.error = inspection.error.message;
+  return result;
 }
 
 async function runHostHandoff(input: {
