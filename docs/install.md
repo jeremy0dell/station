@@ -405,10 +405,10 @@ replacement requires the exact Host build commitment to remain empty and never
 falls through to handoff, while handoff requires the exact non-empty immutable
 inventory and never falls through to replacement. A typed drift refusal causes
 fresh aggregate inspection and a nonzero result without claiming either action
-completed. A live Host handoff also requires a strict receipt containing
-the exact planned `{ terminalTargetId, ptyId, ptyInstanceId }` set and final
-inspection must retain that set; absence is not treated as an unevidenced
-natural exit.
+completed. A live Host handoff also requires a strict receipt containing the
+exact planned session-bound `{ terminalTargetId, ptyId, ptyInstanceId,
+sessionId }` set and final inspection must retain that set; absence or session
+reassignment is not treated as an unevidenced natural exit.
 Observer execution likewise cannot act from a stale inspection. Immediately
 before start or restart, the CLI re-inspects and requires the exact planned PID,
 OS start, process token, build selector, configured socket, and selected Station

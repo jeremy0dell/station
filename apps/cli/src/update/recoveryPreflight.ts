@@ -1,5 +1,6 @@
 import {
   compareCodeUnitStrings,
+  comparePtyLifetimeIdentities,
   ObserverProcessTokenSchema,
   type ProviderHookHealth,
   ProviderHookHealthSchema,
@@ -404,14 +405,16 @@ function terminalDispositionsFor(
 }
 
 function compareTerminalIdentity(
-  left: Pick<UpdateReapTerminalDisposition, "terminalTargetId" | "ptyId" | "ptyInstanceId">,
-  right: Pick<UpdateReapTerminalDisposition, "terminalTargetId" | "ptyId" | "ptyInstanceId">,
+  left: Pick<
+    UpdateReapTerminalDisposition,
+    "terminalTargetId" | "ptyId" | "ptyInstanceId" | "sessionId"
+  >,
+  right: Pick<
+    UpdateReapTerminalDisposition,
+    "terminalTargetId" | "ptyId" | "ptyInstanceId" | "sessionId"
+  >,
 ): number {
-  return (
-    compareCodeUnitStrings(left.terminalTargetId, right.terminalTargetId) ||
-    compareCodeUnitStrings(left.ptyId, right.ptyId) ||
-    compareCodeUnitStrings(left.ptyInstanceId, right.ptyInstanceId)
-  );
+  return comparePtyLifetimeIdentities(left, right);
 }
 
 export function redactedPreflightError(

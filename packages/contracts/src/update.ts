@@ -326,7 +326,7 @@ function validateUpdateResult(
         if (!ptyLifetimeIdentitySetsMatch(terminals, action.handoffReceipt.terminals)) {
           digestMismatch(
             [...path, "actions", index, "handoffReceipt"],
-            "Terminal handoff receipt must match the exact planned PTY lifetime identities.",
+            "Terminal handoff receipt must match the exact planned session-bound PTY lifetime identities.",
           );
         }
       }
@@ -434,7 +434,7 @@ function validateUpdateResult(
       finalAction.action === "handoff" &&
       expectedCompleted.at(-1)?.phase === "terminal-convergence"
     ) {
-      // Terminal preservation becomes auditable only after Host handoff returns an exact receipt.
+      // Terminal preservation becomes auditable only after Host handoff returns a session-bound receipt.
       expectedCompleted = expectedCompleted.slice(0, -1);
     }
     const completed = audit.actions.slice(0, -1);
@@ -475,7 +475,7 @@ function validateUpdateResult(
     if (!ptyLifetimeIdentitySetsMatch(before, after)) {
       digestMismatch(
         path,
-        "Verified convergence after handoff must retain every exact PTY lifetime identity.",
+        "Verified convergence after handoff must retain every exact session-bound PTY lifetime identity.",
       );
     }
   };

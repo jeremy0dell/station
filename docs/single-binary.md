@@ -107,7 +107,7 @@ as ownership roots.
   target is inspected and receives a typed convergence plan. After apply, the
   successor launcher proves the pinned installed artifact locally without
   latest discovery, executes its own safe plan, and verifies a fresh no-op plan.
-  Live handoff separately receipts and re-verifies every immutable PTY lifetime.
+  Live handoff separately receipts and re-verifies every session-bound immutable PTY lifetime.
   A non-bridge busy Host returns `reap-required` before mutation for #641.
 
 ## Packaged runtime assets

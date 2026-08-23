@@ -14,9 +14,9 @@ type CanonicalRecord = { readonly [key: string]: CanonicalValue };
 /**
  * POLICY
  *
- * Binds a public convergence plan to its redaction-safe aggregate and private ownership sidecar.
- * SHA-256 collision resistance is assumed; the digest reveals no private value and grants no
- * authority. #641 must independently authorize exact Station-owned process-group targets.
+ * Binds a public convergence plan to its redaction-safe, session-bound aggregate and private
+ * ownership sidecar. SHA-256 collision resistance is assumed; the digest reveals no private value
+ * and grants no authority. #641 must independently authorize exact Station-owned process-group targets.
  */
 export function attachUpdateConvergenceDigest(input: {
   draft: UpdateConvergencePlanDraft;

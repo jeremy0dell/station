@@ -744,6 +744,9 @@ describe("stn update convergence", () => {
     expect(textFor(result)).toContain(
       "terminal-convergence: preserve-via-handoff completed fidelity=screen",
     );
+    expect(textFor(result)).toContain(
+      "receipt: terminal-1 pty=pty-1/pty-instance-1 session=session-1",
+    );
     const contradictoryAudit = structuredClone(report);
     if (contradictoryAudit.result.kind !== "current-runtime-execution") {
       throw new Error("expected cloned runtime execution");
@@ -754,6 +757,32 @@ describe("stn update convergence", () => {
     if (hostAudit === undefined) throw new Error("missing Host handoff audit");
     hostAudit.fidelity = "processes";
     expect(UpdateCommandReportSchema.safeParse(contradictoryAudit).success).toBe(false);
+    const reassignedReceipt = structuredClone(report);
+    if (reassignedReceipt.result.kind !== "current-runtime-execution") {
+      throw new Error("expected cloned runtime execution");
+    }
+    const terminalAudit = reassignedReceipt.result.actionAudits[0].actions.find(
+      (action) => action.phase === "terminal-convergence",
+    );
+    const receiptedTerminal = terminalAudit?.handoffReceipt?.terminals[0];
+    if (receiptedTerminal === undefined) throw new Error("missing handoff receipt terminal");
+    receiptedTerminal.sessionId = "session-replacement";
+    expect(UpdateCommandReportSchema.safeParse(reassignedReceipt).success).toBe(false);
+
+    const reassignedFinalInventory = structuredClone(report);
+    if (reassignedFinalInventory.result.kind !== "current-runtime-execution") {
+      throw new Error("expected cloned runtime execution");
+    }
+    const finalHost = reassignedFinalInventory.result.postAction.preflight.host;
+    const finalDisposition =
+      reassignedFinalInventory.result.postAction.preflight.terminalDispositions[0];
+    if (finalHost.status !== "inspected" || finalHost.terminals[0] === undefined) {
+      throw new Error("missing final Host terminal");
+    }
+    if (finalDisposition === undefined) throw new Error("missing final terminal disposition");
+    finalHost.terminals[0].sessionId = "session-replacement";
+    finalDisposition.sessionId = "session-replacement";
+    expect(UpdateCommandReportSchema.safeParse(reassignedFinalInventory).success).toBe(false);
     expect(
       runner.mock.calls.some(([input]) => (input as ExternalCommandInput).args?.includes("host")),
     ).toBe(false);
@@ -1051,6 +1080,10 @@ describe("stn update convergence", () => {
       kind: "wrong-identity" as const,
     },
     {
+      name: "same PTY different session",
+      kind: "wrong-session" as const,
+    },
+    {
       name: "duplicate",
       kind: "duplicate" as const,
     },
@@ -1075,7 +1108,9 @@ describe("stn update convergence", () => {
           const terminals =
             kind === "duplicate"
               ? [terminalIdentity(), terminalIdentity()]
-              : [terminalIdentity("2")];
+              : kind === "wrong-session"
+                ? [{ ...terminalIdentity(), sessionId: "session-replacement" }]
+                : [terminalIdentity("2")];
           return (
             kind === "missing"
               ? { ...exact, receipt: undefined }
@@ -1114,6 +1149,13 @@ describe("stn update convergence", () => {
       name: "same-count wrong",
       finalTerminals: [terminal("bridge-releasable", "2")],
       finalDispositions: [disposition("preservable", "recoverable", "2")],
+    },
+    {
+      name: "same PTY different session",
+      finalTerminals: [{ ...terminal("bridge-releasable"), sessionId: "session-replacement" }],
+      finalDispositions: [
+        { ...disposition("preservable", "recoverable"), sessionId: "session-replacement" },
+      ],
     },
   ])("fails final verification for $name PTY lifetime identities after handoff", async ({
     finalTerminals,
@@ -3349,6 +3391,7 @@ function terminalIdentity(identity = "1") {
     terminalTargetId: `terminal-${identity}`,
     ptyId: `pty-${identity}`,
     ptyInstanceId: `pty-instance-${identity}`,
+    sessionId: `session-${identity}`,
   };
 }
 

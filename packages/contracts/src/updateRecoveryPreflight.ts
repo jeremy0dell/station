@@ -1,13 +1,7 @@
 import { z } from "zod";
 import { SafeErrorSchema } from "./errors.js";
 import { comparePtyLifetimeIdentities, PtyLifetimeIdentitySchema } from "./hostHandoff.js";
-import {
-  ProjectIdSchema,
-  type ProviderId,
-  ProviderIdSchema,
-  SessionIdSchema,
-  WorktreeIdSchema,
-} from "./ids.js";
+import { ProjectIdSchema, type ProviderId, ProviderIdSchema, WorktreeIdSchema } from "./ids.js";
 import { ProviderHookHealthSchema } from "./providerHooks.js";
 import {
   ObserverSessionRecoveryAssessmentSchema,
@@ -202,7 +196,6 @@ export const UpdateReapTerminalEvidenceSchema = PtyLifetimeIdentitySchema.extend
   kind: z.enum(["agent", "aux"]),
   projectId: ProjectIdSchema,
   worktreeId: WorktreeIdSchema,
-  sessionId: SessionIdSchema,
   harnessProvider: ProviderIdSchema,
   alive: z.boolean(),
   handoffSupport: z.enum(["bridge-releasable", "non-releasable", "unknown"]),
@@ -263,7 +256,6 @@ const orderedTerminalReasonsSchema = z
   });
 
 export const UpdateReapTerminalDispositionSchema = PtyLifetimeIdentitySchema.extend({
-  sessionId: SessionIdSchema,
   handoff: z.enum(["preservable", "non-preservable", "unknown"]),
   reapRecovery: z.enum(["recoverable", "non-resumable", "unknown"]),
   reasons: orderedTerminalReasonsSchema,
@@ -409,6 +401,7 @@ function strictlySortedTerminals(
     terminalTargetId: string;
     ptyId: string;
     ptyInstanceId: string;
+    sessionId: string;
   }[],
 ): boolean {
   return terminals.every((terminal, index) => {
@@ -426,7 +419,8 @@ function strictlySortedStrings(values: readonly string[]): boolean {
 
 /**
  * Proves that Host terminals and recovery dispositions form one deterministic, exact-identity set.
- * The canonical PTY lifetime identity is correlated with its Station session and handoff class.
+ * The canonical PTY lifetime identity includes its Station session and is correlated with its
+ * handoff class.
  */
 export function updateTerminalEvidenceSetsMatch(
   host: UpdateReapHostEvidence,
@@ -445,7 +439,6 @@ export function updateTerminalEvidenceSetsMatch(
     return (
       disposition !== undefined &&
       comparePtyLifetimeIdentities(terminal, disposition) === 0 &&
-      terminal.sessionId === disposition.sessionId &&
       disposition.handoff === handoffDispositionFor(terminal.handoffSupport)
     );
   });

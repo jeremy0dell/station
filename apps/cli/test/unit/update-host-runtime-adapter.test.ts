@@ -167,6 +167,7 @@ function hostCommitment(): UpdateHostConvergenceCommitment {
             terminalTargetId: "terminal-1",
             ptyId: "pty-1",
             ptyInstanceId: "pty-instance-1",
+            sessionId: "session-1",
           },
         ],
       },

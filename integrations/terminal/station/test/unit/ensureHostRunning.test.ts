@@ -93,6 +93,7 @@ function terminalIdentities(manifest: PtyHandoffManifest): PtyLifetimeIdentity[]
     terminalTargetId: entry.identity.terminalTargetId,
     ptyId,
     ptyInstanceId: entry.ptyInstanceId,
+    sessionId: entry.identity.sessionId,
   }));
 }
 
@@ -941,6 +942,7 @@ describe("ensureStationHostRunning", () => {
                 terminalTargetId: "native:wt-1",
                 ptyId: "pty-1",
                 ptyInstanceId: "instance-pty-1",
+                sessionId: "ses-1",
               },
             ],
           },
@@ -1347,6 +1349,49 @@ describe("ensureStationHostRunning", () => {
     }
   });
 
+  it("refuses the same PTY lifetime attributed to another Station session", async () => {
+    const socket = await liveSocket();
+    const expectedManifest = oneEntryHandoffManifest("pty-1");
+    const actualPtys = recoveryPtys(expectedManifest).map((terminal) => ({
+      ...terminal,
+      sessionId: "ses-replacement",
+    }));
+    const beginHandoff = vi.fn();
+    try {
+      const result = await convergeStationHostForUpdate(
+        {
+          socketPath: socket.socketPath,
+          stateDir: tmpdir(),
+          hostCommand: ["bun", "/tmp/hostMain.ts"],
+          command: convergenceCommand("handoff", terminalIdentities(expectedManifest)),
+        },
+        {
+          clientFactory: () =>
+            fakeClient({
+              health: async () => ({
+                ok: true,
+                protocolVersion: HOST_PROTOCOL_VERSION,
+                buildVersion: "older-build",
+              }),
+              recoveryInventory: async () => ({
+                buildIdentity: incumbentBuildIdentity,
+                ptys: actualPtys,
+              }),
+              beginHandoff,
+            }),
+        },
+      );
+
+      expect(result).toMatchObject({
+        status: "stale",
+        error: { code: "HOST_CONVERGENCE_PLAN_DRIFT" },
+      });
+      expect(beginHandoff).not.toHaveBeenCalled();
+    } finally {
+      await socket.close();
+    }
+  });
+
   it("executes an exact idle replacement without entering live handoff", async () => {
     const socket = await liveSocket();
     let healthCalls = 0;
@@ -1508,6 +1553,61 @@ describe("ensureStationHostRunning", () => {
       expect(result).toMatchObject({
         requestedAction: "handoff",
         requestedFidelity: "processes",
+        status: "stale",
+        error: { code: "HOST_CONVERGENCE_PLAN_DRIFT" },
+      });
+      expect(abortHandoff).toHaveBeenCalledOnce();
+      expect(completeHandoff).not.toHaveBeenCalled();
+      expect(spawnHost).not.toHaveBeenCalled();
+    } finally {
+      await socket.close();
+    }
+  });
+
+  it("refuses a handoff manifest that reassigns the planned PTY to another session", async () => {
+    const socket = await liveSocket();
+    const expectedManifest = oneEntryHandoffManifest("pty-1");
+    const reassignedManifest = structuredClone(expectedManifest);
+    const reassignedEntry = reassignedManifest["pty-1"];
+    if (reassignedEntry === undefined) throw new Error("missing reassigned manifest entry");
+    reassignedEntry.identity.sessionId = "ses-replacement";
+    const abortHandoff = vi.fn(async () => ({ adopted: ["pty-1"], failed: [] }));
+    const completeHandoff = vi.fn();
+    const spawnHost = vi.fn();
+    try {
+      const result = await convergeStationHostForUpdate(
+        {
+          socketPath: socket.socketPath,
+          stateDir: tmpdir(),
+          hostCommand: ["bun", "/tmp/hostMain.ts"],
+          command: convergenceCommand("handoff", terminalIdentities(expectedManifest)),
+        },
+        {
+          clientFactory: () =>
+            fakeClient({
+              health: async () => ({
+                ok: true,
+                protocolVersion: HOST_PROTOCOL_VERSION,
+                buildVersion: "older-build",
+              }),
+              recoveryInventory: async () => ({
+                buildIdentity: incumbentBuildIdentity,
+                ptys: recoveryPtys(expectedManifest),
+              }),
+              beginHandoff: async () => ({
+                manifest: reassignedManifest,
+                fidelity: "processes",
+                released: ["pty-1"],
+                skipped: [],
+              }),
+              abortHandoff,
+              completeHandoff,
+            }),
+          spawnHost,
+        },
+      );
+
+      expect(result).toMatchObject({
         status: "stale",
         error: { code: "HOST_CONVERGENCE_PLAN_DRIFT" },
       });

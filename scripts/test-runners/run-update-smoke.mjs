@@ -901,6 +901,7 @@ async function runScenario(input) {
             terminalTargetId: spawnedPty.terminalTargetId,
             ptyId: spawnedPty.ptyId,
             ptyInstanceId: spawnedPty.ptyInstanceId,
+            sessionId: ptyIdentity.sessionId,
           },
         });
         const attachment = await targetHostClient.attach(
@@ -2167,6 +2168,7 @@ function assertHostConvergenceAudit(report, input, expected) {
       terminalTargetId: terminal.terminalTargetId,
       ptyId: terminal.ptyId,
       ptyInstanceId: terminal.ptyInstanceId,
+      sessionId: terminal.sessionId,
     })),
     [expected.terminalIdentity],
     `${input.name} planned immutable terminal inventory`,

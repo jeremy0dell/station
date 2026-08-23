@@ -51,7 +51,7 @@ export type StationHostHandle =
       client: StationHostClient;
       /** How this ensure call obtained a usable host. */
       ensuredBy: StationHostEnsuredBy;
-      /** Present only for handoff; its receipt names every immutable adopted PTY lifetime. */
+      /** Present only for handoff; its receipt names every session-bound adopted PTY lifetime. */
       handoffAdopt?: StationHostHandoffAdoptReport & { fidelity: HostHandoffFidelity };
     }
   | { status: "unavailable"; socketPath: string; error: SafeError };
@@ -125,7 +125,7 @@ type IncumbentHostDecision =
  * the child binder while retaining compatibility-aware idle replacement and an
  * opt-in busy-host live handoff path. Pre-commit failure restores the incumbent
  * refusal; after completion commits, parked PTYs remain available to a successor. Adoption succeeds
- * only with an exact PTY-id set and returns a canonical immutable-lifetime receipt.
+ * only with an exact PTY-id set and returns a canonical session-bound lifetime receipt.
  */
 export async function ensureStationHostRunning(
   options: EnsureStationHostOptions,
@@ -138,9 +138,10 @@ export async function ensureStationHostRunning(
  * ADAPTER
  *
  * Executes one update-authorized Host action only while the exact committed incumbent build and
- * immutable PTY inventory remain current; live handoff also requires exact requested and
- * acknowledged fidelity. It never switches between idle replacement and handoff. Disappearance and
- * drift do not spawn, while an exact target and inventory return a non-mutating already-converged outcome.
+ * session-bound immutable PTY inventory remain current; live handoff also requires exact requested
+ * and acknowledged fidelity. It never switches between idle replacement and handoff.
+ * Disappearance and drift do not spawn, while an exact target and inventory return a non-mutating
+ * already-converged outcome.
  */
 export async function convergeStationHostForUpdate(
   options: ConvergeStationHostForUpdateOptions,
@@ -765,11 +766,13 @@ function ptyLifetimeIdentityFromEntry(entry: {
   terminalTargetId: string;
   ptyId: string;
   ptyInstanceId: string;
+  sessionId: string;
 }): PtyLifetimeIdentity {
   return {
     terminalTargetId: entry.terminalTargetId,
     ptyId: entry.ptyId,
     ptyInstanceId: entry.ptyInstanceId,
+    sessionId: entry.sessionId,
   };
 }
 
@@ -779,6 +782,7 @@ function ptyLifetimeIdentitiesFromManifest(manifest: PtyHandoffManifest): PtyLif
       terminalTargetId: entry.identity.terminalTargetId,
       ptyId,
       ptyInstanceId: entry.ptyInstanceId,
+      sessionId: entry.identity.sessionId,
     }))
     .sort(comparePtyLifetimeIdentities);
 }
@@ -853,6 +857,7 @@ export async function adoptHandoffManifest(
           terminalTargetId: entry.identity.terminalTargetId,
           ptyId,
           ptyInstanceId: entry.ptyInstanceId,
+          sessionId: entry.identity.sessionId,
         };
       })
       .sort(comparePtyLifetimeIdentities);

@@ -80,9 +80,9 @@ class ObserverExecutionPlanStaleError extends Error {}
  *
  * Resolves and binds the exact install owner/action, inspects all live state, plans convergence,
  * executes only safe typed actions, and verifies a fresh no-op plan. Host actions retain the plan's
- * exact build, immutable PTY commitment, and handoff fidelity without fallback. Observer mutation
- * first revalidates the private process and selected-handle commitment retained from the inspected
- * plan. Artifact application remains channel-owned; destructive Station process-group
+ * exact build, session-bound immutable PTY commitment, and handoff fidelity without fallback.
+ * Observer mutation first revalidates the private process and selected-handle commitment retained
+ * from the inspected plan. Artifact application remains channel-owned; destructive Station process-group
  * authorization, journaling, and reaping remain exclusively owned by #641.
  */
 export async function runUpdateConvergence(
@@ -527,7 +527,8 @@ async function executeCurrentRuntime(
             ) {
               throw updateErrorFromUnknown(undefined, {
                 code: "UPDATE_TERMINAL_HANDOFF_RECEIPT_MISMATCH",
-                message: "Host handoff did not acknowledge every exact planned PTY lifetime.",
+                message:
+                  "Host handoff did not acknowledge every exact planned session-bound PTY lifetime.",
               });
             }
             actions.push({
@@ -656,7 +657,7 @@ async function executeCurrentRuntime(
     const error = updateErrorFromUnknown(undefined, {
       code: "UPDATE_TERMINAL_CONVERGENCE_INCOMPLETE",
       message:
-        "Fresh inspection after Host handoff did not retain every planned PTY lifetime identity.",
+        "Fresh inspection after Host handoff did not retain every planned session-bound PTY lifetime identity.",
     });
     actions.push({ phase: "verification", action: "reinspect", status: "failed" });
     return finishReport({
@@ -732,6 +733,7 @@ function hostConvergenceCommitment(evidence: UpdateEvidencePlan): UpdateHostConv
           terminalTargetId: terminal.terminalTargetId,
           ptyId: terminal.ptyId,
           ptyInstanceId: terminal.ptyInstanceId,
+          sessionId: terminal.sessionId,
         })),
       },
     },

@@ -109,6 +109,7 @@ describe("pty handoff receipt schema", () => {
     terminalTargetId: `native:wt-${id}`,
     ptyId: `pty-${id}`,
     ptyInstanceId: `ptyi-${id}`,
+    sessionId: `ses-${id}`,
   });
 
   it("accepts an exact sorted receipt and strict completed command result", () => {
@@ -152,6 +153,17 @@ describe("pty handoff receipt schema", () => {
         receipt: { terminals: [{ ...terminal("1"), processToken: "private" }] },
       }).success,
     ).toBe(false);
+  });
+
+  it("requires and preserves the Station session in each lifetime", () => {
+    expect(
+      PtyHandoffReceiptSchema.safeParse({
+        terminals: [{ ...terminal("1"), sessionId: undefined }],
+      }).success,
+    ).toBe(false);
+    expect(PtyHandoffReceiptSchema.parse({ terminals: [terminal("1")] })).toMatchObject({
+      terminals: [{ sessionId: "ses-1" }],
+    });
   });
 });
 

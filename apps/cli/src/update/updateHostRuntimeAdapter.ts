@@ -2,7 +2,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type StationConfig, stationHostSocketPath } from "@station/config";
 import {
-  compareCodeUnitStrings,
+  comparePtyLifetimeIdentities,
   type SafeError,
   type UpdateArtifact,
   type UpdateHostConvergenceCommand,
@@ -45,8 +45,8 @@ export type UpdateHostRuntimeAdapterDeps = {
  * ADAPTER
  *
  * Translates the update Host port into direct typed socket inspection and constrained Station Host
- * convergence with exact fidelity receipts. No update action passes through CLI text or generic
- * handoff behavior.
+ * convergence with exact session-bound inventory and fidelity receipts. No update action passes
+ * through CLI text or generic handoff behavior.
  */
 export function createUpdateHostRuntimeAdapter(
   options: UpdateHostRuntimeAdapterOptions,
@@ -184,11 +184,7 @@ function compareHostTerminal(
   left: UpdateReapTerminalEvidence,
   right: UpdateReapTerminalEvidence,
 ): number {
-  return (
-    compareCodeUnitStrings(left.terminalTargetId, right.terminalTargetId) ||
-    compareCodeUnitStrings(left.ptyId, right.ptyId) ||
-    compareCodeUnitStrings(left.ptyInstanceId, right.ptyInstanceId)
-  );
+  return comparePtyLifetimeIdentities(left, right);
 }
 
 function hostUnknown(

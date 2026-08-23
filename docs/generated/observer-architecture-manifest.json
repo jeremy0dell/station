@@ -14434,7 +14434,7 @@
       "declaration": "attachUpdateConvergenceDigest",
       "kind": "function",
       "role": "POLICY",
-      "purpose": "Binds a public convergence plan to its redaction-safe aggregate and private ownership sidecar. SHA-256 collision resistance is assumed; the digest reveals no private value and grants no authority. #641 must independently authorize exact Station-owned process-group targets.",
+      "purpose": "Binds a public convergence plan to its redaction-safe, session-bound aggregate and private ownership sidecar. SHA-256 collision resistance is assumed; the digest reveals no private value and grants no authority. #641 must independently authorize exact Station-owned process-group targets.",
       "dependencies": []
     },
     {
@@ -14690,7 +14690,7 @@
       "declaration": "runUpdateConvergence",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Resolves and binds the exact install owner/action, inspects all live state, plans convergence, executes only safe typed actions, and verifies a fresh no-op plan. Host actions retain the plan's exact build, immutable PTY commitment, and handoff fidelity without fallback. Observer mutation first revalidates the private process and selected-handle commitment retained from the inspected plan. Artifact application remains channel-owned; destructive Station process-group authorization, journaling, and reaping remain exclusively owned by #641.",
+      "purpose": "Resolves and binds the exact install owner/action, inspects all live state, plans convergence, executes only safe typed actions, and verifies a fresh no-op plan. Host actions retain the plan's exact build, session-bound immutable PTY commitment, and handoff fidelity without fallback. Observer mutation first revalidates the private process and selected-handle commitment retained from the inspected plan. Artifact application remains channel-owned; destructive Station process-group authorization, journaling, and reaping remain exclusively owned by #641.",
       "dependencies": [
         {
           "path": "apps/cli/src/update/convergenceDigest.ts",
@@ -14734,7 +14734,7 @@
       "declaration": "createUpdateHostRuntimeAdapter",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Translates the update Host port into direct typed socket inspection and constrained Station Host convergence with exact fidelity receipts. No update action passes through CLI text or generic handoff behavior.",
+      "purpose": "Translates the update Host port into direct typed socket inspection and constrained Station Host convergence with exact session-bound inventory and fidelity receipts. No update action passes through CLI text or generic handoff behavior.",
       "dependencies": [
         {
           "path": "apps/cli/src/update/runtimeBuildRelation.ts",
@@ -14757,7 +14757,7 @@
       "declaration": "UpdateHostRuntimePort",
       "kind": "interface",
       "role": "DRIVEN PORT",
-      "purpose": "Supplies one update-owned Host inspection and phase-constrained mutations bound to the selected build, exact immutable terminal inventory, and authorized handoff fidelity.",
+      "purpose": "Supplies one update-owned Host inspection and phase-constrained mutations bound to the selected build, exact session-bound immutable terminal inventory, and authorized handoff fidelity.",
       "dependencies": []
     },
     {
@@ -16707,7 +16707,7 @@
       "declaration": "convergeStationHostForUpdate",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Executes one update-authorized Host action only while the exact committed incumbent build and immutable PTY inventory remain current; live handoff also requires exact requested and acknowledged fidelity. It never switches between idle replacement and handoff. Disappearance and drift do not spawn, while an exact target and inventory return a non-mutating already-converged outcome.",
+      "purpose": "Executes one update-authorized Host action only while the exact committed incumbent build and session-bound immutable PTY inventory remain current; live handoff also requires exact requested and acknowledged fidelity. It never switches between idle replacement and handoff. Disappearance and drift do not spawn, while an exact target and inventory return a non-mutating already-converged outcome.",
       "dependencies": [
         {
           "path": "packages/protocol/src/transport.ts",
@@ -16730,7 +16730,7 @@
       "declaration": "ensureStationHostRunning",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Preserves inaccessible Host ownership and defers definite stale reclaim to the child binder while retaining compatibility-aware idle replacement and an opt-in busy-host live handoff path. Pre-commit failure restores the incumbent refusal; after completion commits, parked PTYs remain available to a successor. Adoption succeeds only with an exact PTY-id set and returns a canonical immutable-lifetime receipt.",
+      "purpose": "Preserves inaccessible Host ownership and defers definite stale reclaim to the child binder while retaining compatibility-aware idle replacement and an opt-in busy-host live handoff path. Pre-commit failure restores the incumbent refusal; after completion commits, parked PTYs remain available to a successor. Adoption succeeds only with an exact PTY-id set and returns a canonical session-bound lifetime receipt.",
       "dependencies": [
         {
           "path": "packages/protocol/src/transport.ts",

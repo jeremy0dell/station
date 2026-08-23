@@ -24,7 +24,7 @@ macOS candidate lane runs four current-contract transitions from a composed
 synthetic-version incumbent. The no-Host lane proves artifact application and
 successor-owned verified convergence. The Host lanes prove real old-idle-Host replacement and
 old bridge-backed live handoff, including exact PIDs, immutable build identities,
-PTY identity, output continuity, typed receipt audit, and a fresh final no-op
+session-bound PTY identity, output continuity, typed receipt audit, and a fresh final no-op
 plan. A separate real successor hook-failure lane seeds distinct token, private
 worktree path, PID, provider payload, process-group, and terminal-control
 canaries and requires both strict JSON and default text to retain only sanitized
@@ -86,7 +86,7 @@ clean Linux machine. Preserve the first failing command and output.
 - **Popup and ingress:** The optional tmux binding cold-opens and warm-reopens
   the popup, and `stn-ingress` delivers a provider event.
 - **Upgrade safety:** A supported `full-handoff` preserves PTY identity and
-  output through Host replacement, with an exact receipt and final inventory
+  output through Host replacement, with an exact session-bound receipt and final inventory
   match. The staged transport refuses post-apply latest discovery so successor
   convergence proves the pinned installed target without a new network
   dependency. If the incumbent cannot hand off, the

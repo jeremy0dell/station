@@ -22,7 +22,8 @@ export const HostPtyInventoryCommitmentSchema = z
       context.addIssue({
         code: "custom",
         path: ["terminals"],
-        message: "Committed Host terminals must be unique and sorted by immutable identity.",
+        message:
+          "Committed Host terminals must be unique and sorted by session-bound immutable identity.",
       });
     }
   });
@@ -83,7 +84,7 @@ export const UpdateHostConvergenceCommandSchema = z
   });
 export type UpdateHostConvergenceCommand = z.infer<typeof UpdateHostConvergenceCommandSchema>;
 
-/** Exact build, inventory, action, and acknowledged fidelity proof from constrained Host mutation. */
+/** Exact build, session-bound inventory, action, and fidelity proof from constrained Host mutation. */
 export const UpdateHostConvergenceReceiptSchema = z
   .discriminatedUnion("ensuredBy", [
     z
@@ -109,7 +110,7 @@ export const UpdateHostConvergenceReceiptSchema = z
       context.addIssue({
         code: "custom",
         path: ["actualInventory"],
-        message: "Host convergence must retain the exact authorized immutable inventory.",
+        message: "Host convergence must retain the exact authorized session-bound inventory.",
       });
     }
     if (receipt.ensuredBy === "idle-replace") {
@@ -131,7 +132,7 @@ export const UpdateHostConvergenceReceiptSchema = z
       context.addIssue({
         code: "custom",
         path: ["handoffReceipt"],
-        message: "Live handoff must receipt the exact validated immutable inventory.",
+        message: "Live handoff must receipt the exact validated session-bound inventory.",
       });
     }
   });
@@ -212,7 +213,8 @@ export const UpdateHostConvergenceCommandResultSchema = z
       context.addIssue({
         code: "custom",
         path: ["actualInventory"],
-        message: "Already-converged Host evidence must retain the exact authorized inventory.",
+        message:
+          "Already-converged Host evidence must retain the exact authorized session-bound inventory.",
       });
     }
   });

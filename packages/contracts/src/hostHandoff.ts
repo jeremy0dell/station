@@ -45,12 +45,13 @@ export type PtyHandoffIdentity = z.infer<typeof PtyHandoffIdentitySchema>;
 export const HostHandoffFidelitySchema = z.enum(["processes", "screen"]);
 export type HostHandoffFidelity = z.infer<typeof HostHandoffFidelitySchema>;
 
-/** Canonical immutable identity for one PTY lifetime across Host ownership changes. */
+/** Canonical session-bound identity for one PTY lifetime across Host ownership changes. */
 export const PtyLifetimeIdentitySchema = z
   .object({
     terminalTargetId: TerminalTargetIdSchema,
     ptyId: nonEmptyStringSchema,
     ptyInstanceId: PtyInstanceIdSchema,
+    sessionId: SessionIdSchema,
   })
   .strict();
 export type PtyLifetimeIdentity = z.infer<typeof PtyLifetimeIdentitySchema>;
@@ -62,7 +63,8 @@ export function comparePtyLifetimeIdentities(
   return (
     compareCodeUnitStrings(left.terminalTargetId, right.terminalTargetId) ||
     compareCodeUnitStrings(left.ptyId, right.ptyId) ||
-    compareCodeUnitStrings(left.ptyInstanceId, right.ptyInstanceId)
+    compareCodeUnitStrings(left.ptyInstanceId, right.ptyInstanceId) ||
+    compareCodeUnitStrings(left.sessionId, right.sessionId)
   );
 }
 
@@ -97,7 +99,8 @@ export const PtyHandoffReceiptSchema = z
       context.addIssue({
         code: "custom",
         path: ["terminals"],
-        message: "Handoff receipt terminals must be unique and sorted by immutable identity.",
+        message:
+          "Handoff receipt terminals must be unique and sorted by session-bound immutable identity.",
       });
     }
   });

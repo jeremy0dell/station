@@ -101,6 +101,13 @@ function renderUpdateReport(report: UpdateCommandReport): string {
             : ` provider=${encodeUpdateTerminalText(action.provider)}`
         }${fidelityText(action.fidelity)}${installationText(action.installation)}`,
       );
+      if (action.handoffReceipt !== undefined) {
+        for (const terminal of action.handoffReceipt.terminals) {
+          lines.push(
+            `    receipt: ${encodeUpdateTerminalText(terminal.terminalTargetId)} pty=${encodeUpdateTerminalText(terminal.ptyId)}/${encodeUpdateTerminalText(terminal.ptyInstanceId)} session=${encodeUpdateTerminalText(terminal.sessionId)}`,
+          );
+        }
+      }
     }
   }
   const consequences = nonMutatingTerminalConsequences(report);

@@ -42,6 +42,17 @@ describe("update convergence digest", () => {
     expect(digest(base)).not.toBe(digest(base, preflightWithTerminal("pty-instance-2")));
   });
 
+  it("changes when the same PTY lifetime is attributed to another Station session", () => {
+    expect(
+      digest({ selectedRecoveryHandles: [] }, preflightWithTerminal("pty-instance-1")),
+    ).not.toBe(
+      digest(
+        { selectedRecoveryHandles: [] },
+        preflightWithTerminal("pty-instance-1", "session-replacement"),
+      ),
+    );
+  });
+
   it("binds Observer singleton replacement admission", () => {
     const privateEvidence: UpdateConvergencePrivateEvidence = {
       observer: {
@@ -184,7 +195,10 @@ function basePreflight(): UpdateReapRecoveryPreflight {
   };
 }
 
-function preflightWithTerminal(ptyInstanceId: string): UpdateReapRecoveryPreflight {
+function preflightWithTerminal(
+  ptyInstanceId: string,
+  sessionId = "session-1",
+): UpdateReapRecoveryPreflight {
   return {
     ...basePreflight(),
     host: {
@@ -202,7 +216,7 @@ function preflightWithTerminal(ptyInstanceId: string): UpdateReapRecoveryPreflig
           ptyInstanceId,
           projectId: "project-1",
           worktreeId: "worktree-1",
-          sessionId: "session-1",
+          sessionId,
           harnessProvider: "codex",
           alive: true,
           handoffSupport: "bridge-releasable",
@@ -214,7 +228,7 @@ function preflightWithTerminal(ptyInstanceId: string): UpdateReapRecoveryPreflig
         terminalTargetId: "terminal-1",
         ptyId: "pty-1",
         ptyInstanceId,
-        sessionId: "session-1",
+        sessionId,
         handoff: "preservable",
         reapRecovery: "unknown",
         reasons: ["session_recovery_unknown"],

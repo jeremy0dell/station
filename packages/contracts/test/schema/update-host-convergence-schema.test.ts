@@ -9,6 +9,7 @@ const terminal = (id: string) => ({
   terminalTargetId: `native:wt-${id}`,
   ptyId: `pty-${id}`,
   ptyInstanceId: `ptyi-${id}`,
+  sessionId: `ses-${id}`,
 });
 
 describe("update Host convergence schema", () => {
@@ -157,6 +158,21 @@ describe("update Host convergence schema", () => {
       UpdateHostConvergenceCommandResultSchema.safeParse({
         ...result,
         receipt: { ...result.receipt, fidelity: "screen" },
+      }).success,
+    ).toBe(false);
+    expect(
+      UpdateHostConvergenceCommandResultSchema.safeParse({
+        ...result,
+        receipt: {
+          ...result.receipt,
+          actualInventory: commitment.incumbent.inventory,
+          handoffReceipt: {
+            terminals: authorized.map((identity) => ({
+              ...identity,
+              sessionId: `${identity.sessionId}-replacement`,
+            })),
+          },
+        },
       }).success,
     ).toBe(false);
   });
