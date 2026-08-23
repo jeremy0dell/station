@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { measureContextMenu, placeContextMenu } from "./placement.js";
+import { measureContextMenuWidth, placeContextMenu } from "./placement.js";
 import type { ContextMenuItem } from "./types.js";
 
 const ITEMS: readonly ContextMenuItem[] = [
@@ -9,25 +9,22 @@ const ITEMS: readonly ContextMenuItem[] = [
 ];
 
 describe("context menu placement", () => {
-  it("measures labels plus border and row height", () => {
-    expect(measureContextMenu(ITEMS)).toEqual({ width: 15, height: 5 });
+  it("measures labels plus structural border width", () => {
+    expect(measureContextMenuWidth(ITEMS)).toBe(15);
   });
 
-  it("includes separator rows in measured height", () => {
+  it("does not let structural separators affect intrinsic width", () => {
     expect(
-      measureContextMenu([
+      measureContextMenuWidth([
         ITEMS[0]!,
         { ...ITEMS[1]!, separatorBefore: true },
         { ...ITEMS[2]!, separatorBefore: true },
       ]),
-    ).toEqual({ width: 15, height: 7 });
+    ).toBe(15);
   });
 
   it("includes visible keyboard shortcuts in measured width", () => {
-    expect(measureContextMenu([{ ...ITEMS[0]!, shortcut: "R" }])).toEqual({
-      width: 17,
-      height: 3,
-    });
+    expect(measureContextMenuWidth([{ ...ITEMS[0]!, shortcut: "R" }])).toBe(17);
   });
 
   it("uses bottom-start placement by default", () => {

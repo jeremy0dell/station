@@ -2,124 +2,157 @@ import type { ColorInput, MouseEvent } from "@opentui/core";
 import { Fragment } from "react";
 import { normalizeStationMouseEvent, type StationMouseEvent } from "../input/mouse.js";
 import type { MouseTargetRef } from "../input/router.js";
-import { formatMenuRow } from "../menu/formatMenuRow.js";
-import {
-  visibleMenuItems,
-  type VisibleMenuItem,
-} from "../menu/visibleMenuItems.js";
+import { SemanticScrollRegion } from "../station/view/layout/SemanticScrollViewport.js";
+import { semanticItemRenderableId } from "../station/view/layout/scrollViewport.js";
+import { semanticItemIndexAtPointer } from "../station/view/layout/semanticPointerTarget.js";
 import {
   toOpenTuiColor,
   toOpenTuiOpaqueColor,
   useStationTheme,
   type StationTheme,
 } from "../theme/index.js";
-import type { ContextMenuItem } from "./types.js";
+import type { ContextMenuAnchor, ContextMenuItem } from "./types.js";
+import { usePointerAnchoredMenuPlacement } from "./usePointerAnchoredMenuPlacement.js";
+
+const CONTEXT_MENU_VIEWPORT_ID = "station-context-menu-items";
+
+export function contextMenuItemRenderableId(itemId: string): string {
+  return semanticItemRenderableId(itemId);
+}
 
 export type ContextMenuSurfaceProps = {
   items: readonly ContextMenuItem[];
   activeIndex: number;
-  width: number;
-  height: number;
+  anchor: ContextMenuAnchor;
+  preferredWidth: number;
+  boundaryId: string;
   dispatchMouse: (target: MouseTargetRef, event: StationMouseEvent) => boolean;
 };
 
 export function ContextMenuSurface({
   items,
   activeIndex,
-  width,
-  height,
+  anchor,
+  preferredWidth,
+  boundaryId,
   dispatchMouse,
 }: ContextMenuSurfaceProps) {
   const theme = useStationTheme();
-  const contentWidth = Math.max(1, width - 2);
-  const visibleItems = visibleMenuItems(items, Math.max(0, height - 2));
+  const surfaceRef = usePointerAnchoredMenuPlacement({
+    boundaryId,
+    anchor,
+    contentViewportId: CONTEXT_MENU_VIEWPORT_ID,
+    preferredWidth,
+  });
+  const itemIds = items.map((item) => item.id);
+  const followedItemId = items[activeIndex]?.id;
+  const dispatchPointer = (
+    event: MouseEvent,
+    kind: "contextMenuItem" | "contextMenuItemHover",
+  ): void => {
+    event.stopPropagation();
+    const itemIndex = semanticItemIndexAtPointer(surfaceRef.current, itemIds, event.x, event.y);
+    if (itemIndex < 0 || (kind === "contextMenuItemHover" && itemIndex === activeIndex)) {
+      return;
+    }
+    dispatchMouse({ kind, itemIndex }, normalizeStationMouseEvent(event));
+  };
   return (
     <box
-      width={width}
-      height={height}
+      id="station-context-menu-surface"
+      ref={surfaceRef}
+      position="absolute"
+      left={anchor.x}
+      top={anchor.y + 1}
+      width={preferredWidth}
+      maxWidth="100%"
+      border
+      borderColor={toOpenTuiColor(theme.contextMenu.border)}
       backgroundColor={toOpenTuiOpaqueColor(theme.contextMenu.surface)}
       flexDirection="column"
       overflow="hidden"
       onMouseDown={(event: MouseEvent) => {
-        event.stopPropagation();
+        dispatchPointer(event, "contextMenuItem");
+      }}
+      onMouseMove={(event: MouseEvent) => {
+        dispatchPointer(event, "contextMenuItemHover");
       }}
     >
-      <ContextMenuSeparator width={contentWidth} />
-      {visibleItems.map((entry) => (
-        <Fragment key={entry.item.id}>
-          {entry.item.separatorBefore === true ? (
-            <ContextMenuSeparator width={contentWidth} />
-          ) : null}
-          <ContextMenuItemRow
-            entry={entry}
-            activeIndex={activeIndex}
-            contentWidth={contentWidth}
-            dispatchMouse={dispatchMouse}
-          />
-        </Fragment>
-      ))}
-      <ContextMenuSeparator width={contentWidth} />
+      <SemanticScrollRegion
+        itemIds={itemIds}
+        followedItemId={followedItemId}
+        fill={false}
+        viewportId={CONTEXT_MENU_VIEWPORT_ID}
+      >
+        {items.map((item, itemIndex) => (
+          <Fragment key={item.id}>
+            {item.separatorBefore === true ? <ContextMenuSeparator /> : null}
+            <ContextMenuItemRow
+              item={item}
+              active={itemIndex === activeIndex}
+            />
+          </Fragment>
+        ))}
+      </SemanticScrollRegion>
     </box>
   );
 }
 
-function ContextMenuSeparator({ width }: { width: number }) {
+function ContextMenuSeparator() {
   const theme = useStationTheme();
-  return (
-    <text fg={toOpenTuiColor(theme.contextMenu.border)}>{borderLine(width)}</text>
-  );
-}
-
-function ContextMenuItemRow({
-  entry,
-  activeIndex,
-  contentWidth,
-  dispatchMouse,
-}: {
-  entry: VisibleMenuItem<ContextMenuItem>;
-  activeIndex: number;
-  contentWidth: number;
-  dispatchMouse: ContextMenuSurfaceProps["dispatchMouse"];
-}) {
-  const theme = useStationTheme();
-  const { item, itemIndex } = entry;
-  const active = itemIndex === activeIndex;
-  const disabled = item.disabled === true;
-  const target = { kind: "contextMenuItem" as const, itemIndex };
-  const hoverTarget = { kind: "contextMenuItemHover" as const, itemIndex };
-  const content = formatMenuRow(item.label, item.shortcut, Math.max(0, contentWidth - 1));
-  const onMouseDown = (event: MouseEvent): void => {
-    event.stopPropagation();
-    dispatchMouse(target, normalizeStationMouseEvent(event));
-  };
-  const onMouseMove = (event: MouseEvent): void => {
-    event.stopPropagation();
-    if (!active) dispatchMouse(hoverTarget, normalizeStationMouseEvent(event));
-  };
-
   return (
     <box
       width="100%"
       height={1}
-      backgroundColor={toOpenTuiOpaqueColor(
-        active ? theme.contextMenu.selected : theme.contextMenu.surface,
-      )}
-      onMouseDown={onMouseDown}
-      onMouseMove={onMouseMove}
-    >
-      <text
-        fg={menuRowColor(theme, item, disabled)}
-        onMouseDown={onMouseDown}
-        onMouseMove={onMouseMove}
-      >
-        {`|${active ? "▸" : " "}${content}|`}
-      </text>
-    </box>
+      flexShrink={0}
+      border={["top"]}
+      borderColor={toOpenTuiColor(theme.contextMenu.border)}
+    />
   );
 }
 
-function borderLine(width: number): string {
-  return `+${"-".repeat(width)}+`;
+function ContextMenuItemRow({
+  item,
+  active,
+}: {
+  item: ContextMenuItem;
+  active: boolean;
+}) {
+  const theme = useStationTheme();
+  const disabled = item.disabled === true;
+
+  return (
+    <box
+      id={contextMenuItemRenderableId(item.id)}
+      width="100%"
+      flexDirection="row"
+      backgroundColor={toOpenTuiOpaqueColor(
+        active ? theme.contextMenu.selected : theme.contextMenu.surface,
+      )}
+    >
+      <text flexShrink={0} fg={menuRowColor(theme, item, disabled)}>
+        {active ? "▸" : " "}
+      </text>
+      <box
+        flexGrow={1}
+        flexShrink={1}
+        minWidth={0}
+        overflow="hidden"
+      >
+        <text fg={menuRowColor(theme, item, disabled)}>
+          {item.label}
+        </text>
+      </box>
+      {item.shortcut === undefined ? null : (
+        <text
+          flexShrink={0}
+          fg={menuRowColor(theme, item, disabled)}
+        >
+          {` ${item.shortcut}`}
+        </text>
+      )}
+    </box>
+  );
 }
 
 function menuRowColor(theme: StationTheme, item: ContextMenuItem, disabled: boolean): ColorInput {

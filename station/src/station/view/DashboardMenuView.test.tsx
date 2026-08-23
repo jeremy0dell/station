@@ -1,9 +1,11 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import { testRender } from "@opentui/react/test-utils";
+import { MouseButtons } from "@opentui/core/testing";
 import { act } from "react";
 import { nativeStationTheme, StationThemeProvider } from "../../theme/index.js";
 import { DashboardMenuView, type DashboardMenuModel } from "./DashboardMenuView.js";
 import { semanticItemRenderableId } from "./layout/scrollViewport.js";
+import { StationMouseProvider } from "./stationMouseContext.js";
 
 const teardowns: Array<() => void> = [];
 
@@ -25,17 +27,20 @@ describe("DashboardMenuView", () => {
         ...(index > 0 && index % 3 === 0 ? { separatorBefore: true as const } : {}),
       })),
     };
+    const pointerTargets: DashboardMenuModel["items"][number]["target"][] = [];
     const setup = await testRender(
       <StationThemeProvider theme={nativeStationTheme}>
-        <box id={boundaryId} width={30} height="100%" flexDirection="column">
-          <box height={2} flexShrink={0} />
-          <box id={anchorRenderableId} height={1} flexShrink={0} />
-          <DashboardMenuView
-            menu={menu}
-            boundaryId={boundaryId}
-            anchorRenderableId={anchorRenderableId}
-          />
-        </box>
+        <StationMouseProvider value={(target) => pointerTargets.push(target)}>
+          <box id={boundaryId} width={30} height="100%" flexDirection="column">
+            <box height={2} flexShrink={0} />
+            <box id={anchorRenderableId} height={1} flexShrink={0} />
+            <DashboardMenuView
+              menu={menu}
+              boundaryId={boundaryId}
+              anchorRenderableId={anchorRenderableId}
+            />
+          </box>
+        </StationMouseProvider>
       </StationThemeProvider>,
       { width: 30, height: 8 },
     );
@@ -52,6 +57,16 @@ describe("DashboardMenuView", () => {
     expect(
       setup.renderer.root.findDescendantById(semanticItemRenderableId("item-11")),
     ).toBeDefined();
+    const focusedItem = setup.renderer.root.findDescendantById(
+      semanticItemRenderableId("item-11"),
+    );
+    if (focusedItem === undefined) throw new Error("focused menu item did not render");
+    await setup.mockMouse.click(
+      focusedItem.screenX + 2,
+      focusedItem.screenY,
+      MouseButtons.LEFT,
+    );
+    expect(pointerTargets.at(-1)).toEqual(menu.items[11]?.target);
 
     await act(async () => {
       setup.renderer.resize(30, 6);

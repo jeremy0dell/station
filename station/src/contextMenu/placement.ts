@@ -19,7 +19,7 @@ export type ContextMenuPlacement = ContextMenuSize & {
 const HORIZONTAL_PADDING = 2;
 const BORDER_CELLS = 2;
 
-export function measureContextMenu(items: readonly ContextMenuItem[]): ContextMenuSize {
+export function measureContextMenuWidth(items: readonly ContextMenuItem[]): number {
   const labelWidth = Math.max(
     1,
     ...items.map(
@@ -28,11 +28,7 @@ export function measureContextMenu(items: readonly ContextMenuItem[]): ContextMe
         (item.shortcut === undefined ? 0 : stringWidth(item.shortcut) + 1),
     ),
   );
-  const separatorRows = items.filter((item) => item.separatorBefore === true).length;
-  return {
-    width: labelWidth + HORIZONTAL_PADDING + BORDER_CELLS,
-    height: Math.max(1, items.length + separatorRows + BORDER_CELLS),
-  };
+  return labelWidth + HORIZONTAL_PADDING + BORDER_CELLS;
 }
 
 export function placeContextMenu(
