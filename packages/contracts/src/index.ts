@@ -21,7 +21,7 @@ export * from "./recoveryBreadcrumbs.js";
 export * from "./recoveryInventory.js";
 export * from "./sessionRecovery.js";
 export * from "./setupTypes.js";
-export { textLineTerminatorPattern } from "./shared.js";
+export { compareCodeUnitStrings, textLineTerminatorPattern } from "./shared.js";
 export * from "./snapshot.js";
 export * from "./terminalTargets.js";
 export * from "./tuiConfig.js";

@@ -102,6 +102,47 @@ describe("ObserverRecoveryAssessmentSchema", () => {
     ).toBe(false);
   });
 
+  it("rejects mismatched inventory sessions and cross-session selected handles", () => {
+    const session = {
+      sessionId: "sess_a",
+      projectId: "project_a",
+      worktreeId: "worktree_a",
+      lifecycle: "open" as const,
+      harnessProvider: "codex",
+      disposition: "recoverable" as const,
+      reasons: [],
+      handleResolution: {
+        kind: "selected" as const,
+        selectedHandleId: "handle_a",
+        eligibleHandleCount: 1,
+        rejectedHandleCount: 0,
+        rejectedReasons: [],
+      },
+    };
+    const assessment = {
+      schemaVersion: 1 as const,
+      inventory,
+      resumeEnabled: true,
+      providerCapabilities: [{ provider: "codex", status: "enabled" as const }],
+      sessions: [session],
+    };
+    expect(
+      ObserverRecoveryAssessmentSchema.safeParse({
+        ...assessment,
+        sessions: [{ ...session, projectId: "project_b" }],
+      }).success,
+    ).toBe(false);
+    expect(
+      ObserverRecoveryAssessmentSchema.safeParse({
+        ...assessment,
+        inventory: {
+          ...inventory,
+          recoveryHandles: [{ ...inventory.recoveryHandles[0], sessionId: "sess_b" }],
+        },
+      }).success,
+    ).toBe(false);
+  });
+
   it("rejects unsorted reason codes and unknown fields", () => {
     expect(
       ObserverRecoveryAssessmentSchema.safeParse({

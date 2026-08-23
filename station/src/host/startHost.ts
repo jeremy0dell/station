@@ -50,6 +50,8 @@ export type StartStationHostOptions = {
    * entrypoints leave this unset and use `stationBuildInfo().version`.
    */
   buildVersion?: string;
+  /** Test seam for immutable recovery evidence; defaults to a supplied test build selector. */
+  buildIdentity?: string;
 };
 
 export type StationHostInstance = {
@@ -73,7 +75,16 @@ export async function startStationHost(
 ): Promise<StationHostInstance> {
   const ptyImplementation =
     options.ptyImplementation ?? resolvePtyImplementation(process.env.STATION_PTY_IMPL);
-  const buildVersion = options.buildVersion ?? stationBuildInfo().version;
+  let buildVersion: string;
+  let buildIdentity: string;
+  if (options.buildVersion !== undefined) {
+    buildVersion = options.buildVersion;
+    buildIdentity = options.buildIdentity ?? options.buildVersion;
+  } else {
+    const buildInfo = stationBuildInfo();
+    buildVersion = buildInfo.version;
+    buildIdentity = options.buildIdentity ?? buildInfo.buildIdentity;
+  }
   const orphanTtlMs = resolveOrphanTtlMs(process.env.STATION_PTY_ORPHAN_TTL_MS);
   const logger =
     options.logger ??
@@ -168,6 +179,7 @@ export async function startStationHost(
   const handlers = buildHostHandlers({
     ptyTable,
     buildVersion,
+    buildIdentity,
     closeHost,
     onPtySpawned: (client, outcome, ptyKind) => {
       void hostLifecycle.ptySpawned(client, outcome, ptyKind);
@@ -202,6 +214,7 @@ export async function startStationHost(
 function buildHostHandlers(input: {
   ptyTable: PtyTable;
   buildVersion: string;
+  buildIdentity: string;
   closeHost: (reason: CloseReason) => Promise<void>;
   onPtySpawned: (
     client: HostClientIdentity,
@@ -209,7 +222,7 @@ function buildHostHandlers(input: {
     ptyKind: HostPtyKind,
   ) => void;
 }): HostHandlers {
-  const { ptyTable, buildVersion, closeHost, onPtySpawned } = input;
+  const { ptyTable, buildVersion, buildIdentity, closeHost, onPtySpawned } = input;
   const handoff = createHostHandoffSession({ ptyTable, buildVersion });
 
   return {
@@ -252,6 +265,10 @@ function buildHostHandlers(input: {
       "host.list": () => {
         handoff.assertNotDraining();
         return { ptys: ptyTable.list() };
+      },
+      "host.recoveryInventory": () => {
+        handoff.assertNotDraining();
+        return { buildIdentity, ptys: ptyTable.recoveryInventory() };
       },
       "host.focus": (params) => {
         const { ptyId } = HostFocusParamsSchema.parse(params);

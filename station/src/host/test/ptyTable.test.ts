@@ -133,6 +133,12 @@ describe("createPtyTable", () => {
         ptyId,
         worktreeId: "wt-1",
         alive: true,
+      },
+    ]);
+    expect(table.list()[0]).not.toHaveProperty("handoffSupport");
+    expect(table.recoveryInventory()).toMatchObject([
+      {
+        ptyId,
         handoffSupport: { kind: "non-releasable", reason: "no-bridge-transport" },
       },
     ]);

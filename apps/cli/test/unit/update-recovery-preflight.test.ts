@@ -1,8 +1,8 @@
 import type {
-  ObserverRecoveryAssessment,
   ProviderHookHealth,
   UpdateReapHostEvidence,
   UpdateReapObserverEvidence,
+  UpdateReapRecoveryAssessment,
 } from "@station/contracts";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -10,8 +10,6 @@ import {
   runUpdateRecoveryPreflight,
   type UpdateRecoveryPreflightPorts,
 } from "../../src/update/recoveryPreflight";
-
-const now = "2026-08-21T12:00:00.000Z";
 
 describe("runUpdateRecoveryPreflight", () => {
   it("reports a matching target with no live runtime without inferring persisted recovery", async () => {
@@ -101,6 +99,7 @@ describe("runUpdateRecoveryPreflight", () => {
     const text = renderUpdateRecoveryPreflight(result);
     expect(text).toContain("reapRecovery=NON-RESUMABLE");
     expect(text).toContain("session-z: NON-RESUMABLE");
+    expect(text).toContain("handle: selected eligible=1 rejected=0");
     expect(text).toContain("actions: not included (#640)");
     expect(text).not.toContain("/private/worktree");
   });
@@ -190,9 +189,98 @@ describe("runUpdateRecoveryPreflight", () => {
       evidenceComplete: false,
     });
   });
+
+  it("fails closed on hook provider substitution", async () => {
+    const result = await runUpdateRecoveryPreflight({
+      installed: { version: "1.0.0" },
+      target: { version: "1.1.0" },
+      ports: {
+        inspectObserver: async () => ({ status: "absent" }),
+        inspectHost: async () => ({ status: "absent" }),
+        hookProviderIds: ["claude"],
+        readHookHealth: async () => ({ provider: "codex", status: "healthy" }),
+      },
+    });
+
+    expect(result.hookProviderIds).toEqual(["claude"]);
+    expect(result.hooks).toMatchObject([
+      {
+        provider: "claude",
+        status: "inspection-failed",
+        error: { code: "UPDATE_PREFLIGHT_HOOK_INSPECTION_FAILED" },
+      },
+    ]);
+    expect(result.evidenceComplete).toBe(false);
+  });
+
+  it("does not treat auxiliary or identity-mismatched terminals as resumable sessions", async () => {
+    const observer = observerEvidence(
+      assessment([sessionAssessment("session-a", "recoverable", [])]),
+    );
+    const mismatched = { ...terminal("terminal-agent", "session-a", "bridge-releasable") };
+    mismatched.projectId = "project-other";
+    const auxiliary = {
+      ...terminal("terminal-aux", "session-a", "bridge-releasable"),
+      kind: "aux" as const,
+    };
+    const result = await runUpdateRecoveryPreflight({
+      installed: { version: "1.0.0" },
+      target: { version: "1.1.0" },
+      ports: {
+        inspectObserver: async () => observer,
+        inspectHost: async () => hostEvidence([auxiliary, mismatched]),
+        hookProviderIds: ["codex"],
+        readHookHealth: async () => ({ provider: "codex", status: "healthy" }),
+      },
+    });
+
+    expect(result.terminalDispositions).toMatchObject([
+      {
+        terminalTargetId: "terminal-agent",
+        reapRecovery: "unknown",
+        reasons: ["retained_session_identity_mismatch"],
+      },
+      {
+        terminalTargetId: "terminal-aux",
+        reapRecovery: "non-resumable",
+        reasons: ["aux_terminal_not_resumable"],
+      },
+    ]);
+    expect(result.evidenceComplete).toBe(false);
+  });
+
+  it("uses code-unit ordering and escapes terminal control characters in text", async () => {
+    const injectedId = "terminal\n\u001b[31m";
+    const result = await runUpdateRecoveryPreflight({
+      installed: { version: "1.0.0", revision: "revision\n\u001b]8;;bad" },
+      target: { version: "1.1.0" },
+      ports: {
+        inspectObserver: async () => ({ status: "absent" }),
+        inspectHost: async () =>
+          hostEvidence([
+            terminal("a", "session-a", "bridge-releasable"),
+            terminal(injectedId, "session-control", "bridge-releasable"),
+            terminal("Z", "session-z", "bridge-releasable"),
+          ]),
+        hookProviderIds: ["a", "Z"],
+        readHookHealth: async (provider) => ({ provider, status: "healthy" }),
+      },
+    });
+
+    expect(result.hooks.map((hook) => hook.provider)).toEqual(["Z", "a"]);
+    expect(result.terminalDispositions.map((terminal) => terminal.terminalTargetId)).toEqual([
+      "Z",
+      "a",
+      injectedId,
+    ]);
+    const text = renderUpdateRecoveryPreflight(result);
+    expect(text).toContain("revision\\u000a\\u001b]8;;bad");
+    expect(text).toContain("terminal\\u000a\\u001b[31m");
+    expect(text).not.toContain(injectedId);
+  });
 });
 
-function observerEvidence(value: ObserverRecoveryAssessment): UpdateReapObserverEvidence {
+function observerEvidence(value: UpdateReapRecoveryAssessment): UpdateReapObserverEvidence {
   return {
     status: "exact",
     buildVersion: "1.0.0",
@@ -234,37 +322,11 @@ function terminal(
   };
 }
 
-function assessment(sessions: ObserverRecoveryAssessment["sessions"]): ObserverRecoveryAssessment {
+function assessment(
+  sessions: UpdateReapRecoveryAssessment["sessions"],
+): UpdateReapRecoveryAssessment {
   return {
     schemaVersion: 1,
-    inventory: {
-      schemaVersion: 1,
-      sessions: sessions.map((session) => ({
-        id: session.sessionId,
-        projectId: session.projectId,
-        worktreeId: session.worktreeId,
-        lifecycle: session.lifecycle,
-        harnessProvider: "codex",
-        createdAt: now,
-        lastSeenAt: now,
-      })),
-      recoveryHandles: sessions.flatMap((session) =>
-        session.handleResolution.kind === "selected"
-          ? [
-              {
-                id: session.handleResolution.selectedHandleId,
-                provider: "codex",
-                projectId: session.projectId,
-                worktreeId: session.worktreeId,
-                sessionId: session.sessionId,
-                targetKind: "native-session" as const,
-                observedAt: now,
-                lastSeenAt: now,
-              },
-            ]
-          : [],
-      ),
-    },
     resumeEnabled: true,
     providerCapabilities: [{ provider: "codex", status: "enabled" }],
     sessions,
@@ -274,8 +336,8 @@ function assessment(sessions: ObserverRecoveryAssessment["sessions"]): ObserverR
 function sessionAssessment(
   sessionId: string,
   disposition: "recoverable" | "non-resumable",
-  reasons: ObserverRecoveryAssessment["sessions"][number]["reasons"],
-): ObserverRecoveryAssessment["sessions"][number] {
+  reasons: UpdateReapRecoveryAssessment["sessions"][number]["reasons"],
+): UpdateReapRecoveryAssessment["sessions"][number] {
   return {
     sessionId,
     projectId: "project-a",
@@ -288,7 +350,6 @@ function sessionAssessment(
       disposition === "recoverable"
         ? {
             kind: "selected",
-            selectedHandleId: `handle-${sessionId}`,
             eligibleHandleCount: 1,
             rejectedHandleCount: 0,
             rejectedReasons: [],

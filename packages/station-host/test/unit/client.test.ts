@@ -5,6 +5,7 @@ import {
   HostClientShutdownNotificationSchema,
   HostFrameSchema,
   type HostListEntry,
+  type HostRecoveryInventoryEntry,
   HostRequestSchema,
   HostResizeParamsSchema,
   HostWriteParamsSchema,
@@ -63,6 +64,8 @@ function startFakeRouter(
     onClient?: (client: NonNullable<ReturnType<typeof HostRequestSchema.parse>["client"]>) => void;
     onShutdown?: () => void;
     listPtys?: HostListEntry[];
+    recoveryPtys?: HostRecoveryInventoryEntry[];
+    buildIdentity?: string;
   } = {},
 ): void {
   void runFakeRouter(server, options);
@@ -76,6 +79,8 @@ async function runFakeRouter(
     onClient?: (client: NonNullable<ReturnType<typeof HostRequestSchema.parse>["client"]>) => void;
     onShutdown?: () => void;
     listPtys?: HostListEntry[];
+    recoveryPtys?: HostRecoveryInventoryEntry[];
+    buildIdentity?: string;
   },
 ): Promise<void> {
   for await (const message of server.messages()) {
@@ -145,6 +150,14 @@ async function runFakeRouter(
         break;
       case "host.list":
         server.send(hostSuccess(request.id, { ptys: options.listPtys ?? [] }));
+        break;
+      case "host.recoveryInventory":
+        server.send(
+          hostSuccess(request.id, {
+            buildIdentity: options.buildIdentity ?? "test-build-identity",
+            ptys: options.recoveryPtys ?? [],
+          }),
+        );
         break;
       case "host.explode":
         server.send(
@@ -330,7 +343,7 @@ describe("createStationHostClient", () => {
   });
 
   it("parses read-only Host handoff support evidence", async () => {
-    const pty: HostListEntry = {
+    const pty: HostRecoveryInventoryEntry = {
       kind: "agent",
       terminalTargetId: "target-1",
       worktreeId: "wt-1",
@@ -347,19 +360,45 @@ describe("createStationHostClient", () => {
       handoffSupport: { kind: "bridge-releasable" },
     };
     const { client: clientConn, server } = inMemoryNdjsonConnectionPair();
-    startFakeRouter(server, { listPtys: [pty] });
+    startFakeRouter(server, {
+      listPtys: [
+        {
+          kind: pty.kind,
+          terminalTargetId: pty.terminalTargetId,
+          worktreeId: pty.worktreeId,
+          projectId: pty.projectId,
+          sessionId: pty.sessionId,
+          worktreePath: pty.worktreePath,
+          harnessProvider: pty.harnessProvider,
+          ptyId: pty.ptyId,
+          ptyInstanceId: pty.ptyInstanceId,
+          pid: pty.pid,
+          alive: pty.alive,
+          cols: pty.cols,
+          rows: pty.rows,
+        },
+      ],
+      recoveryPtys: [pty],
+      buildIdentity: "1.0.0+station.host.revision-a",
+    });
     const client = createStationHostClient({
       socketPath: "unused",
       expectedBuildVersion: "test-build",
       connect: async () => clientConn,
     });
-    await expect(client.list()).resolves.toMatchObject([
-      {
-        ptyId: "pty-1",
-        ptyInstanceId: "pty-instance-1",
-        handoffSupport: { kind: "bridge-releasable" },
-      },
-    ]);
+    const listed = await client.list();
+    expect(listed).toMatchObject([{ ptyId: "pty-1", ptyInstanceId: "pty-instance-1" }]);
+    expect(listed[0]).not.toHaveProperty("handoffSupport");
+    await expect(client.recoveryInventory?.()).resolves.toMatchObject({
+      buildIdentity: "1.0.0+station.host.revision-a",
+      ptys: [
+        {
+          ptyId: "pty-1",
+          ptyInstanceId: "pty-instance-1",
+          handoffSupport: { kind: "bridge-releasable" },
+        },
+      ],
+    });
     client.dispose();
   });
 

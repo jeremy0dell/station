@@ -1,10 +1,14 @@
 import type { StationConfig } from "@station/config";
 import type {
   ObserverProcessIdentity,
+  ObserverRecoveryAssessment,
+  UpdateArtifact,
   UpdateReapHostEvidence,
   UpdateReapObserverEvidence,
+  UpdateReapRecoveryAssessment,
   UpdateReapTerminalEvidence,
 } from "@station/contracts";
+import { compareCodeUnitStrings } from "@station/contracts";
 import {
   createLocalObserverProcessEvidence,
   type ObserverProcessIdentityEvidenceSource,
@@ -13,6 +17,11 @@ import {
   verifyObserverProcessIdentity,
 } from "@station/observer/internal";
 import { createObserverClient, type ExpectedObserverIdentity } from "@station/protocol";
+import {
+  parseStationObserverBuildVersion,
+  stationBuildInfo,
+  stationObserverBuildVersion,
+} from "@station/runtime";
 import { type HostCommandDeps, runHostCommand } from "../commands/host/index.js";
 import { getObserverStatus, type ObserverProcessDeps } from "../observerProcess.js";
 import type { UpdateRecoveryPreflightPorts } from "./recoveryPreflight.js";
@@ -28,6 +37,10 @@ export type CreateUpdateRecoveryPreflightPortsOptions = {
   providers: ProviderRegistry;
   observerStatus?: typeof getObserverStatus;
   hostStatus?: typeof runHostCommand;
+  /** Test seam for the immutable build identity of the current CLI/Host implementation. */
+  currentBuildIdentity?: string;
+  /** Test seam for the exact current Observer selector. */
+  currentObserverBuildVersion?: string;
 };
 
 /**
@@ -44,20 +57,25 @@ export function createUpdateRecoveryPreflightPorts(
   const observerIdentitySource = options.observerIdentitySource ?? localObserverEvidence;
   const readIdentity = options.readObserverIdentity ?? localObserverEvidence.readProcessIdentity;
   const providers = options.providers;
+  const currentBuildIdentity = options.currentBuildIdentity ?? stationBuildInfo().buildIdentity;
+  const currentObserverBuildVersion =
+    options.currentObserverBuildVersion ?? stationObserverBuildVersion();
   return {
-    inspectObserver: (targetBuildVersion) =>
+    inspectObserver: (artifacts) =>
       inspectObserverRecoveryEvidence({
         config: options.config,
-        targetBuildVersion,
+        artifacts,
+        currentObserverBuildVersion,
         observerIdentitySource,
         readIdentity,
         readStatus: options.observerStatus ?? getObserverStatus,
         ...(options.observerDeps === undefined ? {} : { observerDeps: options.observerDeps }),
       }),
-    inspectHost: (targetBuildVersion) =>
+    inspectHost: (artifacts) =>
       inspectHostRecoveryEvidence({
         config: options.config,
-        targetBuildVersion,
+        artifacts,
+        currentBuildIdentity,
         readStatus: options.hostStatus ?? runHostCommand,
         ...(options.hostDeps === undefined ? {} : { hostDeps: options.hostDeps }),
       }),
@@ -66,13 +84,14 @@ export function createUpdateRecoveryPreflightPorts(
       if (options.configPath !== undefined) hookOptions.stationConfigPath = options.configPath;
       return readHarnessHookHealth(hookOptions);
     },
-    hookProviderIds: Array.from(providers.harnesses.keys()).sort(),
+    hookProviderIds: Array.from(providers.harnesses.keys()).sort(compareCodeUnitStrings),
   };
 }
 
 async function inspectObserverRecoveryEvidence(input: {
   config: StationConfig;
-  targetBuildVersion: string;
+  artifacts: { installed: UpdateArtifact; target: UpdateArtifact };
+  currentObserverBuildVersion: string;
   observerIdentitySource: ObserverProcessIdentityEvidenceSource;
   readIdentity: (socketPath: string) => Promise<ObserverProcessIdentity | undefined>;
   readStatus: typeof getObserverStatus;
@@ -82,7 +101,7 @@ async function inspectObserverRecoveryEvidence(input: {
   if (status.status !== "running") {
     switch (status.status) {
       case "stopped":
-        return { status: "absent" };
+        return inspectStoppedObserverEvidence(input, status.paths.socketPath);
       case "stale":
         return observerUnknown(
           "stale-socket",
@@ -190,7 +209,12 @@ async function inspectObserverRecoveryEvidence(input: {
   const exact: Extract<UpdateReapObserverEvidence, { status: "exact" }> = {
     status: "exact",
     buildVersion: health.version,
-    relation: buildRelation(health.version, input.targetBuildVersion),
+    relation: runtimeBuildRelation({
+      runningDisplayVersion: parseStationObserverBuildVersion(health.version).version,
+      runningBuildIdentity: health.version,
+      currentBuildIdentity: input.currentObserverBuildVersion,
+      artifacts: input.artifacts,
+    }),
     health: health.status,
     recovery:
       assessment === undefined
@@ -202,20 +226,59 @@ async function inspectObserverRecoveryEvidence(input: {
               message: "Observer recovery assessment could not be read.",
             }),
           }
-        : { status: "assessed", assessment },
+        : { status: "assessed", assessment: publicRecoveryAssessment(assessment) },
   };
   return exact;
 }
 
+async function inspectStoppedObserverEvidence(
+  input: Pick<
+    Parameters<typeof inspectObserverRecoveryEvidence>[0],
+    "readIdentity" | "observerIdentitySource"
+  >,
+  socketPath: string,
+): Promise<UpdateReapObserverEvidence> {
+  let identity: ObserverProcessIdentity | undefined;
+  try {
+    identity = await input.readIdentity(socketPath);
+  } catch (error) {
+    return observerUnknown(
+      "identity-unavailable",
+      "UPDATE_PREFLIGHT_OBSERVER_IDENTITY_UNAVAILABLE",
+      "Observer process identity evidence could not be read.",
+      error,
+    );
+  }
+  if (identity === undefined) return { status: "absent" };
+  if (identity.socketPath !== socketPath) {
+    return observerUnknown(
+      "identity-mismatch",
+      "UPDATE_PREFLIGHT_OBSERVER_IDENTITY_MISMATCH",
+      "Observer pidfile identity does not match the configured socket.",
+    );
+  }
+  const verification = verifyObserverProcessIdentity(
+    { source: "pidfile", identity },
+    input.observerIdentitySource,
+  );
+  if (verification.status !== "exact") return observerVerificationUnknown(verification.status);
+  return observerUnknown(
+    "process-without-socket",
+    "UPDATE_PREFLIGHT_OBSERVER_PROCESS_WITHOUT_SOCKET",
+    "An exact live Observer process exists without a reachable socket.",
+  );
+}
+
 async function inspectHostRecoveryEvidence(input: {
   config: StationConfig;
-  targetBuildVersion: string;
+  artifacts: { installed: UpdateArtifact; target: UpdateArtifact };
+  currentBuildIdentity: string;
   readStatus: typeof runHostCommand;
   hostDeps?: HostCommandDeps;
 }): Promise<UpdateReapHostEvidence> {
   const deps: HostCommandDeps = {
     ...input.hostDeps,
-    expectedBuildVersion: input.targetBuildVersion,
+    expectedBuildVersion: input.artifacts.target.version,
   };
   const status = await input.readStatus(["status"], { config: input.config }, deps);
   if (status.action !== "status") {
@@ -258,11 +321,17 @@ async function inspectHostRecoveryEvidence(input: {
   const evidence: Extract<UpdateReapHostEvidence, { status: "inspected" }> = {
     status: "inspected",
     protocolVersion: status.health.protocolVersion,
-    relation: buildRelation(status.health.buildVersion, input.targetBuildVersion),
+    relation: runtimeBuildRelation({
+      runningDisplayVersion: status.health.buildVersion,
+      runningBuildIdentity: status.buildIdentity,
+      currentBuildIdentity: input.currentBuildIdentity,
+      artifacts: input.artifacts,
+    }),
     compatibility: status.compatibility.action,
     terminals,
   };
   if (status.health.buildVersion !== undefined) evidence.buildVersion = status.health.buildVersion;
+  if (status.buildIdentity !== undefined) evidence.buildIdentity = status.buildIdentity;
   return evidence;
 }
 
@@ -290,18 +359,70 @@ function compareHostTerminal(
   right: UpdateReapTerminalEvidence,
 ): number {
   return (
-    left.terminalTargetId.localeCompare(right.terminalTargetId) ||
-    left.ptyId.localeCompare(right.ptyId) ||
-    left.ptyInstanceId.localeCompare(right.ptyInstanceId)
+    compareCodeUnitStrings(left.terminalTargetId, right.terminalTargetId) ||
+    compareCodeUnitStrings(left.ptyId, right.ptyId) ||
+    compareCodeUnitStrings(left.ptyInstanceId, right.ptyInstanceId)
   );
 }
 
-function buildRelation(
-  buildVersion: string | undefined,
-  targetBuildVersion: string,
-): "matching-target" | "different" | "unknown" {
-  if (buildVersion === undefined) return "unknown";
-  return buildVersion === targetBuildVersion ? "matching-target" : "different";
+function runtimeBuildRelation(input: {
+  runningDisplayVersion: string | undefined;
+  runningBuildIdentity: string | undefined;
+  currentBuildIdentity: string;
+  artifacts: { installed: UpdateArtifact; target: UpdateArtifact };
+}): "matching-target" | "different" | "unknown" {
+  if (input.runningDisplayVersion === undefined) return "unknown";
+  if (input.runningDisplayVersion !== input.artifacts.target.version) return "different";
+  if (input.artifacts.target.revision === undefined) return "matching-target";
+  if (input.runningBuildIdentity === undefined) return "unknown";
+  if (input.runningBuildIdentity === input.currentBuildIdentity) {
+    return updateArtifactsMatch(input.artifacts.installed, input.artifacts.target)
+      ? "matching-target"
+      : "different";
+  }
+  return updateArtifactsMatch(input.artifacts.installed, input.artifacts.target)
+    ? "different"
+    : "unknown";
+}
+
+function updateArtifactsMatch(left: UpdateArtifact, right: UpdateArtifact): boolean {
+  return left.version === right.version && left.revision === right.revision;
+}
+
+function publicRecoveryAssessment(
+  assessment: ObserverRecoveryAssessment,
+): UpdateReapRecoveryAssessment {
+  const sessions: UpdateReapRecoveryAssessment["sessions"] = assessment.sessions.map((session) => {
+    const handleResolution = session.handleResolution;
+    const publicHandleResolution =
+      handleResolution.kind === "selected"
+        ? {
+            kind: "selected" as const,
+            eligibleHandleCount: handleResolution.eligibleHandleCount,
+            rejectedHandleCount: handleResolution.rejectedHandleCount,
+            rejectedReasons: handleResolution.rejectedReasons,
+          }
+        : handleResolution;
+    const projected: UpdateReapRecoveryAssessment["sessions"][number] = {
+      sessionId: session.sessionId,
+      projectId: session.projectId,
+      worktreeId: session.worktreeId,
+      lifecycle: session.lifecycle,
+      disposition: session.disposition,
+      reasons: session.reasons,
+      handleResolution: publicHandleResolution,
+    };
+    if (session.harnessProvider !== undefined) {
+      projected.harnessProvider = session.harnessProvider;
+    }
+    return projected;
+  });
+  return {
+    schemaVersion: 1,
+    resumeEnabled: assessment.resumeEnabled,
+    providerCapabilities: assessment.providerCapabilities,
+    sessions,
+  };
 }
 
 function observerVerificationUnknown(

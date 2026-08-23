@@ -26,6 +26,10 @@ const processEntry = {
   socketPath,
   startupTimeoutMs: 5_000,
 };
+const artifacts = {
+  installed: { version: "1.0.0" },
+  target: { version: "1.1.0+station.target" },
+};
 
 describe("createUpdateRecoveryPreflightPorts", () => {
   it("keeps stopped, stale, and unhealthy Observer evidence typed without querying recovery", async () => {
@@ -53,11 +57,15 @@ describe("createUpdateRecoveryPreflightPorts", () => {
     ];
 
     for (const testCase of cases) {
-      const readObserverIdentity = vi.fn(async () => identity);
+      const readObserverIdentity = vi.fn(async () =>
+        testCase.status.status === "stopped" ? undefined : identity,
+      );
       const clientFactory = vi.fn();
       const ports = createUpdateRecoveryPreflightPorts({
         config: testConfig(),
         providers: providerRegistry(),
+        currentBuildIdentity: "current-build-identity",
+        currentObserverBuildVersion: identity.version,
         observerStatus: async () => testCase.status,
         readObserverIdentity,
         observerDeps: { clientFactory },
@@ -68,22 +76,24 @@ describe("createUpdateRecoveryPreflightPorts", () => {
         }),
       });
 
-      await expect(ports.inspectObserver("1.1.0+station.target")).resolves.toMatchObject(
-        testCase.expected,
+      await expect(ports.inspectObserver(artifacts)).resolves.toMatchObject(testCase.expected);
+      expect(readObserverIdentity).toHaveBeenCalledTimes(
+        testCase.status.status === "stopped" ? 1 : 0,
       );
-      expect(readObserverIdentity).not.toHaveBeenCalled();
       expect(clientFactory).not.toHaveBeenCalled();
     }
   });
 
   it("uses the shared exact verifier, pins the Observer query, and redacts Host inventory", async () => {
-    const assessment = emptyAssessment();
+    const assessment = selectedAssessment();
     const getSessionRecoveryAssessment = vi.fn(async () => assessment);
     const readObserverProcess = vi.fn(() => processEntry);
     const providers = providerRegistry();
     const ports = createUpdateRecoveryPreflightPorts({
       config: testConfig(),
       providers,
+      currentBuildIdentity: "current-build-identity",
+      currentObserverBuildVersion: identity.version,
       observerStatus: async () => ({
         status: "running",
         paths: observerPaths(),
@@ -134,8 +144,8 @@ describe("createUpdateRecoveryPreflightPorts", () => {
       }),
     });
 
-    const observer = await ports.inspectObserver("1.1.0+station.target");
-    const host = await ports.inspectHost("1.1.0+station.target");
+    const observer = await ports.inspectObserver(artifacts);
+    const host = await ports.inspectHost(artifacts);
     const hook = await ports.readHookHealth("codex");
 
     expect(observer).toMatchObject({
@@ -161,6 +171,37 @@ describe("createUpdateRecoveryPreflightPorts", () => {
     expect(serialized).not.toContain("/private/");
     expect(serialized).not.toContain("secret");
     expect(serialized).not.toContain("9999");
+    expect(serialized).not.toContain("selectedHandleId");
+    expect(serialized).not.toContain("recoveryHandles");
+  });
+
+  it("reports an exact live Observer process when its socket is missing", async () => {
+    const clientFactory = vi.fn();
+    const ports = createUpdateRecoveryPreflightPorts({
+      config: testConfig(),
+      providers: providerRegistry(),
+      currentBuildIdentity: "current-build-identity",
+      currentObserverBuildVersion: identity.version,
+      observerStatus: async () => ({ status: "stopped", paths: observerPaths() }),
+      readObserverIdentity: async () => identity,
+      observerIdentitySource: {
+        processStartToken: () => identity.osStartTime,
+        readObserverProcess: () => processEntry,
+      },
+      observerDeps: { clientFactory },
+      hostStatus: async () => ({
+        action: "status",
+        socketPath: "/private/runtime/host.sock",
+        probe: "absent",
+      }),
+    });
+
+    await expect(ports.inspectObserver(artifacts)).resolves.toMatchObject({
+      status: "unknown",
+      reason: "process-without-socket",
+      error: { code: "UPDATE_PREFLIGHT_OBSERVER_PROCESS_WITHOUT_SOCKET" },
+    });
+    expect(clientFactory).not.toHaveBeenCalled();
   });
 
   it("returns typed unknown when exact process evidence drifts after the single API read", async () => {
@@ -169,6 +210,8 @@ describe("createUpdateRecoveryPreflightPorts", () => {
     const ports = createUpdateRecoveryPreflightPorts({
       config: testConfig(),
       providers: providerRegistry(),
+      currentBuildIdentity: "current-build-identity",
+      currentObserverBuildVersion: identity.version,
       observerStatus: async () => ({
         status: "running",
         paths: observerPaths(),
@@ -200,7 +243,7 @@ describe("createUpdateRecoveryPreflightPorts", () => {
       }),
     });
 
-    await expect(ports.inspectObserver("1.1.0+station.target")).resolves.toMatchObject({
+    await expect(ports.inspectObserver(artifacts)).resolves.toMatchObject({
       status: "unknown",
       reason: "identity-mismatch",
       error: { code: "UPDATE_PREFLIGHT_OBSERVER_IDENTITY_DRIFT" },
@@ -238,6 +281,8 @@ describe("createUpdateRecoveryPreflightPorts", () => {
       const ports = createUpdateRecoveryPreflightPorts({
         config: testConfig(),
         providers: providerRegistry(),
+        currentBuildIdentity: "current-build-identity",
+        currentObserverBuildVersion: identity.version,
         observerStatus: async () => ({ status: "stopped", paths: observerPaths() }),
         hostStatus: async () => ({
           action: "status",
@@ -251,7 +296,68 @@ describe("createUpdateRecoveryPreflightPorts", () => {
         }),
       });
 
-      await expect(ports.inspectHost(targetBuildVersion)).resolves.toMatchObject(testCase.expected);
+      await expect(
+        ports.inspectHost({
+          installed: { version: "1.0.0" },
+          target: { version: targetBuildVersion },
+        }),
+      ).resolves.toMatchObject(testCase.expected);
+    }
+  });
+
+  it("does not equate same-version Host revisions without exact build evidence", async () => {
+    const target = { version: "1.1.0", revision: "target-revision" };
+    const cases = [
+      {
+        installed: target,
+        runningBuildIdentity: "current-build-identity",
+        expectedRelation: "matching-target",
+      },
+      {
+        installed: { version: "1.1.0", revision: "installed-revision" },
+        runningBuildIdentity: "current-build-identity",
+        expectedRelation: "different",
+      },
+      {
+        installed: { version: "1.1.0", revision: "installed-revision" },
+        runningBuildIdentity: "unidentified-other-build",
+        expectedRelation: "unknown",
+      },
+      {
+        installed: { version: "1.1.0", revision: "installed-revision" },
+        runningBuildIdentity: undefined,
+        expectedRelation: "unknown",
+      },
+    ] as const;
+
+    for (const testCase of cases) {
+      const ports = createUpdateRecoveryPreflightPorts({
+        config: testConfig(),
+        providers: providerRegistry(),
+        currentBuildIdentity: "current-build-identity",
+        currentObserverBuildVersion: identity.version,
+        observerStatus: async () => ({ status: "stopped", paths: observerPaths() }),
+        hostStatus: async () => ({
+          action: "status",
+          socketPath: "/private/runtime/host.sock",
+          probe: "listening",
+          health: { ok: true, protocolVersion: 8, buildVersion: target.version },
+          compatibility: { action: "reuse" },
+          livePtyCount: 0,
+          handoffEligible: false,
+          ptys: [],
+          ...(testCase.runningBuildIdentity === undefined
+            ? {}
+            : { buildIdentity: testCase.runningBuildIdentity }),
+        }),
+      });
+
+      await expect(
+        ports.inspectHost({ installed: testCase.installed, target }),
+      ).resolves.toMatchObject({
+        status: "inspected",
+        relation: testCase.expectedRelation,
+      });
     }
   });
 });
@@ -293,5 +399,57 @@ function emptyAssessment(): ObserverRecoveryAssessment {
     resumeEnabled: true,
     providerCapabilities: [],
     sessions: [],
+  };
+}
+
+function selectedAssessment(): ObserverRecoveryAssessment {
+  return {
+    schemaVersion: 1,
+    inventory: {
+      schemaVersion: 1,
+      sessions: [
+        {
+          id: "session-a",
+          projectId: "project-a",
+          worktreeId: "worktree-a",
+          lifecycle: "open",
+          harnessProvider: "codex",
+          createdAt: now,
+          lastSeenAt: now,
+        },
+      ],
+      recoveryHandles: [
+        {
+          id: "private-handle-a",
+          provider: "codex",
+          projectId: "project-a",
+          worktreeId: "worktree-a",
+          sessionId: "session-a",
+          targetKind: "native-session",
+          observedAt: now,
+          lastSeenAt: now,
+        },
+      ],
+    },
+    resumeEnabled: true,
+    providerCapabilities: [{ provider: "codex", status: "enabled" }],
+    sessions: [
+      {
+        sessionId: "session-a",
+        projectId: "project-a",
+        worktreeId: "worktree-a",
+        lifecycle: "open",
+        harnessProvider: "codex",
+        disposition: "recoverable",
+        reasons: [],
+        handleResolution: {
+          kind: "selected",
+          selectedHandleId: "private-handle-a",
+          eligibleHandleCount: 1,
+          rejectedHandleCount: 0,
+          rejectedReasons: [],
+        },
+      },
+    ],
   };
 }

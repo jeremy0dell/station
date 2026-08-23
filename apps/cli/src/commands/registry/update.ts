@@ -69,7 +69,7 @@ async function runUpdateCliCommand(context: CliCommandRunContext) {
   );
 }
 
-/** COMPOSITION ROOT: Adds read-only recovery ports only for an admitted dry-run reap request. */
+// Adds read-only recovery ports only for an admitted dry-run reap request.
 function updateDeps(
   context: CliCommandRunContext,
   loaded: ReturnType<typeof loadedConfigCommandOptions>,

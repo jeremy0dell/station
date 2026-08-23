@@ -1,5 +1,6 @@
 import type { StationConfig } from "@station/config";
 import {
+  compareCodeUnitStrings,
   type ObserverRecoveryAssessment,
   ObserverRecoveryAssessmentSchema,
   type ObserverSessionRecoveryAssessment,
@@ -61,11 +62,11 @@ export function assessObserverRecovery(input: {
   }
   for (const handle of input.persistenceSnapshot.recoveryHandles) providerIds.add(handle.provider);
   const providerCapabilities = Array.from(providerIds)
-    .sort()
+    .sort(compareCodeUnitStrings)
     .map((provider) => normalizeProviderCapability(input, provider));
   const sessions = input.persistenceSnapshot.sessions
     .map((session) => assessSession(input, session, resumeEnabled))
-    .sort((left, right) => left.sessionId.localeCompare(right.sessionId));
+    .sort((left, right) => compareCodeUnitStrings(left.sessionId, right.sessionId));
   return ObserverRecoveryAssessmentSchema.parse({
     schemaVersion: 1,
     inventory,
@@ -261,5 +262,5 @@ function capabilityReasonFor(
 function sortedReasons(
   reasons: readonly SessionRecoveryAssessmentReason[],
 ): SessionRecoveryAssessmentReason[] {
-  return Array.from(new Set(reasons)).sort();
+  return Array.from(new Set(reasons)).sort(compareCodeUnitStrings);
 }

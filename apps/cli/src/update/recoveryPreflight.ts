@@ -1,5 +1,7 @@
 import {
+  compareCodeUnitStrings,
   type ProviderHookHealth,
+  ProviderHookHealthSchema,
   type ProviderId,
   type SafeError,
   type UpdateArtifact,
@@ -20,10 +22,15 @@ import { publicSafeErrorFromUnknown } from "@station/runtime";
  * start, stop, signal, install, reconcile, resume, or otherwise mutate the inspected system.
  */
 export type UpdateRecoveryPreflightPorts = {
-  inspectObserver(targetBuildVersion: string): Promise<UpdateReapObserverEvidence>;
-  inspectHost(targetBuildVersion: string): Promise<UpdateReapHostEvidence>;
+  inspectObserver(artifacts: UpdateRecoveryArtifacts): Promise<UpdateReapObserverEvidence>;
+  inspectHost(artifacts: UpdateRecoveryArtifacts): Promise<UpdateReapHostEvidence>;
   readHookHealth(provider: ProviderId): Promise<ProviderHookHealth>;
   hookProviderIds: readonly ProviderId[];
+};
+
+export type UpdateRecoveryArtifacts = {
+  installed: UpdateArtifact;
+  target: UpdateArtifact;
 };
 
 /**
@@ -38,9 +45,10 @@ export async function runUpdateRecoveryPreflight(input: {
   target: UpdateArtifact;
   ports: UpdateRecoveryPreflightPorts;
 }): Promise<UpdateReapRecoveryPreflight> {
+  const artifacts = { installed: input.installed, target: input.target };
   const [observer, host] = await Promise.all([
-    inspectObserver(input.ports, input.target.version),
-    inspectHost(input.ports, input.target.version),
+    inspectObserver(input.ports, artifacts),
+    inspectHost(input.ports, artifacts),
   ]);
   const hookProviderIds = providersForHookInspection(input.ports.hookProviderIds, observer);
   const hooks = await Promise.all(
@@ -50,6 +58,7 @@ export async function runUpdateRecoveryPreflight(input: {
   const evidence = {
     observer,
     host,
+    hookProviderIds,
     hooks,
     terminalDispositions,
   };
@@ -69,10 +78,10 @@ export async function runUpdateRecoveryPreflight(input: {
 
 async function inspectObserver(
   ports: UpdateRecoveryPreflightPorts,
-  targetBuildVersion: string,
+  artifacts: UpdateRecoveryArtifacts,
 ): Promise<UpdateReapObserverEvidence> {
   try {
-    return await ports.inspectObserver(targetBuildVersion);
+    return await ports.inspectObserver(artifacts);
   } catch (error) {
     return {
       status: "unknown",
@@ -87,10 +96,10 @@ async function inspectObserver(
 
 async function inspectHost(
   ports: UpdateRecoveryPreflightPorts,
-  targetBuildVersion: string,
+  artifacts: UpdateRecoveryArtifacts,
 ): Promise<UpdateReapHostEvidence> {
   try {
-    const host = await ports.inspectHost(targetBuildVersion);
+    const host = await ports.inspectHost(artifacts);
     return host.status === "inspected"
       ? { ...host, terminals: [...host.terminals].sort(compareTerminalIdentity) }
       : host;
@@ -111,7 +120,11 @@ async function inspectHook(
   provider: ProviderId,
 ): Promise<ProviderHookHealth> {
   try {
-    return await ports.readHookHealth(provider);
+    const health = ProviderHookHealthSchema.parse(await ports.readHookHealth(provider));
+    if (health.provider !== provider) {
+      throw new Error("Hook evidence provider did not match the requested provider.");
+    }
+    return health;
   } catch (error) {
     return {
       provider,
@@ -136,7 +149,7 @@ function providersForHookInspection(
       providers.add(capability.provider);
     }
   }
-  return Array.from(providers).sort();
+  return Array.from(providers).sort(compareCodeUnitStrings);
 }
 
 function terminalDispositionsFor(
@@ -162,7 +175,10 @@ function terminalDispositionsFor(
 
       const session = sessions.get(terminal.sessionId);
       let reapRecovery: UpdateReapTerminalDisposition["reapRecovery"];
-      if (session === undefined) {
+      if (terminal.kind === "aux") {
+        reapRecovery = "non-resumable";
+        reasons.push("aux_terminal_not_resumable");
+      } else if (session === undefined) {
         reapRecovery =
           observer.status === "exact" && observer.recovery.status === "assessed"
             ? "non-resumable"
@@ -172,6 +188,13 @@ function terminalDispositionsFor(
             ? "retained_session_missing"
             : "session_recovery_unknown",
         );
+      } else if (
+        session.projectId !== terminal.projectId ||
+        session.worktreeId !== terminal.worktreeId ||
+        session.harnessProvider !== terminal.harnessProvider
+      ) {
+        reapRecovery = "unknown";
+        reasons.push("retained_session_identity_mismatch");
       } else if (session.disposition === "recoverable") {
         reapRecovery = "recoverable";
       } else if (session.disposition === "unknown") {
@@ -188,7 +211,7 @@ function terminalDispositionsFor(
         sessionId: terminal.sessionId,
         handoff,
         reapRecovery,
-        reasons: Array.from(new Set(reasons)).sort(),
+        reasons: Array.from(new Set(reasons)).sort(compareCodeUnitStrings),
       };
     })
     .sort(compareTerminalIdentity);
@@ -199,9 +222,9 @@ function compareTerminalIdentity(
   right: Pick<UpdateReapTerminalDisposition, "terminalTargetId" | "ptyId" | "ptyInstanceId">,
 ): number {
   return (
-    left.terminalTargetId.localeCompare(right.terminalTargetId) ||
-    left.ptyId.localeCompare(right.ptyId) ||
-    left.ptyInstanceId.localeCompare(right.ptyInstanceId)
+    compareCodeUnitStrings(left.terminalTargetId, right.terminalTargetId) ||
+    compareCodeUnitStrings(left.ptyId, right.ptyId) ||
+    compareCodeUnitStrings(left.ptyInstanceId, right.ptyInstanceId)
   );
 }
 
@@ -236,15 +259,19 @@ export function renderUpdateRecoveryPreflight(preflight: UpdateReapRecoveryPrefl
     `observer: ${observerText(preflight.observer)}`,
     `host: ${hostText(preflight.host)}`,
   ];
-  if (preflight.terminalDispositions.length === 0) {
-    lines.push("terminals: none reported");
+  if (preflight.host.status === "unknown") {
+    lines.push("terminals: unknown (Host inventory unavailable)");
+  } else if (preflight.host.status === "absent") {
+    lines.push("terminals: none (Host absent)");
+  } else if (preflight.terminalDispositions.length === 0) {
+    lines.push("terminals: none");
   } else {
     lines.push("terminals:");
     for (const terminal of preflight.terminalDispositions) {
       const recovery =
         terminal.reapRecovery === "non-resumable" ? "NON-RESUMABLE" : terminal.reapRecovery;
       lines.push(
-        `  ${terminal.terminalTargetId} pty=${terminal.ptyId}/${terminal.ptyInstanceId} session=${terminal.sessionId} handoff=${terminal.handoff} reapRecovery=${recovery}`,
+        `  ${terminalText(terminal.terminalTargetId)} pty=${terminalText(terminal.ptyId)}/${terminalText(terminal.ptyInstanceId)} session=${terminalText(terminal.sessionId)} handoff=${terminal.handoff} reapRecovery=${recovery}`,
       );
       if (terminal.reasons.length > 0) lines.push(`    reasons: ${terminal.reasons.join(", ")}`);
     }
@@ -256,38 +283,70 @@ export function renderUpdateRecoveryPreflight(preflight: UpdateReapRecoveryPrefl
     for (const session of assessment.sessions) {
       const disposition =
         session.disposition === "non-resumable" ? "NON-RESUMABLE" : session.disposition;
-      lines.push(`  ${session.sessionId}: ${disposition}`);
+      lines.push(`  ${terminalText(session.sessionId)}: ${disposition}`);
       if (session.reasons.length > 0) lines.push(`    reasons: ${session.reasons.join(", ")}`);
+      const resolution = session.handleResolution;
+      if (resolution.kind === "selected") {
+        lines.push(
+          `    handle: selected eligible=${resolution.eligibleHandleCount} rejected=${resolution.rejectedHandleCount}`,
+        );
+        if (resolution.rejectedReasons.length > 0) {
+          lines.push(`    handle rejected reasons: ${resolution.rejectedReasons.join(", ")}`);
+        }
+      } else if (resolution.kind === "none") {
+        lines.push(`    handle: none eligible=0 rejected=${resolution.rejectedHandleCount}`);
+        lines.push(`    handle reasons: ${resolution.reasons.join(", ")}`);
+      } else {
+        lines.push(`    handle: unknown (${resolution.reasons.join(", ")})`);
+      }
     }
     lines.push("resume capabilities:");
     if (assessment.providerCapabilities.length === 0) lines.push("  none reported");
     for (const capability of assessment.providerCapabilities) {
-      lines.push(`  ${capability.provider}: ${capability.status}`);
+      lines.push(`  ${terminalText(capability.provider)}: ${capability.status}`);
     }
   } else {
     lines.push("  unknown");
   }
   lines.push("hooks:");
-  if (preflight.hooks.length === 0) lines.push("  none reported");
-  for (const hook of preflight.hooks) lines.push(`  ${hook.provider}: ${hook.status}`);
+  if (preflight.hooks.length === 0) lines.push("  none configured");
+  for (const hook of preflight.hooks) {
+    lines.push(`  ${terminalText(hook.provider)}: ${hook.status}`);
+  }
   lines.push("actions: not included (#640)", "digest: not included (#640)");
   return `${lines.join("\n")}\n`;
 }
 
 function artifactText(artifact: UpdateArtifact): string {
   return artifact.revision === undefined
-    ? artifact.version
-    : `${artifact.version} (${artifact.revision})`;
+    ? terminalText(artifact.version)
+    : `${terminalText(artifact.version)} (${terminalText(artifact.revision)})`;
 }
 
 function observerText(observer: UpdateReapObserverEvidence): string {
   if (observer.status === "absent") return "absent";
   if (observer.status === "unknown") return `unknown (${observer.reason})`;
-  return `exact build=${observer.buildVersion} relation=${observer.relation} health=${observer.health} recovery=${observer.recovery.status}`;
+  return `exact build=${terminalText(observer.buildVersion)} relation=${observer.relation} health=${observer.health} recovery=${observer.recovery.status}`;
 }
 
 function hostText(host: UpdateReapHostEvidence): string {
   if (host.status === "absent") return "absent";
   if (host.status === "unknown") return `unknown (${host.reason})`;
-  return `inspected build=${host.buildVersion ?? "legacy"} relation=${host.relation} compatibility=${host.compatibility} terminals=${host.terminals.length}`;
+  const build = host.buildVersion === undefined ? "legacy" : terminalText(host.buildVersion);
+  const identity = host.buildIdentity === undefined ? "unknown" : terminalText(host.buildIdentity);
+  return `inspected build=${build} identity=${identity} relation=${host.relation} compatibility=${host.compatibility} terminals=${host.terminals.length}`;
+}
+
+function terminalText(value: string): string {
+  let escaped = "";
+  for (const character of value) {
+    const codePoint = character.codePointAt(0) ?? 0;
+    const isTerminalControl =
+      codePoint <= 31 ||
+      (codePoint >= 127 && codePoint <= 159) ||
+      codePoint === 8_232 ||
+      codePoint === 8_233;
+    escaped += isTerminalControl ? `\\u${codePoint.toString(16).padStart(4, "0")}` : character;
+  }
+  return escaped;
 }

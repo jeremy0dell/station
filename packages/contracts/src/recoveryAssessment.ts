@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { ProjectIdSchema, ProviderIdSchema, SessionIdSchema, WorktreeIdSchema } from "./ids.js";
 import { ObserverRecoveryInventorySchema } from "./recoveryInventory.js";
-import { nonEmptyStringSchema } from "./shared.js";
+import { compareCodeUnitStrings, nonEmptyStringSchema } from "./shared.js";
 
 export const SessionRecoveryAssessmentReasonSchema = z.enum([
   "project_mismatch",
@@ -30,13 +30,13 @@ export const ProviderResumeCapabilitySchema = z
   .strict();
 export type ProviderResumeCapability = z.infer<typeof ProviderResumeCapabilitySchema>;
 
-const orderedReasonsSchema = z
+export const SessionRecoveryAssessmentReasonsSchema = z
   .array(SessionRecoveryAssessmentReasonSchema)
   .superRefine((reasons, context) => {
     if (
       reasons.some((reason, index) => {
         const previous = reasons[index - 1];
-        return previous !== undefined && previous >= reason;
+        return previous !== undefined && compareCodeUnitStrings(previous, reason) >= 0;
       })
     ) {
       context.addIssue({
@@ -53,7 +53,7 @@ export const SessionRecoveryHandleResolutionSchema = z.discriminatedUnion("kind"
       selectedHandleId: nonEmptyStringSchema,
       eligibleHandleCount: z.number().int().positive(),
       rejectedHandleCount: z.number().int().nonnegative(),
-      rejectedReasons: orderedReasonsSchema,
+      rejectedReasons: SessionRecoveryAssessmentReasonsSchema,
     })
     .strict(),
   z
@@ -61,13 +61,13 @@ export const SessionRecoveryHandleResolutionSchema = z.discriminatedUnion("kind"
       kind: z.literal("none"),
       eligibleHandleCount: z.literal(0),
       rejectedHandleCount: z.number().int().nonnegative(),
-      reasons: orderedReasonsSchema.min(1),
+      reasons: SessionRecoveryAssessmentReasonsSchema.min(1),
     })
     .strict(),
   z
     .object({
       kind: z.literal("unknown"),
-      reasons: orderedReasonsSchema.min(1),
+      reasons: SessionRecoveryAssessmentReasonsSchema.min(1),
     })
     .strict(),
 ]);
@@ -81,7 +81,7 @@ export const ObserverSessionRecoveryAssessmentSchema = z
     lifecycle: z.enum(["legacy", "open", "ended"]),
     harnessProvider: ProviderIdSchema.optional(),
     disposition: z.enum(["recoverable", "non-resumable", "not-applicable", "unknown"]),
-    reasons: orderedReasonsSchema,
+    reasons: SessionRecoveryAssessmentReasonsSchema,
     handleResolution: SessionRecoveryHandleResolutionSchema,
   })
   .strict();
@@ -109,7 +109,7 @@ export const ObserverRecoveryAssessmentSchema = z
     if (
       capabilityProviders.some((provider, index) => {
         const previous = capabilityProviders[index - 1];
-        return previous !== undefined && previous >= provider;
+        return previous !== undefined && compareCodeUnitStrings(previous, provider) >= 0;
       })
     ) {
       context.addIssue({
@@ -121,7 +121,7 @@ export const ObserverRecoveryAssessmentSchema = z
     if (
       sessionIds.some((sessionId, index) => {
         const previous = sessionIds[index - 1];
-        return previous !== undefined && previous >= sessionId;
+        return previous !== undefined && compareCodeUnitStrings(previous, sessionId) >= 0;
       })
     ) {
       context.addIssue({
@@ -142,6 +142,21 @@ export const ObserverRecoveryAssessmentSchema = z
       });
     }
     for (const [index, session] of assessment.sessions.entries()) {
+      const inventorySession = assessment.inventory.sessions[index];
+      if (
+        inventorySession !== undefined &&
+        (inventorySession.id !== session.sessionId ||
+          inventorySession.projectId !== session.projectId ||
+          inventorySession.worktreeId !== session.worktreeId ||
+          inventorySession.lifecycle !== session.lifecycle ||
+          inventorySession.harnessProvider !== session.harnessProvider)
+      ) {
+        context.addIssue({
+          code: "custom",
+          path: ["sessions", index],
+          message: "Session assessments must match their exact inventory identity.",
+        });
+      }
       if (session.disposition === "recoverable" && session.reasons.length > 0) {
         context.addIssue({
           code: "custom",
@@ -165,13 +180,25 @@ export const ObserverRecoveryAssessmentSchema = z
       }
       if (session.handleResolution.kind === "selected") {
         const selectedHandleId = session.handleResolution.selectedHandleId;
-        if (
-          !assessment.inventory.recoveryHandles.some((handle) => handle.id === selectedHandleId)
-        ) {
+        const selectedHandle = assessment.inventory.recoveryHandles.find(
+          (handle) => handle.id === selectedHandleId,
+        );
+        if (selectedHandle === undefined) {
           context.addIssue({
             code: "custom",
             path: ["sessions", index, "handleResolution", "selectedHandleId"],
             message: "Selected handles must belong to the coherent recovery inventory.",
+          });
+        } else if (
+          selectedHandle.sessionId !== session.sessionId ||
+          selectedHandle.projectId !== session.projectId ||
+          selectedHandle.worktreeId !== session.worktreeId ||
+          selectedHandle.provider !== session.harnessProvider
+        ) {
+          context.addIssue({
+            code: "custom",
+            path: ["sessions", index, "handleResolution", "selectedHandleId"],
+            message: "Selected handles must match the exact assessed session identity.",
           });
         }
       }

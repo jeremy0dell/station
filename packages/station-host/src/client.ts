@@ -36,6 +36,8 @@ import {
   type HostPtyIdentity,
   type HostPtyKind,
   type HostPtyRef,
+  type HostRecoveryInventoryResult,
+  HostRecoveryInventoryResultSchema,
   type HostResponse,
   HostResponseSchema,
   type HostSpawnParams,
@@ -96,8 +98,10 @@ export type StationHostClient = {
   /** Lifecycle-only: adopt a parked manifest on a successor host. */
   adoptRegistry(manifest: PtyHandoffManifest): Promise<HostAdoptRegistryResult>;
   spawn(params: HostSpawnParamsInput): Promise<HostSpawnResult>;
-  /** Read exact PTY lifetimes and Host-owned handoff support without exporting or parking them. */
+  /** Read protocol-v8 PTY lifetimes without exporting or parking them. */
   list(): Promise<HostListResult["ptys"]>;
+  /** Read immutable Host build and PTY recovery evidence without changing protocol-v8 `host.list`. */
+  recoveryInventory?(): Promise<HostRecoveryInventoryResult>;
   focus(ptyId: string): Promise<void>;
   close(ptyId: string): Promise<{ closed: boolean }>;
   /** Attach only with an explicit role and a matching complete identity proof. */
@@ -426,6 +430,8 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
       request("host.adoptRegistry", { manifest }, HostAdoptRegistryResultSchema),
     spawn: (params) => request("host.spawn", params, HostSpawnResultSchema),
     list: async () => (await request("host.list", undefined, HostListResultSchema)).ptys,
+    recoveryInventory: () =>
+      request("host.recoveryInventory", undefined, HostRecoveryInventoryResultSchema),
     focus: async (ptyId) => {
       await request("host.focus", { ptyId }, HostOkResultSchema);
     },

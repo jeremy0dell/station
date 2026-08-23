@@ -12712,7 +12712,7 @@
           "specifier": "@station/contracts",
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "runtime",
-          "bindings": ["ObserverRecoveryAssessmentSchema"]
+          "bindings": ["ObserverRecoveryAssessmentSchema", "compareCodeUnitStrings"]
         },
         {
           "specifier": "@station/contracts",
@@ -12810,7 +12810,7 @@
           "specifier": "@station/contracts",
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "runtime",
-          "bindings": ["ObserverRecoveryInventorySchema"]
+          "bindings": ["ObserverRecoveryInventorySchema", "compareCodeUnitStrings"]
         },
         {
           "specifier": "@station/contracts",

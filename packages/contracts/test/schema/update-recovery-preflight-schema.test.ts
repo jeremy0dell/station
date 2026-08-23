@@ -4,8 +4,6 @@ import {
 } from "@station/contracts";
 import { describe, expect, it } from "vitest";
 
-const now = "2026-08-21T12:00:00.000Z";
-
 const preflight = {
   schemaVersion: 1 as const,
   boundary: {
@@ -24,32 +22,6 @@ const preflight = {
       status: "assessed" as const,
       assessment: {
         schemaVersion: 1 as const,
-        inventory: {
-          schemaVersion: 1 as const,
-          sessions: [
-            {
-              id: "session-a",
-              projectId: "project-a",
-              worktreeId: "worktree-a",
-              lifecycle: "open" as const,
-              harnessProvider: "codex",
-              createdAt: now,
-              lastSeenAt: now,
-            },
-          ],
-          recoveryHandles: [
-            {
-              id: "handle-a",
-              provider: "codex",
-              projectId: "project-a",
-              worktreeId: "worktree-a",
-              sessionId: "session-a",
-              targetKind: "native-session" as const,
-              observedAt: now,
-              lastSeenAt: now,
-            },
-          ],
-        },
         resumeEnabled: true,
         providerCapabilities: [{ provider: "codex", status: "enabled" as const }],
         sessions: [
@@ -63,7 +35,6 @@ const preflight = {
             reasons: [],
             handleResolution: {
               kind: "selected" as const,
-              selectedHandleId: "handle-a",
               eligibleHandleCount: 1,
               rejectedHandleCount: 0,
               rejectedReasons: [],
@@ -94,6 +65,7 @@ const preflight = {
       },
     ],
   },
+  hookProviderIds: ["codex"],
   hooks: [{ provider: "codex", status: "healthy" as const }],
   terminalDispositions: [
     {
@@ -134,6 +106,30 @@ describe("UpdateReapRecoveryPreflightSchema", () => {
     expect(
       UpdateReapRecoveryPreflightSchema.safeParse({ ...preflight, evidenceComplete: false })
         .success,
+    ).toBe(false);
+  });
+
+  it("rejects missing or mismatched hook coverage and terminal ownership", () => {
+    expect(
+      UpdateReapRecoveryPreflightSchema.safeParse({
+        ...preflight,
+        hookProviderIds: [],
+        hooks: [],
+      }).success,
+    ).toBe(false);
+    expect(
+      UpdateReapRecoveryPreflightSchema.safeParse({
+        ...preflight,
+        hooks: [{ provider: "claude", status: "healthy" }],
+      }).success,
+    ).toBe(false);
+    expect(
+      UpdateReapRecoveryPreflightSchema.safeParse({
+        ...preflight,
+        terminalDispositions: [
+          { ...preflight.terminalDispositions[0], sessionId: "different-session" },
+        ],
+      }).success,
     ).toBe(false);
   });
 });

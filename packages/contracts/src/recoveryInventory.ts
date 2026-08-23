@@ -6,7 +6,7 @@ import {
   TimestampSchema,
   WorktreeIdSchema,
 } from "./ids.js";
-import { nonEmptyStringSchema } from "./shared.js";
+import { compareCodeUnitStrings, nonEmptyStringSchema } from "./shared.js";
 
 export const ObserverRecoveryInventorySessionSchema = z
   .object({
@@ -55,7 +55,7 @@ export const ObserverRecoveryInventorySchema = z
       if (
         ids.some((id, index) => {
           const previousId = ids[index - 1];
-          return previousId !== undefined && previousId >= id;
+          return previousId !== undefined && compareCodeUnitStrings(previousId, id) >= 0;
         })
       ) {
         context.addIssue({

@@ -4,7 +4,7 @@ import type {
   ObserverRecoveryInventorySession,
   SessionRecoveryHandle,
 } from "@station/contracts";
-import { ObserverRecoveryInventorySchema } from "@station/contracts";
+import { compareCodeUnitStrings, ObserverRecoveryInventorySchema } from "@station/contracts";
 import type { SessionStore } from "./persistence/ports.js";
 import type {
   ObserverRecoveryInventoryPersistenceSnapshot,
@@ -67,7 +67,5 @@ function recoveryInventoryHandle(handle: SessionRecoveryHandle): ObserverRecover
 }
 
 function compareId<T extends { id: string }>(left: T, right: T): number {
-  if (left.id < right.id) return -1;
-  if (left.id > right.id) return 1;
-  return 0;
+  return compareCodeUnitStrings(left.id, right.id);
 }

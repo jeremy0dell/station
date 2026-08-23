@@ -56,6 +56,7 @@ const recoveryPreflight = {
   target: reportCore.target,
   observer: { status: "absent" as const },
   host: { status: "absent" as const },
+  hookProviderIds: [],
   hooks: [],
   terminalDispositions: [],
   evidenceComplete: false,
@@ -115,6 +116,15 @@ describe("update command schemas", () => {
     expect(UpdateCommandStepSchema.safeParse({ ...reportCore.steps[0], extra: true }).success).toBe(
       false,
     );
+    expect(
+      UpdateCommandReportV3Schema.safeParse({
+        ...reportV3,
+        recoveryPreflight: {
+          ...recoveryPreflight,
+          target: { version: "contradictory-target" },
+        },
+      }).success,
+    ).toBe(false);
   });
 
   it("rejects unknown channels and empty commands", () => {

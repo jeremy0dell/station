@@ -85,6 +85,9 @@ describe("stn update command", () => {
     expect(recovery.readHookHealth).toHaveBeenCalledOnce();
     expect(fixture.apply).not.toHaveBeenCalled();
     expect(commandRunner).not.toHaveBeenCalled();
+    const serialized = JSON.stringify(result.output);
+    expect(serialized).not.toContain("selectedHandleId");
+    expect(serialized).not.toContain("recoveryHandles");
   });
 
   it("keeps a current-build dry-run reap non-mutating and textually unmistakable", async () => {
@@ -980,7 +983,6 @@ function liveHostCommandOptions(config: StationConfig) {
 }
 
 function recoveryPreflightFixture() {
-  const observedAt = "2026-08-21T12:00:00.000Z";
   const inspectObserver = vi.fn(async () => ({
     status: "exact" as const,
     buildVersion: "1.0.0+station.observer",
@@ -990,21 +992,6 @@ function recoveryPreflightFixture() {
       status: "assessed" as const,
       assessment: {
         schemaVersion: 1 as const,
-        inventory: {
-          schemaVersion: 1 as const,
-          sessions: [
-            {
-              id: "session-a",
-              projectId: "project-a",
-              worktreeId: "worktree-a",
-              lifecycle: "open" as const,
-              harnessProvider: "codex",
-              createdAt: observedAt,
-              lastSeenAt: observedAt,
-            },
-          ],
-          recoveryHandles: [],
-        },
         resumeEnabled: true,
         providerCapabilities: [{ provider: "codex", status: "enabled" as const }],
         sessions: [

@@ -1,9 +1,19 @@
 import { z } from "zod";
 import { SafeErrorSchema } from "./errors.js";
-import { ProjectIdSchema, ProviderIdSchema, SessionIdSchema, WorktreeIdSchema } from "./ids.js";
+import {
+  ProjectIdSchema,
+  type ProviderId,
+  ProviderIdSchema,
+  SessionIdSchema,
+  WorktreeIdSchema,
+} from "./ids.js";
 import { ProviderHookHealthSchema } from "./providerHooks.js";
-import { ObserverRecoveryAssessmentSchema } from "./recoveryAssessment.js";
-import { nonEmptyStringSchema } from "./shared.js";
+import {
+  ObserverSessionRecoveryAssessmentSchema,
+  ProviderResumeCapabilitySchema,
+  SessionRecoveryAssessmentReasonsSchema,
+} from "./recoveryAssessment.js";
+import { compareCodeUnitStrings, nonEmptyStringSchema } from "./shared.js";
 import { UpdateArtifactSchema } from "./updateArtifact.js";
 
 export const UpdateRuntimeBuildRelationSchema = z.enum(["matching-target", "different", "unknown"]);
@@ -18,17 +28,104 @@ const unknownObserverSchema = z
       "identity-missing",
       "identity-mismatch",
       "identity-unavailable",
+      "process-without-socket",
       "inspection-failed",
     ]),
     error: SafeErrorSchema,
   })
   .strict();
 
+export const UpdateReapRecoveryHandleResolutionSchema = z.discriminatedUnion("kind", [
+  z
+    .object({
+      kind: z.literal("selected"),
+      eligibleHandleCount: z.number().int().positive(),
+      rejectedHandleCount: z.number().int().nonnegative(),
+      rejectedReasons: SessionRecoveryAssessmentReasonsSchema,
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("none"),
+      eligibleHandleCount: z.literal(0),
+      rejectedHandleCount: z.number().int().nonnegative(),
+      reasons: SessionRecoveryAssessmentReasonsSchema.min(1),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("unknown"),
+      reasons: SessionRecoveryAssessmentReasonsSchema.min(1),
+    })
+    .strict(),
+]);
+export type UpdateReapRecoveryHandleResolution = z.infer<
+  typeof UpdateReapRecoveryHandleResolutionSchema
+>;
+
+export const UpdateReapSessionRecoveryAssessmentSchema =
+  ObserverSessionRecoveryAssessmentSchema.omit({ handleResolution: true })
+    .extend({ handleResolution: UpdateReapRecoveryHandleResolutionSchema })
+    .strict();
+export type UpdateReapSessionRecoveryAssessment = z.infer<
+  typeof UpdateReapSessionRecoveryAssessmentSchema
+>;
+
+/** Public recovery projection: exact decisions and counts without execution-facing handle IDs. */
+export const UpdateReapRecoveryAssessmentSchema = z
+  .object({
+    schemaVersion: z.literal(1),
+    resumeEnabled: z.boolean(),
+    providerCapabilities: z.array(ProviderResumeCapabilitySchema),
+    sessions: z.array(UpdateReapSessionRecoveryAssessmentSchema),
+  })
+  .strict()
+  .superRefine((assessment, context) => {
+    if (!strictlySortedStrings(assessment.providerCapabilities.map((entry) => entry.provider))) {
+      context.addIssue({
+        code: "custom",
+        path: ["providerCapabilities"],
+        message: "Provider capabilities must be unique and deterministically sorted.",
+      });
+    }
+    if (!strictlySortedStrings(assessment.sessions.map((session) => session.sessionId))) {
+      context.addIssue({
+        code: "custom",
+        path: ["sessions"],
+        message: "Session assessments must be unique and deterministically sorted.",
+      });
+    }
+    for (const [index, session] of assessment.sessions.entries()) {
+      if (session.disposition === "recoverable" && session.reasons.length > 0) {
+        context.addIssue({
+          code: "custom",
+          path: ["sessions", index, "reasons"],
+          message: "Recoverable sessions cannot contain blocking reasons.",
+        });
+      }
+      if (session.disposition !== "recoverable" && session.reasons.length === 0) {
+        context.addIssue({
+          code: "custom",
+          path: ["sessions", index, "reasons"],
+          message: "Blocked, unknown, and inapplicable sessions require a typed reason.",
+        });
+      }
+      if (session.disposition === "recoverable" && session.handleResolution.kind !== "selected") {
+        context.addIssue({
+          code: "custom",
+          path: ["sessions", index, "handleResolution"],
+          message: "Recoverable sessions require a deterministically selected handle.",
+        });
+      }
+    }
+  });
+export type UpdateReapRecoveryAssessment = z.infer<typeof UpdateReapRecoveryAssessmentSchema>;
+
 const observerRecoveryEvidenceSchema = z.discriminatedUnion("status", [
   z
     .object({
       status: z.literal("assessed"),
-      assessment: ObserverRecoveryAssessmentSchema,
+      assessment: UpdateReapRecoveryAssessmentSchema,
     })
     .strict(),
   z
@@ -86,6 +183,7 @@ export const UpdateReapHostEvidenceSchema = z.discriminatedUnion("status", [
     .object({
       status: z.literal("inspected"),
       buildVersion: nonEmptyStringSchema.optional(),
+      buildIdentity: nonEmptyStringSchema.optional(),
       protocolVersion: z.number().int(),
       relation: UpdateRuntimeBuildRelationSchema,
       compatibility: z.enum(["reuse", "replace", "refuse"]),
@@ -97,7 +195,9 @@ export type UpdateReapHostEvidence = z.infer<typeof UpdateReapHostEvidenceSchema
 
 export const UpdateReapTerminalDispositionReasonSchema = z.enum([
   "handoff_support_unknown",
+  "aux_terminal_not_resumable",
   "retained_session_missing",
+  "retained_session_identity_mismatch",
   "session_non_resumable",
   "session_recovery_unknown",
 ]);
@@ -111,7 +211,7 @@ const orderedTerminalReasonsSchema = z
     if (
       reasons.some((reason, index) => {
         const previous = reasons[index - 1];
-        return previous !== undefined && previous >= reason;
+        return previous !== undefined && compareCodeUnitStrings(previous, reason) >= 0;
       })
     ) {
       context.addIssue({
@@ -137,6 +237,7 @@ export type UpdateReapTerminalDisposition = z.infer<typeof UpdateReapTerminalDis
 type UpdateReapEvidenceSet = {
   observer: UpdateReapObserverEvidence;
   host: UpdateReapHostEvidence;
+  hookProviderIds: ProviderId[];
   hooks: z.infer<typeof ProviderHookHealthSchema>[];
   terminalDispositions: UpdateReapTerminalDisposition[];
 };
@@ -159,33 +260,53 @@ export const UpdateReapRecoveryPreflightSchema = z
     target: UpdateArtifactSchema,
     observer: UpdateReapObserverEvidenceSchema,
     host: UpdateReapHostEvidenceSchema,
+    hookProviderIds: z.array(ProviderIdSchema),
     hooks: z.array(ProviderHookHealthSchema),
     terminalDispositions: z.array(UpdateReapTerminalDispositionSchema),
     evidenceComplete: z.boolean(),
   })
   .strict()
   .superRefine((preflight, context) => {
+    if (!strictlySortedStrings(preflight.hookProviderIds)) {
+      context.addIssue({
+        code: "custom",
+        path: ["hookProviderIds"],
+        message: "Hook provider ids must be unique and deterministically sorted.",
+      });
+    }
     const hookProviders = preflight.hooks.map((hook) => hook.provider);
-    if (
-      hookProviders.some((provider, index) => {
-        const previous = hookProviders[index - 1];
-        return previous !== undefined && previous >= provider;
-      })
-    ) {
+    if (!strictlySortedStrings(hookProviders)) {
       context.addIssue({
         code: "custom",
         path: ["hooks"],
         message: "Hook evidence must be unique and deterministically sorted.",
       });
     }
-
-    const terminalKeys = preflight.terminalDispositions.map(terminalKey);
     if (
-      terminalKeys.some((key, index) => {
-        const previous = terminalKeys[index - 1];
-        return previous !== undefined && previous >= key;
-      })
+      hookProviders.length !== preflight.hookProviderIds.length ||
+      hookProviders.some((provider, index) => provider !== preflight.hookProviderIds[index])
     ) {
+      context.addIssue({
+        code: "custom",
+        path: ["hooks"],
+        message: "Every requested hook provider must have exactly one matching evidence result.",
+      });
+    }
+    if (
+      preflight.observer.status === "exact" &&
+      preflight.observer.recovery.status === "assessed" &&
+      preflight.observer.recovery.assessment.providerCapabilities.some(
+        (capability) => !preflight.hookProviderIds.includes(capability.provider),
+      )
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["hookProviderIds"],
+        message: "Every assessed recovery provider must have hook evidence.",
+      });
+    }
+
+    if (!strictlySortedTerminals(preflight.terminalDispositions)) {
       context.addIssue({
         code: "custom",
         path: ["terminalDispositions"],
@@ -194,10 +315,16 @@ export const UpdateReapRecoveryPreflightSchema = z
     }
 
     if (preflight.host.status === "inspected") {
-      const hostKeys = preflight.host.terminals.map(terminalKey);
       if (
-        hostKeys.length !== terminalKeys.length ||
-        hostKeys.some((key, index) => key !== terminalKeys[index])
+        preflight.host.terminals.length !== preflight.terminalDispositions.length ||
+        preflight.host.terminals.some((terminal, index) => {
+          const disposition = preflight.terminalDispositions[index];
+          return (
+            disposition === undefined ||
+            compareTerminalIdentity(terminal, disposition) !== 0 ||
+            terminal.sessionId !== disposition.sessionId
+          );
+        })
       ) {
         context.addIssue({
           code: "custom",
@@ -222,15 +349,54 @@ export const UpdateReapRecoveryPreflightSchema = z
   });
 export type UpdateReapRecoveryPreflight = z.infer<typeof UpdateReapRecoveryPreflightSchema>;
 
-function terminalKey(terminal: {
-  terminalTargetId: string;
-  ptyId: string;
-  ptyInstanceId: string;
-}): string {
-  return `${terminal.terminalTargetId}\u0000${terminal.ptyId}\u0000${terminal.ptyInstanceId}`;
+function compareTerminalIdentity(
+  left: {
+    terminalTargetId: string;
+    ptyId: string;
+    ptyInstanceId: string;
+  },
+  right: {
+    terminalTargetId: string;
+    ptyId: string;
+    ptyInstanceId: string;
+  },
+): number {
+  return (
+    compareCodeUnitStrings(left.terminalTargetId, right.terminalTargetId) ||
+    compareCodeUnitStrings(left.ptyId, right.ptyId) ||
+    compareCodeUnitStrings(left.ptyInstanceId, right.ptyInstanceId)
+  );
+}
+
+function strictlySortedTerminals(
+  terminals: readonly {
+    terminalTargetId: string;
+    ptyId: string;
+    ptyInstanceId: string;
+  }[],
+): boolean {
+  return terminals.every((terminal, index) => {
+    const previous = terminals[index - 1];
+    return previous === undefined || compareTerminalIdentity(previous, terminal) < 0;
+  });
+}
+
+function strictlySortedStrings(values: readonly string[]): boolean {
+  return values.every((value, index) => {
+    const previous = values[index - 1];
+    return previous === undefined || compareCodeUnitStrings(previous, value) < 0;
+  });
 }
 
 export function updateReapEvidenceIsComplete(preflight: UpdateReapEvidenceSet): boolean {
+  if (
+    preflight.hookProviderIds.length !== preflight.hooks.length ||
+    preflight.hookProviderIds.some(
+      (provider, index) => provider !== preflight.hooks[index]?.provider,
+    )
+  ) {
+    return false;
+  }
   if (preflight.observer.status !== "exact" || preflight.observer.recovery.status !== "assessed") {
     return false;
   }

@@ -134,6 +134,20 @@ describe("inspectObserverRecoveryAssessment", () => {
       },
     ]);
   });
+
+  it("orders mixed-case session identities by contract code units", () => {
+    const result = assessObserverRecovery({
+      graph: graph(true),
+      persistenceSnapshot: {
+        sessions: [session({ id: "a" }), session({ id: "Z" })],
+        recoveryHandles: [],
+      },
+      providers: providers(true),
+      config: enabledConfig(),
+    });
+
+    expect(result.sessions.map((entry) => entry.sessionId)).toEqual(["Z", "a"]);
+  });
 });
 
 function session(overrides: Partial<PersistedSession> = {}): PersistedSession {

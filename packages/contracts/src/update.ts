@@ -183,6 +183,19 @@ export const UpdateCommandReportV3Schema: z.ZodType<UpdateCommandReport> = z
     recoveryPreflight: UpdateReapRecoveryPreflightSchema.optional(),
   })
   .strict()
+  .superRefine((report, context) => {
+    if (
+      report.recoveryPreflight !== undefined &&
+      (!updateArtifactsMatch(report.current, report.recoveryPreflight.installed) ||
+        !updateArtifactsMatch(report.target, report.recoveryPreflight.target))
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["recoveryPreflight"],
+        message: "Recovery preflight artifacts must match the enclosing update report.",
+      });
+    }
+  })
   .transform(
     (report): UpdateCommandReport => ({
       schemaVersion: report.schemaVersion,
@@ -207,6 +220,10 @@ export type CompatibleUpdateCommandReport =
 /** Explicit compatible parser for persisted or piped reports from versions 1, 2, and 3. */
 export const CompatibleUpdateCommandReportSchema: z.ZodType<CompatibleUpdateCommandReport> =
   z.union([UpdateCommandReportV1Schema, UpdateCommandReportV2Schema, UpdateCommandReportV3Schema]);
+
+function updateArtifactsMatch(left: UpdateArtifact, right: UpdateArtifact): boolean {
+  return left.version === right.version && left.revision === right.revision;
+}
 
 function updateCommandReportCore(report: {
   channel: UpdateChannelId;
