@@ -17,6 +17,10 @@ import type {
 import { manyProjectsSnapshot } from "../../fixtures/scenarios.js";
 import { FakeStationSource } from "./fakeStationSource.js";
 import { FakeTuiObserverService } from "./fakeObserverService.js";
+import {
+  createDashboardScrollController,
+  type DashboardScrollController,
+} from "../../view/layout/scrollViewport.js";
 
 export type MakeStationTestRuntimeOptions = {
   /** Source snapshot; `null` exercises the no-snapshot states. Default: manyProjectsSnapshot(). */
@@ -24,7 +28,6 @@ export type MakeStationTestRuntimeOptions = {
   connection?: StationClientConnectionState | undefined;
   /** Seed the store synchronously instead of waiting for the source mirror. Default: true. */
   seedInitialSnapshot?: boolean | undefined;
-  terminalRows?: number | undefined;
   initialState?: DashboardRuntimeOptions["initialState"];
   capabilities?: DashboardCapabilities;
   folderService?: TuiFolderService | undefined;
@@ -32,6 +35,7 @@ export type MakeStationTestRuntimeOptions = {
 
 export type StationTestDashboardRuntime = DashboardRuntime & {
   clientState: StationClientStateSource;
+  layout: DashboardScrollController;
 };
 
 export type CreateStationTestDashboardRuntimeOptions = Omit<
@@ -66,6 +70,7 @@ export function createStationTestDashboardRuntime(
     exitOnFocusSuccess,
     ...runtimeOptions
   } = options;
+  const layout = createDashboardScrollController();
   const clientState = options.source ?? new FakeStationSource(initialSnapshot);
   const resolvedCapabilities =
     capabilities ??
@@ -84,8 +89,9 @@ export function createStationTestDashboardRuntime(
     ...runtimeOptions,
     source: clientState,
     capabilities: resolvedCapabilities,
+    visibleDashboardRows: runtimeOptions.visibleDashboardRows ?? layout.visibleRows,
   });
-  return { ...runtime, clientState };
+  return { ...runtime, clientState, layout };
 }
 
 function createStationTestCapabilities(options: {
@@ -144,7 +150,7 @@ function createStationTestCapabilities(options: {
 
 export type StationTestRuntime = {
   runtime: StationTestDashboardRuntime;
-  input: Pick<StationTestDashboardRuntime, "state" | "actions" | "clientState">;
+  input: Pick<StationTestDashboardRuntime, "state" | "actions" | "clientState" | "layout">;
   source: FakeStationSource;
   service: FakeTuiObserverService;
 };
@@ -168,7 +174,6 @@ export function makeStationTestRuntime(
     ...(options.capabilities === undefined ? {} : { capabilities: options.capabilities }),
     initialState: {
       ...(options.initialState ?? {}),
-      ...(options.terminalRows === undefined ? {} : { terminalRows: options.terminalRows }),
     },
     ...(options.folderService === undefined ? {} : { folderService: options.folderService }),
   });
@@ -179,7 +184,7 @@ export function makeStationTestRuntime(
   }
   return {
     runtime,
-    input: { state: runtime.state, actions: runtime.actions, clientState: source },
+    input: { state: runtime.state, actions: runtime.actions, clientState: source, layout: runtime.layout },
     source,
     service,
   };

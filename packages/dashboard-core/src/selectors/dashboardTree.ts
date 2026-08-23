@@ -39,12 +39,9 @@ export type DashboardRowId = string & {
 export const dashboardRowIds = {
   project: (projectId: ProjectId): DashboardRowId => `project:${projectId}` as DashboardRowId,
   group: (groupId: SessionGroupId): DashboardRowId => `group:${groupId}` as DashboardRowId,
-  groupFrameEnd: (groupId: SessionGroupId): DashboardRowId =>
-    `group-frame-end:${groupId}` as DashboardRowId,
   session: (sessionId: SessionId): DashboardRowId => `session:${sessionId}` as DashboardRowId,
   create: (localId: string): DashboardRowId => `create:${localId}` as DashboardRowId,
   empty: (projectId: ProjectId): DashboardRowId => `empty:${projectId}` as DashboardRowId,
-  gap: (projectId: ProjectId): DashboardRowId => `gap:${projectId}` as DashboardRowId,
 } as const;
 
 export type DashboardCellId = "identity" | "shell" | "quickSession" | "addSession" | "menu";
@@ -77,7 +74,7 @@ export type DashboardProjectHeaderPayload = {
 
 /**
  * Canonical snapshots enforce exclusive direct membership; the dashboard flattens parent links,
- * and only the viewport assigns keys to visible sessions.
+ * and only renderer-reported semantic visibility assigns keys to sessions.
  */
 export type DashboardGroupHeaderPayload = {
   readonly type: "groupHeader";
@@ -86,12 +83,6 @@ export type DashboardGroupHeaderPayload = {
   readonly sessionCount: number;
   readonly visibleSessionCount: number;
   readonly persistentFilterMatch?: DashboardPersistentFilterGroupMatch;
-};
-
-/** Inert closing-frame row that consumes viewport height without focus cells or selection slots. */
-export type DashboardGroupFrameEndPayload = {
-  readonly type: "groupFrameEnd";
-  readonly groupId: SessionGroupId;
 };
 
 export type DashboardSessionPayload = {
@@ -116,19 +107,12 @@ export type DashboardEmptyProjectPayload = {
   readonly project: DashboardProjectView;
 };
 
-export type DashboardProjectGapPayload = {
-  readonly type: "projectGap";
-  readonly projectId: ProjectId;
-};
-
 export type DashboardTreePayload =
   | DashboardProjectHeaderPayload
   | DashboardGroupHeaderPayload
-  | DashboardGroupFrameEndPayload
   | DashboardSessionPayload
   | DashboardCreateLocalRowPayload
-  | DashboardEmptyProjectPayload
-  | DashboardProjectGapPayload;
+  | DashboardEmptyProjectPayload;
 
 export type DashboardTreeRow = TreeGridRow<
   DashboardRowId,
@@ -141,12 +125,23 @@ export type DashboardTreeRow = TreeGridRow<
   readonly containsFocusedRow?: true;
 };
 
+/**
+ * Renderer-neutral dashboard structure. Projects and Groups own their semantic children; visual
+ * frames, indentation, spacing, and clipping are deliberately absent from this contract.
+ */
+export type DashboardTreeBranch = {
+  readonly row: DashboardTreeRow;
+  readonly children: readonly DashboardTreeBranch[];
+};
+
 export type DashboardTreeProjection = Omit<
   TreeGridProjection<DashboardRowId, DashboardCellId, DashboardTreePayload>,
   "rowById" | "visibleRows"
 > & {
   readonly rowById: ReadonlyMap<DashboardRowId, DashboardTreeRow>;
   readonly visibleRows: readonly DashboardTreeRow[];
+  /** Visible nested structure used by renderers without reconstructing ancestry from flat rows. */
+  readonly roots: readonly DashboardTreeBranch[];
   readonly persistentFilter?: DashboardPersistentFilterProjection;
 };
 
@@ -481,10 +476,9 @@ function dashboardRoots(
   groupHeaderActionVisibility: DashboardGroupHeaderActionVisibility,
 ): DashboardTreeNode[] {
   const applied = projection?.source === "applied" && projection.active;
-  return projects.flatMap((projectRows, index) => [
-    ...(index === 0 ? [] : [projectGapNode(projectRows.project.id)]),
+  return projects.map((projectRows) =>
     projectNode(projectRows, projection, applied, orderingMode, groupHeaderActionVisibility),
-  ]);
+  );
 }
 
 function projectNode(
@@ -539,10 +533,7 @@ function groupNode(
     visibleSessionCount: visibleRows.filter((row) => row.type === "session").length,
     ...(match === undefined ? {} : { persistentFilterMatch: match }),
   };
-  const children = [
-    ...visibleRows.map((row) => rowNode(row, projection)),
-    groupFrameEndNode(groupRows.group.id),
-  ];
+  const children = visibleRows.map((row) => rowNode(row, projection));
   return {
     id: dashboardRowIds.group(groupRows.group.id),
     payload,
@@ -560,14 +551,6 @@ function groupHeaderCells(
   if (visibility.quickSession) cells.push("quickSession");
   if (visibility.menu) cells.push("menu");
   return cells;
-}
-
-function groupFrameEndNode(groupId: SessionGroupId): DashboardTreeNode {
-  return {
-    id: dashboardRowIds.groupFrameEnd(groupId),
-    payload: { type: "groupFrameEnd", groupId },
-    cells: [],
-  };
 }
 
 function admittedRows<Row extends DashboardSessionPayload | DashboardCreateLocalRowPayload>(
@@ -643,14 +626,6 @@ function emptyProjectNode(project: DashboardProjectView): DashboardTreeNode {
   };
 }
 
-function projectGapNode(projectId: ProjectId): DashboardTreeNode {
-  return {
-    id: dashboardRowIds.gap(projectId),
-    payload: { type: "projectGap", projectId },
-    cells: [],
-  };
-}
-
 function decorateDashboardProjection(
   projection: TreeGridProjection<DashboardRowId, DashboardCellId, DashboardTreePayload>,
   focus: DashboardFocus | undefined,
@@ -682,11 +657,39 @@ function decorateDashboardProjection(
     }
     return decorated;
   });
+  const roots = dashboardBranches(projection, rowById);
   return {
     rowById,
     visibleRows,
+    roots,
     visibleIndexById: projection.visibleIndexById,
     collapsedAncestorById: projection.collapsedAncestorById,
     ...(persistentFilter === undefined ? {} : { persistentFilter }),
   };
+}
+
+function dashboardBranches(
+  projection: TreeGridProjection<DashboardRowId, DashboardCellId, DashboardTreePayload>,
+  rowById: ReadonlyMap<DashboardRowId, DashboardTreeRow>,
+): DashboardTreeBranch[] {
+  const childrenByParent = new Map<DashboardRowId, DashboardTreeRow[]>();
+  const roots: DashboardTreeRow[] = [];
+  for (const row of projection.visibleRows) {
+    const decorated = rowById.get(row.id);
+    if (decorated === undefined) {
+      throw new Error(`Projected dashboard branch is missing: ${row.id}`);
+    }
+    if (decorated.parentId === undefined) {
+      roots.push(decorated);
+      continue;
+    }
+    const siblings = childrenByParent.get(decorated.parentId) ?? [];
+    siblings.push(decorated);
+    childrenByParent.set(decorated.parentId, siblings);
+  }
+  const branch = (row: DashboardTreeRow): DashboardTreeBranch => ({
+    row,
+    children: (childrenByParent.get(row.id) ?? []).map(branch),
+  });
+  return roots.map(branch);
 }

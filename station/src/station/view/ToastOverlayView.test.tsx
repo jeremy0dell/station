@@ -139,6 +139,7 @@ async function renderNotice() {
           <DashboardRoot
             state={store.state}
             actions={store.actions}
+            layout={store.layout}
             columns={99}
             rows={25}
             onCopyNotice={(text) => copied.push(text)}

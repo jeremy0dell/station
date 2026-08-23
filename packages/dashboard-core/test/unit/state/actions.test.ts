@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import { dashboardRowIds } from "../../../src/selectors/dashboardTree.js";
 import type { DashboardStateAction } from "../../../src/state/actions.js";
 import { handleTuiAction } from "../../../src/state/actions.js";
-import { scrollDashboard } from "../../../src/state/dashboardScroll.js";
 import { createInitialTuiState } from "../../../src/state/screen.js";
 import { tuiScreenBehavior } from "../../../src/state/screenBehavior.js";
 import {
@@ -45,12 +44,6 @@ type StateActionCase = Readonly<{
 }>;
 
 const STATE_ACTION_CASES: readonly StateActionCase[] = [
-  {
-    name: "dashboard.scroll",
-    action: { type: "dashboard.scroll", delta: 5 },
-    state: scrollingDashboardState,
-    reduce: (state) => scrollDashboard(state, 5),
-  },
   {
     name: "projectSettings.focusItem",
     action: { type: "projectSettings.focusItem", itemId: "remove" },
@@ -593,10 +586,6 @@ function dashboardState(): DashboardState {
 
 function groupedDashboardState(): DashboardState {
   return createInitialTuiState({ initialSnapshot: createGroupedDashboardSnapshot() });
-}
-
-function scrollingDashboardState(): DashboardState {
-  return { ...dashboardState(), terminalRows: 8 };
 }
 
 function projectSettingsState(): DashboardState {

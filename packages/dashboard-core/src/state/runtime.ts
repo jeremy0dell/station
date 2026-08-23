@@ -5,11 +5,8 @@ import { createNodeFolderService, type TuiFolderService } from "../services/fold
 import type { ObserverService } from "../services/types.js";
 import { type DashboardActions, handleTuiAction } from "./actions.js";
 import type { DashboardCapabilities } from "./capabilities/execution.js";
-import {
-  clearDashboardFocus,
-  focusDashboardSession,
-  reconcileDashboardFocus,
-} from "./dashboardFocus.js";
+import { clearDashboardFocus, focusDashboardSession } from "./dashboardFocus.js";
+import type { DashboardVisibleRowsSource } from "./layoutVisibility.js";
 import {
   createTuiLocalOperationRunner,
   type TuiLocalOperationRunner,
@@ -50,6 +47,8 @@ export type DashboardRuntimeOptions = {
   initialState?: Omit<CreateInitialTuiStateOptions, "initialSnapshot">;
   folderService?: TuiFolderService;
   clientLabel?: string;
+  /** Semantic identities intersecting the renderer viewport; physical geometry stays outside core. */
+  visibleDashboardRows?: DashboardVisibleRowsSource;
 };
 
 /**
@@ -109,6 +108,9 @@ export function createDashboardRuntime(options: DashboardRuntimeOptions): Dashbo
         handleTuiKey(store.getState(), key, {
           cwd: folderService.cwd(),
           homeDir: folderService.homeDir(),
+          ...(options.visibleDashboardRows === undefined
+            ? {}
+            : { visibleDashboardRows: options.visibleDashboardRows }),
         }),
       );
     },
@@ -123,13 +125,11 @@ export function createDashboardRuntime(options: DashboardRuntimeOptions): Dashbo
         handleTuiAction(store.getState(), action, {
           cwd: folderService.cwd(),
           homeDir: folderService.homeDir(),
+          ...(options.visibleDashboardRows === undefined
+            ? {}
+            : { visibleDashboardRows: options.visibleDashboardRows }),
         }),
       );
-    },
-    setTerminalRows: (rows): void => {
-      if (!effectScope.isOpen()) return;
-      const current = store.getState();
-      store.setState(reconcileDashboardFocus(current, { ...current, terminalRows: rows }), true);
     },
     focusDashboardSession: (sessionId): void => {
       if (!effectScope.isOpen()) return;

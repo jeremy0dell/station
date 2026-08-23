@@ -21,11 +21,13 @@ import {
 } from "../mouse.js";
 import { C0 } from "../../terminal/protocol/syntax.js";
 import { ARROW_KEYS } from "../../terminal/protocol/cursorKeys.js";
+import type { DashboardScrollController } from "../../station/view/layout/scrollViewport.js";
 
 type StationDashboardInput = {
   state: DashboardStateSource;
   clientState: StationClientStateSource;
   actions: Pick<DashboardActions, "dismissToasts" | "dispatch" | "handleKey" | "pushToast">;
+  layout: DashboardScrollController;
 };
 
 export const STATION_EXIT_LEGACY = "\x11"; // Ctrl-Q

@@ -178,7 +178,7 @@ describe("buildContextMenuItems", () => {
     ]);
   });
 
-  it("keeps hidden and pending dashboard sessions inert", () => {
+  it("keeps collapse-hidden and pending dashboard sessions inert", () => {
     const store = createStationStore();
     const snapshot = manyProjectsSnapshot();
     const session = snapshot.sessions.find(({ id }) => id === STATION_IDLE_SESSION_ID);
@@ -191,7 +191,6 @@ describe("buildContextMenuItems", () => {
     };
     const states = [
       createInitialTuiState({ initialSnapshot: snapshot, collapsedProjectIds: ["station"] }),
-      createInitialTuiState({ initialSnapshot: snapshot, terminalRows: 8 }),
       createInitialTuiState({
         initialSnapshot: snapshot,
         localRows: {
@@ -528,20 +527,6 @@ describe("buildContextMenuItems", () => {
         actionId: "remove",
       });
     }
-
-    const frameItems = buildContextMenuItems(
-      {
-        kind: "station",
-        target: {
-          kind: "dashboardCell",
-          rowId: dashboardRowIds.groupFrameEnd("grp_station_active"),
-          cellId: "identity",
-        },
-      },
-      store.getState(),
-      stationState,
-    );
-    expect(frameItems.map(({ id }) => id)).toEqual(["station.noActions"]);
   });
 
   it("keeps STATION row actions inert off the dashboard screen", () => {

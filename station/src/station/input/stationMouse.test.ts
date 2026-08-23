@@ -5,7 +5,7 @@
 import { describe, expect, it } from "bun:test";
 import type { ProviderId, StationSnapshot } from "@station/contracts";
 import type { DashboardRuntimeOptions } from "@station/dashboard-core/runtime";
-import { dashboardRowIds, selectDashboardViewport } from "@station/dashboard-core/selectors";
+import { dashboardRowIds, selectDashboardSlots } from "@station/dashboard-core/selectors";
 import { addProjectSelectedIndex, removeProjectConfirmPhrase } from "@station/dashboard-core/state";
 import type { StationMouseEvent } from "../../input/mouse.js";
 import {
@@ -68,7 +68,6 @@ function makeStore(
   // Enough rows to keep the same visible window as before the pinned fleet bar +
   // column header, so the station-project rows stay slot-addressable.
   return makeStationTestRuntime({
-    terminalRows: 14,
     ...(snapshot === undefined ? {} : { snapshot }),
     ...(initialState === undefined ? {} : { initialState }),
   }).runtime;
@@ -421,7 +420,6 @@ describe("routeStationMouse", () => {
 
   it("edits and clears an applied filter from footer actions only in dashboard mode", () => {
     const store = makeStationTestRuntime({
-      terminalRows: 14,
       initialState: { persistentFilter: { query: "working" } },
     }).runtime;
 
@@ -460,10 +458,8 @@ describe("routeStationMouse", () => {
 
   it("routes condition building and final apply clicks through the same transitions as keys", () => {
     const clicked = makeStationTestRuntime({
-      terminalRows: 14,
     }).runtime;
     const keyed = makeStationTestRuntime({
-      terminalRows: 14,
     }).runtime;
     for (const store of [clicked, keyed]) {
       store.actions.handleKey({ input: "/" });
@@ -518,7 +514,6 @@ describe("routeStationMouse", () => {
 
   it("routes the top back and close controls independently", () => {
     const store = makeStationTestRuntime({
-      terminalRows: 14,
     }).runtime;
     store.actions.handleKey({ input: "/" });
     store.actions.handleKey({ input: "i", ctrl: true });
@@ -548,7 +543,6 @@ describe("routeStationMouse", () => {
 
   it("click-away discards only the active field's unretained changes", () => {
     const store = makeStationTestRuntime({
-      terminalRows: 14,
     }).runtime;
     store.actions.handleKey({ input: "/" });
     store.actions.handleKey({ input: "draft" });
@@ -634,18 +628,6 @@ describe("routeStationMouse", () => {
     );
     expect(store.state.getState().screen).toEqual({ name: "dashboard" });
 
-    const beforeFrame = store.state.getState();
-    routeStationMouse(
-      {
-        kind: "dashboardCell",
-        rowId: dashboardRowIds.groupFrameEnd("group_design_refresh"),
-        cellId: "identity",
-      },
-      LEFT_DOWN,
-      store,
-    );
-    expect(store.state.getState()).toEqual(beforeFrame);
-
     routeStationMouse(
       { kind: "dashboardCell", rowId: groupId, cellId: "identity" },
       LEFT_DOWN,
@@ -678,7 +660,7 @@ describe("routeStationMouse", () => {
     const snapshot = store.state.getState().snapshot;
     if (snapshot === undefined) throw new Error("expected snapshot");
     const visibleSessions = () =>
-      selectDashboardViewport(snapshot, store.state.getState()).rows.filter(
+      selectDashboardSlots(snapshot, store.state.getState()).tree.visibleRows.filter(
         (row) => row.payload.type === "session",
       ).length;
 
@@ -691,26 +673,32 @@ describe("routeStationMouse", () => {
 
   it("scrolls on wheel in row-interactive modes and nowhere else", () => {
     const store = makeStore();
+    const deltas: number[] = [];
+    store.layout.scrollBy = (delta) => void deltas.push(delta);
 
     routeStationMouse({ kind: "body" }, SCROLL_DOWN, store);
-    expect(store.state.getState().scrollOffset).toBe(1);
+    expect(deltas).toEqual([1]);
     routeStationMouse({ kind: "body" }, SCROLL_UP, store);
-    expect(store.state.getState().scrollOffset).toBe(0);
+    expect(deltas).toEqual([1, -1]);
 
     store.actions.handleKey({ input: "H" });
     routeStationMouse({ kind: "body" }, SCROLL_DOWN, store);
-    expect(store.state.getState().scrollOffset).toBe(0);
+    expect(deltas).toEqual([1, -1]);
   });
 
   it("never scrolls the dashboard under a sheet backdrop", () => {
     const store = makeStore();
+    const deltas: number[] = [];
+    store.layout.scrollBy = (delta) => void deltas.push(delta);
     const outcome = routeStationMouse({ kind: "sheetBackdrop" }, SCROLL_DOWN, store);
     expect(outcome).toEqual({ kind: "handled" });
-    expect(store.state.getState().scrollOffset).toBe(0);
+    expect(deltas).toEqual([]);
   });
 
   it("dismisses a bounded screen only on primary-down over the screen backdrop", () => {
     const store = makeStore();
+    const deltas: number[] = [];
+    store.layout.scrollBy = (delta) => void deltas.push(delta);
     store.actions.handleKey({ input: "H" });
 
     for (const event of [LEFT_UP, RIGHT_DOWN, MIDDLE_DOWN, SCROLL_DOWN]) {
@@ -728,6 +716,8 @@ describe("routeStationMouse", () => {
 
   it("keeps stale screen and sheet backdrop wheel events from scrolling after dismissal", () => {
     const store = makeStore();
+    const deltas: number[] = [];
+    store.layout.scrollBy = (delta) => void deltas.push(delta);
     store.actions.handleKey({ input: "H" });
     routeStationMouse({ kind: "screenBackdrop" }, LEFT_DOWN, store);
 
@@ -735,15 +725,17 @@ describe("routeStationMouse", () => {
     routeStationMouse({ kind: "sheetBackdrop" }, SCROLL_DOWN, store);
 
     expect(store.state.getState().screen).toEqual({ name: "dashboard" });
-    expect(store.state.getState().scrollOffset).toBe(0);
+    expect(deltas).toEqual([]);
   });
 
   it("pages on scroll-indicator clicks", () => {
     const store = makeStore();
+    const directions: number[] = [];
+    store.layout.scrollPage = (direction) => void directions.push(direction);
     routeStationMouse({ kind: "scrollIndicator", direction: "down" }, LEFT_DOWN, store);
-    expect(store.state.getState().scrollOffset).toBe(5);
+    expect(directions).toEqual([1]);
     routeStationMouse({ kind: "scrollIndicator", direction: "up" }, LEFT_DOWN, store);
-    expect(store.state.getState().scrollOffset).toBe(0);
+    expect(directions).toEqual([1, -1]);
   });
 
   it("dismisses toasts on click in any mode", () => {
@@ -897,7 +889,7 @@ describe("routeStationMouse", () => {
   });
 
   it("resolves native shell targets from client truth when dashboard projection is stale", () => {
-    const fixture = makeStationTestRuntime({ terminalRows: 14 });
+    const fixture = makeStationTestRuntime();
     const canonical = manyProjectsSnapshot();
     const canonicalPath = "/canonical/station/pty-buffer";
     fixture.source.setSnapshot({
@@ -1110,7 +1102,7 @@ describe("routeStationMouse", () => {
   });
 
   it("selects a project default agent by clicking an agent picker row", async () => {
-    const fixture = makeStationTestRuntime({ terminalRows: 12 });
+    const fixture = makeStationTestRuntime();
     const store = fixture.runtime;
     routeStationMouse(
       { kind: "dashboardCell", rowId: dashboardRowIds.project("station"), cellId: "menu" },
@@ -1197,7 +1189,7 @@ describe("routeStationMouse", () => {
 
   it("unchecks a current member and dispatches one ungroup membership delta", async () => {
     const snapshot = groupedManyProjectsSnapshot();
-    const fixture = makeStationTestRuntime({ terminalRows: 14, snapshot });
+    const fixture = makeStationTestRuntime({ snapshot });
     const store = fixture.runtime;
 
     routeStationMouse(
@@ -1299,7 +1291,7 @@ describe("routeStationMouse", () => {
   });
 
   it("fires removal when the armed remove confirmation is clicked", async () => {
-    const fixture = makeStationTestRuntime({ terminalRows: 12 });
+    const fixture = makeStationTestRuntime();
     const store = fixture.runtime;
     store.actions.dispatch({ type: "projectSettings.open", projectId: "station" });
     store.actions.dispatch({ type: "projectSettings.focusItem", itemId: "remove" });
@@ -1339,9 +1331,12 @@ function slotForRow(store: StationTestDashboardRuntime, rowId: string): string {
   if (state.snapshot === undefined) {
     throw new Error("store has no snapshot");
   }
-  // Mirrors the viewport selector the actions module uses; resolved through
-  // the store so the slot reflects current scroll/filter state.
-  const choice = selectDashboardViewport(state.snapshot, state).rowChoices.find(
+  const choice = selectDashboardSlots(
+    state.snapshot,
+    state,
+    state.screen,
+    store.layout.snapshot(),
+  ).rowChoices.find(
     (candidate) => candidate.value.id === rowId,
   );
   if (choice === undefined) {

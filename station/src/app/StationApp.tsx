@@ -32,6 +32,7 @@ export function StationApp({
   dashboardState,
   clientState,
   dashboardActions,
+  dashboardLayout,
   dispatchMouse,
   onCopySelection,
   automations,
@@ -78,6 +79,7 @@ export function StationApp({
         <StationOverlay
           state={dashboardState}
           actions={dashboardActions}
+          layout={dashboardLayout}
           topRowWidgets={topRowWidgets}
           dispatchMouse={dispatchMouse}
           onCopyNotice={onCopySelection}

@@ -35,6 +35,8 @@ import { parseStationTerminalPaletteObservation } from "../../theme/terminalPale
 import { lightTerminalColors } from "../../theme/terminalPalette/test/fixtures.js";
 import { createTerminalPaletteTheme } from "../../theme/terminalPalette/theme.js";
 import { StationHoverProvider, StationMouseProvider } from "./stationMouseContext.js";
+import { semanticItemRenderableId } from "./layout/scrollViewport.js";
+import { FullscreenDashboard } from "../../dashboardRenderer/FullscreenDashboard.js";
 
 function spanHex(span: ReturnType<typeof spanAtFrameCell>): string | undefined {
   return span?.fg === undefined ? undefined : rgbToHex(span.fg);
@@ -134,6 +136,7 @@ describe("dashboard golden frames", () => {
       <DashboardRoot
         state={store.state}
         actions={store.actions}
+        layout={store.layout}
         columns={input.width}
         rows={input.height}
         onCopyNotice={() => {}}
@@ -159,6 +162,7 @@ describe("dashboard golden frames", () => {
       setup.renderer.destroy();
     });
     await setup.renderOnce();
+    await setup.flush();
     const toast = input.toast;
     if (toast !== undefined) {
       await act(async () => {
@@ -255,7 +259,82 @@ describe("dashboard golden frames", () => {
     expect(pendingLine?.trimEnd().endsWith("│")).toBe(true);
   });
 
-  it("renders filtered Group counts and clips framed blocks as ordinary rows", async () => {
+  it("lays out mixed-height children and follows semantic focus through resize and reflow", async () => {
+    const failedId = dashboardRowIds.create("failed-layout-proof");
+    const focusedId = dashboardRowIds.session("ses_wt_scripts_unknown");
+    const { runtime: store } = makeStationTestRuntime({
+      snapshot: manyProjectsSnapshot(),
+      seedInitialSnapshot: false,
+      initialState: {
+        localRows: {
+          pendingCreate: [],
+          failedCreate: [
+            {
+              localId: "failed-layout-proof",
+              projectId: "station",
+              title: "failed-layout-child",
+              branch: "failed-layout-child",
+              error: {
+                tag: "ClientObserverError",
+                code: "CREATE_FAILED",
+                message: "Failure detail occupies its own intrinsic child box.",
+              },
+              expiresAt: Date.now() + 60_000,
+            },
+          ],
+          pendingRemove: [],
+          pendingStart: [],
+        },
+      },
+    });
+    store.start();
+    const setup = await testRender(
+      <StationThemeProvider theme={nativeStationTheme}>
+        <FullscreenDashboard
+          runtime={store}
+          openUrl={() => {}}
+          onCopyNotice={() => {}}
+        />
+      </StationThemeProvider>,
+      { width: 80, height: 16 },
+    );
+    teardowns.push(() => setup.renderer.destroy());
+    await setup.renderOnce();
+    await setup.flush();
+    const failedRenderable = setup.renderer.root.findDescendantById(
+      semanticItemRenderableId(failedId),
+    );
+    const initialLines = setup.captureCharFrame().split("\n");
+    const failedTitle = initialLines.findIndex((line) => line.includes("failed-layout-child"));
+
+    expect(failedRenderable?.height).toBe(2);
+    expect(initialLines[failedTitle + 1]).toContain(
+      "Failure detail occupies its own intrinsic child box.",
+    );
+
+    store.actions.focusDashboardSession("ses_wt_scripts_unknown");
+    await setup.flush();
+    expect(store.layout.snapshot()).toContain(focusedId);
+
+    await act(async () => setup.renderer.resize(60, 10));
+    await setup.renderOnce();
+    await setup.flush();
+    expect(store.layout.snapshot()).toContain(focusedId);
+
+    store.actions.dispatch({
+      type: "dashboard.cell.activate",
+      rowId: dashboardRowIds.project("station"),
+      cellId: "identity",
+    });
+    store.actions.focusDashboardSession("ses_wt_scripts_unknown");
+    await setup.flush();
+    await setup.flush();
+
+    expect(store.state.getState().collapsedProjectIds.has("station")).toBe(true);
+    expect(store.layout.snapshot()).toContain(focusedId);
+  });
+
+  it("renders filtered Group counts and clips structural Group boxes", async () => {
     const snapshot = groupedManyProjectsSnapshot();
     const filtered = await renderDashboard({
       width: 80,
@@ -274,8 +353,9 @@ describe("dashboard golden frames", () => {
       width: 80,
       height: 16,
       snapshot,
-      initialState: { scrollOffset: 8 },
     });
+    scrolled.store.layout.scrollBy(8);
+    await scrolled.flush();
     const scrolledFrame = scrolled.captureCharFrame();
     expect(scrolledFrame).toContain("▲");
     expect(scrolledFrame).toContain("│");
@@ -583,6 +663,8 @@ describe("dashboard golden frames", () => {
       await Promise.resolve();
     });
     await setup.flush();
+    await setup.flush();
+    await setup.renderOnce();
 
     const frame = setup.captureCharFrame();
     expect(frame).toMatchSnapshot();
@@ -661,7 +743,7 @@ describe("dashboard golden frames", () => {
     store.start();
     const setup = await testRender(
       <StationThemeProvider theme={nativeStationTheme}>
-        <DashboardRoot state={store.state} actions={store.actions} columns={width} rows={height} onCopyNotice={() => {}} />
+        <DashboardRoot state={store.state} actions={store.actions} layout={store.layout} columns={width} rows={height} onCopyNotice={() => {}} />
       </StationThemeProvider>,
       { width, height },
     );
@@ -1045,7 +1127,7 @@ describe("dashboard golden frames", () => {
     store.start();
     const setup = await testRender(
       <StationThemeProvider theme={nativeStationTheme}>
-        <DashboardRoot state={store.state} actions={store.actions} columns={80} rows={24} onCopyNotice={() => {}} />
+        <DashboardRoot state={store.state} actions={store.actions} layout={store.layout} columns={80} rows={24} onCopyNotice={() => {}} />
       </StationThemeProvider>,
       { width: 80, height: 24 },
     );

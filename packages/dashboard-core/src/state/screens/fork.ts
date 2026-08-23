@@ -10,6 +10,7 @@ import { createNewSessionNameToken } from "../../flows/newSession.js";
 import { selectDashboardSessionRow } from "../../selectors/dashboardSessionRows.js";
 import type { TuiKey } from "../keys.js";
 import { isReturnKey } from "../keys.js";
+import type { DashboardVisibleRowsSource } from "../layoutVisibility.js";
 import type { TuiTransition } from "../transition.js";
 import type { DashboardScreenView, DashboardSnapshotView, DashboardState } from "../types.js";
 import { handleDashboardRowChoiceKey } from "./rowChoose.js";
@@ -138,7 +139,11 @@ export function validateForkSessionCreate(
   return validation;
 }
 
-export function handleForkKey(state: DashboardState, key: TuiKey): TuiTransition {
+export function handleForkKey(
+  state: DashboardState,
+  key: TuiKey,
+  visibleRows?: DashboardVisibleRowsSource,
+): TuiTransition {
   if (state.screen.name !== "fork") {
     return { state };
   }
@@ -146,9 +151,12 @@ export function handleForkKey(state: DashboardState, key: TuiKey): TuiTransition
     if (key.escape === true) {
       return { state: { ...state, screen: { name: "dashboard" } } };
     }
-    return handleDashboardRowChoiceKey(state, key, (current, rowId) => ({
-      state: openForkDetailsForRow(current, rowId),
-    }));
+    return handleDashboardRowChoiceKey(
+      state,
+      key,
+      (current, rowId) => ({ state: openForkDetailsForRow(current, rowId) }),
+      visibleRows,
+    );
   }
   return handleDetailsKey(state, key, state.screen);
 }

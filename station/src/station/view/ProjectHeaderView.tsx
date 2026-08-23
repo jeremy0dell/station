@@ -23,6 +23,7 @@ const MENU_AFFORDANCE_LABEL = "[▾]";
 const PROJECT_HEADER_SEPARATOR_COUNT = 3;
 
 export function ProjectHeaderView({
+  renderableId,
   columns,
   rowId,
   project,
@@ -31,6 +32,7 @@ export function ProjectHeaderView({
   focusedCellId,
   persistentFilterMatch,
 }: {
+  renderableId?: string;
   columns: number;
   rowId: DashboardRowId;
   project: DashboardProjectView;
@@ -48,7 +50,7 @@ export function ProjectHeaderView({
     PROJECT_HEADER_SEPARATOR_COUNT;
   const dimmed = persistentFilterMatch?.matched === false;
   return (
-    <box flexDirection="row" width="100%" height={1} overflow="hidden">
+    <box id={renderableId} flexDirection="row" width="100%" height={1} overflow="hidden">
       <ProjectHeaderPrimary
         rowId={rowId}
         project={project}

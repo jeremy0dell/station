@@ -79,15 +79,12 @@ describe("createOverlayRowFocusReconciler", () => {
           rowId: dashboardRowIds.session(SECOND_SESSION_ID),
           cellId: "identity",
         },
-        scrollOffset: 2,
       });
-      const initialOffset = dashboardRuntime.state.getState().scrollOffset;
       const dispose = createOverlayRowFocusReconciler(stationStore, dashboardRuntime);
 
       stationStore.actions.openOverlay(STATION_OVERLAY_ID);
 
       expect("dashboardFocus" in dashboardRuntime.state.getState()).toBe(false);
-      expect(dashboardRuntime.state.getState().scrollOffset).toBe(initialOffset);
       dispose();
     });
   }
@@ -142,10 +139,6 @@ describe("createOverlayRowFocusReconciler", () => {
       cellId: "identity",
     });
 
-    dashboardRuntime.actions.dispatch({ type: "dashboard.scroll", delta: 1 });
-    const scrolledOffset = dashboardRuntime.state.getState().scrollOffset;
-    expect(scrolledOffset).toBeGreaterThan(0);
-
     const laterSnapshot: StationSnapshot = {
       ...firstSnapshot,
       generatedAt: "2026-06-12T12:01:00.000Z",
@@ -153,7 +146,6 @@ describe("createOverlayRowFocusReconciler", () => {
     fixture.source.setSnapshot(laterSnapshot);
 
     expect(dashboardRuntime.state.getState().dashboardFocus).toEqual(navigatedFocus);
-    expect(dashboardRuntime.state.getState().scrollOffset).toBe(scrolledOffset);
     dispose();
   });
 
@@ -200,13 +192,12 @@ function loadedViewStore(
 ): DashboardRuntime {
   return makeStationTestRuntime({
     snapshot: manyProjectsSnapshot(),
-    terminalRows: 12,
     ...(initialState === undefined ? {} : { initialState }),
   }).runtime;
 }
 
 function unloadedViewRuntime(): ReturnType<typeof makeStationTestRuntime> {
-  return makeStationTestRuntime({ snapshot: null, terminalRows: 12 });
+  return makeStationTestRuntime({ snapshot: null });
 }
 
 function managedStore(sessionId: string): StationStore {

@@ -520,7 +520,7 @@ FLEET  ● 0 ready  ⠋ 3 working  ! 1 needs you  x 1 exited  ○ 6 idle        
 "
 `;
 
-exports[`dashboard golden frames renders filtered Group counts and clips framed blocks as ordinary rows 1`] = `
+exports[`dashboard golden frames renders filtered Group counts and clips structural Group boxes 1`] = `
 "                                                                                
 FLEET  ● 0 ready  ⠋ 3 working  ! 1 needs you  x 1 exited  ○ 6 idle  1 · 12 · 11 
 ─────────────────────────────────────────────────────────────────────────────── 
@@ -564,7 +564,7 @@ FILTER no-such-session                                             0/12 matches
 "
 `;
 
-exports[`dashboard golden frames renders filtered Group counts and clips framed blocks as ordinary rows 2`] = `
+exports[`dashboard golden frames renders filtered Group counts and clips structural Group boxes 2`] = `
 "                                                                                
 FLEET  ● 0 ready  ⠋ 3 working  ! 1 needs you  x 1 exited  ○ 6 idle  1 · 12 · 11 
 ─────────────────────────────────────────────────────────────────────────────── 

@@ -6,14 +6,16 @@ import {
   dashboardExecution,
 } from "@station/dashboard-core/runtime";
 import type { DashboardCapabilities } from "@station/dashboard-core/runtime";
-import { selectDashboardViewport } from "@station/dashboard-core/selectors";
+import { selectDashboardSlots } from "@station/dashboard-core/selectors";
 import type { TuiFolderService } from "@station/dashboard-core/runtime";
-import type { DashboardRuntime } from "@station/dashboard-core/runtime";
 import { waitFor } from "../../terminal/testing/waitFor.js";
 import { manyProjectsSnapshot } from "../fixtures/scenarios.js";
 import { FakeStationSource } from "../test/support/fakeStationSource.js";
 import { createStationStubObserverService } from "./stubObserverService.js";
-import { createStationDashboardRuntime } from "./dashboardRuntime.js";
+import {
+  createStationDashboardRuntime,
+  type StationDashboardRuntime,
+} from "./dashboardRuntime.js";
 
 describe("createStationDashboardRuntime", () => {
   it("forwards one asynchronous repeat-safe dashboard settlement", async () => {
@@ -124,7 +126,7 @@ describe("createStationDashboardRuntime", () => {
   });
 });
 
-function makeStore(folderService?: TuiFolderService): DashboardRuntime {
+function makeStore(folderService?: TuiFolderService): StationDashboardRuntime {
   const snapshot = manyProjectsSnapshot();
   const source = new FakeStationSource(snapshot);
   const options: Parameters<typeof createStationDashboardRuntime>[2] = {};
@@ -158,12 +160,17 @@ function makeStore(folderService?: TuiFolderService): DashboardRuntime {
   return store;
 }
 
-function slotForRow(store: DashboardRuntime, rowId: string): string {
+function slotForRow(store: StationDashboardRuntime, rowId: string): string {
   const state = store.state.getState();
   if (state.snapshot === undefined) {
     throw new Error("store has no snapshot");
   }
-  const choice = selectDashboardViewport(state.snapshot, state).rowChoices.find(
+  const choice = selectDashboardSlots(
+    state.snapshot,
+    state,
+    state.screen,
+    store.layout.snapshot(),
+  ).rowChoices.find(
     (candidate) => candidate.value.id === rowId,
   );
   if (choice === undefined) {
@@ -172,7 +179,7 @@ function slotForRow(store: DashboardRuntime, rowId: string): string {
   return choice.key;
 }
 
-async function waitForMockRejectionToast(store: DashboardRuntime): Promise<void> {
+async function waitForMockRejectionToast(store: StationDashboardRuntime): Promise<void> {
   await waitFor(() =>
     store
       .state.getState()
@@ -180,12 +187,12 @@ async function waitForMockRejectionToast(store: DashboardRuntime): Promise<void>
   );
 }
 
-function addProjectScreenMode(store: DashboardRuntime): string | undefined {
+function addProjectScreenMode(store: StationDashboardRuntime): string | undefined {
   const screen = store.state.getState().screen;
   return screen.name === "addProject" ? screen.flow.mode : undefined;
 }
 
-function addProjectFailureMessage(store: DashboardRuntime): string {
+function addProjectFailureMessage(store: StationDashboardRuntime): string {
   const screen = store.state.getState().screen;
   return screen.name === "addProject" && screen.flow.mode === "failed"
     ? screen.flow.error.message

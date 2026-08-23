@@ -5,7 +5,6 @@ import type { NewSessionActionId } from "../flows/newSession.js";
 import type { DashboardCellId, DashboardRowId } from "../selectors/dashboardTree.js";
 import type { ClientNotice } from "../services/types.js";
 import { activateDashboardCell } from "./dashboardCells.js";
-import { scrollDashboard } from "./dashboardScroll.js";
 import type { TuiKey } from "./keys.js";
 import { openDashboardRowShell } from "./rowActivation.js";
 import { tuiScreenBehavior } from "./screenBehavior.js";
@@ -94,7 +93,6 @@ export type DashboardActions = {
   handleKey(key: TuiKey): void;
   /** Resolve one typed action through the shared transition and runtime effect path. */
   dispatch(action: DashboardAction): void;
-  setTerminalRows(rows: number): void;
   /** Synchronize row focus from a canonical observer session identity. */
   focusDashboardSession(sessionId: SessionId): void;
   /** Remove transient row focus without changing other dashboard state. */
@@ -159,7 +157,6 @@ export type TuiSemanticAction =
 
 /** State-only dashboard events for focus, screen, selection, scrolling, and widget transitions. */
 export type DashboardStateAction =
-  | { type: "dashboard.scroll"; delta: number }
   | { type: "newSession.open"; projectId?: ProjectId; groupId?: SessionGroupId }
   | { type: "projectSettings.focusItem"; itemId: ProjectSettingsItemId }
   | { type: "addProject.selectRow"; index: number }
@@ -264,8 +261,6 @@ function handleDashboardStateAction(
   action: DashboardStateAction,
 ): TuiTransition {
   switch (action.type) {
-    case "dashboard.scroll":
-      return stateTransition(scrollDashboard(state, action.delta));
     case "newSession.open":
       return openNewSession(state, {
         ...(action.projectId === undefined ? {} : { projectId: action.projectId }),

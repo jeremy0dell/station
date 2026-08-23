@@ -2,7 +2,7 @@ import { normalize } from "node:path";
 import type { ProjectId, SessionGroupId } from "@station/contracts";
 import type { Automation } from "../config/stationConfig.js";
 import { MAIN_PANE_ID, worktreeIdFromAgentPaneId, type StationState } from "../state/types.js";
-import { selectDashboardViewport } from "@station/dashboard-core/selectors";
+import { selectDashboardSlots } from "@station/dashboard-core/selectors";
 import type { DashboardSessionRow } from "@station/dashboard-core/selectors";
 import { GROUP_MENU_ITEMS, isAgentRemovalUnavailable } from "@station/dashboard-core/state";
 import type { DashboardStateView, GroupMenuActionId } from "@station/dashboard-core/state";
@@ -102,8 +102,8 @@ function buildStationItems(
   if (target.kind !== "dashboardCell") {
     return [noActionsItem()];
   }
-  const viewport = selectDashboardViewport(state.snapshot, state);
-  const row = viewport.rowById.get(target.rowId);
+  const slots = selectDashboardSlots(state.snapshot, state, state.screen);
+  const row = slots.tree.rowById.get(target.rowId);
   if (row === undefined || !row.cells.includes(target.cellId)) {
     return [noActionsItem()];
   }
@@ -114,14 +114,12 @@ function buildStationItems(
       return buildGroupItems(row.payload.group.id, row.payload.group.projectId, state);
     case "session": {
       const sessionRow = row.payload.row;
-      return viewport.rowChoices.some((choice) => choice.value.id === sessionRow.id)
+      return slots.rowChoices.some((choice) => choice.value.id === sessionRow.id)
         ? buildSessionItems(sessionRow, state)
         : [noActionsItem()];
     }
     case "createLocalRow":
     case "emptyProject":
-    case "groupFrameEnd":
-    case "projectGap":
       return [noActionsItem()];
   }
 }

@@ -1,5 +1,5 @@
 import type { DashboardPersistentFilterProjection } from "../../selectors/dashboardPersistentFilter.js";
-import type { DashboardSessionOverflow } from "../../selectors/dashboardViewport.js";
+import type { DashboardSessionOverflow } from "../../selectors/dashboardSlots.js";
 import type { DashboardFilterConditionField } from "../../state/types.js";
 import { cellWidth, type RowGridLayout } from "../WorktreeRow/layout.js";
 import {

@@ -10,15 +10,14 @@ import { DashboardFrameTitle } from "./view/DashboardFrameTitle.js";
 import { DashboardRoot } from "./view/DashboardRoot.js";
 import { toOpenTuiColor, toOpenTuiOpaqueColor, useStationTheme } from "../theme/index.js";
 import { StationMouseProvider, type StationMouseDispatch } from "./view/stationMouseContext.js";
+import type { DashboardScrollController } from "./view/layout/scrollViewport.js";
 
 export type StationOverlayProps = {
   /** Read-only dashboard state owned by the renderer composition. */
   state: DashboardStateSource;
   /** Named dashboard effects required by the rendered surface. */
-  actions: Pick<
-    DashboardActions,
-    "expireToasts" | "refreshActiveToastExpiry" | "setTerminalRows"
-  >;
+  actions: Pick<DashboardActions, "expireToasts" | "refreshActiveToastExpiry">;
+  layout: DashboardScrollController;
   topRowWidgets?: readonly TopRowWidgetView[];
   /** The Station input runtime's mouse entry point. */
   dispatchMouse: (target: MouseTargetRef, event: StationMouseEvent) => boolean;
@@ -80,6 +79,7 @@ export function stationPopupLayout(
 export function StationOverlay({
   state,
   actions,
+  layout: dashboardLayout,
   topRowWidgets = [],
   dispatchMouse,
   onCopyNotice,
@@ -140,6 +140,7 @@ export function StationOverlay({
         <DashboardRoot
           state={state}
           actions={actions}
+          layout={dashboardLayout}
           columns={innerColumns}
           rows={innerRows}
           onCopyNotice={onCopyNotice}

@@ -32,6 +32,7 @@ type GroupHeaderAction = {
 };
 
 export function GroupHeaderView({
+  renderableId,
   columns,
   rowId,
   payload,
@@ -39,6 +40,7 @@ export function GroupHeaderView({
   focusedCellId,
   containsFocusedRow,
 }: {
+  renderableId?: string;
   columns: number;
   rowId: DashboardRowId;
   payload: DashboardGroupHeaderPayload;
@@ -55,6 +57,7 @@ export function GroupHeaderView({
   return payload.collapsed ? (
     <CollapsedGroupHeader
       columns={width}
+      renderableId={renderableId}
       rowId={rowId}
       payload={payload}
       actions={actions}
@@ -63,6 +66,7 @@ export function GroupHeaderView({
   ) : (
     <ExpandedGroupHeader
       columns={width}
+      renderableId={renderableId}
       rowId={rowId}
       payload={payload}
       actions={actions}
@@ -73,6 +77,7 @@ export function GroupHeaderView({
 }
 
 function ExpandedGroupHeader({
+  renderableId,
   columns,
   rowId,
   payload,
@@ -80,6 +85,7 @@ function ExpandedGroupHeader({
   focusedCellId,
   focus,
 }: {
+  renderableId?: string;
   columns: number;
   rowId: DashboardRowId;
   payload: DashboardGroupHeaderPayload;
@@ -98,7 +104,7 @@ function ExpandedGroupHeader({
     columns - 1 - 1 - identity.width - actionsWidth - 1,
   );
   return (
-    <box flexDirection="row" width="100%" height={1} overflow="hidden">
+    <box id={renderableId} flexDirection="row" width="100%" height={1} overflow="hidden">
       <GroupFrameText text="╭" focus={focus} />
       <GroupIdentityTarget
         rowId={rowId}
@@ -129,12 +135,14 @@ function ExpandedGroupHeader({
 }
 
 function CollapsedGroupHeader({
+  renderableId,
   columns,
   rowId,
   payload,
   actions,
   focusedCellId,
 }: {
+  renderableId?: string;
   columns: number;
   rowId: DashboardRowId;
   payload: DashboardGroupHeaderPayload;
@@ -147,7 +155,7 @@ function CollapsedGroupHeader({
   );
   const dimmed = payload.persistentFilterMatch?.matched === false;
   return (
-    <box flexDirection="row" width="100%" height={1} overflow="hidden">
+    <box id={renderableId} flexDirection="row" width="100%" height={1} overflow="hidden">
       <text flexShrink={0}> </text>
       <GroupIdentityTarget
         rowId={rowId}

@@ -24,7 +24,6 @@ export type {
   DashboardExecutionResult,
 } from "../state/capabilities/execution.js";
 export { dashboardExecution } from "../state/capabilities/execution.js";
-
 export { createObserverManagedSessionCapabilities } from "../state/capabilities/managedSessions.js";
 export type { OpenDashboardShellRequest } from "../state/capabilities/shell.js";
 export type {
@@ -33,6 +32,7 @@ export type {
 } from "../state/capabilities/worktreeRemoval.js";
 export { createObserverWorktreeRemovalCapabilities } from "../state/capabilities/worktreeRemoval.js";
 export { buildRemoveWorktreeCommand } from "../state/commandBuilders.js";
+export type { DashboardVisibleRowsSource } from "../state/layoutVisibility.js";
 export type {
   DashboardRuntime,
   DashboardRuntimeOptions,

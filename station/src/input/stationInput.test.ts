@@ -553,7 +553,6 @@ describe("createStationInputRuntime", () => {
       initialSnapshot: snapshot,
       persistentPopup: true,
       onDismiss: async () => {},
-      initialState: { terminalRows: 12 },
     });
     const { runtime, store } = harness({ dashboardRuntime });
     store.actions.openOverlay(STATION_OVERLAY_ID);
@@ -776,7 +775,6 @@ describe("createStationInputRuntime open-pane wiring", () => {
         registry,
         managedLaunch,
       }),
-      initialState: { terminalRows: 12 },
     });
     const runtime = createStationInputRuntime({
       store,
@@ -994,7 +992,6 @@ describe("createStationInputRuntime STATION context-menu actions", () => {
       initialSnapshot: snapshot,
       persistentPopup: true,
       onDismiss: async () => {},
-      initialState: { terminalRows: 12 },
     });
     const store = createStationStore();
     const runtime = createStationInputRuntime({

@@ -33,7 +33,7 @@ export function GroupFrameRailView({
   return <GroupFrameText text={text} focus={{ focusedHeader, containsFocusedRow }} />;
 }
 
-export function GroupFrameEndView({
+export function GroupFrameBottomView({
   columns,
   focusedHeader,
   containsFocusedRow,

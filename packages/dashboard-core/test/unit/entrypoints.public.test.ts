@@ -35,13 +35,12 @@ const STATE_VALUES = [
 ];
 
 const SELECTORS_VALUES = [
-  "selectDashboardViewport",
+  "selectDashboardSlots",
   "selectDashboardSessionRows",
   "selectFleetSummary",
   "dashboardRowGridInput",
   "dashboardRowIds",
   "dashboardTableHeaderModel",
-  "dashboardBodyTop",
   "createGroupSheetContent",
   "layoutWorktreeRowGrid",
 ];

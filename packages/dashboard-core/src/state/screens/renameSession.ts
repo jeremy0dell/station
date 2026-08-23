@@ -5,6 +5,7 @@ import {
 import { buildRenameSessionCommand } from "../commandBuilders.js";
 import type { TuiKey } from "../keys.js";
 import { isReturnKey } from "../keys.js";
+import type { DashboardVisibleRowsSource } from "../layoutVisibility.js";
 import { addPendingRenameSessionTitle } from "../localRows.js";
 import { addTuiToast } from "../toasts.js";
 import type { TuiTransition } from "../transition.js";
@@ -30,7 +31,11 @@ export function renameSessionScreenBehavior(screen: RenameSessionScreen) {
   return assertNever(screen);
 }
 
-function handleChooseSlotKey(state: DashboardState, key: TuiKey): TuiTransition {
+function handleChooseSlotKey(
+  state: DashboardState,
+  key: TuiKey,
+  visibleRows?: DashboardVisibleRowsSource,
+): TuiTransition {
   if (key.escape === true) {
     return {
       state: {
@@ -39,17 +44,22 @@ function handleChooseSlotKey(state: DashboardState, key: TuiKey): TuiTransition 
       },
     };
   }
-  return handleDashboardRowChoiceKey(state, key, (current, rowId) => {
-    const next = openRenameEditForRow(current, rowId);
-    return next === current
-      ? {
-          state: addTuiToast(current, {
-            kind: "error",
-            message: "No session exists for that row.",
-          }),
-        }
-      : { state: next };
-  });
+  return handleDashboardRowChoiceKey(
+    state,
+    key,
+    (current, rowId) => {
+      const next = openRenameEditForRow(current, rowId);
+      return next === current
+        ? {
+            state: addTuiToast(current, {
+              kind: "error",
+              message: "No session exists for that row.",
+            }),
+          }
+        : { state: next };
+    },
+    visibleRows,
+  );
 }
 
 function handleEditNameKey(state: DashboardState, key: TuiKey): TuiTransition {
@@ -150,13 +160,17 @@ export function submitRenameSession(state: DashboardState): TuiTransition {
   };
 }
 
-export function handleRenameSessionKey(state: DashboardState, key: TuiKey): TuiTransition {
+export function handleRenameSessionKey(
+  state: DashboardState,
+  key: TuiKey,
+  visibleRows?: DashboardVisibleRowsSource,
+): TuiTransition {
   if (state.screen.name !== "renameSession") {
     return { state };
   }
 
   if (state.screen.step === "chooseSlot") {
-    return handleChooseSlotKey(state, key);
+    return handleChooseSlotKey(state, key, visibleRows);
   }
 
   return handleEditNameKey(state, key);

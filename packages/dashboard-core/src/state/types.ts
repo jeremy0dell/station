@@ -81,8 +81,6 @@ export type TuiViewState = {
   collapsedGroupIds: ReadonlySet<SessionGroupId>;
   groupOrderingMode: GroupOrderingMode;
   groupHeaderActionVisibility: DashboardGroupHeaderActionVisibility;
-  scrollOffset: number;
-  terminalRows: number;
   localRows: TuiLocalRows;
   /** Branded dashboard row/cell cursor; native overlays synchronize session identity once per open. */
   dashboardFocus?: DashboardFocus;
@@ -312,8 +310,6 @@ export type CreateInitialTuiStateOptions = {
   groupOrderingMode?: GroupOrderingMode;
   /** Optional overrides; omitted Group header actions remain visible. */
   groupHeaderActionVisibility?: Partial<DashboardGroupHeaderActionVisibility>;
-  scrollOffset?: number;
-  terminalRows?: number;
   localRows?: TuiLocalRows;
   dashboardFocus?: DashboardFocus;
   widgets?: readonly TuiWidgetConfig[];

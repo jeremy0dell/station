@@ -1,6 +1,6 @@
 import type { ProjectId, SessionGroupId } from "@station/contracts";
 import { createNewSessionFlow, createNewSessionNameToken } from "../../flows/newSession.js";
-import { selectDashboardViewport } from "../../selectors/dashboardViewport.js";
+import { selectDashboardSlots } from "../../selectors/dashboardSlots.js";
 import { choiceValueByKey } from "../../selectors/selectors.js";
 import { safeErrorToToast } from "../../services/errors/errors.js";
 import { activateFocusedDashboardCell } from "../dashboardCells.js";
@@ -9,7 +9,6 @@ import {
   moveDashboardCursor,
   moveDashboardCursorHorizontal,
 } from "../dashboardFocus.js";
-import { scrollDashboard } from "../dashboardScroll.js";
 import { matchDashboardBinding, type TuiDashboardAction } from "../keymap.js";
 import type { TuiKey } from "../keys.js";
 import { activateDashboardRow } from "../rowActivation.js";
@@ -32,12 +31,7 @@ export function handleDashboardKey(
   key: TuiKey,
   context: TuiRuntimeContext,
 ): TuiTransition {
-  const mouseScrollDelta = mouseScrollDeltaForKey(key);
-  if (mouseScrollDelta !== 0) {
-    return {
-      state: scrollDashboard(state, mouseScrollDelta),
-    };
-  }
+  if (key.mouseScroll !== undefined) return { state };
 
   const binding = matchDashboardBinding(key);
   if (binding === undefined) {
@@ -56,11 +50,11 @@ function handleDashboardAction(
   switch (action) {
     case "tui.focus.up":
       return {
-        state: moveDashboardCursor(state, -1),
+        state: moveDashboardCursor(state, -1, context.visibleDashboardRows?.visibleRowIds()),
       };
     case "tui.focus.down":
       return {
-        state: moveDashboardCursor(state, 1),
+        state: moveDashboardCursor(state, 1, context.visibleDashboardRows?.visibleRowIds()),
       };
     case "tui.focus.left":
       return {
@@ -143,7 +137,7 @@ function handleDashboardAction(
     case "tui.widgetSettings.open":
       return { state: openWidgetSettings(state) };
     case "tui.row.activateSlot":
-      return activateDashboardSlot(state, key);
+      return activateDashboardSlot(state, key, context);
     default:
       return assertNever(action);
   }
@@ -183,13 +177,22 @@ function exitDashboardRenderer(state: DashboardState): TuiTransition {
   };
 }
 
-function activateDashboardSlot(state: DashboardState, key: TuiKey): TuiTransition {
+function activateDashboardSlot(
+  state: DashboardState,
+  key: TuiKey,
+  context: TuiRuntimeContext,
+): TuiTransition {
   if (state.snapshot === undefined) {
     return { state };
   }
 
   const row = choiceValueByKey(
-    selectDashboardViewport(state.snapshot, state).rowChoices,
+    selectDashboardSlots(
+      state.snapshot,
+      state,
+      state.screen,
+      context.visibleDashboardRows?.visibleRowIds(),
+    ).rowChoices,
     key.input,
   );
   if (row === undefined) {
@@ -197,16 +200,6 @@ function activateDashboardSlot(state: DashboardState, key: TuiKey): TuiTransitio
   }
 
   return activateDashboardRow(state, row);
-}
-
-function mouseScrollDeltaForKey(key: TuiKey): -1 | 0 | 1 {
-  if (key.mouseScroll === "up") {
-    return -1;
-  }
-  if (key.mouseScroll === "down") {
-    return 1;
-  }
-  return 0;
 }
 
 export function openNewSession(

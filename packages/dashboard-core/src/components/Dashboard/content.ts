@@ -1,5 +1,5 @@
 import stringWidth from "string-width";
-import type { DashboardSessionOverflow } from "../../selectors/dashboardViewport.js";
+import type { DashboardSessionOverflow } from "../../selectors/dashboardSlots.js";
 import type {
   DashboardScreenView,
   DashboardSnapshotView,

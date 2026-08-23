@@ -1,16 +1,14 @@
-// Store-wired root for the STATION dashboard: subscribes to the view store,
-// feeds the overlay's row budget into the viewport math, and switches
+// Store-wired root for the STATION dashboard: subscribes to the view store and switches
 // between the loading/waiting/unavailable bodies and the live dashboard —
 // mirroring apps/tui's App.tsx branch for the popup posture, including the
 // toast overlay, kind-specific expiry timers, and explicit error dismissal.
-import { useEffect, useRef } from "react";
+import type { BoxRenderable } from "@opentui/core";
+import { useCallback, useEffect, useRef } from "react";
 import { useStore } from "zustand/react";
 import type { DashboardActions, DashboardStateSource } from "@station/dashboard-core/runtime";
 import {
   commandPromptRows,
-  dashboardBodyTop,
   dashboardRowIds,
-  selectDashboardViewport,
   snapshotLoadingLines,
 } from "@station/dashboard-core/selectors";
 import {
@@ -29,20 +27,27 @@ import {
 } from "./stationMouseContext.js";
 import { ToastOverlayView } from "./ToastOverlayView.js";
 import { toOpenTuiColor, useStationTheme } from "../../theme/index.js";
+import type { DashboardScrollController } from "./layout/scrollViewport.js";
+import { useDashboardVisibleRows } from "./layout/DashboardScrollViewport.js";
 
 export type DashboardRootProps = {
   state: DashboardStateSource;
-  actions: Pick<
-    DashboardActions,
-    "expireToasts" | "refreshActiveToastExpiry" | "setTerminalRows"
-  >;
+  actions: Pick<DashboardActions, "expireToasts" | "refreshActiveToastExpiry">;
+  layout: DashboardScrollController;
   /** The overlay's content area, in terminal cells. */
   columns: number;
   rows: number;
   onCopyNotice: (text: string) => void;
 };
 
-export function DashboardRoot({ state, actions, columns, rows, onCopyNotice }: DashboardRootProps) {
+export function DashboardRoot({
+  state,
+  actions,
+  layout,
+  columns,
+  rows,
+  onCopyNotice,
+}: DashboardRootProps) {
   const theme = useStationTheme();
   const snapshot = useStore(state, (state) => state.snapshot);
   const loading = useStore(state, (state) => state.loading);
@@ -55,7 +60,6 @@ export function DashboardRoot({ state, actions, columns, rows, onCopyNotice }: D
     state,
     (state) => state.groupHeaderActionVisibility,
   );
-  const scrollOffset = useStore(state, (state) => state.scrollOffset);
   const dashboardFocus = useStore(state, (state) => state.dashboardFocus);
   const selection = useStore(state, (state) => state.selection);
   const localRows = useStore(state, (state) => state.localRows);
@@ -70,14 +74,12 @@ export function DashboardRoot({ state, actions, columns, rows, onCopyNotice }: D
   const backgroundHoverEnabled =
     hoverEnabled && tuiScreenBehavior(screen).dashboardHoverEnabled;
   const wasToastHiddenByScreen = useRef(toastHiddenByScreen);
+  const setCoordinateRoot = useCallback(
+    (root: BoxRenderable | null) => layout.setCoordinateRoot(root ?? undefined),
+    [layout],
+  );
+  useDashboardVisibleRows(layout);
 
-  // The store's terminalRows feeds the keyboard scroll-clamping machinery;
-  // rendering reads the prop directly so the first frame after the popup
-  // opens never lays out against the store's stale value while this passive
-  // effect catches up.
-  useEffect(() => {
-    actions.setTerminalRows(rows);
-  }, [actions, rows]);
   useEffect(() => {
     const wasHidden = wasToastHiddenByScreen.current;
     wasToastHiddenByScreen.current = toastHiddenByScreen;
@@ -136,8 +138,6 @@ export function DashboardRoot({ state, actions, columns, rows, onCopyNotice }: D
     collapsedGroupIds,
     groupOrderingMode,
     groupHeaderActionVisibility,
-    scrollOffset,
-    terminalRows: rows,
     localRows,
     selection,
     ...(persistentFilter === undefined ? {} : { persistentFilter }),
@@ -152,21 +152,16 @@ export function DashboardRoot({ state, actions, columns, rows, onCopyNotice }: D
   const menuAnchorTop =
     menuRowId === undefined
       ? undefined
-      : dashboardBodyTop() +
-        Math.max(
-          0,
-          selectDashboardViewport(snapshot, viewState, screen).rows.findIndex(
-            (row) => row.id === menuRowId,
-          ),
-        );
+      : layout.itemTop(menuRowId);
 
   return (
-    <box width="100%" flexGrow={1} flexDirection="column">
+    <box ref={setCoordinateRoot} width="100%" flexGrow={1} minHeight={0} flexDirection="column">
       <StationHoverProvider value={backgroundHoverEnabled}>
         <DashboardView
           snapshot={snapshot}
           viewState={viewState}
           screen={screen}
+          layout={layout}
           columns={columns}
         />
         <DashboardFooterView state={state} columns={contentColumns} />

@@ -49,8 +49,6 @@ export function activateDashboardCell(
         ? submitQuickSession(focused, row.payload.project.id)
         : { state: focused };
     case "createLocalRow":
-    case "groupFrameEnd":
-    case "projectGap":
       return { state: focused };
   }
 }

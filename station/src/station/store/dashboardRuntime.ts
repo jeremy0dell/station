@@ -8,10 +8,15 @@ import type { DashboardCapabilities, DashboardRuntime, TuiFolderService } from "
 import type { DashboardGroupHeaderActionVisibility } from "@station/dashboard-core/state";
 import type { TuiWidgetConfig } from "@station/dashboard-core/widgets";
 import type { StationClient } from "../../sources/types.js";
+import {
+  createDashboardScrollController,
+  type DashboardScrollController,
+} from "../view/layout/scrollViewport.js";
 
 export type StationDashboardRuntime = DashboardRuntime & {
   /** Canonical snapshot/connection authority paired with this dashboard projection. */
   clientState: StationClient["state"];
+  layout: DashboardScrollController;
 };
 
 /** Options for Station's native dashboard-runtime composition. */
@@ -23,6 +28,7 @@ export type CreateStationDashboardRuntimeOptions = {
   widgetsPersisted?: boolean;
   /** Optional Group header action visibility overrides. */
   groupHeaderActionVisibility?: Partial<DashboardGroupHeaderActionVisibility>;
+  layout?: DashboardScrollController;
 };
 
 /**
@@ -35,11 +41,13 @@ export function createStationDashboardRuntime(
   capabilities: DashboardCapabilities,
   options: CreateStationDashboardRuntimeOptions = {},
 ): StationDashboardRuntime {
+  const layout = options.layout ?? createDashboardScrollController();
   const runtimeOptions: Parameters<typeof createDashboardRuntime>[0] = {
     source: client.state,
     service: client.service,
     capabilities,
     clientLabel: "Station",
+    visibleDashboardRows: layout.visibleRows,
   };
   if (options.folderService !== undefined) {
     runtimeOptions.folderService = options.folderService;
@@ -56,5 +64,5 @@ export function createStationDashboardRuntime(
   }
   runtimeOptions.initialState = initialState;
   const runtime = createDashboardRuntime(runtimeOptions);
-  return { ...runtime, clientState: client.state };
+  return { ...runtime, clientState: client.state, layout };
 }

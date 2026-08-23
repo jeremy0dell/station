@@ -28,11 +28,13 @@ import {
   dispatchStationAction,
   dispatchStationKey,
 } from "./stationActions.js";
+import type { DashboardScrollController } from "../view/layout/scrollViewport.js";
 
 /** Read/action surface required by the pointer router shared by both Station renderers. */
 export type DashboardMouseRuntime = {
   state: DashboardStateSource;
   actions: Pick<DashboardActions, "dismissToasts" | "dispatch" | "handleKey">;
+  layout: DashboardScrollController;
 };
 
 export type StationMouseTarget =
@@ -83,7 +85,6 @@ export type StationMouseTarget =
 export type StationMouseEventKind = "down" | "scroll-up" | "scroll-down";
 export type StationMouseOutcome = { kind: "handled" } | { kind: "open-url"; url: string };
 
-const SCROLL_PAGE_ROWS = 5;
 const ROW_INTERACTIVE_MODES: ReadonlySet<TuiInputMode> = new Set([
   "dashboard",
   "removeChooseSlot",
@@ -164,10 +165,7 @@ export function routeStationMouse(
       return { kind: "handled" };
     case "scrollIndicator":
       if (ROW_INTERACTIVE_MODES.has(mode)) {
-        runtime.actions.dispatch({
-          type: "dashboard.scroll",
-          delta: target.direction === "up" ? -SCROLL_PAGE_ROWS : SCROLL_PAGE_ROWS,
-        });
+        runtime.layout.scrollPage(target.direction === "up" ? -1 : 1);
       }
       return { kind: "handled" };
     case "toast":
@@ -351,8 +349,5 @@ function routeStationWheel(
   ) {
     return;
   }
-  runtime.actions.dispatch({
-    type: "dashboard.scroll",
-    delta: eventKind === "scroll-up" ? -1 : 1,
-  });
+  runtime.layout.scrollBy(eventKind === "scroll-up" ? -1 : 1);
 }

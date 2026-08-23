@@ -1,5 +1,4 @@
 import type { ProjectId, SessionGroupId, SessionId } from "@station/contracts";
-import { clampDashboardScrollOffset, dashboardBodyRows } from "../components/Dashboard/layout.js";
 import type { DashboardSessionRow } from "../selectors/dashboardSessionRows.js";
 import {
   type DashboardCellId,
@@ -17,7 +16,6 @@ import {
   type TreeGridNavigationPolicy,
   treeGridCursorForRow,
 } from "../treeGrid.js";
-import { scrollDashboard } from "./dashboardScroll.js";
 import type { DashboardState } from "./types.js";
 
 type DashboardPolicy = TreeGridNavigationPolicy<
@@ -142,8 +140,12 @@ export function clearDashboardFocus(state: DashboardState): DashboardState {
 }
 
 /** Moves vertically through Project, Group, canonical-session, and empty-action rows. */
-export function moveDashboardCursor(state: DashboardState, delta: -1 | 1): DashboardState {
-  return moveCursor(state, delta, dashboardPolicy);
+export function moveDashboardCursor(
+  state: DashboardState,
+  delta: -1 | 1,
+  visibleRowIds?: readonly DashboardRowId[],
+): DashboardState {
+  return moveCursor(state, delta, dashboardPolicy, visibleRowIds);
 }
 
 /** Moves within the current row's ordered cells, clamping without wrapping. */
@@ -169,8 +171,12 @@ export function moveDashboardCursorHorizontal(
 }
 
 /** Moves remove/rename/fork choice focus across selectable canonical sessions only. */
-export function moveDashboardChooserCursor(state: DashboardState, delta: -1 | 1): DashboardState {
-  return moveCursor(state, delta, chooserPolicy);
+export function moveDashboardChooserCursor(
+  state: DashboardState,
+  delta: -1 | 1,
+  visibleRowIds?: readonly DashboardRowId[],
+): DashboardState {
+  return moveCursor(state, delta, chooserPolicy, visibleRowIds);
 }
 
 export function focusNextNeedsMe(state: DashboardState): DashboardState {
@@ -217,15 +223,15 @@ export function reconcileDashboardFocus(
   next: DashboardState,
 ): DashboardState {
   if (next.snapshot === undefined) {
-    return clearDashboardFocus(withClampedScroll(next, 0));
+    return clearDashboardFocus(next);
   }
   const nextTree = dashboardTree(next);
   const focus = previous.dashboardFocus;
   if (focus === undefined) {
-    return withClampedScroll(next, nextTree.visibleRows.length);
+    return next;
   }
   if (previous.snapshot === undefined) {
-    return clearDashboardFocus(withClampedScroll(next, nextTree.visibleRows.length));
+    return clearDashboardFocus(next);
   }
   const previousTree = dashboardTree(previous);
   const policy = navigationPolicy(next);
@@ -236,7 +242,7 @@ export function reconcileDashboardFocus(
     policy,
   });
   return reconciled === undefined
-    ? clearDashboardFocus(withClampedScroll(next, nextTree.visibleRows.length))
+    ? clearDashboardFocus(next)
     : focusResolvedDashboardCursor(next, nextTree, reconciled);
 }
 
@@ -244,9 +250,14 @@ export function rowNeedsYou(row: DashboardSessionRow): boolean {
   return row.presentation.display.alert;
 }
 
-function moveCursor(state: DashboardState, delta: -1 | 1, policy: DashboardPolicy): DashboardState {
+function moveCursor(
+  state: DashboardState,
+  delta: -1 | 1,
+  policy: DashboardPolicy,
+  visibleRowIds?: readonly DashboardRowId[],
+): DashboardState {
   if (state.snapshot === undefined) {
-    return scrollDashboard(state, delta);
+    return state;
   }
   const tree = dashboardTree(state);
   const current =
@@ -254,10 +265,8 @@ function moveCursor(state: DashboardState, delta: -1 | 1, policy: DashboardPolic
       ? undefined
       : exactCursor(tree, state.dashboardFocus, policy);
   if (current === undefined) {
-    const entered = enterCursor(state, tree, delta, policy);
-    return entered === undefined
-      ? scrollDashboard(state, delta)
-      : focusResolvedDashboardCursor(state, tree, entered);
+    const entered = enterCursor(tree, delta, policy, visibleRowIds);
+    return entered === undefined ? state : focusResolvedDashboardCursor(state, tree, entered);
   }
   const moved = moveTreeGridCursor({
     projection: tree,
@@ -269,13 +278,16 @@ function moveCursor(state: DashboardState, delta: -1 | 1, policy: DashboardPolic
 }
 
 function enterCursor(
-  state: DashboardState,
   tree: DashboardTreeProjection,
   delta: -1 | 1,
   policy: DashboardPolicy,
+  visibleRowIds?: readonly DashboardRowId[],
 ): DashboardFocus | undefined {
-  const { bodyRows, offset } = viewportWindow(state, tree.visibleRows.length);
-  const visibleRows = tree.visibleRows.slice(offset, offset + bodyRows);
+  const visible = visibleRowIds === undefined ? undefined : new Set(visibleRowIds);
+  const visibleRows =
+    visible === undefined
+      ? tree.visibleRows
+      : tree.visibleRows.filter((row) => visible.has(row.id));
   const orderedRows = delta > 0 ? visibleRows : [...visibleRows].reverse();
   for (const row of orderedRows) {
     const cursor = cursorForRow(tree, row, policy);
@@ -328,47 +340,19 @@ function exactCursor(
   return resolved?.cellId === cursor.cellId ? resolved : undefined;
 }
 
-/** Applies a resolved dashboard cursor and follows it within the terminal viewport. */
+/** Applies a resolved semantic cursor; the renderer follows it using laid-out coordinates. */
 export function focusResolvedDashboardCursor(
   state: DashboardState,
   tree: DashboardTreeProjection,
   cursor: DashboardFocus,
 ): DashboardState {
-  const index = tree.visibleIndexById.get(cursor.rowId);
-  if (index === undefined) {
+  if (!tree.visibleIndexById.has(cursor.rowId)) {
     return state;
   }
-  const { bodyRows, offset } = viewportWindow(state, tree.visibleRows.length);
-  let scrollOffset = offset;
-  if (index < offset) {
-    scrollOffset = index;
-  } else if (index >= offset + bodyRows) {
-    scrollOffset = index - bodyRows + 1;
-  }
-  if (sameCursor(state.dashboardFocus, cursor) && scrollOffset === state.scrollOffset) {
+  if (sameCursor(state.dashboardFocus, cursor)) {
     return state;
   }
-  return { ...state, dashboardFocus: cursor, scrollOffset };
-}
-
-function withClampedScroll(state: DashboardState, rowCount: number): DashboardState {
-  const { offset } = viewportWindow(state, rowCount);
-  return offset === state.scrollOffset ? state : { ...state, scrollOffset: offset };
-}
-
-function viewportWindow(
-  state: DashboardState,
-  rowCount: number,
-): { bodyRows: number; offset: number } {
-  const bodyRows = dashboardBodyRows(state.terminalRows);
-  return {
-    bodyRows,
-    offset: clampDashboardScrollOffset({
-      bodyRows,
-      itemCount: rowCount,
-      scrollOffset: state.scrollOffset,
-    }),
-  };
+  return { ...state, dashboardFocus: cursor };
 }
 
 function navigationPolicy(state: DashboardState): DashboardPolicy {

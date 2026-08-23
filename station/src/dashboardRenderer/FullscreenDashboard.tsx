@@ -14,6 +14,7 @@ import {
   type StationMouseDispatch,
 } from "../station/view/stationMouseContext.js";
 import { routeDashboardMouse } from "./dashboardMouse.js";
+import type { DashboardScrollController } from "../station/view/layout/scrollViewport.js";
 
 type FullscreenDashboardInput = {
   state: DashboardStateSource;
@@ -25,8 +26,8 @@ type FullscreenDashboardInput = {
     | "handleKey"
     | "pushToast"
     | "refreshActiveToastExpiry"
-    | "setTerminalRows"
   >;
+  layout: DashboardScrollController;
 };
 
 /**
@@ -74,6 +75,7 @@ export function FullscreenDashboard({
           <DashboardRoot
             state={runtime.state}
             actions={runtime.actions}
+            layout={runtime.layout}
             columns={width}
             rows={height}
             onCopyNotice={onCopyNotice}

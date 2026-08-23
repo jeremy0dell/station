@@ -184,7 +184,6 @@ function attemptHarness(options: AttemptHarnessOptions = {}) {
     initialSnapshot: snapshot,
     persistentPopup: true,
     onDismiss: async () => {},
-    initialState: { terminalRows: 12 },
   });
   const scripted = [createScriptedTerminal(), createScriptedTerminal()];
   const spawnSizes: StationTerminalSize[] = [];

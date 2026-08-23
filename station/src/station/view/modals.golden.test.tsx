@@ -21,7 +21,8 @@ import {
   manyProjectsSnapshot,
   noProjectsSnapshot,
 } from "../fixtures/scenarios.js";
-import type { DashboardRuntime, DashboardStateSource } from "@station/dashboard-core/runtime";
+import type { DashboardStateSource } from "@station/dashboard-core/runtime";
+import type { StationTestDashboardRuntime } from "../test/support/makeStationTestRuntime.js";
 import type { TuiKey } from "@station/dashboard-core/state";
 import {
   addPendingProjectDefaultHarness,
@@ -771,7 +772,7 @@ describe("modal flow golden frames", () => {
     }
   });
 
-  function makeStore(snapshot = manyProjectsSnapshot()): DashboardRuntime {
+  function makeStore(snapshot = manyProjectsSnapshot()): StationTestDashboardRuntime {
     return makeStationTestRuntime({
       snapshot,
       folderService: {
@@ -815,6 +816,7 @@ describe("modal flow golden frames", () => {
           <DashboardRoot
             state={state}
             actions={store.actions}
+            layout={store.layout}
             columns={size.width}
             rows={size.height}
             onCopyNotice={() => {}}
@@ -825,6 +827,8 @@ describe("modal flow golden frames", () => {
       teardowns.push(() => {
         setup.renderer.destroy();
       });
+      await setup.renderOnce();
+      await setup.flush();
       await setup.renderOnce();
       // The generated session name is uuid-seeded (stableNameHash over a
       // random token); scrub it so the goldens stay deterministic.
@@ -890,6 +894,7 @@ describe("modal flow golden frames", () => {
           <DashboardRoot
             state={state}
             actions={store.actions}
+            layout={store.layout}
             columns={size.width}
             rows={size.height}
             onCopyNotice={() => {}}
@@ -947,6 +952,7 @@ describe("modal flow golden frames", () => {
         <DashboardRoot
           state={store.state}
           actions={store.actions}
+          layout={store.layout}
           columns={SIZE.width}
           rows={SIZE.height}
           onCopyNotice={() => {}}

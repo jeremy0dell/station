@@ -22,6 +22,7 @@ import { VtPrefix } from "../terminal/protocol/syntax.js";
 import { openExternalUrl } from "../openUrl.js";
 import { createStationClient } from "../sources/createStationClient.js";
 import { sanitizePastedText } from "../station/input/sequenceToTuiKey.js";
+import { createDashboardScrollController } from "../station/view/layout/scrollViewport.js";
 import {
   createStationThemeController,
   type StationThemeController,
@@ -107,11 +108,13 @@ export async function runDashboardMain(): Promise<void> {
     popupRuntime,
     exitRenderer: exit,
   });
+  const dashboardLayout = createDashboardScrollController();
   const dashboardRuntime = createDashboardRuntime({
     source: client.state,
     service: client.service,
     capabilities,
     clientLabel: "station",
+    visibleDashboardRows: dashboardLayout.visibleRows,
     initialState: {
       widgets: tuiConfig.config?.widgets ?? [],
       widgetsPersisted: tuiConfig.configPath !== undefined,
@@ -120,6 +123,7 @@ export async function runDashboardMain(): Promise<void> {
   const dashboardInput = {
     state: dashboardRuntime.state,
     actions: dashboardRuntime.actions,
+    layout: dashboardLayout,
   };
   const copyNoticeText = (text: string): void => {
     copyToClipboard(text, DEFAULT_COPY_SINKS, clipboardEffects);

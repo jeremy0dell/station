@@ -1,4 +1,5 @@
 import type { TuiKey } from "./keys.js";
+import type { DashboardVisibleRowsSource } from "./layoutVisibility.js";
 import type { TuiOperation } from "./operations/types.js";
 import { handleAddProjectKey } from "./screens/addProjectScreen.js";
 import { handleDashboardKey } from "./screens/dashboard.js";
@@ -31,6 +32,7 @@ export type TuiTransition = {
 export type TuiRuntimeContext = {
   cwd: string;
   homeDir: string;
+  visibleDashboardRows?: DashboardVisibleRowsSource;
 };
 
 export function handleTuiKey(
@@ -86,13 +88,13 @@ export function handleTuiKey(
     case "freshStart":
       return handleFreshStartKey(state, key);
     case "removeWorktree":
-      return handleRemoveWorktreeKey(state, key);
+      return handleRemoveWorktreeKey(state, key, context.visibleDashboardRows);
     case "renameSession":
-      return handleRenameSessionKey(state, key);
+      return handleRenameSessionKey(state, key, context.visibleDashboardRows);
     case "moveToGroup":
-      return handleMoveToGroupKey(state, key);
+      return handleMoveToGroupKey(state, key, context.visibleDashboardRows);
     case "fork":
-      return handleForkKey(state, key);
+      return handleForkKey(state, key, context.visibleDashboardRows);
     case "newSession":
       return handleNewSessionKey(state, key);
     case "projectDefaultAgent":
