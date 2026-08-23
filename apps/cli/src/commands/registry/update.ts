@@ -2,7 +2,7 @@ import {
   type CreateProviderRegistryOptions,
   createProviderRegistry,
 } from "../../observerProviders.js";
-import { runUpdateRecoveryPreflight } from "../../update/recoveryPreflight.js";
+import { inspectUpdateConvergencePreflight } from "../../update/recoveryPreflight.js";
 import { createUpdateRecoveryPreflightPorts } from "../../update/recoveryPreflightAdapters.js";
 import { loadedConfigCommandOptions } from "../cliCommand/helpers.js";
 import type { CliCommandNode, CliCommandRunContext } from "../cliCommand/types.js";
@@ -69,21 +69,15 @@ async function runUpdateCliCommand(context: CliCommandRunContext) {
   );
 }
 
-// Adds read-only recovery ports only for an admitted dry-run reap request.
+// Every resolved target receives one aggregate inspection; mutation capabilities stay separate.
 function updateDeps(
   context: CliCommandRunContext,
   loaded: ReturnType<typeof loadedConfigCommandOptions>,
 ): UpdateCommandDeps {
   const hostDeps = context.options.updateDeps?.hostDeps ?? context.options.hostDeps;
-  const deps: UpdateCommandDeps = {
-    ...context.options.updateDeps,
-    ...(hostDeps === undefined ? {} : { hostDeps }),
-  };
-  if (
-    deps.recoveryPreflight === undefined &&
-    context.args.includes("--dry-run") &&
-    context.args.includes("--reap")
-  ) {
+  const configuredInspection = context.options.updateDeps?.convergenceInspection;
+  let convergenceInspection = configuredInspection;
+  if (convergenceInspection === undefined) {
     const registryOptions: CreateProviderRegistryOptions = {};
     if (loaded.configPath !== undefined) registryOptions.configPath = loaded.configPath;
     if (loaded.providerHookIngressLauncher !== undefined) {
@@ -102,7 +96,11 @@ function updateDeps(
       preflightOptions.observerDeps = context.options.observerDeps;
     }
     const ports = createUpdateRecoveryPreflightPorts(preflightOptions);
-    deps.recoveryPreflight = (input) => runUpdateRecoveryPreflight({ ...input, ports });
+    convergenceInspection = (input) => inspectUpdateConvergencePreflight({ ...input, ports });
   }
-  return deps;
+  return {
+    ...context.options.updateDeps,
+    convergenceInspection,
+    ...(hostDeps === undefined ? {} : { hostDeps }),
+  };
 }

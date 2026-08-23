@@ -1,9 +1,11 @@
 import {
   compareCodeUnitStrings,
+  ObserverProcessTokenSchema,
   type ProviderHookHealth,
   ProviderHookHealthSchema,
   type ProviderId,
   type SafeError,
+  SessionIdSchema,
   type UpdateArtifact,
   type UpdateReapHostEvidence,
   type UpdateReapObserverEvidence,
@@ -14,19 +16,66 @@ import {
   updateReapEvidenceIsComplete,
 } from "@station/contracts";
 import { publicSafeErrorFromUnknown } from "@station/runtime";
+import { z } from "zod";
+
+const updateConvergencePrivateEvidenceSchema = z
+  .object({
+    observer: z
+      .object({
+        pid: z.number().int().positive(),
+        osStartTime: z.string().min(1),
+        processToken: ObserverProcessTokenSchema,
+        buildSelector: z.string().min(1),
+      })
+      .strict()
+      .optional(),
+    selectedRecoveryHandles: z.array(
+      z
+        .object({
+          sessionId: SessionIdSchema,
+          selectedHandleId: z.string().min(1),
+        })
+        .strict(),
+    ),
+  })
+  .strict();
+
+export type UpdateConvergencePrivateEvidence = z.infer<
+  typeof updateConvergencePrivateEvidenceSchema
+>;
+
+const updateConvergencePreflightInspectionSchema = z
+  .object({
+    preflight: UpdateReapRecoveryPreflightSchema,
+    privateEvidence: updateConvergencePrivateEvidenceSchema,
+  })
+  .strict()
+  .superRefine((inspection, context) => {
+    validateObserverPrivateEvidence(inspection, context);
+    validateSelectedRecoveryHandles(inspection, context);
+  });
 
 /**
  * DRIVEN PORT
  *
- * Supplies already normalized, read-only runtime and provider evidence. Implementations must not
- * start, stop, signal, install, reconcile, resume, or otherwise mutate the inspected system.
+ * Supplies already normalized, read-only runtime and provider evidence. Observer inspection
+ * returns its public facts and CLI-private identity sidecar together so they cannot be sampled
+ * independently. Implementations must not start, stop, signal, install, reconcile, resume, or
+ * otherwise mutate the inspected system.
  */
 export type UpdateRecoveryPreflightPorts = {
-  inspectObserver(artifacts: UpdateRecoveryArtifacts): Promise<UpdateReapObserverEvidence>;
+  inspectObserver(artifacts: UpdateRecoveryArtifacts): Promise<{
+    evidence: UpdateReapObserverEvidence;
+    privateEvidence: UpdateConvergencePrivateEvidence;
+  }>;
   inspectHost(artifacts: UpdateRecoveryArtifacts): Promise<UpdateReapHostEvidence>;
   readHookHealth(provider: ProviderId): Promise<ProviderHookHealth>;
   hookProviderIds: readonly ProviderId[];
 };
+
+export type UpdateConvergencePreflightInspection = z.infer<
+  typeof updateConvergencePreflightInspectionSchema
+>;
 
 export type UpdateRecoveryArtifacts = {
   installed: UpdateArtifact;
@@ -34,22 +83,44 @@ export type UpdateRecoveryArtifacts = {
 };
 
 /**
- * USE CASE
+ * DRIVEN PORT
  *
- * Aggregates read-only Observer, Host, retained-session, capability, handle, and hook facts while
- * settling every evidence source. It computes dispositions only; executable actions, authorization,
- * digests, and mutation remain downstream responsibilities.
+ * Supplies one validated public/private aggregate for the exact selected update artifacts. The
+ * private sidecar is CLI-owned and never crosses the serialized report boundary.
  */
+export type UpdateConvergenceInspectionPort = (
+  artifacts: UpdateRecoveryArtifacts,
+) => Promise<UpdateConvergencePreflightInspection>;
+
+/** Compatibility projection for callers that need only #665's public aggregate. */
 export async function runUpdateRecoveryPreflight(input: {
   installed: UpdateArtifact;
   target: UpdateArtifact;
   ports: UpdateRecoveryPreflightPorts;
 }): Promise<UpdateReapRecoveryPreflight> {
+  // #665 callers receive only the public projection of the validated convergence aggregate.
+  return (await inspectUpdateConvergencePreflight(input)).preflight;
+}
+
+/**
+ * USE CASE
+ *
+ * Aggregates read-only Observer, Host, retained-session, capability, handle, and hook facts while
+ * settling every evidence source. It validates public/private Observer build identity and exact
+ * selected-handle correspondence before returning execution-facing identity in a private sidecar;
+ * executable actions, authorization, digests, and mutation remain downstream responsibilities.
+ */
+export async function inspectUpdateConvergencePreflight(input: {
+  installed: UpdateArtifact;
+  target: UpdateArtifact;
+  ports: UpdateRecoveryPreflightPorts;
+}): Promise<UpdateConvergencePreflightInspection> {
   const artifacts = { installed: input.installed, target: input.target };
-  const [observer, host] = await Promise.all([
-    inspectObserver(input.ports, artifacts),
+  const [observerInspection, host] = await Promise.all([
+    inspectObserverForConvergence(input.ports, artifacts),
     inspectHost(input.ports, artifacts),
   ]);
+  const observer = observerInspection.evidence;
   const hookProviderIds = providersForHookInspection(input.ports.hookProviderIds, observer);
   const hooks = await Promise.all(
     hookProviderIds.map((provider) => inspectHook(input.ports, provider)),
@@ -62,7 +133,7 @@ export async function runUpdateRecoveryPreflight(input: {
     hooks,
     terminalDispositions,
   };
-  return UpdateReapRecoveryPreflightSchema.parse({
+  const preflight = UpdateReapRecoveryPreflightSchema.parse({
     schemaVersion: 1,
     boundary: {
       authorization: "none",
@@ -74,24 +145,139 @@ export async function runUpdateRecoveryPreflight(input: {
     ...evidence,
     evidenceComplete: updateReapEvidenceIsComplete(evidence),
   });
+  return validateUpdateConvergenceInspection(
+    { preflight, privateEvidence: observerInspection.privateEvidence },
+    artifacts,
+  );
 }
 
-async function inspectObserver(
+async function inspectObserverForConvergence(
   ports: UpdateRecoveryPreflightPorts,
   artifacts: UpdateRecoveryArtifacts,
-): Promise<UpdateReapObserverEvidence> {
+): Promise<{
+  evidence: UpdateReapObserverEvidence;
+  privateEvidence: UpdateConvergencePrivateEvidence;
+}> {
   try {
     return await ports.inspectObserver(artifacts);
   } catch (error) {
     return {
-      status: "unknown",
-      reason: "inspection-failed",
-      error: redactedPreflightError(error, {
-        code: "UPDATE_PREFLIGHT_OBSERVER_INSPECTION_FAILED",
-        message: "Observer recovery evidence could not be inspected.",
-      }),
+      evidence: {
+        status: "unknown",
+        reason: "inspection-failed",
+        error: redactedPreflightError(error, {
+          code: "UPDATE_PREFLIGHT_OBSERVER_INSPECTION_FAILED",
+          message: "Observer recovery evidence could not be inspected.",
+        }),
+      },
+      privateEvidence: { selectedRecoveryHandles: [] },
     };
   }
+}
+
+/**
+ * POLICY
+ *
+ * Admits one strict convergence inspection only when its selected artifacts and public/private
+ * Observer and recovery identities correspond exactly.
+ */
+export function validateUpdateConvergenceInspection(
+  inspection: UpdateConvergencePreflightInspection,
+  artifacts: UpdateRecoveryArtifacts,
+): UpdateConvergencePreflightInspection {
+  const parsed = updateConvergencePreflightInspectionSchema.parse(inspection);
+  if (
+    !updateArtifactsMatch(parsed.preflight.installed, artifacts.installed) ||
+    !updateArtifactsMatch(parsed.preflight.target, artifacts.target)
+  ) {
+    throw new Error("Update convergence aggregate does not match the selected artifacts.");
+  }
+  return parsed;
+}
+
+function validateObserverPrivateEvidence(
+  inspection: z.infer<typeof updateConvergencePreflightInspectionSchema>,
+  context: z.RefinementCtx,
+): void {
+  const observer = inspection.preflight.observer;
+  const expectedBuild =
+    observer.status === "exact" ||
+    (observer.status === "unknown" && observer.reason === "restartable-executable-drift")
+      ? observer.buildVersion
+      : undefined;
+  const privateObserver = inspection.privateEvidence.observer;
+  if (expectedBuild === undefined) {
+    if (privateObserver !== undefined) {
+      context.addIssue({
+        code: "custom",
+        path: ["privateEvidence", "observer"],
+        message: "Non-exact Observer evidence cannot carry a private ownership tuple.",
+      });
+    }
+    return;
+  }
+  if (privateObserver === undefined) {
+    context.addIssue({
+      code: "custom",
+      path: ["privateEvidence", "observer"],
+      message: "Exact Observer build evidence requires its private ownership tuple.",
+    });
+  } else if (privateObserver.buildSelector !== expectedBuild) {
+    context.addIssue({
+      code: "custom",
+      path: ["privateEvidence", "observer", "buildSelector"],
+      message: "Public and private Observer build selectors must match exactly.",
+    });
+  }
+}
+
+function validateSelectedRecoveryHandles(
+  inspection: z.infer<typeof updateConvergencePreflightInspectionSchema>,
+  context: z.RefinementCtx,
+): void {
+  const observer = inspection.preflight.observer;
+  const expectedSessions =
+    observer.status === "exact" && observer.recovery.status === "assessed"
+      ? observer.recovery.assessment.sessions
+          .filter((session) => session.handleResolution.kind === "selected")
+          .map((session) => session.sessionId)
+      : [];
+  const handles = inspection.privateEvidence.selectedRecoveryHandles;
+  const sessionIds = handles.map((handle) => handle.sessionId);
+  const handleIds = handles.map((handle) => handle.selectedHandleId);
+  if (
+    sessionIds.some((sessionId, index) => {
+      const previous = sessionIds[index - 1];
+      return previous !== undefined && compareCodeUnitStrings(previous, sessionId) >= 0;
+    })
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["privateEvidence", "selectedRecoveryHandles"],
+      message: "Private recovery handles must have unique canonically ordered session IDs.",
+    });
+  }
+  if (new Set(handleIds).size !== handleIds.length) {
+    context.addIssue({
+      code: "custom",
+      path: ["privateEvidence", "selectedRecoveryHandles"],
+      message: "One opaque Station recovery handle cannot correspond to multiple sessions.",
+    });
+  }
+  if (
+    expectedSessions.length !== sessionIds.length ||
+    expectedSessions.some((sessionId, index) => sessionId !== sessionIds[index])
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["privateEvidence", "selectedRecoveryHandles"],
+      message: "Every public selected handle requires one exact private session correspondence.",
+    });
+  }
+}
+
+function updateArtifactsMatch(left: UpdateArtifact, right: UpdateArtifact): boolean {
+  return left.version === right.version && left.revision === right.revision;
 }
 
 async function inspectHost(

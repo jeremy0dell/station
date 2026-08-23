@@ -439,9 +439,10 @@ describe("hosted CI policy", () => {
     }
   });
 
-  it("binds staged and public update acceptance to one exact predecessor", () => {
+  it("separates compatible predecessor transition from v4 staged convergence", () => {
     const release = read(".github/workflows/release.yml");
     const promotion = read(".github/workflows/promote-release.yml");
+    const updateSmoke = read("scripts/test-runners/run-update-smoke.mjs");
     const installDraft = workflowJob(release, "install-draft");
     const createDraft = workflowJob(release, "create-draft");
     const accepted = workflowJob(release, "record-accepted-candidate");
@@ -464,8 +465,21 @@ describe("hosted CI policy", () => {
     expect(installDraft).not.toContain("select(.name == $name)");
     expect(installDraft).toContain('--target-release-dir "$RUNNER_TEMP/update-release"');
     expect(installDraft).toContain('--target-build-identity "$target_build_identity"');
+    expect(installDraft).toContain("Prove compatible transition from the exact predecessor");
+    expect(installDraft).toContain("--incumbent-contract legacy-compatible");
+    expect(installDraft).toContain("Prove v4 pre-mutation convergence against the staged target");
+    expect(installDraft).toContain('--incumbent-binary "$RUNNER_TEMP/v4-update-incumbent"');
+    expect(installDraft).toContain('pnpm build:binary -- --version "$v4_incumbent_version"');
+    expect(installDraft.match(/pnpm smoke:update/g)).toHaveLength(2);
+    const compatibleTransition = between(
+      installDraft,
+      "Prove compatible transition from the exact predecessor",
+      "Prove v4 pre-mutation convergence against the staged target",
+    );
+    expect(compatibleTransition).toContain("--scenarios no-host");
+    expect(compatibleTransition).not.toContain("--busy-host-outcome pre-mutation-reap-required");
     expect(installDraft).toContain("--scenarios full");
-    expect(installDraft).toContain("--busy-host-outcome preserved-refusal");
+    expect(installDraft).toContain("--busy-host-outcome pre-mutation-reap-required");
     expect(accepted).toContain('test "$current_ids" = "$(cat candidate/asset-ids.txt)"');
     expect(accepted).not.toContain(": > candidate/asset-ids.txt");
 
@@ -481,9 +495,19 @@ describe("hosted CI policy", () => {
     expect(publicInstall).toContain('--public-target-tag "$TAG"');
     expect(publicInstall).toContain('--target-build-identity "$TARGET_BUILD_IDENTITY"');
     expect(publicInstall).toContain("--scenarios no-host");
-    expect(promotion).toContain(
-      "Confirm macOS partial crossover preserved old Host output and the target native UI visibly refused it",
+    expect(publicInstall).toContain("--incumbent-contract legacy-compatible");
+    expect(updateSmoke).toContain("CompatibleUpdateCommandReportSchema.parse(rawReport)");
+    expect(updateSmoke).toContain("function assertLegacyUpdateReport");
+    expect(updateSmoke).toContain("post-apply latest discovery is forbidden");
+    expect(updateSmoke).toContain("denyPostApplyLatest");
+    expect(updateSmoke).toContain("function assertTargetCurrentReport");
+    expect(updateSmoke).toContain(
+      "--incumbent-contract legacy-compatible requires --scenarios no-host and full-handoff.",
     );
+    expect(promotion).toContain(
+      "Confirm macOS pre-mutation reap-required kept incumbent artifact, Observer, Host, and PTY inventory unchanged with no target UI/artifact crossover",
+    );
+    expect(promotion).not.toContain("partial crossover preserved old Host output");
   });
 
   it("keeps binary handoff stress manual, capped, and failure-artifact-only", () => {

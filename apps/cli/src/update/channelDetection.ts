@@ -1,3 +1,4 @@
+import type { UpdateArtifact } from "@station/contracts";
 import type {
   UpdateApplyReportBase,
   UpdateChannel,
@@ -19,7 +20,12 @@ export type PlannedUpdateChannel = {
 export type UpdateChannelProbe = {
   channel: UpdateChannelId;
   detectAndPlan(options?: UpdateOperationOptions): Promise<PlannedUpdateChannel | undefined>;
+  proveInstalledTarget(
+    target: UpdateArtifact,
+    options?: UpdateOperationOptions,
+  ): Promise<PlannedUpdateChannel | undefined>;
 };
+export type UpdateDiscoveryProbe = Pick<UpdateChannelProbe, "channel" | "detectAndPlan">;
 
 export function createUpdateChannelProbe<
   Detection extends UpdateDetectionBase,
@@ -42,14 +48,51 @@ export function createUpdateChannelProbe<
           : { applyRecoveryCommands: (error: unknown) => applyRecoveryCommands(plan, error) }),
       };
     },
+    async proveInstalledTarget(target, options = {}) {
+      const plan = await channel.proveInstalledTarget(target, options);
+      if (plan === undefined) return undefined;
+      return {
+        channel: channel.id,
+        plan,
+        apply: async () => {
+          throw selectionError(
+            "UPDATE_SUCCESSOR_ARTIFACT_APPLY_FORBIDDEN",
+            "A successor convergence evaluator cannot apply another artifact.",
+            "Rerun stn update from the installed launcher to select a new artifact.",
+          );
+        },
+      };
+    },
   };
 }
 
-export async function selectUpdateChannel(input: {
+/** Selects the local owner of an inherited target without invoking ordinary target discovery. */
+export async function selectInstalledUpdateChannel(input: {
   probes: readonly UpdateChannelProbe[];
+  target: UpdateArtifact;
   requested?: UpdateChannelId;
   options?: UpdateOperationOptions;
 }): Promise<PlannedUpdateChannel> {
+  return selectMatchingChannel(input, (probe) =>
+    probe.proveInstalledTarget(input.target, input.options),
+  );
+}
+
+export async function selectUpdateChannel(input: {
+  probes: readonly UpdateDiscoveryProbe[];
+  requested?: UpdateChannelId;
+  options?: UpdateOperationOptions;
+}): Promise<PlannedUpdateChannel> {
+  return selectMatchingChannel(input, (probe) => probe.detectAndPlan(input.options));
+}
+
+async function selectMatchingChannel<Probe extends { channel: UpdateChannelId }>(
+  input: {
+    probes: readonly Probe[];
+    requested?: UpdateChannelId;
+  },
+  matchProbe: (probe: Probe) => Promise<PlannedUpdateChannel | undefined>,
+): Promise<PlannedUpdateChannel> {
   const selectedProbes =
     input.requested === undefined
       ? input.probes
@@ -64,7 +107,7 @@ export async function selectUpdateChannel(input: {
 
   const matches: PlannedUpdateChannel[] = [];
   for (const probe of selectedProbes) {
-    const match = await probe.detectAndPlan(input.options);
+    const match = await matchProbe(probe);
     if (match !== undefined) matches.push(match);
   }
   if (matches.length === 1 && matches[0] !== undefined) return matches[0];

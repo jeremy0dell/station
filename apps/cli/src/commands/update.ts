@@ -1,49 +1,62 @@
 import type { StationConfig } from "@station/config";
 import {
+  type HostHandoffCommandResult,
+  HostHandoffCommandResultSchema,
   type ObserverLifecycleFailure,
   ObserverLifecycleFailureSchema,
   ObserverRestartCommandResultSchema,
+  type ObserverStartupEvidence,
   type ProviderHookReconciliationResult,
   ProviderHookReconciliationResultSchema,
   providerHookReconciliationSucceeded,
+  ptyLifetimeIdentitySetsMatch,
   type SafeError,
+  type UpdateActionAudit,
   type UpdateArtifact,
-  type UpdateReapRecoveryPreflight,
+  type UpdateArtifactApplication,
+  type UpdateCommandReport,
+  UpdateCommandReportSchema,
+  type UpdateConvergenceResult,
+  type UpdateEvidencePlan,
+  type UpdateExecutedAction,
+  type UpdateFinalInspection,
+  updateCommandReportStatus,
 } from "@station/contracts";
+import { redact } from "@station/observability";
 import {
   type ExternalCommandRunner,
+  publicSafeErrorFromUnknown,
   runExternalCommand,
   type StationBuildInfo,
+  stationBuildInfo,
 } from "@station/runtime";
 import type { CliRunResult } from "../cliTypes.js";
 import type { CliEnv } from "../env.js";
 import type { ExecutableArgv } from "../selfExec.js";
 import {
   type PlannedUpdateChannel,
+  selectInstalledUpdateChannel,
   selectUpdateChannel,
   type UpdateChannelProbe,
 } from "../update/channelDetection.js";
+import { attachUpdateConvergenceDigest } from "../update/convergenceDigest.js";
+import { planUpdateConvergence, type UpdateArtifactPlanAction } from "../update/convergencePlan.js";
 import { createDefaultUpdateProbes } from "../update/defaultUpdateProbes.js";
-import type { UpdateApplyReportBase, UpdateCommandArgv } from "../update/updateChannel.js";
+import {
+  sanitizePublicHookResult,
+  sanitizePublicObserverLifecycleFailure,
+  sanitizePublicUpdateReport,
+} from "../update/publicUpdateReport.js";
+import {
+  type UpdateConvergenceInspectionPort,
+  type UpdateConvergencePreflightInspection,
+  validateUpdateConvergenceInspection,
+} from "../update/recoveryPreflight.js";
+import type { UpdateCommandArgv } from "../update/updateChannel.js";
 import { updateErrorFromUnknown } from "../update/updateError.js";
 import type { HostCommandDeps } from "./host/index.js";
 import { parseUpdateRequest, type UpdateRequest } from "./update/args.js";
-import {
-  createUpdateReport,
-  currentUpdateResult,
-  deferredUpdateResult,
-  failedUpdateResult,
-  previewCurrentUpdateResult,
-  previewUpdateResult,
-  type UpdateCommandReport,
-  updatedUpdateResult,
-  updateStep,
-} from "./update/report.js";
-import {
-  type HostHandoffScenario,
-  resolveUpdateScenario,
-  type UpdateScenario,
-} from "./update/scenario.js";
+import { nonExecutedPhases, updateCommandExitCode, updateCommandResult } from "./update/report.js";
 
 export type UpdateCommandOptions = {
   config: StationConfig;
@@ -53,342 +66,736 @@ export type UpdateCommandOptions = {
 };
 
 export type UpdateCommandDeps = {
+  /** Returns one strict public/private aggregate for the exact selected artifacts. */
+  convergenceInspection: UpdateConvergenceInspectionPort;
   probes?: readonly UpdateChannelProbe[];
   buildInfo?: () => StationBuildInfo;
   executablePath?: string;
   commandRunner?: ExternalCommandRunner;
   hostDeps?: HostCommandDeps;
-  /** Runs the composed read-only assessment required only by `--dry-run --reap`. */
-  recoveryPreflight?: (input: {
-    installed: UpdateArtifact;
-    target: UpdateArtifact;
-  }) => Promise<UpdateReapRecoveryPreflight>;
 };
-
-type ExecutableUpdateScenario = Extract<
-  UpdateScenario,
-  { kind: "defer-to-package-manager" | "apply-update" }
->;
 
 const OBSERVER_CROSSOVER_TIMEOUT_MS = 20_000;
 
+type InFlightUpdateAction = Pick<UpdateExecutedAction, "phase" | "action" | "provider">;
+
 /**
- * ADAPTER
+ * USE CASE
  *
- * Selects one owned install channel and optionally aggregates non-authorizing recovery facts.
- * Apply mode then preflights Host preservation, reconciles hooks through the selected launcher,
- * and crosses runtimes; recovery preflight itself exposes no mutation capability.
+ * Resolves the install owner, inspects all live state, plans convergence, executes only safe typed
+ * actions, and verifies a fresh no-op plan. Artifact application remains channel-owned; destructive
+ * Station process-group authorization, journaling, and reaping remain exclusively owned by #641.
  */
 export async function runUpdateCommand(
   args: readonly string[],
   options: UpdateCommandOptions,
-  deps: UpdateCommandDeps = {},
+  deps: UpdateCommandDeps,
 ): Promise<CliRunResult> {
   const request = parseUpdateRequest(args);
-  const selected = await selectUpdateChannel({
-    probes: deps.probes ?? createDefaultUpdateProbes(options, deps),
-    ...(request.channel === undefined ? {} : { requested: request.channel }),
+  const probes = deps.probes ?? createDefaultUpdateProbes(options, deps);
+  const selected =
+    request.successorTarget === undefined
+      ? await selectUpdateChannel({
+          probes,
+          ...(request.channel === undefined ? {} : { requested: request.channel }),
+        })
+      : await selectInstalledUpdateChannel({
+          probes,
+          target: request.successorTarget,
+          ...(request.channel === undefined ? {} : { requested: request.channel }),
+        });
+  validatePackageManagerRequest(selected, request);
+
+  const current = artifact(selected.plan.currentVersion, selected.plan.currentRevision);
+  const detectedTarget = artifact(selected.plan.targetVersion, selected.plan.targetRevision);
+  const target = request.successorTarget ?? detectedTarget;
+  const build = (deps.buildInfo ?? stationBuildInfo)();
+  validateSuccessorTarget(request, current, build);
+  const artifactAction = artifactActionFor(selected, request);
+  const initial = await inspectAndPlan({
+    evaluator: request.evaluator,
+    current,
+    target,
+    selected,
+    artifactAction,
+    build,
+    request,
+    deps,
   });
-  const report = createUpdateReport(selected);
-  if (request.reap) {
-    if (deps.recoveryPreflight === undefined) {
-      throw {
-        tag: "UpdatePreflightError",
-        code: "UPDATE_PREFLIGHT_PORTS_UNAVAILABLE",
-        message: "Update recovery preflight is unavailable in this CLI composition.",
-      } satisfies SafeError;
-    }
-    report.recoveryPreflight = await deps.recoveryPreflight({
-      installed: report.current,
-      target: report.target,
+
+  if (request.mode === "preview") {
+    const result: UpdateConvergenceResult = {
+      kind: "preview",
+      planDigest: initial.plan.digest.value,
+      phases: nonExecutedPhases(initial.plan),
+      ...(initial.plan.status === "converged"
+        ? {
+            verification: {
+              status: "converged" as const,
+              source: "initial" as const,
+              planDigest: initial.plan.digest.value,
+            },
+          }
+        : {}),
+    };
+    return finishReport({
+      selected,
+      current,
+      target,
+      artifactApplication: managerAwareArtifactApplication("preview", selected),
+      initial,
+      result,
+      output: request.output,
     });
   }
-  const scenario = await resolveUpdateScenario({
-    selected,
-    request,
-    config: options.config,
-    ...(deps.hostDeps === undefined ? {} : { hostDeps: deps.hostDeps }),
-  });
 
-  switch (scenario.kind) {
-    case "already-current":
-      if (request.mode === "preview") {
-        return previewCurrentUpdateResult(report, request);
-      }
-      return reconcileCurrentInstallation(
-        selected,
-        scenario.hostHandoff,
-        report,
-        request,
-        options,
-        deps.commandRunner,
-      );
-    case "preview":
-      return previewUpdateResult(report, scenario, request.output);
-    case "defer-to-package-manager":
-    case "apply-update":
-      return executeSelectedUpdate(selected, scenario, report, request, options, deps);
+  if (
+    initial.plan.status === "blocked" ||
+    initial.plan.status === "reap-required" ||
+    initial.plan.status === "intentionally-incomplete"
+  ) {
+    const result: UpdateConvergenceResult = {
+      kind: "non-mutating-stop",
+      disposition: initial.plan.status,
+      planDigest: initial.plan.digest.value,
+      phases: nonExecutedPhases(initial.plan),
+    };
+    return finishReport({
+      selected,
+      current,
+      target,
+      artifactApplication: {
+        status: artifactAction === "no-op" ? "not-required" : "not-attempted",
+      },
+      initial,
+      result,
+      output: request.output,
+    });
   }
+
+  if (initial.plan.status === "deferred") {
+    const result: UpdateConvergenceResult = {
+      kind: "deferred",
+      planDigest: initial.plan.digest.value,
+      phases: initial.plan.phases.map((phase) => ({
+        id: phase.id,
+        status: phase.id === "artifact-application" ? "deferred" : "not-executed",
+      })),
+    };
+    return finishReport({
+      selected,
+      current,
+      target,
+      artifactApplication: managerAwareArtifactApplication("deferred", selected),
+      initial,
+      result,
+      output: request.output,
+    });
+  }
+
+  if (initial.plan.status === "converged") {
+    return finishReport({
+      selected,
+      current,
+      target,
+      artifactApplication: { status: "not-required" },
+      initial,
+      result: {
+        kind: "already-converged",
+        verification: {
+          status: "converged",
+          source: "initial",
+          planDigest: initial.plan.digest.value,
+        },
+      },
+      output: request.output,
+    });
+  }
+
+  return artifactAction === "apply"
+    ? applyThenConverge(selected, current, target, initial, request, options, deps)
+    : executeCurrentRuntime(selected, current, target, initial, request, options, deps);
 }
 
-async function executeSelectedUpdate(
+async function applyThenConverge(
   selected: PlannedUpdateChannel,
-  scenario: ExecutableUpdateScenario,
-  report: UpdateCommandReport,
+  current: UpdateArtifact,
+  target: UpdateArtifact,
+  initial: UpdateEvidencePlan,
   request: UpdateRequest,
   options: UpdateCommandOptions,
   deps: UpdateCommandDeps,
 ): Promise<CliRunResult> {
-  let applied: UpdateApplyReportBase;
+  const artifactAudit: UpdateActionAudit = {
+    executor: request.evaluator,
+    planDigest: initial.plan.digest.value,
+    actions: [{ phase: "artifact-application", action: "apply", status: "completed" }],
+  };
+  let applied: Awaited<ReturnType<PlannedUpdateChannel["apply"]>>;
   try {
-    applied = await selected.apply({ drivePackageManager: scenario.drivePackageManager });
+    applied = await selected.apply({ drivePackageManager: request.packageManager === "drive" });
   } catch (error) {
-    const recoveryCommands = selected.applyRecoveryCommands?.(error) ?? [
-      retryUpdateCommand(selected.plan.currentCli, options.configPath, request),
-    ];
-    return failedUpdateResult(report, "apply", error, recoveryCommands, request.output);
+    artifactAudit.actions[0] = {
+      phase: "artifact-application",
+      action: "apply",
+      status: "failed",
+    };
+    const safe = updateErrorFromUnknown(error, {
+      code: "UPDATE_ARTIFACT_APPLICATION_FAILED",
+      message: "Station could not apply the selected artifact.",
+    });
+    return finishReport({
+      selected,
+      current,
+      target,
+      artifactApplication: { status: "failed" },
+      initial,
+      result: {
+        kind: "execution-failed",
+        stage: "artifact-application",
+        actionAudits: [artifactAudit],
+        finalInspection: { status: "not-attempted", reason: "artifact-application-failed" },
+      },
+      error: safe,
+      recoveryCommands: retryCommands(selected, options, request),
+      output: request.output,
+    });
   }
-
-  report.warnings.push(...applied.warnings);
   if (applied.status === "deferred") {
-    return deferredUpdateResult(report, selected.plan.managerCommand, request.output);
+    return finishReport({
+      selected,
+      current,
+      target,
+      artifactApplication: managerAwareArtifactApplication("deferred", selected),
+      initial,
+      result: {
+        kind: "deferred",
+        planDigest: initial.plan.digest.value,
+        phases: initial.plan.phases.map((phase) => ({
+          id: phase.id,
+          status: phase.id === "artifact-application" ? "deferred" : "not-executed",
+        })),
+      },
+      warnings: applied.warnings,
+      output: request.output,
+    });
   }
-  report.steps.push(
-    updateStep("apply", "completed", `Installed Station ${applied.installedVersion}.`),
-  );
-  if (scenario.hostHandoff.kind === "not-requested") {
-    report.warnings.push({
-      tag: "UpdateWarning",
-      code: "UPDATE_HOST_HANDOFF_DISABLED",
-      message: "Host handoff was disabled; the next TUI may refuse the incumbent Host.",
+  if (applied.successorCli === undefined) {
+    const error = updateErrorFromUnknown(undefined, {
+      code: "UPDATE_SUCCESSOR_UNAVAILABLE",
+      message: "The artifact was applied without identifying its successor Station launcher.",
+    });
+    return finishReport({
+      selected,
+      current,
+      target,
+      artifactApplication: { status: "applied" },
+      initial,
+      result: {
+        kind: "execution-failed",
+        stage: "successor-boundary",
+        actionAudits: [artifactAudit],
+        finalInspection: { status: "not-attempted", reason: "successor-unavailable" },
+      },
+      warnings: applied.warnings,
+      error,
+      recoveryCommands: retryCommands(selected, options, request),
+      output: request.output,
     });
   }
 
-  if (applied.successorCli === undefined) {
-    return failedUpdateResult(
-      report,
-      "observer-restart",
-      updateErrorFromUnknown(undefined, {
-        code: "UPDATE_CROSSOVER_INVALID",
-        message: "The update committed without identifying its successor Station launcher.",
-      }),
-      [retryUpdateCommand(selected.plan.currentCli, options.configPath, request)],
-      request.output,
+  try {
+    const successorReport = await runSuccessorUpdate(
+      applied.successorCli,
+      selected,
+      target,
+      request,
+      options,
+      deps.commandRunner,
     );
+    const successorAudits = auditsFrom(successorReport);
+    const postAction = newestEvidence(successorReport);
+    const verification = verificationFor(postAction, "post-action");
+    if (successorReport.result.kind === "execution-failed") {
+      return finishReport({
+        selected,
+        current,
+        target,
+        artifactApplication: { status: "applied" },
+        initial,
+        result: {
+          kind: "execution-failed",
+          stage: successorReport.result.stage,
+          actionAudits: [artifactAudit, ...successorAudits],
+          successor: successorReport.initial,
+          finalInspection: successorReport.result.finalInspection,
+        },
+        warnings: [...applied.warnings, ...successorReport.warnings],
+        ...(successorReport.error === undefined ? {} : { error: successorReport.error }),
+        ...(successorReport.cause === undefined ? {} : { cause: successorReport.cause }),
+        ...(successorReport.startupEvidence === undefined
+          ? {}
+          : { startupEvidence: successorReport.startupEvidence }),
+        recoveryCommands: successorReport.recoveryCommands,
+        output: request.output,
+      });
+    }
+    return finishReport({
+      selected,
+      current,
+      target,
+      artifactApplication: { status: "applied" },
+      initial,
+      result: {
+        kind: "successor-runtime-execution",
+        actionAudits: [artifactAudit, ...successorAudits],
+        successor: successorReport.initial,
+        postAction,
+        verification,
+      },
+      warnings: [...applied.warnings, ...successorReport.warnings],
+      recoveryCommands: successorReport.recoveryCommands,
+      output: request.output,
+    });
+  } catch (error) {
+    const safe = updateErrorFromUnknown(error, {
+      code: "UPDATE_SUCCESSOR_BOUNDARY_FAILED",
+      message: "The artifact was applied but successor runtime convergence could not start.",
+    });
+    return finishReport({
+      selected,
+      current,
+      target,
+      artifactApplication: { status: "applied" },
+      initial,
+      result: {
+        kind: "execution-failed",
+        stage: "successor-boundary",
+        actionAudits: [artifactAudit],
+        finalInspection: { status: "not-attempted", reason: "successor-unavailable" },
+      },
+      warnings: applied.warnings,
+      error: safe,
+      recoveryCommands: retryCommands(selected, options, request),
+      output: request.output,
+    });
   }
-
-  return crossOverRuntime(
-    {
-      launcher: applied.successorCli,
-      hostHandoff: scenario.hostHandoff,
-      observerAction: "restart",
-      completionStatus: "updated",
-    },
-    report,
-    request,
-    options,
-    deps.commandRunner,
-  );
 }
 
-type RuntimeCrossoverPlan = {
-  launcher: ExecutableArgv;
-  hostHandoff: HostHandoffScenario;
-  observerAction: "start" | "restart";
-  completionStatus: "current" | "updated";
-};
-
-async function crossOverRuntime(
-  plan: RuntimeCrossoverPlan,
-  report: UpdateCommandReport,
+async function executeCurrentRuntime(
+  selected: PlannedUpdateChannel,
+  current: UpdateArtifact,
+  target: UpdateArtifact,
+  initial: UpdateEvidencePlan,
   request: UpdateRequest,
   options: UpdateCommandOptions,
-  commandRunner: ExternalCommandRunner | undefined,
+  deps: UpdateCommandDeps,
 ): Promise<CliRunResult> {
-  const hookCommand = stationCommand(plan.launcher, options.configPath, [
-    "hooks",
-    "reconcile",
-    "codex",
-  ]);
-  const observerCommand = stationCommand(plan.launcher, options.configPath, [
-    "observer",
-    plan.observerAction,
-    "--timeout-ms",
-    String(OBSERVER_CROSSOVER_TIMEOUT_MS),
-  ]);
-  const hostCommand =
-    plan.hostHandoff.kind === "handoff"
-      ? stationCommand(plan.launcher, options.configPath, [
+  const actions: UpdateExecutedAction[] = [];
+  let inFlightAction: InFlightUpdateAction | undefined;
+  let observerLifecycleFailure: ObserverLifecycleFailure | undefined;
+  const audit: UpdateActionAudit = {
+    executor: request.evaluator,
+    planDigest: initial.plan.digest.value,
+    actions,
+  };
+  try {
+    for (const hook of initial.plan.components.hooks) {
+      if (hook.action !== "reconcile") continue;
+      inFlightAction = {
+        phase: "hook-reconciliation",
+        action: "reconcile",
+        provider: hook.provider,
+      };
+      const result = await runHookReconciliation(
+        stationCommand(selected.plan.currentCli, options.configPath, [
+          "hooks",
+          "reconcile",
+          hook.provider,
+        ]),
+        deps.commandRunner,
+      );
+      const succeeded = providerHookReconciliationSucceeded(result);
+      actions.push({
+        phase: "hook-reconciliation",
+        action: "reconcile",
+        status: succeeded ? "completed" : "failed",
+        provider: hook.provider,
+        hookResult: result,
+      });
+      if (!succeeded) {
+        throw result.status === "ownership-conflict"
+          ? updateErrorFromUnknown(undefined, {
+              code: "UPDATE_HOOK_OWNERSHIP_CONFLICT",
+              message: "Configured provider hooks are owned by another installation.",
+            })
+          : result.error;
+      }
+      inFlightAction = undefined;
+    }
+    const observer = initial.plan.components.observer;
+    if (observer.action === "start" || observer.action === "restart") {
+      inFlightAction = {
+        phase: "observer-convergence",
+        action: observer.action,
+      };
+      observerLifecycleFailure = await runObserverMutation(
+        stationCommand(selected.plan.currentCli, options.configPath, [
+          "observer",
+          observer.action,
+          "--timeout-ms",
+          String(OBSERVER_CROSSOVER_TIMEOUT_MS),
+        ]),
+        deps.commandRunner,
+      );
+      if (observerLifecycleFailure !== undefined) {
+        throw updateErrorFromUnknown(undefined, {
+          code: "UPDATE_RUNTIME_CONVERGENCE_FAILED",
+          message: "Station could not complete safe runtime convergence.",
+        });
+      }
+      actions.push({
+        phase: "observer-convergence",
+        action: observer.action,
+        status: "completed",
+      });
+      inFlightAction = undefined;
+    }
+    const host = initial.plan.components.host;
+    if (host.action === "handoff" || host.action === "replace-idle") {
+      inFlightAction = {
+        phase: "host-convergence",
+        action: host.action,
+      };
+      const handoffResult = await runHostMutation(
+        stationCommand(selected.plan.currentCli, options.configPath, [
           "host",
           "handoff",
           "--fidelity",
-          plan.hostHandoff.fidelity,
-        ])
-      : undefined;
-  const runtimeRecoveryCommands = [
-    observerCommand,
-    ...(hostCommand === undefined ? [] : [hostCommand]),
-  ];
-  const hookFailure = await reconcileUpdateHooks(report, hookCommand, commandRunner);
-  if (hookFailure !== undefined) {
-    return failedUpdateResult(
-      report,
-      "hook-reconciliation",
-      hookFailure,
-      hookReconciliationRecoveryCommands(
-        plan.launcher,
-        options.configPath,
-        report.hookReconciliation,
-        hookCommand,
-        runtimeRecoveryCommands,
-      ),
-      request.output,
-    );
-  }
-
-  // Every command remains pinned to the selected launcher: hooks first, then Observer and Host.
-  try {
-    const lifecycleFailure = await runObserverCrossover(
-      observerCommand,
-      plan.completionStatus,
-      commandRunner,
-    );
-    if (lifecycleFailure !== undefined) {
-      return failedUpdateResult(
-        report,
-        "observer-restart",
-        updateErrorFromUnknown(undefined, {
-          code: "UPDATE_RUNTIME_CROSSOVER_FAILED",
-          message: runtimeCrossoverFailureMessage(plan.completionStatus),
-        }),
-        runtimeRecoveryCommands,
-        request.output,
-        lifecycleFailure,
+          request.handoff ?? "processes",
+          "--json",
+        ]),
+        deps.commandRunner,
       );
+      if (host.action === "handoff") {
+        inFlightAction = {
+          phase: "terminal-convergence",
+          action: "preserve-via-handoff",
+        };
+        const expectedTerminals =
+          initial.preflight.host.status === "inspected" ? initial.preflight.host.terminals : [];
+        if (
+          handoffResult.receipt === undefined ||
+          !ptyLifetimeIdentitySetsMatch(expectedTerminals, handoffResult.receipt.terminals)
+        ) {
+          throw updateErrorFromUnknown(undefined, {
+            code: "UPDATE_TERMINAL_HANDOFF_RECEIPT_MISMATCH",
+            message: "Host handoff did not acknowledge every exact planned PTY lifetime.",
+          });
+        }
+        actions.push({
+          phase: "terminal-convergence",
+          action: "preserve-via-handoff",
+          status: "completed",
+          handoffReceipt: handoffResult.receipt,
+        });
+      } else if (handoffResult.receipt !== undefined) {
+        throw updateErrorFromUnknown(undefined, {
+          code: "UPDATE_HOST_REPLACEMENT_RECEIPT_UNEXPECTED",
+          message: "Idle Host replacement returned an unexpected live-terminal receipt.",
+        });
+      }
+      actions.push({
+        phase: "host-convergence",
+        action: host.action,
+        status: "completed",
+      });
+      inFlightAction = undefined;
     }
-    report.steps.push(
-      updateStep(
-        "observer-restart",
-        "completed",
-        plan.completionStatus === "updated"
-          ? "The Observer is running from the selected build."
-          : "The accepted Observer singleton is running.",
-      ),
-    );
+    if (initial.plan.components.reconcile.action === "run") {
+      inFlightAction = {
+        phase: "runtime-reconcile",
+        action: "run",
+      };
+      await runMutationCommand(
+        stationCommand(selected.plan.currentCli, options.configPath, [
+          "reconcile",
+          "--reason",
+          "update-convergence",
+        ]),
+        deps.commandRunner,
+      );
+      actions.push({ phase: "runtime-reconcile", action: "run", status: "completed" });
+      inFlightAction = undefined;
+    }
   } catch (error) {
-    return failedUpdateResult(
-      report,
-      "observer-restart",
-      error,
-      runtimeRecoveryCommands,
-      request.output,
-    );
-  }
-
-  if (hostCommand !== undefined) {
-    try {
-      await runCrossover(hostCommand, plan.completionStatus, commandRunner);
-    } catch (error) {
-      return failedUpdateResult(report, "host-handoff", error, [hostCommand], request.output);
+    let failedAction = actions.at(-1);
+    if (failedAction?.status !== "failed") {
+      // Descriptive phases such as terminal convergence must not shift the identity of the
+      // concrete mutation that failed.
+      if (inFlightAction === undefined) {
+        throw new Error("Runtime convergence failure has no in-flight action identity.", {
+          cause: error,
+        });
+      }
+      failedAction = { ...inFlightAction, status: "failed" };
+      actions.push(failedAction);
     }
+    const safe = updateErrorFromUnknown(error, {
+      code: "UPDATE_RUNTIME_CONVERGENCE_FAILED",
+      message: "Station could not complete safe runtime convergence.",
+    });
+    const finalInspection = await attemptFinalInspection({
+      current,
+      target,
+      selected,
+      build: (deps.buildInfo ?? stationBuildInfo)(),
+      request,
+      deps,
+    });
+    return finishReport({
+      selected,
+      current,
+      target,
+      artifactApplication: { status: "not-required" },
+      initial,
+      result: {
+        kind: "execution-failed",
+        stage: failedAction.phase,
+        actionAudits: [audit],
+        finalInspection,
+      },
+      error: safe,
+      ...(observerLifecycleFailure === undefined
+        ? {}
+        : {
+            cause: observerLifecycleFailure.cause ?? observerLifecycleFailure.error,
+            ...(observerLifecycleFailure.startupEvidence === undefined
+              ? {}
+              : { startupEvidence: observerLifecycleFailure.startupEvidence }),
+          }),
+      recoveryCommands: retryCommands(selected, options, request),
+      output: request.output,
+    });
   }
 
-  return plan.completionStatus === "updated"
-    ? updatedUpdateResult(report, plan.hostHandoff, request.output)
-    : currentUpdateResult(report, plan.hostHandoff, request.output);
+  const finalInspection = await attemptFinalInspection({
+    current,
+    target,
+    selected,
+    build: (deps.buildInfo ?? stationBuildInfo)(),
+    request,
+    deps,
+  });
+  if (finalInspection.status !== "completed") {
+    const error =
+      finalInspection.status === "failed"
+        ? finalInspection.error
+        : updateErrorFromUnknown(undefined, {
+            code: "UPDATE_FINAL_INSPECTION_FAILED",
+            message: "Final aggregate inspection was not attempted after runtime convergence.",
+          });
+    return finishReport({
+      selected,
+      current,
+      target,
+      artifactApplication: { status: "not-required" },
+      initial,
+      result: {
+        kind: "execution-failed",
+        stage: "verification",
+        actionAudits: [audit],
+        finalInspection,
+      },
+      error,
+      recoveryCommands: retryCommands(selected, options, request),
+      output: request.output,
+    });
+  }
+  const postAction = finalInspection.evidence;
+  if (!terminalsPreservedAcrossHandoff(initial, postAction, audit)) {
+    const error = updateErrorFromUnknown(undefined, {
+      code: "UPDATE_TERMINAL_CONVERGENCE_INCOMPLETE",
+      message:
+        "Fresh inspection after Host handoff did not retain every planned PTY lifetime identity.",
+    });
+    return finishReport({
+      selected,
+      current,
+      target,
+      artifactApplication: { status: "not-required" },
+      initial,
+      result: {
+        kind: "execution-failed",
+        stage: "verification",
+        actionAudits: [audit],
+        finalInspection,
+      },
+      error,
+      recoveryCommands: retryCommands(selected, options, request),
+      output: request.output,
+    });
+  }
+  if (postAction.plan.status === "actionable") {
+    const error = updateErrorFromUnknown(undefined, {
+      code: "UPDATE_RUNTIME_CONVERGENCE_INCOMPLETE",
+      message:
+        "Station completed the planned runtime actions, but fresh inspection still requires convergence.",
+    });
+    return finishReport({
+      selected,
+      current,
+      target,
+      artifactApplication: { status: "not-required" },
+      initial,
+      result: {
+        kind: "execution-failed",
+        stage: "verification",
+        actionAudits: [audit],
+        finalInspection,
+      },
+      error,
+      recoveryCommands: retryCommands(selected, options, request),
+      output: request.output,
+    });
+  }
+  return finishReport({
+    selected,
+    current,
+    target,
+    artifactApplication: { status: "not-required" },
+    initial,
+    result: {
+      kind: "current-runtime-execution",
+      actionAudits: [audit],
+      postAction,
+      verification: verificationFor(postAction, "post-action"),
+    },
+    output: request.output,
+  });
 }
 
-async function reconcileCurrentInstallation(
+async function inspectAndPlan(input: {
+  evaluator: "incumbent-cli" | "successor-cli";
+  current: UpdateArtifact;
+  target: UpdateArtifact;
+  selected: PlannedUpdateChannel;
+  artifactAction: UpdateArtifactPlanAction;
+  build: StationBuildInfo;
+  request: UpdateRequest;
+  deps: UpdateCommandDeps;
+}): Promise<UpdateEvidencePlan> {
+  const inspection = await runInspection(input.current, input.target, input.deps);
+  const selectedTarget = {
+    artifact: input.target,
+    buildIdentity:
+      input.artifactAction === "no-op"
+        ? ({ status: "known", value: input.build.buildIdentity } as const)
+        : ({ status: "not-yet-provable" } as const),
+  };
+  const draft = planUpdateConvergence({
+    selectedTarget,
+    artifactAction: input.artifactAction,
+    ...(input.request.handoff === undefined ? {} : { handoffFidelity: input.request.handoff }),
+    preflight: inspection.preflight,
+  });
+  const plan = attachUpdateConvergenceDigest({
+    draft,
+    preflight: inspection.preflight,
+    privateEvidence: inspection.privateEvidence,
+  });
+  return { evaluator: input.evaluator, preflight: inspection.preflight, plan };
+}
+
+async function runInspection(
+  current: UpdateArtifact,
+  target: UpdateArtifact,
+  deps: UpdateCommandDeps,
+): Promise<UpdateConvergencePreflightInspection> {
+  const artifacts = { installed: current, target };
+  return validateUpdateConvergenceInspection(
+    await deps.convergenceInspection(artifacts),
+    artifacts,
+  );
+}
+
+async function attemptFinalInspection(input: {
+  current: UpdateArtifact;
+  target: UpdateArtifact;
+  selected: PlannedUpdateChannel;
+  build: StationBuildInfo;
+  request: UpdateRequest;
+  deps: UpdateCommandDeps;
+}): Promise<UpdateFinalInspection> {
+  try {
+    return {
+      status: "completed",
+      evidence: await inspectAndPlan({
+        evaluator: input.request.evaluator,
+        current: input.current,
+        target: input.target,
+        selected: input.selected,
+        artifactAction: "no-op",
+        build: input.build,
+        request: input.request,
+        deps: input.deps,
+      }),
+    };
+  } catch (error) {
+    return {
+      status: "failed",
+      error: publicSafeErrorFromUnknown(error, {
+        tag: "UpdatePreflightError",
+        code: "UPDATE_FINAL_INSPECTION_FAILED",
+        message: "Final aggregate inspection failed after a runtime action failure.",
+      }),
+    };
+  }
+}
+
+async function runSuccessorUpdate(
+  launcher: ExecutableArgv,
   selected: PlannedUpdateChannel,
-  hostHandoff: HostHandoffScenario,
-  report: UpdateCommandReport,
+  target: UpdateArtifact,
   request: UpdateRequest,
   options: UpdateCommandOptions,
-  commandRunner: ExternalCommandRunner | undefined,
-): Promise<CliRunResult> {
-  report.steps.push(
-    updateStep("apply", "skipped", "The selected installation already matches its target."),
-  );
-  if (hostHandoff.kind === "not-requested") {
-    report.warnings.push({
-      tag: "UpdateWarning",
-      code: "UPDATE_HOST_HANDOFF_DISABLED",
-      message: "Host handoff was disabled; the next TUI may refuse the incumbent Host.",
-    });
-  }
-  return crossOverRuntime(
-    {
-      launcher: selected.plan.currentCli,
-      hostHandoff,
-      observerAction: "start",
-      completionStatus: "current",
-    },
-    report,
-    request,
-    options,
-    commandRunner,
-  );
-}
-
-async function reconcileUpdateHooks(
-  report: UpdateCommandReport,
-  command: UpdateCommandArgv,
   runner: ExternalCommandRunner | undefined,
-): Promise<SafeError | undefined> {
-  try {
-    const result = await runHookReconciliation(command, runner);
-    report.hookReconciliation = result;
-    switch (result.status) {
-      case "configured-disabled":
-        report.steps.push(
-          updateStep(
-            "hook-reconciliation",
-            "completed",
-            "Configured provider hook installation is disabled.",
-          ),
-        );
-        return undefined;
-      case "unsupported":
-        report.steps.push(
-          updateStep(
-            "hook-reconciliation",
-            "completed",
-            "The selected provider does not support managed hooks.",
-          ),
-        );
-        return undefined;
-      case "healthy":
-        report.steps.push(
-          updateStep("hook-reconciliation", "completed", "Configured provider hooks are healthy."),
-        );
-        return undefined;
-      case "repaired":
-        report.steps.push(
-          updateStep(
-            "hook-reconciliation",
-            "completed",
-            "Configured provider hooks were repaired and verified.",
-          ),
-        );
-        return undefined;
-      case "ownership-conflict":
-        return updateErrorFromUnknown(undefined, {
-          code: "UPDATE_HOOK_OWNERSHIP_CONFLICT",
-          message: "Configured provider hooks are owned by another installation.",
-          hint: "Use the explicit Codex hook takeover flow before retrying the update.",
-        });
-      case "write-failed":
-      case "post-write-doctor-failed":
-      case "inspection-failed":
-        return result.error;
-    }
-  } catch (error) {
-    return updateErrorFromUnknown(error, {
-      code: "UPDATE_HOOK_RECONCILIATION_FAILED",
-      message: "Station could not verify configured provider hooks.",
-      hint: "Run provider hook doctor and retry the update after correcting the reported issue.",
-    });
+): Promise<UpdateCommandReport> {
+  const command = stationCommand(launcher, options.configPath, [
+    "update",
+    "--channel",
+    selected.channel,
+    "--json",
+    "--internal-successor-evaluator",
+    "--internal-selected-target-version",
+    target.version,
+    ...(target.revision === undefined
+      ? []
+      : ["--internal-selected-target-revision", target.revision]),
+    ...(request.handoff === undefined
+      ? ["--no-handoff"]
+      : request.handoff === "processes"
+        ? []
+        : [`--handoff=${request.handoff}`]),
+  ]);
+  const [executable, ...args] = command;
+  const result = await runExternalCommand(
+    {
+      command: executable,
+      args,
+      timeoutMs: 120_000,
+      maxOutputChars: 512 * 1024,
+      allowedExitCodes: [1],
+    },
+    runner,
+  );
+  const report = sanitizePublicUpdateReport(
+    UpdateCommandReportSchema.parse(JSON.parse(result.stdout)),
+  );
+  if (result.exitCode !== updateCommandExitCode(report)) {
+    throw new Error("Successor update report contradicted its process exit status.");
   }
+  return report;
 }
 
 async function runHookReconciliation(
@@ -406,107 +813,270 @@ async function runHookReconciliation(
     },
     runner,
   );
-  const parsed = ProviderHookReconciliationResultSchema.parse(JSON.parse(result.stdout));
-  const succeeded = providerHookReconciliationSucceeded(parsed);
-  if ((result.exitCode === 0) !== succeeded) {
-    throw new Error("Hook reconciliation result contradicted its process exit status.");
+  const parsed = sanitizePublicHookResult(
+    ProviderHookReconciliationResultSchema.parse(JSON.parse(result.stdout)),
+  );
+  if ((result.exitCode === 0) !== providerHookReconciliationSucceeded(parsed)) {
+    throw new Error("Hook reconciliation contradicted its process exit status.");
   }
   return parsed;
 }
 
-function hookReconciliationRecoveryCommands(
-  launcher: ExecutableArgv,
-  configPath: string | undefined,
-  result: ProviderHookReconciliationResult | undefined,
-  reconcileCommand: UpdateCommandArgv,
-  runtimeCommands: readonly UpdateCommandArgv[],
-): UpdateCommandArgv[] {
-  const provider = result?.provider ?? "codex";
-  const action = result !== undefined && "followUp" in result ? result.followUp.action : undefined;
-  let prerequisiteCommands: UpdateCommandArgv[] = [];
-  switch (action) {
-    case "run-explicit-takeover":
-      prerequisiteCommands = [
-        stationCommand(launcher, configPath, ["hooks", "install", provider, "--yes", "--takeover"]),
-      ];
-      break;
-    case "run-doctor":
-    case "enable-hooks":
-    case undefined:
-      prerequisiteCommands = [stationCommand(launcher, configPath, ["hooks", "doctor", provider])];
-      break;
-    case "retry":
-      break;
-  }
-  return [...prerequisiteCommands, reconcileCommand, ...runtimeCommands];
-}
-
-async function runCrossover(
+async function runMutationCommand(
   command: UpdateCommandArgv,
-  completionStatus: RuntimeCrossoverPlan["completionStatus"],
   runner: ExternalCommandRunner | undefined,
-) {
+): Promise<void> {
   const [executable, ...args] = command;
-  try {
-    await runExternalCommand(
-      {
-        command: executable,
-        args,
-        timeoutMs: 60_000,
-        maxOutputChars: 64 * 1024,
-      },
-      runner,
-    );
-  } catch (error) {
-    throw updateErrorFromUnknown(error, {
-      code: "UPDATE_RUNTIME_CROSSOVER_FAILED",
-      message: runtimeCrossoverFailureMessage(completionStatus),
-    });
-  }
+  await runExternalCommand(
+    { command: executable, args, timeoutMs: 60_000, maxOutputChars: 128 * 1024 },
+    runner,
+  );
 }
 
-async function runObserverCrossover(
+async function runHostMutation(
   command: UpdateCommandArgv,
-  completionStatus: RuntimeCrossoverPlan["completionStatus"],
+  runner: ExternalCommandRunner | undefined,
+): Promise<HostHandoffCommandResult> {
+  const [executable, ...args] = command;
+  const result = await runExternalCommand(
+    {
+      command: executable,
+      args,
+      timeoutMs: 60_000,
+      maxOutputChars: 128 * 1024,
+      allowedExitCodes: [1],
+    },
+    runner,
+  );
+  const parsed = HostHandoffCommandResultSchema.parse(JSON.parse(result.stdout));
+  const succeeded = parsed.status === "planned" || parsed.status === "completed";
+  if ((result.exitCode === 0) !== succeeded) {
+    throw new Error("Host handoff result contradicted its process exit status.");
+  }
+  if (parsed.status !== "completed" || parsed.dryRun) {
+    throw new Error("Host handoff did not complete the requested mutation.");
+  }
+  return parsed;
+}
+
+async function runObserverMutation(
+  command: UpdateCommandArgv,
   runner: ExternalCommandRunner | undefined,
 ): Promise<ObserverLifecycleFailure | undefined> {
   const [executable, ...args] = command;
-  try {
-    const result = await runExternalCommand(
-      {
-        command: executable,
-        args,
-        timeoutMs: 60_000,
-        maxOutputChars: 64 * 1024,
-        allowedExitCodes: [1],
-      },
-      runner,
-    );
-    const parsed = ObserverRestartCommandResultSchema.parse(JSON.parse(result.stdout));
-    if (result.exitCode === 0 && parsed.status === "running") return undefined;
-    if (result.exitCode !== 0 && parsed.status !== "running") {
-      const failure: ObserverLifecycleFailure = { error: parsed.error };
-      if (parsed.cause !== undefined) failure.cause = parsed.cause;
-      if (parsed.startupEvidence !== undefined) {
-        failure.startupEvidence = parsed.startupEvidence;
-      }
-      return ObserverLifecycleFailureSchema.parse(failure);
+  const result = await runExternalCommand(
+    {
+      command: executable,
+      args,
+      timeoutMs: 60_000,
+      maxOutputChars: 128 * 1024,
+      allowedExitCodes: [1],
+    },
+    runner,
+  );
+  const parsed = ObserverRestartCommandResultSchema.parse(JSON.parse(result.stdout));
+  if (result.exitCode === 0 && parsed.status === "running") return undefined;
+  if (result.exitCode !== 0 && parsed.status !== "running") {
+    const failure: ObserverLifecycleFailure = { error: parsed.error };
+    if (parsed.cause !== undefined) failure.cause = parsed.cause;
+    if (parsed.startupEvidence !== undefined) failure.startupEvidence = parsed.startupEvidence;
+    return sanitizePublicObserverLifecycleFailure(ObserverLifecycleFailureSchema.parse(failure));
+  }
+  throw new Error("Observer convergence result contradicted its process exit status.");
+}
+
+function finishReport(input: {
+  selected: PlannedUpdateChannel;
+  current: UpdateArtifact;
+  target: UpdateArtifact;
+  artifactApplication: UpdateArtifactApplication;
+  initial: UpdateEvidencePlan;
+  result: UpdateConvergenceResult;
+  output: UpdateRequest["output"];
+  warnings?: SafeError[];
+  recoveryCommands?: UpdateCommandArgv[];
+  error?: SafeError;
+  cause?: SafeError;
+  startupEvidence?: ObserverStartupEvidence;
+}): CliRunResult {
+  const core = {
+    schemaVersion: 4 as const,
+    channel: input.selected.channel,
+    current: input.current,
+    target: input.target,
+    artifactApplication: input.artifactApplication,
+    initial: input.initial,
+    result: input.result,
+    warnings: input.warnings ?? [],
+    recoveryCommands: input.recoveryCommands ?? [],
+  };
+  const report: UpdateCommandReport = {
+    ...core,
+    warnings: core.warnings.map((warning) =>
+      publicSafeErrorFromUnknown(warning, {
+        tag: warning.tag,
+        code: warning.code,
+        message: warning.message,
+      }),
+    ),
+    status: updateCommandReportStatus(core),
+  };
+  if (input.error !== undefined) {
+    report.error = publicSafeErrorFromUnknown(input.error, {
+      tag: input.error.tag,
+      code: input.error.code,
+      message: input.error.message,
+    });
+  }
+  if (input.cause !== undefined) {
+    const cause = publicSafeErrorFromUnknown(input.cause, {
+      tag: input.cause.tag,
+      code: input.cause.code,
+      message: input.cause.message,
+    });
+    report.cause = redact(cause).value;
+  }
+  if (input.startupEvidence !== undefined) {
+    report.startupEvidence = redact(input.startupEvidence).value;
+  }
+  return updateCommandResult(sanitizePublicUpdateReport(report), input.output);
+}
+
+function verificationFor(
+  evidence: UpdateEvidencePlan,
+  source: "successor" | "post-action",
+): Extract<UpdateConvergenceResult, { kind: "current-runtime-execution" }>["verification"] {
+  return evidence.plan.status === "converged"
+    ? { status: "converged", source, planDigest: evidence.plan.digest.value }
+    : {
+        status: "not-converged",
+        source,
+        planDigest: evidence.plan.digest.value,
+        disposition: evidence.plan.status === "deferred" ? "blocked" : evidence.plan.status,
+      };
+}
+
+function auditsFrom(report: UpdateCommandReport): UpdateActionAudit[] {
+  switch (report.result.kind) {
+    case "current-runtime-execution":
+    case "successor-runtime-execution":
+    case "execution-failed":
+      return [...report.result.actionAudits];
+    case "already-converged":
+    case "preview":
+    case "deferred":
+    case "non-mutating-stop":
+      return [];
+  }
+}
+
+function newestEvidence(report: UpdateCommandReport): UpdateEvidencePlan {
+  switch (report.result.kind) {
+    case "current-runtime-execution":
+      return report.result.postAction;
+    case "successor-runtime-execution":
+      return report.result.postAction;
+    case "execution-failed":
+      return report.result.finalInspection.status === "completed"
+        ? report.result.finalInspection.evidence
+        : (report.result.successor ?? report.initial);
+    case "already-converged":
+    case "preview":
+    case "deferred":
+    case "non-mutating-stop":
+      return report.initial;
+  }
+}
+
+function artifactActionFor(
+  selected: PlannedUpdateChannel,
+  request: UpdateRequest,
+): UpdateArtifactPlanAction {
+  if (request.successorTarget !== undefined) return "no-op";
+  if (selected.plan.status === "current") return "no-op";
+  if (selected.plan.managerCommand !== undefined && request.packageManager === "defer") {
+    return "defer";
+  }
+  return "apply";
+}
+
+function managerAwareArtifactApplication(
+  status: "preview" | "deferred",
+  selected: PlannedUpdateChannel,
+): UpdateArtifactApplication {
+  if (status === "preview") {
+    const application: Extract<UpdateArtifactApplication, { status: "preview" }> = {
+      status: "preview",
+    };
+    if (selected.plan.managerCommand !== undefined) {
+      application.managerCommand = selected.plan.managerCommand;
     }
-    throw new Error("Observer restart result contradicted its process exit status.");
-  } catch (error) {
-    throw updateErrorFromUnknown(error, {
-      code: "UPDATE_RUNTIME_CROSSOVER_FAILED",
-      message: runtimeCrossoverFailureMessage(completionStatus),
+    return application;
+  }
+  const application: Extract<UpdateArtifactApplication, { status: "deferred" }> = {
+    status: "deferred",
+  };
+  if (selected.plan.managerCommand !== undefined) {
+    application.managerCommand = selected.plan.managerCommand;
+  }
+  return application;
+}
+
+function validateSuccessorTarget(
+  request: UpdateRequest,
+  current: UpdateArtifact,
+  build: StationBuildInfo,
+): void {
+  if (request.successorTarget === undefined) return;
+  if (
+    !artifactsMatch(current, request.successorTarget) ||
+    build.version !== request.successorTarget.version
+  ) {
+    throw updateErrorFromUnknown(undefined, {
+      code: "UPDATE_SUCCESSOR_TARGET_MISMATCH",
+      message: "The successor launcher does not match the artifact selected before application.",
+      hint: "Rerun stn update from the currently installed launcher to build a fresh plan.",
     });
   }
 }
 
-function runtimeCrossoverFailureMessage(
-  completionStatus: RuntimeCrossoverPlan["completionStatus"],
-): string {
-  return completionStatus === "updated"
-    ? "Station installed the new build but runtime crossover did not complete."
-    : "Station could not complete runtime convergence for the current build.";
+function artifactsMatch(left: UpdateArtifact, right: UpdateArtifact): boolean {
+  return left.version === right.version && left.revision === right.revision;
+}
+
+function terminalsPreservedAcrossHandoff(
+  initial: UpdateEvidencePlan,
+  postAction: UpdateEvidencePlan,
+  audit: UpdateActionAudit,
+): boolean {
+  const handoffCompleted = audit.actions.some(
+    (action) =>
+      action.phase === "terminal-convergence" &&
+      action.action === "preserve-via-handoff" &&
+      action.status === "completed",
+  );
+  if (!handoffCompleted) return true;
+  const before =
+    initial.preflight.host.status === "inspected" ? initial.preflight.host.terminals : [];
+  const after =
+    postAction.preflight.host.status === "inspected" ? postAction.preflight.host.terminals : [];
+  return ptyLifetimeIdentitySetsMatch(before, after);
+}
+
+function validatePackageManagerRequest(
+  selected: PlannedUpdateChannel,
+  request: UpdateRequest,
+): void {
+  if (request.packageManager === "drive" && selected.plan.managerCommand === undefined) {
+    throw updateErrorFromUnknown(undefined, {
+      code: "UPDATE_FLAG_INVALID",
+      message: "--drive-package-manager requires a Homebrew, npm-global, or mise channel.",
+    });
+  }
+}
+
+function artifact(version: string, revision: string | undefined): UpdateArtifact {
+  return { version, ...(revision === undefined ? {} : { revision }) };
 }
 
 function stationCommand(
@@ -523,15 +1093,22 @@ function stationCommand(
   ];
 }
 
-function retryUpdateCommand(
-  cli: ExecutableArgv,
-  configPath: string | undefined,
+function retryCommands(
+  selected: PlannedUpdateChannel,
+  options: UpdateCommandOptions,
   request: UpdateRequest,
-): UpdateCommandArgv {
-  return stationCommand(cli, configPath, [
-    "update",
-    ...(request.channel === undefined ? [] : ["--channel", request.channel]),
-    ...(request.packageManager === "drive" ? ["--drive-package-manager"] : []),
-    ...(request.handoff === undefined ? ["--no-handoff"] : [`--handoff=${request.handoff}`]),
-  ]);
+): UpdateCommandArgv[] {
+  return [
+    stationCommand(selected.plan.currentCli, options.configPath, [
+      "update",
+      "--channel",
+      selected.channel,
+      ...(request.packageManager === "drive" ? ["--drive-package-manager"] : []),
+      ...(request.handoff === undefined
+        ? ["--no-handoff"]
+        : request.handoff === "processes"
+          ? []
+          : [`--handoff=${request.handoff}`]),
+    ]),
+  ];
 }

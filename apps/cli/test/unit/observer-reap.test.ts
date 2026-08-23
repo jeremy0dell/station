@@ -54,6 +54,7 @@ function proc(
     pid,
     argv,
     executablePath,
+    executableProvenance: "exact",
     startToken: token,
     processToken:
       pid === 100 ? TOKEN : ["b47ac10b", "58cc", "4372", "a567", "0e02b2c3d479"].join("-"),

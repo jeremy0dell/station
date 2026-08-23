@@ -23,9 +23,13 @@ import {
   stationObserverBuildVersion,
 } from "@station/runtime";
 import { type HostCommandDeps, runHostCommand } from "../commands/host/index.js";
+import { classifyObserverHealth } from "../observerProcess/health.js";
 import { getObserverStatus, type ObserverProcessDeps } from "../observerProcess.js";
 import type { UpdateRecoveryPreflightPorts } from "./recoveryPreflight.js";
-import { redactedPreflightError } from "./recoveryPreflight.js";
+import {
+  redactedPreflightError,
+  type UpdateConvergencePrivateEvidence,
+} from "./recoveryPreflight.js";
 
 export type CreateUpdateRecoveryPreflightPortsOptions = {
   config: StationConfig;
@@ -47,8 +51,9 @@ export type CreateUpdateRecoveryPreflightPortsOptions = {
  * COMPOSITION ROOT
  *
  * Binds recovery preflight to read-only local process evidence, Observer protocol queries, strict
- * Host inventory, and the provider-neutral hook-health use case. No lifecycle or repair capability
- * is exposed through these ports.
+ * Host inventory, and the provider-neutral hook-health use case. Observer public evidence and its
+ * CLI-private ownership sidecar are captured together. No lifecycle or repair capability is
+ * exposed through these ports.
  */
 export function createUpdateRecoveryPreflightPorts(
   options: CreateUpdateRecoveryPreflightPortsOptions,
@@ -96,24 +101,34 @@ async function inspectObserverRecoveryEvidence(input: {
   readIdentity: (socketPath: string) => Promise<ObserverProcessIdentity | undefined>;
   readStatus: typeof getObserverStatus;
   observerDeps?: ObserverProcessDeps;
-}): Promise<UpdateReapObserverEvidence> {
+}): Promise<{
+  evidence: UpdateReapObserverEvidence;
+  privateEvidence: UpdateConvergencePrivateEvidence;
+}> {
   const status = await input.readStatus({ config: input.config }, input.observerDeps);
   if (status.status !== "running") {
     switch (status.status) {
       case "stopped":
-        return inspectStoppedObserverEvidence(input, status.paths.socketPath);
+        return {
+          evidence: await inspectStoppedObserverEvidence(input, status.paths.socketPath),
+          privateEvidence: { selectedRecoveryHandles: [] },
+        };
       case "stale":
-        return observerUnknown(
-          "stale-socket",
-          "UPDATE_PREFLIGHT_OBSERVER_STALE",
-          "Observer socket evidence is stale.",
+        return publicOnlyObserver(
+          observerUnknown(
+            "stale-socket",
+            "UPDATE_PREFLIGHT_OBSERVER_STALE",
+            "Observer socket evidence is stale.",
+          ),
         );
       case "unhealthy":
-        return observerUnknown(
-          "unhealthy",
-          "UPDATE_PREFLIGHT_OBSERVER_UNHEALTHY",
-          "Observer health could not be established.",
-          status.error,
+        return publicOnlyObserver(
+          observerUnknown(
+            "unhealthy",
+            "UPDATE_PREFLIGHT_OBSERVER_UNHEALTHY",
+            "Observer health could not be established.",
+            status.error,
+          ),
         );
     }
   }
@@ -125,10 +140,12 @@ async function inspectObserverRecoveryEvidence(input: {
     health.version === undefined ||
     (health.socketPath !== undefined && health.socketPath !== paths.socketPath)
   ) {
-    return observerUnknown(
-      "identity-missing",
-      "UPDATE_PREFLIGHT_OBSERVER_IDENTITY_MISSING",
-      "Observer health did not provide complete process identity.",
+    return publicOnlyObserver(
+      observerUnknown(
+        "identity-missing",
+        "UPDATE_PREFLIGHT_OBSERVER_IDENTITY_MISSING",
+        "Observer health did not provide complete process identity.",
+      ),
     );
   }
 
@@ -136,18 +153,22 @@ async function inspectObserverRecoveryEvidence(input: {
   try {
     identity = await input.readIdentity(paths.socketPath);
   } catch (error) {
-    return observerUnknown(
-      "identity-unavailable",
-      "UPDATE_PREFLIGHT_OBSERVER_IDENTITY_UNAVAILABLE",
-      "Observer process identity evidence could not be read.",
-      error,
+    return publicOnlyObserver(
+      observerUnknown(
+        "identity-unavailable",
+        "UPDATE_PREFLIGHT_OBSERVER_IDENTITY_UNAVAILABLE",
+        "Observer process identity evidence could not be read.",
+        error,
+      ),
     );
   }
   if (identity === undefined) {
-    return observerUnknown(
-      "identity-missing",
-      "UPDATE_PREFLIGHT_OBSERVER_IDENTITY_MISSING",
-      "Observer process identity evidence is missing.",
+    return publicOnlyObserver(
+      observerUnknown(
+        "identity-missing",
+        "UPDATE_PREFLIGHT_OBSERVER_IDENTITY_MISSING",
+        "Observer process identity evidence is missing.",
+      ),
     );
   }
   if (
@@ -155,17 +176,23 @@ async function inspectObserverRecoveryEvidence(input: {
     identity.version !== health.version ||
     identity.socketPath !== paths.socketPath
   ) {
-    return observerUnknown(
-      "identity-mismatch",
-      "UPDATE_PREFLIGHT_OBSERVER_IDENTITY_MISMATCH",
-      "Observer health and process identity evidence disagree.",
+    return publicOnlyObserver(
+      observerUnknown(
+        "identity-mismatch",
+        "UPDATE_PREFLIGHT_OBSERVER_IDENTITY_MISMATCH",
+        "Observer health and process identity evidence disagree.",
+      ),
     );
   }
   const before = verifyObserverProcessIdentity(
     { source: "pidfile", identity },
     input.observerIdentitySource,
   );
-  if (before.status !== "exact") return observerVerificationUnknown(before.status);
+  if (before.status !== "exact") {
+    const restartable = restartableInstalledPathReplacement(input, health, identity, before);
+    if (restartable !== undefined) return restartable;
+    return publicOnlyObserver(observerVerificationUnknown(before.status));
+  }
 
   const expectedObserverIdentity: ExpectedObserverIdentity = {
     pid: health.pid,
@@ -198,11 +225,13 @@ async function inspectObserverRecoveryEvidence(input: {
     input.observerIdentitySource,
   );
   if (after.status !== "exact") {
-    return observerUnknown(
-      after.status === "mismatch" ? "identity-mismatch" : "identity-unavailable",
-      "UPDATE_PREFLIGHT_OBSERVER_IDENTITY_DRIFT",
-      "Observer process identity changed while recovery evidence was captured.",
-      after.status === "unavailable" ? after.cause : undefined,
+    return publicOnlyObserver(
+      observerUnknown(
+        after.status === "unavailable" ? "identity-unavailable" : "identity-mismatch",
+        "UPDATE_PREFLIGHT_OBSERVER_IDENTITY_DRIFT",
+        "Observer process identity changed while recovery evidence was captured.",
+        after.status === "unavailable" ? after.cause : undefined,
+      ),
     );
   }
 
@@ -228,7 +257,82 @@ async function inspectObserverRecoveryEvidence(input: {
           }
         : { status: "assessed", assessment: publicRecoveryAssessment(assessment) },
   };
-  return exact;
+  return {
+    evidence: exact,
+    privateEvidence: {
+      observer: {
+        pid: identity.pid,
+        osStartTime: identity.osStartTime,
+        processToken: identity.processToken,
+        buildSelector: identity.version,
+      },
+      selectedRecoveryHandles:
+        assessment === undefined ? [] : selectedStationRecoveryHandles(assessment),
+    },
+  };
+}
+
+function restartableInstalledPathReplacement(
+  input: Pick<Parameters<typeof inspectObserverRecoveryEvidence>[0], "currentObserverBuildVersion">,
+  health: Extract<Awaited<ReturnType<typeof getObserverStatus>>, { status: "running" }>["health"],
+  identity: ObserverProcessIdentity,
+  verification: ReturnType<typeof verifyObserverProcessIdentity>,
+):
+  | {
+      evidence: UpdateReapObserverEvidence;
+      privateEvidence: UpdateConvergencePrivateEvidence;
+    }
+  | undefined {
+  if (verification.status !== "installed-path-replaced") return undefined;
+  const decision = classifyObserverHealth(health, input.currentObserverBuildVersion);
+  if (
+    decision.action !== "replace" &&
+    !(decision.action === "attach" && decision.reason === "exact-build")
+  ) {
+    return undefined;
+  }
+  // Atomic installation replacement invalidates path provenance for the still-running image.
+  // Only the existing health-pinned explicit restart may consume this narrow evidence state.
+  return {
+    evidence: observerUnknown(
+      "restartable-executable-drift",
+      "UPDATE_PREFLIGHT_OBSERVER_EXECUTABLE_DRIFT_RESTARTABLE",
+      "Observer executable provenance changed, but its stable identity admits an explicit same- or higher-build restart.",
+      undefined,
+      identity.version,
+    ),
+    privateEvidence: {
+      observer: {
+        pid: identity.pid,
+        osStartTime: identity.osStartTime,
+        processToken: identity.processToken,
+        buildSelector: identity.version,
+      },
+      selectedRecoveryHandles: [],
+    },
+  };
+}
+
+function publicOnlyObserver(evidence: UpdateReapObserverEvidence): {
+  evidence: UpdateReapObserverEvidence;
+  privateEvidence: UpdateConvergencePrivateEvidence;
+} {
+  return { evidence, privateEvidence: { selectedRecoveryHandles: [] } };
+}
+
+function selectedStationRecoveryHandles(
+  assessment: ObserverRecoveryAssessment,
+): UpdateConvergencePrivateEvidence["selectedRecoveryHandles"] {
+  return assessment.sessions.flatMap((session) =>
+    session.handleResolution.kind === "selected"
+      ? [
+          {
+            sessionId: session.sessionId,
+            selectedHandleId: session.handleResolution.selectedHandleId,
+          },
+        ]
+      : [],
+  );
 }
 
 async function inspectStoppedObserverEvidence(
@@ -279,6 +383,7 @@ async function inspectHostRecoveryEvidence(input: {
   const deps: HostCommandDeps = {
     ...input.hostDeps,
     expectedBuildVersion: input.artifacts.target.version,
+    expectedBuildIdentity: input.currentBuildIdentity,
   };
   const status = await input.readStatus(["status"], { config: input.config }, deps);
   if (status.action !== "status") {
@@ -373,7 +478,6 @@ function runtimeBuildRelation(input: {
 }): "matching-target" | "different" | "unknown" {
   if (input.runningDisplayVersion === undefined) return "unknown";
   if (input.runningDisplayVersion !== input.artifacts.target.version) return "different";
-  if (input.artifacts.target.revision === undefined) return "matching-target";
   if (input.runningBuildIdentity === undefined) return "unknown";
   if (input.runningBuildIdentity === input.currentBuildIdentity) {
     return updateArtifactsMatch(input.artifacts.installed, input.artifacts.target)
@@ -426,14 +530,15 @@ function publicRecoveryAssessment(
 }
 
 function observerVerificationUnknown(
-  status: "mismatch" | "unavailable",
+  status: "installed-path-replaced" | "mismatch" | "unavailable",
 ): UpdateReapObserverEvidence {
+  const mismatch = status !== "unavailable";
   return observerUnknown(
-    status === "mismatch" ? "identity-mismatch" : "identity-unavailable",
-    status === "mismatch"
+    mismatch ? "identity-mismatch" : "identity-unavailable",
+    mismatch
       ? "UPDATE_PREFLIGHT_OBSERVER_IDENTITY_MISMATCH"
       : "UPDATE_PREFLIGHT_OBSERVER_IDENTITY_UNAVAILABLE",
-    status === "mismatch"
+    mismatch
       ? "Observer process identity does not match current operating-system evidence."
       : "Observer process identity could not be verified from operating-system evidence.",
   );
@@ -444,12 +549,15 @@ function observerUnknown(
   code: string,
   message: string,
   error?: unknown,
+  buildVersion?: string,
 ): UpdateReapObserverEvidence {
-  return {
+  const evidence: Extract<UpdateReapObserverEvidence, { status: "unknown" }> = {
     status: "unknown",
     reason,
     error: redactedPreflightError(error, { code, message }),
   };
+  if (buildVersion !== undefined) evidence.buildVersion = buildVersion;
+  return evidence;
 }
 
 function hostUnknown(

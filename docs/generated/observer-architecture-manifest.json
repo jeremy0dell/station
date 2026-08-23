@@ -4327,7 +4327,7 @@
           "name": "createLocalObserverProcessEvidence",
           "kind": "function",
           "role": "ADAPTER",
-          "purpose": "Translates bounded targeted and global exact argv, executable provenance, launch nonce, OS start time, non-signaling process existence, strict socket-holder and complete file-descriptor evidence, pidfiles, socket identities, and signals into conservative ownership evidence. Exact executable/argv mismatch throws a stable typed refusal without weakening the fail-closed ownership decision."
+          "purpose": "Translates bounded targeted and global exact argv, executable provenance, launch nonce, OS start time, non-signaling process existence, strict socket-holder and complete file-descriptor evidence, pidfiles, socket identities, and signals into conservative ownership evidence. Exact executable/argv mismatch throws a stable typed refusal. Atomic installed-path replacement is retained as a distinct non-authorizing provenance state."
         },
         {
           "name": "createLocalObserverProcessIdentityRepair",
@@ -4381,7 +4381,7 @@
           "name": "createObserverLifecycleClient",
           "kind": "function",
           "role": "ADAPTER",
-          "purpose": "Translates build-aware incumbent lifecycle requests into validated local protocol calls; false means proven release while inaccessible probes throw."
+          "purpose": "Translates build-aware incumbent lifecycle requests into validated local protocol calls; false means proven release, a verified live holder remains occupied, and every other inaccessible probe throws."
         },
         {
           "name": "createObserverLogger",
@@ -4891,7 +4891,7 @@
           "name": "ObserverProcessIdentityEvidenceSource",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Supplies exact, read-only Observer process evidence without exposing the operating-system commands used to collect it."
+          "purpose": "Supplies exact, read-only Observer process evidence without exposing the operating-system commands used to collect it. Installed-path replacement is reported separately from missing, ambiguous, or mismatched process evidence."
         },
         {
           "name": "ObserverProcessIdentityExpectation",
@@ -5695,7 +5695,7 @@
           "name": "verifyObserverProcessIdentity",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Verifies one exact Observer process generation from read-only evidence. The caller decides whether an exact, mismatched, or unavailable result permits a lifecycle action; the verifier never creates signal authority."
+          "purpose": "Verifies one exact Observer process generation from read-only evidence. The caller decides whether an exact, installed-path-replaced, mismatched, or unavailable result permits a lifecycle action; the verifier never creates signal authority."
         },
         {
           "name": "withSessionCorrelationFromSnapshot",
@@ -11792,7 +11792,7 @@
           "name": "createLocalObserverProcessEvidence",
           "kind": "function",
           "role": "ADAPTER",
-          "purpose": "Translates bounded targeted and global exact argv, executable provenance, launch nonce, OS start time, non-signaling process existence, strict socket-holder and complete file-descriptor evidence, pidfiles, socket identities, and signals into conservative ownership evidence. Exact executable/argv mismatch throws a stable typed refusal without weakening the fail-closed ownership decision."
+          "purpose": "Translates bounded targeted and global exact argv, executable provenance, launch nonce, OS start time, non-signaling process existence, strict socket-holder and complete file-descriptor evidence, pidfiles, socket identities, and signals into conservative ownership evidence. Exact executable/argv mismatch throws a stable typed refusal. Atomic installed-path replacement is retained as a distinct non-authorizing provenance state."
         },
         {
           "name": "LocalObserverProcessEvidenceSource",
@@ -11947,7 +11947,7 @@
           "name": "ObserverProcessIdentityEvidenceSource",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Supplies exact, read-only Observer process evidence without exposing the operating-system commands used to collect it."
+          "purpose": "Supplies exact, read-only Observer process evidence without exposing the operating-system commands used to collect it. Installed-path replacement is reported separately from missing, ambiguous, or mismatched process evidence."
         },
         {
           "name": "ObserverProcessIdentityExpectation",
@@ -11977,7 +11977,7 @@
           "name": "verifyObserverProcessIdentity",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Verifies one exact Observer process generation from read-only evidence. The caller decides whether an exact, mismatched, or unavailable result permits a lifecycle action; the verifier never creates signal authority."
+          "purpose": "Verifies one exact Observer process generation from read-only evidence. The caller decides whether an exact, installed-path-replaced, mismatched, or unavailable result permits a lifecycle action; the verifier never creates signal authority."
         }
       ],
       "imports": [
@@ -12329,7 +12329,7 @@
           "name": "createObserverLifecycleClient",
           "kind": "function",
           "role": "ADAPTER",
-          "purpose": "Translates build-aware incumbent lifecycle requests into validated local protocol calls; false means proven release while inaccessible probes throw."
+          "purpose": "Translates build-aware incumbent lifecycle requests into validated local protocol calls; false means proven release, a verified live holder remains occupied, and every other inaccessible probe throws."
         },
         {
           "name": "ObserverServer",
@@ -13172,7 +13172,7 @@
       "declaration": "runHostCommand",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Drive Station host inspection and opt-in live handoff from the CLI without routing through Observer application code. Mutating handoff defers policy to `ensureStationHostRunning`; this layer only projects the ensure outcome.",
+      "purpose": "Drive Station host inspection and opt-in live handoff from the CLI without routing through Observer application code. Mutating handoff defers policy to `ensureStationHostRunning`; this layer projects its exact immutable PTY receipt at the strict JSON boundary.",
       "dependencies": [
         {
           "path": "packages/protocol/src/transport.ts",
@@ -13599,14 +13599,42 @@
       "path": "apps/cli/src/commands/update.ts",
       "declaration": "runUpdateCommand",
       "kind": "function",
-      "role": "ADAPTER",
-      "purpose": "Selects one owned install channel and optionally aggregates non-authorizing recovery facts. Apply mode then preflights Host preservation, reconciles hooks through the selected launcher, and crosses runtimes; recovery preflight itself exposes no mutation capability.",
+      "role": "USE CASE",
+      "purpose": "Resolves the install owner, inspects all live state, plans convergence, executes only safe typed actions, and verifies a fresh no-op plan. Artifact application remains channel-owned; destructive Station process-group authorization, journaling, and reaping remain exclusively owned by #641.",
       "dependencies": [
         {
-          "path": "apps/cli/src/commands/update/scenario.ts",
-          "declaration": "resolveUpdateScenario",
+          "path": "apps/cli/src/commands/update/report.ts",
+          "declaration": "updateCommandExitCode",
           "kind": "function",
-          "role": "ADAPTER",
+          "role": "POLICY",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/update/convergenceDigest.ts",
+          "declaration": "attachUpdateConvergenceDigest",
+          "kind": "function",
+          "role": "POLICY",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/update/convergencePlan.ts",
+          "declaration": "planUpdateConvergence",
+          "kind": "function",
+          "role": "POLICY",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/update/publicUpdateReport.ts",
+          "declaration": "sanitizePublicUpdateReport",
+          "kind": "function",
+          "role": "POLICY",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/update/recoveryPreflight.ts",
+          "declaration": "validateUpdateConvergenceInspection",
+          "kind": "function",
+          "role": "POLICY",
           "edgeKind": "runtime"
         },
         {
@@ -13619,20 +13647,12 @@
       ]
     },
     {
-      "path": "apps/cli/src/commands/update/scenario.ts",
-      "declaration": "resolveUpdateScenario",
+      "path": "apps/cli/src/commands/update/report.ts",
+      "declaration": "updateCommandExitCode",
       "kind": "function",
-      "role": "ADAPTER",
-      "purpose": "Resolves the selected update path and preflights default Host preservation before mutation.",
-      "dependencies": [
-        {
-          "path": "apps/cli/src/commands/host/index.ts",
-          "declaration": "runHostCommand",
-          "kind": "function",
-          "role": "ADAPTER",
-          "edgeKind": "runtime"
-        }
-      ]
+      "role": "POLICY",
+      "purpose": "Maps the strict update disposition to the CLI process contract shared by the presenter and successor-child boundary.",
+      "dependencies": []
     },
     {
       "path": "apps/cli/src/ingress/command.ts",
@@ -14365,11 +14385,27 @@
       ]
     },
     {
+      "path": "apps/cli/src/update/convergenceDigest.ts",
+      "declaration": "attachUpdateConvergenceDigest",
+      "kind": "function",
+      "role": "POLICY",
+      "purpose": "Binds a public convergence plan to its redaction-safe aggregate and private ownership sidecar. SHA-256 collision resistance is assumed; the digest reveals no private value and grants no authority. #641 must independently authorize exact Station-owned process-group targets.",
+      "dependencies": []
+    },
+    {
+      "path": "apps/cli/src/update/convergencePlan.ts",
+      "declaration": "planUpdateConvergence",
+      "kind": "function",
+      "role": "POLICY",
+      "purpose": "Converts one #665 aggregate inspection into a deterministic, provider-neutral convergence plan. Evidence is admitted per component and action: facts irrelevant to a safe action do not block it.",
+      "dependencies": []
+    },
+    {
       "path": "apps/cli/src/update/devCheckoutUpdate.ts",
       "declaration": "createDevCheckoutUpdateChannel",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Translates a clean upstream-tracking checkout into a pinned fast-forward with frozen dependency preparation, rebuild, and relinking.",
+      "purpose": "Translates a clean upstream-tracking checkout into a pinned fast-forward with frozen dependency preparation, rebuild, and relinking. Installed-target proof reads the local immutable revision without contacting the upstream remote.",
       "dependencies": [
         {
           "path": "apps/cli/src/update/updateChannel.ts",
@@ -14385,7 +14421,7 @@
       "declaration": "createHomebrewUpdateChannel",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Translates Homebrew Cellar or Caskroom ownership into a native brew update plan.",
+      "purpose": "Translates Homebrew Cellar or Caskroom ownership into a native brew update plan. Installed-target proof uses only the active Cellar/Caskroom path and does not request package metadata.",
       "dependencies": [
         {
           "path": "apps/cli/src/update/updateChannel.ts",
@@ -14401,7 +14437,7 @@
       "declaration": "createInstallerBinaryUpdateChannel",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Translates installer receipt and release evidence into a verified binary update.",
+      "purpose": "Translates installer receipt and release evidence into a verified binary update. Installed-target proof remains local and never resolves the newest release.",
       "dependencies": []
     },
     {
@@ -14409,7 +14445,7 @@
       "declaration": "createMiseUpdateChannel",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Translates mise's active tool installation into its configured-range upgrade command.",
+      "purpose": "Translates mise's active tool installation into its configured-range upgrade command. Installed-target proof reads the active tool only and does not invoke `mise outdated`.",
       "dependencies": [
         {
           "path": "apps/cli/src/update/updateChannel.ts",
@@ -14425,7 +14461,7 @@
       "declaration": "createNpmGlobalUpdateChannel",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Translates npm's global package and bin ownership into a pinned package-manager update.",
+      "purpose": "Translates npm's global package and bin ownership into a pinned package-manager update. Installed-target proof reads the active package only and does not invoke `npm view`.",
       "dependencies": [
         {
           "path": "apps/cli/src/update/updateChannel.ts",
@@ -14437,11 +14473,19 @@
       ]
     },
     {
+      "path": "apps/cli/src/update/publicUpdateReport.ts",
+      "declaration": "sanitizePublicUpdateReport",
+      "kind": "function",
+      "role": "POLICY",
+      "purpose": "Defines the deterministic confidentiality decision for one strict v4 update result. Every nested SafeError crosses this policy, including successor and post-action evidence, without weakening report invariants or optional-field absence.",
+      "dependencies": []
+    },
+    {
       "path": "apps/cli/src/update/recoveryPreflight.ts",
-      "declaration": "runUpdateRecoveryPreflight",
+      "declaration": "inspectUpdateConvergencePreflight",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Aggregates read-only Observer, Host, retained-session, capability, handle, and hook facts while settling every evidence source. It computes dispositions only; executable actions, authorization, digests, and mutation remain downstream responsibilities.",
+      "purpose": "Aggregates read-only Observer, Host, retained-session, capability, handle, and hook facts while settling every evidence source. It validates public/private Observer build identity and exact selected-handle correspondence before returning execution-facing identity in a private sidecar; executable actions, authorization, digests, and mutation remain downstream responsibilities.",
       "dependencies": [
         {
           "path": "apps/cli/src/update/recoveryPreflight.ts",
@@ -14449,15 +14493,38 @@
           "kind": "type",
           "role": "DRIVEN PORT",
           "edgeKind": "type-only"
+        },
+        {
+          "path": "apps/cli/src/update/recoveryPreflight.ts",
+          "declaration": "validateUpdateConvergenceInspection",
+          "kind": "function",
+          "role": "POLICY",
+          "edgeKind": "runtime"
         }
       ]
+    },
+    {
+      "path": "apps/cli/src/update/recoveryPreflight.ts",
+      "declaration": "UpdateConvergenceInspectionPort",
+      "kind": "type",
+      "role": "DRIVEN PORT",
+      "purpose": "Supplies one validated public/private aggregate for the exact selected update artifacts. The private sidecar is CLI-owned and never crosses the serialized report boundary.",
+      "dependencies": []
     },
     {
       "path": "apps/cli/src/update/recoveryPreflight.ts",
       "declaration": "UpdateRecoveryPreflightPorts",
       "kind": "type",
       "role": "DRIVEN PORT",
-      "purpose": "Supplies already normalized, read-only runtime and provider evidence. Implementations must not start, stop, signal, install, reconcile, resume, or otherwise mutate the inspected system.",
+      "purpose": "Supplies already normalized, read-only runtime and provider evidence. Observer inspection returns its public facts and CLI-private identity sidecar together so they cannot be sampled independently. Implementations must not start, stop, signal, install, reconcile, resume, or otherwise mutate the inspected system.",
+      "dependencies": []
+    },
+    {
+      "path": "apps/cli/src/update/recoveryPreflight.ts",
+      "declaration": "validateUpdateConvergenceInspection",
+      "kind": "function",
+      "role": "POLICY",
+      "purpose": "Admits one strict convergence inspection only when its selected artifacts and public/private Observer and recovery identities correspond exactly.",
       "dependencies": []
     },
     {
@@ -14465,7 +14532,7 @@
       "declaration": "createUpdateRecoveryPreflightPorts",
       "kind": "function",
       "role": "COMPOSITION ROOT",
-      "purpose": "Binds recovery preflight to read-only local process evidence, Observer protocol queries, strict Host inventory, and the provider-neutral hook-health use case. No lifecycle or repair capability is exposed through these ports.",
+      "purpose": "Binds recovery preflight to read-only local process evidence, Observer protocol queries, strict Host inventory, and the provider-neutral hook-health use case. Observer public evidence and its CLI-private ownership sidecar are captured together. No lifecycle or repair capability is exposed through these ports.",
       "dependencies": [
         {
           "path": "apps/cli/src/commands/host/index.ts",
@@ -14530,7 +14597,7 @@
       "declaration": "UpdateChannel",
       "kind": "interface",
       "role": "DRIVEN PORT",
-      "purpose": "Defines one install owner's typed detect, plan, apply, and optional adapter-owned recovery lifecycle.",
+      "purpose": "Defines one install owner's typed detect, plan, apply, exact installed-target proof, and optional adapter-owned recovery lifecycle.",
       "dependencies": []
     },
     {
@@ -15835,7 +15902,7 @@
       "declaration": "createLocalObserverProcessEvidence",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Translates bounded targeted and global exact argv, executable provenance, launch nonce, OS start time, non-signaling process existence, strict socket-holder and complete file-descriptor evidence, pidfiles, socket identities, and signals into conservative ownership evidence. Exact executable/argv mismatch throws a stable typed refusal without weakening the fail-closed ownership decision.",
+      "purpose": "Translates bounded targeted and global exact argv, executable provenance, launch nonce, OS start time, non-signaling process existence, strict socket-holder and complete file-descriptor evidence, pidfiles, socket identities, and signals into conservative ownership evidence. Exact executable/argv mismatch throws a stable typed refusal. Atomic installed-path replacement is retained as a distinct non-authorizing provenance state.",
       "dependencies": []
     },
     {
@@ -15851,7 +15918,7 @@
       "declaration": "ObserverProcessIdentityEvidenceSource",
       "kind": "interface",
       "role": "DRIVEN PORT",
-      "purpose": "Supplies exact, read-only Observer process evidence without exposing the operating-system commands used to collect it.",
+      "purpose": "Supplies exact, read-only Observer process evidence without exposing the operating-system commands used to collect it. Installed-path replacement is reported separately from missing, ambiguous, or mismatched process evidence.",
       "dependencies": []
     },
     {
@@ -15867,7 +15934,7 @@
       "declaration": "verifyObserverProcessIdentity",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Verifies one exact Observer process generation from read-only evidence. The caller decides whether an exact, mismatched, or unavailable result permits a lifecycle action; the verifier never creates signal authority.",
+      "purpose": "Verifies one exact Observer process generation from read-only evidence. The caller decides whether an exact, installed-path-replaced, mismatched, or unavailable result permits a lifecycle action; the verifier never creates signal authority.",
       "dependencies": [
         {
           "path": "apps/observer/src/runtime/observerProcessIdentity.ts",
@@ -15992,7 +16059,7 @@
       "declaration": "createObserverLifecycleClient",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Translates build-aware incumbent lifecycle requests into validated local protocol calls; false means proven release while inaccessible probes throw.",
+      "purpose": "Translates build-aware incumbent lifecycle requests into validated local protocol calls; false means proven release, a verified live holder remains occupied, and every other inaccessible probe throws.",
       "dependencies": [
         {
           "path": "apps/observer/src/runtime/observerHandoff.ts",
@@ -16395,7 +16462,7 @@
       "declaration": "ensureStationHostRunning",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Preserves inaccessible Host ownership and defers definite stale reclaim to the child binder while retaining compatibility-aware idle replacement and an opt-in busy-host live handoff path. Pre-commit failure restores the incumbent refusal; after completion commits, parked PTYs remain available to a successor.",
+      "purpose": "Preserves inaccessible Host ownership and defers definite stale reclaim to the child binder while retaining compatibility-aware idle replacement and an opt-in busy-host live handoff path. Pre-commit failure restores the incumbent refusal; after completion commits, parked PTYs remain available to a successor. Adoption succeeds only with an exact PTY-id set and returns a canonical immutable-lifetime receipt.",
       "dependencies": [
         {
           "path": "packages/protocol/src/transport.ts",

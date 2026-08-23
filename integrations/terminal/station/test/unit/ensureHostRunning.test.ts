@@ -1,9 +1,11 @@
 import { chmod, lstat, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { PtyHandoffManifest } from "@station/contracts";
 import { HOST_PROTOCOL_VERSION, type StationHostClient, stationHostSafeError } from "@station/host";
 import { listenUnixSocket, probeUnixSocket } from "@station/protocol";
 import {
+  adoptHandoffManifest,
   type ChildProcessLike,
   ensureStationHostRunning,
   type SpawnStationHostInput,
@@ -53,6 +55,32 @@ function absentSocketPath(): string {
   );
 }
 
+function twoEntryHandoffManifest(): PtyHandoffManifest {
+  return Object.fromEntries(
+    ["1", "2"].map((identity) => [
+      `pty-${identity}`,
+      {
+        bridgeProtocolVersion: 2 as const,
+        bridgePid: 4200 + Number(identity),
+        controlSocket: `/tmp/pty-${identity}.sock`,
+        command: "/bin/sh",
+        cols: 80,
+        rows: 24,
+        ptyInstanceId: `instance-pty-${identity}`,
+        identity: {
+          kind: "agent" as const,
+          terminalTargetId: `native:wt-${identity}`,
+          worktreeId: `wt-${identity}`,
+          projectId: "proj-1",
+          sessionId: `ses-${identity}`,
+          worktreePath: `/repo/wt-${identity}`,
+          harnessProvider: "claude",
+        },
+      },
+    ]),
+  );
+}
+
 async function liveSocket(): Promise<{ socketPath: string; close(): Promise<void> }> {
   const directory = await mkdtemp(join(tmpdir(), "station-host-test-"));
   const socketPath = join(directory, "host.sock");
@@ -70,6 +98,19 @@ async function liveSocket(): Promise<{ socketPath: string; close(): Promise<void
 }
 
 describe("ensureStationHostRunning", () => {
+  it.each([
+    { name: "same-count wrong", adopted: ["pty-1", "pty-wrong"] },
+    { name: "duplicate", adopted: ["pty-1", "pty-1"] },
+  ])("rejects a $name adopted PTY id set", async ({ adopted }) => {
+    const result = await adoptHandoffManifest(
+      fakeClient({ adoptRegistry: async () => ({ adopted, failed: [] }) }),
+      twoEntryHandoffManifest(),
+    );
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: "HOST_HANDOFF_MANIFEST_INVALID" },
+    });
+  });
   it("reports unavailable when no host entry is configured", async () => {
     const handle = await ensureStationHostRunning(
       {
@@ -835,7 +876,19 @@ describe("ensureStationHostRunning", () => {
         status: "running",
         socketPath,
         ensuredBy: "handoff",
-        handoffAdopt: { adopted: ["pty-1"], failed: [] },
+        handoffAdopt: {
+          adopted: ["pty-1"],
+          failed: [],
+          receipt: {
+            terminals: [
+              {
+                terminalTargetId: "native:wt-1",
+                ptyId: "pty-1",
+                ptyInstanceId: "instance-pty-1",
+              },
+            ],
+          },
+        },
       });
       expect(beginHandoff).toHaveBeenCalledWith(expectedBuildVersion, "processes");
       expect(completeHandoff).toHaveBeenCalledOnce();

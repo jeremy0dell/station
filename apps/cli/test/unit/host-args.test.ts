@@ -7,6 +7,7 @@ describe("parseHostArgs", () => {
       action: "status",
       dryRun: false,
       fidelity: "processes",
+      output: "text",
     });
   });
 
@@ -15,12 +16,15 @@ describe("parseHostArgs", () => {
       action: "handoff",
       dryRun: true,
       fidelity: "screen",
+      output: "text",
     });
     expect(parseHostArgs(["handoff", "--fidelity=processes"])).toEqual({
       action: "handoff",
       dryRun: false,
       fidelity: "processes",
+      output: "text",
     });
+    expect(parseHostArgs(["handoff", "--json"])).toMatchObject({ output: "json" });
   });
 
   it("rejects unknown actions, status flags, and bad fidelity", () => {

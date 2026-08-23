@@ -103,9 +103,12 @@ as ownership roots.
   the old Host and PTYs, and target launches refuse it visibly.
 - `stn update` composes installer-binary ownership with dev-checkout, Homebrew,
   npm-global, and mise adapters. Manager-owned channels defer unless the user
-  explicitly asks Station to drive their native update command. After apply,
-  the successor launcher restarts Observer before attempting Host handoff; a
-  later crossover failure never rolls back a verified installation.
+  explicitly asks Station to drive their native update command. Every selected
+  target is inspected and receives a typed convergence plan. After apply, the
+  successor launcher proves the pinned installed artifact locally without
+  latest discovery, executes its own safe plan, and verifies a fresh no-op plan.
+  Live handoff separately receipts and re-verifies every immutable PTY lifetime.
+  A non-bridge busy Host returns `reap-required` before mutation for #641.
 
 ## Packaged runtime assets
 
@@ -196,15 +199,17 @@ pnpm smoke:release
 ```
 
 The composed update smoke has two explicit busy-Host outcomes. `full-handoff`
-requires PTY continuity through replacement; `preserved-refusal` requires a
-completed install and Observer crossover while the old Host and PTYs remain
-usable and the target native UI refuses that Host. The pane-free tmux dashboard
-may still render against the matching target Observer; Host-producing work stays
-guarded by the terminal provider boundary. Release staging requires full
-scenario coverage: compiled predecessor busy Hosts must take the
-`preserved-refusal` path, and the no-Host scenario must complete discovery,
-download, installation, and crossover. Post-promotion public checks repeat the
-no-Host path.
+requires PTY continuity through replacement; `pre-mutation-reap-required`
+requires a fresh typed plan for the target while the incumbent artifact,
+Observer, Host, and PTYs remain usable and no update action has run. It hands
+#641 the evidence needed to begin a separately authorized, journaled destructive
+transaction; the digest itself authorizes nothing. Release staging does not
+retrofit that contract onto a published pre-v4 predecessor: its no-Host result
+is parsed through the compatible report schema and validated as legacy artifact
+application, after which the installed target must report strict v4 verified
+`current`. A separate v4-capable incumbent runs the full staged-target scenarios
+and owns the `pre-mutation-reap-required` proof. Post-promotion public checks
+repeat the compatible no-Host transition and target-v4 verification.
 
 Native release CI builds and tests `darwin-arm64`, `darwin-x64`, `linux-arm64`,
 and `linux-x64`. The manual release gate covers real TTY rendering, shell job

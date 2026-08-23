@@ -437,7 +437,11 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           command -v tmux >/dev/null 2>&1 || brew install tmux
-          pnpm build
+          v4_incumbent_version="0.0.0-0.v4-smoke.${GITHUB_RUN_ID}.${GITHUB_RUN_ATTEMPT}"
+          pnpm build:binary -- --version "$v4_incumbent_version"
+          cp station/dist/bin/stn "$RUNNER_TEMP/v4-update-incumbent"
+          chmod 0755 "$RUNNER_TEMP/v4-update-incumbent"
+          printf 'V4_SMOKE_INCUMBENT_VERSION=%s\n' "$v4_incumbent_version" >> "$GITHUB_ENV"
       - name: Fetch tagged installer
         env:
           GH_HOST: github.com
@@ -575,7 +579,7 @@ jobs:
             PATH="$bin_dir:$runtime_path" \
             stn --version)"
           test "$actual" = "$EXPECTED_VERSION"
-      - name: Prove composed update from the exact predecessor
+      - name: Prove compatible transition from the exact predecessor
         if: runner.os == 'macOS'
         env:
           PREVIOUS_TAG: ${{ needs.validate.outputs.previous_tag }}
@@ -588,8 +592,22 @@ jobs:
             --target-release-dir "$RUNNER_TEMP/update-release" \
             --target-tag "$TAG" \
             --target-build-identity "$target_build_identity" \
+            --scenarios no-host \
+            --incumbent-contract legacy-compatible
+      - name: Prove v4 pre-mutation convergence against the staged target
+        if: runner.os == 'macOS'
+        env:
+          TAG: ${{ needs.validate.outputs.tag }}
+        run: |
+          target_build_identity="$(jq -er .targetBuildIdentity candidate/manifest.json)"
+          pnpm smoke:update -- \
+            --incumbent-binary "$RUNNER_TEMP/v4-update-incumbent" \
+            --incumbent-version "$V4_SMOKE_INCUMBENT_VERSION" \
+            --target-release-dir "$RUNNER_TEMP/update-release" \
+            --target-tag "$TAG" \
+            --target-build-identity "$target_build_identity" \
             --scenarios full \
-            --busy-host-outcome preserved-refusal
+            --busy-host-outcome pre-mutation-reap-required
       - name: Verify lock refusal and same-version retry
         env:
           EXPECTED_VERSION: ${{ needs.validate.outputs.version }}

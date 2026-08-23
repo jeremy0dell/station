@@ -148,7 +148,10 @@ describe("release readiness docs", () => {
     expect(singleBinary).toContain("target build identity");
     expect(singleBinary).toContain("repository-wide");
     expect(singleBinary).toContain("`full-handoff`");
-    expect(singleBinary).toContain("`preserved-refusal`");
+    expect(singleBinary).toContain("`pre-mutation-reap-required`");
+    expect(singleBinary).toContain("published pre-v4 predecessor");
+    expect(singleBinary).toContain("compatible report schema");
+    expect(singleBinary).toContain("separate v4-capable incumbent");
     expect(singleBinary).not.toMatch(
       /Status: implemented|## Phases|## Audit findings|## Evidence appendix|### A\d|### B-/,
     );
@@ -285,17 +288,27 @@ describe("release readiness docs", () => {
     expect(install).toContain("Automatic-update ownership");
     expect(install).toContain("stn update --dry-run --json");
     expect(install).toContain("stn update --drive-package-manager");
+    expect(install).toContain("exact argv for manager-owned");
+    expect(install.replace(/\s+/g, " ")).toContain("text using safe shell quoting");
     expect(install).toContain("defaults to preserving");
     expect(install).toContain("--no-handoff");
+    expect(install).toContain("`intentionally-incomplete`");
+    expect(install).toContain("`reap-required` plan before artifact");
+    expect(install).toContain("current` and `updated`");
+    expect(install).toContain("matching digest alone never authorizes");
     expect(install).toContain("first incumbent capable of attempting the next self-update");
     expect(releasing).toMatch(/never publishes the draft automatically/);
     expect(releasing).toContain("accepted-release-candidate-*");
     expect(releasing).toContain("target build identity");
     expect(releasing).toContain("repository-wide publication lock");
     expect(releasing).toContain("`full-handoff`");
-    expect(releasing).toContain("`preserved-refusal`");
-    expect(releasing).toContain("compiled predecessors must preserve and visibly");
-    expect(releasing).toContain("scenario must complete the version change");
+    expect(releasing).toContain("`pre-mutation-reap-required`");
+    expect(releasing).toContain("compatible v1-v4 report parser");
+    expect(releasing).toContain("pre-v4 predecessor");
+    expect(releasing).toContain("strict v4 `current` report");
+    expect(releasing.replace(/\s+/g, " ")).toContain("separate synthetic-version v4 incumbent");
+    expect(releasing).toContain("while preserving the incumbent artifact and runtime");
+    expect(releasing).not.toContain("compiled predecessors must stop with a typed");
     expect(releasing).not.toContain(exactVersion);
     expect(homebrew).toContain("Homebrew installation is not currently supported");
     expect(homebrew).toContain("This distribution policy is separate from first-run dependencies");

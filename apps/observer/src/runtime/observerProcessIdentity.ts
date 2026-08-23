@@ -6,6 +6,8 @@ export type ObserverProcessEntry = {
   argv: string[];
   /** Executable path corroborated against the OS process image. */
   executablePath: string;
+  /** Exact live-image relation to the executable currently installed at argv[0]. */
+  executableProvenance: "exact" | "installed-path-replaced";
   /** Verbatim OS start time; second-resolution output is never sufficient alone. */
   startToken: string;
   /** Per-launch nonce that prevents same-second PID reuse from inheriting authority. */
@@ -22,7 +24,8 @@ export type ObserverProcessEntry = {
  * DRIVEN PORT
  *
  * Supplies exact, read-only Observer process evidence without exposing the
- * operating-system commands used to collect it.
+ * operating-system commands used to collect it. Installed-path replacement is
+ * reported separately from missing, ambiguous, or mismatched process evidence.
  */
 export interface ObserverProcessIdentityEvidenceSource {
   readObserverProcess(pid: number): ObserverProcessEntry | undefined;
@@ -66,6 +69,7 @@ export type ObserverProcessIdentityMismatchReason =
 
 export type ObserverProcessIdentityVerification =
   | { status: "exact"; process: ObserverProcessEntry }
+  | { status: "installed-path-replaced"; process: ObserverProcessEntry }
   | { status: "mismatch"; reason: ObserverProcessIdentityMismatchReason; cause?: unknown }
   | { status: "unavailable"; cause?: unknown };
 
@@ -77,6 +81,7 @@ export function observerProcessEntriesMatch(
   return (
     left.pid === right.pid &&
     left.executablePath === right.executablePath &&
+    left.executableProvenance === right.executableProvenance &&
     left.startToken === right.startToken &&
     left.processToken === right.processToken &&
     left.buildVersion === right.buildVersion &&
@@ -105,8 +110,9 @@ export function observerProcessIdentitiesMatch(
  * USE CASE
  *
  * Verifies one exact Observer process generation from read-only evidence. The
- * caller decides whether an exact, mismatched, or unavailable result permits a
- * lifecycle action; the verifier never creates signal authority.
+ * caller decides whether an exact, installed-path-replaced, mismatched, or
+ * unavailable result permits a lifecycle action; the verifier never creates
+ * signal authority.
  */
 export function verifyObserverProcessIdentity(
   expected: ObserverProcessIdentityExpectation,
@@ -135,7 +141,7 @@ export function verifyObserverProcessIdentity(
       return { status: "unavailable", cause };
     }
     if (process === undefined) {
-      return { status: "mismatch", reason: "executable-argv-drift" };
+      return { status: "unavailable" };
     }
     if (process.startToken !== identity.osStartTime) {
       return { status: "mismatch", reason: "os-start-token-drift" };
@@ -149,13 +155,37 @@ export function verifyObserverProcessIdentity(
     if (process.socketPath !== identity.socketPath) {
       return { status: "mismatch", reason: "socket-argv-drift" };
     }
-    if (expected.source === "process" && !observerProcessEntriesMatch(process, expected.process)) {
+    if (
+      expected.source === "process" &&
+      !observerProcessStableEvidenceMatches(process, expected.process)
+    ) {
       return { status: "mismatch", reason: "executable-argv-drift" };
+    }
+    // Captured non-exact provenance cannot become signal authority through a later path change.
+    if (
+      expected.source === "process" &&
+      expected.process.executableProvenance === "installed-path-replaced" &&
+      process.executableProvenance === "exact"
+    ) {
+      return { status: "mismatch", reason: "executable-argv-drift" };
+    }
+    if (process.executableProvenance === "installed-path-replaced") {
+      return { status: "installed-path-replaced", process };
     }
     return { status: "exact", process };
   } catch (cause) {
     return { status: "unavailable", cause };
   }
+}
+
+function observerProcessStableEvidenceMatches(
+  left: ObserverProcessEntry,
+  right: ObserverProcessEntry,
+): boolean {
+  return observerProcessEntriesMatch(
+    { ...left, executableProvenance: "exact" },
+    { ...right, executableProvenance: "exact" },
+  );
 }
 
 function normalizeExpectedIdentity(

@@ -38,6 +38,7 @@ function processEntry(pid: number, startToken: string, startupTimeoutMs = 25) {
     pid,
     argv: [executablePath, "__observer", "--socket", socketPath],
     executablePath,
+    executableProvenance: "exact" as const,
     startToken,
     processToken:
       pid === 100 ? keeperIdentity.processToken : "00000000-0000-4000-8000-000000000002",

@@ -20,6 +20,7 @@ const processEntry = {
   pid: identity.pid,
   argv: ["/private/bin/stn", "--token", "secret"],
   executablePath: "/private/bin/stn",
+  executableProvenance: "exact" as const,
   startToken: identity.osStartTime,
   processToken: identity.processToken,
   buildVersion: identity.version,
@@ -76,7 +77,9 @@ describe("createUpdateRecoveryPreflightPorts", () => {
         }),
       });
 
-      await expect(ports.inspectObserver(artifacts)).resolves.toMatchObject(testCase.expected);
+      await expect(
+        ports.inspectObserver(artifacts).then((inspection) => inspection.evidence),
+      ).resolves.toMatchObject(testCase.expected);
       expect(readObserverIdentity).toHaveBeenCalledTimes(
         testCase.status.status === "stopped" ? 1 : 0,
       );
@@ -144,7 +147,8 @@ describe("createUpdateRecoveryPreflightPorts", () => {
       }),
     });
 
-    const observer = await ports.inspectObserver(artifacts);
+    const observerInspection = await ports.inspectObserver(artifacts);
+    const observer = observerInspection.evidence;
     const host = await ports.inspectHost(artifacts);
     const hook = await ports.readHookHealth("codex");
 
@@ -156,6 +160,15 @@ describe("createUpdateRecoveryPreflightPorts", () => {
     });
     expect(readObserverProcess).toHaveBeenCalledTimes(2);
     expect(getSessionRecoveryAssessment).toHaveBeenCalledOnce();
+    expect(observerInspection.privateEvidence).toEqual({
+      observer: {
+        pid: identity.pid,
+        osStartTime: identity.osStartTime,
+        processToken: identity.processToken,
+        buildSelector: identity.version,
+      },
+      selectedRecoveryHandles: [{ sessionId: "session-a", selectedHandleId: "private-handle-a" }],
+    });
     expect(host).toMatchObject({
       status: "inspected",
       relation: "different",
@@ -196,7 +209,9 @@ describe("createUpdateRecoveryPreflightPorts", () => {
       }),
     });
 
-    await expect(ports.inspectObserver(artifacts)).resolves.toMatchObject({
+    await expect(
+      ports.inspectObserver(artifacts).then((inspection) => inspection.evidence),
+    ).resolves.toMatchObject({
       status: "unknown",
       reason: "process-without-socket",
       error: { code: "UPDATE_PREFLIGHT_OBSERVER_PROCESS_WITHOUT_SOCKET" },
@@ -243,7 +258,9 @@ describe("createUpdateRecoveryPreflightPorts", () => {
       }),
     });
 
-    await expect(ports.inspectObserver(artifacts)).resolves.toMatchObject({
+    await expect(
+      ports.inspectObserver(artifacts).then((inspection) => inspection.evidence),
+    ).resolves.toMatchObject({
       status: "unknown",
       reason: "identity-mismatch",
       error: { code: "UPDATE_PREFLIGHT_OBSERVER_IDENTITY_DRIFT" },
@@ -251,7 +268,166 @@ describe("createUpdateRecoveryPreflightPorts", () => {
     expect(getSessionRecoveryAssessment).toHaveBeenCalledOnce();
   });
 
-  it("keeps matching and legacy idle Host build evidence explicit", async () => {
+  it("admits only a same- or higher-build explicit restart after installed executable drift", async () => {
+    const incumbentBuild = `1.0.0+station.${"a".repeat(64)}`;
+    const candidateBuild = `1.1.0+station.${"b".repeat(64)}`;
+    const incumbentIdentity = { ...identity, version: incumbentBuild };
+    const health = {
+      schemaVersion: STATION_SCHEMA_VERSION,
+      status: "healthy" as const,
+      pid: identity.pid,
+      startedAt: now,
+      version: incumbentBuild,
+      socketPath,
+    };
+    const replacedProcess = {
+      ...processEntry,
+      executableProvenance: "installed-path-replaced" as const,
+      buildVersion: incumbentBuild,
+    };
+    const makePorts = (
+      currentObserverBuildVersion: string,
+      readObserverProcess: () => typeof replacedProcess | undefined = () => replacedProcess,
+    ) =>
+      createUpdateRecoveryPreflightPorts({
+        config: testConfig(),
+        providers: providerRegistry(),
+        currentBuildIdentity: "current-build-identity",
+        currentObserverBuildVersion,
+        observerStatus: async () => ({ status: "running", paths: observerPaths(), health }),
+        readObserverIdentity: async () => incumbentIdentity,
+        observerIdentitySource: {
+          processStartToken: () => incumbentIdentity.osStartTime,
+          readObserverProcess,
+        },
+        hostStatus: async () => ({
+          action: "status",
+          socketPath: "/private/runtime/host.sock",
+          probe: "absent",
+        }),
+      });
+
+    const restartable = await makePorts(candidateBuild).inspectObserver({
+      installed: { version: "1.1.0" },
+      target: { version: "1.1.0" },
+    });
+    expect(restartable).toMatchObject({
+      evidence: {
+        status: "unknown",
+        reason: "restartable-executable-drift",
+        buildVersion: incumbentBuild,
+        error: { code: "UPDATE_PREFLIGHT_OBSERVER_EXECUTABLE_DRIFT_RESTARTABLE" },
+      },
+      privateEvidence: {
+        observer: {
+          pid: identity.pid,
+          processToken: identity.processToken,
+          buildSelector: incumbentBuild,
+        },
+        selectedRecoveryHandles: [],
+      },
+    });
+    expect(JSON.stringify(restartable.evidence)).not.toContain(identity.processToken);
+
+    await expect(
+      makePorts(`0.9.0+station.${"0".repeat(64)}`)
+        .inspectObserver(artifacts)
+        .then((inspection) => inspection.evidence),
+    ).resolves.toMatchObject({
+      status: "unknown",
+      reason: "identity-mismatch",
+      error: { code: "UPDATE_PREFLIGHT_OBSERVER_IDENTITY_MISMATCH" },
+    });
+
+    await expect(
+      makePorts(candidateBuild, () => undefined)
+        .inspectObserver(artifacts)
+        .then((inspection) => inspection.evidence),
+    ).resolves.toMatchObject({
+      status: "unknown",
+      reason: "identity-unavailable",
+      error: { code: "UPDATE_PREFLIGHT_OBSERVER_IDENTITY_UNAVAILABLE" },
+    });
+
+    const genericDrift = Object.assign(new Error("argv changed"), {
+      tag: "ObserverProcessEvidenceError",
+      code: "OBSERVER_PROCESS_EXECUTABLE_ARGV_MISMATCH",
+      message: "Observer process evidence did not match exact argv.",
+    });
+    await expect(
+      makePorts(candidateBuild, () => {
+        throw genericDrift;
+      })
+        .inspectObserver(artifacts)
+        .then((inspection) => inspection.evidence),
+    ).resolves.toMatchObject({
+      status: "unknown",
+      reason: "identity-mismatch",
+      error: { code: "UPDATE_PREFLIGHT_OBSERVER_IDENTITY_MISMATCH" },
+    });
+  });
+
+  it("compares an Observer immutable selector when the installed target has no revision", async () => {
+    const runningBuildSelector = `1.0.0+station.${"a".repeat(64)}`;
+    const runningIdentity = { ...identity, version: runningBuildSelector };
+    const currentArtifacts = {
+      installed: { version: "1.0.0" },
+      target: { version: "1.0.0" },
+    };
+    const cases = [
+      { currentBuildSelector: runningBuildSelector, expectedRelation: "matching-target" },
+      {
+        currentBuildSelector: `1.0.0+station.${"b".repeat(64)}`,
+        expectedRelation: "different",
+      },
+    ] as const;
+
+    for (const testCase of cases) {
+      const ports = createUpdateRecoveryPreflightPorts({
+        config: testConfig(),
+        providers: providerRegistry(),
+        currentBuildIdentity: "current-build-identity",
+        currentObserverBuildVersion: testCase.currentBuildSelector,
+        observerStatus: async () => ({
+          status: "running",
+          paths: observerPaths(),
+          health: {
+            schemaVersion: STATION_SCHEMA_VERSION,
+            status: "healthy",
+            pid: runningIdentity.pid,
+            startedAt: now,
+            version: runningBuildSelector,
+            socketPath,
+          },
+        }),
+        readObserverIdentity: async () => runningIdentity,
+        observerIdentitySource: {
+          processStartToken: () => runningIdentity.osStartTime,
+          readObserverProcess: () => ({
+            ...processEntry,
+            buildVersion: runningBuildSelector,
+          }),
+        },
+        observerDeps: {
+          clientFactory: () =>
+            ({
+              getSessionRecoveryAssessment: async () => emptyAssessment(),
+            }) as ReturnType<typeof createObserverClient>,
+        },
+        hostStatus: async () => ({
+          action: "status",
+          socketPath: "/private/runtime/host.sock",
+          probe: "absent",
+        }),
+      });
+
+      await expect(
+        ports.inspectObserver(currentArtifacts).then((inspection) => inspection.evidence),
+      ).resolves.toMatchObject({ status: "exact", relation: testCase.expectedRelation });
+    }
+  });
+
+  it("keeps target-version-only and legacy idle Host build evidence unknown", async () => {
     const targetBuildVersion = "1.1.0+station.target";
     const cases = [
       {
@@ -260,7 +436,7 @@ describe("createUpdateRecoveryPreflightPorts", () => {
         expected: {
           status: "inspected",
           buildVersion: targetBuildVersion,
-          relation: "matching-target",
+          relation: "unknown",
           compatibility: "reuse",
           terminals: [],
         },
@@ -302,6 +478,46 @@ describe("createUpdateRecoveryPreflightPorts", () => {
           target: { version: targetBuildVersion },
         }),
       ).resolves.toMatchObject(testCase.expected);
+    }
+  });
+
+  it("compares Host immutable identity when the installed target has no revision", async () => {
+    const currentArtifacts = {
+      installed: { version: "1.0.0" },
+      target: { version: "1.0.0" },
+    };
+    const cases = [
+      { runningBuildIdentity: "current-build-identity", expectedRelation: "matching-target" },
+      { runningBuildIdentity: "other-build-identity", expectedRelation: "different" },
+      { runningBuildIdentity: undefined, expectedRelation: "unknown" },
+    ] as const;
+
+    for (const testCase of cases) {
+      const ports = createUpdateRecoveryPreflightPorts({
+        config: testConfig(),
+        providers: providerRegistry(),
+        currentBuildIdentity: "current-build-identity",
+        currentObserverBuildVersion: identity.version,
+        observerStatus: async () => ({ status: "stopped", paths: observerPaths() }),
+        hostStatus: async () => ({
+          action: "status",
+          socketPath: "/private/runtime/host.sock",
+          probe: "listening",
+          health: { ok: true, protocolVersion: 8, buildVersion: "1.0.0" },
+          compatibility: { action: "reuse" },
+          livePtyCount: 0,
+          handoffEligible: false,
+          ptys: [],
+          ...(testCase.runningBuildIdentity === undefined
+            ? {}
+            : { buildIdentity: testCase.runningBuildIdentity }),
+        }),
+      });
+
+      await expect(ports.inspectHost(currentArtifacts)).resolves.toMatchObject({
+        status: "inspected",
+        relation: testCase.expectedRelation,
+      });
     }
   });
 

@@ -670,6 +670,7 @@ function handoffFixture() {
             pid: identity.pid,
             argv: ["/opt/station/stn", "__observer", "--socket", socketPath],
             executablePath: "/opt/station/stn",
+            executableProvenance: "exact",
             startToken: identity.osStartTime,
             processToken: identity.processToken,
             buildVersion: identity.version,

@@ -38,6 +38,10 @@ export type ObserverSocketProbe =
       error: SafeError;
     };
 
+type ObserverLifecycleClientDeps = {
+  probeSocket?: typeof probeObserverSocket;
+};
+
 /**
  * ADAPTER
  *
@@ -75,13 +79,16 @@ export function readObserverSocketHolderPids(socketPath: string): number[] {
  * ADAPTER
  *
  * Translates build-aware incumbent lifecycle requests into validated local
- * protocol calls; false means proven release while inaccessible probes throw.
+ * protocol calls; false means proven release, a verified live holder remains
+ * occupied, and every other inaccessible probe throws.
  */
-export function createObserverLifecycleClient(options: {
-  timeoutMs: number;
-}): ObserverIncumbentLifecycle {
+export function createObserverLifecycleClient(
+  options: { timeoutMs: number },
+  deps: ObserverLifecycleClientDeps = {},
+): ObserverIncumbentLifecycle {
   const requestTimeout = (requestedTimeoutMs: number) =>
     Math.max(MIN_SOCKET_PROBE_TIMEOUT_MS, Math.min(options.timeoutMs, requestedTimeoutMs));
+  const probeSocket = deps.probeSocket ?? probeObserverSocket;
   return {
     health: (socketPath, request) =>
       createObserverClient({
@@ -97,10 +104,15 @@ export function createObserverLifecycleClient(options: {
         acceptPreviousLifecycleSchema: true,
       }).stop(),
     socketListening: async (socketPath, request) => {
-      const probe = await probeObserverSocket(socketPath, {
+      const probe = await probeSocket(socketPath, {
         timeoutMs: requestTimeout(request.timeoutMs),
       });
-      if (probe.status === "inaccessible") throw probe.error;
+      if (probe.status === "inaccessible") {
+        // A holder that stopped accepting connections still owns the socket; the
+        // handoff wait must not confuse that transient shutdown state with release.
+        if (probe.reason === "live-holder") return true;
+        throw probe.error;
+      }
       return probe.status === "listening";
     },
   };

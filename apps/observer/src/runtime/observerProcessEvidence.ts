@@ -38,12 +38,14 @@ const requiredObserverFlags = [
 ] as const;
 
 type ExecFileStatus = { status: number | null; stdout: string; stderr: string };
+type ObserverExecutableProvenance = ObserverProcessEntry["executableProvenance"] | "mismatch";
+type ParsedObserverProcessEntry = Omit<ObserverProcessEntry, "executableProvenance">;
 
 type LocalObserverProcessEvidenceDeps = {
   execFile?: (file: string, args: readonly string[]) => string;
   execFileStatus?: (file: string, args: readonly string[]) => ExecFileStatus;
   readProcessArgv?: (pid: number) => string[] | undefined;
-  processExecutableMatches?: (pid: number, expectedPath: string) => boolean;
+  processExecutableProvenance?: (pid: number, expectedPath: string) => ObserverExecutableProvenance;
   socketHolders?: (socketPath: string) => number[];
   signal?: (pid: number, signal: NodeJS.Signals | 0) => void;
   evidenceTimeoutMs?: number;
@@ -59,8 +61,8 @@ export type LocalObserverProcessEvidenceSource = ObserverDuplicateProcessEvidenc
  * launch nonce, OS start time, non-signaling process existence, strict
  * socket-holder and complete file-descriptor evidence, pidfiles, socket
  * identities, and signals into conservative ownership evidence. Exact
- * executable/argv mismatch throws a stable typed refusal without weakening the
- * fail-closed ownership decision.
+ * executable/argv mismatch throws a stable typed refusal. Atomic installed-path
+ * replacement is retained as a distinct non-authorizing provenance state.
  */
 export function createLocalObserverProcessEvidence(
   deps: LocalObserverProcessEvidenceDeps = {},
@@ -74,14 +76,14 @@ export function createLocalObserverProcessEvidence(
   const execFileStatus =
     deps.execFileStatus ?? ((file, args) => defaultExecFileStatus(file, args, evidenceTimeoutMs));
   const readProcessArgv = deps.readProcessArgv ?? defaultReadProcessArgv;
-  const processExecutableMatches =
-    deps.processExecutableMatches ??
-    ((pid, expectedPath) => defaultProcessExecutableMatches(pid, expectedPath, execFileStatus));
+  const processExecutableProvenance =
+    deps.processExecutableProvenance ??
+    ((pid, expectedPath) => defaultProcessExecutableProvenance(pid, expectedPath, execFileStatus));
   const signal = deps.signal ?? process.kill;
   const readEntries = (args: readonly string[]): ObserverProcessEntry[] => {
     const parsed = parseObserverProcessList(execFile(psPath, args));
     return parsed.map((entry) =>
-      requireExactLocalObserverProcess(entry, readProcessArgv, processExecutableMatches),
+      requireLocalObserverProcessEvidence(entry, readProcessArgv, processExecutableProvenance),
     );
   };
   const readObserverProcess = (pid: number): ObserverProcessEntry | undefined =>
@@ -118,8 +120,8 @@ export function createLocalObserverProcessEvidence(
   };
 }
 
-export function parseObserverProcessList(output: string): ObserverProcessEntry[] {
-  const entries: ObserverProcessEntry[] = [];
+export function parseObserverProcessList(output: string): ParsedObserverProcessEntry[] {
+  const entries: ParsedObserverProcessEntry[] = [];
   for (const line of output.split("\n")) {
     if (line.trim().length === 0) continue;
     const parsedLine = ProcessListLineSchema.safeParse(line);
@@ -148,7 +150,7 @@ export function parseObserverProcessList(output: string): ObserverProcessEntry[]
 
 function parseFlattenedObserverCommand(
   command: string,
-): Omit<ObserverProcessEntry, "pid" | "startToken"> | undefined {
+): Omit<ParsedObserverProcessEntry, "pid" | "startToken"> | undefined {
   const indexes = observerFlagIndexes(command);
   if (indexes === undefined) return undefined;
   const configIndexes = markerIndexes(command, " --config ");
@@ -322,27 +324,32 @@ function looksLikeIdentifiedObserver(command: string): boolean {
   );
 }
 
-function requireExactLocalObserverProcess(
-  entry: ObserverProcessEntry,
+function requireLocalObserverProcessEvidence(
+  entry: ParsedObserverProcessEntry,
   readProcessArgv: (pid: number) => string[] | undefined,
-  processExecutableMatches: (pid: number, expectedPath: string) => boolean,
+  processExecutableProvenance: (pid: number, expectedPath: string) => ObserverExecutableProvenance,
 ): ObserverProcessEntry {
   const exactArgv = readProcessArgv(entry.pid);
   if (
-    (exactArgv !== undefined &&
-      (exactArgv.length !== entry.argv.length ||
-        exactArgv.some((value, index) => value !== entry.argv[index]))) ||
-    !processExecutableMatches(entry.pid, entry.executablePath)
+    exactArgv !== undefined &&
+    (exactArgv.length !== entry.argv.length ||
+      exactArgv.some((value, index) => value !== entry.argv[index]))
   ) {
     throw observerProcessExecutableArgvMismatch();
   }
+  const provenance = processExecutableProvenance(entry.pid, entry.executablePath);
+  if (provenance === "mismatch") throw observerProcessExecutableArgvMismatch();
   const scriptPath = entry.argv[1];
   if (scriptPath !== "__observer") {
     if (scriptPath === undefined || !realpathSync(scriptPath).endsWith(sourceObserverSuffix)) {
       throw new Error(`Observer process ${entry.pid} did not have exact source provenance.`);
     }
   }
-  return { ...entry, executablePath: realpathSync(entry.executablePath) };
+  return {
+    ...entry,
+    executablePath: realpathSync(entry.executablePath),
+    executableProvenance: provenance,
+  };
 }
 
 function observerProcessExecutableArgvMismatch(): Error & SafeError {
@@ -437,15 +444,28 @@ function defaultReadProcessArgv(pid: number): string[] | undefined {
   return commandLine.subarray(0, -1).toString("utf8").split("\0");
 }
 
-function defaultProcessExecutableMatches(
+function defaultProcessExecutableProvenance(
   pid: number,
   expectedPath: string,
   execFileStatus: (file: string, args: readonly string[]) => ExecFileStatus,
-): boolean {
+): ObserverExecutableProvenance {
   const expected = realpathSync(expectedPath);
   const expectedIdentity = statSync(expected, { bigint: true });
   if (process.platform !== "darwin") {
-    return realpathSync(readlinkSync(`/proc/${pid}/exe`)) === expected;
+    const processExecutablePath = `/proc/${pid}/exe`;
+    const reported = readlinkSync(processExecutablePath);
+    const deletedSuffix = " (deleted)";
+    const reportedPath = reported.endsWith(deletedSuffix)
+      ? reported.slice(0, -deletedSuffix.length)
+      : reported;
+    let pathMatches = reportedPath === expected;
+    if (!pathMatches && !reported.endsWith(deletedSuffix)) {
+      pathMatches = realpathSync(reportedPath) === expected;
+    }
+    if (!pathMatches) return "mismatch";
+    const liveIdentity = statSync(processExecutablePath, { bigint: true });
+    if (liveIdentity.dev !== expectedIdentity.dev) return "mismatch";
+    return liveIdentity.ino === expectedIdentity.ino ? "exact" : "installed-path-replaced";
   }
   const result = execFileStatus(lsofPath, [
     "-nP",
@@ -459,33 +479,35 @@ function defaultProcessExecutableMatches(
   if (result.status !== 0 || result.stderr.trim().length !== 0) {
     throw new Error(`Executable provenance was unavailable for PID ${pid}.`);
   }
-  const lines = strictLsofLines(result.stdout, pid);
-  return lines.slice(1).some((line) => {
-    const fields = strictNulFields(line);
-    const device = fields[1];
-    const inode = fields[2];
-    const name = fields[3];
-    if (
-      fields.length !== 4 ||
-      fields[0] !== "ftxt" ||
-      device === undefined ||
-      !/^D0x[0-9a-f]+$/iu.test(device) ||
-      inode === undefined ||
-      !/^i[1-9]\d*$/u.test(inode) ||
-      name?.startsWith("n") !== true
-    ) {
-      return false;
-    }
-    try {
-      return (
-        realpathSync(name.slice(1)) === expected &&
-        BigInt(device.slice(1)) === expectedIdentity.dev &&
-        BigInt(inode.slice(1)) === expectedIdentity.ino
-      );
-    } catch {
-      return false;
-    }
-  });
+  const matchingImages = strictLsofLines(result.stdout, pid)
+    .slice(1)
+    .flatMap((line) => {
+      const fields = strictNulFields(line);
+      const device = fields[1];
+      const inode = fields[2];
+      const name = fields[3];
+      if (
+        fields.length !== 4 ||
+        fields[0] !== "ftxt" ||
+        device === undefined ||
+        !/^D0x[0-9a-f]+$/iu.test(device) ||
+        inode === undefined ||
+        !/^i[1-9]\d*$/u.test(inode) ||
+        name?.startsWith("n") !== true
+      ) {
+        return [];
+      }
+      try {
+        if (realpathSync(name.slice(1)) !== expected) return [];
+        return [{ device: BigInt(device.slice(1)), inode: BigInt(inode.slice(1)) }];
+      } catch {
+        return [];
+      }
+    });
+  if (matchingImages.length !== 1) return "mismatch";
+  const liveIdentity = matchingImages[0];
+  if (liveIdentity === undefined || liveIdentity.device !== expectedIdentity.dev) return "mismatch";
+  return liveIdentity.inode === expectedIdentity.ino ? "exact" : "installed-path-replaced";
 }
 
 function signalProcess(

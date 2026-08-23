@@ -12,7 +12,7 @@ on:
         required: true
         type: string
       manual_acceptance:
-        description: Confirm macOS partial crossover preserved old Host output and the target native UI visibly refused it
+        description: Confirm macOS pre-mutation reap-required kept incumbent artifact, Observer, Host, and PTY inventory unchanged with no target UI/artifact crossover
         required: true
         type: boolean
 
@@ -326,7 +326,7 @@ jobs:
             test "$(stat -f '%Lp' "$receipt_path")" = 600
           fi
           test -f "$data_home/station/LICENSE"
-      - name: Verify public update discovery and download
+      - name: Verify public update discovery and converged runtime
         if: runner.os == 'macOS'
         env:
           PREVIOUS_TAG: ${{ needs.promote.outputs.previous_tag }}
@@ -338,4 +338,5 @@ jobs:
             --incumbent-version "${PREVIOUS_TAG#v}" \
             --public-target-tag "$TAG" \
             --target-build-identity "$TARGET_BUILD_IDENTITY" \
-            --scenarios no-host
+            --scenarios no-host \
+            --incumbent-contract legacy-compatible

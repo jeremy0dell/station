@@ -1,6 +1,7 @@
 import { chmod, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
+import type { UpdateArtifact } from "@station/contracts";
 import {
   type ExternalCommandRunner,
   normalizeCancellationError,
@@ -110,7 +111,8 @@ const InstallerBinaryUpdatePlanSchema = InstallerBinaryDetectionSchema.extend({
 /**
  * ADAPTER
  *
- * Translates installer receipt and release evidence into a verified binary update.
+ * Translates installer receipt and release evidence into a verified binary update. Installed-target
+ * proof remains local and never resolves the newest release.
  */
 export function createInstallerBinaryUpdateChannel(
   deps: InstallerBinaryUpdateChannelDeps = {},
@@ -127,7 +129,7 @@ export function createInstallerBinaryUpdateChannel(
   const removeTempDir =
     deps.removeTempDir ?? ((path: string) => rm(path, { recursive: true, force: true }));
 
-  return {
+  const adapter: InstallerBinaryUpdateChannel = {
     id: channel,
     async detect(options = {}) {
       const info = buildInfo();
@@ -229,6 +231,31 @@ export function createInstallerBinaryUpdateChannel(
       };
     },
 
+    async proveInstalledTarget(target: UpdateArtifact, options = {}) {
+      const detection = await adapter.detect(options);
+      if (
+        detection === undefined ||
+        target.revision !== undefined ||
+        detection.currentVersion !== target.version
+      ) {
+        return undefined;
+      }
+      await validateDetectionSemantics(detection, {
+        buildInfo,
+        executablePath,
+        platform,
+        architecture,
+      });
+      await requireUnchangedInstallerInstallation(detection);
+      return {
+        channel,
+        status: "current",
+        currentVersion: target.version,
+        targetVersion: target.version,
+        currentCli: [detection.executablePath],
+      };
+    },
+
     async apply(plan, options = {}) {
       const validatedPlan = await validateApplyPlan(plan, {
         buildInfo,
@@ -288,6 +315,7 @@ export function createInstallerBinaryUpdateChannel(
       throw outcome.error;
     },
   };
+  return adapter;
 }
 
 async function applyVerifiedInstaller(

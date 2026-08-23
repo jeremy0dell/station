@@ -11,6 +11,7 @@ const process: ObserverProcessEntry = {
   pid: 42,
   argv: ["/opt/station/stn", "__observer", "--socket", socketPath],
   executablePath: "/opt/station/stn",
+  executableProvenance: "exact",
   startToken: "Sat Jul  4 17:45:33 2026",
   processToken: "00000000-0000-4000-8000-000000000001",
   buildVersion: "1.2.3",
@@ -75,9 +76,37 @@ describe("Observer process identity verification", () => {
     ).toEqual({ status: "mismatch", reason: "executable-argv-drift" });
   });
 
+  it("distinguishes an installed-path replacement after every stable identity field matches", () => {
+    const replaced = { ...process, executableProvenance: "installed-path-replaced" as const };
+    expect(
+      verifyObserverProcessIdentity({ source: "pidfile", identity }, evidence(replaced)),
+    ).toEqual({ status: "installed-path-replaced", process: replaced });
+    expect(
+      verifyObserverProcessIdentity(
+        { source: "pidfile", identity },
+        evidence({ ...replaced, processToken: "00000000-0000-4000-8000-000000000002" }),
+      ),
+    ).toEqual({ status: "mismatch", reason: "process-token-drift" });
+    expect(
+      verifyObserverProcessIdentity(
+        { source: "process", process },
+        evidence({ ...replaced, argv: [...replaced.argv, "--unexpected"] }),
+      ),
+    ).toEqual({ status: "mismatch", reason: "executable-argv-drift" });
+    expect(
+      verifyObserverProcessIdentity({ source: "process", process: replaced }, evidence(process)),
+    ).toEqual({ status: "mismatch", reason: "executable-argv-drift" });
+  });
+
   it("keeps missing or failed process evidence unavailable", () => {
     expect(
       verifyObserverProcessIdentity({ source: "pidfile", identity }, evidence(undefined)),
+    ).toEqual({ status: "unavailable" });
+    expect(
+      verifyObserverProcessIdentity(
+        { source: "pidfile", identity },
+        { readObserverProcess: () => undefined, processStartToken: () => identity.osStartTime },
+      ),
     ).toEqual({ status: "unavailable" });
     const cause = new Error("evidence failed");
     expect(

@@ -22,7 +22,10 @@ import {
 import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { UpdateCommandReportSchema } from "../../packages/contracts/dist/index.js";
+import {
+  CompatibleUpdateCommandReportSchema,
+  UpdateCommandReportSchema,
+} from "../../packages/contracts/dist/index.js";
 import {
   createObserverClient,
   readUnixSocketHolderPids,
@@ -340,6 +343,8 @@ async function runScenario(input) {
           scenarioRoot,
           currentTag: `v${input.options.incumbentVersion}`,
           target: input.target,
+          installedBinaryPath: join(installDir, "stn"),
+          denyPostApplyLatest: input.options.incumbentContract !== "legacy-compatible",
         });
   const tmuxPath = findExecutable("tmux", process.env.PATH);
   const tmuxAudit = await prepareTmuxAudit(scenarioRoot, tmuxPath);
@@ -443,7 +448,7 @@ async function runScenario(input) {
       tmuxServer = await startTmuxServer(tmuxPath, env, tmuxTempDir, input.name, processIdentities);
     }
     const expectedUpdateCode =
-      input.busyHost && input.options.busyHostOutcome === "preserved-refusal" ? 1 : 0;
+      input.busyHost && input.options.busyHostOutcome === "pre-mutation-reap-required" ? 1 : 0;
     const updateResult =
       input.invocation === "external"
         ? await run(installedBinary, ["update", "--json"], {
@@ -458,177 +463,263 @@ async function runScenario(input) {
             scenarioRoot,
           );
     assertEqual(updateResult.code, expectedUpdateCode, `${input.name} update exit code`);
-    const report = UpdateCommandReportSchema.parse(
-      parseJson(updateResult.stdout, `${input.name} update report`),
-    );
-    assertUpdateReport(report, input, installedBinary, configPath);
+    const rawReport = parseJson(updateResult.stdout, `${input.name} update report`);
+    const report =
+      input.options.incumbentContract === "legacy-compatible"
+        ? CompatibleUpdateCommandReportSchema.parse(rawReport)
+        : UpdateCommandReportSchema.parse(rawReport);
+    assertUpdateReport(report, input);
     if (expectedUpdateCode === 0) {
       assertNoMismatch(updateResult.stderr, `${input.name} update stderr`);
+    }
+    if (input.options.incumbentContract === "legacy-compatible") {
+      const targetResult = await run(installedBinary, ["update", "--json"], {
+        env,
+        timeoutMs: childTimeoutMs,
+      });
+      assertNoMismatch(targetResult.stderr, `${input.name} target-current stderr`);
+      assertTargetCurrentReport(
+        UpdateCommandReportSchema.parse(
+          parseJson(targetResult.stdout, `${input.name} target-current report`),
+        ),
+        input,
+      );
     }
     if (transportDir !== undefined) {
       await assertExactTransportRequests(transportDir, input);
     }
 
-    const targetObserver = await waitForObserver(observerClient, input.target.version);
-    diagnostics.observerPid = targetObserver.pid;
-    await recordProcessIdentity(processIdentities, "target-observer", targetObserver.pid);
-    assertObserverBuildIdentity(
-      targetObserver.version,
-      input.target.buildIdentity,
-      `${input.name} target Observer`,
-    );
-    assertNotEqual(
-      targetObserver.pid,
-      incumbentObserver.pid,
-      `${input.name} Observer replacement PID`,
-    );
-    assertEqual(
-      await waitForExactProcessExit(processIdentities.get("incumbent-observer"), 10_000),
-      true,
-      `${input.name} incumbent Observer exit`,
-    );
-    assertDeepEqual(
-      readUnixSocketHolderPids(socketPath),
-      [targetObserver.pid],
-      `${input.name} target Observer holder`,
-    );
-
-    if (input.busyHost && input.options.busyHostOutcome === "full-handoff") {
+    const preMutationReapRequired =
+      input.busyHost && input.options.busyHostOutcome === "pre-mutation-reap-required";
+    if (preMutationReapRequired) {
+      const preservedVersion = await run(installedBinary, ["--version"], { env });
       assertEqual(
-        await waitForExactProcessExit(processIdentities.get("incumbent-host"), 10_000),
-        true,
-        `${input.name} incumbent Host exit`,
+        preservedVersion.stdout.trim(),
+        input.options.incumbentVersion,
+        `${input.name} artifact preserved before #641`,
       );
-      const holders = await waitForSocketHolders(hostSocketPath, 10_000);
-      assertEqual(holders.length, 1, `${input.name} target Host holder count`);
-      assertNotEqual(holders[0], incumbentHostProcess.pid, `${input.name} target Host replacement`);
-      diagnostics.hostPid = holders[0];
-      await recordProcessIdentity(processIdentities, "target-host", holders[0]);
-      const targetHostClient = createStationHostClient({
-        socketPath: hostSocketPath,
-        timeoutMs: 3000,
-        expectedBuildVersion: input.target.version,
+      assertEqual(
+        await processIdentityMatches(processIdentities.get("incumbent-observer")),
+        true,
+        `${input.name} incumbent Observer preserved`,
+      );
+      assertEqual(
+        await processIdentityMatches(processIdentities.get("incumbent-host")),
+        true,
+        `${input.name} incumbent Host preserved`,
+      );
+      assertEqual(
+        await processIdentityMatches(processIdentities.get("pty-payload")),
+        true,
+        `${input.name} terminal process group preserved`,
+      );
+      await verifyBareLaunches({
+        installedBinary,
+        env,
+        scenarioRoot,
+        tmuxPath,
+        tmuxTempDir,
+        tmuxServer,
+        name: input.name,
+        expectNativeRefusal: false,
+        processIdentities,
       });
-      const hostHealth = await targetHostClient.health();
-      assertEqual(hostHealth.buildVersion, input.target.version, `${input.name} target Host build`);
-      const live = (await targetHostClient.list()).find(
-        (entry) => entry.ptyId === spawnedPty.ptyId,
-      );
-      if (live === undefined) throw new Error(`${input.name} target Host lost the live PTY.`);
-      assertEqual(live.ptyId, spawnedPty.ptyId, `${input.name} PTY ID`);
-      assertEqual(live.ptyInstanceId, spawnedPty.ptyInstanceId, `${input.name} PTY instance`);
-      assertEqual(live.pid, ptyChildPid, `${input.name} PTY child PID`);
-      const attachment = await targetHostClient.attach({ ...ptyIdentity, ...spawnedPty }, "viewer");
-      const replay = replayText(attachment.ack);
-      assertIncludes(replay, "UPDATE_SMOKE_PRE", `${input.name} preserved replay`);
-      const iterator = attachment.frames[Symbol.asyncIterator]();
-      await writeFile(postSignal, "\n", { mode: 0o600 });
-      const post = await waitForFrame(iterator, "UPDATE_SMOKE_POST", 10_000);
-      assertIncludes(post, "UPDATE_SMOKE_POST", `${input.name} continued PTY output`);
-      await writeFile(releaseSignal, "\n", { mode: 0o600 });
-      await waitForExitFrame(iterator, 10_000);
-      await iterator.return?.();
-      await attachment.detach();
-      await targetHostClient.close(spawnedPty.ptyId).catch(() => undefined);
-      targetHostClient.dispose();
-    } else if (input.busyHost) {
-      const incumbentHostIdentity = processIdentities.get("incumbent-host");
-      assertEqual(
-        await processIdentityMatches(incumbentHostIdentity),
-        true,
-        `${input.name} incumbent Host identity preserved`,
-      );
-      assertDeepEqual(
-        readUnixSocketHolderPids(hostSocketPath),
-        [incumbentHostProcess.pid],
-        `${input.name} incumbent Host holder preserved`,
-      );
-      const preservedHostClient = createStationHostClient({
+      const cleanupClient = createStationHostClient({
         socketPath: hostSocketPath,
         timeoutMs: 3000,
         expectedBuildVersion: input.options.incumbentVersion,
       });
-      const preservedHealth = await preservedHostClient.health();
-      assertEqual(
-        preservedHealth.buildVersion,
-        input.options.incumbentVersion,
-        `${input.name} preserved Host build`,
-      );
-      const live = (await preservedHostClient.list()).find(
-        (entry) => entry.ptyId === spawnedPty.ptyId,
-      );
+      const live = (await cleanupClient.list()).find((entry) => entry.ptyId === spawnedPty.ptyId);
       assertPreservedPty(live, spawnedPty, ptyChildPid, input.name);
-      const attachment = await preservedHostClient.attach(
-        { ...ptyIdentity, ...spawnedPty },
-        "viewer",
-      );
-      assertIncludes(
-        replayText(attachment.ack),
-        "UPDATE_SMOKE_PRE",
-        `${input.name} preserved replay`,
-      );
-      const iterator = attachment.frames[Symbol.asyncIterator]();
-      await writeFile(postSignal, "\n", { mode: 0o600 });
-      const post = await waitForFrame(iterator, "UPDATE_SMOKE_POST", 10_000);
-      assertIncludes(post, "UPDATE_SMOKE_POST", `${input.name} preserved live output`);
-      await iterator.return?.();
-      await attachment.detach();
-      preservedHostClient.dispose();
-    } else {
-      assertEqual(await pathExists(hostSocketPath), false, `${input.name} skips Host creation`);
-    }
-
-    await verifyBareLaunches({
-      installedBinary,
-      env,
-      scenarioRoot,
-      tmuxPath,
-      tmuxTempDir,
-      tmuxServer,
-      name: input.name,
-      expectNativeRefusal: input.busyHost && input.options.busyHostOutcome === "preserved-refusal",
-      processIdentities,
-    });
-    if (input.busyHost) {
-      const expectedHostVersion =
-        input.options.busyHostOutcome === "preserved-refusal"
-          ? input.options.incumbentVersion
-          : input.target.version;
-      const cleanupClient = createStationHostClient({
-        socketPath: hostSocketPath,
-        timeoutMs: 3000,
-        expectedBuildVersion: expectedHostVersion,
-      });
-      if (input.options.busyHostOutcome === "preserved-refusal") {
-        const live = (await cleanupClient.list()).find((entry) => entry.ptyId === spawnedPty.ptyId);
-        assertPreservedPty(live, spawnedPty, ptyChildPid, input.name);
-        await writeFile(releaseSignal, "\n", { mode: 0o600 });
-        await waitForExactProcessExit(processIdentities.get("pty-payload"), 10_000);
-        await cleanupClient.close(spawnedPty.ptyId).catch(() => undefined);
-      }
-      await cleanupClient.stopIfIdle(expectedHostVersion);
+      await writeFile(releaseSignal, "\n", { mode: 0o600 });
+      await waitForExactProcessExit(processIdentities.get("pty-payload"), 10_000);
+      await cleanupClient.close(spawnedPty.ptyId).catch(() => undefined);
+      await cleanupClient.stopIfIdle(input.options.incumbentVersion);
       cleanupClient.dispose();
       await waitForMissing(hostSocketPath, 10_000);
+      await observerClient.stop();
+      await waitForMissing(socketPath, 10_000);
       assertEqual(
-        await waitForExactProcessExit(
-          processIdentities.get(
-            input.options.busyHostOutcome === "preserved-refusal"
-              ? "incumbent-host"
-              : "target-host",
-          ),
-          10_000,
-        ),
+        await waitForExactProcessExit(processIdentities.get("incumbent-observer"), 10_000),
         true,
-        `${input.name} target Host cleanup`,
+        `${input.name} incumbent Observer cleanup`,
+      );
+    } else {
+      const targetObserver = await waitForObserver(observerClient, input.target.version);
+      diagnostics.observerPid = targetObserver.pid;
+      await recordProcessIdentity(processIdentities, "target-observer", targetObserver.pid);
+      assertObserverBuildIdentity(
+        targetObserver.version,
+        input.target.buildIdentity,
+        `${input.name} target Observer`,
+      );
+      assertNotEqual(
+        targetObserver.pid,
+        incumbentObserver.pid,
+        `${input.name} Observer replacement PID`,
+      );
+      assertEqual(
+        await waitForExactProcessExit(processIdentities.get("incumbent-observer"), 10_000),
+        true,
+        `${input.name} incumbent Observer exit`,
+      );
+      assertDeepEqual(
+        readUnixSocketHolderPids(socketPath),
+        [targetObserver.pid],
+        `${input.name} target Observer holder`,
+      );
+
+      if (input.busyHost && input.options.busyHostOutcome === "full-handoff") {
+        assertEqual(
+          await waitForExactProcessExit(processIdentities.get("incumbent-host"), 10_000),
+          true,
+          `${input.name} incumbent Host exit`,
+        );
+        const holders = await waitForSocketHolders(hostSocketPath, 10_000);
+        assertEqual(holders.length, 1, `${input.name} target Host holder count`);
+        assertNotEqual(
+          holders[0],
+          incumbentHostProcess.pid,
+          `${input.name} target Host replacement`,
+        );
+        diagnostics.hostPid = holders[0];
+        await recordProcessIdentity(processIdentities, "target-host", holders[0]);
+        const targetHostClient = createStationHostClient({
+          socketPath: hostSocketPath,
+          timeoutMs: 3000,
+          expectedBuildVersion: input.target.version,
+        });
+        const hostHealth = await targetHostClient.health();
+        assertEqual(
+          hostHealth.buildVersion,
+          input.target.version,
+          `${input.name} target Host build`,
+        );
+        const live = (await targetHostClient.list()).find(
+          (entry) => entry.ptyId === spawnedPty.ptyId,
+        );
+        if (live === undefined) throw new Error(`${input.name} target Host lost the live PTY.`);
+        assertEqual(live.ptyId, spawnedPty.ptyId, `${input.name} PTY ID`);
+        assertEqual(live.ptyInstanceId, spawnedPty.ptyInstanceId, `${input.name} PTY instance`);
+        assertEqual(live.pid, ptyChildPid, `${input.name} PTY child PID`);
+        const attachment = await targetHostClient.attach(
+          { ...ptyIdentity, ...spawnedPty },
+          "viewer",
+        );
+        const replay = replayText(attachment.ack);
+        assertIncludes(replay, "UPDATE_SMOKE_PRE", `${input.name} preserved replay`);
+        const iterator = attachment.frames[Symbol.asyncIterator]();
+        await writeFile(postSignal, "\n", { mode: 0o600 });
+        const post = await waitForFrame(iterator, "UPDATE_SMOKE_POST", 10_000);
+        assertIncludes(post, "UPDATE_SMOKE_POST", `${input.name} continued PTY output`);
+        await writeFile(releaseSignal, "\n", { mode: 0o600 });
+        await waitForExitFrame(iterator, 10_000);
+        await iterator.return?.();
+        await attachment.detach();
+        await targetHostClient.close(spawnedPty.ptyId).catch(() => undefined);
+        targetHostClient.dispose();
+      } else if (input.busyHost) {
+        const incumbentHostIdentity = processIdentities.get("incumbent-host");
+        assertEqual(
+          await processIdentityMatches(incumbentHostIdentity),
+          true,
+          `${input.name} incumbent Host identity preserved`,
+        );
+        assertDeepEqual(
+          readUnixSocketHolderPids(hostSocketPath),
+          [incumbentHostProcess.pid],
+          `${input.name} incumbent Host holder preserved`,
+        );
+        const preservedHostClient = createStationHostClient({
+          socketPath: hostSocketPath,
+          timeoutMs: 3000,
+          expectedBuildVersion: input.options.incumbentVersion,
+        });
+        const preservedHealth = await preservedHostClient.health();
+        assertEqual(
+          preservedHealth.buildVersion,
+          input.options.incumbentVersion,
+          `${input.name} preserved Host build`,
+        );
+        const live = (await preservedHostClient.list()).find(
+          (entry) => entry.ptyId === spawnedPty.ptyId,
+        );
+        assertPreservedPty(live, spawnedPty, ptyChildPid, input.name);
+        const attachment = await preservedHostClient.attach(
+          { ...ptyIdentity, ...spawnedPty },
+          "viewer",
+        );
+        assertIncludes(
+          replayText(attachment.ack),
+          "UPDATE_SMOKE_PRE",
+          `${input.name} preserved replay`,
+        );
+        const iterator = attachment.frames[Symbol.asyncIterator]();
+        await writeFile(postSignal, "\n", { mode: 0o600 });
+        const post = await waitForFrame(iterator, "UPDATE_SMOKE_POST", 10_000);
+        assertIncludes(post, "UPDATE_SMOKE_POST", `${input.name} preserved live output`);
+        await iterator.return?.();
+        await attachment.detach();
+        preservedHostClient.dispose();
+      } else {
+        assertEqual(await pathExists(hostSocketPath), false, `${input.name} skips Host creation`);
+      }
+
+      await verifyBareLaunches({
+        installedBinary,
+        env,
+        scenarioRoot,
+        tmuxPath,
+        tmuxTempDir,
+        tmuxServer,
+        name: input.name,
+        expectNativeRefusal:
+          input.busyHost && input.options.busyHostOutcome === "pre-mutation-reap-required",
+        processIdentities,
+      });
+      if (input.busyHost) {
+        const expectedHostVersion =
+          input.options.busyHostOutcome === "pre-mutation-reap-required"
+            ? input.options.incumbentVersion
+            : input.target.version;
+        const cleanupClient = createStationHostClient({
+          socketPath: hostSocketPath,
+          timeoutMs: 3000,
+          expectedBuildVersion: expectedHostVersion,
+        });
+        if (input.options.busyHostOutcome === "pre-mutation-reap-required") {
+          const live = (await cleanupClient.list()).find(
+            (entry) => entry.ptyId === spawnedPty.ptyId,
+          );
+          assertPreservedPty(live, spawnedPty, ptyChildPid, input.name);
+          await writeFile(releaseSignal, "\n", { mode: 0o600 });
+          await waitForExactProcessExit(processIdentities.get("pty-payload"), 10_000);
+          await cleanupClient.close(spawnedPty.ptyId).catch(() => undefined);
+        }
+        await cleanupClient.stopIfIdle(expectedHostVersion);
+        cleanupClient.dispose();
+        await waitForMissing(hostSocketPath, 10_000);
+        assertEqual(
+          await waitForExactProcessExit(
+            processIdentities.get(
+              input.options.busyHostOutcome === "pre-mutation-reap-required"
+                ? "incumbent-host"
+                : "target-host",
+            ),
+            10_000,
+          ),
+          true,
+          `${input.name} target Host cleanup`,
+        );
+      }
+      await observerClient.stop();
+      await waitForMissing(socketPath, 10_000);
+      assertEqual(
+        await waitForExactProcessExit(processIdentities.get("target-observer"), 10_000),
+        true,
+        `${input.name} target Observer cleanup`,
       );
     }
-    await observerClient.stop();
-    await waitForMissing(socketPath, 10_000);
-    assertEqual(
-      await waitForExactProcessExit(processIdentities.get("target-observer"), 10_000),
-      true,
-      `${input.name} target Observer cleanup`,
-    );
   } catch (error) {
     failure = error;
     if (input.evidenceDir !== undefined) {
@@ -892,13 +983,12 @@ async function writeReleaseTransport(input) {
   const curlPath = join(transportDir, "curl");
   const current = releaseMetadata(input.currentTag, 1001, "2026-01-01T00:00:00Z");
   const target = releaseMetadata(input.target.tag, 1002, "2026-01-02T00:00:00Z");
+  const latestListUrl =
+    "https://api.github.com/repos/jeremy0dell/station/releases?per_page=100&page=1";
   const routes = [
     [releaseApiTagUrl(input.currentTag), { kind: "json", value: current }],
     [releaseApiTagUrl(input.target.tag), { kind: "json", value: target }],
-    [
-      "https://api.github.com/repos/jeremy0dell/station/releases?per_page=100&page=1",
-      { kind: "json", value: [current, target] },
-    ],
+    [latestListUrl, { kind: "json", value: [current, target] }],
     [
       releaseDownloadUrl(input.target.tag, "install.sh"),
       { kind: "file", path: input.target.installerPath },
@@ -933,12 +1023,14 @@ async function writeReleaseTransport(input) {
   const script =
     `#!${process.execPath}\n` +
     `const { createHash } = require("node:crypto");\n` +
-    `const { appendFileSync, copyFileSync, lstatSync, readFileSync } = require("node:fs");\n` +
+    `const { appendFileSync, copyFileSync, existsSync, lstatSync, readFileSync } = require("node:fs");\n` +
+    `const { execFileSync } = require("node:child_process");\n` +
     `const routes = new Map(${JSON.stringify(routes)});\n` +
     `const fileRoutes = ${JSON.stringify(fileRoutes)};\n` +
     `const args = process.argv.slice(2);\n` +
     `const url = [...args].reverse().find((arg) => /^https:\\/\\//.test(arg));\n` +
     `appendFileSync(${JSON.stringify(join(transportDir, "curl.log"))}, String(url) + "\\n");\n` +
+    `if (${JSON.stringify(input.denyPostApplyLatest)} && url === ${JSON.stringify(latestListUrl)} && existsSync(${JSON.stringify(input.installedBinaryPath)})) { const installedVersion = execFileSync(${JSON.stringify(input.installedBinaryPath)}, ["--version"], { encoding: "utf8", env: process.env }).trim(); if (installedVersion === ${JSON.stringify(input.target.version)}) { process.stderr.write("post-apply latest discovery is forbidden for pinned successor convergence\\n"); process.exit(24); } }\n` +
     `const route = routes.get(url);\n` +
     `if (!route) { process.stderr.write("unexpected update smoke URL: " + url + "\\n"); process.exit(22); }\n` +
     `if (route.kind === "file") { const expected = fileRoutes[url]; const stat = lstatSync(route.path, { bigint: true }); const actual = { path: route.path, device: String(stat.dev), inode: String(stat.ino), size: String(stat.size), sha256: createHash("sha256").update(readFileSync(route.path)).digest("hex") }; if (JSON.stringify(actual) !== JSON.stringify(expected)) { process.stderr.write("update smoke target asset changed: " + route.path + "\\n"); process.exit(23); } }\n` +
@@ -959,10 +1051,26 @@ async function assertExactTransportRequests(transportDir, input) {
   const expected = [
     releaseApiTagUrl(`v${input.options.incumbentVersion}`),
     "https://api.github.com/repos/jeremy0dell/station/releases?per_page=100&page=1",
-    releaseDownloadUrl(input.target.tag, "install.sh"),
-    releaseDownloadUrl(input.target.tag, "SHA256SUMS"),
-    releaseDownloadUrl(input.target.tag, archiveName),
-    releaseDownloadUrl(input.target.tag, "SHA256SUMS"),
+    ...(input.busyHost && input.options.busyHostOutcome === "pre-mutation-reap-required"
+      ? []
+      : [
+          releaseDownloadUrl(input.target.tag, "install.sh"),
+          releaseDownloadUrl(input.target.tag, "SHA256SUMS"),
+          releaseDownloadUrl(input.target.tag, archiveName),
+          releaseDownloadUrl(input.target.tag, "SHA256SUMS"),
+          ...(input.options.incumbentContract === "legacy-compatible"
+            ? [
+                releaseApiTagUrl(input.target.tag),
+                "https://api.github.com/repos/jeremy0dell/station/releases?per_page=100&page=1",
+              ]
+            : []),
+        ]),
+    ...(input.options.incumbentContract === "legacy-compatible"
+      ? [
+          releaseApiTagUrl(input.target.tag),
+          "https://api.github.com/repos/jeremy0dell/station/releases?per_page=100&page=1",
+        ]
+      : []),
   ].sort();
   assertDeepEqual(actual, expected, `${input.name} exact update transport requests`);
 }
@@ -1369,67 +1477,183 @@ async function verifyBareLaunches(input) {
   }
 }
 
-function assertUpdateReport(report, input, installedBinary, configPath) {
-  assertEqual(report.schemaVersion, 3, `${input.name} update schema`);
-  assertEqual(
-    report.recoveryPreflight,
-    undefined,
-    `${input.name} ordinary update omits reap recovery preflight`,
-  );
+function assertUpdateReport(report, input) {
+  if (report.schemaVersion !== 4) {
+    assertLegacyUpdateReport(report, input);
+    return;
+  }
+  assertEqual(report.schemaVersion, 4, `${input.name} update schema`);
   assertEqual(report.channel, "installer-binary", `${input.name} update channel`);
-  const refusal = input.busyHost && input.options.busyHostOutcome === "preserved-refusal";
-  assertEqual(report.status, refusal ? "failed" : "updated", `${input.name} update status`);
+  const refusal = input.busyHost && input.options.busyHostOutcome === "pre-mutation-reap-required";
+  assertEqual(report.status, refusal ? "reap-required" : "updated", `${input.name} update status`);
   assertEqual(report.current?.version, input.options.incumbentVersion, `${input.name} current`);
   assertEqual(report.target?.version, input.target.version, `${input.name} target`);
-  assertDeepEqual(report.warnings, [], `${input.name} update warnings`);
-  const expectedRecovery = refusal
-    ? [[installedBinary, "--config", configPath, "host", "handoff", "--fidelity", "processes"]]
-    : [];
-  assertDeepEqual(
-    report.recoveryCommands,
-    expectedRecovery,
-    `${input.name} recovery commands (${JSON.stringify({ error: report.error, steps: report.steps })})`,
+  assertEqual(
+    report.initial?.preflight?.boundary?.authorization,
+    "none",
+    `${input.name} aggregate is non-authorizing`,
   );
   assertEqual(
-    report.error?.code,
-    refusal ? "UPDATE_RUNTIME_CROSSOVER_FAILED" : undefined,
-    `${input.name} update error`,
+    report.initial?.plan?.selectedTarget?.artifact?.version,
+    input.target.version,
+    `${input.name} convergence target`,
   );
-  assertDeepEqual(
-    report.hookReconciliation,
-    {
-      provider: "codex",
-      status: "configured-disabled",
-      changed: false,
-      verified: false,
-      followUp: { action: "enable-hooks" },
-    },
-    `${input.name} provider-neutral hook reconciliation`,
+  assertEqual(
+    report.initial?.plan?.selectedTarget?.buildIdentity?.status,
+    "not-yet-provable",
+    `${input.name} pre-apply target build identity`,
   );
-  const expectedIds = [
-    "detect",
-    "plan",
-    "apply",
-    "hook-reconciliation",
-    "observer-restart",
-    "host-handoff",
-  ];
-  assertDeepEqual(
-    report.steps.map((step) => step.id),
-    expectedIds,
-    `${input.name} exact ordered update steps`,
+  assertEqual(
+    report.initial?.plan?.digest?.algorithm,
+    "sha256",
+    `${input.name} convergence digest algorithm`,
   );
-  assertDeepEqual(
-    report.steps.map((step) => step.status),
-    [
+  assertEqual(
+    report.initial?.plan?.phases?.length,
+    7,
+    `${input.name} exact ordered convergence phases`,
+  );
+  assertDeepEqual(report.warnings, [], `${input.name} update warnings`);
+  assertDeepEqual(report.recoveryCommands, [], `${input.name} recovery commands`);
+  assertEqual(report.error, undefined, `${input.name} update error`);
+  if (refusal) {
+    assertEqual(
+      report.artifactApplication?.status,
+      "not-attempted",
+      `${input.name} artifact preserved before reap`,
+    );
+    assertEqual(report.initial.plan.status, "reap-required", `${input.name} plan disposition`);
+    assertEqual(report.result?.kind, "non-mutating-stop", `${input.name} pre-mutation result`);
+    assertEqual(
+      report.result?.disposition,
+      "reap-required",
+      `${input.name} #641 handoff disposition`,
+    );
+    assertEqual(report.result?.actionAudits, undefined, `${input.name} no action audit`);
+  } else {
+    assertEqual(report.artifactApplication?.status, "applied", `${input.name} artifact applied`);
+    assertEqual(
+      report.result?.kind,
+      "successor-runtime-execution",
+      `${input.name} successor-owned convergence`,
+    );
+    assertEqual(
+      report.result?.successor?.evaluator,
+      "successor-cli",
+      `${input.name} successor evaluator`,
+    );
+    assertEqual(
+      report.result?.postAction?.plan?.status,
+      "converged",
+      `${input.name} verified no-op plan`,
+    );
+    assertEqual(
+      report.result?.verification?.status,
+      "converged",
+      `${input.name} final verification`,
+    );
+  }
+  const serialized = JSON.stringify(report);
+  for (const privateField of [
+    "processToken",
+    "selectedHandleId",
+    "providerData",
+    "recoveryHandles",
+  ]) {
+    if (serialized.includes(privateField)) {
+      throw new Error(`${input.name} update report leaked private field ${privateField}.`);
+    }
+  }
+}
+
+function assertLegacyUpdateReport(report, input) {
+  if (input.options.incumbentContract !== "legacy-compatible") {
+    throw new Error(`${input.name} accepted a legacy report outside the transition lane.`);
+  }
+  assertEqual(input.busyHost, false, `${input.name} legacy transition has no busy Host`);
+  assertEqual(report.channel, "installer-binary", `${input.name} legacy update channel`);
+  assertEqual(report.status, "updated", `${input.name} legacy artifact outcome`);
+  assertEqual(
+    report.current?.version,
+    input.options.incumbentVersion,
+    `${input.name} legacy current`,
+  );
+  assertEqual(report.target?.version, input.target.version, `${input.name} legacy target`);
+  assertDeepEqual(report.warnings, [], `${input.name} legacy update warnings`);
+  assertDeepEqual(report.recoveryCommands, [], `${input.name} legacy recovery commands`);
+  assertEqual(report.error, undefined, `${input.name} legacy update error`);
+  assertEqual(report.artifactApplication, undefined, `${input.name} legacy artifact model absent`);
+  assertEqual(report.initial, undefined, `${input.name} legacy convergence plan absent`);
+  assertEqual(report.result, undefined, `${input.name} legacy convergence result absent`);
+  const stepById = new Map(report.steps.map((step) => [step.id, step]));
+  for (const id of ["detect", "plan", "apply", "observer-restart"]) {
+    assertEqual(stepById.get(id)?.status, "completed", `${input.name} legacy ${id} step`);
+  }
+  assertEqual(stepById.get("host-handoff")?.status, "skipped", `${input.name} legacy Host step`);
+  if (report.schemaVersion === 2 || report.schemaVersion === 3) {
+    assertDeepEqual(
+      report.hookReconciliation,
+      {
+        provider: "codex",
+        status: "configured-disabled",
+        changed: false,
+        verified: false,
+        followUp: { action: "enable-hooks" },
+      },
+      `${input.name} legacy hook reconciliation`,
+    );
+    assertEqual(
+      stepById.get("hook-reconciliation")?.status,
       "completed",
-      "completed",
-      "completed",
-      "completed",
-      "completed",
-      refusal ? "failed" : input.busyHost ? "completed" : "skipped",
-    ],
-    `${input.name} exact update step outcomes`,
+      `${input.name} legacy hook step`,
+    );
+  }
+  if (report.schemaVersion === 3) {
+    assertEqual(
+      report.recoveryPreflight,
+      undefined,
+      `${input.name} ordinary legacy update omits recovery preflight`,
+    );
+  }
+}
+
+function assertTargetCurrentReport(report, input) {
+  assertEqual(report.schemaVersion, 4, `${input.name} installed target schema`);
+  assertEqual(report.channel, "installer-binary", `${input.name} installed target channel`);
+  assertEqual(report.status, "current", `${input.name} installed target status`);
+  assertEqual(
+    report.current?.version,
+    input.target.version,
+    `${input.name} installed target current`,
+  );
+  assertEqual(
+    report.target?.version,
+    input.target.version,
+    `${input.name} installed target selected`,
+  );
+  assertEqual(
+    report.artifactApplication?.status,
+    "not-required",
+    `${input.name} installed target artifact state`,
+  );
+  const verifiedEvidence =
+    report.result.kind === "already-converged"
+      ? report.initial
+      : report.result.kind === "current-runtime-execution"
+        ? report.result.postAction
+        : undefined;
+  if (verifiedEvidence === undefined) {
+    throw new Error(`${input.name} installed target did not produce verified convergence.`);
+  }
+  assertEqual(
+    verifiedEvidence.plan.status,
+    "converged",
+    `${input.name} installed target no-op plan`,
+  );
+  assertEqual(
+    report.result.verification.status,
+    "converged",
+    `${input.name} installed target verification`,
   );
 }
 
@@ -1685,6 +1909,7 @@ function parseArgs(argv) {
         "--public-target-tag",
         "--scenarios",
         "--busy-host-outcome",
+        "--incumbent-contract",
       ].includes(key)
     ) {
       throw new Error(`Unknown update smoke flag: ${key}`);
@@ -1736,11 +1961,23 @@ function parseArgs(argv) {
     throw new Error("--scenarios must be full or no-host.");
   }
   const busyHostOutcome = values.get("--busy-host-outcome") ?? "full-handoff";
-  if (busyHostOutcome !== "full-handoff" && busyHostOutcome !== "preserved-refusal") {
-    throw new Error("--busy-host-outcome must be full-handoff or preserved-refusal.");
+  if (busyHostOutcome !== "full-handoff" && busyHostOutcome !== "pre-mutation-reap-required") {
+    throw new Error("--busy-host-outcome must be full-handoff or pre-mutation-reap-required.");
   }
-  if (scenarios === "no-host" && busyHostOutcome === "preserved-refusal") {
-    throw new Error("--busy-host-outcome preserved-refusal requires --scenarios full.");
+  if (scenarios === "no-host" && busyHostOutcome === "pre-mutation-reap-required") {
+    throw new Error("--busy-host-outcome pre-mutation-reap-required requires --scenarios full.");
+  }
+  const incumbentContract = values.get("--incumbent-contract") ?? "v4";
+  if (incumbentContract !== "v4" && incumbentContract !== "legacy-compatible") {
+    throw new Error("--incumbent-contract must be v4 or legacy-compatible.");
+  }
+  if (
+    incumbentContract === "legacy-compatible" &&
+    (scenarios !== "no-host" || busyHostOutcome !== "full-handoff")
+  ) {
+    throw new Error(
+      "--incumbent-contract legacy-compatible requires --scenarios no-host and full-handoff.",
+    );
   }
   return {
     incumbentBinary: resolve(incumbentBinary),
@@ -1748,12 +1985,13 @@ function parseArgs(argv) {
     target,
     scenarios,
     busyHostOutcome,
+    incumbentContract,
     keepTemp,
   };
 }
 
 function updateSmokeUsage() {
-  return "Usage: run-update-smoke.mjs --incumbent-binary <path> --incumbent-version <version> (--target-source-version <version> | --target-release-dir <path> --target-tag <tag> --target-build-identity <64-hex> | --public-target-tag <tag> --target-build-identity <64-hex>) [--scenarios full|no-host] [--busy-host-outcome full-handoff|preserved-refusal] [--keep-temp]";
+  return "Usage: run-update-smoke.mjs --incumbent-binary <path> --incumbent-version <version> (--target-source-version <version> | --target-release-dir <path> --target-tag <tag> --target-build-identity <64-hex> | --public-target-tag <tag> --target-build-identity <64-hex>) [--scenarios full|no-host] [--busy-host-outcome full-handoff|pre-mutation-reap-required] [--incumbent-contract v4|legacy-compatible] [--keep-temp]";
 }
 
 function assertBuildIdentity(value, label) {

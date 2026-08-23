@@ -196,6 +196,27 @@ describe("observer protocol server", () => {
     }
   });
 
+  it("keeps waiting while an unreachable socket still has a verified live holder", async () => {
+    const lifecycle = createObserverLifecycleClient(
+      { timeoutMs: 100 },
+      {
+        probeSocket: async () => ({
+          status: "inaccessible",
+          reason: "live-holder",
+          error: {
+            tag: "ObserverSocketError",
+            code: "OBSERVER_SOCKET_INACCESSIBLE",
+            message: "The Observer socket is still held during shutdown.",
+          },
+        }),
+      },
+    );
+
+    await expect(
+      lifecycle.socketListening("/tmp/station-observer.sock", { timeoutMs: 100 }),
+    ).resolves.toBe(true);
+  });
+
   it("preserves a verified incumbent when successor hook preparation fails", async () => {
     const { dir, socketPath } = await createTempSocketPath();
     const fixture = createObserverFixture(socketPath);
@@ -227,6 +248,7 @@ describe("observer protocol server", () => {
               pid,
               argv: [process.execPath, "__observer", "--socket", socketPath],
               executablePath: process.execPath,
+              executableProvenance: "exact",
               startToken: incumbentIdentity.osStartTime,
               processToken: incumbentIdentity.processToken,
               buildVersion: incumbentIdentity.version,
@@ -346,6 +368,7 @@ describe("observer protocol server", () => {
               pid,
               argv: [process.execPath, "__observer", "--socket", socketPath],
               executablePath: process.execPath,
+              executableProvenance: "exact",
               startToken: incumbentIdentity.osStartTime,
               processToken: incumbentIdentity.processToken,
               buildVersion: incumbentIdentity.version,
@@ -601,6 +624,7 @@ describe("observer protocol server", () => {
       pid: process.pid,
       argv: [process.execPath, "__observer", "--socket", socketPath],
       executablePath: process.execPath,
+      executableProvenance: "exact" as const,
       startToken: keeperIdentity.osStartTime,
       processToken,
       buildVersion: observerBuildVersion,

@@ -60,7 +60,7 @@ describe("local Observer process evidence", () => {
     const evidence = createLocalObserverProcessEvidence({
       execFile: () => wrapper,
       readProcessArgv: () => undefined,
-      processExecutableMatches: () => false,
+      processExecutableProvenance: () => "mismatch",
     });
 
     expect(() => evidence.listObserverProcesses()).toThrow(
@@ -90,7 +90,7 @@ describe("local Observer process evidence", () => {
     const evidence = createLocalObserverProcessEvidence({
       execFile,
       readProcessArgv: () => undefined,
-      processExecutableMatches: () => true,
+      processExecutableProvenance: () => "exact",
     });
 
     try {
@@ -100,6 +100,50 @@ describe("local Observer process evidence", () => {
         expect.arrayContaining(["-p", "42"]),
       );
       expect(() => evidence.listObserverProcesses()).toThrow("ENOENT");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("retains only exact argv with installed-path replacement as distinct provenance", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "stn-process-evidence-"));
+    const executable = join(dir, "stn");
+    await writeFile(executable, "");
+    const argv = [
+      executable,
+      "__observer",
+      "--socket",
+      "/tmp/observer.sock",
+      "--state-dir",
+      "/tmp/state",
+      "--startup-timeout-ms",
+      "10000",
+      "--build-version",
+      BUILD,
+      "--process-token",
+      TOKEN,
+    ];
+    const listing = ` 42 Sat Jul  4 17:45:33 2026 ${argv.join(" ")}\n`;
+    try {
+      const replaced = createLocalObserverProcessEvidence({
+        execFile: () => listing,
+        readProcessArgv: () => argv,
+        processExecutableProvenance: () => "installed-path-replaced",
+      });
+      expect(replaced.readObserverProcess(42)).toMatchObject({
+        pid: 42,
+        argv,
+        executableProvenance: "installed-path-replaced",
+      });
+
+      const argvDrift = createLocalObserverProcessEvidence({
+        execFile: () => listing,
+        readProcessArgv: () => [...argv, "--unexpected"],
+        processExecutableProvenance: () => "installed-path-replaced",
+      });
+      expect(() => argvDrift.readObserverProcess(42)).toThrow(
+        expect.objectContaining({ code: "OBSERVER_PROCESS_EXECUTABLE_ARGV_MISMATCH" }),
+      );
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
@@ -136,7 +180,7 @@ describe("local Observer process evidence", () => {
     const base = {
       execFile: () => listing,
       readProcessArgv: () => undefined,
-      processExecutableMatches: () => true,
+      processExecutableProvenance: () => "exact",
     };
     const zero = createLocalObserverProcessEvidence({
       ...base,
@@ -201,7 +245,7 @@ describe("local Observer process evidence", () => {
     const evidence = createLocalObserverProcessEvidence({
       execFile: () => (reads++ < 2 ? listing : ""),
       readProcessArgv: () => undefined,
-      processExecutableMatches: () => true,
+      processExecutableProvenance: () => "exact",
       execFileStatus: () => ({
         status: 0,
         stdout: "p42\0\nfcwd\0tDIR\0\n",

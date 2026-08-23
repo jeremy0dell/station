@@ -87,6 +87,43 @@ describe("UpdateReapRecoveryPreflightSchema", () => {
     expect(updateReapEvidenceIsComplete(preflight)).toBe(true);
   });
 
+  it("strictly admits restartable installed-executable drift without treating it as complete", () => {
+    const restartable = {
+      ...preflight,
+      observer: {
+        status: "unknown" as const,
+        reason: "restartable-executable-drift" as const,
+        buildVersion: `1.0.0+station.${"a".repeat(64)}`,
+        error: {
+          tag: "UpdatePreflightError",
+          code: "UPDATE_PREFLIGHT_OBSERVER_EXECUTABLE_DRIFT_RESTARTABLE",
+          message: "The incumbent is pinned for explicit restart.",
+        },
+      },
+      host: { status: "absent" as const },
+      terminalDispositions: [],
+      evidenceComplete: false,
+    };
+
+    expect(UpdateReapRecoveryPreflightSchema.parse(restartable)).toEqual(restartable);
+    expect(updateReapEvidenceIsComplete(restartable)).toBe(false);
+    expect(
+      UpdateReapRecoveryPreflightSchema.safeParse({
+        ...restartable,
+        observer: { ...restartable.observer, buildVersion: undefined },
+      }).success,
+    ).toBe(false);
+    expect(
+      UpdateReapRecoveryPreflightSchema.safeParse({
+        ...restartable,
+        observer: {
+          ...restartable.observer,
+          reason: "identity-mismatch",
+        },
+      }).success,
+    ).toBe(false);
+  });
+
   it("rejects action authorization, raw evidence, and inconsistent completeness", () => {
     expect(
       UpdateReapRecoveryPreflightSchema.safeParse({
@@ -129,6 +166,43 @@ describe("UpdateReapRecoveryPreflightSchema", () => {
         terminalDispositions: [
           { ...preflight.terminalDispositions[0], sessionId: "different-session" },
         ],
+      }).success,
+    ).toBe(false);
+    expect(
+      UpdateReapRecoveryPreflightSchema.safeParse({
+        ...preflight,
+        terminalDispositions: [],
+        evidenceComplete: false,
+      }).success,
+    ).toBe(false);
+    expect(
+      UpdateReapRecoveryPreflightSchema.safeParse({
+        ...preflight,
+        host: {
+          ...preflight.host,
+          terminals: [preflight.host.terminals[0], preflight.host.terminals[0]],
+        },
+        terminalDispositions: [
+          preflight.terminalDispositions[0],
+          preflight.terminalDispositions[0],
+        ],
+        evidenceComplete: false,
+      }).success,
+    ).toBe(false);
+    expect(
+      UpdateReapRecoveryPreflightSchema.safeParse({
+        ...preflight,
+        terminalDispositions: [
+          { ...preflight.terminalDispositions[0], ptyInstanceId: "different-instance" },
+        ],
+        evidenceComplete: false,
+      }).success,
+    ).toBe(false);
+    expect(
+      UpdateReapRecoveryPreflightSchema.safeParse({
+        ...preflight,
+        terminalDispositions: [{ ...preflight.terminalDispositions[0], handoff: "preservable" }],
+        evidenceComplete: false,
       }).success,
     ).toBe(false);
   });

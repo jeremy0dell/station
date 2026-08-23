@@ -1,7 +1,15 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
-import type { HostHandoffFidelity, PtyHandoffManifest, SafeError } from "@station/contracts";
+import {
+  compareCodeUnitStrings,
+  comparePtyLifetimeIdentities,
+  type HostHandoffFidelity,
+  type PtyHandoffManifest,
+  type PtyHandoffReceipt,
+  PtyHandoffReceiptSchema,
+  type SafeError,
+} from "@station/contracts";
 import {
   assertHostReusable,
   classifyHostCompatibility,
@@ -25,6 +33,7 @@ export type StationHostEnsuredBy = "reuse" | "start" | "idle-replace" | "handoff
 export type StationHostHandoffAdoptReport = {
   adopted: string[];
   failed: Array<{ ptyId: string; reason: string }>;
+  receipt: PtyHandoffReceipt;
 };
 
 export type StationHostHandle =
@@ -34,7 +43,7 @@ export type StationHostHandle =
       client: StationHostClient;
       /** How this ensure call obtained a usable host. */
       ensuredBy: StationHostEnsuredBy;
-      /** Present only when ensuredBy is handoff; fail-closed (failed empty). */
+      /** Present only for handoff; its receipt names every immutable adopted PTY lifetime. */
       handoffAdopt?: StationHostHandoffAdoptReport;
     }
   | { status: "unavailable"; socketPath: string; error: SafeError };
@@ -69,6 +78,8 @@ export type EnsureStationHostOptions = {
   hostCommand: StationHostCommand;
   /** Expected opaque Station build version; defaults to this process's build. */
   expectedBuildVersion?: string;
+  /** Optional immutable content identity for exact same-version convergence admission. */
+  expectedBuildIdentity?: string;
   timeoutMs?: number;
   /**
    * Opt-in busy-host live handoff. Absent means today's visible refuse when the
@@ -96,7 +107,8 @@ type IncumbentHostDecision =
  * Preserves inaccessible Host ownership and defers definite stale reclaim to
  * the child binder while retaining compatibility-aware idle replacement and an
  * opt-in busy-host live handoff path. Pre-commit failure restores the incumbent
- * refusal; after completion commits, parked PTYs remain available to a successor.
+ * refusal; after completion commits, parked PTYs remain available to a successor. Adoption succeeds
+ * only with an exact PTY-id set and returns a canonical immutable-lifetime receipt.
  */
 export async function ensureStationHostRunning(
   options: EnsureStationHostOptions,
@@ -128,6 +140,9 @@ export async function ensureStationHostRunning(
       : await negotiateIncumbentHost({
           socketPath,
           expectedBuildVersion,
+          ...(options.expectedBuildIdentity === undefined
+            ? {}
+            : { expectedBuildIdentity: options.expectedBuildIdentity }),
           replacementConfigured: options.hostCommand[0].length > 0,
           timeoutMs: options.timeoutMs ?? defaultTimeoutMs,
           client,
@@ -182,6 +197,15 @@ export async function ensureStationHostRunning(
       async () => {
         const health = await client.health();
         assertHostReusable(health, expectedBuildVersion);
+        if (options.expectedBuildIdentity !== undefined) {
+          const inventory = await client.recoveryInventory?.();
+          if (inventory?.buildIdentity !== options.expectedBuildIdentity) {
+            throw stationHostSafeError(
+              "HOST_VERSION_INCOMPATIBLE",
+              "Station host immutable build identity does not match the requesting build.",
+            );
+          }
+        }
         return health;
       },
     );
@@ -224,6 +248,7 @@ export async function ensureStationHostRunning(
 async function negotiateIncumbentHost(input: {
   socketPath: string;
   expectedBuildVersion: string;
+  expectedBuildIdentity?: string;
   replacementConfigured: boolean;
   timeoutMs: number;
   client: StationHostClient;
@@ -245,7 +270,35 @@ async function negotiateIncumbentHost(input: {
     };
   }
 
-  const compatibility = classifyHostCompatibility(health, input.expectedBuildVersion);
+  let compatibility = classifyHostCompatibility(health, input.expectedBuildVersion);
+  if (compatibility.action === "reuse" && input.expectedBuildIdentity !== undefined) {
+    try {
+      const inventory = await input.client.recoveryInventory?.();
+      if (inventory === undefined) {
+        return {
+          outcome: "unavailable",
+          error: stationHostSafeError(
+            "HOST_VERSION_INCOMPATIBLE",
+            "Station host immutable build identity is unavailable.",
+          ),
+        };
+      }
+      if (inventory.buildIdentity !== input.expectedBuildIdentity) {
+        compatibility = {
+          action: "replace",
+          runningBuildVersion: input.expectedBuildVersion,
+        };
+      }
+    } catch (error) {
+      return {
+        outcome: "unavailable",
+        error: stationHostErrorFromUnknown(error, {
+          code: "HOST_VERSION_INCOMPATIBLE",
+          message: "Station host immutable build identity could not be verified.",
+        }),
+      };
+    }
+  }
   if (compatibility.action === "reuse") {
     return { outcome: "running" };
   }
@@ -408,8 +461,13 @@ export async function adoptHandoffManifest(
 ): Promise<{ ok: true; report: StationHostHandoffAdoptReport } | { ok: false; error: SafeError }> {
   try {
     const report = await client.adoptRegistry(manifest);
-    const expected = Object.keys(manifest);
-    if (report.failed.length > 0 || report.adopted.length !== expected.length) {
+    const expected = Object.keys(manifest).sort(compareCodeUnitStrings);
+    const adopted = [...report.adopted].sort(compareCodeUnitStrings);
+    const exactAdoptedSet =
+      adopted.length === expected.length &&
+      adopted.every((ptyId, index) => ptyId === expected[index]) &&
+      adopted.every((ptyId, index) => index === 0 || ptyId !== adopted[index - 1]);
+    if (report.failed.length > 0 || !exactAdoptedSet) {
       return {
         ok: false,
         error: stationHostSafeError(
@@ -421,7 +479,22 @@ export async function adoptHandoffManifest(
         ),
       };
     }
-    return { ok: true, report: { adopted: report.adopted, failed: report.failed } };
+    const terminals = expected
+      .map((ptyId) => {
+        const entry = manifest[ptyId];
+        if (entry === undefined) throw new Error("Validated handoff manifest entry disappeared.");
+        return {
+          terminalTargetId: entry.identity.terminalTargetId,
+          ptyId,
+          ptyInstanceId: entry.ptyInstanceId,
+        };
+      })
+      .sort(comparePtyLifetimeIdentities);
+    const receipt = PtyHandoffReceiptSchema.parse({ terminals });
+    return {
+      ok: true,
+      report: { adopted: report.adopted, failed: report.failed, receipt },
+    };
   } catch (error) {
     return {
       ok: false,

@@ -1,5 +1,6 @@
 import { readFile, realpath } from "node:fs/promises";
 import { dirname, isAbsolute, resolve, sep } from "node:path";
+import type { UpdateArtifact } from "@station/contracts";
 import {
   type ExternalCommandRunner,
   isSafeError,
@@ -65,7 +66,9 @@ export type DevCheckoutUpdateChannelDeps = {
 /**
  * ADAPTER
  *
- * Translates a clean upstream-tracking checkout into a pinned fast-forward with frozen dependency preparation, rebuild, and relinking.
+ * Translates a clean upstream-tracking checkout into a pinned fast-forward with frozen dependency
+ * preparation, rebuild, and relinking. Installed-target proof reads the local immutable revision
+ * without contacting the upstream remote.
  */
 export function createDevCheckoutUpdateChannel(
   deps: DevCheckoutUpdateChannelDeps,
@@ -116,6 +119,26 @@ export function createDevCheckoutUpdateChannel(
         branch,
         upstreamRemote,
         upstreamRef,
+      };
+    },
+    async proveInstalledTarget(target: UpdateArtifact, options = {}) {
+      const detection = await detectDevCheckout(deps, options);
+      if (
+        detection === undefined ||
+        target.revision === undefined ||
+        detection.currentVersion !== target.version ||
+        detection.currentRevision !== target.revision
+      ) {
+        return undefined;
+      }
+      return {
+        channel,
+        status: "current",
+        currentVersion: target.version,
+        currentRevision: target.revision,
+        targetVersion: target.version,
+        targetRevision: target.revision,
+        currentCli: [detection.runtimePath, detection.cliEntryPath],
       };
     },
     async apply(plan, options = {}) {

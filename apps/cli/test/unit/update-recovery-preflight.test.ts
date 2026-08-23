@@ -6,6 +6,7 @@ import type {
 } from "@station/contracts";
 import { describe, expect, it, vi } from "vitest";
 import {
+  inspectUpdateConvergencePreflight,
   renderUpdateRecoveryPreflight,
   runUpdateRecoveryPreflight,
   type UpdateRecoveryPreflightPorts,
@@ -18,7 +19,7 @@ describe("runUpdateRecoveryPreflight", () => {
       installed: { version: "1.1.0", revision: "same-build" },
       target: { version: "1.1.0", revision: "same-build" },
       ports: {
-        inspectObserver: async () => ({ status: "absent" }),
+        inspectObserver: async () => observerInspection({ status: "absent" }),
         inspectHost: async () => ({ status: "absent" }),
         hookProviderIds: ["codex"],
         readHookHealth,
@@ -66,7 +67,7 @@ describe("runUpdateRecoveryPreflight", () => {
       installed: { version: "1.0.0" },
       target: { version: "1.1.0" },
       ports: {
-        inspectObserver: async () => observer,
+        inspectObserver: async () => observerInspection(observer),
         inspectHost: async () => host,
         hookProviderIds: ["claude"],
         readHookHealth,
@@ -150,26 +151,155 @@ describe("runUpdateRecoveryPreflight", () => {
     expect(serialized).not.toContain("providerData");
   });
 
+  it("constructs one coherent aggregate while projecting only public #665 evidence", async () => {
+    const observer = observerEvidence(
+      assessment([sessionAssessment("session-a", "recoverable", [])]),
+    );
+    const aggregate = await inspectUpdateConvergencePreflight({
+      installed: { version: "1.0.0" },
+      target: { version: "1.1.0" },
+      ports: aggregatePorts(observerInspection(observer)),
+    });
+
+    expect(aggregate.privateEvidence).toMatchObject({
+      observer: { buildSelector: "1.0.0" },
+      selectedRecoveryHandles: [{ sessionId: "session-a", selectedHandleId: "private-session-a" }],
+    });
+    const publicProjection = await runUpdateRecoveryPreflight({
+      installed: { version: "1.0.0" },
+      target: { version: "1.1.0" },
+      ports: aggregatePorts(observerInspection(observer)),
+    });
+    expect(JSON.stringify(publicProjection)).not.toContain("private-session-a");
+    expect(JSON.stringify(publicProjection)).not.toContain("processToken");
+  });
+
+  it.each([
+    {
+      name: "mismatched Observer build",
+      expected: "Public and private Observer build selectors must match exactly.",
+      inspection: () => {
+        const coherent = observerInspection(observerEvidence(assessment([])));
+        return {
+          ...coherent,
+          privateEvidence: {
+            ...coherent.privateEvidence,
+            observer: { ...coherent.privateEvidence.observer, buildSelector: "other-build" },
+          },
+        };
+      },
+    },
+    {
+      name: "missing Observer tuple",
+      expected: "Exact Observer build evidence requires its private ownership tuple.",
+      inspection: () => ({
+        evidence: observerEvidence(assessment([])),
+        privateEvidence: { selectedRecoveryHandles: [] },
+      }),
+    },
+    {
+      name: "missing selected handle",
+      expected: "Every public selected handle requires one exact private session correspondence.",
+      inspection: () => {
+        const coherent = observerInspection(
+          observerEvidence(assessment([sessionAssessment("session-a", "recoverable", [])])),
+        );
+        return {
+          ...coherent,
+          privateEvidence: { ...coherent.privateEvidence, selectedRecoveryHandles: [] },
+        };
+      },
+    },
+    {
+      name: "mismatched selected-handle session",
+      expected: "Every public selected handle requires one exact private session correspondence.",
+      inspection: () => {
+        const coherent = observerInspection(
+          observerEvidence(assessment([sessionAssessment("session-a", "recoverable", [])])),
+        );
+        return {
+          ...coherent,
+          privateEvidence: {
+            ...coherent.privateEvidence,
+            selectedRecoveryHandles: coherent.privateEvidence.selectedRecoveryHandles.map(
+              (handle) => ({ ...handle, sessionId: "session-other" }),
+            ),
+          },
+        };
+      },
+    },
+    {
+      name: "duplicate selected-handle session",
+      expected: "Private recovery handles must have unique canonically ordered session IDs.",
+      inspection: () => {
+        const coherent = observerInspection(
+          observerEvidence(assessment([sessionAssessment("session-a", "recoverable", [])])),
+        );
+        const handle = coherent.privateEvidence.selectedRecoveryHandles[0];
+        if (handle === undefined) throw new Error("missing coherent private handle");
+        return {
+          ...coherent,
+          privateEvidence: {
+            ...coherent.privateEvidence,
+            selectedRecoveryHandles: [handle, { ...handle, selectedHandleId: "second-handle" }],
+          },
+        };
+      },
+    },
+    {
+      name: "duplicate opaque handle",
+      expected: "One opaque Station recovery handle cannot correspond to multiple sessions.",
+      inspection: () => {
+        const coherent = observerInspection(
+          observerEvidence(
+            assessment([
+              sessionAssessment("session-a", "recoverable", []),
+              sessionAssessment("session-b", "recoverable", []),
+            ]),
+          ),
+        );
+        return {
+          ...coherent,
+          privateEvidence: {
+            ...coherent.privateEvidence,
+            selectedRecoveryHandles: coherent.privateEvidence.selectedRecoveryHandles.map(
+              (handle) => ({ ...handle, selectedHandleId: "duplicate-private-handle" }),
+            ),
+          },
+        };
+      },
+    },
+  ])("rejects a $name aggregate before planning", async ({ inspection, expected }) => {
+    await expect(
+      inspectUpdateConvergencePreflight({
+        installed: { version: "1.0.0" },
+        target: { version: "1.1.0" },
+        ports: aggregatePorts(inspection()),
+      }),
+    ).rejects.toThrow(expected);
+  });
+
   it("keeps partial runtime evidence and marks terminal consequences unknown", async () => {
     const result = await runUpdateRecoveryPreflight({
       installed: { version: "1.0.0" },
       target: { version: "1.1.0" },
       ports: {
-        inspectObserver: async () => ({
-          status: "exact",
-          buildVersion: "1.0.0",
-          relation: "different",
-          health: "degraded",
-          recovery: {
-            status: "unknown",
-            reason: "api-unavailable",
-            error: {
-              tag: "UpdatePreflightError",
-              code: "UPDATE_PREFLIGHT_RECOVERY_API_UNAVAILABLE",
-              message: "Observer recovery assessment is unavailable.",
+        inspectObserver: async () =>
+          observerInspection({
+            status: "exact",
+            buildVersion: "1.0.0",
+            relation: "different",
+            health: "degraded",
+            recovery: {
+              status: "unknown",
+              reason: "api-unavailable",
+              error: {
+                tag: "UpdatePreflightError",
+                code: "UPDATE_PREFLIGHT_RECOVERY_API_UNAVAILABLE",
+                message: "Observer recovery assessment is unavailable.",
+              },
             },
-          },
-        }),
+          }),
         inspectHost: async () => hostEvidence([terminal("terminal-a", "session-a", "unknown")]),
         hookProviderIds: [],
         readHookHealth: async () => ({ provider: "codex", status: "healthy" }),
@@ -190,12 +320,44 @@ describe("runUpdateRecoveryPreflight", () => {
     });
   });
 
+  it("keeps restartable executable drift distinct from complete recovery evidence", async () => {
+    const result = await runUpdateRecoveryPreflight({
+      installed: { version: "1.1.0" },
+      target: { version: "1.1.0" },
+      ports: {
+        inspectObserver: async () =>
+          observerInspection({
+            status: "unknown",
+            reason: "restartable-executable-drift",
+            buildVersion: "1.0.0+station.incumbent",
+            error: {
+              tag: "UpdatePreflightError",
+              code: "UPDATE_PREFLIGHT_OBSERVER_EXECUTABLE_DRIFT_RESTARTABLE",
+              message: "The incumbent is pinned for explicit restart.",
+            },
+          }),
+        inspectHost: async () => ({ status: "absent" }),
+        hookProviderIds: [],
+        readHookHealth: async () => ({ provider: "codex", status: "healthy" }),
+      },
+    });
+
+    expect(result).toMatchObject({
+      observer: { status: "unknown", reason: "restartable-executable-drift" },
+      terminalDispositions: [],
+      evidenceComplete: false,
+    });
+    expect(renderUpdateRecoveryPreflight(result)).toContain(
+      "observer: unknown (restartable-executable-drift)",
+    );
+  });
+
   it("fails closed on hook provider substitution", async () => {
     const result = await runUpdateRecoveryPreflight({
       installed: { version: "1.0.0" },
       target: { version: "1.1.0" },
       ports: {
-        inspectObserver: async () => ({ status: "absent" }),
+        inspectObserver: async () => observerInspection({ status: "absent" }),
         inspectHost: async () => ({ status: "absent" }),
         hookProviderIds: ["claude"],
         readHookHealth: async () => ({ provider: "codex", status: "healthy" }),
@@ -227,7 +389,7 @@ describe("runUpdateRecoveryPreflight", () => {
       installed: { version: "1.0.0" },
       target: { version: "1.1.0" },
       ports: {
-        inspectObserver: async () => observer,
+        inspectObserver: async () => observerInspection(observer),
         inspectHost: async () => hostEvidence([auxiliary, mismatched]),
         hookProviderIds: ["codex"],
         readHookHealth: async () => ({ provider: "codex", status: "healthy" }),
@@ -255,7 +417,7 @@ describe("runUpdateRecoveryPreflight", () => {
       installed: { version: "1.0.0", revision: "revision\n\u001b]8;;bad" },
       target: { version: "1.1.0" },
       ports: {
-        inspectObserver: async () => ({ status: "absent" }),
+        inspectObserver: async () => observerInspection({ status: "absent" }),
         inspectHost: async () =>
           hostEvidence([
             terminal("a", "session-a", "bridge-releasable"),
@@ -287,6 +449,49 @@ function observerEvidence(value: UpdateReapRecoveryAssessment): UpdateReapObserv
     relation: "different",
     health: "healthy",
     recovery: { status: "assessed", assessment: value },
+  };
+}
+
+function observerInspection(evidence: UpdateReapObserverEvidence) {
+  const exactBuild =
+    evidence.status === "exact" ||
+    (evidence.status === "unknown" && evidence.reason === "restartable-executable-drift")
+      ? evidence.buildVersion
+      : undefined;
+  const selectedRecoveryHandles =
+    evidence.status === "exact" && evidence.recovery.status === "assessed"
+      ? evidence.recovery.assessment.sessions.flatMap((session) =>
+          session.handleResolution.kind === "selected"
+            ? [{ sessionId: session.sessionId, selectedHandleId: `private-${session.sessionId}` }]
+            : [],
+        )
+      : [];
+  return {
+    evidence,
+    privateEvidence: {
+      ...(exactBuild === undefined
+        ? {}
+        : {
+            observer: {
+              pid: 4242,
+              osStartTime: "Fri Aug 21 12:00:00 2026",
+              processToken: "123e4567-e89b-42d3-a456-426614174000",
+              buildSelector: exactBuild,
+            },
+          }),
+      selectedRecoveryHandles,
+    },
+  };
+}
+
+function aggregatePorts(
+  inspection: Awaited<ReturnType<UpdateRecoveryPreflightPorts["inspectObserver"]>>,
+): UpdateRecoveryPreflightPorts {
+  return {
+    inspectObserver: async () => inspection,
+    inspectHost: async () => ({ status: "absent" }),
+    hookProviderIds: [],
+    readHookHealth: async () => ({ provider: "codex", status: "healthy" }),
   };
 }
 

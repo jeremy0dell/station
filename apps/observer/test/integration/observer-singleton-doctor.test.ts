@@ -71,6 +71,7 @@ describe("observer singleton Doctor check", () => {
                 pid: 200,
                 argv: [],
                 executablePath: "/opt/station/stn",
+                executableProvenance: "exact",
                 startToken: "candidate-start",
                 socketPath: join(stateDir, "observer.sock"),
               },

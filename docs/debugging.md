@@ -268,30 +268,56 @@ Auto-starting `snapshot`, `doctor`, `command`, `reconcile`, `observe`, and
 `debug bundle` boundaries preserve failures as the strict `{ error, cause?,
 startupEvidence? }` lifecycle envelope instead of flattening them into prose.
 Setup activation retains the same fields in its failed operation/session
-outcome. Update report schema version 2 adds the provider-neutral
-`hookReconciliation` result and `hook-reconciliation` step. Schema version 3
-adds the optional `recoveryPreflight` assessment; compatible readers retain
-explicit version 1 and version 2 parsers instead of accepting version backports.
-Use `stn update --dry-run --reap --json` to collect the redacted aggregate
-Observer, Host, terminal, retained-session, resume-capability, handle-count,
-and hook-health evidence without changing runtime state. The public projection
-omits recovery inventory, provider-native state, and executable handle IDs.
-Unknown or drifting identity remains typed in the report, including an exact
-live Observer whose socket is missing and a legacy Host whose same-version
-revision cannot be proved. Non-resumable dispositions are explicit. The
-assessment contains no executable action or digest. A same-version
-dry-run reports planned hook and Observer convergence plus enabled Host
-preservation evaluation, but runs no hook, Observer, or Host command. A
-same-version apply resumes an interrupted crossover through the
-current launcher: hook reconciliation, idempotent `observer start`, and any
-preflighted Host handoff. An installed successor uses that successor launcher
-for hook reconciliation before Observer restart. Hook failure prevents runtime
-crossover. Recovery commands are the remaining ordered commands pinned to that
-same launcher; `run-doctor` adds provider doctor before retry, and ownership
-conflict exposes the explicit `hooks install <provider> --yes --takeover` choice
-without granting automatic takeover authority. `stn update --json` keeps
-`UPDATE_RUNTIME_CROSSOVER_FAILED` as its outer `error` and publishes the
-strictly parsed successor lifecycle `cause` and `startupEvidence` separately.
+outcome. Update report schema version 4 separates artifact application from
+live runtime convergence while the compatible parser retains strict version 1,
+2, and 3 readers. Every resolved target is inspected, including same-version
+and same-revision updates. `initial` carries the redacted #665 aggregate and its
+typed plan; `result` distinguishes preview, package-manager deferral,
+non-mutating stop, current-CLI execution, successor-CLI execution, and failure.
+Successful actions retain an ordered audit and a fresh post-action aggregate.
+Only a verified converged no-op plan can produce `current` or `updated`.
+Observer start or restart output is parsed through its strict command-result
+schema and checked against the process exit status. A typed lifecycle failure
+retains its sanitized `cause` (falling back to its lifecycle `error`) and bounded,
+redacted `startupEvidence` as separate report and text fields; an incumbent
+report preserves those fields when the failure came from its successor CLI.
+
+Use `stn update --dry-run --reap --json` to inspect Observer, Host, hooks,
+terminals, recovery consequences, and the seven ordered convergence phases
+without mutation. The public convergence plan includes the digest but omits the
+Observer process token, selected Station recovery-handle ID, provider-native
+state, private aggregate paths, and raw provider payloads. Those private facts
+can change the digest without appearing in JSON or text. The documented
+lifecycle-failure envelope remains the sole path-bearing exception through its
+local boot-log location; it contains no raw stack or command output, and its
+optional tail is bounded and redacted before serialization. The SHA-256 digest is a stale-plan
+detector, not authority and not a reversible encoding of private evidence.
+Unknown evidence blocks only decisions that consume it: an absent Observer and
+Host may still start and reconcile, and bridge-preserving handoff does not need
+reap-only recovery evidence. One narrow `restartable-executable-drift` Observer
+state is also actionable: the process verifier must first report
+`installed-path-replaced`, proving exact parsed argv, health, pidfile, OS start,
+process token, build selector, and socket while only the live executable image
+differs from the current installed-path identity. Missing or ambiguous process
+records, generic executable or argv mismatch, lower-build candidates, and every
+other identity mismatch remain blocked; this state never authorizes automatic
+signals or destructive reaping. The CLI accepts this and selected recovery
+evidence only through one validated public/private aggregate: Observer build
+selectors and every selected session's unique opaque Station handle must
+correspond exactly before the public projection is usable. A destructive follow-up is reported as
+`reap-required` only when terminal and recovery consequences are complete.
+
+Issue #641 may consume the newest fresh, no-mutation `reap-required` plan for
+the explicitly selected target, including a plan evaluated by the incumbent CLI
+before artifact application. It must rerun inspection against unchanged state,
+compare the digest, independently authorize exact Station-owned process groups,
+journal, reap, apply the artifact, and continue successor-owned convergence.
+The update convergence inspector does not collect process-group targets and its
+digest cannot authorize a signal. Changed public terminal inventory changes the
+#640 digest; changed exact process-group evidence is independently a #641
+authorization failure. An explicit `--no-handoff` can instead return
+`intentionally-incomplete` without applying or mutating anything and is not
+eligible for destructive execution.
 
 `OBSERVER_EXACT_BUILD_ACTIVATION_FAILED` means an explicit configured-runtime
 activation could not finish with the caller's exact immutable selector. The
@@ -480,9 +506,9 @@ When Station "does nothing" or panes read "exited", inspect the `cli`, `tui`, an
   that is impossible, inspect candidates independently with
   `ps -t "$(tty | sed 's#^/dev/##')" -o pid=,command=` and only then send
   `kill -TERM <independently-verified-station-pid>` yourself.
-- The host the UI dials must match both its host protocol and Station display build version. `host.start` in `station-host.jsonl` records both versions. `HOST_UPGRADE_BLOCKED` means a different display build owns live PTYs and handoff was not opted in; `HOST_VERSION_INCOMPATIBLE` means the running host is legacy, uses another display build, or speaks another protocol. `HOST_HANDOFF_INVALID_STATE` / `HOST_HANDOFF_MANIFEST_INVALID` diagnose negotiated handoff misuse or a bad manifest. `HOST_CLIENT_IDENTITY_MISMATCH` instead means one connection omitted or changed its UI correlation identity. Compatibility failures preserve the Host; correlation failures reject only the malformed client request. These are separate from Observer immutable-selector admission.
+- The host the UI dials must match its host protocol and normal UI admission still uses the Station display build version. Update convergence additionally compares the immutable build identity reported by current Hosts; absent or unreadable identity is unavailable evidence and fails closed for update-owned replacement. `host.start` in `station-host.jsonl` records the display and protocol versions. `HOST_UPGRADE_BLOCKED` means a different build owns live PTYs and handoff was not opted in; `HOST_VERSION_INCOMPATIBLE` means the running host is legacy, uses another display build, or speaks another protocol. `HOST_HANDOFF_INVALID_STATE` / `HOST_HANDOFF_MANIFEST_INVALID` diagnose negotiated handoff misuse or a bad manifest. `HOST_CLIENT_IDENTITY_MISMATCH` instead means one connection omitted or changed its UI correlation identity. Compatibility failures preserve the Host; correlation failures reject only the malformed client request. These are separate from Observer immutable-selector admission.
 - The host socket defaults to `<state_dir>/run/station-host.sock` (beside `observer.sock`); override with `STATION_HOST_SOCKET_PATH`. Inspect with `pnpm stn host status` or `bun run host:list` in `station/`. Opt into live ownership transfer with `pnpm stn host handoff [--dry-run] [--fidelity processes|screen]` (default busy-host behavior remains refuse).
-- Host reuse/replace keys on Host protocol major equality plus exact display `buildVersion` string equality (`stationBuildInfo().version`). It does **not** key on `compiled` vs source, and does **not** use Observer's content `buildIdentity`. Same display version ⇒ reuse (handoff refused as unnecessary). Different display versions + matching protocol ⇒ replace (handoff only when opted in). Protocol major skew ⇒ refuse (never handoffs). The successor process form follows whoever requests the handoff (`bun hostMain.ts` from source CLI, `<stn> __station-host` from a binary).
+- Normal Host admission keys on Host protocol major equality plus exact display `buildVersion` string equality (`stationBuildInfo().version`). Update convergence supplies the expected immutable `buildIdentity` as an additional replace/reuse key so a same-version different revision is not treated as current. Different selected identity + matching protocol ⇒ replace (handoff only when opted in); missing identity fails closed; protocol major skew ⇒ refuse. The successor process form follows whoever requests the handoff (`bun hostMain.ts` from source CLI, `<stn> __station-host` from a binary).
 - `pnpm station:devbox` always launches a Bun source host (`STATION_HOST_ENTRY=hostMain.ts`) under checkout-local `.dev-state`. Do not point a binary `stn host handoff` at that socket unless you intend to flip packaging; afterward run `pnpm station:devbox stop` then `start`, or another deliberate handoff, before treating the lane as normal. `station:devbox status` warns when the listening host's build does not match this checkout's expected source CLI build.
 - Orphaned PTY bridges park under `<state_dir>/run/pty-bridges/` when their host dies without an intentional stop, or when `beginHandoff` releases owner pipes without SIGTERM: `<ptyId>.sock` is the live control socket, `<ptyId>.park.json` the redaction-safe park state (ids, pid, geometry, timestamps — never PTY data), `<ptyId>.scrollback.json` a persisted replay export when one was written, and optional `<ptyId>.screen.json` a best-effort semantic snapshot for fidelity `screen`. A live socket answering `exit-status` means the agent is still parked and adoptable; a clean host startup reaps the dead ones automatically (`host.orphan-reap` in `station-host.jsonl` reports the counts). Unadopted parks self-reap at the TTL (`STATION_PTY_ORPHAN_TTL_MS`, default 24h). If `<ptyId>.park.json` exists without `<ptyId>.sock`, check for `<ptyId>.park.json.listen-error` — on macOS an overlong unix socket path (`sun_path` ≈ 104 bytes) fails listen with `EINVAL`, and `beginHandoff` refuses rather than returning an unadoptable manifest.
 - Never kill a version-mismatched host or remove its socket until a matching build proves that its PTY list is empty. Reopen with the build named by the error to finish or explicitly close live terminals, then retry; current-protocol idle hosts replace themselves automatically. A legacy or different-protocol host requires an explicit stop only after its sessions are accounted for.

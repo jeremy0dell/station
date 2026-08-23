@@ -6,6 +6,7 @@ export type ParsedHostArgs = {
   action: HostCommandAction;
   dryRun: boolean;
   fidelity: HostHandoffFidelity;
+  output: "text" | "json";
 };
 
 export function parseHostArgs(args: readonly string[]): ParsedHostArgs {
@@ -21,6 +22,7 @@ export function parseHostArgs(args: readonly string[]): ParsedHostArgs {
 
   let dryRun = false;
   let fidelity: HostHandoffFidelity = "processes";
+  let output: "text" | "json" = "text";
   while (tokens.length > 0) {
     const token = tokens.shift();
     if (token === undefined) {
@@ -28,6 +30,10 @@ export function parseHostArgs(args: readonly string[]): ParsedHostArgs {
     }
     if (actionToken === "status") {
       throw new Error(`stn host status does not accept ${token}`);
+    }
+    if (token === "--json") {
+      output = "json";
+      continue;
     }
     if (token === "--dry-run") {
       dryRun = true;
@@ -45,12 +51,12 @@ export function parseHostArgs(args: readonly string[]): ParsedHostArgs {
     throw new Error(`Unknown host flag: ${token}`);
   }
 
-  return { action: actionToken, dryRun, fidelity };
+  return { action: actionToken, dryRun, fidelity, output };
 }
 
 function parseFidelity(value: string | undefined): HostHandoffFidelity {
   if (value !== "processes" && value !== "screen") {
-    throw new Error("Usage: stn host handoff [--fidelity processes|screen]");
+    throw new Error("Usage: stn host handoff [--fidelity processes|screen] [--json]");
   }
   return value;
 }

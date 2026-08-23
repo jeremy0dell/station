@@ -1,1174 +1,1713 @@
-import { type StationConfig, stationHostSocketPath } from "@station/config";
-import { type ObserverLifecycleFailure, STATION_SCHEMA_VERSION } from "@station/contracts";
-import { HOST_PROTOCOL_VERSION } from "@station/host";
-import { listenUnixSocket } from "@station/protocol";
+import type { StationConfig } from "@station/config";
+import type { SafeError, UpdateReapRecoveryPreflight } from "@station/contracts";
+import {
+  STATION_SCHEMA_VERSION,
+  UpdateCommandReportSchema,
+  updateReapEvidenceIsComplete,
+} from "@station/contracts";
 import type { ExternalCommandInput, ExternalCommandResult } from "@station/runtime";
 import { describe, expect, it, vi } from "vitest";
-import { createTempState } from "../../../../tests/support/temp-projects";
+import { updateCommandResult } from "../../src/commands/update/report.js";
 import { runUpdateCommand } from "../../src/commands/update.js";
-import { selectUpdateChannel, type UpdateChannelProbe } from "../../src/update/channelDetection.js";
-import {
-  runUpdateRecoveryPreflight,
-  type UpdateRecoveryPreflightPorts,
-} from "../../src/update/recoveryPreflight.js";
-import type {
-  UpdateApplyReportBase,
-  UpdateChannelId,
-  UpdateCommandArgv,
-  UpdatePlanBase,
-} from "../../src/update/updateChannel.js";
+import type { UpdateChannelProbe } from "../../src/update/channelDetection.js";
+import type { UpdateConvergencePrivateEvidence } from "../../src/update/recoveryPreflight.js";
 
 const config = {
   observer: { socketPath: `/tmp/station-update-command-${process.pid}/observer.sock` },
 } as StationConfig;
-const testBuildInfo = () => ({
-  compiled: false,
-  version: "1.0.0",
-  buildIdentity: "a".repeat(64),
-});
-const higherObserverBuildVersion = `2.0.0+station.${"b".repeat(64)}`;
+const identityA = "a".repeat(64);
+const identityB = "b".repeat(64);
 
-describe("stn update command", () => {
-  it("rejects non-dry-run --reap before update detection or mutation", async () => {
+describe("stn update convergence", () => {
+  it("requires an explicit selected target for the internal successor evaluator", async () => {
     const detectAndPlan = vi.fn();
-
     await expect(
-      runUpdateCommand(["--reap"], commandOptions(), {
+      runUpdateCommand(["--internal-successor-evaluator"], options(), {
         probes: [{ channel: "installer-binary", detectAndPlan }],
+        convergenceInspection: inspection(preflight("1.0.0", "1.0.0")),
+      }),
+    ).rejects.toThrow("Usage: stn update");
+    expect(detectAndPlan).not.toHaveBeenCalled();
+  });
+
+  it("rejects destructive reap execution before target detection", async () => {
+    const detectAndPlan = vi.fn();
+    await expect(
+      runUpdateCommand(["--reap"], options(), {
+        probes: [{ channel: "installer-binary", detectAndPlan }],
+        convergenceInspection: inspection(preflight("1.0.0", "1.0.0")),
       }),
     ).rejects.toThrow("Use --dry-run --reap");
     expect(detectAndPlan).not.toHaveBeenCalled();
   });
 
-  it("emits report v3 with aggregate recovery facts without applying or crossing runtimes", async () => {
-    const fixture = probeFixture("installer-binary");
-    const recovery = recoveryPreflightFixture();
-    const commandRunner = vi.fn();
-
-    const result = await runUpdateCommand(
-      ["--dry-run", "--reap", "--no-handoff", "--json"],
-      commandOptions(),
-      {
-        probes: [fixture.probe],
-        commandRunner,
-        buildInfo: testBuildInfo,
-        recoveryPreflight: recovery.run,
+  it("emits an explicit non-executed preview for a fresh selected target", async () => {
+    const fixture = probe("update-available");
+    const runner = vi.fn();
+    const result = await runUpdateCommand(["--dry-run", "--json"], options(), {
+      probes: [fixture.probe],
+      buildInfo: build(identityA, "1.0.0"),
+      convergenceInspection: inspection(preflight("1.0.0", "2.0.0")),
+      commandRunner: runner,
+    });
+    expect(result).toMatchObject({
+      code: 0,
+      output: {
+        schemaVersion: 4,
+        status: "planned",
+        artifactApplication: { status: "preview" },
+        initial: {
+          evaluator: "incumbent-cli",
+          plan: {
+            selectedTarget: {
+              artifact: { version: "2.0.0" },
+              buildIdentity: { status: "not-yet-provable" },
+            },
+          },
+        },
+        result: { kind: "preview" },
       },
+    });
+    const output = reportFrom(result);
+    expect(output.artifactApplication).not.toHaveProperty("managerCommand");
+    expect(output.result).not.toHaveProperty("actionAudits");
+    if (output.result.kind !== "preview") throw new Error("expected preview result");
+    expect(output.result.phases).toHaveLength(7);
+    expect(output.result.phases.every((phase) => phase.status === "not-executed")).toBe(true);
+    expect(textFor(result)).not.toContain("verified plan:");
+    expect(fixture.apply).not.toHaveBeenCalled();
+    expect(runner).not.toHaveBeenCalled();
+  });
+
+  it("rejects an incoherent public/private inspection before planning or mutation", async () => {
+    const fixture = probe("current");
+    const evidence = preflight("1.0.0", "1.0.0", {
+      observer: matchingObserver(identityA),
+    });
+    const coherentPrivate = privateEvidence(evidence);
+    const observer = coherentPrivate.observer;
+    if (observer === undefined) throw new Error("missing coherent Observer fixture");
+
+    await expect(
+      runUpdateCommand(["--json"], options(), {
+        probes: [fixture.probe],
+        buildInfo: build(identityA, "1.0.0"),
+        convergenceInspection: async () => ({
+          preflight: evidence,
+          privateEvidence: {
+            ...coherentPrivate,
+            observer: { ...observer, buildSelector: "different-build" },
+          },
+        }),
+      }),
+    ).rejects.toThrow("Public and private Observer build selectors must match exactly.");
+    expect(fixture.apply).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    {
+      channel: "homebrew" as const,
+      command: [
+        "/opt/homebrew/bin/brew",
+        "upgrade",
+        "--formula",
+        "jeremy0dell/station/station",
+      ] as const,
+      rendered:
+        "manager command: /opt/homebrew/bin/brew upgrade --formula jeremy0dell/station/station",
+    },
+    {
+      channel: "npm-global" as const,
+      command: ["/usr/local/bin/npm", "install", "--global", "@station/cli@2.0.0"] as const,
+      rendered: "manager command: /usr/local/bin/npm install --global @station/cli@2.0.0",
+    },
+    {
+      channel: "mise" as const,
+      command: ["/opt/mise tools/bin/mise", "upgrade", "station"] as const,
+      rendered: "manager command: '/opt/mise tools/bin/mise' upgrade station",
+    },
+  ])("retains and quotes the $channel native command for defer and preview", async (testCase) => {
+    for (const args of [["--json"], ["--dry-run", "--json"]]) {
+      const fixture = probe(
+        "update-available",
+        "1.0.0",
+        "2.0.0",
+        testCase.command,
+        testCase.channel,
+      );
+      const runner = vi.fn();
+      const result = await runUpdateCommand(args, options(), {
+        probes: [fixture.probe],
+        buildInfo: build(identityA, "1.0.0"),
+        convergenceInspection: inspection(preflight("1.0.0", "2.0.0")),
+        commandRunner: runner,
+      });
+      const report = reportFrom(result);
+
+      expect(result.code).toBe(0);
+      expect(report.artifactApplication).toEqual({
+        status: args.includes("--dry-run") ? "preview" : "deferred",
+        managerCommand: testCase.command,
+      });
+      expect(report.result.kind).toBe(args.includes("--dry-run") ? "preview" : "deferred");
+      expect(textFor(result)).toContain(testCase.rendered);
+      expect(textFor(result)).not.toContain("verified plan:");
+      expect(fixture.apply).not.toHaveBeenCalled();
+      expect(runner).not.toHaveBeenCalled();
+    }
+  });
+
+  it.each([
+    {
+      name: "unknown runtime",
+      evidence: preflight("1.0.0", "2.0.0", {
+        observer: {
+          status: "unknown",
+          reason: "identity-unavailable",
+          error: {
+            tag: "UpdatePreflightError",
+            code: "OBSERVER_UNKNOWN",
+            message: "Observer identity unavailable.",
+          },
+        },
+      }),
+    },
+    {
+      name: "busy bridge Host",
+      evidence: preflight("1.0.0", "2.0.0", {
+        observer: matchingObserver(identityA),
+        host: differentHost(identityA, [terminal("bridge-releasable")]),
+        terminalDispositions: [disposition("preservable", "recoverable")],
+      }),
+    },
+    {
+      name: "reap-required Host",
+      evidence: preflight("1.0.0", "2.0.0", {
+        observer: matchingObserver(identityA),
+        host: differentHost(identityA, [terminal("non-releasable")]),
+        terminalDispositions: [disposition("non-preservable", "non-resumable")],
+      }),
+    },
+  ])("defers package-manager application with $name evidence and executes nothing", async ({
+    evidence,
+  }) => {
+    const fixture = probe(
+      "update-available",
+      "1.0.0",
+      "2.0.0",
+      ["brew", "upgrade", "station"],
+      "homebrew",
     );
+    const runner = vi.fn();
+    const result = await runUpdateCommand(["--json"], options(), {
+      probes: [fixture.probe],
+      buildInfo: build(identityA, "1.0.0"),
+      convergenceInspection: inspection(evidence),
+      commandRunner: runner,
+    });
+    const report = reportFrom(result);
+
+    expect(result.code).toBe(0);
+    expect(report).toMatchObject({
+      status: "deferred",
+      artifactApplication: { status: "deferred" },
+      initial: { preflight: evidence, plan: { status: "deferred" } },
+      result: { kind: "deferred" },
+    });
+    if (report.result.kind !== "deferred") throw new Error("expected deferred result");
+    expect(report.result.phases).toEqual(
+      report.initial.plan.phases.map((phase, index) => ({
+        id: phase.id,
+        status: index === 0 ? "deferred" : "not-executed",
+      })),
+    );
+    expect(report.result).not.toHaveProperty("actionAudits");
+    expect(report.artifactApplication).toMatchObject({
+      managerCommand: ["brew", "upgrade", "station"],
+    });
+    expect(fixture.apply).not.toHaveBeenCalled();
+    expect(runner).not.toHaveBeenCalled();
+    expect(textFor(result)).toContain("status: deferred");
+    expect(textFor(result)).not.toContain("verified plan:");
+  });
+
+  it("starts an absent runtime, reconciles, and reports current only after a verified no-op plan", async () => {
+    const fixture = probe("current");
+    const inspect = sequenceInspection([
+      preflight("1.0.0", "1.0.0"),
+      preflight("1.0.0", "1.0.0", {
+        observer: matchingObserver(identityA),
+        evidenceComplete: false,
+      }),
+    ]);
+    const runner = vi.fn(commandResult);
+    const result = await runUpdateCommand(["--json"], options(), {
+      probes: [fixture.probe],
+      buildInfo: build(identityA, "1.0.0"),
+      convergenceInspection: inspect,
+      commandRunner: runner,
+    });
+    expect(result).toMatchObject({
+      code: 0,
+      output: {
+        status: "current",
+        artifactApplication: { status: "not-required" },
+        result: {
+          kind: "current-runtime-execution",
+          actionAudits: [{ executor: "incumbent-cli" }],
+          postAction: { plan: { status: "converged" } },
+          verification: { status: "converged", source: "post-action" },
+        },
+      },
+    });
+    expect(inspect).toHaveBeenCalledTimes(2);
+    expect(fixture.apply).not.toHaveBeenCalled();
+    expect(runner.mock.calls.map(([input]) => (input as ExternalCommandInput).args)).toEqual([
+      expect.arrayContaining(["observer", "start"]),
+      expect.arrayContaining(["reconcile", "--reason", "update-convergence"]),
+    ]);
+  });
+
+  it("executes a health-pinned Observer restart after installed executable replacement", async () => {
+    const fixture = probe("current");
+    const inspect = sequenceInspection([
+      preflight("1.0.0", "1.0.0", { observer: restartableObserverDrift() }),
+      preflight("1.0.0", "1.0.0", { observer: matchingObserver(identityA) }),
+    ]);
+    const runner = vi.fn(commandResult);
+    const result = await runUpdateCommand(["--json"], options(), {
+      probes: [fixture.probe],
+      buildInfo: build(identityA, "1.0.0"),
+      convergenceInspection: inspect,
+      commandRunner: runner,
+    });
 
     expect(result).toMatchObject({
       code: 0,
       output: {
-        schemaVersion: 3,
-        status: "planned",
-        recoveryPreflight: {
-          boundary: {
-            authorization: "none",
-            actions: "not-included",
-            digest: "not-included",
-          },
-          hooks: [{ provider: "codex", status: "needs-repair" }],
-          terminalDispositions: [
-            {
-              terminalTargetId: "terminal-a",
-              handoff: "non-preservable",
-              reapRecovery: "non-resumable",
-              reasons: ["session_non_resumable"],
-            },
-          ],
-          evidenceComplete: true,
-        },
-      },
-    });
-    expect(recovery.inspectObserver).toHaveBeenCalledOnce();
-    expect(recovery.inspectHost).toHaveBeenCalledOnce();
-    expect(recovery.readHookHealth).toHaveBeenCalledOnce();
-    expect(fixture.apply).not.toHaveBeenCalled();
-    expect(commandRunner).not.toHaveBeenCalled();
-    const serialized = JSON.stringify(result.output);
-    expect(serialized).not.toContain("selectedHandleId");
-    expect(serialized).not.toContain("recoveryHandles");
-  });
-
-  it("keeps a current-build dry-run reap non-mutating and textually unmistakable", async () => {
-    const fixture = probeFixture("installer-binary", { planStatus: "current" });
-    const recovery = recoveryPreflightFixture();
-    const commandRunner = vi.fn();
-
-    const result = await runUpdateCommand(
-      ["--dry-run", "--reap", "--no-handoff"],
-      commandOptions(),
-      {
-        probes: [fixture.probe],
-        commandRunner,
-        buildInfo: testBuildInfo,
-        recoveryPreflight: recovery.run,
-      },
-    );
-
-    expect(result).toMatchObject({ code: 0, outputFormat: "text" });
-    expect(result.output).toContain("reapRecovery=NON-RESUMABLE");
-    expect(result.output).toContain("actions: not included (#640)");
-    expect(result.output).toContain("digest: not included (#640)");
-    expect(fixture.apply).not.toHaveBeenCalled();
-    expect(commandRunner).not.toHaveBeenCalled();
-  });
-
-  it("converges an already-current installation without misreporting a higher accepted Observer", async () => {
-    const fixture = probeFixture("installer-binary", { planStatus: "current" });
-    const liveHost = await createLiveHostFixture();
-    const commandRunner = vi.fn(async (input: ExternalCommandInput) =>
-      commandResult(input, higherObserverBuildVersion),
-    );
-    try {
-      const result = await runUpdateCommand(
-        ["--handoff", "--json"],
-        {
-          config: liveHost.state.config,
-          configPath: "/tmp/config.toml",
-          cliEntryPath: "/repo/apps/cli/dist/main.js",
-        },
-        {
-          probes: [fixture.probe],
-          commandRunner,
-          buildInfo: testBuildInfo,
-          hostDeps: liveHost.hostDeps,
-        },
-      );
-
-      expect(result).toEqual({
-        code: 0,
-        output: {
-          schemaVersion: 3,
-          channel: "installer-binary",
-          status: "current",
-          current: { version: "1.0.0" },
-          target: { version: "1.0.0" },
-          steps: [
-            { id: "detect", status: "completed", detail: "Detected installer-binary ownership." },
-            {
-              id: "plan",
-              status: "completed",
-              detail: "Resolved the current and target Station builds.",
-            },
-            {
-              id: "apply",
-              status: "skipped",
-              detail: "The selected installation already matches its target.",
-            },
-            {
-              id: "hook-reconciliation",
-              status: "completed",
-              detail: "Configured provider hooks are healthy.",
-            },
-            {
-              id: "observer-restart",
-              status: "completed",
-              detail: "The accepted Observer singleton is running.",
-            },
-            {
-              id: "host-handoff",
-              status: "skipped",
-              detail: "No live Host handoff is needed.",
-            },
-          ],
-          warnings: [],
-          recoveryCommands: [],
-          hookReconciliation: {
-            provider: "codex",
-            status: "healthy",
-            changed: false,
-            verified: true,
-          },
-        },
-      });
-      expect(fixture.apply).not.toHaveBeenCalled();
-      expect(commandRunner).toHaveBeenCalledWith(
-        expect.objectContaining({
-          command: "/opt/stn",
-          args: ["--config", "/tmp/config.toml", "hooks", "reconcile", "codex"],
-        }),
-      );
-      expect(commandRunner).toHaveBeenCalledWith(
-        expect.objectContaining({
-          command: "/opt/stn",
-          args: ["--config", "/tmp/config.toml", "observer", "start", "--timeout-ms", "20000"],
-        }),
-      );
-      expect(liveHost.clientFactory).toHaveBeenCalled();
-    } finally {
-      await liveHost.close();
-    }
-  });
-
-  it("keeps an already-current dry-run free of hook, Observer, and Host effects", async () => {
-    const fixture = probeFixture("installer-binary", { planStatus: "current" });
-    const liveHost = await createLiveHostFixture({ listError: new Error("must not inspect Host") });
-    const commandRunner = vi.fn();
-    try {
-      const result = await runUpdateCommand(
-        ["--dry-run", "--json"],
-        liveHostCommandOptions(liveHost.state.config),
-        {
-          probes: [fixture.probe],
-          commandRunner,
-          buildInfo: testBuildInfo,
-          hostDeps: liveHost.hostDeps,
-        },
-      );
-
-      expect(result).toMatchObject({
-        code: 0,
-        output: {
-          schemaVersion: 3,
-          status: "current",
-          steps: [
-            { id: "detect", status: "completed" },
-            { id: "plan", status: "completed" },
-            { id: "apply", status: "skipped" },
-            { id: "hook-reconciliation", status: "planned" },
-            { id: "observer-restart", status: "planned" },
-            {
-              id: "host-handoff",
-              status: "planned",
-              detail:
-                "The selected launcher would evaluate the active Host and preserve processes state if replacement is needed.",
-            },
-          ],
-        },
-      });
-      expect(fixture.apply).not.toHaveBeenCalled();
-      expect(commandRunner).not.toHaveBeenCalled();
-      expect(liveHost.clientFactory).not.toHaveBeenCalled();
-    } finally {
-      await liveHost.close();
-    }
-  });
-
-  it("finishes an interrupted current-build crossover through the current launcher", async () => {
-    const fixture = probeFixture("installer-binary", { planStatus: "current" });
-    const liveHost = await createLiveHostFixture({ hostBuildVersion: "0.9.0" });
-    const commands: ExternalCommandInput[] = [];
-    try {
-      const result = await runUpdateCommand(
-        ["--json"],
-        liveHostCommandOptions(liveHost.state.config),
-        {
-          probes: [fixture.probe],
-          buildInfo: testBuildInfo,
-          hostDeps: liveHost.hostDeps,
-          commandRunner: async (input) => {
-            commands.push(input);
-            return commandResult(input);
-          },
-        },
-      );
-
-      expect(result.output).toMatchObject({
         status: "current",
-        steps: [
-          { id: "detect", status: "completed" },
-          { id: "plan", status: "completed" },
-          { id: "apply", status: "skipped" },
-          { id: "hook-reconciliation", status: "completed" },
-          { id: "observer-restart", status: "completed" },
-          { id: "host-handoff", status: "completed" },
-        ],
-      });
-      expect(commands.map(({ args }) => args)).toEqual([
-        ["--config", "/tmp/config.toml", "hooks", "reconcile", "codex"],
-        ["--config", "/tmp/config.toml", "observer", "start", "--timeout-ms", "20000"],
-        ["--config", "/tmp/config.toml", "host", "handoff", "--fidelity", "processes"],
-      ]);
-    } finally {
-      await liveHost.close();
-    }
-  });
-
-  it("prints a JSON dry-run plan without applying or crossing runtime boundaries", async () => {
-    const fixture = probeFixture("installer-binary");
-    const commandRunner = vi.fn();
-    const result = await runUpdateCommand(["--dry-run", "--json"], commandOptions(), {
-      probes: [fixture.probe],
-      commandRunner,
-      buildInfo: testBuildInfo,
-    });
-
-    expect(result.code).toBe(0);
-    expect(result.output).toMatchObject({
-      schemaVersion: 3,
-      channel: "installer-binary",
-      status: "planned",
-      current: { version: "1.0.0" },
-      target: { version: "1.1.0" },
-      steps: [
-        { id: "detect", status: "completed" },
-        { id: "plan", status: "completed" },
-        { id: "apply", status: "planned" },
-        { id: "hook-reconciliation", status: "planned" },
-        { id: "observer-restart", status: "planned" },
-        { id: "host-handoff", status: "skipped" },
-      ],
-    });
-    expect(fixture.apply).not.toHaveBeenCalled();
-    expect(commandRunner).not.toHaveBeenCalled();
-  });
-
-  it("describes package-manager deferral in previews without default Host preflight", async () => {
-    const fixture = probeFixture("npm-global", {
-      managerCommand: ["/opt/npm", "install", "--global", "station@1.1.0"],
-    });
-    const liveHost = await createLiveHostFixture();
-    try {
-      const result = await runUpdateCommand(
-        ["--dry-run", "--json"],
-        {
-          config: liveHost.state.config,
-          configPath: "/tmp/config.toml",
-          cliEntryPath: "/repo/apps/cli/dist/main.js",
+        initial: {
+          preflight: { observer: { reason: "restartable-executable-drift" } },
+          plan: { components: { observer: { action: "restart" } } },
         },
-        {
-          probes: [fixture.probe],
-          hostDeps: liveHost.hostDeps,
-          buildInfo: testBuildInfo,
+        result: {
+          kind: "current-runtime-execution",
+          postAction: { plan: { status: "converged" } },
         },
-      );
-
-      expect(result.output).toMatchObject({
-        status: "planned",
-        steps: [
-          { id: "detect", status: "completed" },
-          { id: "plan", status: "completed" },
-          {
-            id: "apply",
-            status: "deferred",
-            command: ["/opt/npm", "install", "--global", "station@1.1.0"],
-          },
-          { id: "hook-reconciliation", status: "skipped" },
-          { id: "observer-restart", status: "skipped" },
-          {
-            id: "host-handoff",
-            status: "skipped",
-            detail: "No live Host handoff is needed.",
-          },
-        ],
-      });
-      expect(fixture.apply).not.toHaveBeenCalled();
-      expect(liveHost.clientFactory).not.toHaveBeenCalled();
-    } finally {
-      await liveHost.close();
-    }
-  });
-
-  it("describes driven package-manager mutation in previews", async () => {
-    const fixture = probeFixture("mise", {
-      managerCommand: ["/opt/mise", "upgrade", "station"],
-    });
-    const result = await runUpdateCommand(
-      ["--dry-run", "--drive-package-manager", "--json"],
-      commandOptions(),
-      { probes: [fixture.probe], buildInfo: testBuildInfo },
-    );
-
-    expect(result.output).toMatchObject({
-      status: "planned",
-      steps: [
-        { id: "detect", status: "completed" },
-        { id: "plan", status: "completed" },
-        {
-          id: "apply",
-          status: "planned",
-          command: ["/opt/mise", "upgrade", "station"],
-        },
-        { id: "hook-reconciliation", status: "planned" },
-        { id: "observer-restart", status: "planned" },
-        { id: "host-handoff", status: "skipped" },
-      ],
-    });
-    expect(fixture.apply).not.toHaveBeenCalled();
-  });
-
-  it("defers package-manager mutation by default", async () => {
-    const fixture = probeFixture("npm-global", {
-      managerCommand: ["/opt/npm", "install", "--global", "station@1.1.0"],
-      applyReport: {
-        channel: "npm-global",
-        status: "deferred",
-        previousVersion: "1.0.0",
-        installedVersion: "1.0.0",
-        warnings: [],
       },
     });
-    const commandRunner = vi.fn();
-    const result = await runUpdateCommand([], commandOptions(), {
-      probes: [fixture.probe],
-      commandRunner,
-      buildInfo: testBuildInfo,
-    });
+    expect(runner.mock.calls[0]?.[0].args).toEqual(expect.arrayContaining(["observer", "restart"]));
+  });
 
+  it("returns already-converged without running actions for a healthy matching runtime", async () => {
+    const fixture = probe("current");
+    const runner = vi.fn();
+    const result = await runUpdateCommand(["--json"], options(), {
+      probes: [fixture.probe],
+      buildInfo: build(identityA, "1.0.0"),
+      convergenceInspection: inspection(
+        preflight("1.0.0", "1.0.0", {
+          observer: matchingObserver(identityA),
+          host: matchingHost(identityA),
+        }),
+      ),
+      commandRunner: runner,
+    });
+    expect(result).toMatchObject({
+      code: 0,
+      output: {
+        status: "current",
+        result: { kind: "already-converged", verification: { source: "initial" } },
+      },
+    });
+    expect(runner).not.toHaveBeenCalled();
+  });
+
+  it("renders artifact, component, recovery, and ordered-phase distinctions in text", async () => {
+    const fixture = probe("current");
+    const result = await runUpdateCommand([], options(), {
+      probes: [fixture.probe],
+      buildInfo: build(identityA, "1.0.0"),
+      convergenceInspection: inspection(
+        preflight("1.0.0", "1.0.0", {
+          observer: matchingObserver(identityA),
+          host: matchingHost(identityA),
+        }),
+      ),
+    });
     expect(result).toMatchObject({ code: 0, outputFormat: "text" });
-    expect(result.output).toContain("status: deferred");
-    expect(result.output).toContain("/opt/npm install --global station@1.1.0");
-    expect(fixture.apply).toHaveBeenCalledWith({ drivePackageManager: false });
-    expect(commandRunner).not.toHaveBeenCalled();
+    expect(result.output).toEqual(expect.any(String));
+    for (const label of [
+      "artifact application:",
+      "hooks:",
+      "observer:",
+      "host:",
+      "terminals:",
+      "recovery:",
+      "ordered convergence phases:",
+      "artifact-application:",
+      "verification:",
+    ]) {
+      expect(result.output).toContain(label);
+    }
+    expect(result.output).toContain("verified plan:");
   });
 
-  it("drives a manager and restarts the Observer through the successor launcher", async () => {
-    const fixture = probeFixture("mise", {
-      managerCommand: ["/opt/mise", "upgrade", "station"],
-      applyReport: {
-        channel: "mise",
-        status: "updated",
-        previousVersion: "1.0.0",
-        installedVersion: "1.1.0",
-        successorCli: ["/opt/mise", "exec", "--", "stn"],
-        warnings: [],
-      },
-    });
-    const commands: ExternalCommandInput[] = [];
-    const result = await runUpdateCommand(["--drive-package-manager", "--json"], commandOptions(), {
+  it("executes bridge-preserving handoff without requiring reap-only recovery evidence", async () => {
+    const fixture = probe("current");
+    const bridge = terminal("bridge-releasable");
+    const inspect = sequenceInspection([
+      preflight("1.0.0", "1.0.0", {
+        observer: matchingObserver(identityA, "unknown"),
+        host: differentHost(identityB, [bridge]),
+        terminalDispositions: [disposition("preservable", "unknown")],
+      }),
+      preflight("1.0.0", "1.0.0", {
+        observer: matchingObserver(identityA),
+        host: matchingHost(identityA, [bridge]),
+        terminalDispositions: [disposition("preservable", "recoverable")],
+      }),
+    ]);
+    const runner = vi.fn(commandResult);
+    const result = await runUpdateCommand(["--json"], options(), {
       probes: [fixture.probe],
-      buildInfo: testBuildInfo,
+      buildInfo: build(identityA, "1.0.0"),
+      convergenceInspection: inspect,
+      commandRunner: runner,
+    });
+    expect(result).toMatchObject({ code: 0, output: { status: "current" } });
+    const report = reportFrom(result);
+    if (report.result.kind !== "current-runtime-execution") {
+      throw new Error("expected runtime execution");
+    }
+    expect(report.result.actionAudits[0].actions).toEqual([
+      {
+        phase: "terminal-convergence",
+        action: "preserve-via-handoff",
+        status: "completed",
+        handoffReceipt: { terminals: [terminalIdentity()] },
+      },
+      { phase: "host-convergence", action: "handoff", status: "completed" },
+      { phase: "runtime-reconcile", action: "run", status: "completed" },
+    ]);
+    const serialized = JSON.stringify(report);
+    expect(serialized).not.toContain("/tmp/station-host.sock");
+    expect(serialized).not.toContain("Live handoff completed.");
+    expect(
+      runner.mock.calls.some(([input]) => (input as ExternalCommandInput).args?.includes("host")),
+    ).toBe(true);
+  });
+
+  it("attributes a Host handoff failure to host convergence", async () => {
+    const fixture = probe("current");
+    const bridge = terminal("bridge-releasable");
+    const evidence = preflight("1.0.0", "1.0.0", {
+      observer: matchingObserver(identityA),
+      host: differentHost(identityB, [bridge]),
+      terminalDispositions: [disposition("preservable", "recoverable")],
+    });
+    const result = await runUpdateCommand(["--json"], options(), {
+      probes: [fixture.probe],
+      buildInfo: build(identityA, "1.0.0"),
+      convergenceInspection: inspection(evidence),
       commandRunner: async (input) => {
-        commands.push(input);
+        if (input.args?.includes("host")) throw new Error("Host handoff failed");
         return commandResult(input);
       },
     });
-
-    expect(result.output).toMatchObject({
-      status: "updated",
-      steps: expect.arrayContaining([
-        {
-          id: "observer-restart",
-          status: "completed",
-          detail: "The Observer is running from the selected build.",
-        },
-      ]),
+    const report = reportFrom(result);
+    expect(report).toMatchObject({
+      status: "failed",
+      result: { kind: "execution-failed", stage: "host-convergence" },
     });
-    expect(fixture.apply).toHaveBeenCalledWith({ drivePackageManager: true });
-    expect(commands).toEqual([
-      expect.objectContaining({
-        command: "/opt/mise",
-        args: ["exec", "--", "stn", "--config", "/tmp/config.toml", "hooks", "reconcile", "codex"],
-      }),
-      expect.objectContaining({
-        command: "/opt/mise",
-        args: [
-          "exec",
-          "--",
-          "stn",
-          "--config",
-          "/tmp/config.toml",
-          "observer",
-          "restart",
-          "--timeout-ms",
-          "20000",
-        ],
-      }),
+    if (report.result.kind !== "execution-failed") throw new Error("expected failure result");
+    expect(report.result.actionAudits[0]?.actions).toEqual([
+      { phase: "host-convergence", action: "handoff", status: "failed" },
     ]);
   });
 
-  it("stops successor crossover when configured hook reconciliation fails", async () => {
-    const fixture = probeFixture("installer-binary");
-    const commands: ExternalCommandInput[] = [];
-    const result = await runUpdateCommand(["--json"], commandOptions(), {
+  it("attributes reconcile failure after Host handoff to runtime reconcile", async () => {
+    const fixture = probe("current");
+    const bridge = terminal("bridge-releasable");
+    const evidence = preflight("1.0.0", "1.0.0", {
+      observer: matchingObserver(identityA),
+      host: differentHost(identityB, [bridge]),
+      terminalDispositions: [disposition("preservable", "recoverable")],
+    });
+    const result = await runUpdateCommand(["--json"], options(), {
       probes: [fixture.probe],
-      buildInfo: testBuildInfo,
+      buildInfo: build(identityA, "1.0.0"),
+      convergenceInspection: inspection(evidence),
       commandRunner: async (input) => {
-        commands.push(input);
-        return {
-          command: input.command,
-          args: input.args ?? [],
-          stdout: JSON.stringify({
-            provider: "codex",
-            status: "post-write-doctor-failed",
-            changed: true,
-            verified: false,
-            error: {
-              tag: "CodexHookSetupError",
-              code: "CODEX_HOOK_POST_WRITE_DOCTOR_FAILED",
-              message: "Codex hook writes were not verified by provider doctor.",
-              provider: "codex",
+        if (input.args?.includes("reconcile")) throw new Error("Runtime reconcile failed");
+        return commandResult(input);
+      },
+    });
+    const report = reportFrom(result);
+    expect(report).toMatchObject({
+      status: "failed",
+      result: { kind: "execution-failed", stage: "runtime-reconcile" },
+    });
+    if (report.result.kind !== "execution-failed") throw new Error("expected failure result");
+    expect(report.result.actionAudits[0]?.actions).toEqual([
+      {
+        phase: "terminal-convergence",
+        action: "preserve-via-handoff",
+        status: "completed",
+        handoffReceipt: { terminals: [terminalIdentity()] },
+      },
+      { phase: "host-convergence", action: "handoff", status: "completed" },
+      { phase: "runtime-reconcile", action: "run", status: "failed" },
+    ]);
+  });
+
+  it.each([
+    { name: "missing", receipt: undefined, stage: "terminal-convergence" },
+    {
+      name: "same-count wrong",
+      receipt: { terminals: [terminalIdentity("2")] },
+      stage: "terminal-convergence",
+    },
+    {
+      name: "duplicate",
+      receipt: { terminals: [terminalIdentity(), terminalIdentity()] },
+      stage: "host-convergence",
+    },
+  ])("rejects a $name Host handoff receipt", async ({ receipt, stage }) => {
+    const fixture = probe("current");
+    const bridge = terminal("bridge-releasable");
+    const evidence = preflight("1.0.0", "1.0.0", {
+      observer: matchingObserver(identityA),
+      host: differentHost(identityB, [bridge]),
+      terminalDispositions: [disposition("preservable", "recoverable")],
+    });
+    const result = await runUpdateCommand(["--json"], options(), {
+      probes: [fixture.probe],
+      buildInfo: build(identityA, "1.0.0"),
+      convergenceInspection: inspection(evidence),
+      commandRunner: async (input) =>
+        input.args?.includes("host")
+          ? externalResult(
+              input,
+              JSON.stringify({
+                ...hostHandoffResult([terminalIdentity()]),
+                ...(receipt === undefined
+                  ? { receipt: undefined, livePtyCount: 1 }
+                  : { receipt, livePtyCount: receipt.terminals.length }),
+              }),
+              0,
+            )
+          : commandResult(input),
+    });
+    const report = reportFrom(result);
+    expect(report).toMatchObject({
+      status: "failed",
+      result: { kind: "execution-failed", stage },
+    });
+    if (report.result.kind !== "execution-failed") throw new Error("expected failure result");
+    expect(report.result.actionAudits[0]?.actions.at(-1)).toMatchObject({
+      phase: stage,
+      status: "failed",
+    });
+  });
+
+  it.each([
+    { name: "missing", finalTerminals: [], finalDispositions: [] },
+    {
+      name: "same-count wrong",
+      finalTerminals: [terminal("bridge-releasable", "2")],
+      finalDispositions: [disposition("preservable", "recoverable", "2")],
+    },
+  ])("fails final verification for $name PTY lifetime identities after handoff", async ({
+    finalTerminals,
+    finalDispositions,
+  }) => {
+    const fixture = probe("current");
+    const bridge = terminal("bridge-releasable");
+    const inspect = sequenceInspection([
+      preflight("1.0.0", "1.0.0", {
+        observer: matchingObserver(identityA),
+        host: differentHost(identityB, [bridge]),
+        terminalDispositions: [disposition("preservable", "recoverable")],
+      }),
+      preflight("1.0.0", "1.0.0", {
+        observer: matchingObserver(identityA),
+        host: matchingHost(identityA, finalTerminals),
+        terminalDispositions: finalDispositions,
+      }),
+    ]);
+    const result = await runUpdateCommand(["--json"], options(), {
+      probes: [fixture.probe],
+      buildInfo: build(identityA, "1.0.0"),
+      convergenceInspection: inspect,
+      commandRunner: commandResult,
+    });
+    const report = reportFrom(result);
+    expect(report).toMatchObject({
+      status: "failed",
+      result: { kind: "execution-failed", stage: "verification" },
+      error: { code: "UPDATE_TERMINAL_CONVERGENCE_INCOMPLETE" },
+    });
+    if (report.result.kind !== "execution-failed") throw new Error("expected failure result");
+    expect(report.result.actionAudits[0]?.actions).toContainEqual(
+      expect.objectContaining({
+        phase: "terminal-convergence",
+        action: "preserve-via-handoff",
+        status: "completed",
+      }),
+    );
+  });
+
+  it("audits same-version hook reconciliation against the exact provider decision", async () => {
+    const fixture = probe("current");
+    const inspect = sequenceInspection([
+      preflight("1.0.0", "1.0.0", {
+        observer: matchingObserver(identityA),
+        host: matchingHost(identityA),
+        hookProviderIds: ["codex"],
+        hooks: [{ provider: "codex", status: "needs-repair", reason: "owned-drift" }],
+      }),
+      preflight("1.0.0", "1.0.0", {
+        observer: matchingObserver(identityA),
+        host: matchingHost(identityA),
+        hookProviderIds: ["codex"],
+        hooks: [{ provider: "codex", status: "healthy" }],
+      }),
+    ]);
+    const result = await runUpdateCommand(["--json"], options(), {
+      probes: [fixture.probe],
+      buildInfo: build(identityA, "1.0.0"),
+      convergenceInspection: inspect,
+      commandRunner: async (input) =>
+        input.args?.includes("hooks")
+          ? externalResult(
+              input,
+              JSON.stringify({
+                provider: "codex",
+                status: "repaired",
+                changed: true,
+                verified: true,
+              }),
+              0,
+            )
+          : externalResult(input, "", 0),
+    });
+    const report = reportFrom(result);
+    expect(report).toMatchObject({ status: "current" });
+    if (report.result.kind !== "current-runtime-execution") {
+      throw new Error("expected current runtime execution");
+    }
+    expect(report.result.actionAudits[0].actions[0]).toMatchObject({
+      phase: "hook-reconciliation",
+      action: "reconcile",
+      status: "completed",
+      provider: "codex",
+      hookResult: { provider: "codex", status: "repaired" },
+    });
+  });
+
+  it("hands #641 a fresh pre-mutation reap-required target plan before artifact application", async () => {
+    const fixture = probe("update-available");
+    const result = await runUpdateCommand(["--json"], options(), {
+      probes: [fixture.probe],
+      buildInfo: build(identityA, "1.0.0"),
+      convergenceInspection: inspection(
+        preflight("1.0.0", "2.0.0", {
+          observer: matchingObserver(identityA),
+          host: differentHost(identityA, [terminal("non-releasable")]),
+          terminalDispositions: [disposition("non-preservable", "non-resumable")],
+          evidenceComplete: true,
+        }),
+      ),
+    });
+    expect(result).toMatchObject({
+      code: 1,
+      output: {
+        status: "reap-required",
+        artifactApplication: { status: "not-attempted" },
+        initial: {
+          evaluator: "incumbent-cli",
+          plan: {
+            status: "reap-required",
+            selectedTarget: {
+              artifact: { version: "2.0.0" },
+              buildIdentity: { status: "not-yet-provable" },
             },
-            followUp: { action: "run-doctor" },
-          }),
-          stderr: "/resolved/provider/path and raw provider payload",
-          exitCode: 1,
-        };
-      },
-    });
-
-    expect(commands).toHaveLength(1);
-    expect(commands[0]).toMatchObject({
-      args: ["--config", "/tmp/config.toml", "hooks", "reconcile", "codex"],
-    });
-    expect(result).toMatchObject({
-      code: 1,
-      output: {
-        schemaVersion: 3,
-        status: "failed",
-        hookReconciliation: {
-          status: "post-write-doctor-failed",
-          changed: true,
-          verified: false,
-          followUp: { action: "run-doctor" },
-        },
-        error: { code: "CODEX_HOOK_POST_WRITE_DOCTOR_FAILED" },
-        recoveryCommands: [
-          ["/opt/stn", "--config", "/tmp/config.toml", "hooks", "doctor", "codex"],
-          ["/opt/stn", "--config", "/tmp/config.toml", "hooks", "reconcile", "codex"],
-          [
-            "/opt/stn",
-            "--config",
-            "/tmp/config.toml",
-            "observer",
-            "restart",
-            "--timeout-ms",
-            "20000",
-          ],
-        ],
-        steps: [
-          { id: "detect", status: "completed" },
-          { id: "plan", status: "completed" },
-          { id: "apply", status: "completed" },
-          { id: "hook-reconciliation", status: "failed" },
-          { id: "observer-restart", status: "skipped" },
-          { id: "host-handoff", status: "skipped" },
-        ],
-      },
-    });
-    expect(JSON.stringify(result.output)).not.toContain("/resolved/provider/path");
-  });
-
-  it("reports but never executes explicit takeover while resuming a current build", async () => {
-    const fixture = probeFixture("installer-binary", { planStatus: "current" });
-    const commands: ExternalCommandInput[] = [];
-    const result = await runUpdateCommand(["--no-handoff", "--json"], commandOptions(), {
-      probes: [fixture.probe],
-      buildInfo: testBuildInfo,
-      commandRunner: async (input) => {
-        commands.push(input);
-        return {
-          command: input.command,
-          args: input.args ?? [],
-          stdout: JSON.stringify({
-            provider: "codex",
-            status: "ownership-conflict",
-            changed: false,
-            verified: false,
-            followUp: { action: "run-explicit-takeover" },
-          }),
-          stderr: "",
-          exitCode: 1,
-        };
-      },
-    });
-
-    expect(commands.map(({ args }) => args)).toEqual([
-      ["--config", "/tmp/config.toml", "hooks", "reconcile", "codex"],
-    ]);
-    expect(result).toMatchObject({
-      code: 1,
-      output: {
-        status: "failed",
-        error: { code: "UPDATE_HOOK_OWNERSHIP_CONFLICT" },
-        recoveryCommands: [
-          [
-            "/opt/stn",
-            "--config",
-            "/tmp/config.toml",
-            "hooks",
-            "install",
-            "codex",
-            "--yes",
-            "--takeover",
-          ],
-          ["/opt/stn", "--config", "/tmp/config.toml", "hooks", "reconcile", "codex"],
-          [
-            "/opt/stn",
-            "--config",
-            "/tmp/config.toml",
-            "observer",
-            "start",
-            "--timeout-ms",
-            "20000",
-          ],
-        ],
-      },
-    });
-  });
-
-  it("describes current-build Observer convergence failures without claiming an install", async () => {
-    const fixture = probeFixture("installer-binary", { planStatus: "current" });
-    const result = await runUpdateCommand(["--no-handoff", "--json"], commandOptions(), {
-      probes: [fixture.probe],
-      buildInfo: testBuildInfo,
-      commandRunner: async (input) => {
-        if (input.args?.includes("hooks") === true) return commandResult(input);
-        throw new Error("observer failed");
-      },
-    });
-
-    expect(result).toMatchObject({
-      code: 1,
-      output: {
-        status: "failed",
-        error: {
-          code: "UPDATE_RUNTIME_CROSSOVER_FAILED",
-          message: "Station could not complete runtime convergence for the current build.",
-        },
-        recoveryCommands: [
-          [
-            "/opt/stn",
-            "--config",
-            "/tmp/config.toml",
-            "observer",
-            "start",
-            "--timeout-ms",
-            "20000",
-          ],
-        ],
-      },
-    });
-    expect(JSON.stringify(result.output)).not.toContain("installed the new build");
-  });
-
-  it("retains the Observer and pending Host recovery sequence after install", async () => {
-    const fixture = probeFixture("installer-binary");
-    const liveHost = await createLiveHostFixture({ hostBuildVersion: "0.9.0" });
-    try {
-      const result = await runUpdateCommand(
-        ["--json"],
-        liveHostCommandOptions(liveHost.state.config),
-        {
-          probes: [fixture.probe],
-          buildInfo: testBuildInfo,
-          hostDeps: liveHost.hostDeps,
-          commandRunner: async (input) => {
-            if (input.args?.includes("hooks") === true) return commandResult(input);
-            throw new Error("observer failed");
           },
         },
-      );
-
-      expect(result.code).toBe(1);
-      expect(result.output).toMatchObject({
-        status: "failed",
-        error: { code: "UPDATE_RUNTIME_CROSSOVER_FAILED" },
-        recoveryCommands: [
-          [
-            "/opt/stn",
-            "--config",
-            "/tmp/config.toml",
-            "observer",
-            "restart",
-            "--timeout-ms",
-            "20000",
-          ],
-          [
-            "/opt/stn",
-            "--config",
-            "/tmp/config.toml",
-            "host",
-            "handoff",
-            "--fidelity",
-            "processes",
-          ],
-        ],
-      });
-    } finally {
-      await liveHost.close();
-    }
+        result: { kind: "non-mutating-stop", disposition: "reap-required" },
+      },
+    });
+    expect(reportFrom(result).result).not.toHaveProperty("actionAudits");
+    expect(textFor(result)).not.toContain("verified plan:");
+    expect(fixture.apply).not.toHaveBeenCalled();
   });
 
-  it("strictly retains a successor Observer lifecycle cause and startup evidence", async () => {
-    const fixture = probeFixture("installer-binary");
-    const lifecycleFailure: ObserverLifecycleFailure = {
-      error: {
-        tag: "ObserverStartupError",
-        code: "OBSERVER_HANDOFF_REFUSED",
-        message: "Observer build handoff was refused.",
+  it("hands #641 only the recovery-complete non-preservable subset of a mixed inventory", async () => {
+    const fixture = probe("update-available");
+    const evidence = preflight("1.0.0", "2.0.0", {
+      observer: matchingObserver(identityA),
+      host: differentHost(identityA, [
+        terminal("bridge-releasable", "1"),
+        terminal("non-releasable", "2"),
+      ]),
+      terminalDispositions: [
+        disposition("preservable", "unknown", "1"),
+        disposition("non-preservable", "non-resumable", "2"),
+      ],
+    });
+    const runner = vi.fn(commandResult);
+    const result = await runUpdateCommand(["--json"], options(), {
+      probes: [fixture.probe],
+      buildInfo: build(identityA, "1.0.0"),
+      convergenceInspection: inspection(evidence),
+      commandRunner: runner,
+    });
+
+    expect(result).toMatchObject({
+      code: 1,
+      output: {
+        status: "reap-required",
+        artifactApplication: { status: "not-attempted" },
+        initial: {
+          preflight: { evidenceComplete: false },
+          plan: {
+            status: "reap-required",
+            components: {
+              terminals: {
+                liveCount: 2,
+                nonResumableCount: 1,
+                unknownRecoveryCount: 1,
+              },
+              recovery: { relevance: "destructive-follow-up", status: "complete" },
+            },
+          },
+        },
+        result: { kind: "non-mutating-stop", disposition: "reap-required" },
       },
+    });
+    expect(fixture.apply).not.toHaveBeenCalled();
+    expect(runner).not.toHaveBeenCalled();
+  });
+
+  it("fails closed with a non-mutating blocked result when Observer evidence is unknown", async () => {
+    const fixture = probe("current");
+    const result = await runUpdateCommand(["--json"], options(), {
+      probes: [fixture.probe],
+      buildInfo: build(identityA, "1.0.0"),
+      convergenceInspection: inspection(
+        preflight("1.0.0", "1.0.0", {
+          observer: {
+            status: "unknown",
+            reason: "identity-unavailable",
+            error: {
+              tag: "UpdatePreflightError",
+              code: "OBSERVER_UNKNOWN",
+              message: "Observer identity unavailable.",
+            },
+          },
+        }),
+      ),
+    });
+    expect(result).toMatchObject({
+      code: 1,
+      output: {
+        status: "blocked",
+        artifactApplication: { status: "not-required" },
+        result: { kind: "non-mutating-stop", disposition: "blocked" },
+      },
+    });
+    expect(reportFrom(result).result).not.toHaveProperty("actionAudits");
+    expect(textFor(result)).not.toContain("verified plan:");
+  });
+
+  it("represents current artifact plus busy old Host plus --no-handoff as intentionally incomplete", async () => {
+    const fixture = probe("current");
+    const result = await runUpdateCommand(["--no-handoff", "--json"], options(), {
+      probes: [fixture.probe],
+      buildInfo: build(identityA, "1.0.0"),
+      convergenceInspection: inspection(
+        preflight("1.0.0", "1.0.0", {
+          observer: matchingObserver(identityA),
+          host: differentHost(identityB, [terminal("bridge-releasable")]),
+          terminalDispositions: [disposition("preservable", "recoverable")],
+        }),
+      ),
+    });
+    expect(result).toMatchObject({
+      code: 1,
+      output: {
+        status: "intentionally-incomplete",
+        artifactApplication: { status: "not-required" },
+        result: {
+          kind: "non-mutating-stop",
+          disposition: "intentionally-incomplete",
+        },
+      },
+    });
+    expect(reportFrom(result).result).not.toHaveProperty("actionAudits");
+    expect(textFor(result)).not.toContain("verified plan:");
+  });
+
+  it("represents final aggregate inspection failure after a runtime action failure", async () => {
+    const fixture = probe("current");
+    const inspect = vi
+      .fn()
+      .mockResolvedValueOnce({
+        preflight: preflight("1.0.0", "1.0.0"),
+        privateEvidence: privateEvidence(),
+      })
+      .mockRejectedValueOnce(new Error("inspection failed"));
+    const result = await runUpdateCommand(["--json"], options(), {
+      probes: [fixture.probe],
+      buildInfo: build(identityA, "1.0.0"),
+      convergenceInspection: inspect,
+      commandRunner: async () => {
+        throw new Error("observer start failed");
+      },
+    });
+    expect(result).toMatchObject({
+      code: 1,
+      output: {
+        status: "failed",
+        result: {
+          kind: "execution-failed",
+          finalInspection: { status: "failed", error: { code: "UPDATE_FINAL_INSPECTION_FAILED" } },
+        },
+      },
+    });
+    expect(reportFrom(result).result).not.toHaveProperty("postAction");
+  });
+
+  it("strictly preserves sanitized Observer lifecycle evidence in JSON and text", async () => {
+    const fixture = probe("current");
+    const secret = "observer-secret-value";
+    const result = await runUpdateCommand(["--json"], options(), {
+      probes: [fixture.probe],
+      buildInfo: build(identityA, "1.0.0"),
+      convergenceInspection: inspection(preflight("1.0.0", "1.0.0")),
+      commandRunner: async (input) =>
+        input.args?.includes("observer")
+          ? observerFailureResult(input, secret)
+          : commandResult(input),
+    });
+    const report = reportFrom(result);
+    expect(report).toMatchObject({
+      status: "failed",
+      result: { kind: "execution-failed", stage: "observer-convergence" },
       cause: {
-        tag: "ObserverProcessIdentityError",
         code: "OBSERVER_PROCESS_EXECUTABLE_ARGV_MISMATCH",
-        message: "Observer executable arguments did not match.",
+        message: "Observer executable arguments did not match. API_TOKEN=[REDACTED]",
       },
       startupEvidence: {
         bootLogPath: "/tmp/station/logs/observer-boot.log",
-        bootLogTail: "replacement refused",
-      },
-    };
-    const result = await runUpdateCommand(["--json"], commandOptions(), {
-      probes: [fixture.probe],
-      buildInfo: testBuildInfo,
-      commandRunner: async (input) => {
-        if (input.args?.includes("hooks") === true) return commandResult(input);
-        return {
-          command: input.command,
-          args: input.args ?? [],
-          stdout: JSON.stringify({
-            status: "unhealthy",
-            paths: observerCommandPaths(),
-            ...lifecycleFailure,
-          }),
-          stderr: "",
-          exitCode: 1,
-        };
+        bootLogTail: "startup failed API_TOKEN=[REDACTED]",
       },
     });
+    const serialized = JSON.stringify(report);
+    expect(serialized).not.toContain(secret);
+    expect(serialized).not.toContain("raw observer stack");
+    const text = textFor(result);
+    expect(text).toContain(
+      "cause: Observer executable arguments did not match. API_TOKEN=[REDACTED] (OBSERVER_PROCESS_EXECUTABLE_ARGV_MISMATCH)",
+    );
+    expect(text).toContain("observer startup evidence:");
+    expect(text).toContain("boot log: /tmp/station/logs/observer-boot.log");
+    expect(text).toContain("bounded boot log tail: startup failed API_TOKEN=[REDACTED]");
+    expect(text).not.toContain(secret);
+  });
 
+  it("fails a contradictory Observer command result without inventing lifecycle evidence", async () => {
+    const fixture = probe("current");
+    const result = await runUpdateCommand(["--json"], options(), {
+      probes: [fixture.probe],
+      buildInfo: build(identityA, "1.0.0"),
+      convergenceInspection: inspection(preflight("1.0.0", "1.0.0")),
+      commandRunner: async (input) =>
+        input.args?.includes("observer")
+          ? externalResult(input, JSON.stringify(observerRunningResult()), 1)
+          : commandResult(input),
+    });
+    const report = reportFrom(result);
+    expect(report).toMatchObject({
+      status: "failed",
+      result: { kind: "execution-failed", stage: "observer-convergence" },
+    });
+    expect(report).not.toHaveProperty("cause");
+    expect(report).not.toHaveProperty("startupEvidence");
+  });
+
+  it("reports verification failure when final inspection fails after safe actions complete", async () => {
+    const fixture = probe("current");
+    const inspect = vi
+      .fn()
+      .mockResolvedValueOnce({
+        preflight: preflight("1.0.0", "1.0.0"),
+        privateEvidence: privateEvidence(),
+      })
+      .mockRejectedValueOnce(new Error("final inspection failed"));
+    const result = await runUpdateCommand(["--json"], options(), {
+      probes: [fixture.probe],
+      buildInfo: build(identityA, "1.0.0"),
+      convergenceInspection: inspect,
+      commandRunner: vi.fn(commandResult),
+    });
     expect(result).toMatchObject({
       code: 1,
       output: {
         status: "failed",
-        error: { code: "UPDATE_RUNTIME_CROSSOVER_FAILED" },
-        cause: { code: "OBSERVER_PROCESS_EXECUTABLE_ARGV_MISMATCH" },
-        startupEvidence: lifecycleFailure.startupEvidence,
+        result: {
+          kind: "execution-failed",
+          stage: "verification",
+          finalInspection: { status: "failed", error: { code: "UPDATE_FINAL_INSPECTION_FAILED" } },
+        },
       },
     });
+    const report = reportFrom(result);
+    if (report.result.kind !== "execution-failed") throw new Error("expected failure result");
+    expect(
+      report.result.actionAudits[0]?.actions.every((action) => action.status === "completed"),
+    ).toBe(true);
+    expect(report.result).not.toHaveProperty("postAction");
   });
 
-  it("retains the generic retry command when another channel apply fails", async () => {
-    const fixture = probeFixture("installer-binary");
-    fixture.apply.mockRejectedValueOnce(new Error("apply failed"));
-    const result = await runUpdateCommand(
-      ["--channel", "installer-binary", "--handoff=screen", "--json"],
-      commandOptions(),
+  it("fails when completed successor runtime actions still leave a fresh actionable plan", async () => {
+    const outer = probe("update-available");
+    const bridge = terminal("bridge-releasable");
+    const stillActionable = preflight("2.0.0", "2.0.0", {
+      observer: restartableObserverDrift(),
+      host: differentHost(identityA, [bridge]),
+      terminalDispositions: [disposition("preservable", "recoverable")],
+    });
+    const runner = vi.fn(async (input: ExternalCommandInput) =>
+      input.args?.includes("update")
+        ? successorResult(input, stillActionable)
+        : commandResult(input),
+    );
+    const result = await runUpdateCommand(["--json"], options(), {
+      probes: [outer.probe],
+      buildInfo: build(identityA, "1.0.0"),
+      convergenceInspection: inspection(preflight("1.0.0", "2.0.0")),
+      commandRunner: runner,
+    });
+    const report = reportFrom(result);
+
+    expect(result.code).toBe(1);
+    expect(report).toMatchObject({
+      status: "failed",
+      artifactApplication: { status: "applied" },
+      result: {
+        kind: "execution-failed",
+        stage: "verification",
+        successor: { evaluator: "successor-cli", plan: { status: "actionable" } },
+        finalInspection: {
+          status: "completed",
+          evidence: { evaluator: "successor-cli", plan: { status: "actionable" } },
+        },
+      },
+      error: { code: "UPDATE_RUNTIME_CONVERGENCE_INCOMPLETE" },
+    });
+    if (report.result.kind !== "execution-failed") throw new Error("expected failure result");
+    expect(report.result.actionAudits[1]?.actions).toEqual([
+      { phase: "observer-convergence", action: "restart", status: "completed" },
       {
-        probes: [fixture.probe],
-        buildInfo: testBuildInfo,
+        phase: "terminal-convergence",
+        action: "preserve-via-handoff",
+        status: "completed",
+        handoffReceipt: { terminals: [terminalIdentity()] },
       },
+      { phase: "host-convergence", action: "handoff", status: "completed" },
+      { phase: "runtime-reconcile", action: "run", status: "completed" },
+    ]);
+    expect(report.status).not.toBe("planned");
+    expect(textFor(result)).toContain("status: failed");
+    expect(textFor(result)).toContain("verified plan:");
+    expect(textFor(result)).toContain("(actionable)");
+    expect(textFor(result)).toContain("UPDATE_RUNTIME_CONVERGENCE_INCOMPLETE");
+  });
+
+  it("does not require post-action evidence when artifact apply cannot identify a successor", async () => {
+    const fixture = probe("update-available");
+    fixture.apply.mockResolvedValueOnce({
+      channel: "installer-binary",
+      status: "updated",
+      previousVersion: "1.0.0",
+      installedVersion: "2.0.0",
+      warnings: [],
+    });
+    const result = await runUpdateCommand(["--json"], options(), {
+      probes: [fixture.probe],
+      buildInfo: build(identityA, "1.0.0"),
+      convergenceInspection: inspection(preflight("1.0.0", "2.0.0")),
+    });
+    expect(result).toMatchObject({
+      code: 1,
+      output: {
+        status: "failed",
+        artifactApplication: { status: "applied" },
+        result: {
+          kind: "execution-failed",
+          stage: "successor-boundary",
+          finalInspection: { status: "not-attempted", reason: "successor-unavailable" },
+        },
+      },
+    });
+    expect(reportFrom(result).result).not.toHaveProperty("postAction");
+  });
+
+  it.each([
+    {
+      name: "network failure",
+      ordinaryDiscovery: async () => {
+        throw new Error("latest release network unavailable");
+      },
+    },
+    { name: "removed latest target", ordinaryDiscovery: async () => undefined },
+    {
+      name: "malformed latest response",
+      ordinaryDiscovery: async () => {
+        throw new SyntaxError("malformed latest response");
+      },
+    },
+  ])("retains the exact successor-owned plan without latest discovery during $name", async ({
+    ordinaryDiscovery,
+  }) => {
+    const outer = probe("update-available");
+    const successor = probe("update-available", "2.0.0", "3.0.0");
+    const latestDiscovery = vi.fn(ordinaryDiscovery);
+    successor.probe.detectAndPlan = latestDiscovery;
+    const successorInspect = sequenceInspection([
+      preflight("2.0.0", "2.0.0"),
+      preflight("2.0.0", "2.0.0", { observer: matchingObserver(identityB) }),
+    ]);
+    const successorRunner = vi.fn(commandResult);
+    const outerRunner = vi.fn(async (input: ExternalCommandInput) => {
+      if (input.args?.includes("update")) {
+        const nested = await runUpdateCommand(
+          input.args.slice(input.args.indexOf("update") + 1),
+          options(),
+          {
+            probes: [successor.probe],
+            buildInfo: build(identityB, "2.0.0"),
+            convergenceInspection: successorInspect,
+            commandRunner: successorRunner,
+          },
+        );
+        return externalResult(input, JSON.stringify(nested.output), nested.code);
+      }
+      return commandResult(input);
+    });
+    const result = await runUpdateCommand(["--json"], options(), {
+      probes: [outer.probe],
+      buildInfo: build(identityA, "1.0.0"),
+      convergenceInspection: inspection(preflight("1.0.0", "2.0.0")),
+      commandRunner: outerRunner,
+    });
+    expect(result).toMatchObject({
+      code: 0,
+      output: {
+        status: "updated",
+        artifactApplication: { status: "applied" },
+        initial: { evaluator: "incumbent-cli" },
+        result: {
+          kind: "successor-runtime-execution",
+          actionAudits: [{ executor: "incumbent-cli" }, { executor: "successor-cli" }],
+          successor: { evaluator: "successor-cli" },
+          postAction: { evaluator: "successor-cli", plan: { status: "converged" } },
+          verification: { status: "converged" },
+        },
+      },
+    });
+    const output = reportFrom(result);
+    if (output.result.kind !== "successor-runtime-execution") {
+      throw new Error("expected successor execution result");
+    }
+    expect(output.result.actionAudits[0]?.planDigest).toBe(output.initial.plan.digest.value);
+    expect(output.result.actionAudits[1]?.planDigest).toBe(
+      output.result.successor.plan.digest.value,
     );
+    expect(successor.apply).not.toHaveBeenCalled();
+    expect(latestDiscovery).not.toHaveBeenCalled();
+  });
+
+  it("rejects a successful successor report returned with exit status 1", async () => {
+    const outer = probe("update-available");
+    const outerRunner = vi.fn(async (input: ExternalCommandInput) =>
+      input.args?.includes("update")
+        ? successorResult(
+            input,
+            preflight("2.0.0", "2.0.0", {
+              observer: matchingObserver(identityB),
+              host: matchingHost(identityB),
+            }),
+            1,
+          )
+        : commandResult(input),
+    );
+
+    const result = await runUpdateCommand(["--json"], options(), {
+      probes: [outer.probe],
+      buildInfo: build(identityA, "1.0.0"),
+      convergenceInspection: inspection(preflight("1.0.0", "2.0.0")),
+      commandRunner: outerRunner,
+    });
 
     expect(result).toMatchObject({
       code: 1,
       output: {
         status: "failed",
-        recoveryCommands: [
-          [
-            "/opt/stn",
-            "--config",
-            "/tmp/config.toml",
-            "update",
-            "--channel",
-            "installer-binary",
-            "--handoff=screen",
-          ],
-        ],
-        steps: [
-          { id: "detect", status: "completed" },
-          { id: "plan", status: "completed" },
-          { id: "apply", status: "failed" },
-          { id: "hook-reconciliation", status: "skipped" },
-          { id: "observer-restart", status: "skipped" },
-          { id: "host-handoff", status: "skipped" },
-        ],
+        artifactApplication: { status: "applied" },
+        error: { code: "UPDATE_SUCCESSOR_BOUNDARY_FAILED" },
+        result: {
+          kind: "execution-failed",
+          stage: "successor-boundary",
+          actionAudits: [{ actions: [{ phase: "artifact-application", status: "completed" }] }],
+        },
       },
     });
   });
 
-  it("renders every dev-checkout preparation recovery command in JSON and text", async () => {
-    const recoveryCommands: UpdateCommandArgv[] = [
-      ["/opt/pnpm", "--dir", "/repo", "install", "--frozen-lockfile"],
-      ["/opt/bun", "--cwd", "/repo/station", "install", "--frozen-lockfile"],
-      ["/opt/pnpm", "--dir", "/repo", "build"],
-      ["/opt/bun", "run", "--cwd", "/repo/station", "link:station"],
-      ["/opt/bun", "run", "--cwd", "/repo/station", "repair:node-pty"],
-      ["/opt/pnpm", "--dir", "/repo", "station:link"],
-    ];
-    const preparationFailure = {
-      tag: "UpdateError",
-      code: "UPDATE_DEV_CHECKOUT_PREPARE_FAILED",
-      message: "The development checkout could not be prepared.",
-    };
-    const fixture = probeFixture("dev-checkout", {
-      applyRecoveryCommands: () => recoveryCommands,
-    });
-    fixture.apply.mockRejectedValue(preparationFailure);
+  it("rejects a blocked successor report returned with exit status 0", async () => {
+    const outer = probe("update-available");
+    const outerRunner = vi.fn(async (input: ExternalCommandInput) =>
+      input.args?.includes("update")
+        ? successorResult(
+            input,
+            preflight("2.0.0", "2.0.0", {
+              observer: {
+                status: "unknown",
+                reason: "identity-unavailable",
+                error: {
+                  tag: "UpdatePreflightError",
+                  code: "OBSERVER_UNKNOWN",
+                  message: "Observer identity unavailable.",
+                },
+              },
+            }),
+            0,
+          )
+        : commandResult(input),
+    );
 
-    const json = await runUpdateCommand(["--channel", "dev-checkout", "--json"], commandOptions(), {
-      probes: [fixture.probe],
-      buildInfo: testBuildInfo,
-    });
-    const text = await runUpdateCommand(["--channel", "dev-checkout"], commandOptions(), {
-      probes: [fixture.probe],
-      buildInfo: testBuildInfo,
+    const result = await runUpdateCommand(["--json"], options(), {
+      probes: [outer.probe],
+      buildInfo: build(identityA, "1.0.0"),
+      convergenceInspection: inspection(preflight("1.0.0", "2.0.0")),
+      commandRunner: outerRunner,
     });
 
-    expect(json).toMatchObject({
+    expect(result).toMatchObject({
       code: 1,
       output: {
         status: "failed",
-        error: { code: "UPDATE_DEV_CHECKOUT_PREPARE_FAILED" },
-        recoveryCommands,
+        artifactApplication: { status: "applied" },
+        error: { code: "UPDATE_SUCCESSOR_BOUNDARY_FAILED" },
+        result: { kind: "execution-failed", stage: "successor-boundary" },
       },
     });
-    expect(text).toMatchObject({ code: 1, outputFormat: "text" });
-    for (const command of [
-      "/opt/pnpm --dir /repo install --frozen-lockfile",
-      "/opt/bun --cwd /repo/station install --frozen-lockfile",
-      "/opt/pnpm --dir /repo build",
-      "/opt/bun run --cwd /repo/station link:station",
-      "/opt/bun run --cwd /repo/station repair:node-pty",
-      "/opt/pnpm --dir /repo station:link",
-    ]) {
-      expect(text.output).toContain(command);
-    }
   });
 
-  it("restarts the Observer before the default processes Host handoff", async () => {
-    const liveHost = await createLiveHostFixture();
-    const fixture = probeFixture("installer-binary");
-    const commands: ExternalCommandInput[] = [];
-    try {
-      const result = await runUpdateCommand(
-        ["--json"],
-        liveHostCommandOptions(liveHost.state.config),
-        {
-          probes: [fixture.probe],
-          buildInfo: testBuildInfo,
-          hostDeps: liveHost.hostDeps,
-          commandRunner: async (input) => {
-            commands.push(input);
-            return commandResult(input);
+  it.each([
+    {
+      disposition: "blocked" as const,
+      successorPreflight: preflight("2.0.0", "2.0.0", {
+        observer: {
+          status: "unknown",
+          reason: "identity-unavailable",
+          error: {
+            tag: "UpdatePreflightError",
+            code: "OBSERVER_UNKNOWN",
+            message: "Observer identity unavailable.",
           },
         },
-      );
-
-      expect(result.output).toMatchObject({ status: "updated" });
-      expect(commands.map(({ args }) => args)).toEqual([
-        ["--config", "/tmp/config.toml", "hooks", "reconcile", "codex"],
-        ["--config", "/tmp/config.toml", "observer", "restart", "--timeout-ms", "20000"],
-        ["--config", "/tmp/config.toml", "host", "handoff", "--fidelity", "processes"],
-      ]);
-    } finally {
-      await liveHost.close();
-    }
-  });
-
-  it("fails closed by default while --no-handoff skips Host preflight with a warning", async () => {
-    const liveHost = await createLiveHostFixture({
-      listError: new Error("inventory unavailable"),
-    });
-    const fixture = probeFixture("installer-binary");
-    try {
-      await expect(
-        runUpdateCommand(["--json"], liveHostCommandOptions(liveHost.state.config), {
-          probes: [fixture.probe],
-          buildInfo: testBuildInfo,
-          hostDeps: liveHost.hostDeps,
-        }),
-      ).rejects.toMatchObject({ code: "UPDATE_HOST_HANDOFF_PREFLIGHT_FAILED" });
-      expect(fixture.apply).not.toHaveBeenCalled();
-      liveHost.clientFactory.mockClear();
-
-      const result = await runUpdateCommand(
-        ["--no-handoff"],
-        liveHostCommandOptions(liveHost.state.config),
-        {
-          probes: [fixture.probe],
-          buildInfo: testBuildInfo,
-          hostDeps: liveHost.hostDeps,
-          commandRunner: async (input) => commandResult(input),
-        },
-      );
-      expect(result.output).toContain(
-        "warning: Host handoff was disabled; the next TUI may refuse the incumbent Host.",
-      );
-      expect(liveHost.clientFactory).not.toHaveBeenCalled();
-    } finally {
-      await liveHost.close();
-    }
-  });
-
-  it("retains a recovery command when Host handoff fails after Observer crossover", async () => {
-    const liveHost = await createLiveHostFixture();
-    const fixture = probeFixture("installer-binary");
-    let commandCount = 0;
-    try {
-      const result = await runUpdateCommand(
-        ["--handoff=screen", "--json"],
-        {
-          config: liveHost.state.config,
-          configPath: "/tmp/config.toml",
-          cliEntryPath: "/repo/apps/cli/dist/main.js",
-        },
-        {
-          probes: [fixture.probe],
-          buildInfo: testBuildInfo,
-          hostDeps: liveHost.hostDeps,
-          commandRunner: async (input) => {
-            commandCount += 1;
-            if (commandCount === 3) throw new Error("handoff failed");
-            return commandResult(input);
-          },
-        },
-      );
-
-      expect(result).toMatchObject({
-        code: 1,
-        output: {
-          status: "failed",
-          recoveryCommands: [
-            ["/opt/stn", "--config", "/tmp/config.toml", "host", "handoff", "--fidelity", "screen"],
-          ],
-          steps: [
-            { id: "detect", status: "completed" },
-            { id: "plan", status: "completed" },
-            { id: "apply", status: "completed" },
-            { id: "hook-reconciliation", status: "completed" },
-            { id: "observer-restart", status: "completed" },
-            { id: "host-handoff", status: "failed" },
-          ],
-        },
-      });
-    } finally {
-      await liveHost.close();
-    }
-  });
-
-  it("rejects manager driving for non-manager channels", async () => {
-    const fixture = probeFixture("installer-binary");
-    await expect(
-      runUpdateCommand(["--drive-package-manager"], commandOptions(), {
-        probes: [fixture.probe],
-        buildInfo: testBuildInfo,
       }),
-    ).rejects.toMatchObject({ code: "UPDATE_FLAG_INVALID" });
-  });
-
-  it("rejects unknown and duplicate flags before detection", async () => {
-    await expect(runUpdateCommand(["--channel", "other"], commandOptions())).rejects.toThrow(
-      "Usage: stn update",
+    },
+    {
+      disposition: "reap-required" as const,
+      successorPreflight: preflight("2.0.0", "2.0.0", {
+        observer: matchingObserver(identityB),
+        host: differentHost(identityA, [terminal("non-releasable")]),
+        terminalDispositions: [disposition("non-preservable", "non-resumable")],
+      }),
+    },
+  ])("propagates a valid $disposition successor report returned with exit status 1", async (testCase) => {
+    const outer = probe("update-available");
+    const outerRunner = vi.fn(async (input: ExternalCommandInput) =>
+      input.args?.includes("update")
+        ? successorResult(input, testCase.successorPreflight)
+        : commandResult(input),
     );
-    for (const args of [
-      ["--handoff", "--handoff"],
-      ["--no-handoff", "--no-handoff"],
-      ["--handoff", "--no-handoff"],
-    ]) {
-      await expect(runUpdateCommand(args, commandOptions())).rejects.toThrow(
-        "Host handoff may be configured only once",
-      );
-    }
-  });
-});
 
-describe("update channel selection", () => {
-  it("requires one unambiguous owner and honors explicit selection", async () => {
-    const installer = probeFixture("installer-binary").probe;
-    const npm = probeFixture("npm-global").probe;
-    await expect(selectUpdateChannel({ probes: [installer, npm] })).rejects.toMatchObject({
-      code: "UPDATE_CHANNEL_AMBIGUOUS",
+    const result = await runUpdateCommand(["--json"], options(), {
+      probes: [outer.probe],
+      buildInfo: build(identityA, "1.0.0"),
+      convergenceInspection: inspection(preflight("1.0.0", "2.0.0")),
+      commandRunner: outerRunner,
     });
-    await expect(
-      selectUpdateChannel({ probes: [installer, npm], requested: "npm-global" }),
-    ).resolves.toMatchObject({ channel: "npm-global" });
-    await expect(
-      selectUpdateChannel({ probes: [missingProbe("mise")], requested: "mise" }),
-    ).rejects.toMatchObject({ code: "UPDATE_CHANNEL_NOT_DETECTED" });
+
+    expect(result).toMatchObject({
+      code: 1,
+      output: {
+        status: testCase.disposition,
+        artifactApplication: { status: "applied" },
+        result: {
+          kind: "successor-runtime-execution",
+          successor: { evaluator: "successor-cli", plan: { status: testCase.disposition } },
+          postAction: { evaluator: "successor-cli", plan: { status: testCase.disposition } },
+          verification: {
+            status: "not-converged",
+            disposition: testCase.disposition,
+          },
+        },
+      },
+    });
+  });
+
+  it("propagates successor-owned Observer lifecycle evidence through the outer report", async () => {
+    const outer = probe("update-available");
+    const successor = probe("current", "2.0.0", "2.0.0");
+    const secret = "successor-observer-secret";
+    const outerRunner = vi.fn(async (input: ExternalCommandInput) => {
+      if (input.args?.includes("update")) {
+        const nested = await runUpdateCommand(
+          input.args.slice(input.args.indexOf("update") + 1),
+          options(),
+          {
+            probes: [successor.probe],
+            buildInfo: build(identityB, "2.0.0"),
+            convergenceInspection: inspection(preflight("2.0.0", "2.0.0")),
+            commandRunner: async (successorInput) =>
+              successorInput.args?.includes("observer")
+                ? observerFailureResult(successorInput, secret)
+                : commandResult(successorInput),
+          },
+        );
+        return externalResult(input, JSON.stringify(nested.output), nested.code);
+      }
+      return commandResult(input);
+    });
+    const result = await runUpdateCommand(["--json"], options(), {
+      probes: [outer.probe],
+      buildInfo: build(identityA, "1.0.0"),
+      convergenceInspection: inspection(preflight("1.0.0", "2.0.0")),
+      commandRunner: outerRunner,
+    });
+    const report = reportFrom(result);
+    expect(report).toMatchObject({
+      status: "failed",
+      artifactApplication: { status: "applied" },
+      result: {
+        kind: "execution-failed",
+        stage: "observer-convergence",
+        successor: { evaluator: "successor-cli" },
+      },
+      cause: { code: "OBSERVER_PROCESS_EXECUTABLE_ARGV_MISMATCH" },
+      startupEvidence: { bootLogPath: "/tmp/station/logs/observer-boot.log" },
+    });
+    expect(JSON.stringify(report)).not.toContain(secret);
+  });
+
+  it("deeply sanitizes every nested successor SafeError before JSON and text presentation", async () => {
+    const outer = probe("update-available");
+    const successor = probe("current", "2.0.0", "2.0.0");
+    const secret = "confidential-update-token";
+    const privatePath = "/Users/private-user/.station/runtime.sock";
+    const control = "\u001b";
+    const sensitive = `API_TOKEN=${secret} path:${privatePath} control=${control}[31m`;
+    outer.apply.mockResolvedValueOnce({
+      channel: "installer-binary",
+      status: "updated",
+      previousVersion: "1.0.0",
+      installedVersion: "2.0.0",
+      successorCli: ["/opt/stn-successor"],
+      warnings: [sensitiveSafeError("APPLY_WARNING", sensitive)],
+    });
+    const successorInitial = preflight("2.0.0", "2.0.0", {
+      observer: matchingObserver(identityB, "unknown"),
+      host: matchingHost(identityB),
+      hookProviderIds: ["codex"],
+      hooks: [{ provider: "codex", status: "needs-repair", reason: "missing" }],
+    });
+    const successorInspect = vi
+      .fn()
+      .mockResolvedValueOnce({
+        preflight: successorInitial,
+        privateEvidence: privateEvidence(successorInitial),
+      })
+      .mockRejectedValueOnce(sensitiveSafeError("FINAL_INSPECTION_PRIVATE", sensitive));
+    const outerRunner = vi.fn(async (input: ExternalCommandInput) => {
+      if (!input.args?.includes("update")) return commandResult(input);
+      const updateIndex = input.args.indexOf("update");
+      const nested = await runUpdateCommand(input.args.slice(updateIndex + 1), options(), {
+        probes: [successor.probe],
+        buildInfo: build(identityB, "2.0.0"),
+        convergenceInspection: successorInspect,
+        commandRunner: async (successorInput) =>
+          successorInput.args?.includes("hooks")
+            ? externalResult(
+                successorInput,
+                JSON.stringify({
+                  provider: "codex",
+                  status: "write-failed",
+                  changed: false,
+                  verified: false,
+                  error: sensitiveSafeError("HOOK_CHILD_PRIVATE", sensitive),
+                  followUp: { action: "retry" },
+                }),
+                1,
+              )
+            : commandResult(successorInput),
+      });
+      const childReport = reportFrom(nested);
+      childReport.warnings.push(sensitiveSafeError("SUCCESSOR_WARNING", sensitive));
+      if (
+        childReport.initial.preflight.observer.status !== "exact" ||
+        childReport.initial.preflight.observer.recovery.status !== "unknown"
+      ) {
+        throw new Error("expected nested recovery evidence");
+      }
+      childReport.initial.preflight.observer.recovery.error = sensitiveSafeError(
+        "NESTED_RECOVERY_PRIVATE",
+        sensitive,
+      );
+      if (childReport.result.kind !== "execution-failed") {
+        throw new Error("expected nested execution failure");
+      }
+      const hookResult = childReport.result.actionAudits[0]?.actions[0]?.hookResult;
+      if (hookResult?.status !== "write-failed") {
+        throw new Error("expected nested hook failure");
+      }
+      hookResult.error = sensitiveSafeError("HOOK_CHILD_PRIVATE", sensitive);
+      if (childReport.result.finalInspection.status !== "failed") {
+        throw new Error("expected nested final inspection failure");
+      }
+      childReport.result.finalInspection.error = sensitiveSafeError(
+        "FINAL_INSPECTION_PRIVATE",
+        sensitive,
+      );
+      return externalResult(input, JSON.stringify(childReport), nested.code);
+    });
+
+    const result = await runUpdateCommand(["--json"], options(), {
+      probes: [outer.probe],
+      buildInfo: build(identityA, "1.0.0"),
+      convergenceInspection: inspection(preflight("1.0.0", "2.0.0")),
+      commandRunner: outerRunner,
+    });
+    const report = reportFrom(result);
+    expect(report).toMatchObject({
+      status: "failed",
+      warnings: [{ code: "APPLY_WARNING" }, { code: "SUCCESSOR_WARNING" }],
+      result: {
+        kind: "execution-failed",
+        stage: "hook-reconciliation",
+        successor: {
+          preflight: {
+            observer: {
+              recovery: { error: { code: "NESTED_RECOVERY_PRIVATE" } },
+            },
+          },
+        },
+        actionAudits: [
+          expect.anything(),
+          {
+            actions: [
+              {
+                phase: "hook-reconciliation",
+                status: "failed",
+                hookResult: { error: { code: "HOOK_CHILD_PRIVATE" } },
+              },
+            ],
+          },
+        ],
+        finalInspection: {
+          status: "failed",
+          error: { code: "FINAL_INSPECTION_PRIVATE" },
+        },
+      },
+    });
+    const serialized = JSON.stringify(report);
+    const sanitizedSensitive =
+      "API_TOKEN=[REDACTED] path:[REDACTED_PATH] control=[REDACTED_CONTROL][31m";
+    expect(report.warnings[0]).toMatchObject({
+      code: "APPLY_WARNING",
+      message: sanitizedSensitive,
+      hint: `retry after ${sanitizedSensitive}`,
+    });
+    expect(serialized).not.toContain(secret);
+    expect(serialized).not.toContain(privatePath);
+    expect(serialized).not.toContain(control);
+    expect(serialized).not.toContain("\\u001b");
+    expect(serialized).toContain("[REDACTED]");
+    expect(serialized).toContain("[REDACTED_PATH]");
+    expect(serialized).toContain("[REDACTED_CONTROL]");
+
+    const text = textFor(result);
+    expect(text).toContain("result: execution-failed");
+    expect(text).toContain("hook-reconciliation: reconcile failed provider=codex");
+    expect(text).toContain(`warning: ${sanitizedSensitive}`);
+    expect(text).not.toContain(secret);
+    expect(text).not.toContain(privatePath);
+    expect(text).not.toContain(control);
+    expect(text).not.toContain("\\u001b");
   });
 });
 
-function commandOptions() {
-  return {
-    config,
-    configPath: "/tmp/config.toml",
-    cliEntryPath: "/repo/apps/cli/dist/main.js",
-  };
-}
-
-function liveHostCommandOptions(config: StationConfig) {
+function options() {
   return { config, configPath: "/tmp/config.toml", cliEntryPath: "/repo/apps/cli/dist/main.js" };
 }
 
-function recoveryPreflightFixture() {
-  const inspectObserver = vi.fn(async () => ({
-    status: "exact" as const,
-    buildVersion: "1.0.0+station.observer",
-    relation: "different" as const,
-    health: "healthy" as const,
-    recovery: {
-      status: "assessed" as const,
-      assessment: {
-        schemaVersion: 1 as const,
-        resumeEnabled: true,
-        providerCapabilities: [{ provider: "codex", status: "enabled" as const }],
-        sessions: [
-          {
-            sessionId: "session-a",
-            projectId: "project-a",
-            worktreeId: "worktree-a",
-            lifecycle: "open" as const,
-            harnessProvider: "codex",
-            disposition: "non-resumable" as const,
-            reasons: ["no_recovery_handles" as const],
-            handleResolution: {
-              kind: "none" as const,
-              eligibleHandleCount: 0 as const,
-              rejectedHandleCount: 0,
-              reasons: ["no_recovery_handles" as const],
-            },
-          },
-        ],
-      },
-    },
-  }));
-  const inspectHost = vi.fn(async () => ({
-    status: "inspected" as const,
-    buildVersion: "1.0.0+station.host",
-    protocolVersion: HOST_PROTOCOL_VERSION,
-    relation: "different" as const,
-    compatibility: "replace" as const,
-    terminals: [
-      {
-        kind: "agent" as const,
-        terminalTargetId: "terminal-a",
-        ptyId: "pty-a",
-        ptyInstanceId: "pty-instance-a",
-        projectId: "project-a",
-        worktreeId: "worktree-a",
-        sessionId: "session-a",
-        harnessProvider: "codex",
-        alive: true,
-        handoffSupport: "non-releasable" as const,
-      },
-    ],
-  }));
-  const readHookHealth = vi.fn(async () => ({
-    provider: "codex",
-    status: "needs-repair" as const,
-    reason: "owned-drift" as const,
-  }));
-  const ports: UpdateRecoveryPreflightPorts = {
-    inspectObserver,
-    inspectHost,
-    readHookHealth,
-    hookProviderIds: ["codex"],
-  };
-  const run = (input: Omit<Parameters<typeof runUpdateRecoveryPreflight>[0], "ports">) =>
-    runUpdateRecoveryPreflight({ ...input, ports });
-  return { run, inspectObserver, inspectHost, readHookHealth };
+function reportFrom(result: Awaited<ReturnType<typeof runUpdateCommand>>) {
+  return UpdateCommandReportSchema.parse(result.output);
 }
 
-function probeFixture(
-  channel: UpdateChannelId,
-  overrides: {
-    planStatus?: UpdatePlanBase["status"];
-    managerCommand?: readonly [string, ...string[]];
-    applyReport?: UpdateApplyReportBase;
-    applyRecoveryCommands?: (error: unknown) => readonly UpdateCommandArgv[] | undefined;
-  } = {},
+function textFor(result: Awaited<ReturnType<typeof runUpdateCommand>>): string {
+  const rendered = updateCommandResult(reportFrom(result), "text").output;
+  if (typeof rendered !== "string") throw new Error("expected update text output");
+  return rendered;
+}
+
+function build(buildIdentity: string, version: string) {
+  return () => ({ compiled: false, version, buildIdentity });
+}
+
+function probe(
+  status: "current" | "update-available",
+  current = "1.0.0",
+  target = "2.0.0",
+  managerCommand?: readonly [string, ...string[]],
+  channel: UpdateChannelProbe["channel"] = "installer-binary",
 ) {
-  const plan: UpdatePlanBase = {
+  const apply = vi.fn(async () => ({
     channel,
-    status: overrides.planStatus ?? "update-available",
-    currentVersion: "1.0.0",
-    targetVersion: overrides.planStatus === "current" ? "1.0.0" : "1.1.0",
-    currentCli: ["/opt/stn"],
-    ...(overrides.managerCommand === undefined ? {} : { managerCommand: overrides.managerCommand }),
-  };
-  const apply = vi.fn(
-    async () =>
-      (overrides.applyReport ?? {
-        channel,
-        status: "installed",
-        previousVersion: "1.0.0",
-        installedVersion: "1.1.0",
-        successorCli: ["/opt/stn"],
-        warnings: [],
-      }) satisfies UpdateApplyReportBase,
-  );
+    status: "updated" as const,
+    previousVersion: current,
+    installedVersion: target,
+    successorCli: ["/opt/stn-successor"] as const,
+    warnings: [],
+  }));
   const probe: UpdateChannelProbe = {
     channel,
     detectAndPlan: async () => ({
       channel,
-      plan,
+      plan: {
+        channel,
+        status,
+        currentVersion: current,
+        targetVersion: status === "current" ? current : target,
+        currentCli: ["/opt/stn-current"],
+        ...(managerCommand === undefined ? {} : { managerCommand }),
+      },
       apply,
-      ...(overrides.applyRecoveryCommands === undefined
-        ? {}
-        : { applyRecoveryCommands: overrides.applyRecoveryCommands }),
+    }),
+    proveInstalledTarget: async (selectedTarget) => ({
+      channel,
+      plan: {
+        channel,
+        status: "current",
+        currentVersion: selectedTarget.version,
+        targetVersion: selectedTarget.version,
+        currentCli: ["/opt/stn-current"],
+        ...(selectedTarget.revision === undefined
+          ? {}
+          : {
+              currentRevision: selectedTarget.revision,
+              targetRevision: selectedTarget.revision,
+            }),
+      },
+      apply,
     }),
   };
   return { probe, apply };
 }
 
-function missingProbe(channel: UpdateChannelId): UpdateChannelProbe {
-  return { channel, detectAndPlan: async () => undefined };
+function inspection(evidence: UpdateReapRecoveryPreflight) {
+  return vi.fn(async () => ({ preflight: evidence, privateEvidence: privateEvidence(evidence) }));
 }
 
-function commandResult(
-  input: ExternalCommandInput,
-  observerVersion?: string,
-): ExternalCommandResult {
-  const hookReconciliation =
-    input.args?.includes("hooks") === true && input.args.includes("reconcile");
-  const observerCrossover =
-    input.args?.includes("observer") === true &&
-    (input.args.includes("start") || input.args.includes("restart"));
-  return {
-    command: input.command,
-    args: input.args ?? [],
-    stdout: hookReconciliation
-      ? JSON.stringify({
-          provider: "codex",
-          status: "healthy",
-          changed: false,
-          verified: true,
-        })
-      : observerCrossover
-        ? JSON.stringify({
-            status: "running",
-            socketPath: config.observer.socketPath,
-            health: {
-              schemaVersion: STATION_SCHEMA_VERSION,
-              status: "healthy",
-              ...(observerVersion === undefined ? {} : { version: observerVersion }),
-            },
-          })
-        : "",
-    stderr: "",
-    exitCode: 0,
+function sequenceInspection(evidence: UpdateReapRecoveryPreflight[]) {
+  let index = 0;
+  return vi.fn(async () => {
+    const selected = evidence[Math.min(index, evidence.length - 1)];
+    index += 1;
+    if (selected === undefined) throw new Error("missing inspection fixture");
+    return { preflight: selected, privateEvidence: privateEvidence(selected) };
+  });
+}
+
+function privateEvidence(
+  preflight?: UpdateReapRecoveryPreflight,
+): UpdateConvergencePrivateEvidence {
+  const observer = preflight?.observer;
+  const buildSelector =
+    observer?.status === "exact" ||
+    (observer?.status === "unknown" && observer.reason === "restartable-executable-drift")
+      ? observer.buildVersion
+      : undefined;
+  const selectedRecoveryHandles =
+    observer?.status === "exact" && observer.recovery.status === "assessed"
+      ? observer.recovery.assessment.sessions.flatMap((session) =>
+          session.handleResolution.kind === "selected"
+            ? [{ sessionId: session.sessionId, selectedHandleId: `private-${session.sessionId}` }]
+            : [],
+        )
+      : [];
+  const evidence: UpdateConvergencePrivateEvidence = { selectedRecoveryHandles };
+  if (buildSelector !== undefined) {
+    evidence.observer = {
+      pid: 4242,
+      osStartTime: "Fri Aug 21 12:00:00 2026",
+      processToken: "123e4567-e89b-42d3-a456-426614174000",
+      buildSelector,
+    };
+  }
+  return evidence;
+}
+
+function preflight(
+  installed: string,
+  target: string,
+  overrides: Partial<UpdateReapRecoveryPreflight> = {},
+): UpdateReapRecoveryPreflight {
+  const evidence: UpdateReapRecoveryPreflight = {
+    schemaVersion: 1,
+    boundary: { authorization: "none", actions: "not-included", digest: "not-included" },
+    installed: { version: installed },
+    target: { version: target },
+    observer: { status: "absent" },
+    host: { status: "absent" },
+    hookProviderIds: [],
+    hooks: [],
+    terminalDispositions: [],
+    evidenceComplete: false,
+    ...overrides,
   };
+  evidence.evidenceComplete = updateReapEvidenceIsComplete(evidence);
+  return evidence;
+}
+
+function matchingObserver(
+  identity: string,
+  recovery: "assessed" | "unknown" = "assessed",
+): UpdateReapRecoveryPreflight["observer"] {
+  return {
+    status: "exact",
+    buildVersion: `1.0.0+station.${identity}`,
+    relation: "matching-target",
+    health: "healthy",
+    recovery:
+      recovery === "assessed"
+        ? {
+            status: "assessed",
+            assessment: {
+              schemaVersion: 1,
+              resumeEnabled: true,
+              providerCapabilities: [],
+              sessions: [],
+            },
+          }
+        : {
+            status: "unknown",
+            reason: "api-unavailable",
+            error: { tag: "UpdatePreflightError", code: "RECOVERY_UNKNOWN", message: "Unknown." },
+          },
+  };
+}
+
+function restartableObserverDrift(): UpdateReapRecoveryPreflight["observer"] {
+  return {
+    status: "unknown",
+    reason: "restartable-executable-drift",
+    buildVersion: `1.0.0+station.${identityA}`,
+    error: {
+      tag: "UpdatePreflightError",
+      code: "UPDATE_PREFLIGHT_OBSERVER_EXECUTABLE_DRIFT_RESTARTABLE",
+      message: "The incumbent is pinned for explicit restart.",
+    },
+  };
+}
+
+function matchingHost(
+  identity: string,
+  terminals: Extract<
+    UpdateReapRecoveryPreflight["host"],
+    { status: "inspected" }
+  >["terminals"] = [],
+): UpdateReapRecoveryPreflight["host"] {
+  return {
+    status: "inspected",
+    buildVersion: "1.0.0",
+    buildIdentity: identity,
+    protocolVersion: 8,
+    relation: "matching-target",
+    compatibility: "reuse",
+    terminals,
+  };
+}
+
+function differentHost(
+  identity: string,
+  terminals: Extract<UpdateReapRecoveryPreflight["host"], { status: "inspected" }>["terminals"],
+): UpdateReapRecoveryPreflight["host"] {
+  return {
+    status: "inspected",
+    buildVersion: "0.9.0",
+    buildIdentity: identity,
+    protocolVersion: 8,
+    relation: "different",
+    compatibility: "replace",
+    terminals,
+  };
+}
+
+function terminal(handoffSupport: "bridge-releasable" | "non-releasable", identity = "1") {
+  return {
+    kind: "agent" as const,
+    terminalTargetId: `terminal-${identity}`,
+    ptyId: `pty-${identity}`,
+    ptyInstanceId: `pty-instance-${identity}`,
+    projectId: `project-${identity}`,
+    worktreeId: `worktree-${identity}`,
+    sessionId: `session-${identity}`,
+    harnessProvider: "codex",
+    alive: true,
+    handoffSupport,
+  };
+}
+
+function disposition(
+  handoff: "preservable" | "non-preservable",
+  reapRecovery: "recoverable" | "non-resumable" | "unknown",
+  identity = "1",
+) {
+  return {
+    terminalTargetId: `terminal-${identity}`,
+    ptyId: `pty-${identity}`,
+    ptyInstanceId: `pty-instance-${identity}`,
+    sessionId: `session-${identity}`,
+    handoff,
+    reapRecovery,
+    reasons:
+      reapRecovery === "unknown"
+        ? (["session_recovery_unknown"] as const)
+        : reapRecovery === "non-resumable"
+          ? (["session_non_resumable"] as const)
+          : [],
+  };
+}
+
+function commandResult(input: ExternalCommandInput): Promise<ExternalCommandResult> {
+  return Promise.resolve(
+    input.args?.includes("observer")
+      ? externalResult(input, JSON.stringify(observerRunningResult()), 0)
+      : input.args?.includes("host")
+        ? externalResult(input, JSON.stringify(hostHandoffResult([terminalIdentity()])), 0)
+        : externalResult(input, "", 0),
+  );
+}
+
+function terminalIdentity(identity = "1") {
+  return {
+    terminalTargetId: `terminal-${identity}`,
+    ptyId: `pty-${identity}`,
+    ptyInstanceId: `pty-instance-${identity}`,
+  };
+}
+
+function hostHandoffResult(terminals: ReturnType<typeof terminalIdentity>[]) {
+  return {
+    action: "handoff" as const,
+    dryRun: false,
+    fidelity: "processes" as const,
+    socketPath: "/tmp/station-host.sock",
+    status: "completed" as const,
+    message: "Live handoff completed.",
+    livePtyCount: terminals.length,
+    receipt: { terminals },
+  };
+}
+
+function observerRunningResult() {
+  return {
+    status: "running" as const,
+    socketPath: "/tmp/station/observer.sock",
+    health: { schemaVersion: STATION_SCHEMA_VERSION, status: "healthy" as const },
+  };
+}
+
+function observerFailureResult(input: ExternalCommandInput, secret: string): ExternalCommandResult {
+  return {
+    ...externalResult(
+      input,
+      JSON.stringify({
+        status: "unhealthy",
+        paths: observerCommandPaths(),
+        error: {
+          tag: "ObserverStartupError",
+          code: "OBSERVER_HANDOFF_REFUSED",
+          message: "Observer build handoff was refused.",
+        },
+        cause: {
+          tag: "ObserverProcessIdentityError",
+          code: "OBSERVER_PROCESS_EXECUTABLE_ARGV_MISMATCH",
+          message: `Observer executable arguments did not match. API_TOKEN=${secret}`,
+        },
+        startupEvidence: {
+          bootLogPath: "/tmp/station/logs/observer-boot.log",
+          bootLogTail: `startup failed API_TOKEN=${secret}`,
+        },
+      }),
+      1,
+    ),
+    stderr: `raw observer stack API_TOKEN=${secret}`,
+  };
+}
+
+function sensitiveSafeError(code: string, sensitive: string): SafeError {
+  return {
+    tag: "UpdateConfidentialityError",
+    code,
+    message: sensitive,
+    hint: `retry after ${sensitive}`,
+  };
+}
+
+async function successorResult(
+  input: ExternalCommandInput,
+  successorPreflight: UpdateReapRecoveryPreflight,
+  forcedExitCode?: 0 | 1,
+): Promise<ExternalCommandResult> {
+  const successor = probe("current", "2.0.0", "2.0.0");
+  const updateIndex = input.args?.indexOf("update") ?? -1;
+  if (updateIndex < 0 || input.args === undefined) throw new Error("missing successor update argv");
+  const nested = await runUpdateCommand(input.args.slice(updateIndex + 1), options(), {
+    probes: [successor.probe],
+    buildInfo: build(identityB, "2.0.0"),
+    convergenceInspection: inspection(successorPreflight),
+    commandRunner: commandResult,
+  });
+  return externalResult(
+    input,
+    JSON.stringify(nested.output),
+    forcedExitCode === undefined ? nested.code : forcedExitCode,
+  );
 }
 
 function observerCommandPaths() {
-  const stateDir = "/tmp/station";
   return {
-    stateDir,
-    socketPath: `${stateDir}/run/observer.sock`,
-    dbPath: `${stateDir}/observer.sqlite`,
-    logDir: `${stateDir}/logs`,
-    diagnosticsDir: `${stateDir}/diagnostics`,
-    hookSpoolDir: `${stateDir}/spool/hooks`,
+    stateDir: "/tmp/station",
+    socketPath: "/tmp/station/observer.sock",
+    dbPath: "/tmp/station/observer.sqlite",
+    logDir: "/tmp/station/logs",
+    diagnosticsDir: "/tmp/station/diagnostics",
+    hookSpoolDir: "/tmp/station/spool/hooks",
   };
 }
 
-async function createLiveHostFixture(
-  options: { listError?: Error; hostBuildVersion?: string } = {},
-) {
-  const state = await createTempState();
-  const socketPath = stationHostSocketPath(state.config);
-  const server = await listenUnixSocket({ socketPath, onConnection: () => undefined });
-  const clientFactory = vi.fn(
-    () =>
-      ({
-        health: async () => ({
-          ok: true,
-          protocolVersion: HOST_PROTOCOL_VERSION,
-          buildVersion: options.hostBuildVersion ?? "1.0.0",
-        }),
-        list: async () => {
-          if (options.listError !== undefined) throw options.listError;
-          return [{ ptyId: "pty-1", pid: 42, alive: true }];
-        },
-        dispose: () => undefined,
-      }) as never,
-  );
-  return {
-    state,
-    clientFactory,
-    hostDeps: { clientFactory },
-    close: () => server.close(),
-  };
+function externalResult(
+  input: ExternalCommandInput,
+  stdout: string,
+  exitCode: number,
+): ExternalCommandResult {
+  return { command: input.command, args: input.args ?? [], stdout, stderr: "", exitCode };
 }

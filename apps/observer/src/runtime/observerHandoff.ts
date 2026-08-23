@@ -400,7 +400,7 @@ async function requireVerifiedProcessEvidence(
   if (verification.status !== "exact") {
     throw handoffRefused(
       "The incumbent Observer process identity could not be corroborated.",
-      verification.cause,
+      verification.status === "installed-path-replaced" ? undefined : verification.cause,
     );
   }
 }

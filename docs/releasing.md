@@ -21,11 +21,16 @@ builds the four native targets, creates a six-asset draft, exercises the stamped
 draft installer, binds the exact numeric asset IDs and shared target build
 identity, and records an immutable `accepted-release-candidate-*` artifact. The
 macOS candidate lane selects the newest complete immutable predecessor and
-runs the full scenario set: compiled predecessors must preserve and visibly
-refuse busy Hosts whose in-process PTYs cannot hand off, while the no-Host
-scenario must complete the version change. Post-promotion public update checks
-repeat the no-Host discovery, download, and installation proof. The tag
-workflow never publishes the draft automatically.
+runs two distinct transitions. The exact published predecessor uses the
+compatible v1-v4 report parser; for a pre-v4 predecessor, the no-Host lane
+validates its legacy artifact-update semantics and then requires the installed
+target to emit a strict v4 `current` report with verified convergence. It never
+attributes a v4 plan or pre-mutation guarantee to that legacy binary. A separate
+synthetic-version v4 incumbent runs the full staged-target scenario set and must
+stop before mutation with `pre-mutation-reap-required` for busy in-process PTYs
+while preserving the incumbent artifact and runtime. Post-promotion public
+checks repeat the compatible exact-predecessor no-Host transition and target-v4
+verification. The tag workflow never publishes the draft automatically.
 
 Do not begin manual acceptance until the workflow succeeds. Treat the workflow,
 not this prose, as the source of truth for artifact names, checksums, and target
@@ -78,11 +83,14 @@ clean Linux machine. Preserve the first failing command and output.
 - **Popup and ingress:** The optional tmux binding cold-opens and warm-reopens
   the popup, and `stn-ingress` delivers a provider event.
 - **Upgrade safety:** A supported `full-handoff` preserves PTY identity and
-  output through Host replacement. If the incumbent cannot hand off, the
-  `preserved-refusal` path leaves its Host and PTYs usable while the target native
-  UI refuses visibly; the pane-free popup may still render, but Host-producing
-  work remains guarded. Do not describe that bounded partial crossover as
-  runtime continuity. Concurrent probes observe a complete old or new binary.
+  output through Host replacement, with an exact receipt and final inventory
+  match. The staged transport refuses post-apply latest discovery so successor
+  convergence proves the pinned installed target without a new network
+  dependency. If the incumbent cannot hand off, the
+  `pre-mutation-reap-required` path leaves its incumbent artifact, Observer,
+  Host, and PTYs usable without applying or crossing over. Its digest is
+  revalidation evidence for #641, not signal authority. Concurrent probes
+  observe a complete old or new binary.
 - **Recovery:** An interrupted install leaves the previous TUI usable, releases
   owned locks and stages, and succeeds on retry. Never remove a lock whose owner
   may be alive.

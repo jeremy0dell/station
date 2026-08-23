@@ -1,5 +1,6 @@
 import { realpath } from "node:fs/promises";
 import { relative, resolve } from "node:path";
+import type { UpdateArtifact } from "@station/contracts";
 import {
   type ExternalCommandRunner,
   normalizeCancellationError,
@@ -65,7 +66,8 @@ export type HomebrewUpdateChannelDeps = {
 /**
  * ADAPTER
  *
- * Translates Homebrew Cellar or Caskroom ownership into a native brew update plan.
+ * Translates Homebrew Cellar or Caskroom ownership into a native brew update plan. Installed-target
+ * proof uses only the active Cellar/Caskroom path and does not request package metadata.
  */
 export function createHomebrewUpdateChannel(
   deps: HomebrewUpdateChannelDeps,
@@ -86,6 +88,23 @@ export function createHomebrewUpdateChannel(
           current.kind === "formula" ? "--formula" : "--cask",
           current.packageName,
         ],
+      };
+    },
+    async proveInstalledTarget(target: UpdateArtifact, options = {}) {
+      const installed = await detectInstalledHomebrew(deps, options);
+      if (
+        installed === undefined ||
+        target.revision !== undefined ||
+        installed.currentVersion !== target.version
+      ) {
+        return undefined;
+      }
+      return {
+        channel,
+        status: "current",
+        currentVersion: target.version,
+        targetVersion: target.version,
+        currentCli: [installed.executablePath],
       };
     },
     async apply(plan, options = {}) {
@@ -122,6 +141,35 @@ export function createHomebrewUpdateChannel(
       }) as Promise<HomebrewUpdateReport>;
     },
   };
+}
+
+async function detectInstalledHomebrew(
+  deps: HomebrewUpdateChannelDeps,
+  options: UpdateOperationOptions,
+): Promise<{ currentVersion: string; executablePath: string } | undefined> {
+  const brewPath = await resolveExecutablePath(
+    "brew",
+    deps.pathEnv === undefined ? {} : { pathEnv: deps.pathEnv },
+  );
+  if (brewPath === undefined) return undefined;
+  try {
+    const prefixResult = await runBrew(brewPath, ["--prefix"], deps.commandRunner, options);
+    const prefix = await realpath(oneLine(prefixResult.stdout, "Homebrew prefix"));
+    const executablePath = resolve(prefix, "bin", "stn");
+    const runtimePath = await realpath(deps.runtimePath);
+    const ownership = homebrewOwnership(prefix, runtimePath);
+    if (ownership === undefined || (await realpath(executablePath)) !== runtimePath) {
+      return undefined;
+    }
+    return { currentVersion: ownership.version, executablePath };
+  } catch (error) {
+    const cancellation = normalizeCancellationError(error);
+    if (cancellation !== undefined) throw cancellation;
+    throw updateErrorFromUnknown(error, {
+      code: "UPDATE_CHANNEL_DETECT_FAILED",
+      message: "Homebrew installation ownership could not be inspected.",
+    });
+  }
 }
 
 async function detectHomebrew(

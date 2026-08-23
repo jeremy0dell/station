@@ -1,5 +1,6 @@
 import { loadedConfigCommandOptions } from "../cliCommand/helpers.js";
 import type { CliCommandNode, CliCommandRunContext } from "../cliCommand/types.js";
+import { parseHostArgs } from "../host/args.js";
 import { hostCommandSummary, runHostCommand } from "../host/index.js";
 
 export const hostCliCommand: CliCommandNode = {
@@ -7,7 +8,7 @@ export const hostCliCommand: CliCommandNode = {
   description: "Inspect or opt into live Station host upgrade handoff.",
   requiresConfig: true,
   run: runHostCliCommand,
-  usage: ["stn host status", "stn host handoff [--dry-run] [--fidelity processes|screen]"],
+  usage: ["stn host status", "stn host handoff [--dry-run] [--fidelity processes|screen] [--json]"],
   options: [
     {
       name: "--dry-run",
@@ -16,6 +17,10 @@ export const hostCliCommand: CliCommandNode = {
     {
       name: "--fidelity processes|screen",
       description: "Handoff fidelity; screen degrades to processes when capture fails.",
+    },
+    {
+      name: "--json",
+      description: "Emit the strict handoff result and exact immutable terminal receipt.",
     },
   ],
   examples: [
@@ -33,7 +38,7 @@ export const hostCliCommand: CliCommandNode = {
     {
       name: "handoff",
       description: "Opt into live PTY ownership transfer to this Station build.",
-      usage: ["stn host handoff [--dry-run] [--fidelity processes|screen]"],
+      usage: ["stn host handoff [--dry-run] [--fidelity processes|screen] [--json]"],
       options: [
         {
           name: "--dry-run",
@@ -42,6 +47,10 @@ export const hostCliCommand: CliCommandNode = {
         {
           name: "--fidelity processes|screen",
           description: "Transfer fidelity level.",
+        },
+        {
+          name: "--json",
+          description: "Emit the strict machine-readable handoff result.",
         },
       ],
       examples: ["pnpm stn host handoff --dry-run"],
@@ -52,6 +61,7 @@ export const hostCliCommand: CliCommandNode = {
 async function runHostCliCommand(context: CliCommandRunContext) {
   const options = loadedConfigCommandOptions(context);
   try {
+    const parsed = parseHostArgs(context.args);
     const result = await runHostCommand(context.args, options, context.options.hostDeps);
     const failed =
       (result.action === "handoff" &&
@@ -59,8 +69,8 @@ async function runHostCliCommand(context: CliCommandRunContext) {
       (result.action === "status" && result.probe !== "listening");
     return {
       code: failed ? 1 : 0,
-      output: hostCommandSummary(result),
-      outputFormat: "text" as const,
+      output: parsed.output === "json" ? result : hostCommandSummary(result),
+      outputFormat: parsed.output,
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

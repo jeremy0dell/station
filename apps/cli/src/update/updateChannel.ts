@@ -1,4 +1,4 @@
-import type { UpdateChannelId, UpdateCommandArgv } from "@station/contracts";
+import type { UpdateArtifact, UpdateChannelId, UpdateCommandArgv } from "@station/contracts";
 import { UpdateChannelIdSchema } from "@station/contracts";
 import type { RuntimeSafeError } from "@station/runtime";
 import type { ExecutableArgv } from "../selfExec.js";
@@ -39,7 +39,7 @@ export type UpdateOperationOptions = {
 /**
  * DRIVEN PORT
  *
- * Defines one install owner's typed detect, plan, apply, and optional adapter-owned recovery lifecycle.
+ * Defines one install owner's typed detect, plan, apply, exact installed-target proof, and optional adapter-owned recovery lifecycle.
  */
 export interface UpdateChannel<
   Detection extends UpdateDetectionBase = UpdateDetectionBase,
@@ -49,6 +49,11 @@ export interface UpdateChannel<
   readonly id: UpdateChannelId;
   detect(options?: UpdateOperationOptions): Promise<Detection | undefined>;
   plan(detection: Detection, options?: UpdateOperationOptions): Promise<Plan>;
+  /** Proves local ownership of an already-installed pinned target without remote/latest discovery. */
+  proveInstalledTarget(
+    target: UpdateArtifact,
+    options?: UpdateOperationOptions,
+  ): Promise<UpdatePlanBase | undefined>;
   apply(plan: Plan, options?: UpdateOperationOptions): Promise<Report>;
   applyRecoveryCommands?(plan: Plan, error: unknown): readonly UpdateCommandArgv[] | undefined;
 }

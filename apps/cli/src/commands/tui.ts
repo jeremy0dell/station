@@ -32,7 +32,7 @@ import {
   resolveStationWorkspaceDir,
   stationUiInstallHint,
 } from "../stationWorkspace.js";
-import { selectUpdateChannel, type UpdateChannelProbe } from "../update/channelDetection.js";
+import { selectUpdateChannel, type UpdateDiscoveryProbe } from "../update/channelDetection.js";
 import { requireMatchingStationUiObserverBuild } from "./stationUiBuildAdmission.js";
 import { attachTuiRendererControl, type TuiRendererControlAdapters } from "./tuiRendererControl.js";
 import { createTuiRendererLifecycleWitness } from "./tuiRendererLifecycle.js";
@@ -66,7 +66,7 @@ export type TuiCommandDeps = {
   stationUiInstalled?: () => Promise<boolean>;
   selfExecRuntime?: SelfExecRuntime;
   popupControl?: TuiRendererControlAdapters;
-  updateProbes?: readonly UpdateChannelProbe[];
+  updateProbes?: readonly UpdateDiscoveryProbe[];
   writeUpdateNotice?: (notice: string) => void;
   env?: CliEnv;
 };

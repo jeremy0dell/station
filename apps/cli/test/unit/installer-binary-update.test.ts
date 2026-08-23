@@ -16,7 +16,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ExternalCommandInput, ExternalCommandResult } from "@station/runtime";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createGithubNativeReleaseDiscovery,
   type NativeBinaryRelease,
@@ -202,6 +202,28 @@ describe("installer-binary detection and planning", () => {
       receiptIdentity: { device: expect.any(String), inode: expect.any(String) },
     });
     expect(discoveries).toBe(0);
+  });
+
+  it("proves an inherited installed target without invoking release discovery", async () => {
+    const fixture = await installedFixture();
+    const resolve = vi.fn(async () => {
+      throw new Error("release transport is unavailable after commit");
+    });
+    const channel = createChannel(fixture, { releaseDiscovery: { resolve } });
+
+    await expect(channel.proveInstalledTarget({ version: CURRENT_VERSION })).resolves.toMatchObject(
+      {
+        channel: "installer-binary",
+        status: "current",
+        currentVersion: CURRENT_VERSION,
+        targetVersion: CURRENT_VERSION,
+        currentCli: [fixture.executablePath],
+      },
+    );
+    await expect(
+      channel.proveInstalledTarget({ version: TARGET_VERSION }),
+    ).resolves.toBeUndefined();
+    expect(resolve).not.toHaveBeenCalled();
   });
 
   it("returns undefined for source, unsupported, receipt-less, and non-owned layouts", async () => {

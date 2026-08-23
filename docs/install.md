@@ -267,17 +267,42 @@ stn update --dry-run --reap
 stn update --dry-run --reap --json
 ```
 
-`--dry-run --reap` adds one read-only recovery preflight to the update report.
-It captures the installed and target builds, one live Observer graph snapshot,
-one retained-session inventory query through the Observer API, exact
-Station-owned terminal evidence, Host handoff support, provider resume
-capability and deterministic handle selection, and provider-neutral hook
-health. Every affected terminal and retained session receives a disposition;
-non-resumable consequences are called out explicitly. The preflight does not
-install, signal, restart, reconcile hooks, resume sessions, authorize actions,
-or produce an execution digest. `--reap` without `--dry-run` is rejected before
-update detection or mutation; destructive execution remains a later command
-boundary.
+Every resolved target now receives one read-only aggregate inspection and a
+typed convergence plan, even when the artifact version and revision are already
+installed or a package manager owns application. The aggregate captures live
+Observer identity and health, retained-session recovery assessment, exact
+Station terminal identity, Host compatibility and handoff support, and
+provider-neutral hook health. Evidence relevant to one component cannot be
+substituted for another: unknown Observer identity blocks Observer decisions,
+unknown Host inventory blocks Host and terminal decisions, and uncertain hook
+ownership blocks hook mutation. The CLI constructs public evidence with its
+private Observer ownership and selected-handle sidecar in one required
+inspection, then rejects mismatched build selectors or any missing, duplicate,
+or mismatched selected session-to-handle correspondence before projecting the
+public-only aggregate. An absent Observer and Host may still be safely
+started and reconciled. Terminal dispositions must exactly and uniquely match
+the Host's canonical PTY identities; destructive recovery evidence is required
+only for the correlated non-preservable terminals, while preservable bridge
+terminals may hand off under a fresh plan after that subset is reaped. The sole
+Observer identity exception is installed-executable drift after atomic
+replacement: the verifier must prove exact parsed argv and every health-pinned
+process identity while only the old live image differs from the current
+installed-path identity. The selected same-or-higher build may then use the
+existing cooperative explicit restart. Missing or ambiguous process records,
+generic executable or argv mismatch, lower builds, and other identity mismatches
+remain blocked, and this exception never authorizes automatic signals or
+destructive reaping.
+
+Dry-run v4 output retains the selected artifact, redacted aggregate, typed
+component decisions, SHA-256 plan digest, and seven ordered convergence phases,
+all explicitly marked non-executed. `--dry-run --reap` is the recovery-focused
+spelling for reviewing non-resumable consequences. The public JSON and text
+never include Observer process tokens, opaque Station recovery-handle IDs,
+provider-native payloads, or destructive process-group targets. Private
+ownership and selected Station-handle facts can change the digest, but the hash
+reveals none of those values and grants no mutation or signal authority.
+`--reap` without `--dry-run` is rejected before update detection; destructive
+execution remains owned by issue #641.
 
 The supported channel IDs are:
 
@@ -313,7 +338,12 @@ Homebrew, npm-global, and mise print their exact native upgrade command and
 return `deferred` by default. `stn update --drive-package-manager` explicitly
 allows Station to execute that command. This does not make those managers
 supported public Station distribution channels; it preserves manager ownership
-for installations that already use them. Use `--channel <id>` to resolve an
+for installations that already use them. The aggregate inspection and typed
+component decisions remain visible when application is deferred, but deferral
+controls the terminal status and every runtime phase remains non-executed. The
+strict v4 artifact application field retains that exact argv for manager-owned
+preview and deferral only; both JSON and text preserve it, with text using safe
+shell quoting. Use `--channel <id>` to resolve an
 ambiguous installation, but explicit selection never bypasses ownership proof.
 
 Dev-checkout preparation runs after every fast-forward rather than guessing from
@@ -324,25 +354,45 @@ report lists the complete frozen-install, build, repair, and relink sequence to
 resume safely.
 
 Before mutation, `stn update` defaults to preserving a busy compatible Host with
-preflighted `processes` handoff. Absent, stale, reusable, and idle Hosts need no handoff;
-uncertain preservation fails closed, and deferred package-manager updates skip
-Host inspection. Use `--handoff=screen` for semantic snapshots or
-`--no-handoff` to leave the incumbent in place with a stale-Host warning.
+`processes` handoff. A matching Host is reused, an old idle Host is replaced,
+and a busy bridge-backed Host uses the existing safe handoff contract. Use
+`--handoff=screen` for semantic snapshots. `--no-handoff` with a busy old Host
+returns `intentionally-incomplete` without applying the artifact or mutating
+Observer, Host, hooks, or terminals.
 
-After channel apply completes, the new launcher runs `stn observer restart`, so
-Observer build precedence is evaluated by the installed build rather than the
-old process. The same successor launcher then performs any preflighted Host
-handoff. Failures report completed phases, sanitized evidence, and exact
-recovery commands; a verified install or Git fast-forward is not rolled back
-after a later preparation or runtime-crossover failure.
+A busy old Host containing a non-bridge PTY cannot use safe handoff. When all
+terminal-loss and recovery consequences are complete, update returns a fresh
+`reap-required` plan before artifact, Observer, Host, or hook mutation. Missing
+or contradictory evidence blocks instead. Issue #641 can rerun that incumbent-
+evaluated plan against unchanged state, compare its digest, independently
+authorize and journal exact Station-owned process groups, reap them, and only
+then continue through artifact application and successor convergence. #640 does
+not collect process-group targets, and a matching digest alone never authorizes
+a signal.
+
+When artifact application is admitted, the owning channel applies it and the
+exact successor launcher proves the incumbent-selected artifact and revision
+are now current through the owning channel's local installed-target proof. It
+does not rerun latest discovery, remote pagination, or target availability
+checks after the artifact is committed. It then performs a fresh inspection,
+executes its own safe hook, Observer, Host, and reconcile decisions in canonical
+order, and verifies a final no-op plan. Current-artifact actions stay with the
+current launcher. A live Host handoff also requires a strict receipt containing
+the exact planned `{ terminalTargetId, ptyId, ptyInstanceId }` set and final
+inspection must retain that set; absence is not treated as an unevidenced
+natural exit.
+The v4 report retains the initial evidence, every executed plan digest and
+action audit, successor evidence when applicable, and the final verified
+aggregate. `current` and `updated` mean both artifact and required live runtime
+components are proven converged; successful commands alone cannot produce
+either status. `planned` is reserved for dry-run preview; after mutation, a
+fresh plan with remaining actions is a verification failure with nonzero exit.
+A verified install or Git fast-forward is not rolled back after a later runtime
+failure.
 
 Current compiled binaries, including immutable `.5.2`, use in-process Bun PTYs
-and cannot preserve a live PTY across Host replacement. If handoff fails after
-installation and Observer crossover, Station leaves the old Host and PTY alive;
-the target native UI visibly refuses that old Host. The pane-free tmux dashboard
-may still render against the target Observer, while Host-producing work remains
-guarded. This bounded partial crossover is not transparent runtime continuity.
-Source mode alone has the parkable Node/node-pty bridge.
+and therefore take the pre-mutation `reap-required` path when busy. Source mode
+has the parkable Node/node-pty bridge and can use safe live handoff.
 
 The `installer-binary` channel may own only compiled installations carrying the
 receipt. Detection is local and network-free. Before release discovery and

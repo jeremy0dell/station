@@ -191,7 +191,11 @@ classification separately from the report's typed causal error and bounded boot-
 The channel is diagnostic transport only: malformed, missing, or oversized reports authorize
 no retry, repair, unlink, stop, or signal. In particular, an exact executable/argv mismatch is
 reported as `OBSERVER_PROCESS_EXECUTABLE_ARGV_MISMATCH` while the existing fail-closed handoff
-decision continues to preserve the incumbent.
+decision continues to preserve the incumbent. Update inspection separately recognizes
+`installed-path-replaced` only when exact parsed argv and every stable process-identity field still
+match and only the live executable image differs from the current installed-path identity. Missing
+or ambiguous process records remain unavailable, and this distinction grants no handoff, repair,
+or signal authority.
 
 ## Ownership-loss shutdown
 

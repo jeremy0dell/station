@@ -1,4 +1,4 @@
-import type { HostHandoffFidelity } from "@station/contracts";
+import type { HostHandoffFidelity, UpdateArtifact } from "@station/contracts";
 import { type UpdateChannelId, updateChannelIds } from "../../update/updateChannel.js";
 
 export type UpdateRequest = {
@@ -8,6 +8,8 @@ export type UpdateRequest = {
   packageManager: "defer" | "drive";
   handoff?: HostHandoffFidelity;
   reap: boolean;
+  evaluator: "incumbent-cli" | "successor-cli";
+  successorTarget?: UpdateArtifact;
 };
 
 const updateUsage =
@@ -25,6 +27,9 @@ export function parseUpdateRequest(args: readonly string[]): UpdateRequest {
   let handoff: HostHandoffFidelity | undefined = "processes";
   let handoffConfigured = false;
   let reap = false;
+  let evaluator: UpdateRequest["evaluator"] = "incumbent-cli";
+  let successorTargetVersion: string | undefined;
+  let successorTargetRevision: string | undefined;
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
     if (arg === "--channel") {
@@ -48,6 +53,31 @@ export function parseUpdateRequest(args: readonly string[]): UpdateRequest {
     if (arg === "--reap") {
       if (reap) throw new Error("--reap may be provided only once.");
       reap = true;
+      continue;
+    }
+    if (arg === "--internal-successor-evaluator") {
+      if (evaluator === "successor-cli") throw new Error(updateUsage);
+      evaluator = "successor-cli";
+      continue;
+    }
+    if (arg === "--internal-selected-target-version") {
+      if (successorTargetVersion !== undefined) throw new Error(updateUsage);
+      const value = args[index + 1];
+      if (value === undefined || value.length === 0 || value.startsWith("--")) {
+        throw new Error(updateUsage);
+      }
+      successorTargetVersion = value;
+      index += 1;
+      continue;
+    }
+    if (arg === "--internal-selected-target-revision") {
+      if (successorTargetRevision !== undefined) throw new Error(updateUsage);
+      const value = args[index + 1];
+      if (value === undefined || value.length === 0 || value.startsWith("--")) {
+        throw new Error(updateUsage);
+      }
+      successorTargetRevision = value;
+      index += 1;
       continue;
     }
     if (arg === "--drive-package-manager") {
@@ -84,12 +114,27 @@ export function parseUpdateRequest(args: readonly string[]): UpdateRequest {
       "stn update --reap is not an execution mode yet. Use --dry-run --reap to inspect non-resumable consequences without mutation.",
     );
   }
+  if (
+    (evaluator === "successor-cli") !== (successorTargetVersion !== undefined) ||
+    (successorTargetRevision !== undefined && successorTargetVersion === undefined)
+  ) {
+    throw new Error(updateUsage);
+  }
+  const successorTarget: UpdateArtifact | undefined =
+    successorTargetVersion === undefined
+      ? undefined
+      : {
+          version: successorTargetVersion,
+          ...(successorTargetRevision === undefined ? {} : { revision: successorTargetRevision }),
+        };
   return {
     ...(channel === undefined ? {} : { channel }),
     mode,
     output,
     packageManager,
     reap,
+    evaluator,
     ...(handoff === undefined ? {} : { handoff }),
+    ...(successorTarget === undefined ? {} : { successorTarget }),
   };
 }

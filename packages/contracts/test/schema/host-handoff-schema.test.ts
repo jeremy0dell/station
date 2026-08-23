@@ -1,4 +1,5 @@
 import {
+  HostHandoffCommandResultSchema,
   HostHandoffFidelitySchema,
   PtyBridgeAdoptCommandSchema,
   PtyBridgeAdoptionAckSchema,
@@ -8,6 +9,7 @@ import {
   PtyHandoffEntrySchema,
   PtyHandoffIdentitySchema,
   PtyHandoffManifestSchema,
+  PtyHandoffReceiptSchema,
   PtyScreenSnapshotSchema,
   PtyScrollbackExportSchema,
 } from "@station/contracts";
@@ -99,6 +101,57 @@ describe("pty handoff manifest schema", () => {
       PtyHandoffManifestSchema.parse({ "pty-1": entry({ identity: undefined }) }),
     ).toThrow();
     expect(() => PtyHandoffManifestSchema.parse({ "pty-1": entry(), "pty-2": entry() })).toThrow();
+  });
+});
+
+describe("pty handoff receipt schema", () => {
+  const terminal = (id: string) => ({
+    terminalTargetId: `native:wt-${id}`,
+    ptyId: `pty-${id}`,
+    ptyInstanceId: `ptyi-${id}`,
+  });
+
+  it("accepts an exact sorted receipt and strict completed command result", () => {
+    const receipt = PtyHandoffReceiptSchema.parse({ terminals: [terminal("1"), terminal("2")] });
+    expect(
+      HostHandoffCommandResultSchema.parse({
+        action: "handoff",
+        dryRun: false,
+        fidelity: "processes",
+        socketPath: "/state/host.sock",
+        status: "completed",
+        message: "Handoff completed.",
+        livePtyCount: 2,
+        receipt,
+      }),
+    ).toMatchObject({ receipt });
+  });
+
+  it("rejects duplicate, unsorted, count-contradictory, and private receipt data", () => {
+    expect(
+      PtyHandoffReceiptSchema.safeParse({ terminals: [terminal("1"), terminal("1")] }).success,
+    ).toBe(false);
+    expect(
+      PtyHandoffReceiptSchema.safeParse({ terminals: [terminal("2"), terminal("1")] }).success,
+    ).toBe(false);
+    const base = {
+      action: "handoff",
+      dryRun: false,
+      fidelity: "processes",
+      socketPath: "/state/host.sock",
+      status: "completed",
+      message: "Handoff completed.",
+      livePtyCount: 2,
+      receipt: { terminals: [terminal("1")] },
+    };
+    expect(HostHandoffCommandResultSchema.safeParse(base).success).toBe(false);
+    expect(
+      HostHandoffCommandResultSchema.safeParse({
+        ...base,
+        livePtyCount: 1,
+        receipt: { terminals: [{ ...terminal("1"), processToken: "private" }] },
+      }).success,
+    ).toBe(false);
   });
 });
 

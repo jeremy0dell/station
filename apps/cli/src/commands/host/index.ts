@@ -1,7 +1,7 @@
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type StationConfig, stationHostSocketPath } from "@station/config";
-import type { HostHandoffFidelity } from "@station/contracts";
+import type { HostHandoffCommandResult, HostHandoffFidelity } from "@station/contracts";
 import {
   classifyHostCompatibility,
   createStationHostClient,
@@ -23,6 +23,8 @@ export type HostCommandDeps = {
   resolveHostCommand?: () => readonly [string, ...string[]];
   /** Test/composition override for the requesting Station build identity. */
   expectedBuildVersion?: string;
+  /** Immutable content identity required when update convergence must distinguish same-version builds. */
+  expectedBuildIdentity?: string;
 };
 
 export type HostInspectionEntry = HostListEntry & {
@@ -42,19 +44,7 @@ export type HostStatusResult = {
   error?: string;
 };
 
-export type HostHandoffResult = {
-  action: "handoff";
-  dryRun: boolean;
-  fidelity: HostHandoffFidelity;
-  socketPath: string;
-  status: "planned" | "completed" | "refused" | "unavailable";
-  message: string;
-  livePtyCount?: number;
-  /** From ensure's fail-closed adopt report when status is completed. */
-  adopted?: string[];
-};
-
-export type HostCommandResult = HostStatusResult | HostHandoffResult;
+export type HostCommandResult = HostStatusResult | HostHandoffCommandResult;
 
 export type HostCommandOptions = {
   config: StationConfig;
@@ -65,7 +55,8 @@ export type HostCommandOptions = {
  *
  * Drive Station host inspection and opt-in live handoff from the CLI without
  * routing through Observer application code. Mutating handoff defers policy to
- * `ensureStationHostRunning`; this layer only projects the ensure outcome.
+ * `ensureStationHostRunning`; this layer projects its exact immutable PTY receipt at the strict JSON
+ * boundary.
  */
 export async function runHostCommand(
   args: readonly string[],
@@ -75,15 +66,26 @@ export async function runHostCommand(
   const parsed = parseHostArgs(args);
   const socketPath = stationHostSocketPath(options.config);
   const stateDir = resolveObserverPaths(options.config).stateDir;
-  const expectedBuildVersion = deps.expectedBuildVersion ?? stationBuildInfo().version;
+  const processBuild = deps.expectedBuildVersion === undefined ? stationBuildInfo() : undefined;
+  const expectedBuildVersion = deps.expectedBuildVersion ?? processBuild?.version;
+  if (expectedBuildVersion === undefined)
+    throw new Error("Expected Host build version is missing.");
+  const expectedBuildIdentity = deps.expectedBuildIdentity ?? processBuild?.buildIdentity;
   const clientFactory =
     deps.clientFactory ??
     ((path, build) => createStationHostClient({ socketPath: path, expectedBuildVersion: build }));
 
   if (parsed.action === "status") {
-    return runHostStatus({ socketPath, expectedBuildVersion, clientFactory });
+    const statusInput: Parameters<typeof runHostStatus>[0] = {
+      socketPath,
+      expectedBuildVersion,
+      clientFactory,
+    };
+    if (expectedBuildIdentity !== undefined)
+      statusInput.expectedBuildIdentity = expectedBuildIdentity;
+    return runHostStatus(statusInput);
   }
-  return runHostHandoff({
+  const handoffInput: Parameters<typeof runHostHandoff>[0] = {
     socketPath,
     stateDir,
     expectedBuildVersion,
@@ -92,7 +94,10 @@ export async function runHostCommand(
     clientFactory,
     ensureHost: deps.ensureHost ?? ensureStationHostRunning,
     resolveHostCommand: deps.resolveHostCommand ?? resolveStationHostCommand,
-  });
+  };
+  if (expectedBuildIdentity !== undefined)
+    handoffInput.expectedBuildIdentity = expectedBuildIdentity;
+  return runHostHandoff(handoffInput);
 }
 
 export function hostCommandSummary(result: HostCommandResult): string {
@@ -128,8 +133,8 @@ export function hostCommandSummary(result: HostCommandResult): string {
   if (result.livePtyCount !== undefined) {
     lines.push(`livePtys: ${result.livePtyCount}`);
   }
-  if (result.adopted !== undefined) {
-    lines.push(`adopted: ${result.adopted.length}`);
+  if (result.receipt !== undefined) {
+    lines.push(`adopted: ${result.receipt.terminals.length}`);
   }
   return `${lines.join("\n")}\n`;
 }
@@ -137,6 +142,7 @@ export function hostCommandSummary(result: HostCommandResult): string {
 async function runHostStatus(input: {
   socketPath: string;
   expectedBuildVersion: string;
+  expectedBuildIdentity?: string;
   clientFactory: (socketPath: string, expectedBuildVersion: string) => StationHostClient;
 }): Promise<HostStatusResult> {
   const probe = await probeUnixSocket(input.socketPath);
@@ -153,8 +159,7 @@ async function runHostStatus(input: {
   try {
     const health = await client.health();
     result.health = health;
-    const compatibility = classifyHostCompatibility(health, input.expectedBuildVersion);
-    result.compatibility = compatibility;
+    let compatibility = classifyHostCompatibility(health, input.expectedBuildVersion);
     // Inventory stays read-only but must pass the client's exact incumbent-build gate.
     const inventoryClient =
       compatibility.action === "replace"
@@ -168,6 +173,12 @@ async function runHostStatus(input: {
         try {
           const recovery = await inventoryClient.recoveryInventory();
           result.buildIdentity = recovery.buildIdentity;
+          if (compatibility.action === "reuse" && input.expectedBuildIdentity !== undefined) {
+            compatibility =
+              recovery.buildIdentity === input.expectedBuildIdentity
+                ? compatibility
+                : { action: "replace", runningBuildVersion: input.expectedBuildVersion };
+          }
           ptys = recovery.ptys;
         } catch (error) {
           if (!isSafeError(error) || error.code !== "HOST_BAD_REQUEST") throw error;
@@ -176,6 +187,14 @@ async function runHostStatus(input: {
         }
       }
       result.ptys = ptys;
+      if (
+        compatibility.action === "reuse" &&
+        input.expectedBuildIdentity !== undefined &&
+        result.buildIdentity === undefined
+      ) {
+        compatibility = { action: "refuse", reason: "legacy-health" };
+      }
+      result.compatibility = compatibility;
       result.livePtyCount = ptys.length;
       result.handoffEligible = compatibility.action === "replace" && ptys.length > 0;
     } catch (error) {
@@ -197,12 +216,13 @@ async function runHostHandoff(input: {
   socketPath: string;
   stateDir: string;
   expectedBuildVersion: string;
+  expectedBuildIdentity?: string;
   dryRun: boolean;
   fidelity: HostHandoffFidelity;
   clientFactory: (socketPath: string, expectedBuildVersion: string) => StationHostClient;
   ensureHost: typeof ensureStationHostRunning;
   resolveHostCommand: () => readonly [string, ...string[]];
-}): Promise<HostHandoffResult> {
+}): Promise<HostHandoffCommandResult> {
   const base = {
     action: "handoff" as const,
     dryRun: input.dryRun,
@@ -225,6 +245,9 @@ async function runHostHandoff(input: {
         stateDir: input.stateDir,
         hostCommand: input.resolveHostCommand(),
         expectedBuildVersion: input.expectedBuildVersion,
+        ...(input.expectedBuildIdentity === undefined
+          ? {}
+          : { expectedBuildIdentity: input.expectedBuildIdentity }),
         handoff: { fidelity: input.fidelity },
       },
       { clientFactory: input.clientFactory },
@@ -238,13 +261,20 @@ async function runHostHandoff(input: {
     }
     try {
       if (ensured.ensuredBy === "handoff") {
-        const adopted = ensured.handoffAdopt?.adopted ?? [];
+        const receipt = ensured.handoffAdopt?.receipt;
+        if (receipt === undefined) {
+          return {
+            ...base,
+            status: "unavailable",
+            message: "Successor Host did not return an exact terminal handoff receipt.",
+          };
+        }
         return {
           ...base,
           status: "completed",
-          message: `Live handoff completed; successor adopted ${adopted.length} terminal(s).`,
-          livePtyCount: adopted.length,
-          adopted,
+          message: `Live handoff completed; successor adopted ${receipt.terminals.length} terminal(s).`,
+          livePtyCount: receipt.terminals.length,
+          receipt,
         };
       }
       if (ensured.ensuredBy === "reuse") {
@@ -257,8 +287,8 @@ async function runHostHandoff(input: {
       if (ensured.ensuredBy === "idle-replace") {
         return {
           ...base,
-          status: "refused",
-          message: "Host is idle; ordinary stop-if-idle replacement ran instead of handoff.",
+          status: "completed",
+          message: "Idle Host replacement completed without terminal handoff.",
           livePtyCount: 0,
         };
       }
@@ -288,7 +318,7 @@ async function planHandoffDryRun(input: {
   };
   expectedBuildVersion: string;
   clientFactory: (socketPath: string, expectedBuildVersion: string) => StationHostClient;
-}): Promise<HostHandoffResult> {
+}): Promise<HostHandoffCommandResult> {
   const client = input.clientFactory(input.base.socketPath, input.expectedBuildVersion);
   try {
     const health = await client.health();

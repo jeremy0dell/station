@@ -5,7 +5,7 @@ import {
   TerminalTargetIdSchema,
   WorktreeIdSchema,
 } from "./ids.js";
-import { nonEmptyStringSchema } from "./shared.js";
+import { compareCodeUnitStrings, nonEmptyStringSchema } from "./shared.js";
 
 /**
  * Handoff payloads for transferring live host PTY ownership between builds.
@@ -44,6 +44,92 @@ export type PtyHandoffIdentity = z.infer<typeof PtyHandoffIdentitySchema>;
 /** Composable handoff fidelity; `screen` never blocks when capture is unavailable. */
 export const HostHandoffFidelitySchema = z.enum(["processes", "screen"]);
 export type HostHandoffFidelity = z.infer<typeof HostHandoffFidelitySchema>;
+
+/** Canonical immutable identity for one PTY lifetime across Host ownership changes. */
+export const PtyLifetimeIdentitySchema = z
+  .object({
+    terminalTargetId: TerminalTargetIdSchema,
+    ptyId: nonEmptyStringSchema,
+    ptyInstanceId: PtyInstanceIdSchema,
+  })
+  .strict();
+export type PtyLifetimeIdentity = z.infer<typeof PtyLifetimeIdentitySchema>;
+
+export function comparePtyLifetimeIdentities(
+  left: PtyLifetimeIdentity,
+  right: PtyLifetimeIdentity,
+): number {
+  return (
+    compareCodeUnitStrings(left.terminalTargetId, right.terminalTargetId) ||
+    compareCodeUnitStrings(left.ptyId, right.ptyId) ||
+    compareCodeUnitStrings(left.ptyInstanceId, right.ptyInstanceId)
+  );
+}
+
+export function ptyLifetimeIdentitySetsMatch(
+  left: readonly PtyLifetimeIdentity[],
+  right: readonly PtyLifetimeIdentity[],
+): boolean {
+  return (
+    left.length === right.length &&
+    left.every((identity, index) => {
+      const other = right[index];
+      return other !== undefined && comparePtyLifetimeIdentities(identity, other) === 0;
+    })
+  );
+}
+
+function strictlySortedPtyLifetimeIdentities(identities: readonly PtyLifetimeIdentity[]): boolean {
+  return identities.every((identity, index) => {
+    const previous = identities[index - 1];
+    return previous === undefined || comparePtyLifetimeIdentities(previous, identity) < 0;
+  });
+}
+
+/** Exact, deterministic ownership acknowledgement for one completed live handoff. */
+export const PtyHandoffReceiptSchema = z
+  .object({ terminals: z.array(PtyLifetimeIdentitySchema).min(1) })
+  .strict()
+  .superRefine((receipt, context) => {
+    if (!strictlySortedPtyLifetimeIdentities(receipt.terminals)) {
+      context.addIssue({
+        code: "custom",
+        path: ["terminals"],
+        message: "Handoff receipt terminals must be unique and sorted by immutable identity.",
+      });
+    }
+  });
+export type PtyHandoffReceipt = z.infer<typeof PtyHandoffReceiptSchema>;
+
+/** Strict machine boundary returned by `stn host handoff --json`. */
+export const HostHandoffCommandResultSchema = z
+  .object({
+    action: z.literal("handoff"),
+    dryRun: z.boolean(),
+    fidelity: HostHandoffFidelitySchema,
+    socketPath: nonEmptyStringSchema,
+    status: z.enum(["planned", "completed", "refused", "unavailable"]),
+    message: nonEmptyStringSchema,
+    livePtyCount: z.number().int().nonnegative().optional(),
+    receipt: PtyHandoffReceiptSchema.optional(),
+  })
+  .strict()
+  .superRefine((result, context) => {
+    if (result.receipt !== undefined) {
+      if (
+        result.status !== "completed" ||
+        result.dryRun ||
+        result.livePtyCount !== result.receipt.terminals.length
+      ) {
+        context.addIssue({
+          code: "custom",
+          path: ["receipt"],
+          message: "A handoff receipt requires a completed mutation and its exact terminal count.",
+        });
+      }
+    }
+  });
+export type HostHandoffCommandResult = z.infer<typeof HostHandoffCommandResultSchema>;
 
 export const PtyHandoffEntrySchema = z
   .object({

@@ -28,6 +28,20 @@ describe("registered stn update command", () => {
         },
         apply,
       }),
+      proveInstalledTarget: async (target) => ({
+        channel: "installer-binary",
+        plan: {
+          channel: "installer-binary",
+          status: "current",
+          currentVersion: target.version,
+          targetVersion: target.version,
+          currentCli: ["/opt/stn"],
+          ...(target.revision === undefined
+            ? {}
+            : { currentRevision: target.revision, targetRevision: target.revision }),
+        },
+        apply,
+      }),
     };
 
     const result = await runCli(["--config", configPath, "update", "--dry-run", "--json"], {
@@ -44,7 +58,7 @@ describe("registered stn update command", () => {
     expect(result).toMatchObject({
       code: 0,
       output: {
-        schemaVersion: 3,
+        schemaVersion: 4,
         channel: "installer-binary",
         status: "planned",
       },
@@ -61,20 +75,24 @@ describe("registered stn update command", () => {
             version: "1.0.0",
             buildIdentity: "a".repeat(64),
           }),
-          recoveryPreflight: async ({ installed, target }) => ({
-            schemaVersion: 1,
-            boundary: {
-              authorization: "none",
-              actions: "not-included",
-              digest: "not-included",
+          convergenceInspection: async ({ installed, target }) => ({
+            preflight: {
+              schemaVersion: 1,
+              boundary: {
+                authorization: "none",
+                actions: "not-included",
+                digest: "not-included",
+              },
+              installed,
+              target,
+              observer: { status: "absent" },
+              host: { status: "absent" },
+              hookProviderIds: [],
+              hooks: [],
+              terminalDispositions: [],
+              evidenceComplete: false,
             },
-            installed,
-            target,
-            observer: { status: "absent" },
-            host: { status: "absent" },
-            hooks: [],
-            terminalDispositions: [],
-            evidenceComplete: false,
+            privateEvidence: { selectedRecoveryHandles: [] },
           }),
         },
       },
@@ -82,17 +100,20 @@ describe("registered stn update command", () => {
     expect(reapResult).toMatchObject({
       code: 0,
       output: {
-        schemaVersion: 3,
-        recoveryPreflight: {
-          boundary: {
-            authorization: "none",
-            actions: "not-included",
-            digest: "not-included",
+        schemaVersion: 4,
+        initial: {
+          preflight: {
+            boundary: {
+              authorization: "none",
+              actions: "not-included",
+              digest: "not-included",
+            },
+            observer: { status: "absent" },
+            host: { status: "absent" },
+            evidenceComplete: false,
           },
-          observer: { status: "absent" },
-          host: { status: "absent" },
-          evidenceComplete: false,
         },
+        result: { kind: "preview" },
       },
     });
     expect(apply).not.toHaveBeenCalled();

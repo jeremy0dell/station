@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { SafeErrorSchema } from "./errors.js";
+import { comparePtyLifetimeIdentities, PtyLifetimeIdentitySchema } from "./hostHandoff.js";
 import {
   ProjectIdSchema,
   type ProviderId,
@@ -28,12 +29,25 @@ const unknownObserverSchema = z
       "identity-missing",
       "identity-mismatch",
       "identity-unavailable",
+      "restartable-executable-drift",
       "process-without-socket",
       "inspection-failed",
     ]),
+    buildVersion: nonEmptyStringSchema.optional(),
     error: SafeErrorSchema,
   })
-  .strict();
+  .strict()
+  .superRefine((observer, context) => {
+    const restartable = observer.reason === "restartable-executable-drift";
+    if (restartable !== (observer.buildVersion !== undefined)) {
+      context.addIssue({
+        code: "custom",
+        path: ["buildVersion"],
+        message:
+          "Only restartable installed-path replacement evidence carries the exact Observer build selector.",
+      });
+    }
+  });
 
 export const UpdateReapRecoveryHandleResolutionSchema = z.discriminatedUnion("kind", [
   z
@@ -152,20 +166,15 @@ export const UpdateReapObserverEvidenceSchema = z.discriminatedUnion("status", [
 ]);
 export type UpdateReapObserverEvidence = z.infer<typeof UpdateReapObserverEvidenceSchema>;
 
-export const UpdateReapTerminalEvidenceSchema = z
-  .object({
-    kind: z.enum(["agent", "aux"]),
-    terminalTargetId: nonEmptyStringSchema,
-    ptyId: nonEmptyStringSchema,
-    ptyInstanceId: nonEmptyStringSchema,
-    projectId: ProjectIdSchema,
-    worktreeId: WorktreeIdSchema,
-    sessionId: SessionIdSchema,
-    harnessProvider: ProviderIdSchema,
-    alive: z.boolean(),
-    handoffSupport: z.enum(["bridge-releasable", "non-releasable", "unknown"]),
-  })
-  .strict();
+export const UpdateReapTerminalEvidenceSchema = PtyLifetimeIdentitySchema.extend({
+  kind: z.enum(["agent", "aux"]),
+  projectId: ProjectIdSchema,
+  worktreeId: WorktreeIdSchema,
+  sessionId: SessionIdSchema,
+  harnessProvider: ProviderIdSchema,
+  alive: z.boolean(),
+  handoffSupport: z.enum(["bridge-releasable", "non-releasable", "unknown"]),
+}).strict();
 export type UpdateReapTerminalEvidence = z.infer<typeof UpdateReapTerminalEvidenceSchema>;
 
 const unknownHostSchema = z
@@ -221,17 +230,12 @@ const orderedTerminalReasonsSchema = z
     }
   });
 
-export const UpdateReapTerminalDispositionSchema = z
-  .object({
-    terminalTargetId: nonEmptyStringSchema,
-    ptyId: nonEmptyStringSchema,
-    ptyInstanceId: nonEmptyStringSchema,
-    sessionId: SessionIdSchema,
-    handoff: z.enum(["preservable", "non-preservable", "unknown"]),
-    reapRecovery: z.enum(["recoverable", "non-resumable", "unknown"]),
-    reasons: orderedTerminalReasonsSchema,
-  })
-  .strict();
+export const UpdateReapTerminalDispositionSchema = PtyLifetimeIdentitySchema.extend({
+  sessionId: SessionIdSchema,
+  handoff: z.enum(["preservable", "non-preservable", "unknown"]),
+  reapRecovery: z.enum(["recoverable", "non-resumable", "unknown"]),
+  reasons: orderedTerminalReasonsSchema,
+}).strict();
 export type UpdateReapTerminalDisposition = z.infer<typeof UpdateReapTerminalDispositionSchema>;
 
 type UpdateReapEvidenceSet = {
@@ -306,6 +310,17 @@ export const UpdateReapRecoveryPreflightSchema = z
       });
     }
 
+    if (
+      preflight.host.status === "inspected" &&
+      !strictlySortedTerminals(preflight.host.terminals)
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["host", "terminals"],
+        message: "Host terminals must be unique and deterministically sorted.",
+      });
+    }
+
     if (!strictlySortedTerminals(preflight.terminalDispositions)) {
       context.addIssue({
         code: "custom",
@@ -314,29 +329,12 @@ export const UpdateReapRecoveryPreflightSchema = z
       });
     }
 
-    if (preflight.host.status === "inspected") {
-      if (
-        preflight.host.terminals.length !== preflight.terminalDispositions.length ||
-        preflight.host.terminals.some((terminal, index) => {
-          const disposition = preflight.terminalDispositions[index];
-          return (
-            disposition === undefined ||
-            compareTerminalIdentity(terminal, disposition) !== 0 ||
-            terminal.sessionId !== disposition.sessionId
-          );
-        })
-      ) {
-        context.addIssue({
-          code: "custom",
-          path: ["terminalDispositions"],
-          message: "Every inspected Host terminal must have exactly one disposition.",
-        });
-      }
-    } else if (preflight.terminalDispositions.length > 0) {
+    if (!updateTerminalEvidenceSetsMatch(preflight.host, preflight.terminalDispositions)) {
       context.addIssue({
         code: "custom",
         path: ["terminalDispositions"],
-        message: "Terminal dispositions require an inspected Host inventory.",
+        message:
+          "Every inspected Host terminal must have exactly one identity- and handoff-matched disposition.",
       });
     }
     if (preflight.evidenceComplete !== updateReapEvidenceIsComplete(preflight)) {
@@ -349,25 +347,6 @@ export const UpdateReapRecoveryPreflightSchema = z
   });
 export type UpdateReapRecoveryPreflight = z.infer<typeof UpdateReapRecoveryPreflightSchema>;
 
-function compareTerminalIdentity(
-  left: {
-    terminalTargetId: string;
-    ptyId: string;
-    ptyInstanceId: string;
-  },
-  right: {
-    terminalTargetId: string;
-    ptyId: string;
-    ptyInstanceId: string;
-  },
-): number {
-  return (
-    compareCodeUnitStrings(left.terminalTargetId, right.terminalTargetId) ||
-    compareCodeUnitStrings(left.ptyId, right.ptyId) ||
-    compareCodeUnitStrings(left.ptyInstanceId, right.ptyInstanceId)
-  );
-}
-
 function strictlySortedTerminals(
   terminals: readonly {
     terminalTargetId: string;
@@ -377,7 +356,7 @@ function strictlySortedTerminals(
 ): boolean {
   return terminals.every((terminal, index) => {
     const previous = terminals[index - 1];
-    return previous === undefined || compareTerminalIdentity(previous, terminal) < 0;
+    return previous === undefined || comparePtyLifetimeIdentities(previous, terminal) < 0;
   });
 }
 
@@ -386,6 +365,46 @@ function strictlySortedStrings(values: readonly string[]): boolean {
     const previous = values[index - 1];
     return previous === undefined || compareCodeUnitStrings(previous, value) < 0;
   });
+}
+
+/**
+ * Proves that Host terminals and recovery dispositions form one deterministic, exact-identity set.
+ * The canonical PTY lifetime identity is correlated with its Station session and handoff class.
+ */
+export function updateTerminalEvidenceSetsMatch(
+  host: UpdateReapHostEvidence,
+  dispositions: readonly UpdateReapTerminalDisposition[],
+): boolean {
+  if (host.status !== "inspected") return dispositions.length === 0;
+  if (
+    host.terminals.length !== dispositions.length ||
+    !strictlySortedTerminals(host.terminals) ||
+    !strictlySortedTerminals(dispositions)
+  ) {
+    return false;
+  }
+  return host.terminals.every((terminal, index) => {
+    const disposition = dispositions[index];
+    return (
+      disposition !== undefined &&
+      comparePtyLifetimeIdentities(terminal, disposition) === 0 &&
+      terminal.sessionId === disposition.sessionId &&
+      disposition.handoff === handoffDispositionFor(terminal.handoffSupport)
+    );
+  });
+}
+
+function handoffDispositionFor(
+  support: UpdateReapTerminalEvidence["handoffSupport"],
+): UpdateReapTerminalDisposition["handoff"] {
+  switch (support) {
+    case "bridge-releasable":
+      return "preservable";
+    case "non-releasable":
+      return "non-preservable";
+    case "unknown":
+      return "unknown";
+  }
 }
 
 export function updateReapEvidenceIsComplete(preflight: UpdateReapEvidenceSet): boolean {
@@ -408,6 +427,9 @@ export function updateReapEvidenceIsComplete(preflight: UpdateReapEvidenceSet): 
     return false;
   }
   if (preflight.host.status === "unknown") return false;
+  if (!updateTerminalEvidenceSetsMatch(preflight.host, preflight.terminalDispositions)) {
+    return false;
+  }
   if (
     preflight.host.status === "inspected" &&
     preflight.host.terminals.some((terminal) => terminal.handoffSupport === "unknown")

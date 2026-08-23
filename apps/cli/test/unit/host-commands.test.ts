@@ -245,7 +245,19 @@ describe("runHostCommand", () => {
       status: "running" as const,
       socketPath: stationHostSocketPath(fixture.config),
       ensuredBy: "handoff" as const,
-      handoffAdopt: { adopted: ["pty-1"], failed: [] },
+      handoffAdopt: {
+        adopted: ["pty-1"],
+        failed: [],
+        receipt: {
+          terminals: [
+            {
+              terminalTargetId: "native:wt-1",
+              ptyId: "pty-1",
+              ptyInstanceId: "instance-pty-1",
+            },
+          ],
+        },
+      },
       client: {
         list: async () => [{ ptyId: "pty-1", pid: 99, alive: true }],
         dispose,
@@ -275,7 +287,15 @@ describe("runHostCommand", () => {
       status: "completed",
       fidelity: "screen",
       livePtyCount: 1,
-      adopted: ["pty-1"],
+      receipt: {
+        terminals: [
+          {
+            terminalTargetId: "native:wt-1",
+            ptyId: "pty-1",
+            ptyInstanceId: "instance-pty-1",
+          },
+        ],
+      },
     });
     expect(ensureHost).toHaveBeenCalledWith(
       expect.objectContaining({
