@@ -8,6 +8,7 @@ import {
   type SafeError,
   SafeErrorSchema,
   type UpdateActionAudit,
+  type UpdateCommandArgv,
   type UpdateCommandReport,
   UpdateCommandReportSchema,
   type UpdateConvergenceResult,
@@ -78,8 +79,8 @@ export function createPublicUpdateReport(input: PublicUpdateReportInput): Update
  * ADAPTER
  *
  * Defines the deterministic confidentiality decision for one strict v4 update result. Every nested
- * SafeError crosses this policy, including successor and post-action evidence, without weakening
- * report invariants or optional-field absence.
+ * SafeError and recovery argument crosses this policy, including successor and post-action
+ * evidence, without weakening report invariants or optional-field absence.
  */
 export function sanitizePublicUpdateReport(input: UpdateCommandReport): UpdateCommandReport {
   const report = UpdateCommandReportSchema.parse(input);
@@ -93,7 +94,7 @@ export function sanitizePublicUpdateReport(input: UpdateCommandReport): UpdateCo
     initial: sanitizeEvidence(report.initial),
     result: sanitizeResult(report.result),
     warnings: report.warnings.map(sanitizePublicSafeError),
-    recoveryCommands: report.recoveryCommands,
+    recoveryCommands: report.recoveryCommands.map(sanitizePublicCommand),
   };
   if (report.error !== undefined) sanitized.error = sanitizePublicSafeError(report.error);
   if (report.cause !== undefined) sanitized.cause = sanitizePublicSafeError(report.cause);
@@ -101,6 +102,11 @@ export function sanitizePublicUpdateReport(input: UpdateCommandReport): UpdateCo
     sanitized.startupEvidence = sanitizeStartupEvidence(report.startupEvidence);
   }
   return UpdateCommandReportSchema.parse(sanitized);
+}
+
+function sanitizePublicCommand(command: UpdateCommandArgv): UpdateCommandArgv {
+  const [executable, ...args] = command;
+  return [sanitizePublicErrorText(executable), ...args.map(sanitizePublicErrorText)];
 }
 
 /** Sanitizes an already-shaped SafeError while preserving its useful typed identity fields. */

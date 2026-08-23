@@ -1947,26 +1947,33 @@ describe("stn update convergence", () => {
     const outerRunner = vi.fn(async (input: ExternalCommandInput) => {
       if (!input.args?.includes("update")) return commandResult(input);
       const updateIndex = input.args.indexOf("update");
-      const nested = await runUpdateCommand(input.args.slice(updateIndex + 1), options(), {
-        probes: [successor.probe],
-        buildInfo: build(identityB, "2.0.0"),
-        convergenceInspection: successorInspect,
-        commandRunner: async (successorInput) =>
-          successorInput.args?.includes("hooks")
-            ? externalResult(
-                successorInput,
-                JSON.stringify({
-                  provider: "codex",
-                  status: "write-failed",
-                  changed: false,
-                  verified: false,
-                  error: sensitiveSafeError("HOOK_CHILD_PRIVATE", sensitive),
-                  followUp: { action: "retry" },
-                }),
-                1,
-              )
-            : commandResult(successorInput),
-      });
+      const nested = await runUpdateCommand(
+        input.args.slice(updateIndex + 1),
+        {
+          ...options(),
+          configPath: sensitive,
+        },
+        {
+          probes: [successor.probe],
+          buildInfo: build(identityB, "2.0.0"),
+          convergenceInspection: successorInspect,
+          commandRunner: async (successorInput) =>
+            successorInput.args?.includes("hooks")
+              ? externalResult(
+                  successorInput,
+                  JSON.stringify({
+                    provider: "codex",
+                    status: "write-failed",
+                    changed: false,
+                    verified: false,
+                    error: sensitiveSafeError("HOOK_CHILD_PRIVATE", sensitive),
+                    followUp: { action: "retry" },
+                  }),
+                  1,
+                )
+              : commandResult(successorInput),
+        },
+      );
       const childReport = reportFrom(nested);
       childReport.warnings.push(sensitiveSafeError("SUCCESSOR_WARNING", sensitive));
       if (
@@ -2043,6 +2050,16 @@ describe("stn update convergence", () => {
       message: sanitizedSensitive,
       hint: `retry after ${sanitizedSensitive}`,
     });
+    expect(report.recoveryCommands).toEqual([
+      [
+        "[REDACTED_PATH]",
+        "--config",
+        sanitizedSensitive,
+        "update",
+        "--channel",
+        "installer-binary",
+      ],
+    ]);
     expect(serialized).not.toContain(secret);
     expect(serialized).not.toContain(privatePath);
     expect(serialized).not.toContain(control);
@@ -2055,6 +2072,7 @@ describe("stn update convergence", () => {
     expect(text).toContain("result: execution-failed");
     expect(text).toContain("hook-reconciliation: reconcile failed provider=codex");
     expect(text).toContain(`warning: ${sanitizedSensitive}`);
+    expect(text).toContain("recovery commands:");
     expect(text).not.toContain(secret);
     expect(text).not.toContain(privatePath);
     expect(text).not.toContain(control);

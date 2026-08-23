@@ -245,14 +245,19 @@ async function runUpdateSmoke(options) {
   try {
     for (const scenario of scenarios) {
       await assertTargetAssetsUnchanged(target);
-      await runScenario({
+      const scenarioInput = {
         ...scenario,
         options,
         root,
         suppliedBinary,
         target,
         evidenceDir,
-      });
+      };
+      if (scenario.kind === "redaction-failure") {
+        await runRedactionFailureScenario(scenarioInput);
+      } else {
+        await runScenario(scenarioInput);
+      }
     }
     await assertTargetAssetsUnchanged(target);
     await assertSuppliedBinaryUnchanged(suppliedBinary);
@@ -308,6 +313,11 @@ function updateSmokeScenarios(options) {
     hostMode: "busy-nonbridge",
     expectedOutcome: "pre-mutation-reap-required",
   };
+  const redactionFailure = {
+    name: "successor-hook-failure-redaction",
+    key: "x",
+    kind: "redaction-failure",
+  };
   switch (options.scenarios) {
     case "no-host":
       return [noHost];
@@ -319,14 +329,225 @@ function updateSmokeScenarios(options) {
       return [bridgeHandoff];
     case "reap-required":
       return [nonBridgeReap];
+    case "redaction":
+      return [redactionFailure];
     case "v4-gate":
-      return [idleHost, bridgeHandoff, nonBridgeReap];
+      return [idleHost, bridgeHandoff, nonBridgeReap, redactionFailure];
     case "full":
       return options.busyHostOutcome === "pre-mutation-reap-required"
-        ? [nonBridgeReap, noHost]
-        : [idleHost, bridgeHandoff, noHost];
+        ? [nonBridgeReap, noHost, redactionFailure]
+        : [idleHost, bridgeHandoff, noHost, redactionFailure];
   }
   throw new Error(`Unsupported update smoke scenario suite: ${options.scenarios}`);
+}
+
+async function runRedactionFailureScenario(input) {
+  const scenarioRoot = join(input.root, "scenarios", input.name);
+  const stateDir = join(input.root, "s", input.key);
+  const runtimeDir = join(input.root, "r", input.key);
+  const installDir = join(scenarioRoot, "bin");
+  const homeDir = join(scenarioRoot, "home");
+  const configHome = join(scenarioRoot, "config-home");
+  const stateHome = join(scenarioRoot, "state-home");
+  const dataHome = join(scenarioRoot, "data-home");
+  const cacheHome = join(scenarioRoot, "cache-home");
+  const tempDir = join(scenarioRoot, "tmp");
+  const tmuxTempDir = join(input.root, "m", input.key);
+  const socketPath = join(runtimeDir, "observer.sock");
+  const hostSocketPath = join(runtimeDir, "station-host.sock");
+  const hookScriptPath = join(stateDir, "hooks", "station-codex-hook.sh");
+  const processIdentities = new Map();
+  const cleanupWarnings = [];
+  const runnerIdentity = snapshotProcessIdentitySync(process.pid, "update-smoke-runner");
+  const canaries = redactionFailureCanaries(scenarioRoot, runnerIdentity);
+  const canaryRoot = join(
+    canaries.privateWorktreePath,
+    canaries.pid,
+    canaries.providerPayload,
+    canaries.processGroup,
+    canaries.token,
+    canaries.terminalControl,
+  );
+  const configPath = join(canaryRoot, "station-config", "config.toml");
+  const codexHome = join(canaryRoot, "codex-home");
+  let observerClient;
+  let failure;
+
+  assertUnixSocketPath(socketPath);
+  assertUnixSocketPath(hostSocketPath);
+  await Promise.all(
+    [
+      scenarioRoot,
+      homeDir,
+      stateDir,
+      runtimeDir,
+      installDir,
+      configHome,
+      stateHome,
+      dataHome,
+      cacheHome,
+      tempDir,
+      tmuxTempDir,
+      codexHome,
+      dirname(configPath),
+      dirname(hookScriptPath),
+    ].map((path) => mkdir(path, { recursive: true, mode: 0o700 })),
+  );
+  await installIncumbent(input.suppliedBinary.path, installDir, dataHome);
+  await writeConfig(configPath, stateDir, socketPath);
+  const transportDir =
+    input.target.mode === "public"
+      ? undefined
+      : await writeReleaseTransport({
+          scenarioRoot,
+          currentTag: `v${input.options.incumbentVersion}`,
+          target: input.target,
+          installedBinaryPath: join(installDir, "stn"),
+          denyPostApplyLatest: true,
+        });
+  const tmuxPath = findExecutable("tmux", process.env.PATH);
+  const tmuxAudit = await prepareTmuxAudit(scenarioRoot, tmuxPath);
+  const env = {
+    ...isolatedEnvironment({
+      homeDir,
+      configHome,
+      stateHome,
+      dataHome,
+      cacheHome,
+      runtimeDir,
+      tempDir,
+      tmuxTempDir,
+      installDir,
+      configPath,
+      socketPath,
+      hostSocketPath,
+      transportDir,
+      tmuxPath,
+      tmuxShadowDir: tmuxAudit.shadowDir,
+    }),
+    CODEX_HOME: codexHome,
+  };
+  const installedBinary = await realpath(join(installDir, "stn"));
+
+  try {
+    const incumbentObserver = await startRedactionIncumbentObserver({
+      binary: installedBinary,
+      configPath,
+      env,
+      expectedVersion: input.options.incumbentVersion,
+      label: `${input.name} JSON incumbent`,
+    });
+    observerClient = createObserverClient({ socketPath, timeoutMs: 5000 });
+    await recordProcessIdentity(
+      processIdentities,
+      "redaction-incumbent-observer",
+      incumbentObserver.pid,
+    );
+    await writeConfig(configPath, stateDir, socketPath, { codexHooks: true });
+    await rm(hookScriptPath, { force: true });
+    assertEqual(await pathExists(hookScriptPath), false, `${input.name} JSON hook starts drifted`);
+    await chmod(codexHome, 0o500);
+
+    const jsonResult = await run(installedBinary, ["--config", configPath, "update", "--json"], {
+      env,
+      timeoutMs: childTimeoutMs,
+      allowedExitCodes: [1],
+    });
+    assertEqual(jsonResult.code, 1, `${input.name} JSON failure exit code`);
+    const jsonBootLog = await readFile(join(stateDir, "logs", "observer-boot.log"), "utf8");
+    assertRawObserverLaunchCanaries(jsonBootLog, configPath, canaries, `${input.name} JSON`);
+    const report = UpdateCommandReportSchema.parse(
+      parseJson(jsonResult.stdout, `${input.name} JSON failure report`),
+    );
+    assertRedactionFailureReport(report, input, `${input.name} JSON`);
+    assertPublicRedactionOutput(
+      `${jsonResult.stdout}\n${jsonResult.stderr}`,
+      canaries,
+      `${input.name} JSON output`,
+    );
+    assertEqual(
+      await processIdentityMatches(processIdentities.get("redaction-incumbent-observer")),
+      true,
+      `${input.name} JSON leaves incumbent Observer running`,
+    );
+    assertEqual(await pathExists(socketPath), true, `${input.name} JSON keeps Observer socket`);
+
+    await rm(hookScriptPath, { force: true });
+    assertEqual(await pathExists(hookScriptPath), false, `${input.name} text hook starts drifted`);
+    const textResult = await run(
+      installedBinary,
+      [
+        "--config",
+        configPath,
+        "update",
+        "--channel",
+        "installer-binary",
+        "--internal-successor-evaluator",
+        "--internal-selected-target-version",
+        input.target.version,
+      ],
+      { env, timeoutMs: childTimeoutMs, allowedExitCodes: [1] },
+    );
+    assertEqual(textResult.code, 1, `${input.name} text failure exit code`);
+    assertPublicRedactionOutput(
+      `${textResult.stdout}\n${textResult.stderr}`,
+      canaries,
+      `${input.name} default text output`,
+    );
+    assertIncludes(textResult.stdout, "status: failed", `${input.name} text failure disposition`);
+    assertIncludes(
+      textResult.stdout,
+      "(UPDATE_RUNTIME_CONVERGENCE_FAILED)",
+      `${input.name} text stable error code`,
+    );
+    assertIncludes(
+      textResult.stdout,
+      "hook-reconciliation: reconcile failed provider=codex",
+      `${input.name} failed action stage`,
+    );
+    assertIncludes(textResult.stdout, "[REDACTED_PATH]", `${input.name} text path redaction`);
+    assertEqual(
+      await processIdentityMatches(processIdentities.get("redaction-incumbent-observer")),
+      true,
+      `${input.name} text leaves incumbent Observer running`,
+    );
+    assertEqual(await pathExists(socketPath), true, `${input.name} text keeps Observer socket`);
+    assertEqual(await pathExists(hostSocketPath), false, `${input.name} never starts a Host`);
+    assertEqual(await readFile(tmuxAudit.bareLogPath, "utf8"), "", `${input.name} no bare tmux`);
+    if (transportDir !== undefined) await assertExactTransportRequests(transportDir, input);
+  } catch (error) {
+    failure = error;
+  } finally {
+    await cleanupAction(cleanupWarnings, "redaction fixture permission restore", async () => {
+      await chmod(codexHome, 0o700);
+    });
+    await cleanupAction(cleanupWarnings, "redaction Observer cleanup", async () => {
+      if (!(await pathExists(socketPath))) return;
+      observerClient ??= createObserverClient({ socketPath, timeoutMs: 3000 });
+      await observerClient.stop();
+      await waitForMissing(socketPath, 10_000);
+    });
+    await cleanupAction(cleanupWarnings, "redaction process cleanup", async () => {
+      for (const identity of processIdentities.values()) {
+        if (await processIdentityMatches(identity)) await terminateExactProcess(identity);
+      }
+    });
+  }
+
+  for (const warning of cleanupWarnings) process.stderr.write(`Update smoke warning: ${warning}\n`);
+  if (failure !== undefined && cleanupWarnings.length > 0) {
+    throw new AggregateError(
+      [failure, ...cleanupWarnings.map((warning) => new Error(warning))],
+      `${input.name} failed and cleanup was incomplete.`,
+    );
+  }
+  if (failure !== undefined) throw failure;
+  if (cleanupWarnings.length > 0) {
+    throw new AggregateError(
+      cleanupWarnings.map((warning) => new Error(warning)),
+      `${input.name} cleanup failed.`,
+    );
+  }
 }
 
 async function runScenario(input) {
@@ -1294,7 +1515,11 @@ async function spawnIncumbentHost(input) {
   });
 }
 
-async function writeConfig(path, stateDir, socketPath) {
+async function writeConfig(path, stateDir, socketPath, options = {}) {
+  const harnessConfig =
+    options.codexHooks === true
+      ? ["", "[harness.codex]", "enabled = true", "install_hooks = true"]
+      : [];
   await writeFile(
     path,
     [
@@ -1310,10 +1535,136 @@ async function writeConfig(path, stateDir, socketPath) {
       'terminal = "tmux"',
       'harness = "noop-harness"',
       'layout = "agent-shell"',
+      ...harnessConfig,
       "",
     ].join("\n"),
     { mode: 0o600 },
   );
+}
+
+function redactionFailureCanaries(scenarioRoot, runnerIdentity) {
+  return {
+    token: `ghp_RedactionSmokeToken${canaryNonce()}`,
+    privateWorktreePath: join(scenarioRoot, `private-worktree-${canaryNonce()}`),
+    pid: `pid-${runnerIdentity.pid}-redaction-${canaryNonce()}`,
+    providerPayload: `raw-provider-payload-${canaryNonce()}`,
+    processGroup: `process-group-${runnerIdentity.pgid}-redaction-${canaryNonce()}`,
+    terminalControl: `terminal-control-${canaryNonce()}\u001b]0;private\u0007\u001b[31m\u0085\u009b2J\u2028\u2029-end`,
+  };
+}
+
+function canaryNonce() {
+  return randomUUID().replaceAll("-", "");
+}
+
+async function startRedactionIncumbentObserver(input) {
+  const result = await run(
+    input.binary,
+    ["--config", input.configPath, "observer", "start", "--timeout-ms", "30000"],
+    {
+      env: input.env,
+      timeoutMs: 40_000,
+    },
+  );
+  const health = parseJson(result.stdout, input.label).health;
+  assertDisplayVersion(health.version, input.expectedVersion, input.label);
+  return health;
+}
+
+function assertRawObserverLaunchCanaries(bootLog, configPath, canaries, label) {
+  const [header] = bootLog.split(/\r?\n/u);
+  const command = parseJson(header, `${label} raw Observer boot command`).command;
+  const configIndex = command.indexOf("--config");
+  assertEqual(command[configIndex + 1], configPath, `${label} exact raw config path`);
+  for (const [kind, value] of Object.entries(canaries)) {
+    assertIncludes(configPath, value, `${label} raw ${kind} canary`);
+  }
+  for (const character of redactionControlCharacters()) {
+    assertIncludes(configPath, character, `${label} raw control canary`);
+  }
+}
+
+function assertRedactionFailureReport(report, input, label) {
+  assertEqual(report.schemaVersion, 4, `${label} schema`);
+  assertEqual(report.status, "failed", `${label} status`);
+  assertEqual(report.channel, "installer-binary", `${label} channel`);
+  assertEqual(report.current.version, input.options.incumbentVersion, `${label} artifact before`);
+  assertEqual(report.target.version, input.target.version, `${label} selected artifact`);
+  assertEqual(report.artifactApplication.status, "applied", `${label} artifact application`);
+  assertEqual(report.result.kind, "execution-failed", `${label} result kind`);
+  assertEqual(report.result.stage, "hook-reconciliation", `${label} failed stage`);
+  assertEqual(report.error?.code, "UPDATE_RUNTIME_CONVERGENCE_FAILED", `${label} error code`);
+  assertEqual(
+    report.error?.message,
+    "Station could not complete safe runtime convergence.",
+    `${label} public failure message`,
+  );
+  assertDeepEqual(
+    Object.keys(report.error ?? {}).sort(),
+    ["code", "message", "tag"],
+    `${label} permitted top-level error envelope`,
+  );
+  assertEqual(report.cause, undefined, `${label} no unrelated Observer cause`);
+  assertEqual(report.startupEvidence, undefined, `${label} no unrelated Observer startup evidence`);
+  const successorAudit = report.result.actionAudits.find(
+    (audit) => audit.executor === "successor-cli",
+  );
+  const hookError = successorAudit?.actions[0]?.hookResult?.error;
+  assertDeepEqual(
+    Object.keys(hookError ?? {}).sort(),
+    ["code", "message", "provider", "tag"],
+    `${label} permitted hook failure envelope`,
+  );
+  assertDeepEqual(
+    successorAudit?.actions.map((action) => ({
+      phase: action.phase,
+      action: action.action,
+      status: action.status,
+      ...(action.provider === undefined ? {} : { provider: action.provider }),
+      ...(action.hookResult === undefined
+        ? {}
+        : {
+            hookStatus: action.hookResult.status,
+            hookProvider: action.hookResult.provider,
+            hookErrorCode: action.hookResult.error?.code,
+          }),
+    })),
+    [
+      {
+        phase: "hook-reconciliation",
+        action: "reconcile",
+        status: "failed",
+        provider: "codex",
+        hookStatus: "write-failed",
+        hookProvider: "codex",
+        hookErrorCode: "CODEX_HOOK_RECONCILIATION_LOCK_FAILED",
+      },
+    ],
+    `${label} real successor action audit`,
+  );
+  const serialized = JSON.stringify(report);
+  assertIncludes(serialized, "[REDACTED_PATH]", `${label} path replacement`);
+  assertIncludes(serialized, "[REDACTED_CONTROL]", `${label} control replacement`);
+  assertNoPrivateReportFields(serialized, label);
+}
+
+function assertPublicRedactionOutput(output, canaries, label) {
+  for (const [kind, value] of Object.entries(canaries)) {
+    if (output.includes(value)) throw new Error(`${label} leaked ${kind} canary.`);
+  }
+  for (const character of redactionControlCharacters()) {
+    if (output.includes(character))
+      throw new Error(`${label} leaked a terminal control character.`);
+  }
+  for (const escaped of ["\\u0007", "\\u001b", "\\u0085", "\\u009b", "\\u2028", "\\u2029"]) {
+    if (output.toLowerCase().includes(escaped)) {
+      throw new Error(`${label} leaked an escaped terminal control character.`);
+    }
+  }
+}
+
+function redactionControlCharacters() {
+  return ["\u0007", "\u001b", "\u0085", "\u009b", "\u2028", "\u2029"];
 }
 
 function isolatedEnvironment(input) {
@@ -1727,7 +2078,10 @@ function assertUpdateReport(report, input) {
     );
     assertFreshNoOpPlan(report.result.postAction, report.result.verification, input.name);
   }
-  const serialized = JSON.stringify(report);
+  assertNoPrivateReportFields(JSON.stringify(report), input.name);
+}
+
+function assertNoPrivateReportFields(serialized, label) {
   for (const privateField of [
     "processToken",
     "selectedHandleId",
@@ -1735,7 +2089,7 @@ function assertUpdateReport(report, input) {
     "recoveryHandles",
   ]) {
     if (serialized.includes(privateField)) {
-      throw new Error(`${input.name} update report leaked private field ${privateField}.`);
+      throw new Error(`${label} update report leaked private field ${privateField}.`);
     }
   }
 }
@@ -2265,10 +2619,11 @@ function parseArgs(argv) {
     scenarios !== "idle-replacement" &&
     scenarios !== "bridge-handoff" &&
     scenarios !== "reap-required" &&
+    scenarios !== "redaction" &&
     scenarios !== "v4-gate"
   ) {
     throw new Error(
-      "--scenarios must be full, no-host, host-convergence, idle-replacement, bridge-handoff, reap-required, or v4-gate.",
+      "--scenarios must be full, no-host, host-convergence, idle-replacement, bridge-handoff, reap-required, redaction, or v4-gate.",
     );
   }
   const explicitBusyHostOutcome = values.get("--busy-host-outcome");
@@ -2306,7 +2661,7 @@ function parseArgs(argv) {
 }
 
 function updateSmokeUsage() {
-  return "Usage: run-update-smoke.mjs --incumbent-binary <path> --incumbent-version <version> (--target-source-version <version> | --target-release-dir <path> --target-tag <tag> --target-build-identity <64-hex> | --public-target-tag <tag> --target-build-identity <64-hex>) [--scenarios full|no-host|host-convergence|idle-replacement|bridge-handoff|reap-required|v4-gate] [--busy-host-outcome full-handoff|pre-mutation-reap-required] [--incumbent-contract v4|legacy-compatible] [--keep-temp]";
+  return "Usage: run-update-smoke.mjs --incumbent-binary <path> --incumbent-version <version> (--target-source-version <version> | --target-release-dir <path> --target-tag <tag> --target-build-identity <64-hex> | --public-target-tag <tag> --target-build-identity <64-hex>) [--scenarios full|no-host|host-convergence|idle-replacement|bridge-handoff|reap-required|redaction|v4-gate] [--busy-host-outcome full-handoff|pre-mutation-reap-required] [--incumbent-contract v4|legacy-compatible] [--keep-temp]";
 }
 
 function assertBuildIdentity(value, label) {

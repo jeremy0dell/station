@@ -155,6 +155,8 @@ describe("release readiness docs", () => {
     expect(singleBinary).toContain("source-mode bridge Host");
     expect(singleBinary).toContain("real old idle Host");
     expect(singleBinary).toContain("fresh final no-op plan");
+    expect(singleBinary).toContain("real pinned-successor Codex hook failure");
+    expect(singleBinary).toContain("exclude every raw value and");
     expect(singleBinary).not.toMatch(
       /Status: implemented|## Phases|## Audit findings|## Evidence appendix|### A\d|### B-/,
     );
@@ -313,6 +315,9 @@ describe("release readiness docs", () => {
     expect(releasing).toContain("old-idle-Host replacement");
     expect(releasing).toContain("old bridge-backed live handoff");
     expect(releasing).toContain("typed receipt audit");
+    expect(releasing).toContain("four distinct transitions");
+    expect(releasing).toContain("real successor hook-failure lane");
+    expect(releasing).toContain("terminal-control");
     expect(releasing).toContain("while preserving the incumbent artifact and runtime");
     expect(releasing).not.toContain("compiled predecessors must stop with a typed");
     expect(releasing).not.toContain(exactVersion);

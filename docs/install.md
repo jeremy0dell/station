@@ -309,7 +309,10 @@ blocked, reap-required, and intentionally-incomplete results. Every phase is
 explicitly `not-executed`, except artifact application is `deferred` for a
 manager-owned deferral. Child warnings and failures are rendered through the
 same terminal-safe encoder, so embedded line breaks, terminal controls, and
-Unicode line separators cannot create forged status or action lines.
+Unicode line separators cannot create forged status or action lines. Update
+recovery argv crosses the same public value-redaction boundary: if a failure
+embeds a secret, private path, or control text in an argument, JSON and text
+show a redacted placeholder rather than publishing that value.
 
 The supported channel IDs are:
 

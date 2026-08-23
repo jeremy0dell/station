@@ -439,7 +439,7 @@ describe("hosted CI policy", () => {
     }
   });
 
-  it("separates the legacy transition from v4 Host convergence and reap planning", () => {
+  it("separates legacy transition, v4 Host convergence, redaction, and reap planning", () => {
     const release = read(".github/workflows/release.yml");
     const promotion = read(".github/workflows/promote-release.yml");
     const updateSmoke = read("scripts/test-runners/run-update-smoke.mjs");
@@ -468,10 +468,11 @@ describe("hosted CI policy", () => {
     expect(installDraft).toContain("Prove compatible transition from the exact predecessor");
     expect(installDraft).toContain("--incumbent-contract legacy-compatible");
     expect(installDraft).toContain("Prove v4 Host convergence against the staged target");
+    expect(installDraft).toContain("Prove v4 public-report redaction against the staged target");
     expect(installDraft).toContain("Prove v4 pre-mutation reap-required against the staged target");
     expect(installDraft).toContain('--incumbent-binary "$RUNNER_TEMP/v4-update-incumbent"');
     expect(installDraft).toContain('pnpm build:binary -- --version "$v4_incumbent_version"');
-    expect(installDraft.match(/pnpm smoke:update/g)).toHaveLength(3);
+    expect(installDraft.match(/pnpm smoke:update/g)).toHaveLength(4);
     const compatibleTransition = between(
       installDraft,
       "Prove compatible transition from the exact predecessor",
@@ -482,10 +483,17 @@ describe("hosted CI policy", () => {
     const hostConvergence = between(
       installDraft,
       "Prove v4 Host convergence against the staged target",
-      "Prove v4 pre-mutation reap-required against the staged target",
+      "Prove v4 public-report redaction against the staged target",
     );
     expect(hostConvergence).toContain("--scenarios host-convergence");
     expect(hostConvergence).not.toContain("--incumbent-contract legacy-compatible");
+    const redaction = between(
+      installDraft,
+      "Prove v4 public-report redaction against the staged target",
+      "Prove v4 pre-mutation reap-required against the staged target",
+    );
+    expect(redaction).toContain("--scenarios redaction");
+    expect(redaction).not.toContain("--incumbent-contract legacy-compatible");
     const reapRequired = between(
       installDraft,
       "Prove v4 pre-mutation reap-required against the staged target",
@@ -519,6 +527,11 @@ describe("hosted CI policy", () => {
     expect(updateSmoke).toContain('hostMode: "busy-nonbridge"');
     expect(updateSmoke).toContain("function assertHostConvergenceAudit");
     expect(updateSmoke).toContain("function assertFreshNoOpPlan");
+    expect(updateSmoke).toContain('name: "successor-hook-failure-redaction"');
+    expect(updateSmoke).toContain("function redactionFailureCanaries");
+    expect(updateSmoke).toContain("function assertPublicRedactionOutput");
+    expect(updateSmoke).toContain("raw-provider-payload-");
+    expect(updateSmoke).toContain("redactionControlCharacters()");
     expect(updateSmoke).toContain(
       "--incumbent-contract legacy-compatible requires --scenarios no-host and full-handoff.",
     );
