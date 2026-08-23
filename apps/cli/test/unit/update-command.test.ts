@@ -1473,6 +1473,55 @@ describe("stn update convergence", () => {
     expect(reportFrom(result).result).not.toHaveProperty("postAction");
   });
 
+  it("attributes an already-converged child initial inspection to the successor", async () => {
+    const outer = probe("update-available");
+    const outerRunner = vi.fn(async (input: ExternalCommandInput) =>
+      input.args?.includes("update")
+        ? successorResult(
+            input,
+            preflight("2.0.0", "2.0.0", {
+              observer: matchingObserver(identityB),
+              host: matchingHost(identityB),
+            }),
+          )
+        : commandResult(input),
+    );
+
+    const result = await runUpdateCommand(["--json"], options(), {
+      probes: [outer.probe],
+      buildInfo: build(identityA, "1.0.0"),
+      convergenceInspection: inspection(preflight("1.0.0", "2.0.0")),
+      commandRunner: outerRunner,
+    });
+    const report = reportFrom(result);
+
+    expect(result.code).toBe(0);
+    expect(report).toMatchObject({
+      status: "updated",
+      artifactApplication: { status: "applied" },
+      result: {
+        kind: "successor-runtime-execution",
+        actionAudits: [{ executor: "incumbent-cli" }],
+        successor: { evaluator: "successor-cli", plan: { status: "converged" } },
+        postAction: { evaluator: "successor-cli", plan: { status: "converged" } },
+        verification: { status: "converged", source: "successor" },
+      },
+    });
+    if (report.result.kind !== "successor-runtime-execution") {
+      throw new Error("expected successor execution result");
+    }
+    expect(report.result.postAction).toEqual(report.result.successor);
+    expect(textFor(result)).toContain("verified plan:");
+    expect(textFor(result)).not.toContain("successor plan:");
+
+    const contradictory = structuredClone(report);
+    if (contradictory.result.kind !== "successor-runtime-execution") {
+      throw new Error("expected successor execution result");
+    }
+    contradictory.result.verification.source = "post-action";
+    expect(UpdateCommandReportSchema.safeParse(contradictory).success).toBe(false);
+  });
+
   it.each([
     {
       name: "network failure",
@@ -1534,7 +1583,7 @@ describe("stn update convergence", () => {
           actionAudits: [{ executor: "incumbent-cli" }, { executor: "successor-cli" }],
           successor: { evaluator: "successor-cli" },
           postAction: { evaluator: "successor-cli", plan: { status: "converged" } },
-          verification: { status: "converged" },
+          verification: { status: "converged", source: "post-action" },
         },
       },
     });
@@ -1546,6 +1595,12 @@ describe("stn update convergence", () => {
     expect(output.result.actionAudits[1]?.planDigest).toBe(
       output.result.successor.plan.digest.value,
     );
+    const contradictory = structuredClone(output);
+    if (contradictory.result.kind !== "successor-runtime-execution") {
+      throw new Error("expected successor execution result");
+    }
+    contradictory.result.verification.source = "successor";
+    expect(UpdateCommandReportSchema.safeParse(contradictory).success).toBe(false);
     expect(successor.apply).not.toHaveBeenCalled();
     expect(latestDiscovery).not.toHaveBeenCalled();
     const text = textFor(result);
@@ -1998,6 +2053,7 @@ describe("stn update convergence", () => {
           },
         },
       }),
+      noHandoff: false,
     },
     {
       disposition: "reap-required" as const,
@@ -2006,6 +2062,16 @@ describe("stn update convergence", () => {
         host: differentHost(identityA, [terminal("non-releasable")]),
         terminalDispositions: [disposition("non-preservable", "non-resumable")],
       }),
+      noHandoff: false,
+    },
+    {
+      disposition: "intentionally-incomplete" as const,
+      successorPreflight: preflight("2.0.0", "2.0.0", {
+        observer: matchingObserver(identityB),
+        host: differentHost(identityA, [terminal("bridge-releasable")]),
+        terminalDispositions: [disposition("preservable", "recoverable")],
+      }),
+      noHandoff: true,
     },
   ])("propagates a valid $disposition successor report returned with exit status 1", async (testCase) => {
     const outer = probe("update-available");
@@ -2015,12 +2081,16 @@ describe("stn update convergence", () => {
         : commandResult(input),
     );
 
-    const result = await runUpdateCommand(["--json"], options(), {
-      probes: [outer.probe],
-      buildInfo: build(identityA, "1.0.0"),
-      convergenceInspection: inspection(preflight("1.0.0", "2.0.0")),
-      commandRunner: outerRunner,
-    });
+    const result = await runUpdateCommand(
+      testCase.noHandoff === true ? ["--no-handoff", "--json"] : ["--json"],
+      options(),
+      {
+        probes: [outer.probe],
+        buildInfo: build(identityA, "1.0.0"),
+        convergenceInspection: inspection(preflight("1.0.0", "2.0.0")),
+        commandRunner: outerRunner,
+      },
+    );
 
     expect(result).toMatchObject({
       code: 1,
@@ -2033,11 +2103,22 @@ describe("stn update convergence", () => {
           postAction: { evaluator: "successor-cli", plan: { status: testCase.disposition } },
           verification: {
             status: "not-converged",
+            source: "successor",
             disposition: testCase.disposition,
           },
         },
       },
     });
+    const report = reportFrom(result);
+    if (report.result.kind !== "successor-runtime-execution") {
+      throw new Error("expected successor execution result");
+    }
+    expect(report.result.actionAudits).toHaveLength(1);
+    expect(report.result.postAction).toEqual(report.result.successor);
+    expect(textFor(result)).toContain(
+      `successor plan: ${report.result.successor.plan.digest.value} (${testCase.disposition}) by successor-cli`,
+    );
+    expect(textFor(result)).not.toContain("verified plan:");
   });
 
   it("propagates successor-owned Observer lifecycle evidence through the outer report", async () => {

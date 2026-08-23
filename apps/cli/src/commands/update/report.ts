@@ -100,7 +100,7 @@ function renderUpdateReport(report: UpdateCommandReport): string {
   const final = finalEvidence(report);
   if (final !== undefined) {
     lines.push(
-      `verified plan: ${encodeUpdateTerminalText(final.plan.digest.value)} (${encodeUpdateTerminalText(final.plan.status)}) by ${encodeUpdateTerminalText(final.evaluator)}`,
+      `${final.label}: ${encodeUpdateTerminalText(final.evidence.plan.digest.value)} (${encodeUpdateTerminalText(final.evidence.plan.status)}) by ${encodeUpdateTerminalText(final.evidence.evaluator)}`,
     );
   }
   for (const warning of report.warnings) {
@@ -155,18 +155,28 @@ function actionAudits(report: UpdateCommandReport) {
 function finalEvidence(report: UpdateCommandReport) {
   switch (report.result.kind) {
     case "already-converged":
-      return report.initial;
+      return { label: "verified plan" as const, evidence: report.initial };
     case "preview":
     case "deferred":
     case "non-mutating-stop":
       return undefined;
     case "current-runtime-execution":
-      return report.result.postAction;
+      return { label: "verified plan" as const, evidence: report.result.postAction };
     case "successor-runtime-execution":
-      return report.result.postAction;
+      return {
+        label:
+          report.result.verification.source === "successor" &&
+          report.result.verification.status === "not-converged"
+            ? ("successor plan" as const)
+            : ("verified plan" as const),
+        evidence: report.result.postAction,
+      };
     case "execution-failed":
       return report.result.finalInspection.status === "completed"
-        ? report.result.finalInspection.evidence
+        ? {
+            label: "verified plan" as const,
+            evidence: report.result.finalInspection.evidence,
+          }
         : undefined;
   }
 }

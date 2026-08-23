@@ -276,8 +276,6 @@ async function applyThenConverge(
       ...(request.handoff === undefined ? {} : { handoff: request.handoff }),
     });
     const successorAudits = auditsFrom(successorReport);
-    const postAction = newestEvidence(successorReport);
-    const verification = verificationFor(postAction, "post-action");
     if (successorReport.result.kind === "execution-failed") {
       return finishReport({
         selected,
@@ -301,6 +299,7 @@ async function applyThenConverge(
         recoveryCommands: successorReport.recoveryCommands,
       });
     }
+    const verified = successorVerificationEvidence(successorReport);
     return finishReport({
       selected,
       current,
@@ -311,8 +310,8 @@ async function applyThenConverge(
         kind: "successor-runtime-execution",
         actionAudits: [artifactAudit, ...successorAudits],
         successor: successorReport.initial,
-        postAction,
-        verification,
+        postAction: verified.evidence,
+        verification: verificationFor(verified.evidence, verified.source),
       },
       warnings: [...applied.warnings, ...successorReport.warnings],
       recoveryCommands: successorReport.recoveryCommands,
@@ -814,21 +813,28 @@ function auditsFrom(report: UpdateCommandReport): UpdateActionAudit[] {
   }
 }
 
-function newestEvidence(report: UpdateCommandReport): UpdateEvidencePlan {
+function successorVerificationEvidence(report: UpdateCommandReport): {
+  evidence: UpdateEvidencePlan;
+  source: "successor" | "post-action";
+} {
   switch (report.result.kind) {
-    case "current-runtime-execution":
-      return report.result.postAction;
-    case "successor-runtime-execution":
-      return report.result.postAction;
-    case "execution-failed":
-      return report.result.finalInspection.status === "completed"
-        ? report.result.finalInspection.evidence
-        : (report.result.successor ?? report.initial);
     case "already-converged":
+    case "non-mutating-stop":
+      return { evidence: report.initial, source: "successor" };
+    case "current-runtime-execution": {
+      const verification = report.result.actionAudits[0].actions.at(-1);
+      if (verification?.phase !== "verification" || verification.status !== "completed") {
+        throw new Error(
+          "Successor runtime execution did not complete its final aggregate inspection.",
+        );
+      }
+      return { evidence: report.result.postAction, source: "post-action" };
+    }
     case "preview":
     case "deferred":
-    case "non-mutating-stop":
-      return report.initial;
+    case "successor-runtime-execution":
+    case "execution-failed":
+      throw new Error("Successor transport returned a result without verification provenance.");
   }
 }
 

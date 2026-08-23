@@ -773,6 +773,7 @@ function validateV4Result(
     case "successor-runtime-execution": {
       const artifactAudit = report.result.actionAudits[0];
       const successorAudit = report.result.actionAudits[1];
+      const expectedVerificationSource = successorAudit === undefined ? "successor" : "post-action";
       if (
         report.artifactApplication.status !== "applied" ||
         artifactAudit?.planDigest !== initialDigest ||
@@ -784,7 +785,7 @@ function validateV4Result(
         report.result.successor.evaluator !== "successor-cli" ||
         report.result.postAction.evaluator !== "successor-cli" ||
         report.result.successor.plan.selectedTarget.buildIdentity.status !== "known" ||
-        report.result.verification.source !== "post-action" ||
+        report.result.verification.source !== expectedVerificationSource ||
         (successorAudit === undefined &&
           (report.result.successor.plan.status === "actionable" ||
             report.result.postAction.plan.digest.value !==
@@ -795,7 +796,7 @@ function validateV4Result(
       ) {
         digestMismatch(
           ["result", "actionAudits"],
-          "Successor execution must audit artifact apply and the exact successor plan.",
+          "Successor execution must audit artifact apply and attribute verification to the exact inspected successor plan.",
         );
       }
       if (artifactAudit !== undefined) {
