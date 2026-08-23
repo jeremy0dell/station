@@ -1,6 +1,5 @@
-import { bottomSheetContentWidth } from "@station/dashboard-core/selectors";
 import type { DashboardScreenView } from "@station/dashboard-core/state";
-import { BottomSheetFrameView } from "./BottomSheetFrameView.js";
+import { bottomSheetContentWidth, BottomSheetFrameView } from "./BottomSheetFrameView.js";
 import {
   compactSheetWidth,
   responsiveSheetFooterText,
@@ -8,7 +7,6 @@ import {
   SheetButtonRow,
   SheetFooter,
   SheetLabelValue,
-  SheetLine,
   SheetMessageLine,
 } from "./parts.js";
 
@@ -22,10 +20,6 @@ export type RemoveSessionSheetViewProps = {
 
 const MIN_SHEET_WIDTH = 1;
 const UNAVAILABLE_MAX_SHEET_WIDTH = 68;
-const CHOOSE_SLOT_CONTENT_ROWS = 5;
-const CHOOSE_SLOT_MIN_HEIGHT = 7;
-const DETAIL_CONTENT_ROWS = 7;
-const DETAIL_MIN_HEIGHT = 9;
 const SESSION_LABEL_WIDTH = 8;
 
 const CONFIRM_HELP = {
@@ -43,12 +37,10 @@ export function RemoveSessionSheetView({ screen, columns, rows }: RemoveSessionS
         rows={rows}
         width={sheetWidth}
         title="Select session to delete"
-        contentRows={CHOOSE_SLOT_CONTENT_ROWS}
-        minHeight={CHOOSE_SLOT_MIN_HEIGHT}
+        bodyPaddingTop={1}
+        footer={<SheetFooter width={contentWidth}>Esc:cancel</SheetFooter>}
       >
-        <SheetLine width={contentWidth}> </SheetLine>
         <SheetMessageLine width={contentWidth}>↑↓ move · ↵ choose · slot or click</SheetMessageLine>
-        <SheetFooter width={contentWidth}>Esc:cancel</SheetFooter>
       </BottomSheetFrameView>
     );
   }
@@ -60,8 +52,8 @@ export function RemoveSessionSheetView({ screen, columns, rows }: RemoveSessionS
         rows={rows}
         width={sheetWidth}
         title="Cannot delete worktree"
-        contentRows={DETAIL_CONTENT_ROWS}
-        minHeight={DETAIL_MIN_HEIGHT}
+        bodyPaddingBottom={1}
+        footer={<SheetFooter width={contentWidth}>Esc/Enter:close</SheetFooter>}
       >
         <SheetMessageLine width={contentWidth}>
           Station cannot stop the active agent.
@@ -69,10 +61,6 @@ export function RemoveSessionSheetView({ screen, columns, rows }: RemoveSessionS
         <SheetMessageLine width={contentWidth}>
           Stop it in its terminal before deleting the worktree.
         </SheetMessageLine>
-        <SheetLine width={contentWidth}> </SheetLine>
-        <SheetLine width={contentWidth}> </SheetLine>
-        <SheetLine width={contentWidth}> </SheetLine>
-        <SheetFooter width={contentWidth}>Esc/Enter:close</SheetFooter>
       </BottomSheetFrameView>
     );
   }
@@ -83,8 +71,44 @@ export function RemoveSessionSheetView({ screen, columns, rows }: RemoveSessionS
       rows={rows}
       width={sheetWidth}
       title="Delete session?"
-      contentRows={DETAIL_CONTENT_ROWS}
-      minHeight={DETAIL_MIN_HEIGHT}
+      bodyPaddingBottom={1}
+      actions={
+        <SheetButtonRow
+          width={contentWidth}
+          buttons={[
+            {
+              id: "confirm.delete",
+              label: "Delete",
+              shortcut: "Y",
+              tone: "danger",
+              mouseTarget: {
+                kind: "removeWorktreeAction",
+                actionId: "confirm.delete",
+              },
+              focused: screen.actionFocus === "delete",
+              disabled: false,
+            },
+            {
+              id: "confirm.keep",
+              label: "Keep session",
+              compactLabel: "Keep",
+              shortcut: "N",
+              tone: "neutral",
+              mouseTarget: {
+                kind: "removeWorktreeAction",
+                actionId: "confirm.keep",
+              },
+              focused: screen.actionFocus === "keep",
+              disabled: false,
+            },
+          ]}
+        />
+      }
+      footer={
+        <SheetFooter width={contentWidth}>
+          {responsiveSheetFooterText(contentWidth, CONFIRM_HELP)}
+        </SheetFooter>
+      }
     >
       <SheetLabelValue
         width={contentWidth}
@@ -95,40 +119,6 @@ export function RemoveSessionSheetView({ screen, columns, rows }: RemoveSessionS
       <SheetMessageLine width={contentWidth} tone="danger">
         Removes agent, worktree, and panes.
       </SheetMessageLine>
-      <SheetLine width={contentWidth}> </SheetLine>
-      <SheetButtonRow
-        width={contentWidth}
-        buttons={[
-          {
-            id: "confirm.delete",
-            label: "Delete",
-            shortcut: "Y",
-            tone: "danger",
-            mouseTarget: {
-              kind: "removeWorktreeAction",
-              actionId: "confirm.delete",
-            },
-            focused: screen.actionFocus === "delete",
-            disabled: false,
-          },
-          {
-            id: "confirm.keep",
-            label: "Keep session",
-            compactLabel: "Keep",
-            shortcut: "N",
-            tone: "neutral",
-            mouseTarget: {
-              kind: "removeWorktreeAction",
-              actionId: "confirm.keep",
-            },
-            focused: screen.actionFocus === "keep",
-            disabled: false,
-          },
-        ]}
-      />
-      <SheetFooter width={contentWidth}>
-        {responsiveSheetFooterText(contentWidth, CONFIRM_HELP)}
-      </SheetFooter>
     </BottomSheetFrameView>
   );
 }

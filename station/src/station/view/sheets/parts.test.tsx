@@ -3,6 +3,7 @@ import { rgbToHex } from "@opentui/core";
 import { MouseButtons } from "@opentui/core/testing";
 import { testRender } from "@opentui/react/test-utils";
 import { act } from "react";
+import { cellWidth } from "@station/dashboard-core/selectors";
 import { spanAtFrameCell } from "../../../terminal/testing/frameProbe.js";
 import type { StationMouseTarget } from "../../input/stationMouse.js";
 import { StationHoverProvider, StationMouseProvider } from "../stationMouseContext.js";
@@ -12,6 +13,7 @@ import {
   StationThemeProvider,
 } from "../../../theme/index.js";
 import {
+  fit,
   responsiveSheetFooterText,
   responsiveSheetText,
   SheetButtonRow,
@@ -143,5 +145,15 @@ describe("responsive sheet text", () => {
     const expandedFooter = ` ${variants.expanded}`;
     expect(responsiveSheetFooterText(expandedFooter.length, variants)).toBe(variants.expanded);
     expect(responsiveSheetFooterText(variants.expanded.length, variants)).toBe(variants.compact);
+  });
+});
+
+describe("sheet terminal-cell fitting", () => {
+  it("fits wide and combining graphemes by cells without splitting them", () => {
+    expect(fit("界a", 3)).toBe("界a");
+    expect(cellWidth(fit("界a", 3))).toBe(3);
+    expect(fit("界a", 2)).toBe("界");
+    expect(cellWidth(fit("e\u0301", 2))).toBe(2);
+    expect(fit("e\u0301", 2)).toBe("e\u0301 ");
   });
 });

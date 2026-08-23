@@ -7,6 +7,7 @@ import { nativeStationTheme, StationThemeProvider } from "../../../theme/index.j
 import { groupedManyProjectsSnapshot } from "../../fixtures/scenarios.js";
 import type { StationMouseTarget } from "../../input/stationMouse.js";
 import { StationHoverProvider, StationMouseProvider } from "../stationMouseContext.js";
+import { semanticItemRenderableId } from "../layout/scrollViewport.js";
 import { MoveToGroupSheetView } from "./MoveToGroupSheetView.js";
 
 type MoveScreen = Exclude<
@@ -46,6 +47,7 @@ async function render(
   );
   teardowns.push(() => setup.renderer.destroy());
   await setup.renderOnce();
+  await setup.flush();
   return { setup, targets };
 }
 
@@ -113,7 +115,7 @@ describe("MoveToGroupSheetView", () => {
     expect(targets.some((target) => target.kind === "moveToGroupCreateSubmit")).toBe(false);
   });
 
-  it("windows a short destination list around keyboard focus", async () => {
+  it("follows semantic focus through clipping and resize without slicing choices", async () => {
     const { setup } = await render(
       {
         name: "moveToGroup",
@@ -127,8 +129,24 @@ describe("MoveToGroupSheetView", () => {
     );
     const frame = setup.captureCharFrame();
     expect(frame).toContain("Release train");
-    expect(frame).toContain("5-6 of 6");
-    expect(frame).toContain("U Ungrouped");
-    expect(frame).toContain("N Create new Group…");
+    expect(frame).toContain("↑↓ move   ↵ select");
+    expect(frame).not.toContain("of 6");
+    expect(
+      setup.renderer.root.findDescendantById(
+        semanticItemRenderableId("moveToGroup:existing:group_input_parity"),
+      ),
+    ).toBeDefined();
+    expect(
+      setup.renderer.root.findDescendantById(
+        semanticItemRenderableId("moveToGroup:create"),
+      ),
+    ).toBeDefined();
+
+    await act(async () => setup.renderer.resize(80, 8));
+    await setup.renderOnce();
+    await setup.flush();
+    const resized = setup.captureCharFrame();
+    expect(resized).toContain("▸ 5 Release train");
+    expect(resized).toContain("↑↓ move   ↵ select");
   });
 });

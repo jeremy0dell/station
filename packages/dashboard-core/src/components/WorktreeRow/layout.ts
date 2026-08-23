@@ -812,7 +812,8 @@ function segmentWidth(segment: RowSegment): number {
   return segment.kind === "throbber" ? 1 : cellWidth(segment.text);
 }
 
-function clipCells(text: string, cells: number): string {
+/** Clips sanitized text to terminal cells without splitting a grapheme cluster. */
+export function clipCells(text: string, cells: number): string {
   let remaining = normalizeCells(cells);
   let clipped = "";
   for (const grapheme of graphemes(text)) {

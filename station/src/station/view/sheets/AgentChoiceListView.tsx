@@ -49,6 +49,7 @@ export function AgentChoiceListView({
             width={width}
             current={current}
             selected={choice.value.id === selectedId}
+            itemId={choice.value.id}
             {...(current && pending ? { note: "updating…" } : {})}
           />
         );

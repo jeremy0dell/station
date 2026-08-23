@@ -8,11 +8,6 @@
  */
 
 export {
-  bottomSheetContentWidth,
-  bottomSheetFrameLayout,
-} from "../components/BottomSheetFrame/layout.js";
-
-export {
   commandPromptLineForScreen,
   commandPromptRows,
   emptyProjectLabel,
@@ -69,7 +64,6 @@ export {
   newSessionEditNameContent,
   newSessionReviewContent,
 } from "../components/NewSessionBottomSheet/content.js";
-export { newSessionContentRowCount } from "../components/NewSessionBottomSheet/layout.js";
 
 export type {
   SettingsPanelLayout,
@@ -100,6 +94,7 @@ export type {
 } from "../components/WorktreeRow/layout.js";
 export {
   cellWidth,
+  clipCells,
   layoutWorktreeRowGrid,
   textSegment,
   truncateCells,

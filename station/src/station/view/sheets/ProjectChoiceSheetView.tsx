@@ -1,9 +1,9 @@
 import type { ProjectId } from "@station/contracts";
-import { bottomSheetContentWidth, selectProjectChooserChoices } from "@station/dashboard-core/selectors";
+import { selectProjectChooserChoices } from "@station/dashboard-core/selectors";
 import type { DashboardSnapshotView, DashboardStateView } from "@station/dashboard-core/state";
 import { providerHealthColor, useStationTheme } from "../../../theme/index.js";
-import { BottomSheetFrameView } from "./BottomSheetFrameView.js";
-import { SheetChoiceLine, SheetFooter, SheetLine } from "./parts.js";
+import { bottomSheetContentWidth, BottomSheetFrameView } from "./BottomSheetFrameView.js";
+import { SheetChoiceLine, SheetFooter } from "./parts.js";
 
 export type ProjectChooserMode = "projectCollapse" | "projectSettingsPicker";
 
@@ -31,24 +31,20 @@ export function ProjectChoiceSheetView({
   const choices = selectProjectChooserChoices(snapshot);
   const width = bottomSheetContentWidth(columns);
   const selectedId = selection.get(mode) as ProjectId | undefined;
-  // Window the list to the frame so the cursor can never move onto a clipped
-  // row; the slice follows the cursor like AddProjectSheetView's folder picker.
-  const listHeight = Math.max(1, Math.min(choices.length, rows - 6));
-  const selectedIndex = Math.max(
-    0,
-    choices.findIndex((choice) => choice.value.id === selectedId),
-  );
-  const start = Math.max(0, Math.min(selectedIndex, choices.length - listHeight));
-  const visible = choices.slice(start, start + listHeight);
   return (
     <BottomSheetFrameView
       columns={columns}
       rows={rows}
       title={TITLE[mode]}
-      contentRows={visible.length + 4}
+      bodyItemIds={choices.map((choice) => choice.value.id)}
+      followedBodyItemId={selectedId}
+      bodyPaddingTop={1}
+      bodyPaddingBottom={1}
+      footer={
+        <SheetFooter width={width}>↑↓ move   ↵ select   1-9/a-z jump   Esc cancel</SheetFooter>
+      }
     >
-      <SheetLine width={width}> </SheetLine>
-      {visible.map((choice) => (
+      {choices.map((choice) => (
         <SheetChoiceLine
           key={choice.value.id}
           choiceKey={choice.key}
@@ -57,14 +53,9 @@ export function ProjectChoiceSheetView({
           color={providerHealthColor(theme, choice.value.health.status)}
           width={width}
           selected={choice.value.id === selectedId}
+          itemId={choice.value.id}
         />
       ))}
-      <SheetLine width={width}> </SheetLine>
-      <SheetFooter width={width}>
-        {visible.length < choices.length
-          ? `↑↓ move   ↵ select   ${start + 1}-${start + visible.length} of ${choices.length}   Esc cancel`
-          : "↑↓ move   ↵ select   1-9/a-z jump   Esc cancel"}
-      </SheetFooter>
     </BottomSheetFrameView>
   );
 }

@@ -1,7 +1,6 @@
 import type { ProviderId } from "@station/contracts";
 import {
-  bottomSheetContentWidth,
-  newSessionContentRowCount,
+  cellWidth,
   newSessionEditGroupDraftContent,
   newSessionEditNameContent,
   newSessionReviewContent,
@@ -24,7 +23,7 @@ import type {
 import { providerHealthColor, useStationTheme } from "../../../theme/index.js";
 import { EditableTextInputView } from "../EditableTextInputView.js";
 import { AgentChoiceListView } from "./AgentChoiceListView.js";
-import { BottomSheetFrameView } from "./BottomSheetFrameView.js";
+import { bottomSheetContentWidth, BottomSheetFrameView } from "./BottomSheetFrameView.js";
 import {
   SheetButtonRow,
   SheetChoiceLine,
@@ -53,15 +52,20 @@ export function NewSessionSheetView({
   rows,
 }: NewSessionSheetViewProps) {
   const project = selectedProject(snapshot, state);
-  const optionCount = optionCountForState(snapshot, state, project);
   const contentWidth = bottomSheetContentWidth(columns);
+  const selectedBodyItemId = selectedBodyItem(state, selection);
 
   return (
     <BottomSheetFrameView
       columns={columns}
       rows={rows}
       title={titleForState(state)}
-      contentRows={newSessionContentRowCount(state, optionCount)}
+      bodyItemIds={bodyItems(snapshot, state, project)}
+      followedBodyItemId={selectedBodyItemId}
+      bodyPaddingTop={isPicker(state) ? 1 : 0}
+      bodyPaddingBottom={isPicker(state) ? 1 : 0}
+      actions={actionsForState(snapshot, state, contentWidth)}
+      footer={footerForState(snapshot, state, project, contentWidth)}
     >
       {renderMode(snapshot, state, project, selection, contentWidth)}
     </BottomSheetFrameView>
@@ -86,7 +90,7 @@ function renderMode(
   }
   if (state.mode === "pickAgent") {
     if (project === undefined) {
-      return <SheetFooter width={contentWidth}>No project is available · Esc back</SheetFooter>;
+      return <SheetLine width={contentWidth}>No project is available</SheetLine>;
     }
     return (
       <AgentPicker
@@ -114,6 +118,51 @@ function renderMode(
     return <EditName state={state} project={project} width={contentWidth} />;
   }
   return <Review snapshot={snapshot} state={state} width={contentWidth} />;
+}
+
+function isPicker(state: NewSessionFlowStateView): boolean {
+  return state.mode === "pickProject" || state.mode === "pickAgent" || state.mode === "pickGroup";
+}
+
+function selectedBodyItem(
+  state: NewSessionFlowStateView,
+  selection: DashboardStateView["selection"],
+): string | undefined {
+  switch (state.mode) {
+    case "pickProject":
+      return selection.get("newSessionPickProject");
+    case "pickAgent":
+      return selection.get("newSessionPickAgent");
+    case "pickGroup":
+      return selection.get(NEW_SESSION_GROUP_LIST_ID);
+    default:
+      return undefined;
+  }
+}
+
+function bodyItems(
+  snapshot: DashboardSnapshotView,
+  state: NewSessionFlowStateView,
+  project: NewSessionProjectView | undefined,
+): string[] {
+  switch (state.mode) {
+    case "pickProject":
+      return selectNewSessionProjectChoices(snapshot).map((choice) => choice.value.id);
+    case "pickAgent":
+      return project === undefined
+        ? []
+        : selectNewSessionHarnessChoices(snapshot, project).map((choice) => choice.value.id);
+    case "pickGroup":
+      return [
+        NEW_SESSION_UNGROUPED_CHOICE_ID,
+        ...selectNewSessionGroupChoices(snapshot, state.selectedProjectId).map((choice) =>
+          newSessionExistingGroupChoiceId(choice.value.id),
+        ),
+        NEW_SESSION_CREATE_GROUP_CHOICE_ID,
+      ];
+    default:
+      return [];
+  }
 }
 
 function titleForState(state: NewSessionFlowStateView): string {
@@ -170,26 +219,6 @@ function Review({
           />
         );
       })}
-      <SheetButtonRow
-        width={width}
-        buttons={[
-          {
-            id: content.create.actionId,
-            label: content.create.label,
-            compactLabel: "Create",
-            shortcut: content.create.accelerator ?? "Enter",
-            tone: "primary",
-            focused: state.reviewFocus === content.create.focusId,
-            disabled: !content.create.enabled,
-            mouseTarget: { kind: "newSessionAction", actionId: content.create.actionId },
-          },
-        ]}
-      />
-      {state.submissionLocalId === undefined ? (
-        <SheetFooter width={width}>{`↑↓ focus · ${content.helper} · Esc cancel`}</SheetFooter>
-      ) : (
-        <SheetProgressFooter width={width}>{content.helper}</SheetProgressFooter>
-      )}
     </>
   );
 }
@@ -208,7 +237,6 @@ function GroupPicker({
   const choices = selectNewSessionGroupChoices(snapshot, state.selectedProjectId);
   return (
     <>
-      <SheetLine width={width}> </SheetLine>
       <SheetChoiceLine
         choiceKey="U"
         label="Ungrouped"
@@ -216,6 +244,7 @@ function GroupPicker({
         width={width}
         current={state.groupSelection.kind === "ungrouped"}
         selected={selectedId === NEW_SESSION_UNGROUPED_CHOICE_ID}
+        itemId={NEW_SESSION_UNGROUPED_CHOICE_ID}
       />
       {choices.map((choice) => (
         <SheetChoiceLine
@@ -229,6 +258,7 @@ function GroupPicker({
             state.groupSelection.groupId === choice.value.id
           }
           selected={selectedId === newSessionExistingGroupChoiceId(choice.value.id)}
+          itemId={newSessionExistingGroupChoiceId(choice.value.id)}
         />
       ))}
       <SheetChoiceLine
@@ -242,9 +272,8 @@ function GroupPicker({
         width={width}
         current={state.groupSelection.kind === "create"}
         selected={selectedId === NEW_SESSION_CREATE_GROUP_CHOICE_ID}
+        itemId={NEW_SESSION_CREATE_GROUP_CHOICE_ID}
       />
-      <SheetLine width={width}> </SheetLine>
-      <SheetFooter width={width}>{"↑↓ move   ↵ select   U ungrouped   N create   Esc back"}</SheetFooter>
     </>
   );
 }
@@ -258,7 +287,6 @@ function EditGroupDraft({
   project: NewSessionProjectView | undefined;
   width: number;
 }) {
-  const content = newSessionEditGroupDraftContent(state);
   return (
     <>
       <SheetLabelValue
@@ -278,40 +306,10 @@ function EditGroupDraft({
             active
           />
         }
-        valueCells={state.draftGroupName.value.length + 1}
+        valueCells={cellWidth(state.draftGroupName.value) + 1}
         focused
         mouseTarget={{ kind: "sheetBackdrop" }}
       />
-      <SheetButtonRow
-        width={width}
-        buttons={[
-          {
-            id: content.controls.save.actionId,
-            label: content.controls.save.label,
-            shortcut: content.controls.save.accelerator ?? "Enter",
-            tone: "primary",
-            focused: false,
-            disabled: !content.controls.save.enabled,
-            mouseTarget: {
-              kind: "newSessionAction",
-              actionId: content.controls.save.actionId,
-            },
-          },
-          {
-            id: content.controls.back.actionId,
-            label: content.controls.back.label,
-            shortcut: content.controls.back.accelerator ?? "Esc",
-            tone: "neutral",
-            focused: false,
-            disabled: !content.controls.back.enabled,
-            mouseTarget: {
-              kind: "newSessionAction",
-              actionId: content.controls.back.actionId,
-            },
-          },
-        ]}
-      />
-      <SheetFooter width={width}>{content.helper}</SheetFooter>
     </>
   );
 }
@@ -346,41 +344,11 @@ function EditName({
             active={state.editNameFocus === "name"}
           />
         }
-        valueCells={nameValue.length + Number(state.editNameFocus === "name")}
+        valueCells={cellWidth(nameValue) + Number(state.editNameFocus === "name")}
         focused={state.editNameFocus === content.controls.name.focusId}
         disabled={!content.controls.name.enabled}
         mouseTarget={{ kind: "newSessionAction", actionId: content.controls.name.actionId }}
       />
-      <SheetButtonRow
-        width={width}
-        buttons={[
-          {
-            id: content.controls.save.actionId,
-            label: content.controls.save.label,
-            shortcut: content.controls.save.accelerator ?? "Enter",
-            tone: "primary",
-            focused: state.editNameFocus === content.controls.save.focusId,
-            disabled: !content.controls.save.enabled,
-            mouseTarget: {
-              kind: "newSessionAction",
-              actionId: content.controls.save.actionId,
-            },
-          },
-          {
-            id: content.controls.back.actionId,
-            label: content.controls.back.label,
-            shortcut: content.controls.back.accelerator ?? "Esc",
-            tone: "neutral",
-            focused: state.editNameFocus === content.controls.back.focusId,
-            disabled: !content.controls.back.enabled,
-            mouseTarget: {
-              kind: "newSessionAction",
-              actionId: content.controls.back.actionId,
-            },
-          },
-        ]}
-      />
-      <SheetFooter width={width}>{content.helper}</SheetFooter>
     </>
   );
 }
@@ -398,7 +366,6 @@ function ProjectPicker({
   const projects = selectNewSessionProjectChoices(snapshot);
   return (
     <>
-      <SheetLine width={width}> </SheetLine>
       {projects.map((choice) => (
         <SheetChoiceLine
           key={choice.value.id}
@@ -408,10 +375,9 @@ function ProjectPicker({
           color={providerHealthColor(theme, choice.value.health.status)}
           width={width}
           selected={choice.value.id === selectedId}
+          itemId={choice.value.id}
         />
       ))}
-      <SheetLine width={width}> </SheetLine>
-      <SheetFooter width={width}>{"↑↓ move   ↵ select   1-9/a-z jump   Esc back"}</SheetFooter>
     </>
   );
 }
@@ -428,29 +394,129 @@ function AgentPicker({
   selectedId?: ProviderId;
 }) {
   const options = selectNewSessionHarnessChoices(snapshot, project);
-  return (
-    <>
-      <SheetLine width={width}> </SheetLine>
-      <AgentChoiceListView choices={options} width={width} selectedId={selectedId} />
-      <SheetLine width={width}> </SheetLine>
-      <SheetFooter width={width}>{"↑↓ move   ↵ select   1-9/a-z jump   Esc back"}</SheetFooter>
-    </>
-  );
+  return <AgentChoiceListView choices={options} width={width} selectedId={selectedId} />;
 }
 
-function optionCountForState(
+function actionsForState(
+  snapshot: DashboardSnapshotView,
+  state: NewSessionFlowStateView,
+  width: number,
+) {
+  if (state.mode === "review") {
+    const content = newSessionReviewContent(snapshot, state);
+    return (
+      <SheetButtonRow
+        width={width}
+        buttons={[
+          {
+            id: content.create.actionId,
+            label: content.create.label,
+            compactLabel: "Create",
+            shortcut: content.create.accelerator ?? "Enter",
+            tone: "primary",
+            focused: state.reviewFocus === content.create.focusId,
+            disabled: !content.create.enabled,
+            mouseTarget: { kind: "newSessionAction", actionId: content.create.actionId },
+          },
+        ]}
+      />
+    );
+  }
+  if (state.mode === "editGroupDraft") {
+    const content = newSessionEditGroupDraftContent(state);
+    return (
+      <SheetButtonRow
+        width={width}
+        buttons={[
+          {
+            id: content.controls.save.actionId,
+            label: content.controls.save.label,
+            shortcut: content.controls.save.accelerator ?? "Enter",
+            tone: "primary",
+            focused: false,
+            disabled: !content.controls.save.enabled,
+            mouseTarget: { kind: "newSessionAction", actionId: content.controls.save.actionId },
+          },
+          {
+            id: content.controls.back.actionId,
+            label: content.controls.back.label,
+            shortcut: content.controls.back.accelerator ?? "Esc",
+            tone: "neutral",
+            focused: false,
+            disabled: !content.controls.back.enabled,
+            mouseTarget: { kind: "newSessionAction", actionId: content.controls.back.actionId },
+          },
+        ]}
+      />
+    );
+  }
+  if (state.mode === "editName") {
+    const content = newSessionEditNameContent(state);
+    return (
+      <SheetButtonRow
+        width={width}
+        buttons={[
+          {
+            id: content.controls.save.actionId,
+            label: content.controls.save.label,
+            shortcut: content.controls.save.accelerator ?? "Enter",
+            tone: "primary",
+            focused: state.editNameFocus === content.controls.save.focusId,
+            disabled: !content.controls.save.enabled,
+            mouseTarget: { kind: "newSessionAction", actionId: content.controls.save.actionId },
+          },
+          {
+            id: content.controls.back.actionId,
+            label: content.controls.back.label,
+            shortcut: content.controls.back.accelerator ?? "Esc",
+            tone: "neutral",
+            focused: state.editNameFocus === content.controls.back.focusId,
+            disabled: !content.controls.back.enabled,
+            mouseTarget: { kind: "newSessionAction", actionId: content.controls.back.actionId },
+          },
+        ]}
+      />
+    );
+  }
+  return undefined;
+}
+
+function footerForState(
   snapshot: DashboardSnapshotView,
   state: NewSessionFlowStateView,
   project: NewSessionProjectView | undefined,
-): number {
-  if (state.mode === "pickProject") {
-    return selectNewSessionProjectChoices(snapshot).length;
+  width: number,
+) {
+  switch (state.mode) {
+    case "review": {
+      const helper = newSessionReviewContent(snapshot, state).helper;
+      return state.submissionLocalId === undefined ? (
+        <SheetFooter width={width}>{`↑↓ focus · ${helper} · Esc cancel`}</SheetFooter>
+      ) : (
+        <SheetProgressFooter width={width}>{helper}</SheetProgressFooter>
+      );
+    }
+    case "editGroupDraft":
+      return (
+        <SheetFooter width={width}>{newSessionEditGroupDraftContent(state).helper}</SheetFooter>
+      );
+    case "editName":
+      return <SheetFooter width={width}>{newSessionEditNameContent(state).helper}</SheetFooter>;
+    case "pickGroup":
+      return (
+        <SheetFooter width={width}>
+          ↑↓ move   ↵ select   U ungrouped   N create   Esc back
+        </SheetFooter>
+      );
+    case "pickProject":
+      return (
+        <SheetFooter width={width}>↑↓ move   ↵ select   1-9/a-z jump   Esc back</SheetFooter>
+      );
+    case "pickAgent":
+      return project === undefined ? (
+        <SheetFooter width={width}>No project is available · Esc back</SheetFooter>
+      ) : (
+        <SheetFooter width={width}>↑↓ move   ↵ select   1-9/a-z jump   Esc back</SheetFooter>
+      );
   }
-  if (state.mode === "pickAgent" && project !== undefined) {
-    return selectNewSessionHarnessChoices(snapshot, project).length;
-  }
-  if (state.mode === "pickGroup") {
-    return selectNewSessionGroupChoices(snapshot, state.selectedProjectId).length + 2;
-  }
-  return 0;
 }

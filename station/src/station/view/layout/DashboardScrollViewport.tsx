@@ -1,6 +1,6 @@
-import type { ScrollBoxRenderable } from "@opentui/core";
 import type { DashboardRowId } from "@station/dashboard-core/selectors";
-import { useLayoutEffect, useRef, useSyncExternalStore, type ReactNode } from "react";
+import { useSyncExternalStore, type ReactNode } from "react";
+import { SemanticScrollViewport } from "./SemanticScrollViewport.js";
 import type { DashboardScrollController } from "./scrollViewport.js";
 
 export function useDashboardVisibleRows(
@@ -19,37 +19,9 @@ export function DashboardScrollViewport({
   itemIds: readonly DashboardRowId[];
   children: ReactNode;
 }) {
-  const ref = useRef<ScrollBoxRenderable>(null);
-  const itemIdsRef = useRef(itemIds);
-  itemIdsRef.current = itemIds;
-  const itemIdentity = itemIds.join("\u0000");
-  // biome-ignore lint/correctness/useExhaustiveDependencies: reattach only when semantic identity changes, not when a selector returns a new array.
-  useLayoutEffect(() => {
-    const viewport = ref.current;
-    if (viewport === null) return;
-    controller.attach(viewport, itemIdsRef.current);
-    queueMicrotask(controller.reflow);
-    return () => controller.detach(viewport);
-  }, [controller, itemIdentity]);
-
   return (
-    <scrollbox
-      ref={ref}
-      width="100%"
-      flexGrow={1}
-      flexShrink={1}
-      flexBasis={0}
-      minHeight={0}
-      scrollX={false}
-      scrollY
-      viewportCulling
-      verticalScrollbarOptions={{ visible: false }}
-      horizontalScrollbarOptions={{ visible: false }}
-      contentOptions={{ flexDirection: "column" }}
-      onSizeChange={() => queueMicrotask(controller.reflow)}
-      onMouseScroll={() => queueMicrotask(controller.synchronize)}
-    >
+    <SemanticScrollViewport controller={controller} itemIds={itemIds}>
       {children}
-    </scrollbox>
+    </SemanticScrollViewport>
   );
 }
