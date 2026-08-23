@@ -594,7 +594,7 @@ jobs:
             --target-build-identity "$target_build_identity" \
             --scenarios no-host \
             --incumbent-contract legacy-compatible
-      - name: Prove v4 pre-mutation convergence against the staged target
+      - name: Prove v4 Host convergence against the staged target
         if: runner.os == 'macOS'
         env:
           TAG: ${{ needs.validate.outputs.tag }}
@@ -606,8 +606,20 @@ jobs:
             --target-release-dir "$RUNNER_TEMP/update-release" \
             --target-tag "$TAG" \
             --target-build-identity "$target_build_identity" \
-            --scenarios full \
-            --busy-host-outcome pre-mutation-reap-required
+            --scenarios host-convergence
+      - name: Prove v4 pre-mutation reap-required against the staged target
+        if: runner.os == 'macOS'
+        env:
+          TAG: ${{ needs.validate.outputs.tag }}
+        run: |
+          target_build_identity="$(jq -er .targetBuildIdentity candidate/manifest.json)"
+          pnpm smoke:update -- \
+            --incumbent-binary "$RUNNER_TEMP/v4-update-incumbent" \
+            --incumbent-version "$V4_SMOKE_INCUMBENT_VERSION" \
+            --target-release-dir "$RUNNER_TEMP/update-release" \
+            --target-tag "$TAG" \
+            --target-build-identity "$target_build_identity" \
+            --scenarios reap-required
       - name: Verify lock refusal and same-version retry
         env:
           EXPECTED_VERSION: ${{ needs.validate.outputs.version }}

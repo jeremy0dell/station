@@ -152,6 +152,9 @@ describe("release readiness docs", () => {
     expect(singleBinary).toContain("published pre-v4 predecessor");
     expect(singleBinary).toContain("compatible report schema");
     expect(singleBinary).toContain("separate v4-capable incumbent");
+    expect(singleBinary).toContain("source-mode bridge Host");
+    expect(singleBinary).toContain("real old idle Host");
+    expect(singleBinary).toContain("fresh final no-op plan");
     expect(singleBinary).not.toMatch(
       /Status: implemented|## Phases|## Audit findings|## Evidence appendix|### A\d|### B-/,
     );
@@ -307,6 +310,9 @@ describe("release readiness docs", () => {
     expect(releasing).toContain("pre-v4 predecessor");
     expect(releasing).toContain("strict v4 `current` report");
     expect(releasing.replace(/\s+/g, " ")).toContain("separate synthetic-version v4 incumbent");
+    expect(releasing).toContain("old-idle-Host replacement");
+    expect(releasing).toContain("old bridge-backed live handoff");
+    expect(releasing).toContain("typed receipt audit");
     expect(releasing).toContain("while preserving the incumbent artifact and runtime");
     expect(releasing).not.toContain("compiled predecessors must stop with a typed");
     expect(releasing).not.toContain(exactVersion);

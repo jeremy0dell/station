@@ -21,7 +21,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   CompatibleUpdateCommandReportSchema,
   UpdateCommandReportSchema,
@@ -240,14 +240,7 @@ async function runUpdateSmoke(options) {
   );
   const target = await prepareTarget(options, root);
   await assertTargetAssetsUnchanged(target);
-  const scenarios =
-    options.scenarios === "no-host"
-      ? [{ name: "tmux-no-host", invocation: "tmux", busyHost: false }]
-      : [
-          { name: "external-busy-host", invocation: "external", busyHost: true },
-          { name: "tmux-busy-host", invocation: "tmux", busyHost: true },
-          { name: "tmux-no-host", invocation: "tmux", busyHost: false },
-        ];
+  const scenarios = updateSmokeScenarios(options);
 
   try {
     for (const scenario of scenarios) {
@@ -286,16 +279,67 @@ async function runUpdateSmoke(options) {
   }
 }
 
+function updateSmokeScenarios(options) {
+  const noHost = {
+    name: "tmux-no-host",
+    key: "n",
+    invocation: "tmux",
+    hostMode: "absent",
+    expectedOutcome: "updated",
+  };
+  const idleHost = {
+    name: "external-idle-host-replacement",
+    key: "i",
+    invocation: "external",
+    hostMode: "idle",
+    expectedOutcome: "updated",
+  };
+  const bridgeHandoff = {
+    name: "external-busy-bridge-handoff",
+    key: "h",
+    invocation: "external",
+    hostMode: "busy-bridge",
+    expectedOutcome: "updated",
+  };
+  const nonBridgeReap = {
+    name: "tmux-busy-nonbridge-reap-required",
+    key: "r",
+    invocation: "tmux",
+    hostMode: "busy-nonbridge",
+    expectedOutcome: "pre-mutation-reap-required",
+  };
+  switch (options.scenarios) {
+    case "no-host":
+      return [noHost];
+    case "host-convergence":
+      return [idleHost, bridgeHandoff];
+    case "idle-replacement":
+      return [idleHost];
+    case "bridge-handoff":
+      return [bridgeHandoff];
+    case "reap-required":
+      return [nonBridgeReap];
+    case "v4-gate":
+      return [idleHost, bridgeHandoff, nonBridgeReap];
+    case "full":
+      return options.busyHostOutcome === "pre-mutation-reap-required"
+        ? [nonBridgeReap, noHost]
+        : [idleHost, bridgeHandoff, noHost];
+  }
+  throw new Error(`Unsupported update smoke scenario suite: ${options.scenarios}`);
+}
+
 async function runScenario(input) {
   const scenarioRoot = join(input.root, "scenarios", input.name);
-  const scenarioKey =
-    input.name === "external-busy-host" ? "e" : input.name === "tmux-busy-host" ? "b" : "n";
+  const scenarioKey = input.key;
   const homeDir = join(scenarioRoot, "home");
   const configHome = join(homeDir, ".config");
   const stateHome = join(scenarioRoot, "state-home");
   const dataHome = join(scenarioRoot, "data-home");
   const cacheHome = join(scenarioRoot, "cache-home");
-  const stateDir = join(scenarioRoot, "state");
+  // Bridge adoption uses a Unix control socket below stateDir; keep the entire root short enough
+  // for macOS while retaining the descriptive scenario path for evidence and user-visible files.
+  const stateDir = join(input.root, "s", scenarioKey);
   const runtimeDir = join(input.root, "r", scenarioKey);
   const tempDir = join(scenarioRoot, "tmp");
   const tmuxTempDir = join(input.root, "m", scenarioKey);
@@ -318,6 +362,7 @@ async function runScenario(input) {
   let spawnedPty;
   let ptyIdentity;
   let ptyChildPid;
+  let incumbentHostBuildIdentity;
   let failure;
 
   await Promise.all(
@@ -389,12 +434,22 @@ async function runScenario(input) {
     await recordProcessIdentity(processIdentities, "incumbent-observer", incumbentObserver.pid);
     observerClient = createObserverClient({ socketPath, timeoutMs: 5000 });
 
-    if (input.busyHost) {
-      incumbentHostProcess = spawn(
+    if (input.hostMode !== "absent") {
+      const observerIdentity = parseStationObserverBuildVersion(incumbentObserver.version);
+      if (observerIdentity.buildIdentity === undefined) {
+        throw new Error(`${input.name} incumbent Observer omitted immutable build identity.`);
+      }
+      incumbentHostBuildIdentity = observerIdentity.buildIdentity;
+      incumbentHostProcess = await spawnIncumbentHost({
+        mode: input.hostMode,
         installedBinary,
-        ["__station-host", "--socket", hostSocketPath, "--state-dir", stateDir],
-        { cwd: scenarioRoot, env, stdio: ["ignore", "pipe", "pipe"] },
-      );
+        incumbentVersion: input.options.incumbentVersion,
+        incumbentBuildIdentity: incumbentHostBuildIdentity,
+        hostSocketPath,
+        stateDir,
+        scenarioRoot,
+        env,
+      });
       incumbentHostOutput = collectOutput(incumbentHostProcess);
       diagnostics.hostPid = incumbentHostProcess.pid;
       await recordProcessIdentity(processIdentities, "incumbent-host", incumbentHostProcess.pid);
@@ -409,36 +464,56 @@ async function runScenario(input) {
         [incumbentHostProcess.pid],
         `${input.name} incumbent Host holder`,
       );
-      ptyIdentity = {
-        kind: "agent",
-        terminalTargetId: `native:${input.name}`,
-        worktreeId: input.name,
-        projectId: "update-smoke",
-        sessionId: `ses_${input.name.replaceAll("-", "_")}`,
-        worktreePath: scenarioRoot,
-        harnessProvider: "scripted",
-      };
-      spawnedPty = await incumbentHostClient.spawn({
-        ...ptyIdentity,
-        command: "/bin/sh",
-        args: [
-          "-c",
-          'printf "UPDATE_SMOKE_PRE\\n"; while [ ! -f "$1" ]; do sleep 0.1; done; printf "UPDATE_SMOKE_POST\\n"; while [ ! -f "$2" ]; do sleep 0.1; done',
-          "update-smoke-child",
-          postSignal,
-          releaseSignal,
-        ],
-        cwd: scenarioRoot,
-        cols: 80,
-        rows: 24,
-      });
-      ptyChildPid = await waitForPtyChild(incumbentHostClient, spawnedPty);
-      await recordProcessIdentity(processIdentities, "pty-payload", ptyChildPid);
-      await waitForPtyOutput(
-        incumbentHostClient,
-        { ...ptyIdentity, ...spawnedPty },
-        "UPDATE_SMOKE_PRE",
+      const incumbentInventory = await incumbentHostClient.recoveryInventory();
+      assertEqual(
+        incumbentInventory.buildIdentity,
+        incumbentHostBuildIdentity,
+        `${input.name} incumbent Host immutable build identity`,
       );
+      assertDeepEqual(incumbentInventory.ptys, [], `${input.name} incumbent Host starts idle`);
+      if (input.hostMode === "busy-bridge" || input.hostMode === "busy-nonbridge") {
+        ptyIdentity = {
+          kind: "agent",
+          terminalTargetId: `native:${input.name}`,
+          worktreeId: input.name,
+          projectId: "update-smoke",
+          sessionId: `ses_${input.name.replaceAll("-", "_")}`,
+          worktreePath: scenarioRoot,
+          harnessProvider: "scripted",
+        };
+        spawnedPty = await incumbentHostClient.spawn({
+          ...ptyIdentity,
+          command: "/bin/sh",
+          args: [
+            "-c",
+            'printf "UPDATE_SMOKE_PRE\\n"; while [ ! -f "$1" ]; do sleep 0.1; done; printf "UPDATE_SMOKE_POST\\n"; while [ ! -f "$2" ]; do sleep 0.1; done',
+            "update-smoke-child",
+            postSignal,
+            releaseSignal,
+          ],
+          cwd: scenarioRoot,
+          cols: 80,
+          rows: 24,
+        });
+        ptyChildPid = await waitForPtyChild(incumbentHostClient, spawnedPty);
+        await recordProcessIdentity(processIdentities, "pty-payload", ptyChildPid);
+        await waitForPtyOutput(
+          incumbentHostClient,
+          { ...ptyIdentity, ...spawnedPty },
+          "UPDATE_SMOKE_PRE",
+        );
+        const liveInventory = await incumbentHostClient.recoveryInventory();
+        assertEqual(
+          liveInventory.ptys[0]?.handoffSupport.kind,
+          input.hostMode === "busy-bridge" ? "bridge-releasable" : "non-releasable",
+          `${input.name} Host handoff capability`,
+        );
+        assertTerminalIdentity(
+          liveInventory.ptys[0],
+          { ...ptyIdentity, ...spawnedPty },
+          `${input.name} incumbent terminal identity`,
+        );
+      }
       incumbentHostClient.dispose();
     } else {
       assertEqual(await pathExists(hostSocketPath), false, `${input.name} starts without Host`);
@@ -447,8 +522,7 @@ async function runScenario(input) {
     if (input.invocation === "tmux") {
       tmuxServer = await startTmuxServer(tmuxPath, env, tmuxTempDir, input.name, processIdentities);
     }
-    const expectedUpdateCode =
-      input.busyHost && input.options.busyHostOutcome === "pre-mutation-reap-required" ? 1 : 0;
+    const expectedUpdateCode = input.expectedOutcome === "pre-mutation-reap-required" ? 1 : 0;
     const updateResult =
       input.invocation === "external"
         ? await run(installedBinary, ["update", "--json"], {
@@ -489,8 +563,7 @@ async function runScenario(input) {
       await assertExactTransportRequests(transportDir, input);
     }
 
-    const preMutationReapRequired =
-      input.busyHost && input.options.busyHostOutcome === "pre-mutation-reap-required";
+    const preMutationReapRequired = input.expectedOutcome === "pre-mutation-reap-required";
     if (preMutationReapRequired) {
       const preservedVersion = await run(installedBinary, ["--version"], { env });
       assertEqual(
@@ -529,8 +602,19 @@ async function runScenario(input) {
         timeoutMs: 3000,
         expectedBuildVersion: input.options.incumbentVersion,
       });
-      const live = (await cleanupClient.list()).find((entry) => entry.ptyId === spawnedPty.ptyId);
+      const preservedInventory = await cleanupClient.recoveryInventory();
+      assertEqual(
+        preservedInventory.buildIdentity,
+        incumbentHostBuildIdentity,
+        `${input.name} incumbent Host build identity preserved`,
+      );
+      const live = preservedInventory.ptys.find((entry) => entry.ptyId === spawnedPty.ptyId);
       assertPreservedPty(live, spawnedPty, ptyChildPid, input.name);
+      assertTerminalIdentity(
+        live,
+        { ...ptyIdentity, ...spawnedPty },
+        `${input.name} incumbent terminal identity preserved`,
+      );
       await writeFile(releaseSignal, "\n", { mode: 0o600 });
       await waitForExactProcessExit(processIdentities.get("pty-payload"), 10_000);
       await cleanupClient.close(spawnedPty.ptyId).catch(() => undefined);
@@ -569,7 +653,7 @@ async function runScenario(input) {
         `${input.name} target Observer holder`,
       );
 
-      if (input.busyHost && input.options.busyHostOutcome === "full-handoff") {
+      if (input.hostMode === "busy-bridge") {
         assertEqual(
           await waitForExactProcessExit(processIdentities.get("incumbent-host"), 10_000),
           true,
@@ -595,13 +679,28 @@ async function runScenario(input) {
           input.target.version,
           `${input.name} target Host build`,
         );
-        const live = (await targetHostClient.list()).find(
-          (entry) => entry.ptyId === spawnedPty.ptyId,
+        const targetInventory = await targetHostClient.recoveryInventory();
+        assertEqual(
+          targetInventory.buildIdentity,
+          input.target.buildIdentity,
+          `${input.name} target Host immutable build identity`,
         );
+        const live = targetInventory.ptys.find((entry) => entry.ptyId === spawnedPty.ptyId);
         if (live === undefined) throw new Error(`${input.name} target Host lost the live PTY.`);
-        assertEqual(live.ptyId, spawnedPty.ptyId, `${input.name} PTY ID`);
-        assertEqual(live.ptyInstanceId, spawnedPty.ptyInstanceId, `${input.name} PTY instance`);
+        assertTerminalIdentity(
+          live,
+          { ...ptyIdentity, ...spawnedPty },
+          `${input.name} preserved terminal identity`,
+        );
         assertEqual(live.pid, ptyChildPid, `${input.name} PTY child PID`);
+        assertHostConvergenceAudit(report, input, {
+          hostAction: "handoff",
+          terminalIdentity: {
+            terminalTargetId: spawnedPty.terminalTargetId,
+            ptyId: spawnedPty.ptyId,
+            ptyInstanceId: spawnedPty.ptyInstanceId,
+          },
+        });
         const attachment = await targetHostClient.attach(
           { ...ptyIdentity, ...spawnedPty },
           "viewer",
@@ -618,7 +717,42 @@ async function runScenario(input) {
         await attachment.detach();
         await targetHostClient.close(spawnedPty.ptyId).catch(() => undefined);
         targetHostClient.dispose();
-      } else if (input.busyHost) {
+      } else if (input.hostMode === "idle") {
+        assertEqual(
+          await waitForExactProcessExit(processIdentities.get("incumbent-host"), 10_000),
+          true,
+          `${input.name} incumbent idle Host exit`,
+        );
+        const holders = await waitForSocketHolders(hostSocketPath, 10_000);
+        assertEqual(holders.length, 1, `${input.name} target idle Host holder count`);
+        assertNotEqual(
+          holders[0],
+          incumbentHostProcess.pid,
+          `${input.name} idle Host replacement PID`,
+        );
+        diagnostics.hostPid = holders[0];
+        await recordProcessIdentity(processIdentities, "target-host", holders[0]);
+        const targetHostClient = createStationHostClient({
+          socketPath: hostSocketPath,
+          timeoutMs: 3000,
+          expectedBuildVersion: input.target.version,
+        });
+        const targetHealth = await targetHostClient.health();
+        assertEqual(
+          targetHealth.buildVersion,
+          input.target.version,
+          `${input.name} target idle Host build`,
+        );
+        const targetInventory = await targetHostClient.recoveryInventory();
+        assertEqual(
+          targetInventory.buildIdentity,
+          input.target.buildIdentity,
+          `${input.name} target idle Host immutable build identity`,
+        );
+        assertDeepEqual(targetInventory.ptys, [], `${input.name} target idle Host inventory`);
+        assertHostConvergenceAudit(report, input, { hostAction: "replace-idle" });
+        targetHostClient.dispose();
+      } else if (input.hostMode === "busy-nonbridge") {
         const incumbentHostIdentity = processIdentities.get("incumbent-host");
         assertEqual(
           await processIdentityMatches(incumbentHostIdentity),
@@ -673,13 +807,12 @@ async function runScenario(input) {
         tmuxTempDir,
         tmuxServer,
         name: input.name,
-        expectNativeRefusal:
-          input.busyHost && input.options.busyHostOutcome === "pre-mutation-reap-required",
+        expectNativeRefusal: input.expectedOutcome === "pre-mutation-reap-required",
         processIdentities,
       });
-      if (input.busyHost) {
+      if (input.hostMode !== "absent") {
         const expectedHostVersion =
-          input.options.busyHostOutcome === "pre-mutation-reap-required"
+          input.expectedOutcome === "pre-mutation-reap-required"
             ? input.options.incumbentVersion
             : input.target.version;
         const cleanupClient = createStationHostClient({
@@ -687,7 +820,7 @@ async function runScenario(input) {
           timeoutMs: 3000,
           expectedBuildVersion: expectedHostVersion,
         });
-        if (input.options.busyHostOutcome === "pre-mutation-reap-required") {
+        if (input.expectedOutcome === "pre-mutation-reap-required") {
           const live = (await cleanupClient.list()).find(
             (entry) => entry.ptyId === spawnedPty.ptyId,
           );
@@ -702,7 +835,7 @@ async function runScenario(input) {
         assertEqual(
           await waitForExactProcessExit(
             processIdentities.get(
-              input.options.busyHostOutcome === "pre-mutation-reap-required"
+              input.expectedOutcome === "pre-mutation-reap-required"
                 ? "incumbent-host"
                 : "target-host",
             ),
@@ -1051,7 +1184,7 @@ async function assertExactTransportRequests(transportDir, input) {
   const expected = [
     releaseApiTagUrl(`v${input.options.incumbentVersion}`),
     "https://api.github.com/repos/jeremy0dell/station/releases?per_page=100&page=1",
-    ...(input.busyHost && input.options.busyHostOutcome === "pre-mutation-reap-required"
+    ...(input.expectedOutcome === "pre-mutation-reap-required"
       ? []
       : [
           releaseDownloadUrl(input.target.tag, "install.sh"),
@@ -1119,6 +1252,46 @@ async function installIncumbent(source, installDir, dataHome) {
     0o600,
     "incumbent receipt mode",
   );
+}
+
+async function spawnIncumbentHost(input) {
+  if (input.mode !== "busy-bridge") {
+    return spawn(
+      input.installedBinary,
+      ["__station-host", "--socket", input.hostSocketPath, "--state-dir", input.stateDir],
+      { cwd: input.scenarioRoot, env: input.env, stdio: ["ignore", "pipe", "pipe"] },
+    );
+  }
+
+  const harnessPath = join(input.scenarioRoot, "source-bridge-host.ts");
+  const startHostUrl = pathToFileURL(join(repoRoot, "station", "src", "host", "startHost.ts")).href;
+  await writeFile(
+    harnessPath,
+    [
+      `import { startStationHost } from ${JSON.stringify(startHostUrl)};`,
+      `const host = await startStationHost(${JSON.stringify({
+        socketPath: input.hostSocketPath,
+        stateDir: input.stateDir,
+        buildVersion: input.incumbentVersion,
+        buildIdentity: input.incumbentBuildIdentity,
+      })});`,
+      "let closing = false;",
+      "const close = () => { if (!closing) { closing = true; void host.close(); } };",
+      'process.on("SIGINT", close);',
+      'process.on("SIGTERM", close);',
+      "await host.closed;",
+      'process.off("SIGINT", close);',
+      'process.off("SIGTERM", close);',
+      "process.exit(0);",
+      "",
+    ].join("\n"),
+    { mode: 0o600 },
+  );
+  return spawn(findExecutable("bun", process.env.PATH), [harnessPath], {
+    cwd: input.scenarioRoot,
+    env: { ...input.env, STATION_NODE: process.execPath, STATION_PTY_IMPL: "bridge" },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
 }
 
 async function writeConfig(path, stateDir, socketPath) {
@@ -1484,7 +1657,7 @@ function assertUpdateReport(report, input) {
   }
   assertEqual(report.schemaVersion, 4, `${input.name} update schema`);
   assertEqual(report.channel, "installer-binary", `${input.name} update channel`);
-  const refusal = input.busyHost && input.options.busyHostOutcome === "pre-mutation-reap-required";
+  const refusal = input.expectedOutcome === "pre-mutation-reap-required";
   assertEqual(report.status, refusal ? "reap-required" : "updated", `${input.name} update status`);
   assertEqual(report.current?.version, input.options.incumbentVersion, `${input.name} current`);
   assertEqual(report.target?.version, input.target.version, `${input.name} target`);
@@ -1552,6 +1725,7 @@ function assertUpdateReport(report, input) {
       "converged",
       `${input.name} final verification`,
     );
+    assertFreshNoOpPlan(report.result.postAction, report.result.verification, input.name);
   }
   const serialized = JSON.stringify(report);
   for (const privateField of [
@@ -1570,7 +1744,7 @@ function assertLegacyUpdateReport(report, input) {
   if (input.options.incumbentContract !== "legacy-compatible") {
     throw new Error(`${input.name} accepted a legacy report outside the transition lane.`);
   }
-  assertEqual(input.busyHost, false, `${input.name} legacy transition has no busy Host`);
+  assertEqual(input.hostMode, "absent", `${input.name} legacy transition has no Host`);
   assertEqual(report.channel, "installer-binary", `${input.name} legacy update channel`);
   assertEqual(report.status, "updated", `${input.name} legacy artifact outcome`);
   assertEqual(
@@ -1655,6 +1829,116 @@ function assertTargetCurrentReport(report, input) {
     "converged",
     `${input.name} installed target verification`,
   );
+  assertFreshNoOpPlan(verifiedEvidence, report.result.verification, input.name);
+}
+
+function assertFreshNoOpPlan(evidence, verification, name) {
+  assertEqual(evidence.plan.status, "converged", `${name} fresh final plan status`);
+  assertEqual(
+    verification.planDigest,
+    evidence.plan.digest.value,
+    `${name} verified final plan digest`,
+  );
+  assertEqual(evidence.plan.components.observer.action, "no-op", `${name} final Observer`);
+  assertEqual(evidence.plan.components.host.action, "no-op", `${name} final Host`);
+  assertEqual(evidence.plan.components.terminals.action, "no-op", `${name} final terminals`);
+  assertEqual(evidence.plan.components.reconcile.action, "no-op", `${name} final reconcile`);
+  assertEqual(
+    evidence.plan.components.verification.action,
+    "satisfied",
+    `${name} final verification action`,
+  );
+  for (const hook of evidence.plan.components.hooks) {
+    assertEqual(hook.action, "no-op", `${name} final ${hook.provider} hook`);
+  }
+  const expectedPhaseActions = [
+    ["artifact-application", "no-op"],
+    ["hook-reconciliation", "no-op"],
+    ["observer-convergence", "no-op"],
+    ["terminal-convergence", "no-op"],
+    ["host-convergence", "no-op"],
+    ["runtime-reconcile", "no-op"],
+    ["verification", "satisfied"],
+  ];
+  assertDeepEqual(
+    evidence.plan.phases.map((phase) => [phase.id, phase.action]),
+    expectedPhaseActions,
+    `${name} exact final no-op phases`,
+  );
+}
+
+function assertHostConvergenceAudit(report, input, expected) {
+  assertEqual(
+    report.result.kind,
+    "successor-runtime-execution",
+    `${input.name} Host audit result kind`,
+  );
+  const successor = report.result.successor;
+  assertEqual(
+    successor.plan.components.host.action,
+    expected.hostAction,
+    `${input.name} planned Host action`,
+  );
+  assertEqual(
+    successor.plan.selectedTarget.buildIdentity.status,
+    "known",
+    `${input.name} successor target build identity status`,
+  );
+  assertEqual(
+    successor.plan.selectedTarget.buildIdentity.value,
+    input.target.buildIdentity,
+    `${input.name} successor target build identity`,
+  );
+  if (successor.preflight.host.status !== "inspected") {
+    throw new Error(`${input.name} successor did not inspect the incumbent Host.`);
+  }
+  const audit = report.result.actionAudits.find(
+    (candidate) =>
+      candidate.executor === "successor-cli" &&
+      candidate.planDigest === successor.plan.digest.value,
+  );
+  if (audit === undefined)
+    throw new Error(`${input.name} omitted the successor Host action audit.`);
+  const hostAction = audit.actions.find((action) => action.phase === "host-convergence");
+  assertDeepEqual(
+    hostAction,
+    { phase: "host-convergence", action: expected.hostAction, status: "completed" },
+    `${input.name} parsed Host command receipt audit`,
+  );
+  const terminalAction = audit.actions.find((action) => action.phase === "terminal-convergence");
+  if (expected.terminalIdentity === undefined) {
+    assertDeepEqual(
+      successor.preflight.host.terminals,
+      [],
+      `${input.name} planned idle Host inventory`,
+    );
+    assertEqual(terminalAction, undefined, `${input.name} idle replacement terminal audit`);
+    return;
+  }
+  assertEqual(
+    successor.preflight.host.terminals[0]?.handoffSupport,
+    "bridge-releasable",
+    `${input.name} planned bridge handoff support`,
+  );
+  assertDeepEqual(
+    successor.preflight.host.terminals.map((terminal) => ({
+      terminalTargetId: terminal.terminalTargetId,
+      ptyId: terminal.ptyId,
+      ptyInstanceId: terminal.ptyInstanceId,
+    })),
+    [expected.terminalIdentity],
+    `${input.name} planned immutable terminal inventory`,
+  );
+  assertDeepEqual(
+    terminalAction,
+    {
+      phase: "terminal-convergence",
+      action: "preserve-via-handoff",
+      status: "completed",
+      handoffReceipt: { terminals: [expected.terminalIdentity] },
+    },
+    `${input.name} parsed handoff receipt matches the action audit`,
+  );
 }
 
 function assertVisibleRefusal(result, label) {
@@ -1669,6 +1953,23 @@ function assertPreservedPty(live, spawnedPty, ptyChildPid, name) {
   assertEqual(live.ptyId, spawnedPty.ptyId, `${name} preserved PTY ID`);
   assertEqual(live.ptyInstanceId, spawnedPty.ptyInstanceId, `${name} preserved PTY instance`);
   assertEqual(live.pid, ptyChildPid, `${name} preserved PTY child PID`);
+}
+
+function assertTerminalIdentity(actual, expected, label) {
+  if (actual === undefined) throw new Error(`${label} is absent.`);
+  for (const field of [
+    "kind",
+    "terminalTargetId",
+    "worktreeId",
+    "projectId",
+    "sessionId",
+    "worktreePath",
+    "harnessProvider",
+    "ptyId",
+    "ptyInstanceId",
+  ]) {
+    assertEqual(actual[field], expected[field], `${label} ${field}`);
+  }
 }
 
 async function waitForObserver(client, version) {
@@ -1957,12 +2258,26 @@ function parseArgs(argv) {
     throw new Error("Update smoke target must differ from the incumbent version.");
   }
   const scenarios = values.get("--scenarios") ?? "full";
-  if (scenarios !== "full" && scenarios !== "no-host") {
-    throw new Error("--scenarios must be full or no-host.");
+  if (
+    scenarios !== "full" &&
+    scenarios !== "no-host" &&
+    scenarios !== "host-convergence" &&
+    scenarios !== "idle-replacement" &&
+    scenarios !== "bridge-handoff" &&
+    scenarios !== "reap-required" &&
+    scenarios !== "v4-gate"
+  ) {
+    throw new Error(
+      "--scenarios must be full, no-host, host-convergence, idle-replacement, bridge-handoff, reap-required, or v4-gate.",
+    );
   }
-  const busyHostOutcome = values.get("--busy-host-outcome") ?? "full-handoff";
+  const explicitBusyHostOutcome = values.get("--busy-host-outcome");
+  const busyHostOutcome = explicitBusyHostOutcome ?? "full-handoff";
   if (busyHostOutcome !== "full-handoff" && busyHostOutcome !== "pre-mutation-reap-required") {
     throw new Error("--busy-host-outcome must be full-handoff or pre-mutation-reap-required.");
+  }
+  if (explicitBusyHostOutcome !== undefined && scenarios !== "full") {
+    throw new Error("--busy-host-outcome is valid only with --scenarios full.");
   }
   if (scenarios === "no-host" && busyHostOutcome === "pre-mutation-reap-required") {
     throw new Error("--busy-host-outcome pre-mutation-reap-required requires --scenarios full.");
@@ -1991,7 +2306,7 @@ function parseArgs(argv) {
 }
 
 function updateSmokeUsage() {
-  return "Usage: run-update-smoke.mjs --incumbent-binary <path> --incumbent-version <version> (--target-source-version <version> | --target-release-dir <path> --target-tag <tag> --target-build-identity <64-hex> | --public-target-tag <tag> --target-build-identity <64-hex>) [--scenarios full|no-host] [--busy-host-outcome full-handoff|pre-mutation-reap-required] [--incumbent-contract v4|legacy-compatible] [--keep-temp]";
+  return "Usage: run-update-smoke.mjs --incumbent-binary <path> --incumbent-version <version> (--target-source-version <version> | --target-release-dir <path> --target-tag <tag> --target-build-identity <64-hex> | --public-target-tag <tag> --target-build-identity <64-hex>) [--scenarios full|no-host|host-convergence|idle-replacement|bridge-handoff|reap-required|v4-gate] [--busy-host-outcome full-handoff|pre-mutation-reap-required] [--incumbent-contract v4|legacy-compatible] [--keep-temp]";
 }
 
 function assertBuildIdentity(value, label) {

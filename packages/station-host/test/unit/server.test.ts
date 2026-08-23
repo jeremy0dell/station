@@ -166,12 +166,16 @@ describe("serveHostConnection", () => {
     client.close();
   });
 
-  it("allows handoff lifecycle methods without correlation identity", async () => {
+  it("allows exact convergence reads and handoff lifecycle methods without correlation identity", async () => {
     const { client, server } = inMemoryNdjsonConnectionPair();
     const calls: string[] = [];
     void serveHostConnection(server, {
       hostIdentity: { protocolVersion: HOST_PROTOCOL_VERSION, buildVersion: "test-build" },
       unary: {
+        "host.recoveryInventory": () => {
+          calls.push("recovery-inventory");
+          return { buildIdentity: "incumbent-identity", ptys: [] };
+        },
         "host.beginHandoff": () => {
           calls.push("begin");
           return {
@@ -197,6 +201,12 @@ describe("serveHostConnection", () => {
     });
     const responses = client.messages()[Symbol.asyncIterator]();
 
+    client.send(hostRequest("recovery", "host.recoveryInventory"));
+    expect(HostResponseSchema.parse((await responses.next()).value)).toMatchObject({
+      id: "recovery",
+      ok: true,
+      result: { buildIdentity: "incumbent-identity", ptys: [] },
+    });
     client.send(
       hostRequest("begin", "host.beginHandoff", {
         requestingBuildVersion: "next",
@@ -224,7 +234,7 @@ describe("serveHostConnection", () => {
       ok: false,
       error: { code: "HOST_CLIENT_IDENTITY_MISMATCH" },
     });
-    expect(calls).toEqual(["begin", "complete", "abort"]);
+    expect(calls).toEqual(["recovery-inventory", "begin", "complete", "abort"]);
     client.close();
   });
 

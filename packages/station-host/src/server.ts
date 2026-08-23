@@ -159,9 +159,11 @@ async function handleMessage(
     return;
   }
   const request = parsed.data;
-  // adoptRegistry is identity-bound: only cross-build negotiation methods are exempt.
+  // Cross-build convergence reads the exact incumbent inventory on the same connection before a
+  // lifecycle mutation; operational calls and successor adoption remain identity-bound.
   const lifecycleRequest =
     request.method === "host.health" ||
+    request.method === "host.recoveryInventory" ||
     request.method === "host.stopIfIdle" ||
     request.method === "host.beginHandoff" ||
     request.method === "host.completeHandoff" ||

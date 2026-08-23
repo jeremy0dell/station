@@ -439,7 +439,7 @@ describe("hosted CI policy", () => {
     }
   });
 
-  it("separates compatible predecessor transition from v4 staged convergence", () => {
+  it("separates the legacy transition from v4 Host convergence and reap planning", () => {
     const release = read(".github/workflows/release.yml");
     const promotion = read(".github/workflows/promote-release.yml");
     const updateSmoke = read("scripts/test-runners/run-update-smoke.mjs");
@@ -467,19 +467,32 @@ describe("hosted CI policy", () => {
     expect(installDraft).toContain('--target-build-identity "$target_build_identity"');
     expect(installDraft).toContain("Prove compatible transition from the exact predecessor");
     expect(installDraft).toContain("--incumbent-contract legacy-compatible");
-    expect(installDraft).toContain("Prove v4 pre-mutation convergence against the staged target");
+    expect(installDraft).toContain("Prove v4 Host convergence against the staged target");
+    expect(installDraft).toContain("Prove v4 pre-mutation reap-required against the staged target");
     expect(installDraft).toContain('--incumbent-binary "$RUNNER_TEMP/v4-update-incumbent"');
     expect(installDraft).toContain('pnpm build:binary -- --version "$v4_incumbent_version"');
-    expect(installDraft.match(/pnpm smoke:update/g)).toHaveLength(2);
+    expect(installDraft.match(/pnpm smoke:update/g)).toHaveLength(3);
     const compatibleTransition = between(
       installDraft,
       "Prove compatible transition from the exact predecessor",
-      "Prove v4 pre-mutation convergence against the staged target",
+      "Prove v4 Host convergence against the staged target",
     );
     expect(compatibleTransition).toContain("--scenarios no-host");
     expect(compatibleTransition).not.toContain("--busy-host-outcome pre-mutation-reap-required");
-    expect(installDraft).toContain("--scenarios full");
-    expect(installDraft).toContain("--busy-host-outcome pre-mutation-reap-required");
+    const hostConvergence = between(
+      installDraft,
+      "Prove v4 Host convergence against the staged target",
+      "Prove v4 pre-mutation reap-required against the staged target",
+    );
+    expect(hostConvergence).toContain("--scenarios host-convergence");
+    expect(hostConvergence).not.toContain("--incumbent-contract legacy-compatible");
+    const reapRequired = between(
+      installDraft,
+      "Prove v4 pre-mutation reap-required against the staged target",
+      "Verify lock refusal and same-version retry",
+    );
+    expect(reapRequired).toContain("--scenarios reap-required");
+    expect(reapRequired).not.toContain("--incumbent-contract legacy-compatible");
     expect(accepted).toContain('test "$current_ids" = "$(cat candidate/asset-ids.txt)"');
     expect(accepted).not.toContain(": > candidate/asset-ids.txt");
 
@@ -501,6 +514,11 @@ describe("hosted CI policy", () => {
     expect(updateSmoke).toContain("post-apply latest discovery is forbidden");
     expect(updateSmoke).toContain("denyPostApplyLatest");
     expect(updateSmoke).toContain("function assertTargetCurrentReport");
+    expect(updateSmoke).toContain('hostMode: "idle"');
+    expect(updateSmoke).toContain('hostMode: "busy-bridge"');
+    expect(updateSmoke).toContain('hostMode: "busy-nonbridge"');
+    expect(updateSmoke).toContain("function assertHostConvergenceAudit");
+    expect(updateSmoke).toContain("function assertFreshNoOpPlan");
     expect(updateSmoke).toContain(
       "--incumbent-contract legacy-compatible requires --scenarios no-host and full-handoff.",
     );
@@ -571,6 +589,7 @@ describe("hosted CI policy", () => {
     expect(packageJson.scripts["test:ci:binary"]).toContain(
       "pnpm smoke:update -- --incumbent-binary station/dist/bin/stn",
     );
+    expect(packageJson.scripts["test:ci:binary"]).toContain("--scenarios v4-gate");
     expect(packageJson.scripts["test:ci:station"]).toContain("test:pty:bun");
     expect(lefthook).toContain("run: node scripts/run-without-git-locals.mjs pnpm test:pre-push");
     expect(testing).toContain("The pre-push hook is intentionally lint-only");

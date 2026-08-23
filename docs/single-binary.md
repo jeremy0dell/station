@@ -199,17 +199,22 @@ pnpm smoke:release
 ```
 
 The composed update smoke has two explicit busy-Host outcomes. `full-handoff`
-requires PTY continuity through replacement; `pre-mutation-reap-required`
-requires a fresh typed plan for the target while the incumbent artifact,
-Observer, Host, and PTYs remain usable and no update action has run. It hands
-#641 the evidence needed to begin a separately authorized, journaled destructive
-transaction; the digest itself authorizes nothing. Release staging does not
-retrofit that contract onto a published pre-v4 predecessor: its no-Host result
-is parsed through the compatible report schema and validated as legacy artifact
-application, after which the installed target must report strict v4 verified
-`current`. A separate v4-capable incumbent runs the full staged-target scenarios
-and owns the `pre-mutation-reap-required` proof. Post-promotion public checks
-repeat the compatible no-Host transition and target-v4 verification.
+uses a source-mode bridge Host and requires exact PTY identity and output
+continuity through replacement; `pre-mutation-reap-required` uses the compiled
+non-bridge PTY and requires a fresh typed plan for the target while the incumbent
+artifact, Observer, Host, and PTYs remain usable and no update action has run.
+The v4 gate also starts a real old idle Host and proves its constrained
+replacement. Both mutating Host lanes assert old and new PIDs and immutable build
+identities, the parsed action receipt/audit, and a fresh final no-op plan. The
+reap-required lane hands #641 the evidence needed to begin a separately
+authorized, journaled destructive transaction; the digest itself authorizes
+nothing. Release staging does not retrofit that contract onto a
+published pre-v4 predecessor: its no-Host result is parsed through the compatible report schema
+and validated as legacy artifact application, after which the installed target
+must report strict v4 verified `current`. A separate v4-capable incumbent owns
+the Host convergence and `pre-mutation-reap-required` proofs. Post-promotion
+public checks repeat the compatible no-Host transition and target-v4
+verification.
 
 Native release CI builds and tests `darwin-arm64`, `darwin-x64`, `linux-arm64`,
 and `linux-x64`. The manual release gate covers real TTY rendering, shell job
