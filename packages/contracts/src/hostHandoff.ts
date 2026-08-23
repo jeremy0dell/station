@@ -79,7 +79,9 @@ export function ptyLifetimeIdentitySetsMatch(
   );
 }
 
-function strictlySortedPtyLifetimeIdentities(identities: readonly PtyLifetimeIdentity[]): boolean {
+export function ptyLifetimeIdentitiesStrictlySorted(
+  identities: readonly PtyLifetimeIdentity[],
+): boolean {
   return identities.every((identity, index) => {
     const previous = identities[index - 1];
     return previous === undefined || comparePtyLifetimeIdentities(previous, identity) < 0;
@@ -91,7 +93,7 @@ export const PtyHandoffReceiptSchema = z
   .object({ terminals: z.array(PtyLifetimeIdentitySchema).min(1) })
   .strict()
   .superRefine((receipt, context) => {
-    if (!strictlySortedPtyLifetimeIdentities(receipt.terminals)) {
+    if (!ptyLifetimeIdentitiesStrictlySorted(receipt.terminals)) {
       context.addIssue({
         code: "custom",
         path: ["terminals"],

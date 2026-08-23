@@ -1,18 +1,25 @@
 import { chmod, lstat, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { PtyHandoffManifest } from "@station/contracts";
+import type {
+  PtyHandoffManifest,
+  PtyLifetimeIdentity,
+  UpdateHostConvergenceCommand,
+} from "@station/contracts";
 import { HOST_PROTOCOL_VERSION, type StationHostClient, stationHostSafeError } from "@station/host";
 import { listenUnixSocket, probeUnixSocket } from "@station/protocol";
 import {
   adoptHandoffManifest,
   type ChildProcessLike,
+  convergeStationHostForUpdate,
   ensureStationHostRunning,
   type SpawnStationHostInput,
 } from "@station/terminal";
 import { describe, expect, it, vi } from "vitest";
 
 const expectedBuildVersion = "test-build";
+const incumbentBuildIdentity = "a".repeat(64);
+const targetBuildIdentity = "b".repeat(64);
 
 function fakeClient(overrides: Partial<StationHostClient> = {}): StationHostClient {
   return {
@@ -79,6 +86,54 @@ function twoEntryHandoffManifest(): PtyHandoffManifest {
       },
     ]),
   );
+}
+
+function terminalIdentities(manifest: PtyHandoffManifest): PtyLifetimeIdentity[] {
+  return Object.entries(manifest).map(([ptyId, entry]) => ({
+    terminalTargetId: entry.identity.terminalTargetId,
+    ptyId,
+    ptyInstanceId: entry.ptyInstanceId,
+  }));
+}
+
+function oneEntryHandoffManifest(ptyId: "pty-1" | "pty-2"): PtyHandoffManifest {
+  const entry = twoEntryHandoffManifest()[ptyId];
+  if (entry === undefined) throw new Error(`Missing ${ptyId} handoff fixture.`);
+  return { [ptyId]: entry };
+}
+
+function recoveryPtys(manifest: PtyHandoffManifest) {
+  return Object.entries(manifest).map(([ptyId, entry], index) => ({
+    ...entry.identity,
+    ptyId,
+    ptyInstanceId: entry.ptyInstanceId,
+    pid: 4300 + index,
+    alive: true,
+    cols: entry.cols,
+    rows: entry.rows,
+    handoffSupport: { kind: "bridge-releasable" as const },
+  }));
+}
+
+function convergenceCommand(
+  action: "replace-idle" | "handoff",
+  terminals: PtyLifetimeIdentity[],
+): UpdateHostConvergenceCommand {
+  const commitment = {
+    incumbent: {
+      buildVersion: { status: "known" as const, value: "older-build" },
+      buildIdentity: { status: "known" as const, value: incumbentBuildIdentity },
+      protocolVersion: HOST_PROTOCOL_VERSION,
+      inventory: { terminals },
+    },
+    target: {
+      buildVersion: expectedBuildVersion,
+      buildIdentity: targetBuildIdentity,
+    },
+  };
+  return action === "replace-idle"
+    ? { schemaVersion: 1, action, commitment }
+    : { schemaVersion: 1, action, fidelity: "processes", commitment };
 }
 
 async function liveSocket(): Promise<{ socketPath: string; close(): Promise<void> }> {
@@ -1158,5 +1213,251 @@ describe("ensureStationHostRunning", () => {
     } finally {
       await socket.close();
     }
+  });
+
+  it("refuses idle replacement when a PTY appears after exact inspection without falling back", async () => {
+    const socket = await liveSocket();
+    const stopIfIdle = vi.fn(async () => {
+      throw stationHostSafeError("HOST_UPGRADE_BLOCKED", "A terminal appeared.");
+    });
+    const beginHandoff = vi.fn();
+    const spawnHost = vi.fn();
+    try {
+      const handle = await convergeStationHostForUpdate(
+        {
+          socketPath: socket.socketPath,
+          stateDir: tmpdir(),
+          hostCommand: ["bun", "/tmp/hostMain.ts"],
+          command: convergenceCommand("replace-idle", []),
+        },
+        {
+          clientFactory: () =>
+            fakeClient({
+              health: async () => ({
+                ok: true,
+                protocolVersion: HOST_PROTOCOL_VERSION,
+                buildVersion: "older-build",
+              }),
+              recoveryInventory: async () => ({
+                buildIdentity: incumbentBuildIdentity,
+                ptys: [],
+              }),
+              stopIfIdle,
+              beginHandoff,
+            }),
+          spawnHost,
+        },
+      );
+
+      expect(handle).toMatchObject({
+        status: "unavailable",
+        error: { code: "HOST_CONVERGENCE_PLAN_DRIFT" },
+      });
+      expect(stopIfIdle).toHaveBeenCalledOnce();
+      expect(beginHandoff).not.toHaveBeenCalled();
+      expect(spawnHost).not.toHaveBeenCalled();
+    } finally {
+      await socket.close();
+    }
+  });
+
+  it("refuses live handoff when the planned busy inventory became idle without replacing", async () => {
+    const socket = await liveSocket();
+    const manifest = oneEntryHandoffManifest("pty-1");
+    const beginHandoff = vi.fn();
+    const stopIfIdle = vi.fn();
+    const spawnHost = vi.fn();
+    try {
+      const handle = await convergeStationHostForUpdate(
+        {
+          socketPath: socket.socketPath,
+          stateDir: tmpdir(),
+          hostCommand: ["bun", "/tmp/hostMain.ts"],
+          command: convergenceCommand("handoff", terminalIdentities(manifest)),
+        },
+        {
+          clientFactory: () =>
+            fakeClient({
+              health: async () => ({
+                ok: true,
+                protocolVersion: HOST_PROTOCOL_VERSION,
+                buildVersion: "older-build",
+              }),
+              recoveryInventory: async () => ({
+                buildIdentity: incumbentBuildIdentity,
+                ptys: [],
+              }),
+              beginHandoff,
+              stopIfIdle,
+            }),
+          spawnHost,
+        },
+      );
+
+      expect(handle).toMatchObject({
+        status: "unavailable",
+        error: { code: "HOST_CONVERGENCE_PLAN_DRIFT" },
+      });
+      expect(beginHandoff).not.toHaveBeenCalled();
+      expect(stopIfIdle).not.toHaveBeenCalled();
+      expect(spawnHost).not.toHaveBeenCalled();
+    } finally {
+      await socket.close();
+    }
+  });
+
+  it("refuses a same-count wrong immutable inventory before live handoff", async () => {
+    const socket = await liveSocket();
+    const expectedManifest = oneEntryHandoffManifest("pty-1");
+    const wrongManifest = oneEntryHandoffManifest("pty-2");
+    const beginHandoff = vi.fn();
+    try {
+      const handle = await convergeStationHostForUpdate(
+        {
+          socketPath: socket.socketPath,
+          stateDir: tmpdir(),
+          hostCommand: ["bun", "/tmp/hostMain.ts"],
+          command: convergenceCommand("handoff", terminalIdentities(expectedManifest)),
+        },
+        {
+          clientFactory: () =>
+            fakeClient({
+              health: async () => ({
+                ok: true,
+                protocolVersion: HOST_PROTOCOL_VERSION,
+                buildVersion: "older-build",
+              }),
+              recoveryInventory: async () => ({
+                buildIdentity: incumbentBuildIdentity,
+                ptys: recoveryPtys(wrongManifest),
+              }),
+              beginHandoff,
+            }),
+        },
+      );
+
+      expect(handle).toMatchObject({
+        status: "unavailable",
+        error: { code: "HOST_CONVERGENCE_PLAN_DRIFT" },
+      });
+      expect(beginHandoff).not.toHaveBeenCalled();
+    } finally {
+      await socket.close();
+    }
+  });
+
+  it("executes an exact idle replacement without entering live handoff", async () => {
+    const socket = await liveSocket();
+    let healthCalls = 0;
+    let inventoryCalls = 0;
+    const stopIfIdle = vi.fn(async () => {
+      await socket.close();
+      return { stopping: true as const };
+    });
+    const beginHandoff = vi.fn();
+    const spawnHost = vi.fn(
+      (_input: SpawnStationHostInput): ChildProcessLike => ({ pid: 999, unref: () => undefined }),
+    );
+    const handle = await convergeStationHostForUpdate(
+      {
+        socketPath: socket.socketPath,
+        stateDir: tmpdir(),
+        hostCommand: ["bun", "/tmp/hostMain.ts"],
+        command: convergenceCommand("replace-idle", []),
+      },
+      {
+        clientFactory: () =>
+          fakeClient({
+            health: async () => {
+              healthCalls += 1;
+              return {
+                ok: true,
+                protocolVersion: HOST_PROTOCOL_VERSION,
+                buildVersion: healthCalls === 1 ? "older-build" : expectedBuildVersion,
+              };
+            },
+            recoveryInventory: async () => {
+              inventoryCalls += 1;
+              return {
+                buildIdentity: inventoryCalls === 1 ? incumbentBuildIdentity : targetBuildIdentity,
+                ptys: [],
+              };
+            },
+            stopIfIdle,
+            beginHandoff,
+          }),
+        spawnHost,
+      },
+    );
+
+    expect(handle).toMatchObject({ status: "running", ensuredBy: "idle-replace" });
+    expect(stopIfIdle).toHaveBeenCalledOnce();
+    expect(beginHandoff).not.toHaveBeenCalled();
+    expect(spawnHost).toHaveBeenCalledOnce();
+    if (handle.status === "running") handle.client.dispose();
+  });
+
+  it("executes an exact busy handoff without attempting idle replacement", async () => {
+    const socket = await liveSocket();
+    const manifest = oneEntryHandoffManifest("pty-1");
+    let healthCalls = 0;
+    let inventoryCalls = 0;
+    const stopIfIdle = vi.fn();
+    const beginHandoff = vi.fn(async () => ({
+      manifest,
+      fidelity: "processes" as const,
+      released: ["pty-1"],
+      skipped: [],
+    }));
+    const completeHandoff = vi.fn(async () => {
+      await socket.close();
+      return { stopping: true as const };
+    });
+    const spawnHost = vi.fn(
+      (_input: SpawnStationHostInput): ChildProcessLike => ({ pid: 999, unref: () => undefined }),
+    );
+    const handle = await convergeStationHostForUpdate(
+      {
+        socketPath: socket.socketPath,
+        stateDir: tmpdir(),
+        hostCommand: ["bun", "/tmp/hostMain.ts"],
+        command: convergenceCommand("handoff", terminalIdentities(manifest)),
+      },
+      {
+        clientFactory: () =>
+          fakeClient({
+            health: async () => {
+              healthCalls += 1;
+              return {
+                ok: true,
+                protocolVersion: HOST_PROTOCOL_VERSION,
+                buildVersion: healthCalls === 1 ? "older-build" : expectedBuildVersion,
+              };
+            },
+            recoveryInventory: async () => {
+              inventoryCalls += 1;
+              return {
+                buildIdentity: inventoryCalls === 1 ? incumbentBuildIdentity : targetBuildIdentity,
+                ptys: recoveryPtys(manifest),
+              };
+            },
+            stopIfIdle,
+            beginHandoff,
+            completeHandoff,
+            adoptRegistry: async () => ({ adopted: ["pty-1"], failed: [] }),
+          }),
+        spawnHost,
+      },
+    );
+
+    expect(handle).toMatchObject({
+      status: "running",
+      ensuredBy: "handoff",
+      handoffAdopt: { receipt: { terminals: terminalIdentities(manifest) } },
+    });
+    expect(stopIfIdle).not.toHaveBeenCalled();
+    expect(beginHandoff).toHaveBeenCalledOnce();
+    expect(spawnHost).toHaveBeenCalledOnce();
+    if (handle.status === "running") handle.client.dispose();
   });
 });

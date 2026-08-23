@@ -3,6 +3,7 @@ import type { SafeError, UpdateReapRecoveryPreflight } from "@station/contracts"
 import {
   STATION_SCHEMA_VERSION,
   UpdateCommandReportSchema,
+  UpdateHostConvergenceCommandSchema,
   updateReapEvidenceIsComplete,
 } from "@station/contracts";
 import {
@@ -448,6 +449,116 @@ describe("stn update convergence", () => {
     ).toBe(true);
   });
 
+  it("executes only the exact planned idle Host replacement commitment", async () => {
+    const fixture = probe("current");
+    const inspect = sequenceInspection([
+      preflight("1.0.0", "1.0.0", {
+        observer: matchingObserver(identityA),
+        host: differentHost(identityB, []),
+      }),
+      preflight("1.0.0", "1.0.0", {
+        observer: matchingObserver(identityA),
+        host: matchingHost(identityA),
+      }),
+    ]);
+    let hostCommand: ReturnType<typeof UpdateHostConvergenceCommandSchema.parse> | undefined;
+    const result = await runUpdateCommand(["--json"], options(), {
+      probes: [fixture.probe],
+      buildInfo: build(identityA, "1.0.0"),
+      convergenceInspection: inspect,
+      commandRunner: async (input) => {
+        if (input.args?.includes("host")) {
+          hostCommand = UpdateHostConvergenceCommandSchema.parse(JSON.parse(input.stdin ?? ""));
+        }
+        return commandResult(input);
+      },
+    });
+    const report = reportFrom(result);
+
+    expect(result.code).toBe(0);
+    expect(hostCommand).toEqual({
+      schemaVersion: 1,
+      action: "replace-idle",
+      commitment: {
+        incumbent: {
+          buildVersion: { status: "known", value: "0.9.0" },
+          buildIdentity: { status: "known", value: identityB },
+          protocolVersion: 8,
+          inventory: { terminals: [] },
+        },
+        target: { buildVersion: "1.0.0", buildIdentity: identityA },
+      },
+    });
+    if (report.result.kind !== "current-runtime-execution") {
+      throw new Error("expected runtime execution");
+    }
+    expect(report.result.actionAudits[0].actions).toEqual([
+      { phase: "host-convergence", action: "replace-idle", status: "completed" },
+      { phase: "runtime-reconcile", action: "run", status: "completed" },
+    ]);
+  });
+
+  it("rejects Host plan drift, performs fresh aggregate inspection, and audits no switched action", async () => {
+    const fixture = probe("current");
+    const bridge = terminal("bridge-releasable");
+    const finalEvidence = preflight("1.0.0", "1.0.0", {
+      observer: matchingObserver(identityA),
+      host: differentHost(identityB, []),
+    });
+    const inspect = sequenceInspection([
+      preflight("1.0.0", "1.0.0", {
+        observer: matchingObserver(identityA),
+        host: differentHost(identityB, [bridge]),
+        terminalDispositions: [disposition("preservable", "recoverable")],
+      }),
+      finalEvidence,
+    ]);
+    const result = await runUpdateCommand(["--json"], options(), {
+      probes: [fixture.probe],
+      buildInfo: build(identityA, "1.0.0"),
+      convergenceInspection: inspect,
+      commandRunner: async (input) => {
+        if (!input.args?.includes("host")) return commandResult(input);
+        const request = UpdateHostConvergenceCommandSchema.parse(JSON.parse(input.stdin ?? ""));
+        return externalResult(
+          input,
+          JSON.stringify({
+            schemaVersion: 1,
+            action: "update-converge",
+            requestedAction: request.action,
+            status: "drifted",
+            error: {
+              tag: "TerminalProviderError",
+              provider: "native",
+              code: "HOST_CONVERGENCE_PLAN_DRIFT",
+              message: "The committed Host inventory changed.",
+            },
+          }),
+          1,
+        );
+      },
+    });
+    const report = reportFrom(result);
+
+    expect(inspect).toHaveBeenCalledTimes(2);
+    expect(report).toMatchObject({
+      status: "failed",
+      result: {
+        kind: "execution-failed",
+        stage: "host-convergence",
+        finalInspection: { status: "completed", evidence: { preflight: finalEvidence } },
+        actionAudits: [
+          {
+            actions: [{ phase: "host-convergence", action: "handoff", status: "failed" }],
+          },
+        ],
+      },
+    });
+    const serialized = JSON.stringify(report);
+    expect(serialized).not.toContain('"action":"replace-idle","status":"completed"');
+    expect(serialized).not.toContain('"action":"preserve-via-handoff","status":"completed"');
+  });
+
   it("attributes a Host handoff failure to host convergence", async () => {
     const fixture = probe("current");
     const bridge = terminal("bridge-releasable");
@@ -512,18 +623,17 @@ describe("stn update convergence", () => {
   });
 
   it.each([
-    { name: "missing", receipt: undefined, stage: "terminal-convergence" },
+    { name: "missing", kind: "missing" as const },
     {
       name: "same-count wrong",
-      receipt: { terminals: [terminalIdentity("2")] },
-      stage: "terminal-convergence",
+      kind: "wrong-identity" as const,
     },
     {
       name: "duplicate",
-      receipt: { terminals: [terminalIdentity(), terminalIdentity()] },
-      stage: "host-convergence",
+      kind: "duplicate" as const,
     },
-  ])("rejects a $name Host handoff receipt", async ({ receipt, stage }) => {
+    { name: "action-switched", kind: "action-switched" as const },
+  ])("rejects a $name Host convergence receipt", async ({ kind }) => {
     const fixture = probe("current");
     const bridge = terminal("bridge-releasable");
     const evidence = preflight("1.0.0", "1.0.0", {
@@ -535,28 +645,35 @@ describe("stn update convergence", () => {
       probes: [fixture.probe],
       buildInfo: build(identityA, "1.0.0"),
       convergenceInspection: inspection(evidence),
-      commandRunner: async (input) =>
-        input.args?.includes("host")
-          ? externalResult(
-              input,
-              JSON.stringify({
-                ...hostHandoffResult([terminalIdentity()]),
-                ...(receipt === undefined
-                  ? { receipt: undefined, livePtyCount: 1 }
-                  : { receipt, livePtyCount: receipt.terminals.length }),
-              }),
-              0,
-            )
-          : commandResult(input),
+      commandRunner: async (input) => {
+        if (!input.args?.includes("host")) return commandResult(input);
+        const exact = hostConvergenceResult(input);
+        const terminals =
+          kind === "duplicate" ? [terminalIdentity(), terminalIdentity()] : [terminalIdentity("2")];
+        const malformed =
+          kind === "missing"
+            ? { ...exact, receipt: undefined }
+            : kind === "action-switched"
+              ? { ...exact, receipt: { ...exact.receipt, ensuredBy: "idle-replace" } }
+              : {
+                  ...exact,
+                  receipt: {
+                    ...exact.receipt,
+                    actualInventory: { terminals },
+                    handoffReceipt: { terminals },
+                  },
+                };
+        return externalResult(input, JSON.stringify(malformed), 0);
+      },
     });
     const report = reportFrom(result);
     expect(report).toMatchObject({
       status: "failed",
-      result: { kind: "execution-failed", stage },
+      result: { kind: "execution-failed", stage: "host-convergence" },
     });
     if (report.result.kind !== "execution-failed") throw new Error("expected failure result");
     expect(report.result.actionAudits[0]?.actions.at(-1)).toMatchObject({
-      phase: stage,
+      phase: "host-convergence",
       status: "failed",
     });
   });
@@ -1746,7 +1863,7 @@ function commandResult(input: ExternalCommandInput): Promise<ExternalCommandResu
     input.args?.includes("observer")
       ? externalResult(input, JSON.stringify(observerRunningResult()), 0)
       : input.args?.includes("host")
-        ? externalResult(input, JSON.stringify(hostHandoffResult([terminalIdentity()])), 0)
+        ? externalResult(input, JSON.stringify(hostConvergenceResult(input)), 0)
         : externalResult(input, "", 0),
   );
 }
@@ -1759,16 +1876,20 @@ function terminalIdentity(identity = "1") {
   };
 }
 
-function hostHandoffResult(terminals: ReturnType<typeof terminalIdentity>[]) {
+function hostConvergenceResult(input: ExternalCommandInput) {
+  const request = UpdateHostConvergenceCommandSchema.parse(JSON.parse(input.stdin ?? ""));
+  const terminals = request.commitment.incumbent.inventory.terminals;
   return {
-    action: "handoff" as const,
-    dryRun: false,
-    fidelity: "processes" as const,
-    socketPath: "/tmp/station-host.sock",
+    schemaVersion: 1 as const,
+    action: "update-converge" as const,
+    requestedAction: request.action,
     status: "completed" as const,
-    message: "Live handoff completed.",
-    livePtyCount: terminals.length,
-    receipt: { terminals },
+    receipt: {
+      ensuredBy: request.action === "handoff" ? ("handoff" as const) : ("idle-replace" as const),
+      validatedCommitment: request.commitment,
+      actualInventory: { terminals },
+      ...(request.action === "handoff" ? { handoffReceipt: { terminals } } : {}),
+    },
   };
 }
 

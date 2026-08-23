@@ -1,7 +1,8 @@
+import { readStdinIfAvailable } from "../../stdin.js";
 import { loadedConfigCommandOptions } from "../cliCommand/helpers.js";
 import type { CliCommandNode, CliCommandRunContext } from "../cliCommand/types.js";
 import { parseHostArgs } from "../host/args.js";
-import { hostCommandSummary, runHostCommand } from "../host/index.js";
+import { type HostCommandOptions, hostCommandSummary, runHostCommand } from "../host/index.js";
 
 export const hostCliCommand: CliCommandNode = {
   name: "host",
@@ -62,11 +63,17 @@ async function runHostCliCommand(context: CliCommandRunContext) {
   const options = loadedConfigCommandOptions(context);
   try {
     const parsed = parseHostArgs(context.args);
-    const result = await runHostCommand(context.args, options, context.options.hostDeps);
+    const commandOptions: HostCommandOptions = { config: options.config };
+    if (parsed.action === "update-converge") {
+      const stdin = context.options.stdin ?? (await readStdinIfAvailable({ maxBytes: 256 * 1024 }));
+      if (stdin !== undefined) commandOptions.stdin = stdin;
+    }
+    const result = await runHostCommand(context.args, commandOptions, context.options.hostDeps);
     const failed =
       (result.action === "handoff" &&
         (result.status === "refused" || result.status === "unavailable")) ||
-      (result.action === "status" && result.probe !== "listening");
+      (result.action === "status" && result.probe !== "listening") ||
+      (result.action === "update-converge" && result.status !== "completed");
     return {
       code: failed ? 1 : 0,
       output: parsed.output === "json" ? result : hostCommandSummary(result),

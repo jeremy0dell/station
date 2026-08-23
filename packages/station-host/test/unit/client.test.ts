@@ -402,6 +402,51 @@ describe("createStationHostClient", () => {
     client.dispose();
   });
 
+  it("reads lifecycle inventory on the mutation-pinned connection without target-build reuse", async () => {
+    const pty: HostRecoveryInventoryEntry = {
+      ...PTY_IDENTITY,
+      ptyId: PTY_REF.ptyId,
+      ptyInstanceId: PTY_REF.ptyInstanceId,
+      pid: 4242,
+      alive: true,
+      cols: 80,
+      rows: 24,
+      handoffSupport: { kind: "bridge-releasable" },
+    };
+    const { client: clientConn, server } = inMemoryNdjsonConnectionPair();
+    const listPty: HostListEntry = {
+      ...PTY_IDENTITY,
+      ptyId: PTY_REF.ptyId,
+      ptyInstanceId: PTY_REF.ptyInstanceId,
+      pid: 4242,
+      alive: true,
+      cols: 80,
+      rows: 24,
+    };
+    startFakeRouter(server, {
+      buildVersion: "incumbent-build",
+      listPtys: [listPty],
+      recoveryPtys: [pty],
+      buildIdentity: "incumbent-identity",
+    });
+    const client = createStationHostClient({
+      socketPath: "unused",
+      expectedBuildVersion: "target-build",
+      connect: async () => clientConn,
+    });
+
+    await expect(client.list()).rejects.toMatchObject({ code: "HOST_VERSION_INCOMPATIBLE" });
+    await expect(client.lifecycleList?.()).resolves.toMatchObject([
+      { ptyId: PTY_REF.ptyId, ptyInstanceId: PTY_REF.ptyInstanceId },
+    ]);
+    await expect(client.lifecycleRecoveryInventory?.()).resolves.toMatchObject({
+      buildIdentity: "incumbent-identity",
+      ptys: [{ ptyId: PTY_REF.ptyId, handoffSupport: { kind: "bridge-releasable" } }],
+    });
+    await expect(client.stopIfIdle("target-build")).resolves.toEqual({ stopping: true });
+    client.dispose();
+  });
+
   it("uses the composition-supplied UI context on operational requests", async () => {
     const { client: clientConn, server } = inMemoryNdjsonConnectionPair();
     const identities: Array<NonNullable<ReturnType<typeof HostRequestSchema.parse>["client"]>> = [];

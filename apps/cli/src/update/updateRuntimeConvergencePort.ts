@@ -1,10 +1,11 @@
 import type {
-  HostHandoffCommandResult,
   HostHandoffFidelity,
   ObserverLifecycleFailure,
   ProviderHookReconciliationResult,
   UpdateChannelId,
   UpdateCommandArgv,
+  UpdateHostConvergenceCommitment,
+  UpdateHostConvergenceReceipt,
 } from "@station/contracts";
 import type { ExecutableArgv } from "../selfExec.js";
 
@@ -18,7 +19,8 @@ export type UpdateRecoveryCommandInput = {
 /**
  * DRIVEN PORT
  *
- * Defines the safe child-command mutations and recovery argv required by update convergence.
+ * Defines safe child-command mutations and recovery argv for update convergence. Host replacement
+ * and handoff remain distinct operations bound to one exact planned build and PTY commitment.
  */
 export interface UpdateRuntimeConvergencePort {
   reconcileHook(cli: ExecutableArgv, provider: string): Promise<ProviderHookReconciliationResult>;
@@ -26,10 +28,15 @@ export interface UpdateRuntimeConvergencePort {
     cli: ExecutableArgv,
     action: "start" | "restart",
   ): Promise<ObserverLifecycleFailure | undefined>;
-  convergeHost(
+  replaceIdleHost(
+    cli: ExecutableArgv,
+    commitment: UpdateHostConvergenceCommitment,
+  ): Promise<UpdateHostConvergenceReceipt>;
+  handoffHost(
     cli: ExecutableArgv,
     fidelity: HostHandoffFidelity,
-  ): Promise<HostHandoffCommandResult>;
+    commitment: UpdateHostConvergenceCommitment,
+  ): Promise<UpdateHostConvergenceReceipt>;
   reconcile(cli: ExecutableArgv): Promise<void>;
   recoveryCommands(input: UpdateRecoveryCommandInput): UpdateCommandArgv[];
 }

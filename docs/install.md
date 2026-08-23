@@ -384,7 +384,12 @@ does not rerun latest discovery, remote pagination, or target availability
 checks after the artifact is committed. It then performs a fresh inspection,
 executes its own safe hook, Observer, Host, and reconcile decisions in canonical
 order, and verifies a final no-op plan. Current-artifact actions stay with the
-current launcher. A live Host handoff also requires a strict receipt containing
+current launcher. Host execution cannot change action after inspection: idle
+replacement requires the exact Host build commitment to remain empty and never
+falls through to handoff, while handoff requires the exact non-empty immutable
+inventory and never falls through to replacement. A typed drift refusal causes
+fresh aggregate inspection and a nonzero result without claiming either action
+completed. A live Host handoff also requires a strict receipt containing
 the exact planned `{ terminalTargetId, ptyId, ptyInstanceId }` set and final
 inspection must retain that set; absence is not treated as an unevidenced
 natural exit.

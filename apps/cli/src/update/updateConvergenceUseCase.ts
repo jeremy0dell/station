@@ -10,6 +10,7 @@ import {
   type UpdateEvidencePlan,
   type UpdateExecutedAction,
   type UpdateFinalInspection,
+  type UpdateHostConvergenceCommitment,
 } from "@station/contracts";
 import { publicSafeErrorFromUnknown, type StationBuildInfo } from "@station/runtime";
 import {
@@ -48,7 +49,8 @@ type InFlightUpdateAction = Pick<UpdateExecutedAction, "phase" | "action" | "pro
  * USE CASE
  *
  * Resolves the install owner, inspects all live state, plans convergence, executes only safe typed
- * actions, and verifies a fresh no-op plan. Artifact application remains channel-owned; destructive
+ * actions, and verifies a fresh no-op plan. Host actions retain the plan's exact build and immutable
+ * PTY commitment without action fallback. Artifact application remains channel-owned; destructive
  * Station process-group authorization, journaling, and reaping remain exclusively owned by #641.
  */
 export async function runUpdateConvergence(
@@ -402,14 +404,19 @@ async function executeCurrentRuntime(
     }
     const host = initial.plan.components.host;
     if (host.action === "handoff" || host.action === "replace-idle") {
+      const commitment = hostConvergenceCommitment(initial);
       inFlightAction = {
         phase: "host-convergence",
         action: host.action,
       };
-      const handoffResult = await ports.runtime.convergeHost(
-        selected.plan.currentCli,
-        request.handoff ?? "processes",
-      );
+      const hostReceipt =
+        host.action === "handoff"
+          ? await ports.runtime.handoffHost(
+              selected.plan.currentCli,
+              request.handoff ?? "processes",
+              commitment,
+            )
+          : await ports.runtime.replaceIdleHost(selected.plan.currentCli, commitment);
       if (host.action === "handoff") {
         inFlightAction = {
           phase: "terminal-convergence",
@@ -418,8 +425,8 @@ async function executeCurrentRuntime(
         const expectedTerminals =
           initial.preflight.host.status === "inspected" ? initial.preflight.host.terminals : [];
         if (
-          handoffResult.receipt === undefined ||
-          !ptyLifetimeIdentitySetsMatch(expectedTerminals, handoffResult.receipt.terminals)
+          hostReceipt.ensuredBy !== "handoff" ||
+          !ptyLifetimeIdentitySetsMatch(expectedTerminals, hostReceipt.handoffReceipt.terminals)
         ) {
           throw updateErrorFromUnknown(undefined, {
             code: "UPDATE_TERMINAL_HANDOFF_RECEIPT_MISMATCH",
@@ -430,12 +437,12 @@ async function executeCurrentRuntime(
           phase: "terminal-convergence",
           action: "preserve-via-handoff",
           status: "completed",
-          handoffReceipt: handoffResult.receipt,
+          handoffReceipt: hostReceipt.handoffReceipt,
         });
-      } else if (handoffResult.receipt !== undefined) {
+      } else if (hostReceipt.ensuredBy !== "idle-replace") {
         throw updateErrorFromUnknown(undefined, {
-          code: "UPDATE_HOST_REPLACEMENT_RECEIPT_UNEXPECTED",
-          message: "Idle Host replacement returned an unexpected live-terminal receipt.",
+          code: "UPDATE_HOST_CONVERGENCE_ACTION_MISMATCH",
+          message: "Host convergence completed through an action the plan did not authorize.",
         });
       }
       actions.push({
@@ -594,6 +601,40 @@ async function executeCurrentRuntime(
       verification: verificationFor(postAction, "post-action"),
     },
   });
+}
+
+function hostConvergenceCommitment(evidence: UpdateEvidencePlan): UpdateHostConvergenceCommitment {
+  const host = evidence.preflight.host;
+  const targetBuild = evidence.plan.selectedTarget.buildIdentity;
+  if (host.status !== "inspected" || targetBuild.status !== "known") {
+    throw new Error(
+      "Actionable Host convergence requires inspected Host and target build evidence.",
+    );
+  }
+  return {
+    incumbent: {
+      buildVersion: committedHostValue(host.buildVersion),
+      buildIdentity: committedHostValue(host.buildIdentity),
+      protocolVersion: host.protocolVersion,
+      inventory: {
+        terminals: host.terminals.map((terminal) => ({
+          terminalTargetId: terminal.terminalTargetId,
+          ptyId: terminal.ptyId,
+          ptyInstanceId: terminal.ptyInstanceId,
+        })),
+      },
+    },
+    target: {
+      buildVersion: evidence.plan.selectedTarget.artifact.version,
+      buildIdentity: targetBuild.value,
+    },
+  };
+}
+
+function committedHostValue(
+  value: string | undefined,
+): UpdateHostConvergenceCommitment["incumbent"]["buildVersion"] {
+  return value === undefined ? { status: "absent" } : { status: "known", value };
 }
 
 async function inspectAndPlan(input: {

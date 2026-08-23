@@ -13172,7 +13172,7 @@
       "declaration": "runHostCommand",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Drive Station host inspection and opt-in live handoff from the CLI without routing through Observer application code. Mutating handoff defers policy to `ensureStationHostRunning`; this layer projects its exact immutable PTY receipt at the strict JSON boundary.",
+      "purpose": "Drive Station host inspection and opt-in live handoff from the CLI without routing through Observer application code. User handoff retains its ordinary ensure policy; update-only convergence delegates to the constrained executor and projects its exact action and immutable PTY commitment at a strict JSON boundary.",
       "dependencies": [
         {
           "path": "packages/protocol/src/transport.ts",
@@ -14682,7 +14682,7 @@
       "declaration": "runUpdateConvergence",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Resolves the install owner, inspects all live state, plans convergence, executes only safe typed actions, and verifies a fresh no-op plan. Artifact application remains channel-owned; destructive Station process-group authorization, journaling, and reaping remain exclusively owned by #641.",
+      "purpose": "Resolves the install owner, inspects all live state, plans convergence, executes only safe typed actions, and verifies a fresh no-op plan. Host actions retain the plan's exact build and immutable PTY commitment without action fallback. Artifact application remains channel-owned; destructive Station process-group authorization, journaling, and reaping remain exclusively owned by #641.",
       "dependencies": [
         {
           "path": "apps/cli/src/update/convergenceDigest.ts",
@@ -14734,7 +14734,7 @@
       "declaration": "createUpdateRuntimeConvergenceAdapter",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Translates typed safe runtime actions into strict Host, Observer, hook, and reconcile children.",
+      "purpose": "Translates safe runtime actions into strict Host, Observer, hook, and reconcile children. Host children must receipt the exact requested action and authorized immutable commitment.",
       "dependencies": [
         {
           "path": "apps/cli/src/update/updateRuntimeConvergencePort.ts",
@@ -14757,7 +14757,7 @@
       "declaration": "UpdateRuntimeConvergencePort",
       "kind": "interface",
       "role": "DRIVEN PORT",
-      "purpose": "Defines the safe child-command mutations and recovery argv required by update convergence.",
+      "purpose": "Defines safe child-command mutations and recovery argv for update convergence. Host replacement and handoff remain distinct operations bound to one exact planned build and PTY commitment.",
       "dependencies": []
     },
     {
@@ -16660,6 +16660,29 @@
           "kind": "interface",
           "role": "DRIVEN PORT",
           "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
+      "path": "integrations/terminal/station/src/host/ensureHostRunning.ts",
+      "declaration": "convergeStationHostForUpdate",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Executes one update-authorized Host action only while the exact committed incumbent build and immutable PTY inventory remain current; it never switches between idle replacement and handoff.",
+      "dependencies": [
+        {
+          "path": "packages/protocol/src/transport.ts",
+          "declaration": "probeUnixSocket",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "packages/station-host/src/protocol.ts",
+          "declaration": "classifyHostCompatibility",
+          "kind": "function",
+          "role": "POLICY",
+          "edgeKind": "runtime"
         }
       ]
     },

@@ -102,6 +102,10 @@ export type StationHostClient = {
   list(): Promise<HostListResult["ptys"]>;
   /** Read immutable Host build and PTY recovery evidence without changing protocol-v8 `host.list`. */
   recoveryInventory?(): Promise<HostRecoveryInventoryResult>;
+  /** Lifecycle-only read pinned to the same connection as a later constrained Host mutation. */
+  lifecycleList?(): Promise<HostListResult["ptys"]>;
+  /** Lifecycle-only immutable inventory read that does not require target-build reuse. */
+  lifecycleRecoveryInventory?(): Promise<HostRecoveryInventoryResult>;
   focus(ptyId: string): Promise<void>;
   close(ptyId: string): Promise<{ closed: boolean }>;
   /** Attach only with an explicit role and a matching complete identity proof. */
@@ -432,6 +436,10 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
     list: async () => (await request("host.list", undefined, HostListResultSchema)).ptys,
     recoveryInventory: () =>
       request("host.recoveryInventory", undefined, HostRecoveryInventoryResultSchema),
+    lifecycleList: async () =>
+      (await rawRequest("host.list", undefined, HostListResultSchema)).ptys,
+    lifecycleRecoveryInventory: () =>
+      rawRequest("host.recoveryInventory", undefined, HostRecoveryInventoryResultSchema),
     focus: async (ptyId) => {
       await request("host.focus", { ptyId }, HostOkResultSchema);
     },
