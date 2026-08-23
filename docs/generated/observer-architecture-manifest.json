@@ -16955,6 +16955,14 @@
       "dependencies": []
     },
     {
+      "path": "packages/contracts/src/updateConvergenceSemantics.ts",
+      "declaration": "updateConvergenceSemanticIssues",
+      "kind": "function",
+      "role": "POLICY",
+      "purpose": "Cross-check a serialized convergence plan against the aggregate facts that give it meaning. This is a trust-boundary invariant, not an execution authorizer or digest recomputation.",
+      "dependencies": []
+    },
+    {
       "path": "packages/harness-shared/src/hookAdapter.ts",
       "declaration": "createHarnessHookAdapter",
       "kind": "function",

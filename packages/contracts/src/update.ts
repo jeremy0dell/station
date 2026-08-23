@@ -5,6 +5,7 @@ import { type ObserverStartupEvidence, ObserverStartupEvidenceSchema } from "./o
 import {
   type ProviderHookReconciliationResult,
   ProviderHookReconciliationResultSchema,
+  providerHookReconciliationSucceeded,
 } from "./providerHooks.js";
 import { nonEmptyStringSchema, safeTextSchema } from "./shared.js";
 import { type UpdateArtifact, UpdateArtifactSchema } from "./updateArtifact.js";
@@ -536,6 +537,97 @@ function validateV4Result(
       }
     });
   };
+  const validateSuccessfulRuntimeAudit = (
+    evidence: UpdateEvidencePlan,
+    audit: UpdateActionAudit,
+    path: Array<string | number>,
+  ): void => {
+    validateAudit(evidence, audit, path);
+    const expected = executableRuntimeActions(evidence);
+    if (audit.actions.length !== expected.length) {
+      digestMismatch(
+        [...path, "actions"],
+        "Successful runtime audit must contain every executable phase and provider exactly once.",
+      );
+    }
+    audit.actions.forEach((action, index) => {
+      const expectedAction = expected[index];
+      if (
+        expectedAction === undefined ||
+        !auditActionIdentityMatches(action, expectedAction) ||
+        action.status !== "completed"
+      ) {
+        digestMismatch(
+          [...path, "actions", index],
+          "Successful runtime actions must be exact, canonical, unique, and completed.",
+        );
+      }
+      validateCompletedHookResult(action, [...path, "actions", index], digestMismatch);
+    });
+  };
+  const validateFailedRuntimeAudit = (
+    evidence: UpdateEvidencePlan,
+    audit: UpdateActionAudit,
+    stage: Extract<UpdateConvergenceResult, { kind: "execution-failed" }>["stage"],
+    path: Array<string | number>,
+  ): void => {
+    validateAudit(evidence, audit, path);
+    const finalAction = audit.actions.at(-1);
+    if (
+      finalAction === undefined ||
+      (finalAction.status !== "failed" && finalAction.status !== "skipped") ||
+      finalAction.phase !== stage
+    ) {
+      digestMismatch(
+        [...path, "actions"],
+        "Runtime failure audit must end with one failed or skipped action matching the failure stage.",
+      );
+      return;
+    }
+    if (audit.actions.slice(0, -1).some((action) => action.status !== "completed")) {
+      digestMismatch(
+        [...path, "actions"],
+        "Only the final action in a failure audit may be failed or skipped.",
+      );
+    }
+    const expected = executableRuntimeActions(evidence);
+    const finalExpectedIndex = expected.findIndex((action) =>
+      auditActionIdentityMatches(finalAction, action),
+    );
+    if (finalExpectedIndex < 0) {
+      digestMismatch(
+        [...path, "actions", audit.actions.length - 1],
+        "Failed or skipped action must be executable in the audited convergence plan.",
+      );
+      return;
+    }
+    let expectedCompleted = expected.slice(0, finalExpectedIndex);
+    if (
+      finalAction.phase === "host-convergence" &&
+      finalAction.action === "handoff" &&
+      expectedCompleted.at(-1)?.phase === "terminal-convergence"
+    ) {
+      // Terminal preservation becomes auditable only after Host handoff returns an exact receipt.
+      expectedCompleted = expectedCompleted.slice(0, -1);
+    }
+    const completed = audit.actions.slice(0, -1);
+    if (
+      completed.length !== expectedCompleted.length ||
+      completed.some(
+        (action, index) =>
+          !auditActionIdentityMatches(action, expectedCompleted[index]) ||
+          action.status !== "completed",
+      )
+    ) {
+      digestMismatch(
+        [...path, "actions"],
+        "Failure audit must retain the exact completed prefix before its failed stage.",
+      );
+    }
+    completed.forEach((action, index) => {
+      validateCompletedHookResult(action, [...path, "actions", index], digestMismatch);
+    });
+  };
   const validateTerminalContinuity = (
     initial: UpdateEvidencePlan,
     postAction: UpdateEvidencePlan,
@@ -652,7 +744,7 @@ function validateV4Result(
       ) {
         digestMismatch(["result", "actionAudits"], "Runtime audit must execute the initial plan.");
       }
-      validateAudit(report.initial, audit, ["result", "actionAudits", 0]);
+      validateSuccessfulRuntimeAudit(report.initial, audit, ["result", "actionAudits", 0]);
       validateVerification(report.result.postAction, report.result.verification, [
         "result",
         "verification",
@@ -682,8 +774,9 @@ function validateV4Result(
         report.result.successor.plan.selectedTarget.buildIdentity.status !== "known" ||
         report.result.verification.source !== "post-action" ||
         (successorAudit === undefined &&
-          report.result.postAction.plan.digest.value !==
-            report.result.successor.plan.digest.value) ||
+          (report.result.successor.plan.status === "actionable" ||
+            report.result.postAction.plan.digest.value !==
+              report.result.successor.plan.digest.value)) ||
         (successorAudit !== undefined &&
           (successorAudit.executor !== "successor-cli" ||
             successorAudit.planDigest !== report.result.successor.plan.digest.value))
@@ -694,11 +787,21 @@ function validateV4Result(
         );
       }
       if (artifactAudit !== undefined) {
-        validateAudit(report.initial, artifactAudit, ["result", "actionAudits", 0]);
+        validateArtifactAudit(
+          report.initial,
+          artifactAudit,
+          "completed",
+          ["result", "actionAudits", 0],
+          digestMismatch,
+        );
       }
       validateEvidenceTarget(report.result.successor, ["result", "successor"]);
       if (successorAudit !== undefined) {
-        validateAudit(report.result.successor, successorAudit, ["result", "actionAudits", 1]);
+        validateSuccessfulRuntimeAudit(report.result.successor, successorAudit, [
+          "result",
+          "actionAudits",
+          1,
+        ]);
       }
       validateVerification(report.result.postAction, report.result.verification, [
         "result",
@@ -716,9 +819,6 @@ function validateV4Result(
       const [initialAudit, successorAudit, ...extraAudits] = report.result.actionAudits;
       if (extraAudits.length > 0) {
         digestMismatch(["result", "actionAudits"], "Failure audit supports one actor crossover.");
-      }
-      if (initialAudit !== undefined) {
-        validateAudit(report.initial, initialAudit, ["result", "actionAudits", 0]);
       }
       if (report.result.successor !== undefined) {
         validateEvidenceTarget(report.result.successor, ["result", "successor"]);
@@ -738,8 +838,6 @@ function validateV4Result(
             ["result", "actionAudits", 1],
             "Successor action audit requires successor plan evidence.",
           );
-        } else {
-          validateAudit(report.result.successor, successorAudit, ["result", "actionAudits", 1]);
         }
       }
       if (report.result.finalInspection.status === "completed") {
@@ -762,6 +860,15 @@ function validateV4Result(
         ) {
           digestMismatch(["result"], "Artifact failure must audit the failed initial apply only.");
         }
+        if (initialAudit !== undefined) {
+          validateArtifactAudit(
+            report.initial,
+            initialAudit,
+            "failed",
+            ["result", "actionAudits", 0],
+            digestMismatch,
+          );
+        }
       } else if (report.artifactApplication.status === "not-required") {
         if (
           report.initial.plan.status !== "actionable" ||
@@ -774,6 +881,13 @@ function validateV4Result(
             "Current-runtime failure must retain one initial audit and a final inspection outcome.",
           );
         }
+        if (initialAudit !== undefined) {
+          validateFailedRuntimeAudit(report.initial, initialAudit, report.result.stage, [
+            "result",
+            "actionAudits",
+            0,
+          ]);
+        }
       } else if (report.artifactApplication.status === "applied") {
         if (
           initialAudit === undefined ||
@@ -784,6 +898,15 @@ function validateV4Result(
           digestMismatch(
             ["result"],
             "Post-apply failure must retain the completed artifact audit.",
+          );
+        }
+        if (initialAudit !== undefined) {
+          validateArtifactAudit(
+            report.initial,
+            initialAudit,
+            "completed",
+            ["result", "actionAudits", 0],
+            digestMismatch,
           );
         }
         if (
@@ -806,10 +929,104 @@ function validateV4Result(
             "Successor runtime failure must identify and audit the successor plan.",
           );
         }
+        if (
+          report.result.stage !== "successor-boundary" &&
+          report.result.successor !== undefined &&
+          successorAudit !== undefined
+        ) {
+          validateFailedRuntimeAudit(report.result.successor, successorAudit, report.result.stage, [
+            "result",
+            "actionAudits",
+            1,
+          ]);
+        }
       } else {
         digestMismatch(["artifactApplication"], "Execution failure has invalid artifact state.");
       }
       return;
     }
+  }
+}
+
+type ExpectedAuditAction = {
+  phase: UpdateActionAudit["actions"][number]["phase"];
+  action: UpdateActionAudit["actions"][number]["action"];
+  provider?: string;
+};
+
+function executableRuntimeActions(evidence: UpdateEvidencePlan): ExpectedAuditAction[] {
+  const actions: ExpectedAuditAction[] = [];
+  for (const hook of evidence.plan.components.hooks) {
+    if (hook.action === "reconcile") {
+      actions.push({ phase: "hook-reconciliation", action: "reconcile", provider: hook.provider });
+    }
+  }
+  const observer = evidence.plan.components.observer;
+  if (observer.action === "start" || observer.action === "restart") {
+    actions.push({ phase: "observer-convergence", action: observer.action });
+  }
+  if (evidence.plan.components.terminals.action === "preserve-via-handoff") {
+    actions.push({ phase: "terminal-convergence", action: "preserve-via-handoff" });
+  }
+  const host = evidence.plan.components.host;
+  if (host.action === "replace-idle" || host.action === "handoff") {
+    actions.push({ phase: "host-convergence", action: host.action });
+  }
+  if (evidence.plan.components.reconcile.action === "run") {
+    actions.push({ phase: "runtime-reconcile", action: "run" });
+  }
+  if (evidence.plan.components.verification.action === "reinspect") {
+    actions.push({ phase: "verification", action: "reinspect" });
+  }
+  return actions;
+}
+
+function auditActionIdentityMatches(
+  actual: UpdateActionAudit["actions"][number],
+  expected: ExpectedAuditAction | undefined,
+): boolean {
+  return (
+    expected !== undefined &&
+    actual.phase === expected.phase &&
+    actual.action === expected.action &&
+    actual.provider === expected.provider
+  );
+}
+
+function validateCompletedHookResult(
+  action: UpdateActionAudit["actions"][number],
+  path: Array<string | number>,
+  addIssue: (path: Array<string | number>, message: string) => void,
+): void {
+  if (action.phase !== "hook-reconciliation" || action.action !== "reconcile") return;
+  if (
+    action.hookResult === undefined ||
+    action.hookResult.provider !== action.provider ||
+    !providerHookReconciliationSucceeded(action.hookResult)
+  ) {
+    addIssue(
+      path,
+      "Completed hook reconciliation must retain one successful typed provider result.",
+    );
+  }
+}
+
+function validateArtifactAudit(
+  evidence: UpdateEvidencePlan,
+  audit: UpdateActionAudit,
+  status: "completed" | "failed",
+  path: Array<string | number>,
+  addIssue: (path: Array<string | number>, message: string) => void,
+): void {
+  const action = audit.actions[0];
+  if (
+    audit.executor !== evidence.evaluator ||
+    audit.planDigest !== evidence.plan.digest.value ||
+    audit.actions.length !== 1 ||
+    action?.phase !== "artifact-application" ||
+    action.action !== "apply" ||
+    action.status !== status
+  ) {
+    addIssue(path, `Artifact audit must contain the exact ${status} selected apply action.`);
   }
 }

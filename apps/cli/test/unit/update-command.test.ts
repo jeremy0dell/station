@@ -447,6 +447,7 @@ describe("stn update convergence", () => {
       },
       { phase: "host-convergence", action: "handoff", status: "completed" },
       { phase: "runtime-reconcile", action: "run", status: "completed" },
+      { phase: "verification", action: "reinspect", status: "completed" },
     ]);
     const serialized = JSON.stringify(report);
     expect(serialized).not.toContain("/tmp/station-host.sock");
@@ -500,6 +501,7 @@ describe("stn update convergence", () => {
     expect(report.result.actionAudits[0].actions).toEqual([
       { phase: "host-convergence", action: "replace-idle", status: "completed" },
       { phase: "runtime-reconcile", action: "run", status: "completed" },
+      { phase: "verification", action: "reinspect", status: "completed" },
     ]);
   });
 
@@ -592,7 +594,7 @@ describe("stn update convergence", () => {
     });
   });
 
-  it("re-inspects exact concurrent Host convergence without claiming a mutation", async () => {
+  it("fails the superseded plan after exact concurrent Host convergence without claiming mutation", async () => {
     const fixture = probe("current");
     const bridge = terminal("bridge-releasable");
     const inspect = sequenceInspection([
@@ -626,19 +628,24 @@ describe("stn update convergence", () => {
     });
     const report = reportFrom(result);
 
-    expect(result.code).toBe(0);
+    expect(result.code).toBe(1);
     expect(inspect).toHaveBeenCalledTimes(2);
     expect(reconcile).not.toHaveBeenCalled();
-    expect(report).toMatchObject({ status: "current" });
-    if (report.result.kind !== "current-runtime-execution") {
-      throw new Error("expected current runtime execution");
+    expect(report).toMatchObject({
+      status: "failed",
+      result: {
+        kind: "execution-failed",
+        stage: "host-convergence",
+        finalInspection: {
+          status: "completed",
+          evidence: { plan: { status: "converged" } },
+        },
+      },
+    });
+    if (report.result.kind !== "execution-failed") {
+      throw new Error("expected superseded execution failure");
     }
     expect(report.result.actionAudits[0].actions).toEqual([
-      {
-        phase: "terminal-convergence",
-        action: "preserve-via-handoff",
-        status: "skipped",
-      },
       { phase: "host-convergence", action: "handoff", status: "skipped" },
     ]);
   });
@@ -1164,8 +1171,15 @@ describe("stn update convergence", () => {
     });
     const report = reportFrom(result);
     if (report.result.kind !== "execution-failed") throw new Error("expected failure result");
+    expect(report.result.actionAudits[0]?.actions.at(-1)).toEqual({
+      phase: "verification",
+      action: "reinspect",
+      status: "failed",
+    });
     expect(
-      report.result.actionAudits[0]?.actions.every((action) => action.status === "completed"),
+      report.result.actionAudits[0]?.actions
+        .slice(0, -1)
+        .every((action) => action.status === "completed"),
     ).toBe(true);
     expect(report.result).not.toHaveProperty("postAction");
   });
@@ -1217,6 +1231,7 @@ describe("stn update convergence", () => {
       },
       { phase: "host-convergence", action: "handoff", status: "completed" },
       { phase: "runtime-reconcile", action: "run", status: "completed" },
+      { phase: "verification", action: "reinspect", status: "failed" },
     ]);
     expect(report.status).not.toBe("planned");
     expect(textFor(result)).toContain("status: failed");
@@ -1631,6 +1646,115 @@ describe("stn update convergence", () => {
     const outerRunner = vi.fn(async (input: ExternalCommandInput) =>
       input.args?.includes("update") ? externalResult(input, stdout, 0) : commandResult(input),
     );
+
+    const result = await runUpdateCommand(["--json"], options(), {
+      probes: [outer.probe],
+      buildInfo: build(identityA, "1.0.0"),
+      convergenceInspection: inspection(preflight("1.0.0", "2.0.0")),
+      commandRunner: outerRunner,
+    });
+
+    expect(result).toMatchObject({
+      code: 1,
+      output: {
+        status: "failed",
+        error: { code: "UPDATE_SUCCESSOR_BOUNDARY_FAILED" },
+        result: { kind: "execution-failed", stage: "successor-boundary" },
+      },
+    });
+  });
+
+  it.each([
+    {
+      name: "missing Observer audit",
+      fixture: "observer" as const,
+      mutate: (report: UpdateCommandReport) => {
+        const audit = successorRuntimeAudit(report);
+        audit.actions = audit.actions.filter((action) => action.phase !== "observer-convergence");
+      },
+    },
+    {
+      name: "missing terminal audit",
+      fixture: "host" as const,
+      mutate: (report: UpdateCommandReport) => {
+        const audit = successorRuntimeAudit(report);
+        audit.actions = audit.actions.filter((action) => action.phase !== "terminal-convergence");
+      },
+    },
+    {
+      name: "missing Host audit",
+      fixture: "host" as const,
+      mutate: (report: UpdateCommandReport) => {
+        const audit = successorRuntimeAudit(report);
+        audit.actions = audit.actions.filter((action) => action.phase !== "host-convergence");
+      },
+    },
+    {
+      name: "missing reconcile audit",
+      fixture: "observer" as const,
+      mutate: (report: UpdateCommandReport) => {
+        const audit = successorRuntimeAudit(report);
+        audit.actions = audit.actions.filter((action) => action.phase !== "runtime-reconcile");
+      },
+    },
+    {
+      name: "duplicate audit",
+      fixture: "observer" as const,
+      mutate: (report: UpdateCommandReport) => {
+        const audit = successorRuntimeAudit(report);
+        const observer = audit.actions.find((action) => action.phase === "observer-convergence");
+        if (observer === undefined) throw new Error("missing Observer audit");
+        audit.actions.splice(1, 0, structuredClone(observer));
+      },
+    },
+    {
+      name: "skipped audit",
+      fixture: "observer" as const,
+      mutate: (report: UpdateCommandReport) => {
+        const observer = successorRuntimeAudit(report).actions.find(
+          (action) => action.phase === "observer-convergence",
+        );
+        if (observer === undefined) throw new Error("missing Observer audit");
+        observer.status = "skipped";
+      },
+    },
+    {
+      name: "failed audit",
+      fixture: "observer" as const,
+      mutate: (report: UpdateCommandReport) => {
+        const observer = successorRuntimeAudit(report).actions.find(
+          (action) => action.phase === "observer-convergence",
+        );
+        if (observer === undefined) throw new Error("missing Observer audit");
+        observer.status = "failed";
+      },
+    },
+    {
+      name: "reordered audits",
+      fixture: "host" as const,
+      mutate: (report: UpdateCommandReport) => {
+        successorRuntimeAudit(report).actions.reverse();
+      },
+    },
+    {
+      name: "fabricated converged plan",
+      fixture: "observer" as const,
+      mutate: (report: UpdateCommandReport) => {
+        report.initial.plan.status = "converged";
+      },
+    },
+  ])("rejects a strict successor report with $name", async ({ fixture, mutate }) => {
+    const outer = probe("update-available");
+    const outerRunner = vi.fn(async (input: ExternalCommandInput) => {
+      if (!input.args?.includes("update")) return commandResult(input);
+      const child =
+        fixture === "host"
+          ? await successorHostRuntimeResult(input)
+          : await successorRuntimeResult(input);
+      const report = UpdateCommandReportSchema.parse(JSON.parse(child.stdout));
+      mutate(report);
+      return externalResult(input, JSON.stringify(report), child.exitCode);
+    });
 
     const result = await runUpdateCommand(["--json"], options(), {
       probes: [outer.probe],
@@ -2381,6 +2505,30 @@ function successorRuntimeResult(input: ExternalCommandInput): Promise<ExternalCo
       host: matchingHost(identityB),
     }),
   ]);
+}
+
+function successorHostRuntimeResult(input: ExternalCommandInput): Promise<ExternalCommandResult> {
+  const bridge = terminal("bridge-releasable");
+  const terminalDisposition = disposition("preservable", "recoverable");
+  return successorResultFromInspections(input, [
+    preflight("2.0.0", "2.0.0", {
+      observer: matchingObserver(identityB),
+      host: differentHost(identityA, [bridge]),
+      terminalDispositions: [terminalDisposition],
+    }),
+    preflight("2.0.0", "2.0.0", {
+      observer: matchingObserver(identityB),
+      host: matchingHost(identityB, [bridge]),
+      terminalDispositions: [terminalDisposition],
+    }),
+  ]);
+}
+
+function successorRuntimeAudit(report: UpdateCommandReport) {
+  if (report.result.kind !== "current-runtime-execution") {
+    throw new Error("expected successor runtime execution fixture");
+  }
+  return report.result.actionAudits[0];
 }
 
 async function successorPreviewResult(input: ExternalCommandInput): Promise<ExternalCommandResult> {

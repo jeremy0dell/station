@@ -350,7 +350,6 @@ async function executeCurrentRuntime(
   const actions: UpdateExecutedAction[] = [];
   let inFlightAction: InFlightUpdateAction | undefined;
   let observerLifecycleFailure: ObserverLifecycleFailure | undefined;
-  let hostAlreadyConverged = false;
   const audit: UpdateActionAudit = {
     executor: request.evaluator,
     planDigest: initial.plan.digest.value,
@@ -432,21 +431,16 @@ async function executeCurrentRuntime(
           if (!hostConvergenceCommitmentsMatch(hostResult.validatedCommitment, commitment)) {
             throw hostCommitmentMismatch();
           }
-          if (host.action === "handoff") {
-            actions.push({
-              phase: "terminal-convergence",
-              action: "preserve-via-handoff",
-              status: "skipped",
-            });
-          }
           actions.push({
             phase: "host-convergence",
             action: host.action,
             status: "skipped",
           });
-          hostAlreadyConverged = true;
-          inFlightAction = undefined;
-          break;
+          throw updateErrorFromUnknown(undefined, {
+            code: "UPDATE_HOST_CONVERGENCE_SUPERSEDED",
+            message:
+              "Another actor converged the Host before the authorized mutation; Station stopped for fresh verification.",
+          });
         case "completed": {
           const hostReceipt = hostResult.receipt;
           if (!hostConvergenceCommitmentsMatch(hostReceipt.validatedCommitment, commitment)) {
@@ -490,7 +484,7 @@ async function executeCurrentRuntime(
         }
       }
     }
-    if (!hostAlreadyConverged && initial.plan.components.reconcile.action === "run") {
+    if (initial.plan.components.reconcile.action === "run") {
       inFlightAction = {
         phase: "runtime-reconcile",
         action: "run",
@@ -501,7 +495,7 @@ async function executeCurrentRuntime(
     }
   } catch (error) {
     let failedAction = actions.at(-1);
-    if (failedAction?.status !== "failed") {
+    if (failedAction?.status !== "failed" && failedAction?.status !== "skipped") {
       // Descriptive phases such as terminal convergence must not shift the identity of the
       // concrete mutation that failed.
       if (inFlightAction === undefined) {
@@ -565,6 +559,7 @@ async function executeCurrentRuntime(
             code: "UPDATE_FINAL_INSPECTION_FAILED",
             message: "Final aggregate inspection was not attempted after runtime convergence.",
           });
+    actions.push({ phase: "verification", action: "reinspect", status: "failed" });
     return finishReport({
       selected,
       current,
@@ -588,6 +583,7 @@ async function executeCurrentRuntime(
       message:
         "Fresh inspection after Host handoff did not retain every planned PTY lifetime identity.",
     });
+    actions.push({ phase: "verification", action: "reinspect", status: "failed" });
     return finishReport({
       selected,
       current,
@@ -610,6 +606,7 @@ async function executeCurrentRuntime(
       message:
         "Station completed the planned runtime actions, but fresh inspection still requires convergence.",
     });
+    actions.push({ phase: "verification", action: "reinspect", status: "failed" });
     return finishReport({
       selected,
       current,
@@ -626,6 +623,7 @@ async function executeCurrentRuntime(
       recoveryCommands: recoveryCommands(selected, request, ports),
     });
   }
+  actions.push({ phase: "verification", action: "reinspect", status: "completed" });
   return finishReport({
     selected,
     current,

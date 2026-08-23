@@ -4,6 +4,7 @@ import { PtyHandoffReceiptSchema } from "./hostHandoff.js";
 import { ProviderHookReconciliationResultSchema } from "./providerHooks.js";
 import { compareCodeUnitStrings, nonEmptyStringSchema } from "./shared.js";
 import { type UpdateArtifact, UpdateArtifactSchema } from "./updateArtifact.js";
+import { updateConvergenceSemanticIssues } from "./updateConvergenceSemantics.js";
 import { UpdateReapRecoveryPreflightSchema } from "./updateRecoveryPreflight.js";
 
 const buildIdentitySchema = z.string().regex(/^[0-9a-f]{64}$/u);
@@ -231,6 +232,9 @@ export const UpdateEvidencePlanSchema = z
         path: ["plan", "selectedTarget", "artifact"],
         message: "The convergence target must match the aggregate target.",
       });
+    }
+    for (const issue of updateConvergenceSemanticIssues(evidence)) {
+      context.addIssue({ code: "custom", path: issue.path, message: issue.message });
     }
   });
 export type UpdateEvidencePlan = z.infer<typeof UpdateEvidencePlanSchema>;
