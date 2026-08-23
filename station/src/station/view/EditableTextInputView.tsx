@@ -1,6 +1,5 @@
-// OpenTUI port of apps/tui's EditableTextInput + TuiCursor: value split at
-// the cursor with a blinking "|" cell between (style-only blink; layout
-// stays stable because the cursor cell is always one column wide).
+// The semantic editor guarantees a grapheme-boundary cursor before this renderer
+// splits the value around its stable, single-cell cursor glyph.
 import type { ColorInput } from "@opentui/core";
 import { useEffect, useState } from "react";
 import { clampEditableTextCursor } from "@station/dashboard-core/selectors";
