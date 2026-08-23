@@ -1,20 +1,23 @@
 import { TextAttributes } from "@opentui/core";
 import {
-  dashboardTableHeaderModel,
-  dashboardRowIds,
+  cellWidth,
   dashboardRowGridInput,
-  fleetCountsLabel,
+  dashboardRowIds,
+  dashboardTableHeaderModel,
   emptyProjectLabel,
+  fleetCountsLabel,
   FIRST_RUN_BODY_LABEL,
- } from "@station/dashboard-core/selectors";
-import { layoutWorktreeRowGrid, textSegment, truncateCells } from "@station/dashboard-core/selectors";
-import type { RowGridLayout, RowGridRowInput } from "@station/dashboard-core/selectors";
-import { selectDashboardSlots, selectFleetSummary } from "@station/dashboard-core/selectors";
-import type {
-  DashboardRowId,
-  DashboardTreeBranch,
-  DashboardTreeRow,
-  FleetSummary,
+  layoutWorktreeRowGrid,
+  selectDashboardSlots,
+  selectFleetSummary,
+  textSegment,
+  truncateCells,
+  type DashboardRowId,
+  type DashboardTreeBranch,
+  type DashboardTreeRow,
+  type FleetSummary,
+  type RowGridLayout,
+  type RowGridRowInput,
 } from "@station/dashboard-core/selectors";
 import type {
   DashboardScreenView,
@@ -25,7 +28,7 @@ import {
   DashboardScrollIndicatorView,
   DashboardTableHeaderView,
 } from "./DashboardTableHeaderView.js";
-import { GroupFrameBottomView, GroupFrameRailView } from "./GroupFrameView.js";
+import { GroupFrameView, groupFrameContentColumns } from "./GroupFrameView.js";
 import { GroupHeaderView } from "./GroupHeaderView.js";
 import { ProjectHeaderView } from "./ProjectHeaderView.js";
 import { SegmentLinkTargets, Segments } from "./segments.js";
@@ -72,19 +75,13 @@ export function DashboardView({
   const itemIds = useMemo(() => tree.visibleRows.map((row) => row.id), [tree.visibleRows]);
   const contentColumns = Math.max(1, Math.floor(columns) - 1);
   const firstRun = snapshot.projects.length === 0;
-  const rowGridColumns =
-    snapshot.sessionGroups.length === 0 ? contentColumns : Math.max(1, contentColumns - 2);
   const fleet = selectFleetSummary(snapshot);
   const keyByRow = new Map(
     slots.displayRowChoices.map((choice) => [choice.value.id, choice.key]),
   );
   const { headerLayout, layoutByItem } = firstRun
     ? { headerLayout: undefined, layoutByItem: new Map<string, RowGridLayout>() }
-    : dashboardRowLayouts(
-        tree.visibleRows,
-        keyByRow,
-        rowGridColumns,
-      );
+    : dashboardRowLayouts(tree.visibleRows, tree.rowById, keyByRow, contentColumns);
   const tableHeader = dashboardTableHeaderModel({
     layout: headerLayout,
     overflow: slots.sessionOverflow,
@@ -227,7 +224,8 @@ function FleetBar({
     ];
   });
   const lanesWidth =
-    "FLEET".length + parts.reduce((total, part) => total + 3 + 1 + part.label.length, 0);
+    cellWidth("FLEET") +
+    parts.reduce((total, part) => total + cellWidth(`  ${part.glyph} ${part.label}`), 0);
   const totals = fleetCountsLabel(
     { projects: counts.projects, sessions: counts.sessions, agents: counts.agents },
     Math.max(0, columns - lanesWidth - 2),
@@ -248,7 +246,7 @@ function FleetBar({
           </span>
         ))}
       </text>
-      {totals.length > 0 ? <text fg={toOpenTuiColor(theme.text.muted)}>{totals}</text> : null}
+      {totals !== "" ? <text fg={toOpenTuiColor(theme.text.muted)}>{totals}</text> : null}
     </box>
   );
 }
@@ -270,9 +268,10 @@ function columnHeaderRowInput(): RowGridRowInput {
   };
 }
 
-// The header shares the rows' grid layout so its columns align and shed in lockstep.
+// Root rows align with the table header; Group children resolve against their frame's content box.
 function dashboardRowLayouts(
   rows: readonly DashboardTreeRow[],
+  rowById: ReadonlyMap<DashboardRowId, DashboardTreeRow>,
   keyByRow: ReadonlyMap<string, string>,
   columns: number,
 ): { headerLayout: RowGridLayout | undefined; layoutByItem: Map<string, RowGridLayout> } {
@@ -280,15 +279,36 @@ function dashboardRowLayouts(
     const input = dashboardRowGridInput(row, keyByRow);
     return input === undefined ? [] : [input];
   });
-  const layouts = layoutWorktreeRowGrid({
+  const fullLayouts = layoutWorktreeRowGrid({
     columns: Math.max(1, columns),
     rows: [columnHeaderRowInput(), ...rowInputs],
   });
-  const headerLayout = layouts.find((layout) => layout.id === COLUMN_HEADER_ROW_ID);
+  const framedRowInputs = rowInputs.filter((input) => {
+    const row = rowById.get(input.id as DashboardRowId);
+    const parent = row?.parentId === undefined ? undefined : rowById.get(row.parentId);
+    return parent?.payload.type === "groupHeader";
+  });
+  const framedLayouts =
+    framedRowInputs.length === 0
+      ? []
+      : layoutWorktreeRowGrid({
+          columns: groupFrameContentColumns(columns),
+          rows: [columnHeaderRowInput(), ...framedRowInputs],
+        });
+  const headerLayout = fullLayouts.find((layout) => layout.id === COLUMN_HEADER_ROW_ID);
+  const framedByItem = new Map(framedLayouts.map((layout) => [layout.id, layout]));
   const layoutByItem = new Map(
-    layouts
+    fullLayouts
       .filter((layout) => layout.id !== COLUMN_HEADER_ROW_ID)
-      .map((layout) => [layout.id, layout]),
+      .map((layout) => {
+        const row = rowById.get(layout.id as DashboardRowId);
+        const parent = row?.parentId === undefined ? undefined : rowById.get(row.parentId);
+        const selected =
+          parent?.payload.type === "groupHeader"
+            ? (framedByItem.get(layout.id) ?? layout)
+            : layout;
+        return [layout.id, selected] as const;
+      }),
   );
   return { headerLayout, layoutByItem };
 }
@@ -320,84 +340,112 @@ function DashboardBranchView({
   columns,
   branch,
   layoutByItem,
-  groupRow,
 }: {
   columns: number;
   branch: DashboardTreeBranch;
   layoutByItem: ReadonlyMap<string, RowGridLayout>;
-  groupRow?: DashboardTreeRow;
 }) {
   const row = branch.row;
   if (row.payload.type === "projectHeader") {
-    return (
-      <box flexDirection="column" width="100%">
-        <ProjectHeaderView
-          renderableId={semanticItemRenderableId(row.id)}
-          columns={columns}
-          rowId={row.id}
-          project={row.payload.project}
-          collapsed={row.payload.collapsed}
-          groupCount={row.payload.groupCount}
-          persistentFilterMatch={row.payload.persistentFilterMatch}
-          focusedCellId={row.focusedCellId}
-        />
-        {branch.children.map((child) => (
-          <DashboardBranchView
-            key={child.row.id}
-            columns={columns}
-            branch={child}
-            layoutByItem={layoutByItem}
-          />
-        ))}
-      </box>
-    );
+    return <ProjectBranchView columns={columns} branch={branch} layoutByItem={layoutByItem} />;
   }
   if (row.payload.type === "groupHeader") {
-    const frame = {
-      focusedHeader: row.focusedCellId !== undefined,
-      containsFocusedRow: row.containsFocusedRow === true,
-    };
-    return (
-      <box flexDirection="column" width="100%">
-        <GroupHeaderView
-          renderableId={semanticItemRenderableId(row.id)}
+    return <GroupBranchView columns={columns} branch={branch} layoutByItem={layoutByItem} />;
+  }
+  return <DashboardLeaf row={row} layout={layoutByItem.get(row.id)} />;
+}
+
+function ProjectBranchView({
+  columns,
+  branch,
+  layoutByItem,
+}: {
+  columns: number;
+  branch: DashboardTreeBranch;
+  layoutByItem: ReadonlyMap<string, RowGridLayout>;
+}) {
+  const row = branch.row;
+  if (row.payload.type !== "projectHeader") return null;
+  return (
+    <box id={`station-dashboard-project:${row.id}`} flexDirection="column" width="100%">
+      <ProjectHeaderView
+        renderableId={semanticItemRenderableId(row.id)}
+        columns={columns}
+        rowId={row.id}
+        project={row.payload.project}
+        collapsed={row.payload.collapsed}
+        groupCount={row.payload.groupCount}
+        persistentFilterMatch={row.payload.persistentFilterMatch}
+        focusedCellId={row.focusedCellId}
+      />
+      {branch.children.map((child) => (
+        <DashboardBranchView
+          key={child.row.id}
           columns={columns}
-          rowId={row.id}
-          payload={row.payload}
-          cells={row.cells}
-          focusedCellId={row.focusedCellId}
-          containsFocusedRow={row.containsFocusedRow}
+          branch={child}
+          layoutByItem={layoutByItem}
         />
-        {branch.children.map((child) => (
-          <DashboardBranchView
-            key={child.row.id}
-            columns={columns}
-            branch={child}
-            layoutByItem={layoutByItem}
-            groupRow={row}
-          />
-        ))}
-        {row.payload.collapsed ? null : <GroupFrameBottomView columns={columns} {...frame} />}
+      ))}
+    </box>
+  );
+}
+
+function GroupBranchView({
+  columns,
+  branch,
+  layoutByItem,
+}: {
+  columns: number;
+  branch: DashboardTreeBranch;
+  layoutByItem: ReadonlyMap<string, RowGridLayout>;
+}) {
+  const row = branch.row;
+  if (row.payload.type !== "groupHeader") return null;
+  const renderableId = `station-dashboard-group:${row.id}`;
+  const header = (
+    <GroupHeaderView
+      renderableId={semanticItemRenderableId(row.id)}
+      columns={row.payload.collapsed ? columns : groupFrameContentColumns(columns)}
+      rowId={row.id}
+      payload={row.payload}
+      cells={row.cells}
+      focusedCellId={row.focusedCellId}
+    />
+  );
+  if (row.payload.collapsed) {
+    return (
+      <box id={renderableId} flexDirection="column" width="100%">
+        {header}
       </box>
     );
   }
   return (
-    <DashboardLeaf
-      row={row}
-      layout={layoutByItem.get(row.id)}
-      groupRow={groupRow}
-    />
+    <GroupFrameView
+      renderableId={renderableId}
+      focus={{
+        focusedHeader: row.focusedCellId !== undefined,
+        containsFocusedRow: row.containsFocusedRow === true,
+      }}
+    >
+      {header}
+      {branch.children.map((child) => (
+        <DashboardBranchView
+          key={child.row.id}
+          columns={columns}
+          branch={child}
+          layoutByItem={layoutByItem}
+        />
+      ))}
+    </GroupFrameView>
   );
 }
 
 function DashboardLeaf({
   row,
   layout,
-  groupRow,
 }: {
   row: DashboardTreeRow;
   layout: RowGridLayout | undefined;
-  groupRow?: DashboardTreeRow;
 }) {
   const theme = useStationTheme();
   switch (row.payload.type) {
@@ -417,17 +465,16 @@ function DashboardLeaf({
           rowId={row.id}
           layout={layout}
           focused={row.focusedCellId === "identity"}
-          groupRow={groupRow}
         />
       );
     case "createLocalRow": {
       // Local create rows have no slot and no activation target.
       if (layout === undefined) return null;
-      const content = (
+      return (
         <box
           id={semanticItemRenderableId(row.id)}
           flexDirection="column"
-          {...(groupRow === undefined ? {} : { flexGrow: 1 })}
+          width="100%"
         >
           <text fg={toOpenTuiColor(theme.text.primary)}>
             <Segments segments={layout.segments} />
@@ -435,18 +482,6 @@ function DashboardLeaf({
           {row.payload.row.status === "failed" ? (
             <text fg={toOpenTuiColor(theme.status.danger)}>{row.payload.row.error.message}</text>
           ) : null}
-        </box>
-      );
-      if (groupRow === undefined) return content;
-      const frame = {
-        focusedHeader: groupRow.focusedCellId !== undefined,
-        containsFocusedRow: groupRow.containsFocusedRow === true,
-      };
-      return (
-        <box flexDirection="row" width="100%">
-          <GroupFrameRailView text="│" {...frame} />
-          {content}
-          <GroupFrameRailView text="│" {...frame} />
         </box>
       );
     }
@@ -460,12 +495,10 @@ function SessionRowLine({
   rowId,
   layout,
   focused,
-  groupRow,
 }: {
   rowId: DashboardRowId;
   layout: RowGridLayout;
   focused?: boolean;
-  groupRow?: DashboardTreeRow | undefined;
 }) {
   const theme = useStationTheme();
   const dispatch = useStationMouse();
@@ -476,17 +509,17 @@ function SessionRowLine({
     : focused === true
       ? { backgroundColor: toOpenTuiColor(theme.interaction.keyboardFocus) }
       : {};
-  const content = (
+  // Compact row-grid presentation is an intentional single-cell-high leaf layout.
+  return (
     <box
       id={semanticItemRenderableId(rowId)}
       flexDirection="row"
       height={1}
-      {...(groupRow === undefined ? { width: "100%" as const } : { flexGrow: 1 })}
+      width="100%"
       {...background}
     >
       <box
         flexGrow={1}
-        height={1}
         onMouseOver={() => setHover(true)}
         onMouseOut={() => setHover(false)}
       >
@@ -499,20 +532,6 @@ function SessionRowLine({
         </text>
         <SegmentLinkTargets segments={layout.segments} />
       </box>
-    </box>
-  );
-  if (groupRow === undefined) {
-    return content;
-  }
-  const frame = {
-    focusedHeader: groupRow.focusedCellId !== undefined,
-    containsFocusedRow: groupRow.containsFocusedRow === true,
-  };
-  return (
-    <box flexDirection="row" width="100%" height={1}>
-      <GroupFrameRailView text="│" {...frame} />
-      {content}
-      <GroupFrameRailView text="│" {...frame} />
     </box>
   );
 }

@@ -341,7 +341,7 @@ describe("FullscreenDashboard mouse composition", () => {
       return { row, line: lines[row] ?? "" };
     };
 
-    expect(setup.captureCharFrame()).toContain("╭ ▼ Design refresh 2 sessions");
+    expect(setup.captureCharFrame()).toContain("│ ▼ Design refresh 2 sessions");
     expect(setup.captureCharFrame()).toContain("│ [1]");
     const member = cellFor(setup.captureCharFrame(), "group-contracts");
     await actOn(async () => {

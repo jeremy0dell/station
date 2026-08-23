@@ -1,8 +1,5 @@
 import { TextAttributes, type ColorInput } from "@opentui/core";
-import {
-  textMatchSegments,
-  truncateCells,
-} from "@station/dashboard-core/selectors";
+import { textMatchSegments } from "@station/dashboard-core/selectors";
 import type {
   DashboardCellId,
   DashboardGroupHeaderPayload,
@@ -10,7 +7,6 @@ import type {
   DashboardRowId,
 } from "@station/dashboard-core/selectors";
 import { Fragment } from "react";
-import stringWidth from "string-width";
 import {
   toOpenTuiColor,
   useStationTheme,
@@ -22,7 +18,6 @@ import {
   useStationMouse,
 } from "./stationMouseContext.js";
 import { dashboardQuickSessionActionLabel } from "./dashboardHeaderActionLabels.js";
-import { GroupFrameText, type GroupFrameFocus } from "./GroupFrameView.js";
 
 const MENU_LABEL = "[▾]";
 
@@ -38,7 +33,6 @@ export function GroupHeaderView({
   payload,
   cells,
   focusedCellId,
-  containsFocusedRow,
 }: {
   renderableId?: string;
   columns: number;
@@ -46,128 +40,30 @@ export function GroupHeaderView({
   payload: DashboardGroupHeaderPayload;
   cells: readonly DashboardCellId[];
   focusedCellId?: DashboardCellId | undefined;
-  containsFocusedRow?: true | undefined;
 }) {
-  const width = Math.max(1, Math.floor(columns));
-  const actions = groupHeaderActions(cells, width);
-  const focus = {
-    focusedHeader: focusedCellId !== undefined,
-    containsFocusedRow: containsFocusedRow === true,
-  };
-  return payload.collapsed ? (
-    <CollapsedGroupHeader
-      columns={width}
-      renderableId={renderableId}
-      rowId={rowId}
-      payload={payload}
-      actions={actions}
-      focusedCellId={focusedCellId}
-    />
-  ) : (
-    <ExpandedGroupHeader
-      columns={width}
-      renderableId={renderableId}
-      rowId={rowId}
-      payload={payload}
-      actions={actions}
-      focusedCellId={focusedCellId}
-      focus={focus}
-    />
-  );
-}
-
-function ExpandedGroupHeader({
-  renderableId,
-  columns,
-  rowId,
-  payload,
-  actions,
-  focusedCellId,
-  focus,
-}: {
-  renderableId?: string;
-  columns: number;
-  rowId: DashboardRowId;
-  payload: DashboardGroupHeaderPayload;
-  actions: readonly GroupHeaderAction[];
-  focusedCellId?: DashboardCellId | undefined;
-  focus: GroupFrameFocus;
-}) {
-  const actionsWidth = groupHeaderActionsWidth(actions);
-  const minimumFillWidth = actions.length === 0 ? 1 : 0;
-  const identity = groupIdentityLayout(
-    payload,
-    Math.max(0, columns - 1 - 1 - actionsWidth - minimumFillWidth - 1),
-  );
-  const fillWidth = Math.max(
-    minimumFillWidth,
-    columns - 1 - 1 - identity.width - actionsWidth - 1,
-  );
-  return (
-    <box id={renderableId} flexDirection="row" width="100%" height={1} overflow="hidden">
-      <GroupFrameText text="╭" focus={focus} />
-      <GroupIdentityTarget
-        rowId={rowId}
-        layout={identity}
-        focused={focusedCellId === "identity"}
-        dimmed={payload.persistentFilterMatch?.matched === false}
-        persistentFilterMatch={payload.persistentFilterMatch}
-      />
-      {fillWidth > 0 ? <GroupFrameText text={"─".repeat(fillWidth)} focus={focus} /> : null}
-      {actions.map((action) => (
-        <Fragment key={action.cellId}>
-          <GroupFrameText
-            text={focusedCellId === action.cellId ? "▸" : " "}
-            focus={focus}
-          />
-          <GroupActionTarget
-            label={action.label}
-            rowId={rowId}
-            cellId={action.cellId}
-            focused={focusedCellId === action.cellId}
-            dimmed={payload.persistentFilterMatch?.matched === false}
-          />
-        </Fragment>
-      ))}
-      <GroupFrameText text="╮" focus={focus} />
-    </box>
-  );
-}
-
-function CollapsedGroupHeader({
-  renderableId,
-  columns,
-  rowId,
-  payload,
-  actions,
-  focusedCellId,
-}: {
-  renderableId?: string;
-  columns: number;
-  rowId: DashboardRowId;
-  payload: DashboardGroupHeaderPayload;
-  actions: readonly GroupHeaderAction[];
-  focusedCellId?: DashboardCellId | undefined;
-}) {
-  const identity = groupIdentityLayout(
-    payload,
-    Math.max(0, columns - 1 - 1 - groupHeaderActionsWidth(actions)),
-  );
+  const actions = groupHeaderActions(cells, Math.max(1, Math.floor(columns)));
   const dimmed = payload.persistentFilterMatch?.matched === false;
   return (
-    <box id={renderableId} flexDirection="row" width="100%" height={1} overflow="hidden">
-      <text flexShrink={0}> </text>
-      <GroupIdentityTarget
-        rowId={rowId}
-        layout={identity}
-        focused={focusedCellId === "identity"}
-        dimmed={dimmed}
-        persistentFilterMatch={payload.persistentFilterMatch}
-      />
-      <box flexGrow={1} height={1} />
+    <box
+      {...(renderableId === undefined ? {} : { id: renderableId })}
+      width="100%"
+      flexDirection="row"
+      overflow="hidden"
+      paddingLeft={payload.collapsed ? 1 : 0}
+    >
+      <box minWidth={0} flexGrow={1} flexShrink={1} flexDirection="row" overflow="hidden">
+        <GroupIdentityTarget
+          rowId={rowId}
+          payload={payload}
+          focused={focusedCellId === "identity"}
+          dimmed={dimmed}
+          persistentFilterMatch={payload.persistentFilterMatch}
+        />
+        <box flexGrow={1} />
+      </box>
       {actions.map((action) => (
         <Fragment key={action.cellId}>
-          <CollapsedGroupActionCursor
+          <GroupActionCursor
             focused={focusedCellId === action.cellId}
             dimmed={dimmed}
           />
@@ -198,20 +94,15 @@ function groupHeaderActions(
   return actions;
 }
 
-function groupHeaderActionsWidth(actions: readonly GroupHeaderAction[]): number {
-  // Every action reserves one inert cursor cell so focus cannot change width or pointer geometry.
-  return actions.reduce((width, action) => width + 1 + stringWidth(action.label), 0);
-}
-
 function GroupIdentityTarget({
   rowId,
-  layout,
+  payload,
   focused,
   dimmed,
   persistentFilterMatch,
 }: {
   rowId: DashboardRowId;
-  layout: GroupIdentityLayout;
+  payload: DashboardGroupHeaderPayload;
   focused: boolean;
   dimmed: boolean;
   persistentFilterMatch?: DashboardPersistentFilterGroupMatch | undefined;
@@ -219,9 +110,14 @@ function GroupIdentityTarget({
   const theme = useStationTheme();
   const dispatch = useStationMouse();
   const [hover, setHover] = useStationHoverState();
+  const count =
+    payload.visibleSessionCount === payload.sessionCount
+      ? `${payload.sessionCount} ${payload.sessionCount === 1 ? "session" : "sessions"}`
+      : `${payload.visibleSessionCount} visible`;
   return (
     <text
       flexShrink={0}
+      wrapMode="none"
       fg={toOpenTuiColor(theme.text.primary)}
       attributes={TextAttributes.BOLD | (dimmed ? TextAttributes.DIM : TextAttributes.NONE)}
       {...groupTargetBackground(theme, hover, focused)}
@@ -230,15 +126,13 @@ function GroupIdentityTarget({
       onMouseOut={() => setHover(false)}
     >
       {focused ? "▸" : " "}
-      {layout.prefix}
-      {textMatchSegments(layout.name, persistentFilterMatch?.labelRanges ?? []).map(
+      {payload.collapsed ? "▶ " : "▼ "}
+      {textMatchSegments(payload.group.name, persistentFilterMatch?.labelRanges ?? []).map(
         (segment, index) => (
           <GroupNameSegment key={`${index}:${segment.text}`} segment={segment} />
         ),
       )}
-      {layout.count.length > 0 ? (
-        <span fg={toOpenTuiColor(theme.text.muted)}>{` ${layout.count}`}</span>
-      ) : null}
+      <span fg={toOpenTuiColor(theme.text.muted)}>{` ${count}`}</span>
     </text>
   );
 }
@@ -292,13 +186,7 @@ function GroupActionTarget({
   );
 }
 
-function CollapsedGroupActionCursor({
-  focused,
-  dimmed,
-}: {
-  focused: boolean;
-  dimmed: boolean;
-}) {
+function GroupActionCursor({ focused, dimmed }: { focused: boolean; dimmed: boolean }) {
   const theme = useStationTheme();
   return (
     <text
@@ -309,40 +197,6 @@ function CollapsedGroupActionCursor({
       {focused ? "▸" : " "}
     </text>
   );
-}
-
-type GroupIdentityLayout = {
-  prefix: string;
-  name: string;
-  count: string;
-  width: number;
-};
-
-function groupIdentityLayout(
-  payload: DashboardGroupHeaderPayload,
-  maxWidth: number,
-): GroupIdentityLayout {
-  const prefix = `${payload.collapsed ? "▶" : "▼"} `;
-  const count =
-    payload.visibleSessionCount === payload.sessionCount
-      ? `${payload.sessionCount} ${payload.sessionCount === 1 ? "session" : "sessions"}`
-      : `${payload.visibleSessionCount} visible`;
-  for (const candidate of [count, String(payload.visibleSessionCount), ""]) {
-    const suffix = candidate.length === 0 ? "" : ` ${candidate}`;
-    const width = stringWidth(prefix) + stringWidth(payload.group.name) + stringWidth(suffix);
-    if (width <= maxWidth) {
-      return { prefix, name: payload.group.name, count: candidate, width };
-    }
-  }
-  const prefixWidth = Math.min(maxWidth, stringWidth(prefix));
-  const visiblePrefix = truncateCells(prefix, prefixWidth);
-  const visibleName = truncateCells(payload.group.name, Math.max(0, maxWidth - prefixWidth));
-  return {
-    prefix: visiblePrefix,
-    name: visibleName,
-    count: "",
-    width: stringWidth(visiblePrefix) + stringWidth(visibleName),
-  };
 }
 
 function groupTargetBackground(
