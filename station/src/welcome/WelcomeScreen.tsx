@@ -7,8 +7,6 @@ import { tweenStationColor } from "../stationButton/colors.js";
 import {
   toOpenTuiColor,
   useStationTheme,
-  type StationForegroundColor,
-  type StationTheme,
 } from "../theme/index.js";
 import { useHoverPointer } from "../useHoverPointer.js";
 
@@ -21,10 +19,9 @@ export type WelcomeScreenProps = {
 
 const OPEN_LABEL = "Open project view";
 const CONTINUE_LABEL = "Continue →";
-// Width fits the longest label so both stacked CTAs align.
-const MIN_BUTTON_WIDTH = OPEN_LABEL.length + 8;
 const SHIMMER_WIDTH = 6;
 const SHIMMER_INTERVAL_MS = 80;
+const FULL_WORDMARK_COLUMNS = 32;
 const FULL_WORDMARK = [
   "     _        _   _             ",
   " ___| |_ __ _| |_(_) ___  _ __  ",
@@ -32,81 +29,55 @@ const FULL_WORDMARK = [
   "\\__ \\ || (_| | |_| | (_) | | | |",
   "|___/\\__\\__,_|\\__|_|\\___/|_| |_|",
 ] as const;
-const COMPACT_WORDMARK = ["station"] as const;
-
-type WelcomeLine = {
-  text: string;
-  fg: StationForegroundColor;
-};
-
 export function WelcomeScreen({
   dispatchMouse,
   focused = true,
   canContinue = false,
 }: WelcomeScreenProps) {
-  const theme = useStationTheme();
   const { width, height } = useTerminalDimensions();
-  const workspaceRows = Math.max(1, height);
-  const content = welcomeLines(width, workspaceRows, theme);
-  // Two stacked CTAs (with a gap) when continuing is possible, else one.
-  const ctaRows = canContinue ? 7 : 3;
-  const gapRows = content.length > 0 && workspaceRows - content.length - ctaRows >= 1 ? 1 : 0;
-  const usedRows = content.length + gapRows + ctaRows;
-  const topPad = Math.max(0, Math.floor((workspaceRows - usedRows) / 2));
-  const buttonWidth = Math.max(MIN_BUTTON_WIDTH, Math.min(42, width - 4));
+  // Only the decorative wordmark swaps variants; actions keep the same semantic boxes.
+  const fullWordmark = width >= FULL_WORDMARK_COLUMNS + 4 && height >= 13;
 
   return (
-    <box width="100%" height="100%" flexDirection="column" alignItems="center" overflow="hidden">
-      {topPad > 0 ? <box height={topPad} /> : null}
-      {content.map((line, index) => (
-        <text key={`${index}:${line.text}`} fg={toOpenTuiColor(line.fg)}>
-          {line.text}
-        </text>
-      ))}
-      {gapRows > 0 ? <box height={gapRows} /> : null}
-      {canContinue ? (
-        <>
-          <WelcomeButton
-            width={buttonWidth}
-            label={CONTINUE_LABEL}
-            target={{ kind: "welcomeContinue" }}
-            dispatchMouse={dispatchMouse}
-            focused={focused}
-            shimmer
-          />
-          <box height={1} />
-          <WelcomeButton
-            width={buttonWidth}
-            label={OPEN_LABEL}
-            target={{ kind: "welcomeOpenProjectView" }}
-            dispatchMouse={dispatchMouse}
-            focused={false}
-            shimmer={false}
-          />
-        </>
-      ) : (
-        <WelcomeButton
-          width={buttonWidth}
-          label={OPEN_LABEL}
-          target={{ kind: "welcomeOpenProjectView" }}
+    <box
+      width="100%"
+      height="100%"
+      flexDirection="column"
+      alignItems="center"
+      justifyContent="center"
+      overflow="hidden"
+    >
+      <box
+        width="100%"
+        maxWidth={42}
+        maxHeight="100%"
+        minHeight={0}
+        flexShrink={1}
+        flexDirection="column"
+        alignItems="center"
+        overflow="hidden"
+      >
+        <WelcomeIdentity full={fullWordmark} />
+        <box height={1} flexShrink={1} />
+        <WelcomeActions
+          canContinue={canContinue}
           dispatchMouse={dispatchMouse}
           focused={focused}
-          shimmer
         />
-      )}
+      </box>
     </box>
   );
 }
 
 function WelcomeButton({
-  width,
+  id,
   label,
   target,
   dispatchMouse,
   focused,
   shimmer,
 }: {
-  width: number;
+  id: string;
   label: string;
   target: MouseTargetRef;
   dispatchMouse: (target: MouseTargetRef, event: StationMouseEvent) => boolean;
@@ -114,13 +85,12 @@ function WelcomeButton({
   shimmer: boolean;
 }) {
   const theme = useStationTheme();
-  const innerWidth = Math.max(label.length, width - 2);
-  const line = `+${"-".repeat(innerWidth)}+`;
   const [hovered, setHovered] = useState(false);
   const shimmerFrame = useShimmerFrame(shimmer && hovered);
   const pointerProps = useHoverPointer({ onHoverChange: setHovered });
   const active = focused || hovered;
   const borderFg = active ? theme.welcome.borderActive : theme.welcome.border;
+  const buttonBackground = focused ? theme.welcome.button : theme.welcome.buttonMuted;
   const onMouseDown = (event: MouseEvent): void => {
     event.stopPropagation();
     dispatchMouse(target, normalizeStationMouseEvent(event));
@@ -128,57 +98,115 @@ function WelcomeButton({
 
   return (
     <box
-      width={innerWidth + 2}
-      height={3}
+      id={id}
+      width="100%"
+      flexShrink={0}
       flexDirection="column"
+      border
+      borderColor={toOpenTuiColor(borderFg)}
+      backgroundColor={toOpenTuiColor(buttonBackground)}
       {...pointerProps}
       onMouseDown={onMouseDown}
       overflow="hidden"
     >
-      <text fg={toOpenTuiColor(borderFg)} onMouseDown={onMouseDown}>
-        {line}
-      </text>
-      <ShimmerLabel
-        text={`|${center(label, innerWidth)}|`}
-        focused={focused}
-        hovered={shimmer && hovered}
-        shimmerFrame={shimmerFrame}
-        onMouseDown={onMouseDown}
-      />
-      <text fg={toOpenTuiColor(borderFg)} onMouseDown={onMouseDown}>
-        {line}
-      </text>
+      <box
+        width="100%"
+        flexDirection="row"
+        justifyContent="center"
+        backgroundColor={toOpenTuiColor(buttonBackground)}
+      >
+        <ShimmerLabel
+          text={label}
+          focused={focused}
+          hovered={shimmer && hovered}
+          shimmerFrame={shimmerFrame}
+        />
+      </box>
     </box>
   );
 }
 
-function welcomeLines(columns: number, rows: number, theme: StationTheme): readonly WelcomeLine[] {
-  const { border, muted, wordmark, borderActive: activeBorder } = theme.welcome;
-  const canRenderFull = columns >= FULL_WORDMARK[0].length + 4 && rows >= 13;
-  if (canRenderFull) {
-    return [
-      { text: "+------------------------------+", fg: border },
-      { text: "Welcome to", fg: muted },
-      ...FULL_WORDMARK.map((text) => ({ text, fg: wordmark })),
-    ];
+function WelcomeIdentity({ full }: { full: boolean }) {
+  const theme = useStationTheme();
+  if (!full) {
+    return (
+      <box
+        width={16}
+        maxWidth="100%"
+        minHeight={0}
+        flexShrink={1}
+        flexDirection="column"
+        alignItems="center"
+        overflow="hidden"
+        border={["bottom"]}
+        borderColor={toOpenTuiColor(theme.welcome.borderActive)}
+      >
+        <text fg={toOpenTuiColor(theme.welcome.muted)}>Welcome to</text>
+        <text fg={toOpenTuiColor(theme.welcome.wordmark)}>station</text>
+      </box>
+    );
   }
-  if (rows >= 7) {
-    return [
-      { text: "Welcome to", fg: muted },
-      ...COMPACT_WORDMARK.map((text) => ({ text, fg: wordmark })),
-      { text: "----------------", fg: activeBorder },
-    ];
-  }
-  if (rows >= 5) {
-    return [
-      { text: "Welcome to", fg: muted },
-      ...COMPACT_WORDMARK.map((text) => ({ text, fg: wordmark })),
-    ];
-  }
-  if (rows >= 4) {
-    return COMPACT_WORDMARK.map((text) => ({ text, fg: wordmark }));
-  }
-  return [];
+  return (
+    <box
+      width={FULL_WORDMARK_COLUMNS}
+      maxWidth="100%"
+      minHeight={0}
+      flexShrink={1}
+      flexDirection="column"
+      alignItems="center"
+      overflow="hidden"
+      border={["top"]}
+      borderColor={toOpenTuiColor(theme.welcome.border)}
+    >
+      <text fg={toOpenTuiColor(theme.welcome.muted)}>Welcome to</text>
+      {FULL_WORDMARK.map((text) => (
+        <text key={text} fg={toOpenTuiColor(theme.welcome.wordmark)}>
+          {text}
+        </text>
+      ))}
+    </box>
+  );
+}
+
+function WelcomeActions({
+  canContinue,
+  dispatchMouse,
+  focused,
+}: {
+  canContinue: boolean;
+  dispatchMouse: (target: MouseTargetRef, event: StationMouseEvent) => boolean;
+  focused: boolean;
+}) {
+  return (
+    <box
+      width="100%"
+      flexShrink={canContinue ? 1 : 0}
+      flexDirection="column"
+      overflow="hidden"
+    >
+      {canContinue ? (
+        <>
+          <WelcomeButton
+            id="station-welcome-continue"
+            label={CONTINUE_LABEL}
+            target={{ kind: "welcomeContinue" }}
+            dispatchMouse={dispatchMouse}
+            focused={focused}
+            shimmer
+          />
+          <box height={1} flexShrink={1} />
+        </>
+      ) : null}
+      <WelcomeButton
+        id="station-welcome-open"
+        label={OPEN_LABEL}
+        target={{ kind: "welcomeOpenProjectView" }}
+        dispatchMouse={dispatchMouse}
+        focused={!canContinue && focused}
+        shimmer={!canContinue}
+      />
+    </box>
+  );
 }
 
 function ShimmerLabel({
@@ -186,21 +214,19 @@ function ShimmerLabel({
   focused,
   hovered,
   shimmerFrame,
-  onMouseDown,
 }: {
   text: string;
   focused: boolean;
   hovered: boolean;
   shimmerFrame: number;
-  onMouseDown: (event: MouseEvent) => void;
 }): ReactNode {
   const theme = useStationTheme();
-  const shimmerCenter = 1 + (shimmerFrame % Math.max(1, text.length - 2));
+  const characters = Array.from(text);
+  const shimmerCenter = shimmerFrame % Math.max(1, characters.length);
   return (
-    <box flexDirection="row" height={1}>
-      {Array.from(text, (char, index) => {
-        const border = index === 0 || index === text.length - 1;
-        const intensity = hovered && !border ? shimmerIntensity(index, shimmerCenter) : 0;
+    <box flexDirection="row">
+      {characters.map((char, index) => {
+        const intensity = hovered ? shimmerIntensity(index, shimmerCenter) : 0;
         const baseBg = focused ? theme.welcome.button : theme.welcome.buttonMuted;
         const bg =
           intensity > 0
@@ -213,12 +239,7 @@ function ShimmerLabel({
               ? theme.welcome.wordmark
               : theme.welcome.muted;
         return (
-          <text
-            key={index}
-            fg={toOpenTuiColor(fg)}
-            bg={toOpenTuiColor(bg)}
-            onMouseDown={onMouseDown}
-          >
+          <text key={index} fg={toOpenTuiColor(fg)} bg={toOpenTuiColor(bg)}>
             {char}
           </text>
         );
@@ -256,11 +277,4 @@ function shimmerIntensity(index: number, center: number): number {
   }
   const t = 1 - distance / SHIMMER_WIDTH;
   return t * t * (3 - 2 * t);
-}
-
-function center(text: string, width: number): string {
-  const available = Math.max(0, width - text.length);
-  const left = Math.floor(available / 2);
-  const right = available - left;
-  return `${" ".repeat(left)}${text}${" ".repeat(right)}`;
 }

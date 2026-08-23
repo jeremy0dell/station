@@ -349,9 +349,9 @@ describe("Station app composition", () => {
     expect(initialFrame).not.toContain("terminal starting shell");
     const ctaRows = buttonRows(initialFrame);
     expect(ctaRows).toHaveLength(3);
-    expect(ctaRows[0]?.trim()).toMatch(/^\+-+\+$/);
+    expect(ctaRows[0]?.trim()).toMatch(/^┌─+┐$/);
     expect(ctaRows[1]).toContain("Open project view");
-    expect(ctaRows[2]?.trim()).toMatch(/^\+-+\+$/);
+    expect(ctaRows[2]?.trim()).toMatch(/^└─+┘$/);
 
     station.composition.stationInput.dispatchMouse({ kind: "welcomeOpenProjectView" }, LEFT_DOWN);
     await waitFor(() => overlayVisible(station));

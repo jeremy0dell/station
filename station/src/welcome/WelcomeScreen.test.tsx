@@ -73,6 +73,26 @@ describe("WelcomeScreen", () => {
     }
   });
 
+  it("keeps the primary CTA inside a minimum-height canvas as one structural box", async () => {
+    const setup = await testRender(
+      <StationThemeProvider theme={nativeStationTheme}>
+        <WelcomeScreen dispatchMouse={() => true} />
+      </StationThemeProvider>,
+      { width: 20, height: 3 },
+    );
+    await setup.flush();
+    try {
+      const button = setup.renderer.root.findDescendantById("station-welcome-open");
+      expect(button).toBeDefined();
+      expect(button?.width).toBeLessThanOrEqual(20);
+      expect(button?.height).toBe(3);
+      expect(setup.captureCharFrame()).toContain("Open project view");
+      expect(setup.captureCharFrame()).not.toContain("+----------------");
+    } finally {
+      setup.renderer.destroy();
+    }
+  });
+
   it("paints a shimmer band on CTA hover", async () => {
     const setup = await renderWelcomeScreen();
     try {
