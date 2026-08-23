@@ -28,4 +28,21 @@ describe("semantic scroll viewport", () => {
     expect(semanticRevealDelta({ top: 8, bottom: 11 }, { top: 10, bottom: 12 })).toBe(1);
     expect(semanticRevealDelta({ top: 8, bottom: 11 }, { top: 9, bottom: 15 })).toBe(0);
   });
+
+  it("relaxes a followed edge when the measured viewport grows", () => {
+    const item = { top: 2, bottom: 3 };
+
+    expect(semanticRevealDelta({ top: 0, bottom: 4 }, item)).toBe(0);
+    expect(semanticRevealDelta({ top: 0, bottom: 4 }, item, "end")).toBe(-1);
+  });
+
+  it("keeps the followed edge stable when content above it changes height", () => {
+    expect(
+      semanticRevealDelta(
+        { top: 0, bottom: 4 },
+        { top: 5, bottom: 6 },
+        "end",
+      ),
+    ).toBe(2);
+  });
 });

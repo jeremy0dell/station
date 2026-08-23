@@ -22,6 +22,7 @@ export function intersectingSemanticItems<ItemId extends string>(
 export function semanticRevealDelta(
   viewport: { readonly top: number; readonly bottom: number },
   item: { readonly top: number; readonly bottom: number },
+  alignment: "nearest" | "start" | "end" = "nearest",
 ): number {
   const itemHeight = item.bottom - item.top;
   const viewportHeight = viewport.bottom - viewport.top;
@@ -30,6 +31,8 @@ export function semanticRevealDelta(
       ? 0
       : item.top - viewport.top;
   }
+  if (alignment === "start") return item.top - viewport.top;
+  if (alignment === "end") return item.bottom - viewport.bottom;
   if (item.top < viewport.top) return item.top - viewport.top;
   if (item.bottom > viewport.bottom) return item.bottom - viewport.bottom;
   return 0;
@@ -64,6 +67,7 @@ export function createScrollViewportController<
   let orderedIds: readonly ItemId[] = [];
   let visibleIds: readonly ItemId[] | undefined;
   let followedId: ItemId | undefined;
+  let followAlignment: "start" | "end" | undefined;
   let reflowQueued = false;
   const listeners = new Set<() => void>();
 
@@ -93,11 +97,25 @@ export function createScrollViewportController<
     if (item === undefined) return;
     const viewportTop = viewport.viewport.y;
     const viewportBottom = viewportTop + viewport.viewport.height;
+    if (followAlignment !== undefined) {
+      const anchoredDelta = semanticRevealDelta(
+        { top: viewportTop, bottom: viewportBottom },
+        item,
+        followAlignment,
+      );
+      if (anchoredDelta < 0 && viewport.scrollTop <= 0) {
+        followAlignment = undefined;
+        return;
+      }
+      if (anchoredDelta !== 0) viewport.scrollBy(anchoredDelta);
+      return;
+    }
     const delta = semanticRevealDelta(
       { top: viewportTop, bottom: viewportBottom },
       item,
     );
     if (delta === 0) return;
+    followAlignment = delta < 0 ? "start" : "end";
     viewport.scrollBy(delta);
   };
   const reflow = (): void => {
@@ -130,27 +148,34 @@ export function createScrollViewportController<
       layoutOwner = undefined;
       viewport = undefined;
       orderedIds = [];
+      followAlignment = undefined;
       if (visibleIds === undefined) return;
       visibleIds = undefined;
       for (const listener of listeners) listener();
     },
     reflow,
-    synchronize,
+    synchronize: (): void => {
+      followAlignment = undefined;
+      synchronize();
+    },
     subscribe: (listener): (() => void) => {
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
     snapshot: () => visibleIds,
     scrollBy: (cells): void => {
+      followAlignment = undefined;
       viewport?.scrollBy(cells);
       synchronize();
     },
     scrollPage: (direction): void => {
+      followAlignment = undefined;
       const page = Math.max(1, (viewport?.viewport.height ?? 1) - 1);
       viewport?.scrollBy(direction * page);
       synchronize();
     },
     follow: (itemId): void => {
+      if (itemId !== followedId) followAlignment = undefined;
       followedId = itemId;
       if (itemId === undefined) return;
       revealFollowedItem();
