@@ -207,7 +207,17 @@ export const HostResizeParamsSchema = HostAttachmentCapabilitySchema.extend({
   rows: z.number().int(),
 }).strict();
 export const HostOkResultSchema = z.object({ ok: z.literal(true) }).strict();
-/** Live inventory entry whose reference and immutable identity derive from one table entry. */
+export const HostPtyHandoffSupportSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("bridge-releasable") }).strict(),
+  z
+    .object({
+      kind: z.literal("non-releasable"),
+      reason: z.enum(["no-bridge-transport", "orphan-mode-disabled", "release-unsupported"]),
+    })
+    .strict(),
+]);
+export type HostPtyHandoffSupport = z.infer<typeof HostPtyHandoffSupportSchema>;
+/** Protocol-v8 live inventory entry; keep this response byte-compatible for older strict clients. */
 export const HostListEntrySchema = HostPtyWireIdentitySchema.extend({
   ptyId: idSchema,
   ptyInstanceId: PtyInstanceIdSchema,
@@ -219,6 +229,20 @@ export const HostListEntrySchema = HostPtyWireIdentitySchema.extend({
 export type HostListEntry = z.infer<typeof HostListEntrySchema>;
 
 export const HostListResultSchema = z.object({ ptys: z.array(HostListEntrySchema) }).strict();
+
+/** Exact read-only recovery evidence exposed separately so protocol-v8 `host.list` never changes. */
+export const HostRecoveryInventoryEntrySchema = HostListEntrySchema.extend({
+  handoffSupport: HostPtyHandoffSupportSchema,
+}).strict();
+export type HostRecoveryInventoryEntry = z.infer<typeof HostRecoveryInventoryEntrySchema>;
+
+export const HostRecoveryInventoryResultSchema = z
+  .object({
+    buildIdentity: idSchema,
+    ptys: z.array(HostRecoveryInventoryEntrySchema),
+  })
+  .strict();
+export type HostRecoveryInventoryResult = z.infer<typeof HostRecoveryInventoryResultSchema>;
 export const HostFocusParamsSchema = z.object({ ptyId: idSchema }).strict();
 export const HostCloseParamsSchema = z
   .object({ ptyId: idSchema, confirm: z.literal(true) })

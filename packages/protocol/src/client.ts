@@ -121,6 +121,8 @@ export function createObserverClient(options: CreateObserverClientOptions): Obse
       requestProtocolMethod(options, requestId(), "session.recoveryReadiness"),
     getSessionRecoveryInventory: async () =>
       requestProtocolMethod(options, requestId(), "session.recoveryInventory"),
+    getSessionRecoveryAssessment: async () =>
+      requestProtocolMethod(options, requestId(), "session.recoveryAssessment"),
     dispatch: async (command: StationCommand) =>
       requestProtocolMethod(options, requestId(), "command.dispatch", { command }),
     getCommand: async (commandId: CommandId) => {

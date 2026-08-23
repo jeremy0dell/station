@@ -4,6 +4,8 @@ import {
   HostAttachAckSchema,
   HostClientShutdownNotificationSchema,
   HostFrameSchema,
+  type HostListEntry,
+  type HostRecoveryInventoryEntry,
   HostRequestSchema,
   HostResizeParamsSchema,
   HostWriteParamsSchema,
@@ -61,6 +63,9 @@ function startFakeRouter(
     onRequest?: (method: string) => void;
     onClient?: (client: NonNullable<ReturnType<typeof HostRequestSchema.parse>["client"]>) => void;
     onShutdown?: () => void;
+    listPtys?: HostListEntry[];
+    recoveryPtys?: HostRecoveryInventoryEntry[];
+    buildIdentity?: string;
   } = {},
 ): void {
   void runFakeRouter(server, options);
@@ -73,6 +78,9 @@ async function runFakeRouter(
     onRequest?: (method: string) => void;
     onClient?: (client: NonNullable<ReturnType<typeof HostRequestSchema.parse>["client"]>) => void;
     onShutdown?: () => void;
+    listPtys?: HostListEntry[];
+    recoveryPtys?: HostRecoveryInventoryEntry[];
+    buildIdentity?: string;
   },
 ): Promise<void> {
   for await (const message of server.messages()) {
@@ -141,7 +149,15 @@ async function runFakeRouter(
         server.send(hostSuccess(request.id, { ...PTY_REF, pid: 4242 }));
         break;
       case "host.list":
-        server.send(hostSuccess(request.id, { ptys: [] }));
+        server.send(hostSuccess(request.id, { ptys: options.listPtys ?? [] }));
+        break;
+      case "host.recoveryInventory":
+        server.send(
+          hostSuccess(request.id, {
+            buildIdentity: options.buildIdentity ?? "test-build-identity",
+            ptys: options.recoveryPtys ?? [],
+          }),
+        );
         break;
       case "host.explode":
         server.send(
@@ -323,6 +339,66 @@ describe("createStationHostClient", () => {
       }),
     ).resolves.toEqual({ ...PTY_REF, pid: 4242 });
     await expect(client.list()).resolves.toEqual([]);
+    client.dispose();
+  });
+
+  it("parses read-only Host handoff support evidence", async () => {
+    const pty: HostRecoveryInventoryEntry = {
+      kind: "agent",
+      terminalTargetId: "target-1",
+      worktreeId: "wt-1",
+      projectId: "project-1",
+      sessionId: "session-1",
+      worktreePath: "/repo/wt-1",
+      harnessProvider: "claude",
+      ptyId: "pty-1",
+      ptyInstanceId: "pty-instance-1",
+      pid: 4242,
+      alive: true,
+      cols: 80,
+      rows: 24,
+      handoffSupport: { kind: "bridge-releasable" },
+    };
+    const { client: clientConn, server } = inMemoryNdjsonConnectionPair();
+    startFakeRouter(server, {
+      listPtys: [
+        {
+          kind: pty.kind,
+          terminalTargetId: pty.terminalTargetId,
+          worktreeId: pty.worktreeId,
+          projectId: pty.projectId,
+          sessionId: pty.sessionId,
+          worktreePath: pty.worktreePath,
+          harnessProvider: pty.harnessProvider,
+          ptyId: pty.ptyId,
+          ptyInstanceId: pty.ptyInstanceId,
+          pid: pty.pid,
+          alive: pty.alive,
+          cols: pty.cols,
+          rows: pty.rows,
+        },
+      ],
+      recoveryPtys: [pty],
+      buildIdentity: "1.0.0+station.host.revision-a",
+    });
+    const client = createStationHostClient({
+      socketPath: "unused",
+      expectedBuildVersion: "test-build",
+      connect: async () => clientConn,
+    });
+    const listed = await client.list();
+    expect(listed).toMatchObject([{ ptyId: "pty-1", ptyInstanceId: "pty-instance-1" }]);
+    expect(listed[0]).not.toHaveProperty("handoffSupport");
+    await expect(client.recoveryInventory?.()).resolves.toMatchObject({
+      buildIdentity: "1.0.0+station.host.revision-a",
+      ptys: [
+        {
+          ptyId: "pty-1",
+          ptyInstanceId: "pty-instance-1",
+          handoffSupport: { kind: "bridge-releasable" },
+        },
+      ],
+    });
     client.dispose();
   });
 

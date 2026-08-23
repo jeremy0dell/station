@@ -7,6 +7,10 @@ import { describe, expect, it, vi } from "vitest";
 import { createTempState } from "../../../../tests/support/temp-projects";
 import { runUpdateCommand } from "../../src/commands/update.js";
 import { selectUpdateChannel, type UpdateChannelProbe } from "../../src/update/channelDetection.js";
+import {
+  runUpdateRecoveryPreflight,
+  type UpdateRecoveryPreflightPorts,
+} from "../../src/update/recoveryPreflight.js";
 import type {
   UpdateApplyReportBase,
   UpdateChannelId,
@@ -25,6 +29,91 @@ const testBuildInfo = () => ({
 const higherObserverBuildVersion = `2.0.0+station.${"b".repeat(64)}`;
 
 describe("stn update command", () => {
+  it("rejects non-dry-run --reap before update detection or mutation", async () => {
+    const detectAndPlan = vi.fn();
+
+    await expect(
+      runUpdateCommand(["--reap"], commandOptions(), {
+        probes: [{ channel: "installer-binary", detectAndPlan }],
+      }),
+    ).rejects.toThrow("Use --dry-run --reap");
+    expect(detectAndPlan).not.toHaveBeenCalled();
+  });
+
+  it("emits report v3 with aggregate recovery facts without applying or crossing runtimes", async () => {
+    const fixture = probeFixture("installer-binary");
+    const recovery = recoveryPreflightFixture();
+    const commandRunner = vi.fn();
+
+    const result = await runUpdateCommand(
+      ["--dry-run", "--reap", "--no-handoff", "--json"],
+      commandOptions(),
+      {
+        probes: [fixture.probe],
+        commandRunner,
+        buildInfo: testBuildInfo,
+        recoveryPreflight: recovery.run,
+      },
+    );
+
+    expect(result).toMatchObject({
+      code: 0,
+      output: {
+        schemaVersion: 3,
+        status: "planned",
+        recoveryPreflight: {
+          boundary: {
+            authorization: "none",
+            actions: "not-included",
+            digest: "not-included",
+          },
+          hooks: [{ provider: "codex", status: "needs-repair" }],
+          terminalDispositions: [
+            {
+              terminalTargetId: "terminal-a",
+              handoff: "non-preservable",
+              reapRecovery: "non-resumable",
+              reasons: ["session_non_resumable"],
+            },
+          ],
+          evidenceComplete: true,
+        },
+      },
+    });
+    expect(recovery.inspectObserver).toHaveBeenCalledOnce();
+    expect(recovery.inspectHost).toHaveBeenCalledOnce();
+    expect(recovery.readHookHealth).toHaveBeenCalledOnce();
+    expect(fixture.apply).not.toHaveBeenCalled();
+    expect(commandRunner).not.toHaveBeenCalled();
+    const serialized = JSON.stringify(result.output);
+    expect(serialized).not.toContain("selectedHandleId");
+    expect(serialized).not.toContain("recoveryHandles");
+  });
+
+  it("keeps a current-build dry-run reap non-mutating and textually unmistakable", async () => {
+    const fixture = probeFixture("installer-binary", { planStatus: "current" });
+    const recovery = recoveryPreflightFixture();
+    const commandRunner = vi.fn();
+
+    const result = await runUpdateCommand(
+      ["--dry-run", "--reap", "--no-handoff"],
+      commandOptions(),
+      {
+        probes: [fixture.probe],
+        commandRunner,
+        buildInfo: testBuildInfo,
+        recoveryPreflight: recovery.run,
+      },
+    );
+
+    expect(result).toMatchObject({ code: 0, outputFormat: "text" });
+    expect(result.output).toContain("reapRecovery=NON-RESUMABLE");
+    expect(result.output).toContain("actions: not included (#640)");
+    expect(result.output).toContain("digest: not included (#640)");
+    expect(fixture.apply).not.toHaveBeenCalled();
+    expect(commandRunner).not.toHaveBeenCalled();
+  });
+
   it("converges an already-current installation without misreporting a higher accepted Observer", async () => {
     const fixture = probeFixture("installer-binary", { planStatus: "current" });
     const liveHost = await createLiveHostFixture();
@@ -50,7 +139,7 @@ describe("stn update command", () => {
       expect(result).toEqual({
         code: 0,
         output: {
-          schemaVersion: 2,
+          schemaVersion: 3,
           channel: "installer-binary",
           status: "current",
           current: { version: "1.0.0" },
@@ -131,7 +220,7 @@ describe("stn update command", () => {
       expect(result).toMatchObject({
         code: 0,
         output: {
-          schemaVersion: 2,
+          schemaVersion: 3,
           status: "current",
           steps: [
             { id: "detect", status: "completed" },
@@ -207,7 +296,7 @@ describe("stn update command", () => {
 
     expect(result.code).toBe(0);
     expect(result.output).toMatchObject({
-      schemaVersion: 2,
+      schemaVersion: 3,
       channel: "installer-binary",
       status: "planned",
       current: { version: "1.0.0" },
@@ -416,7 +505,7 @@ describe("stn update command", () => {
     expect(result).toMatchObject({
       code: 1,
       output: {
-        schemaVersion: 2,
+        schemaVersion: 3,
         status: "failed",
         hookReconciliation: {
           status: "post-write-doctor-failed",
@@ -891,6 +980,75 @@ function commandOptions() {
 
 function liveHostCommandOptions(config: StationConfig) {
   return { config, configPath: "/tmp/config.toml", cliEntryPath: "/repo/apps/cli/dist/main.js" };
+}
+
+function recoveryPreflightFixture() {
+  const inspectObserver = vi.fn(async () => ({
+    status: "exact" as const,
+    buildVersion: "1.0.0+station.observer",
+    relation: "different" as const,
+    health: "healthy" as const,
+    recovery: {
+      status: "assessed" as const,
+      assessment: {
+        schemaVersion: 1 as const,
+        resumeEnabled: true,
+        providerCapabilities: [{ provider: "codex", status: "enabled" as const }],
+        sessions: [
+          {
+            sessionId: "session-a",
+            projectId: "project-a",
+            worktreeId: "worktree-a",
+            lifecycle: "open" as const,
+            harnessProvider: "codex",
+            disposition: "non-resumable" as const,
+            reasons: ["no_recovery_handles" as const],
+            handleResolution: {
+              kind: "none" as const,
+              eligibleHandleCount: 0 as const,
+              rejectedHandleCount: 0,
+              reasons: ["no_recovery_handles" as const],
+            },
+          },
+        ],
+      },
+    },
+  }));
+  const inspectHost = vi.fn(async () => ({
+    status: "inspected" as const,
+    buildVersion: "1.0.0+station.host",
+    protocolVersion: HOST_PROTOCOL_VERSION,
+    relation: "different" as const,
+    compatibility: "replace" as const,
+    terminals: [
+      {
+        kind: "agent" as const,
+        terminalTargetId: "terminal-a",
+        ptyId: "pty-a",
+        ptyInstanceId: "pty-instance-a",
+        projectId: "project-a",
+        worktreeId: "worktree-a",
+        sessionId: "session-a",
+        harnessProvider: "codex",
+        alive: true,
+        handoffSupport: "non-releasable" as const,
+      },
+    ],
+  }));
+  const readHookHealth = vi.fn(async () => ({
+    provider: "codex",
+    status: "needs-repair" as const,
+    reason: "owned-drift" as const,
+  }));
+  const ports: UpdateRecoveryPreflightPorts = {
+    inspectObserver,
+    inspectHost,
+    readHookHealth,
+    hookProviderIds: ["codex"],
+  };
+  const run = (input: Omit<Parameters<typeof runUpdateRecoveryPreflight>[0], "ports">) =>
+    runUpdateRecoveryPreflight({ ...input, ports });
+  return { run, inspectObserver, inspectHost, readHookHealth };
 }
 
 function probeFixture(

@@ -44,9 +44,55 @@ describe("registered stn update command", () => {
     expect(result).toMatchObject({
       code: 0,
       output: {
-        schemaVersion: 2,
+        schemaVersion: 3,
         channel: "installer-binary",
         status: "planned",
+      },
+    });
+    expect(apply).not.toHaveBeenCalled();
+
+    const reapResult = await runCli(
+      ["--config", configPath, "update", "--dry-run", "--reap", "--no-handoff", "--json"],
+      {
+        updateDeps: {
+          probes: [probe],
+          buildInfo: () => ({
+            compiled: false,
+            version: "1.0.0",
+            buildIdentity: "a".repeat(64),
+          }),
+          recoveryPreflight: async ({ installed, target }) => ({
+            schemaVersion: 1,
+            boundary: {
+              authorization: "none",
+              actions: "not-included",
+              digest: "not-included",
+            },
+            installed,
+            target,
+            observer: { status: "absent" },
+            host: { status: "absent" },
+            hooks: [],
+            terminalDispositions: [],
+            evidenceComplete: false,
+          }),
+        },
+      },
+    );
+    expect(reapResult).toMatchObject({
+      code: 0,
+      output: {
+        schemaVersion: 3,
+        recoveryPreflight: {
+          boundary: {
+            authorization: "none",
+            actions: "not-included",
+            digest: "not-included",
+          },
+          observer: { status: "absent" },
+          host: { status: "absent" },
+          evidenceComplete: false,
+        },
       },
     });
     expect(apply).not.toHaveBeenCalled();
@@ -56,6 +102,7 @@ describe("registered stn update command", () => {
     const result = await runCli(["--config", "/missing/config.toml", "update", "--help"]);
     expect(result).toMatchObject({ code: 0, outputFormat: "text" });
     expect(result.output).toContain("--drive-package-manager");
+    expect(result.output).toContain("--reap");
     expect(result.output).toContain("--handoff[=processes|screen]");
     expect(result.output).toContain("--no-handoff");
   });
