@@ -871,6 +871,63 @@ describe("stn update convergence", () => {
     });
   });
 
+  it.each([
+    { label: "exit 2", exitCode: 2 },
+    { label: "signal-like exit 143", exitCode: 143 },
+  ])("rejects hook failure JSON returned with $label", async ({ exitCode }) => {
+    const fixture = probe("current");
+    const evidence = preflight("1.0.0", "1.0.0", {
+      observer: matchingObserver(identityA),
+      host: matchingHost(identityA),
+      hookProviderIds: ["codex"],
+      hooks: [{ provider: "codex", status: "needs-repair", reason: "owned-drift" }],
+    });
+    const result = await runUpdateCommand(["--json"], options(), {
+      probes: [fixture.probe],
+      buildInfo: build(identityA, "1.0.0"),
+      convergenceInspection: inspection(evidence),
+      commandRunner: async (input) =>
+        input.args?.includes("hooks")
+          ? externalResult(
+              input,
+              JSON.stringify({
+                provider: "codex",
+                status: "write-failed",
+                changed: false,
+                verified: false,
+                error: sensitiveSafeError("HOOK_CHILD_FAILURE", "typed hook failure"),
+                followUp: { action: "retry" },
+              }),
+              exitCode,
+            )
+          : commandResult(input),
+    });
+    const report = reportFrom(result);
+
+    expect(result.code).toBe(1);
+    expect(report).toMatchObject({
+      status: "failed",
+      result: {
+        kind: "execution-failed",
+        stage: "hook-reconciliation",
+        actionAudits: [
+          {
+            actions: [
+              {
+                phase: "hook-reconciliation",
+                action: "reconcile",
+                status: "failed",
+                provider: "codex",
+              },
+            ],
+          },
+        ],
+      },
+    });
+    if (report.result.kind !== "execution-failed") throw new Error("expected failed result");
+    expect(report.result.actionAudits[0]?.actions[0]).not.toHaveProperty("hookResult");
+  });
+
   it("renders a hostile hook child failure without emitting terminal controls", async () => {
     const fixture = probe("current");
     const sensitive = `hook failed${hostileControls()}forged hook line`;
@@ -1138,6 +1195,45 @@ describe("stn update convergence", () => {
     expect(report).toMatchObject({
       status: "failed",
       result: { kind: "execution-failed", stage: "observer-convergence" },
+    });
+    expect(report).not.toHaveProperty("cause");
+    expect(report).not.toHaveProperty("startupEvidence");
+  });
+
+  it.each([
+    { label: "exit 2", exitCode: 2 },
+    { label: "signal-like exit 143", exitCode: 143 },
+  ])("rejects Observer failure JSON returned with $label", async ({ exitCode }) => {
+    const fixture = probe("current");
+    const result = await runUpdateCommand(["--json"], options(), {
+      probes: [fixture.probe],
+      buildInfo: build(identityA, "1.0.0"),
+      convergenceInspection: inspection(preflight("1.0.0", "1.0.0")),
+      commandRunner: async (input) =>
+        input.args?.includes("observer")
+          ? { ...observerFailureResult(input, "typed-observer-failure"), exitCode }
+          : commandResult(input),
+    });
+    const report = reportFrom(result);
+
+    expect(result.code).toBe(1);
+    expect(report).toMatchObject({
+      status: "failed",
+      result: {
+        kind: "execution-failed",
+        stage: "observer-convergence",
+        actionAudits: [
+          {
+            actions: [
+              {
+                phase: "observer-convergence",
+                action: "start",
+                status: "failed",
+              },
+            ],
+          },
+        ],
+      },
     });
     expect(report).not.toHaveProperty("cause");
     expect(report).not.toHaveProperty("startupEvidence");

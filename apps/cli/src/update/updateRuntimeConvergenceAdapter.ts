@@ -76,9 +76,11 @@ async function runHookReconciliation(
   const parsed = sanitizePublicHookResult(
     ProviderHookReconciliationResultSchema.parse(JSON.parse(result.stdout)),
   );
-  if ((result.exitCode === 0) !== providerHookReconciliationSucceeded(parsed)) {
-    throw new Error("Hook reconciliation contradicted its process exit status.");
-  }
+  typedChildDisposition(
+    result.exitCode,
+    providerHookReconciliationSucceeded(parsed),
+    "Hook reconciliation",
+  );
   return parsed;
 }
 
@@ -109,14 +111,30 @@ async function runObserverMutation(
     runner,
   );
   const parsed = ObserverRestartCommandResultSchema.parse(JSON.parse(result.stdout));
-  if (result.exitCode === 0 && parsed.status === "running") return undefined;
-  if (result.exitCode !== 0 && parsed.status !== "running") {
+  const disposition = typedChildDisposition(
+    result.exitCode,
+    parsed.status === "running",
+    "Observer convergence",
+  );
+  if (disposition === "success") return undefined;
+  if (parsed.status !== "running") {
     const failure: ObserverLifecycleFailure = { error: parsed.error };
     if (parsed.cause !== undefined) failure.cause = parsed.cause;
     if (parsed.startupEvidence !== undefined) failure.startupEvidence = parsed.startupEvidence;
     return sanitizePublicObserverLifecycleFailure(ObserverLifecycleFailureSchema.parse(failure));
   }
   throw new Error("Observer convergence result contradicted its process exit status.");
+}
+
+function typedChildDisposition(
+  exitCode: number,
+  declaredSuccess: boolean,
+  boundary: "Hook reconciliation" | "Observer convergence",
+): "success" | "failure" {
+  // Injected runners return directly, so the typed trust boundary must enforce process semantics.
+  if (exitCode === 0 && declaredSuccess) return "success";
+  if (exitCode === 1 && !declaredSuccess) return "failure";
+  throw new Error(`${boundary} contradicted its exact process exit status.`);
 }
 
 function stationCommand(
