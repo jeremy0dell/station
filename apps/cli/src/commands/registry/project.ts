@@ -17,13 +17,13 @@ export const projectCliCommand: CliCommandNode = {
     "stn project remove <projectId> [options]",
     "stn project doctor <projectId>",
   ],
-  examples: ["pnpm stn project list", "pnpm stn project add --man"],
+  examples: ["stn project list", "stn project add --man"],
   children: [
     {
       name: "list",
       description: "List configured projects.",
       usage: ["stn project list"],
-      examples: ["pnpm stn project list"],
+      examples: ["stn project list"],
       notes: ["The command reads config when run normally but does not start the observer."],
     },
     {
@@ -44,10 +44,7 @@ export const projectCliCommand: CliCommandNode = {
           description: "Override command dispatch and wait timeout.",
         },
       ],
-      examples: [
-        'pnpm stn project add "$PWD" --label "$(basename "$PWD")"',
-        "pnpm stn project add --man",
-      ],
+      examples: ['stn project add "$PWD" --label "$(basename "$PWD")"', "stn project add --man"],
       notes: [
         "The normal command dispatches through the observer and waits for completion.",
         "Use --man to inspect this guidance without loading config or contacting the observer.",
@@ -63,13 +60,13 @@ export const projectCliCommand: CliCommandNode = {
           description: "Override command dispatch and wait timeout.",
         },
       ],
-      notes: ["Use a project id returned by `pnpm stn project list`."],
+      notes: ["Use a project id returned by `stn project list`."],
     },
     {
       name: "doctor",
       description: "Inspect one configured project root.",
       usage: ["stn project doctor <projectId>"],
-      notes: ["Use a project id returned by `pnpm stn project list`."],
+      notes: ["Use a project id returned by `stn project list`."],
     },
   ],
 };

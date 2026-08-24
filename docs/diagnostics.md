@@ -43,7 +43,7 @@ Setup and hook checks:
 ```bash
 stn setup check --json
 stn setup system --check
-pnpm setup:system:check
+bun run setup:system:check
 stn hooks doctor worktrunk
 stn hooks doctor claude
 stn hooks doctor codex
@@ -141,7 +141,7 @@ submits a command and can change runtime state.
 `stn debug bundle` asks the observer for a diagnostic snapshot, then writes a redacted bundle under the configured state directory. If the config cannot be loaded, it writes a local invalid-config bundle next to the failing config instead of contacting the observer.
 
 `stn setup check --json`, `stn setup system --check`, and
-`pnpm setup:system:check` report local tool readiness. They are read-only.
+`bun run setup:system:check` report local tool readiness. They are read-only.
 
 Provider hooks are diagnosed as delivery hints, not runtime truth. `stn-ingress` assigns stable event ids, tries bounded delivery to the observer, uses the standard CLI Observer lifecycle for bounded auto-start when enabled, and writes a spool record only when startup or delivery fails. Harness reports are accepted into an observer-owned ingress queue before slower persistence, projection, and reconcile work. Queue depth, coalescing, drop/failure counts, and last spool-drain stats appear in observer health and diagnostic snapshots. Hook delivery decisions are written to `logs/hooks.jsonl`; hook payload attributes are redacted before they appear in logs or debug bundles.
 
@@ -399,7 +399,7 @@ explicit `--yes`.
 Real Worktrunk E2E coverage is opt-in:
 
 ```bash
-STATION_REAL_WORKTRUNK=1 STATION_WORKTRUNK_BIN="$(command -v wt)" pnpm test:e2e:worktrunk:real
+STATION_REAL_WORKTRUNK=1 STATION_WORKTRUNK_BIN="$(command -v wt)" bun run test:e2e:worktrunk:real
 ```
 
 Default test commands skip this lane because it requires a local external `wt` binary and isolated Worktrunk state.

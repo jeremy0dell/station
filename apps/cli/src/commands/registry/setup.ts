@@ -21,7 +21,7 @@ export const setupCliCommand: CliCommandNode = {
     { name: "--no-brew", description: "Skip Homebrew-dependent checks and actions." },
     { name: "--check", description: "Run setup system in read-only check mode." },
   ],
-  examples: ["pnpm stn setup check --json", "pnpm stn setup apply --dry-run"],
+  examples: ["stn setup check --json", "stn setup apply --dry-run"],
   notes: [
     "Bare stn setup is interactive and requires a terminal.",
     "Automation can use setup check --json, setup plan --json, and explicit setup apply --yes after review.",
@@ -36,7 +36,7 @@ export const setupCliCommand: CliCommandNode = {
         { name: "--json", description: "Print machine-readable setup status." },
         { name: "--no-brew", description: "Skip Homebrew-dependent checks." },
       ],
-      examples: ["pnpm stn setup check --json"],
+      examples: ["stn setup check --json"],
     },
     {
       name: "plan",
@@ -46,7 +46,7 @@ export const setupCliCommand: CliCommandNode = {
         { name: "--json", description: "Print machine-readable setup plan output." },
         { name: "--no-brew", description: "Skip Homebrew-dependent actions in the plan." },
       ],
-      examples: ["pnpm stn setup plan"],
+      examples: ["stn setup plan"],
     },
     {
       name: "apply",
@@ -57,7 +57,7 @@ export const setupCliCommand: CliCommandNode = {
         { name: "--dry-run", description: "Preview apply output without writing." },
         { name: "--no-brew", description: "Skip Homebrew-dependent actions." },
       ],
-      examples: ["pnpm stn setup apply --dry-run", "pnpm stn setup apply --yes"],
+      examples: ["stn setup apply --dry-run", "stn setup apply --yes"],
     },
     {
       name: "system",
@@ -67,7 +67,7 @@ export const setupCliCommand: CliCommandNode = {
         { name: "--check", description: "Inspect system dependency readiness." },
         { name: "--yes, -y", description: "Confirm system dependency installation." },
       ],
-      examples: ["pnpm stn setup system --check"],
+      examples: ["stn setup system --check"],
     },
   ],
 };

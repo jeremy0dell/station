@@ -7,13 +7,12 @@ in their own documents.
 
 ## Prepare a checkout
 
-Development requires Node.js 24.2+ and below 25, pnpm 11, and Bun 1.3.14 for
-the Station renderer and compiled-binary lanes.
+Development requires Node.js 24.2+ and below 25, with Bun 1.4.0 as the
+repository package manager and script dispatcher.
 
 ```sh
-pnpm install
-pnpm build
-cd station && bun install && cd ..
+bun install
+bun run build
 ```
 
 The root workspace and `station/` use TypeScript 7. The root also retains a
@@ -52,17 +51,17 @@ Build first when an integration test launches files from `dist`.
 For documentation-only changes:
 
 ```sh
-pnpm lint
-pnpm test:diagnostics:policy
+bun run lint
+bun run test:diagnostics:policy
 ```
 
 For implementation changes, finish with the deterministic repository gate:
 
 ```sh
-pnpm test:all
+bun run test:all
 ```
 
-The pre-push hook intentionally runs only `pnpm lint`. It is fast feedback, not
+The pre-push hook intentionally runs only `bun run lint`. It is fast feedback, not
 a substitute for the appropriate test gate. Real-provider and machine-specific
 lanes are opt-in; follow [Testing](../tests/README.md) before running them.
 

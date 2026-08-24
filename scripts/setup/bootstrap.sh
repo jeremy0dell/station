@@ -53,29 +53,22 @@ step "Runtime versions"
 echo "  node $(node --version 2>/dev/null || echo 'MISSING')"
 echo "  bun  $(bun --version 2>/dev/null || echo 'MISSING')"
 
-step "Activating pnpm (corepack, pinned by packageManager)"
-corepack enable >/dev/null 2>&1 || true
-
 step "Installing workspace dependencies"
-pnpm install
+bun install
 
 step "Building"
-pnpm build
+bun run build
 
-# The station/ terminal UI is a separate Bun workspace, not a pnpm-workspace member,
-# so `pnpm install` never installs it. Bare `stn` renders the TUI by shelling into
-# `bun run` here, so without this step the first `stn` dies with "@opentui not found".
-# link:station needs the just-built @station dist; repair:node-pty needs the install.
-step "Installing the Station UI (Bun workspace)"
+# node-pty is installed from the root graph, but its local native helper still
+# needs the existing repair pass before the source Host can use it.
+step "Repairing the Station native helper"
 (
   cd "$repo_root/station"
-  bun install
-  bun run link:station
   bun run repair:node-pty
 )
 
 step "Linking STATION launchers onto your PATH"
-pnpm station:link
+bun run station:link
 
 cat <<'EOF'
 
@@ -92,6 +85,6 @@ if [ -n "$node24_bin" ]; then
 
 Note: Homebrew's node@24 is keg-only. So that bare \`stn\` finds Node in new shells, add:
   echo 'export PATH="$node24_bin:\$PATH"' >> ~/.zshrc
-(or run \`pnpm stn ...\` from this checkout, which already resolves it.)
+(or run \`bun run stn -- ...\` from this checkout, which already resolves it.)
 EOF
 fi

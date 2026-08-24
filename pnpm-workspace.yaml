@@ -1,7 +1,0 @@
-packages:
-  - "apps/*"
-  - "packages/*"
-  - "integrations/*/*"
-allowBuilds:
-  esbuild: true
-  lefthook: true

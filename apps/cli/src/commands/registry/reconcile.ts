@@ -9,7 +9,7 @@ export const reconcileCliCommand: CliCommandNode = {
   run: runReconcileCliCommand,
   usage: ["stn reconcile [--reason <reason>]"],
   options: [{ name: "--reason <reason>", description: "Annotate the reconcile request." }],
-  examples: ["pnpm stn reconcile --reason manual-smoke"],
+  examples: ["stn reconcile --reason manual-smoke"],
 };
 
 async function runReconcileCliCommand(context: CliCommandRunContext) {

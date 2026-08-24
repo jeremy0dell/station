@@ -1,6 +1,5 @@
 import { TextAttributes } from "@opentui/core";
 import type { RowSegment } from "@station/dashboard-core/selectors";
-import stringWidth from "string-width";
 import { rowColor, toOpenTuiColor, useStationTheme } from "../../theme/index.js";
 import { useHoverPointer } from "../../useHoverPointer.js";
 import type { StationMouseTarget } from "../input/stationMouse.js";
@@ -126,7 +125,7 @@ function segmentCellWidth(segment: RowSegment): number {
   if (segment.kind === "throbber") {
     return 1;
   }
-  return stringWidth(segment.text);
+  return Bun.stringWidth(segment.text);
 }
 
 function segmentLinks(segments: readonly RowSegment[]): SegmentLink[] {

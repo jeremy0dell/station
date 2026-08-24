@@ -398,7 +398,10 @@ describe("FullscreenDashboard mouse composition", () => {
       groupId: "group_design_refresh",
       section: "general",
     });
-    await actOn(() => fixture.runtime.actions.dispatch({ type: "groupSettings.back" }));
+    await actOn(async () => {
+      fixture.runtime.actions.dispatch({ type: "groupSettings.back" });
+      await setup.flush();
+    });
 
     group = groupLine();
     await actOn(() =>

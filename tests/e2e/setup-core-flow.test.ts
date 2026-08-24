@@ -1,15 +1,5 @@
 import { spawnSync } from "node:child_process";
-import {
-  chmod,
-  mkdir,
-  mkdtemp,
-  readdir,
-  readFile,
-  realpath,
-  rm,
-  stat,
-  writeFile,
-} from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -20,7 +10,7 @@ import { environmentWithoutGitLocals } from "../../packages/runtime/src/index.js
 import { waitForSocketClosed } from "../support/sockets";
 
 describe("setup core flow e2e", () => {
-  it("bootstraps setup and runs all checkout launchers with the pinned pnpm", async () => {
+  it("bootstraps setup and runs all checkout launchers with pinned Bun", async () => {
     const root = await mkdtemp(join(tmpdir(), "station-launcher-install-e2e-"));
     const home = join(root, "home");
     const runtimeDir = await mkdtemp(join(tmpdir(), "stn-r-"));
@@ -29,26 +19,12 @@ describe("setup core flow e2e", () => {
     let passed = false;
     try {
       const repoRoot = process.cwd();
-      const pnpmHome = join(root, "pnpm-home");
+      const bunHome = join(root, "bun-home");
       const bin = join(root, "bin");
-      const pnpmBin = run("/bin/sh", ["-c", "command -v pnpm"], {
+      const bunBin = run("/bin/sh", ["-c", "command -v bun"], {
         cwd: repoRoot,
       }).stdout.trim();
       await mkdir(bin, { recursive: true });
-      await writeShim(
-        bin,
-        "pnpm",
-        [
-          'case "$1" in',
-          "  install|build) exit 0 ;;",
-          `  station:link) exec ${shellQuote(pnpmBin)} --dir "$PWD" station:link ;;`,
-          `  add|--version) exec ${shellQuote(pnpmBin)} "$@" ;;`,
-          "esac",
-          'echo "unexpected pnpm $*" >&2',
-          "exit 2",
-          "",
-        ].join("\n"),
-      );
       await writeShim(
         bin,
         "brew",
@@ -61,16 +37,10 @@ describe("setup core flow e2e", () => {
           "",
         ].join("\n"),
       );
-      await writeShim(bin, "corepack", "exit 0\n");
       await writeShim(
         bin,
         "xcode-select",
         'if [ "$1" = "-p" ]; then echo "/Library/Developer/CommandLineTools"; exit 0; fi\nexit 2\n',
-      );
-      await writeShim(
-        bin,
-        "bun",
-        'if [ "$1" = "--version" ]; then echo "1.2.0"; exit 0; fi\nexit 0\n',
       );
       await writeShim(bin, "npm", "echo 0.1.0\n");
       await writeShim(
@@ -101,34 +71,33 @@ describe("setup core flow e2e", () => {
         ...process.env,
         ...codexOnlyHarnessEnv(bin, home),
         HOME: home,
-        PNPM_HOME: pnpmHome,
+        BUN_INSTALL: bunHome,
         XDG_CONFIG_HOME: join(root, "xdg-config"),
         XDG_DATA_HOME: join(root, "xdg-data"),
         XDG_CACHE_HOME: join(root, "xdg-cache"),
         XDG_STATE_HOME: join(root, "xdg-state"),
         XDG_RUNTIME_DIR: runtimeDir,
-        COREPACK_HOME: join(root, "corepack"),
-        PATH: `${join(pnpmHome, "bin")}:${bin}:${dirname(process.execPath)}:/usr/bin:/bin`,
+        PATH: `${join(bunHome, "bin")}:${bin}:${dirname(bunBin)}:${dirname(process.execPath)}:/usr/bin:/bin`,
         NO_COLOR: "1",
         STATION_FAST_POPUP_NO_FALLBACK: "1",
       };
       expect((env as NodeJS.ProcessEnv).CODEX_HOME).toBe(join(home, ".codex"));
       await Promise.all([
         mkdir(home, { recursive: true }),
-        mkdir(join(pnpmHome, "bin"), { recursive: true }),
+        mkdir(join(bunHome, "bin"), { recursive: true }),
         mkdir(env.XDG_CONFIG_HOME, { recursive: true }),
         mkdir(env.XDG_DATA_HOME, { recursive: true }),
         mkdir(env.XDG_CACHE_HOME, { recursive: true }),
         mkdir(env.XDG_STATE_HOME, { recursive: true }),
-        mkdir(env.COREPACK_HOME, { recursive: true }),
       ]);
+      delete env.STATION_OPENCODE_PLUGIN_BODY_PATH;
 
-      expect(run("pnpm", ["--version"], { cwd: repoRoot, env }).stdout.trim()).toBe("11.0.0");
+      expect(run("bun", ["--version"], { cwd: repoRoot, env }).stdout.trim()).toBe("1.4.0");
       const bootstrap = run(join(repoRoot, "scripts/setup/bootstrap.sh"), [], { cwd: root, env });
       expect(bootstrap.stdout).toContain("Linking STATION launchers onto your PATH");
       expect(bootstrap.stdout).toContain("Station is installed.");
 
-      const globalStation = await findGlobalStationLink(pnpmHome);
+      const globalStation = join(bunHome, "install", "global", "node_modules", "station");
       await expect(realpath(globalStation)).resolves.toBe(repoRoot);
       expect(run("stn", ["--help"], { cwd: root, env }).stdout).toContain("stn --help");
 
@@ -510,14 +479,13 @@ describe("setup core flow e2e", () => {
           "",
         ].join("\n"),
       );
-      await writeShim(
-        bin,
-        "pnpm",
-        'if [ "$1" = "--version" ]; then echo "11.0.0"; exit 0; fi\nexit 2\n',
-      );
       // Hunk is required for `setup system` readiness.
       await writeShim(bin, "hunk", "exit 0\n");
-      await writeShim(bin, "bun", "exit 0\n");
+      await writeShim(
+        bin,
+        "bun",
+        'if [ "$1" = "--version" ]; then echo "1.4.0"; exit 0; fi\nexit 0\n',
+      );
 
       const result = run("scripts/setup/setup-system-dependencies.sh", [], {
         cwd: process.cwd(),
@@ -551,20 +519,6 @@ function codexOnlyHarnessEnv(bin: string, home: string): NodeJS.ProcessEnv {
     STATION_PI_BIN: join(bin, "missing-pi"),
     STATION_CLAUDE_BIN: join(bin, "missing-claude"),
   };
-}
-
-async function findGlobalStationLink(pnpmHome: string): Promise<string> {
-  const globalRoot = join(pnpmHome, "global", "v11");
-  for (const entry of await readdir(globalRoot)) {
-    const candidate = join(globalRoot, entry, "node_modules", "station");
-    try {
-      await realpath(candidate);
-      return candidate;
-    } catch {
-      // pnpm v11 keeps global installs beside non-package metadata in this directory.
-    }
-  }
-  throw new Error(`Global station link was not found under ${globalRoot}.`);
 }
 
 async function writeShim(bin: string, name: string, body: string): Promise<void> {

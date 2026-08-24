@@ -42,7 +42,6 @@ export const setupMessageCatalog = {
   "label.command-line-tools": { terminal: "Command Line Tools" },
   "label.homebrew": { terminal: "Homebrew" },
   "label.node": { terminal: "Node.js" },
-  "label.pnpm": { terminal: "pnpm" },
   "detail.version": { terminal: "Version" },
   "detail.path": { terminal: "Path" },
   "detail.repository": { terminal: "Repository" },
@@ -488,11 +487,10 @@ export const setupMessageCatalog = {
     terminal:
       "Use your Node version manager to install and select Node.js 24.2+ (and below 25), for example:",
   },
-  "system.pnpm-hint": {
-    terminal:
-      "After Node.js 24.2+ (and below 25) is active, enable the repo-pinned package manager with:",
+  "system.bun-hint": {
+    terminal: "Install or select Bun {version}, the exact version declared by root packageManager.",
   },
   "system.unchanged-hint": {
-    terminal: "STATION setup does not change Node or pnpm automatically.",
+    terminal: "STATION setup does not change Node or Bun automatically.",
   },
 } satisfies SetupMessageCatalog;

@@ -219,7 +219,7 @@ function genericNotes(path: readonly string[]): string[] {
 
 function genericVerification(path: readonly string[]): string[] {
   const suffix = path.length === 0 ? "" : ` ${path.join(" ")}`;
-  return [`pnpm stn${suffix} --help`, `pnpm stn${suffix} --man`];
+  return [`stn${suffix} --help`, `stn${suffix} --man`];
 }
 
 function findChild(parent: CliCommandNode, name: string): CliCommandNode | undefined {

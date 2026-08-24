@@ -190,7 +190,7 @@ function summarizeCommand(command) {
 }
 
 function printCleanupHelp() {
-  process.stdout.write(`Usage: pnpm agent:cleanup [-- --run]
+  process.stdout.write(`Usage: bun run agent:cleanup [-- --run]
 
 Stops stale local station runtime debris. Dry-run by default.
 

@@ -96,14 +96,14 @@ function sourceBuildIdentity(): string {
     identity = readFileSync(path, "utf8").trim();
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      throw new Error(`Station build identity is missing at ${path}. Run pnpm build.`, {
+      throw new Error(`Station build identity is missing at ${path}. Run bun run build.`, {
         cause: error,
       });
     }
     throw error;
   }
   if (!BUILD_IDENTITY_PATTERN.test(identity)) {
-    throw new Error(`Station build identity at ${path} is invalid. Run pnpm build.`);
+    throw new Error(`Station build identity at ${path} is invalid. Run bun run build.`);
   }
   try {
     execFileSync(
@@ -116,7 +116,7 @@ function sourceBuildIdentity(): string {
     );
   } catch (error) {
     throw new Error(
-      `Station build identity at ${path} does not match the current checkout and production outputs. Run pnpm build.`,
+      `Station build identity at ${path} does not match the current checkout and production outputs. Run bun run build.`,
       { cause: error },
     );
   }

@@ -3,8 +3,8 @@ import { join, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 /**
- * The Bun renderer lives in the isolated station/ workspace; resolve it relative
- * to this CLI module so both a built (dist) and a source run find it.
+ * The Bun renderer is a root-managed workspace package; resolve it relative to
+ * this CLI module so both a built (dist) and a source run find it.
  */
 export function resolveStationWorkspaceDir(): string {
   const here = fileURLToPath(import.meta.url);
@@ -14,15 +14,14 @@ export function resolveStationWorkspaceDir(): string {
   return join(repoRoot, "station");
 }
 
-/** Human-facing remediation when the station/ Bun lane has not been installed.
- * Absolute path: bare stn runs from arbitrary cwds where `cd station` means nothing. */
-export const stationUiInstallHint = `Install the STATION UI dependencies: cd ${resolveStationWorkspaceDir()} && bun install.`;
+/** Human-facing remediation when the root Bun workspace has not been installed.
+ * Absolute path: bare stn runs from arbitrary working directories. */
+export const stationUiInstallHint = `Install the STATION UI dependencies: cd ${join(resolveStationWorkspaceDir(), "..")} && bun install.`;
 
 /**
- * @opentui is the renderer's first import, so its presence under
- * station/node_modules is the marker that `bun install` ran there. The Bun binary
- * check cannot see this: bare `stn` on an uninstalled lane dies at launch with
- * "@opentui not found" while `bun --version` still succeeds.
+ * @opentui is the renderer's first import, so its root-workspace link under
+ * station/node_modules proves the unified Bun install materialized Station's
+ * renderer graph. The Bun binary check alone cannot establish that readiness.
  */
 export async function isStationUiInstalled(): Promise<boolean> {
   const marker = join(

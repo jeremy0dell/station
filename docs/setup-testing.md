@@ -39,8 +39,8 @@ before inspection or mutation.
 Manual interaction uses the same isolation goals without scripted input:
 
 ```bash
-pnpm setup:guided:sandbox
-pnpm setup:guided:sandbox -- --profile everything-missing --keep
+bun run setup:guided:sandbox
+bun run setup:guided:sandbox -- --profile everything-missing --keep
 ```
 
 The command runs the built CLI on the current terminal but supplies a private temporary home,
@@ -52,8 +52,8 @@ sandboxes expose their generated `run-setup` launcher, editable `bin/` shims, an
 The focused automated guided lane requires Python 3 for its standard-library `pty` bridge:
 
 ```bash
-pnpm test:e2e:setup:guided
-pnpm test:e2e:setup:guided:all-shells
+bun run test:e2e:setup:guided
+bun run test:e2e:setup:guided:all-shells
 ```
 
 Both entrypoints run under a disposable runtime owner that registers the
@@ -123,7 +123,7 @@ non-interaction; release acceptance owns proof in a genuinely new login shell.
 `apps/cli/test/integration/setup-profiles.test.ts` compiles each profile into the
 real `SetupCommandDeps` seam and runs `runCli([... "setup","check","--json"])`,
 asserting exit code + `requiredOk` + per-check status. Runs in the existing
-`pnpm test:integration` lane (so it is already in `pnpm test:all` and hosted CI).
+`bun run test:integration` lane (so it is already in `bun run test:all` and hosted CI).
 The local pre-push hook is lint-only. This integration lane is the backbone and
 canonical contract; it covers every profile, including the darwin `no-xcode-clt`
 case via an injected `platform`.
@@ -131,13 +131,13 @@ Hook-status fixtures return deterministic prepared, missing/drifted, probe-faile
 or unsupported results and never inspect a developer's real provider homes.
 
 ```bash
-pnpm test:integration   # includes setup-profiles
+bun run test:integration   # includes setup-profiles
 ```
 
 Hosted setup E2E uses zsh as the representative process path for unrelated changes. Changes to the
 setup engine or Worktrunk integration, plus release tags, exercise both bash and zsh recovery and
 idempotency paths. Run that focused matrix locally with
-`pnpm test:e2e:setup:guided:all-shells`.
+`bun run test:e2e:setup:guided:all-shells`.
 
 ## Tier 2 — Linux containers (medium fidelity, nightly/manual)
 
@@ -150,7 +150,7 @@ every Linux image already exercises the "brew absent → manual hint" path.
 ```bash
 node scripts/test-runners/run-setup-container.mjs            # all Linux profiles
 node scripts/test-runners/run-setup-container.mjs no-git     # one profile
-pnpm test:env:docker                                         # same, via script
+bun run test:env:docker                                     # same, via script
 ```
 
 Requires Docker. Covers: `happy-linux`, `no-git`, `no-tmux`, `no-worktrunk`,

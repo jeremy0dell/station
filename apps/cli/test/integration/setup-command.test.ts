@@ -1195,7 +1195,7 @@ describe("CLI setup command", () => {
           "wt --version": "worktrunk 1.2.3\n",
           "tmux -V": "tmux 3.5a\n",
           "brew --version": "Homebrew 4.0.0\n",
-          "pnpm --version": "8.15.0\n",
+          "bun --version": "1.3.14\n",
         }),
         access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux", "/fake/bin/bun", "/fake/bin/hunk"]),
         writeStdout: (chunk) => {
@@ -1207,12 +1207,14 @@ describe("CLI setup command", () => {
     const output = chunks.join("");
     expect(result.code).toBe(1);
     expect(output).toContain("expected >=24.2 <25");
-    expect(output).toContain("WARN pnpm incompatible 8.15.0 (expected 11.x)");
-    expect(output).toContain("After Node.js 24.2+ (and below 25) is active");
+    expect(output).toContain("WARN Bun incompatible 1.3.14 (expected 1.4.0)");
+    expect(output).toContain(
+      "Use your Node version manager to install and select Node.js 24.2+ (and below 25)",
+    );
     expect(output).toContain("fnm install 24 && fnm use 24");
     expect(output).toContain("nvm install 24 && nvm use 24");
-    expect(output).toContain("corepack prepare pnpm@11.0.0 --activate");
-    expect(output).toContain("STATION setup does not change Node or pnpm automatically.");
+    expect(output).toContain("Install or select Bun 1.4.0");
+    expect(output).toContain("STATION setup does not change Node or Bun automatically.");
   });
 
   it("setup system --check --yes is invalid and performs no install calls", async () => {
@@ -1249,7 +1251,7 @@ describe("CLI setup command", () => {
           }
           return fakeRunner([], {
             "brew --version": "Homebrew 4.0.0\n",
-            "pnpm --version": "11.0.0\n",
+            "bun --version": "1.4.0\n",
           })(input);
         },
         access: fakeAccess([]),
@@ -1303,7 +1305,7 @@ describe("CLI setup command", () => {
           }
           return fakeRunner([], {
             "brew --version": "Homebrew 4.0.0\n",
-            "pnpm --version": "11.0.0\n",
+            "bun --version": "1.4.0\n",
             "wt --version": "worktrunk 1.2.3\n",
             "tmux -V": "tmux 3.5a\n",
           })(input);
@@ -1350,7 +1352,7 @@ describe("CLI setup command", () => {
         env: { PATH: "/fake/bin" },
         runner: fakeRunner(calls, {
           "brew --version": "Homebrew 4.0.0\n",
-          "pnpm --version": "11.0.0\n",
+          "bun --version": "1.4.0\n",
           "wt --version": "worktrunk 1.2.3\n",
           "tmux -V": "tmux 3.5a\n",
         }),
@@ -1413,6 +1415,7 @@ function fakeBinOutput(
 
 function defaultProbeOutput(key: string): string | undefined {
   if (key === "git --version") return "git version 2.50.1\n";
+  if (key === "bun --version") return "1.4.0\n";
   if (key === "xcode-select -p") return "/Library/Developer/CommandLineTools\n";
   return undefined;
 }

@@ -11,12 +11,12 @@ while [ -h "$script" ]; do
   esac
 done
 
-# pnpm's global shim enters through a symlinked package directory, so resolve the checkout itself.
+# Bun's global link enters through a symlinked package directory, so resolve the checkout itself.
 root=$(CDPATH= cd -- "$(dirname -- "$script")/.." && pwd -P)
 entry=$root/apps/cli/dist/ingressMain.js
 
 if [ ! -f "$entry" ]; then
-  printf '%s\n' "stn-ingress has not been built. Run: pnpm build" >&2
+  printf '%s\n' "stn-ingress has not been built. Run: bun run build" >&2
   exit 1
 fi
 

@@ -326,7 +326,7 @@ export function formatRuntimeInventory(inventory) {
 }
 
 function printRuntimeInventoryHelp() {
-  process.stdout.write(`Usage: pnpm station:runtime-inventory [-- --state-dir /absolute/path] [--json]
+  process.stdout.write(`Usage: bun run station:runtime-inventory [-- --state-dir /absolute/path] [--json]
 
 Reads registered disposable runtime ownership evidence. It never signals, deletes,
 repairs, starts, or stops Station processes.\n`);

@@ -154,8 +154,8 @@ async function dev() {
   let ownership;
   try {
     assertDevLaneAvailableBeforeBuild();
-    log("Building checkout (pnpm build; Turbo-cached when unchanged)…");
-    run("pnpm", ["build"], {
+    log("Building checkout (bun run build; Turbo-cached when unchanged)…");
+    run("bun", ["run", "build"], {
       cwd: repoRoot,
       stdio: "inherit",
       timeoutMs: undefined,
@@ -243,7 +243,7 @@ function requireInteractiveDev() {
   if (process.stdin.isTTY !== true || process.stdout.isTTY !== true) {
     throw new Error(
       "tmux dev requires an interactive terminal.\n" +
-        "For automation, use: pnpm station:devbox tmux start",
+        "For automation, use: bun run station:devbox tmux start",
     );
   }
 }
@@ -307,7 +307,9 @@ function currentObserverBuildVersion() {
     throw new Error(`Station package version is invalid at ${packageJsonPath}.`);
   }
   if (!buildIdentityPattern.test(identity)) {
-    throw new Error(`Station build identity is invalid at ${buildIdentityPath}. Run pnpm build.`);
+    throw new Error(
+      `Station build identity is invalid at ${buildIdentityPath}. Run bun run build.`,
+    );
   }
   return `${version}${version.includes("+") ? "." : "+"}station.${identity}`;
 }
@@ -342,7 +344,7 @@ function assertNoLiveForegroundOwner(manifest) {
   ) {
     throw new Error(
       `The private tmux lane already has foreground owner ${manifest.devOwnerPid}. ` +
-        "Stop it with: pnpm station:devbox tmux stop",
+        "Stop it with: bun run station:devbox tmux stop",
     );
   }
 }
@@ -498,7 +500,7 @@ async function stop() {
 async function reset(args) {
   if (!args.some((arg) => arg === "--yes" || arg === "-y")) {
     throw new Error(
-      "Refusing to reset without --yes.\n\n" + "  pnpm station:devbox tmux reset --yes",
+      "Refusing to reset without --yes.\n\n" + "  bun run station:devbox tmux reset --yes",
     );
   }
   if (!existsSync(privateRoot)) {
@@ -512,7 +514,7 @@ async function reset(args) {
 function help() {
   process.stdout.write(
     [
-      "Usage: pnpm station:devbox tmux [dev|start|attach|status|logs|stop|reset|help]",
+      "Usage: bun run station:devbox tmux [dev|start|attach|status|logs|stop|reset|help]",
       "",
       "  dev              (default) build, start/reuse, attach, and clean up on detach",
       "  start            start/reuse the HMR lane and return (non-interactive automation)",
@@ -579,7 +581,7 @@ async function ensureLaneStarted(options = {}) {
   writeManifest(manifest);
   try {
     createDisposableEnvironment(manifest, prerequisites);
-    run(prerequisites.bun, ["run", "--silent", "--cwd", stationDir, "link:station"], {
+    run(prerequisites.bun, ["run", "--silent", "--cwd", repoRoot, "build:ensure"], {
       cwd: repoRoot,
       env: laneEnvironment(manifest),
     });
@@ -650,10 +652,12 @@ function resolvePrerequisites() {
   const lsof = requireExecutable("lsof");
   run(tmux, ["-V"]);
   if (!existsSync(cliPath)) {
-    throw new Error(`Built Station CLI missing at ${cliPath}. Run pnpm build.`);
+    throw new Error(`Built Station CLI missing at ${cliPath}. Run bun run build.`);
   }
   if (!existsSync(join(stationDir, "node_modules", "@opentui", "core", "package.json"))) {
-    throw new Error(`Station Bun dependencies are missing. Run: cd ${stationDir} && bun install`);
+    throw new Error(
+      `Station Bun dependencies are missing. Run: cd ${repoRoot} && bun install --frozen-lockfile`,
+    );
   }
   return {
     node: process.execPath,
@@ -882,7 +886,7 @@ function renderPopupLauncher(manifest, prerequisites) {
     "status=$?",
     'case "$status" in 0|129) exit 0 ;; esac',
     `${shellQuote(manifest.tmuxWrapper)} display-message -d 3000 ` +
-      `${shellQuote("Station popup failed; run pnpm station:devbox tmux logs")} ` +
+      `${shellQuote("Station popup failed; run bun run station:devbox tmux logs")} ` +
       `>> ${shellQuote(manifest.popupLogPath)} 2>&1 || :`,
     "exit 0",
     "",
@@ -924,7 +928,7 @@ function requireRunningManifest() {
 
 function requireManifest() {
   if (!existsSync(privateRoot)) {
-    throw new Error("Private tmux devbox is not started. Run: pnpm station:devbox tmux dev");
+    throw new Error("Private tmux devbox is not started. Run: bun run station:devbox tmux dev");
   }
   return readManifest();
 }
@@ -1230,13 +1234,13 @@ function printOwnership(manifest, evidence) {
   );
   log("");
   log("Open:");
-  log("  pnpm station:devbox tmux attach");
+  log("  bun run station:devbox tmux attach");
   log("  then press Ctrl-b Space");
   log("Debug:");
-  log("  pnpm station:devbox tmux status");
-  log("  pnpm station:devbox tmux logs --follow");
+  log("  bun run station:devbox tmux status");
+  log("  bun run station:devbox tmux logs --follow");
   log("Stop:");
-  log("  pnpm station:devbox tmux stop");
+  log("  bun run station:devbox tmux stop");
 }
 
 async function cleanupLane(manifest) {
@@ -1423,7 +1427,7 @@ function acquireLaneAuthority(role) {
     if (owner !== undefined) {
       throw new Error(
         `The private tmux lane already has ${incumbent.role} authority ${owner.pid}. ` +
-          "Stop it with: pnpm station:devbox tmux stop",
+          "Stop it with: bun run station:devbox tmux stop",
       );
     }
     releaseLaneAuthority(incumbent);
@@ -1552,7 +1556,7 @@ function assertNoLiveLaneAuthority() {
   if (owner !== undefined) {
     throw new Error(
       `The private tmux lane already has ${authority.role} authority ${owner.pid}. ` +
-        "Stop it with: pnpm station:devbox tmux stop",
+        "Stop it with: bun run station:devbox tmux stop",
     );
   }
   releaseLaneAuthority(authority);
@@ -1897,7 +1901,7 @@ function assertNoAttachedClients(manifest) {
   if (attachedClients > 0) {
     throw new Error(
       `The private tmux lane already has ${attachedClients} attached client(s). ` +
-        "Detach them before running: pnpm station:devbox tmux dev",
+        "Detach them before running: bun run station:devbox tmux dev",
     );
   }
 }
@@ -2198,8 +2202,8 @@ function shellQuote(value) {
 function staleLaneError(manifest) {
   return new Error(
     `The private tmux lane at ${manifest.root} is partial or stale. Recover it with:\n\n` +
-      "  pnpm station:devbox tmux reset --yes\n" +
-      "  pnpm station:devbox tmux dev",
+      "  bun run station:devbox tmux reset --yes\n" +
+      "  bun run station:devbox tmux dev",
   );
 }
 

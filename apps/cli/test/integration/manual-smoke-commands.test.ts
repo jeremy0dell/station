@@ -137,7 +137,7 @@ describe("CLI manual-smoke commands", () => {
     const text = textOutput(result);
     expect(text).toContain("Behavior Notes:");
     expect(text).toContain("Manual Verification:");
-    expect(text).toContain("pnpm stn project add --man");
+    expect(text).toContain("stn project add --man");
   });
 
   it("serves config-backed command help before loading config", async () => {
@@ -218,7 +218,7 @@ describe("CLI manual-smoke commands", () => {
     expect(session).toMatchObject({ code: 0, outputFormat: "text" });
     expect(textOutput(session)).toContain("Usage:\n  stn session current");
     expect(currentHelp).toMatchObject({ code: 0, outputFormat: "text" });
-    expect(textOutput(currentHelp)).toContain("pnpm stn session current");
+    expect(textOutput(currentHelp)).toContain("stn session current");
     expect(currentManual).toMatchObject({ code: 0, outputFormat: "text" });
     expect(textOutput(currentManual)).toContain("Behavior Notes:");
     expect(textOutput(currentManual)).toContain("Detached placement is source-free");
@@ -314,7 +314,7 @@ function collectRegistryExamples(
 }
 
 function commandDispatchJsonPayload(example: string): string | undefined {
-  return /printf '%s\\n' '([^']+)' \| pnpm stn command dispatch\b/.exec(example)?.[1];
+  return /printf '%s\\n' '([^']+)' \| stn command dispatch\b/.exec(example)?.[1];
 }
 
 function fixtureRootPath(): string {

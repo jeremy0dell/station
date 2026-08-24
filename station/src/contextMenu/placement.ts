@@ -1,4 +1,3 @@
-import stringWidth from "string-width";
 import type { ContextMenuAnchor, ContextMenuItem } from "./types.js";
 
 export type ContextMenuSize = {
@@ -24,8 +23,8 @@ export function measureContextMenu(items: readonly ContextMenuItem[]): ContextMe
     1,
     ...items.map(
       (item) =>
-        stringWidth(item.label) +
-        (item.shortcut === undefined ? 0 : stringWidth(item.shortcut) + 1),
+        Bun.stringWidth(item.label) +
+        (item.shortcut === undefined ? 0 : Bun.stringWidth(item.shortcut) + 1),
     ),
   );
   const separatorRows = items.filter((item) => item.separatorBefore === true).length;

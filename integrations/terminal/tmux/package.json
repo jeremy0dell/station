@@ -9,9 +9,6 @@
       "import": "./dist/index.js"
     }
   },
-  "bin": {
-    "stn-tmux-popup": "./bin/stn-popup"
-  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit"

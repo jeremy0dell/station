@@ -8,9 +8,11 @@ stn setup
 
 This configures the core local workflow: the required tools, the selected/default agent CLI and its required Station tracking preparation, and a zero-project config. With no config, one runnable CLI is inferred; several runnable CLIs require an explicit guided selection. When setup creates or appends a selected harness block, it writes the resolved executable path when a bare command was satisfied through the setup process `PATH`, avoiding later Observer or tmux environment drift. For an existing selected block, setup repairs only the provider's exact canonical bare command when it resolves to a different absolute executable; custom aliases, authored paths, unselected harnesses, and unresolved commands remain unchanged. The first explicit selection becomes the default only for a new config. Add the first project explicitly in Station.
 
-The compiled `stn` launches its TUI and Observer without Node.js, pnpm, or Bun. A local source checkout expects Node.js 24.2+ (and below 25), pnpm 11, and Bun 1.3.14 for development. Real-provider test lanes remain opt-in.
-`stn setup system --check` reports those versions, but it does not change the active Node or pnpm
-installation automatically.
+The compiled `stn` launches its TUI and Observer without Node.js or Bun. A local
+source checkout expects Node.js 24.2+ (and below 25) and exact Bun 1.4.0 for
+development. Real-provider test lanes remain opt-in.
+`stn setup system --check` reports those versions, but it does not change the
+active Node or Bun installation automatically.
 
 ## Setup Commands
 
@@ -135,7 +137,7 @@ output.
 
 In a development checkout, the popup launcher may instead be the checkout's
 `integrations/terminal/tmux/bin/stn-popup` path.
-Run `pnpm station:link` only when you want bare `stn`, `stn-ingress`, and `stn-tmux-popup` commands
+Run `bun run station:link` only when you want bare `stn`, `stn-ingress`, and `stn-tmux-popup` commands
 available globally.
 
 Use `terminal.tmux.command` when tmux is installed but not on the observer or popup launcher PATH:
@@ -151,25 +153,27 @@ On macOS, setup installs missing core tools directly when Homebrew is available:
 stn setup apply --yes
 ```
 
-The compatibility script remains available for development checkouts:
+The development wrapper remains available for source checkouts:
 
 ```bash
-pnpm setup:system:check
-pnpm setup:system
+bun run setup:system:check
+bun run setup:system
 ```
 
-`pnpm setup:system:check` delegates to `stn setup system --check`. Bare `pnpm setup:system` is the development-checkout compatibility apply path and delegates to `stn setup system --yes`. Dependency logic lives in the TypeScript CLI.
+`bun run setup:system:check` delegates to `stn setup system --check`. Bare
+`bun run setup:system` is the development-checkout apply path and delegates to
+`stn setup system --yes`. Dependency logic lives in the TypeScript CLI.
 
-If the system check reports Node.js 22.x or pnpm 8.x, switch them deliberately with your normal
-toolchain manager instead of letting setup mutate the machine:
+If the system check reports an unsupported Node.js or Bun version, switch it
+deliberately with your normal toolchain manager instead of letting setup mutate
+the machine:
 
 ```bash
 fnm install 24 && fnm use 24
 # or:
 nvm install 24 && nvm use 24
 
-corepack enable
-corepack prepare pnpm@11.0.0 --activate
+# Install exact Bun 1.4.0 through your normal runtime manager.
 ```
 
 The upstream Worktrunk install docs currently recommend:
@@ -266,10 +270,12 @@ stn event-hooks doctor
 ## Compatibility Script
 
 ```bash
-pnpm setup:system:check
-pnpm setup:system
-pnpm setup:system --yes
-pnpm setup:system --no-brew
+bun run setup:system:check
+bun run setup:system
+bun run setup:system --yes
+bun run setup:system --no-brew
 ```
 
-Use `stn setup` for user setup. Use `pnpm setup:system:check` when validating a development checkout's system dependencies, and `pnpm setup:system` when you want the compatibility wrapper to apply missing Homebrew installs.
+Use `stn setup` for user setup. Use `bun run setup:system:check` when validating
+a development checkout's system dependencies, and `bun run setup:system` when
+you want the wrapper to apply missing Homebrew installs.

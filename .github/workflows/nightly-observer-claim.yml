@@ -20,8 +20,6 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-ci
-        with:
-          bun: "true"
-      - run: pnpm build
+      - run: bun run build
       - name: Exhaustive Node/Bun Observer claim stress
-        run: pnpm test:observer-claim:cross-runtime
+        run: bun run test:observer-claim:cross-runtime

@@ -29,7 +29,7 @@ describe("dev-checkout update channel", () => {
         buildIdentity: "a".repeat(64),
       }),
       commandRunner: async (input) => {
-        if (["pnpm", "bun"].includes(basename(input.command))) {
+        if (basename(input.command) === "bun") {
           preparationCommands.push(input);
           return commandResult(input);
         }
@@ -64,20 +64,14 @@ describe("dev-checkout update channel", () => {
     expect(await git(fixture.checkout, ["rev-parse", "HEAD"])).toBe(fixture.targetRevision);
     expect(preparationCommands).toEqual([
       expect.objectContaining({
-        command: plan.pnpmPath,
+        command: plan.bunPath,
         args: ["install", "--frozen-lockfile"],
         cwd: plan.repoRoot,
       }),
       expect.objectContaining({
         command: plan.bunPath,
-        args: ["install", "--frozen-lockfile"],
-        cwd: join(plan.repoRoot, "station"),
-      }),
-      expect.objectContaining({ command: plan.pnpmPath, args: ["build"], cwd: plan.repoRoot }),
-      expect.objectContaining({
-        command: plan.bunPath,
-        args: ["run", "link:station"],
-        cwd: join(plan.repoRoot, "station"),
+        args: ["run", "build"],
+        cwd: plan.repoRoot,
       }),
       expect.objectContaining({
         command: plan.bunPath,
@@ -85,8 +79,8 @@ describe("dev-checkout update channel", () => {
         cwd: join(plan.repoRoot, "station"),
       }),
       expect.objectContaining({
-        command: plan.pnpmPath,
-        args: ["station:link"],
+        command: plan.bunPath,
+        args: ["run", "station:link"],
         cwd: plan.repoRoot,
       }),
     ]);
@@ -94,7 +88,7 @@ describe("dev-checkout update channel", () => {
 
   it("requires Bun before admitting a development checkout", async () => {
     const fixture = await checkoutFixture();
-    const pathEnv = await toolPath(fixture.root, ["git", "pnpm"], "missing-bun-bin");
+    const pathEnv = await toolPath(fixture.root, ["git"], "missing-bun-bin");
     let commandRan = false;
     const channel = createDevCheckoutUpdateChannel({
       cliEntryPath: fixture.cliEntryPath,
@@ -148,7 +142,7 @@ describe("dev-checkout update channel", () => {
         buildIdentity: "a".repeat(64),
       }),
       commandRunner: async (input) => {
-        if (["pnpm", "bun"].includes(basename(input.command))) {
+        if (basename(input.command) === "bun") {
           preparationCommands.push(input);
           throw Object.assign(new Error("dependency install failed"), {
             code: 17,
@@ -178,18 +172,16 @@ describe("dev-checkout update channel", () => {
     expect(await git(fixture.checkout, ["rev-parse", "HEAD"])).toBe(fixture.targetRevision);
     expect(preparationCommands).toEqual([
       expect.objectContaining({
-        command: plan.pnpmPath,
+        command: plan.bunPath,
         args: ["install", "--frozen-lockfile"],
         cwd: plan.repoRoot,
       }),
     ]);
     expect(channel.applyRecoveryCommands?.(plan, failure)).toEqual([
-      [plan.pnpmPath, "--dir", plan.repoRoot, "install", "--frozen-lockfile"],
-      [plan.bunPath, "--cwd", join(plan.repoRoot, "station"), "install", "--frozen-lockfile"],
-      [plan.pnpmPath, "--dir", plan.repoRoot, "build"],
-      [plan.bunPath, "run", "--cwd", join(plan.repoRoot, "station"), "link:station"],
+      [plan.bunPath, "install", "--cwd", plan.repoRoot, "--frozen-lockfile"],
+      [plan.bunPath, "run", "--cwd", plan.repoRoot, "build"],
       [plan.bunPath, "run", "--cwd", join(plan.repoRoot, "station"), "repair:node-pty"],
-      [plan.pnpmPath, "--dir", plan.repoRoot, "station:link"],
+      [plan.bunPath, "run", "--cwd", plan.repoRoot, "station:link"],
     ]);
   });
 
@@ -204,7 +196,7 @@ describe("dev-checkout update channel", () => {
         buildIdentity: "a".repeat(64),
       }),
       commandRunner: async (input) => {
-        if (basename(input.command) === "pnpm" && input.args?.[0] === "install") {
+        if (basename(input.command) === "bun" && input.args?.[0] === "install") {
           throw Object.assign(new Error("cancelled"), { name: "AbortError" });
         }
         return nodeExternalCommandRunner(input);
@@ -278,7 +270,7 @@ async function checkoutFixture() {
 }
 
 async function devToolPath(root: string): Promise<string> {
-  const bin = await toolPath(root, ["git", "pnpm"]);
+  const bin = await toolPath(root, ["git"]);
   await writeFile(join(bin, "bun"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
   return bin;
 }

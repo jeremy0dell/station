@@ -13,8 +13,8 @@ Station devbox with UI hot reload:
 
 ```sh
 cd /path/to/the-worktree
-test -d node_modules || pnpm install --frozen-lockfile
-pnpm station:devbox dev
+test -d node_modules || bun install --frozen-lockfile
+bun run station:devbox dev
 ```
 
 The command builds this checkout and gives it a private `.dev-state`, Observer,
@@ -26,7 +26,7 @@ command cooperatively recycles only this checkout's Observer, refreshes and
 validates its private provider hooks, and then opens the UI. The persistent Host
 and its agents remain running through that Observer replacement.
 
-Do not run `pnpm station:link`, `pnpm station:reset`, or a globally installed
+Do not run `bun run station:link`, `bun run station:reset`, or a globally installed
 `stn` while comparing worktrees. Those commands can select or mutate a different
 checkout.
 
@@ -34,13 +34,13 @@ checkout.
 
 | Need | Command |
 | --- | --- |
-| Isolated Station | `pnpm station:devbox` |
-| Isolated Station with UI HMR | `pnpm station:devbox dev` |
-| Force a rebuild and isolated Observer recycle | `pnpm station:devbox restart` |
-| Isolated real tmux popup | `pnpm station:devbox tmux dev` |
-| Node CLI watcher with generated isolation | `pnpm dev` |
-| Headless command against the devbox | `pnpm stn --config .dev-state/config.toml <command>` |
-| UI HMR against the real Observer | `pnpm station:ui-dev` |
+| Isolated Station | `bun run station:devbox` |
+| Isolated Station with UI HMR | `bun run station:devbox dev` |
+| Force a rebuild and isolated Observer recycle | `bun run station:devbox restart` |
+| Isolated real tmux popup | `bun run station:devbox tmux dev` |
+| Node CLI watcher with generated isolation | `bun run dev` |
+| Headless command against the devbox | `bun run stn --config .dev-state/config.toml <command>` |
+| UI HMR against the real Observer | `bun run station:ui-dev` |
 
 Prefer the isolated devbox. The real-Observer lane is deliberately non-isolated
 and should be used only when the change must interact with actual Station state.
@@ -48,13 +48,13 @@ and should be used only when the change must interact with actual Station state.
 ## Devbox lifecycle
 
 ```sh
-pnpm station:devbox start
-pnpm station:devbox dev
-pnpm station:devbox restart
-pnpm station:devbox status
-pnpm station:devbox logs --follow
-pnpm station:devbox stop
-pnpm station:devbox reset -- --yes
+bun run station:devbox start
+bun run station:devbox dev
+bun run station:devbox restart
+bun run station:devbox status
+bun run station:devbox logs --follow
+bun run station:devbox stop
+bun run station:devbox reset -- --yes
 ```
 
 - `start` builds, ensures the isolated Observer exactly matches the checkout,
@@ -111,8 +111,8 @@ There is no `STATION_STATE_DIR` environment variable. Manual isolation uses
 CLI option and must precede the subcommand:
 
 ```sh
-pnpm stn --config .dev-state/config.toml snapshot --json
-pnpm stn --config .dev-state/config.toml observe --duration 3s --json
+bun run stn --config .dev-state/config.toml snapshot --json
+bun run stn --config .dev-state/config.toml observe --duration 3s --json
 ```
 
 ## Private tmux popup
@@ -121,7 +121,7 @@ Use the private tmux lane for popup transport, geometry, lifecycle, or dashboard
 HMR:
 
 ```sh
-pnpm station:devbox tmux dev
+bun run station:devbox tmux dev
 # Ctrl-b Space opens or toggles Station
 # Ctrl-b d detaches and cleans up the interactive lane
 ```
@@ -133,12 +133,12 @@ mutates the default tmux server.
 Use split commands when automation or a persistent detached lane is needed:
 
 ```sh
-pnpm station:devbox tmux start
-pnpm station:devbox tmux attach
-pnpm station:devbox tmux status
-pnpm station:devbox tmux logs --follow
-pnpm station:devbox tmux stop
-pnpm station:devbox tmux reset --yes
+bun run station:devbox tmux start
+bun run station:devbox tmux attach
+bun run station:devbox tmux status
+bun run station:devbox tmux logs --follow
+bun run station:devbox tmux stop
+bun run station:devbox tmux reset --yes
 ```
 
 Dashboard code under `station/src/**` hot-reloads in place. Package, CLI,
@@ -153,11 +153,11 @@ process or default-server operations.
 
 ## Advanced lanes
 
-`pnpm dev` watches the built Node CLI and opens `stn tui`. By default it creates
+`bun run dev` watches the built Node CLI and opens `stn tui`. By default it creates
 an isolated config under `.dev-state/tui-dev`; an explicit `--config` must name a
 controlled development configuration. It does not hot-reload the Bun renderer.
 
-`pnpm station:ui-dev` hot-reloads `station/src/**` against the selected real
+`bun run station:ui-dev` hot-reloads `station/src/**` against the selected real
 Observer. It is native-UI only and can see or affect actual sessions. Observer,
 provider, protocol, and Host changes still require rebuilding and deliberately
 restarting the real runtime from the checkout that owns it.

@@ -12,7 +12,7 @@ Run it only when the local machine has:
 STATION_REAL_CURSOR=1 \
 STATION_CURSOR_AGENT_BIN="$(command -v agent)" \
 STATION_TMUX_BIN="$(command -v tmux)" \
-pnpm test:e2e:cursor:real
+bun run test:e2e:cursor:real
 ```
 
 The test creates a temporary git worktree, starts a unique tmux session, launches Cursor through a temporary shim that logs argv/env and then `exec`s the real Cursor Agent binary, reconciles observer state, and cleans up the tmux/temp state afterward.

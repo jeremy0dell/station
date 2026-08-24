@@ -290,10 +290,12 @@ describeRealTmux("real tmux dev popup routing", () => {
     await execFileAsync(tmux, ["-V"], { timeout: 10_000 });
     await execFileAsync("python3", ["--version"], { timeout: 10_000 });
     await access(builtCliPath).catch(() => {
-      throw new Error(`Built CLI not found at ${builtCliPath}; run pnpm build first.`);
+      throw new Error(`Built CLI not found at ${builtCliPath}; run bun run build first.`);
     });
     await access(builtBinaryPath).catch(() => {
-      throw new Error(`Compiled CLI not found at ${builtBinaryPath}; run pnpm build:binary first.`);
+      throw new Error(
+        `Compiled CLI not found at ${builtBinaryPath}; run bun run build:binary first.`,
+      );
     });
   });
 

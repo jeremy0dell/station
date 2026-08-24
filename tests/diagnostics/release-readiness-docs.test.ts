@@ -56,12 +56,12 @@ describe("release readiness docs", () => {
     expect(quickStart).toContain("Add your first project");
     expect(quickStart).toContain("Create Session");
     expect(install).toContain("Node.js 24.2+");
-    expect(install).toContain("pnpm smoke:release");
+    expect(install).toContain("bun run smoke:release");
     expect(install).toContain("examples/local-real-config.toml");
     expect(limitations).toContain("Agent Status Can Be Conservative");
     expect(limitations).not.toMatch(/TODO|Test Coverage Gaps|Remaining work/i);
     expect(systemDependencies).toContain("tmux");
-    expect(systemDependencies).toContain("pnpm setup:system:check");
+    expect(systemDependencies).toContain("bun run setup:system:check");
     expect(testsReadme).toContain("## Choose a gate");
     expect(testsReadme).toContain("## Machine isolation");
     expect(localRealConfig).toContain('managed_root = "~/.worktrees"');
@@ -191,11 +191,11 @@ describe("release readiness docs", () => {
       ).toBeLessThanOrEqual(120);
     }
     for (const command of [
-      "pnpm station:devbox dev",
-      "pnpm station:devbox restart",
-      "pnpm station:devbox reset -- --yes",
-      "pnpm station:devbox tmux dev",
-      "pnpm station:ui-dev",
+      "bun run station:devbox dev",
+      "bun run station:devbox restart",
+      "bun run station:devbox reset -- --yes",
+      "bun run station:devbox tmux dev",
+      "bun run station:ui-dev",
     ]) {
       expect(localDevelopment).toContain(command);
     }
@@ -377,7 +377,7 @@ describe("release readiness docs", () => {
     expect(packageJson.scripts["smoke:install"]).toBe(
       "node scripts/test-runners/run-install-smoke.mjs",
     );
-    expect(packageJson.scripts["test:all"]).toContain("pnpm smoke:install");
+    expect(packageJson.scripts["test:all"]).toContain("bun run smoke:install");
   });
 
   it("keeps installer continuity and interrupted-upgrade recovery documented", async () => {

@@ -27,7 +27,7 @@ export const tuiCliCommand: CliCommandNode = {
       description: "Allow this TUI launch from a Station-owned pane.",
     },
   ],
-  examples: ["pnpm stn tui", "pnpm stn tui --popup --persistent", "pnpm stn tui --allow-nested"],
+  examples: ["stn tui", "stn tui --popup --persistent", "stn tui --allow-nested"],
 };
 
 async function handleTuiConfigError(error: unknown, context: CliCommandConfigErrorContext) {

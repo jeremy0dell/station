@@ -24,10 +24,7 @@ export const observeCliCommand: CliCommandNode = {
     { name: "--duration <time>", description: "Stop after a bounded duration." },
     { name: "--limit <count>", description: "Stop after a bounded number of events." },
   ],
-  examples: [
-    "pnpm stn observe --include-snapshot --duration 3s",
-    "pnpm stn observe --json --limit 5",
-  ],
+  examples: ["stn observe --include-snapshot --duration 3s", "stn observe --json --limit 5"],
 };
 
 async function runObserveCliCommand(context: CliCommandRunContext) {

@@ -2,8 +2,7 @@ node_modules/
 dist/
 coverage/
 .turbo/
-.pnpm-store/
-pnpm-lock.*.yaml
+bun.lock.*
 .DS_Store
 *.bun-build
 .worktrees/

@@ -66,10 +66,10 @@ describe("session current command", () => {
 
     expect(parent).toMatchObject({ code: 0, outputFormat: "text" });
     expect(textOutput(parent)).toContain("Resolve verified context for the invoking terminal.");
-    expect(textOutput(parent)).toContain("pnpm stn session current");
+    expect(textOutput(parent)).toContain("stn session current");
     expect(leaf).toMatchObject({ code: 0, outputFormat: "text" });
     expect(textOutput(leaf)).toContain("Print the verified invoking terminal context as JSON.");
-    expect(textOutput(leaf)).toContain("pnpm stn session current");
+    expect(textOutput(leaf)).toContain("stn session current");
     expect(spawnObserver).not.toHaveBeenCalled();
   });
 

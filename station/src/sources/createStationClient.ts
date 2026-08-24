@@ -73,7 +73,7 @@ function sourceBuildChangedError(startedBuild: string, currentBuild: string): Sa
     tag: "ProtocolError",
     code: "OBSERVER_BUILD_MISMATCH",
     message: `Station source changed after launch: this client started as "${startedBuild}", but the checkout now identifies as "${currentBuild}".`,
-    hint: "Run pnpm build, then close and relaunch Station before issuing more Observer operations.",
+    hint: "Run bun run build, then close and relaunch Station before issuing more Observer operations.",
   };
 }
 

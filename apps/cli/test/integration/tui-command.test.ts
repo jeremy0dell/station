@@ -1,6 +1,6 @@
 import { EventEmitter } from "node:events";
 import { access, mkdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { runCli } from "@station/cli";
 import {
   type ObserverProcessDeps,
@@ -1322,7 +1322,7 @@ describe("CLI tui command", () => {
       expect(persistent.spawnProcess).toHaveBeenNthCalledWith(
         1,
         "bun",
-        ["run", "--silent", "--cwd", workspaceDir, "link:station"],
+        ["run", "--silent", "--cwd", dirname(workspaceDir), "build:ensure"],
         expect.objectContaining({ stdio: "inherit" }),
       );
       expect(persistent.spawnProcess).toHaveBeenNthCalledWith(
@@ -1339,13 +1339,13 @@ describe("CLI tui command", () => {
     }
   });
 
-  it("does not spawn the persistent source renderer when station linking fails", async () => {
-    const persistent = await startPersistentRenderer({ source: true, linkExitCode: 23 });
+  it("does not spawn the persistent source renderer when build admission fails", async () => {
+    const persistent = await startPersistentRenderer({ source: true, buildExitCode: 23 });
 
     expect(persistent.spawnProcess).toHaveBeenCalledOnce();
     expect(persistent.spawnProcess).toHaveBeenCalledWith(
       "bun",
-      ["run", "--silent", "--cwd", resolveStationWorkspaceDir(), "link:station"],
+      ["run", "--silent", "--cwd", dirname(resolveStationWorkspaceDir()), "build:ensure"],
       expect.objectContaining({ stdio: "inherit" }),
     );
     await persistent.finish();
@@ -2079,7 +2079,7 @@ class FakeRendererChild extends EventEmitter {
 
 async function startPersistentRenderer(
   options: {
-    linkExitCode?: number;
+    buildExitCode?: number;
     popupControl?: NonNullable<TuiCommandDeps["popupControl"]>;
     persistentPopup?: boolean;
     sendError?: Error;
@@ -2088,12 +2088,12 @@ async function startPersistentRenderer(
 ) {
   const fixture = await createTempState();
   const child = new FakeRendererChild(options.sendError ?? null);
-  const linkChild = new EventEmitter();
-  const linkExitCode = options.linkExitCode ?? 0;
+  const buildChild = new EventEmitter();
+  const buildExitCode = options.buildExitCode ?? 0;
   const spawnProcess = vi.fn(() => {
     if (options.source === true && spawnProcess.mock.calls.length === 1) {
-      queueMicrotask(() => linkChild.emit("exit", linkExitCode));
-      return linkChild as never;
+      queueMicrotask(() => buildChild.emit("exit", buildExitCode));
+      return buildChild as never;
     }
     return child as never;
   });
@@ -2117,15 +2117,15 @@ async function startPersistentRenderer(
       popupControl,
     },
   );
-  const expectedSpawnCount = options.source === true && linkExitCode === 0 ? 2 : 1;
+  const expectedSpawnCount = options.source === true && buildExitCode === 0 ? 2 : 1;
   await vi.waitFor(() => expect(spawnProcess).toHaveBeenCalledTimes(expectedSpawnCount));
 
   return {
     child,
     spawnProcess,
     finish: async () => {
-      if (options.source === true && linkExitCode !== 0) {
-        await expect(result).resolves.toEqual({ status: "exited", code: linkExitCode });
+      if (options.source === true && buildExitCode !== 0) {
+        await expect(result).resolves.toEqual({ status: "exited", code: buildExitCode });
         return;
       }
       child.emit("exit", 0);

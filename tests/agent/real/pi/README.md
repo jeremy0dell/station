@@ -11,12 +11,12 @@ Run it only when the local machine has:
   agent package directory
 
 ```bash
-pnpm build
+bun run build
 
 STATION_REAL_PI=1 \
 STATION_PI_BIN="$(command -v pi)" \
 STATION_TMUX_BIN="$(command -v tmux)" \
-pnpm test:e2e:pi:real
+bun run test:e2e:pi:real
 ```
 
 The launch-scaffolding test creates a temporary git worktree, starts a unique

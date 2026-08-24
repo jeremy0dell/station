@@ -63,7 +63,7 @@ async function resolveSetupGuidedRuntime() {
   } catch (cause) {
     throw new RuntimeOwnerError(
       "SETUP_GUIDED_E2E_WORKSPACE_NOT_BUILT",
-      "Station consumes built workspace packages. Run `pnpm build` at the repository root first.",
+      "Station consumes built workspace packages. Run `bun run build` at the repository root first.",
       { cause },
     );
   }

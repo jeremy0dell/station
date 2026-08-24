@@ -47,11 +47,7 @@ export const hooksCliCommand: CliCommandNode = {
       description: "Use a specific provider hook script path when supported.",
     },
   ],
-  examples: [
-    "pnpm stn hooks plan codex",
-    "pnpm stn hooks install codex --yes",
-    "pnpm stn hooks doctor opencode",
-  ],
+  examples: ["stn hooks plan codex", "stn hooks install codex --yes", "stn hooks doctor opencode"],
   children: hookActions.map((action) => hookActionCommand(action)),
 };
 
@@ -148,8 +144,8 @@ function hookActionCommand(action: (typeof hookActions)[number]): CliCommandNode
       },
     ],
     examples: [
-      `pnpm stn hooks ${action} codex${actionNeedsYes(action) ? " --yes" : ""}`,
-      `pnpm stn hooks ${action} worktrunk${actionNeedsYes(action) ? " --yes" : ""}`,
+      `stn hooks ${action} codex${actionNeedsYes(action) ? " --yes" : ""}`,
+      `stn hooks ${action} worktrunk${actionNeedsYes(action) ? " --yes" : ""}`,
     ],
     notes: [
       "Provider hooks are delivery hints, not authoritative runtime truth.",

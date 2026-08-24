@@ -1577,8 +1577,8 @@ function errorMessage(error) {
 
 function printHelp() {
   process.stdout.write(`Usage:
-  pnpm station:sessions:migrate -- --archive <path> --target-config <config.toml> [options]
-  pnpm station:sessions:migrate -- --archive <path> --target-config <config.toml> [options] --yes --expect-plan <sha256>
+  bun run station:sessions:migrate -- --archive <path> --target-config <config.toml> [options]
+  bun run station:sessions:migrate -- --archive <path> --target-config <config.toml> [options] --yes --expect-plan <sha256>
 
 Without --yes, validates the complete rescue archive and prints a read-only migration plan and
 digest. Apply revalidates that digest, closes the exact source sessions without force, seals final

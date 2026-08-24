@@ -10,7 +10,6 @@ import type {
   DashboardRowId,
 } from "@station/dashboard-core/selectors";
 import { Fragment } from "react";
-import stringWidth from "string-width";
 import {
   toOpenTuiColor,
   useStationTheme,
@@ -192,7 +191,7 @@ function groupHeaderActions(
 
 function groupHeaderActionsWidth(actions: readonly GroupHeaderAction[]): number {
   // Every action reserves one inert cursor cell so focus cannot change width or pointer geometry.
-  return actions.reduce((width, action) => width + 1 + stringWidth(action.label), 0);
+  return actions.reduce((width, action) => width + 1 + Bun.stringWidth(action.label), 0);
 }
 
 function GroupIdentityTarget({
@@ -321,19 +320,20 @@ function groupIdentityLayout(
       : `${payload.visibleSessionCount} visible`;
   for (const candidate of [count, String(payload.visibleSessionCount), ""]) {
     const suffix = candidate.length === 0 ? "" : ` ${candidate}`;
-    const width = stringWidth(prefix) + stringWidth(payload.group.name) + stringWidth(suffix);
+    const width =
+      Bun.stringWidth(prefix) + Bun.stringWidth(payload.group.name) + Bun.stringWidth(suffix);
     if (width <= maxWidth) {
       return { prefix, name: payload.group.name, count: candidate, width };
     }
   }
-  const prefixWidth = Math.min(maxWidth, stringWidth(prefix));
+  const prefixWidth = Math.min(maxWidth, Bun.stringWidth(prefix));
   const visiblePrefix = truncateCells(prefix, prefixWidth);
   const visibleName = truncateCells(payload.group.name, Math.max(0, maxWidth - prefixWidth));
   return {
     prefix: visiblePrefix,
     name: visibleName,
     count: "",
-    width: stringWidth(visiblePrefix) + stringWidth(visibleName),
+    width: Bun.stringWidth(visiblePrefix) + Bun.stringWidth(visibleName),
   };
 }
 

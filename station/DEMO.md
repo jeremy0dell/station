@@ -36,7 +36,7 @@ station/scripts/run-container.sh --mock
 | **Mock scenario picker** | `STATION_SCENARIO=baseline\|many-projects\|grouped-many-projects\|attention-and-failures\|disconnected` |
 | **Doctor pre-flight** | `scripts/doctor.sh` (clear failure messages, never auto-installs) |
 | **node-pty repair** | auto-runs before spawn (re-asserts `spawn-helper` +x bit that Bun strips) |
-| **STATION package symlink** | `scripts/link-station-packages.sh` (auto-run before `station`/`dev`/`test`) |
+| **Root workspace build admission** | `build:ensure` (auto-run before developer launch/test entrypoints) |
 | **Node sidecar override** | `STATION_NODE=/path/to/node` |
 
 > **Recommended demo recipe:** `run-host.sh --mock --hot` with

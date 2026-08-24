@@ -255,7 +255,7 @@ describe("workflow security policy", () => {
     expect(authenticatedSteps[0]?.text).toContain("exit 1");
     expect(authenticatedSteps[0]?.text).not.toContain("exit 0");
 
-    for (const stepName of ["Install workspace", "Install tmux and the Claude Code CLI"]) {
+    for (const stepName of ["Build", "Install tmux and the Claude Code CLI"]) {
       const step = workflowSteps(file).find((candidate) =>
         candidate.text.startsWith(`      - name: ${stepName}`),
       );
@@ -294,9 +294,9 @@ describe("hosted CI policy", () => {
     expect(standardCi).toContain("needs.classify.outputs.claim_stress");
     expect(standardCi).toContain("needs.classify.outputs.shell_matrix");
     expect(standardCi).toContain("STATION_SETUP_E2E_ALL_SHELLS");
-    expect(standardCi).toContain("pnpm test:sqlite:bun:pr");
-    expect(standardCi).toContain("pnpm test:sqlite:bun");
-    expect(standardCi).not.toContain("pnpm test:pre-push");
+    expect(standardCi).toContain("bun run test:sqlite:bun:pr");
+    expect(standardCi).toContain("bun run test:sqlite:bun");
+    expect(standardCi).not.toContain("bun run test:pre-push");
 
     const aggregate = between(standardCi, "  standard-ci:", "  main-smoke:");
     expect(aggregate).toContain("name: standard-ci");
@@ -495,7 +495,7 @@ describe("hosted CI policy", () => {
     expect(stress).not.toContain("pull_request:");
     expect(stress).toContain("timeout-minutes: 20");
     expect(stress).toContain('if [ "$ROUNDS" -lt 1 ] || [ "$ROUNDS" -gt 100 ]');
-    expect(stress).toContain("pnpm build:binary -- --version 0.0.0-local");
+    expect(stress).toContain("bun run build:binary -- --version 0.0.0-local");
     expect(stress).toContain("--round-timeout-ms 30000");
     expect(stress).toContain(
       `STATION_BINARY_SMOKE_EVIDENCE_DIR: ${actionsExpression("runner.temp")}/station-binary-smoke-evidence`,
@@ -519,8 +519,8 @@ describe("hosted CI policy", () => {
 
     expect(nightly).toContain('cron: "17 7 * * *"');
     expect(nightly).toContain("workflow_dispatch:");
-    expect(nightly).toContain('bun: "true"');
-    expect(nightly).toContain("pnpm test:observer-claim:cross-runtime");
+    expect(nightly).toContain("uses: ./.github/actions/setup-ci");
+    expect(nightly).toContain("bun run test:observer-claim:cross-runtime");
     expect(nightly).not.toContain("test:observer-claim:cross-runtime:pr");
     expect(testing).toContain("nightly-observer-claim");
   });
@@ -532,23 +532,25 @@ describe("hosted CI policy", () => {
     const lefthook = read("lefthook.yml");
     const testing = read("tests/README.md");
 
-    expect(packageJson.scripts["test:pre-push"]).toBe("pnpm lint");
-    expect(packageJson.scripts["test:all"]).toContain("pnpm smoke:install");
+    expect(packageJson.scripts["test:pre-push"]).toBe("bun run lint");
+    expect(packageJson.scripts["test:all"]).toContain("bun run smoke:install");
     expect(packageJson.scripts["test:diagnostics:policy"]).toContain(
       "release-readiness-docs.test.ts",
     );
     expect(packageJson.scripts["test:e2e:setup:guided:all-shells"]).toContain(
       "STATION_SETUP_E2E_ALL_SHELLS=true",
     );
-    expect(packageJson.scripts["test:ci:binary"]).toContain("pnpm smoke:binary");
+    expect(packageJson.scripts["test:ci:binary"]).toContain("bun run smoke:binary");
     expect(packageJson.scripts["smoke:update"]).toBe(
       "node scripts/test-runners/run-update-smoke.mjs",
     );
     expect(packageJson.scripts["test:ci:binary"]).toContain(
-      "pnpm smoke:update -- --incumbent-binary station/dist/bin/stn",
+      "bun run smoke:update -- --incumbent-binary station/dist/bin/stn",
     );
     expect(packageJson.scripts["test:ci:station"]).toContain("test:pty:bun");
-    expect(lefthook).toContain("run: node scripts/run-without-git-locals.mjs pnpm test:pre-push");
+    expect(lefthook).toContain(
+      "run: node scripts/run-without-git-locals.mjs bun run test:pre-push",
+    );
     expect(testing).toContain("The pre-push hook is intentionally lint-only");
   });
 
@@ -557,15 +559,14 @@ describe("hosted CI policy", () => {
     const setupAction = read(".github/actions/setup-ci/action.yml");
     const mainSmoke = between(standardCi, "  main-smoke:");
 
-    const setupNodePin = setupAction.match(/uses: (actions\/setup-node@[0-9a-f]{40})/)?.[1];
-    expect(setupNodePin).toBeDefined();
-    expect(mainSmoke).toContain(`uses: ${setupNodePin}`);
+    expect(setupAction).toMatch(/uses: actions\/setup-node@[0-9a-f]{40}/);
+    expect(mainSmoke).toContain("uses: ./.github/actions/setup-ci");
     expect(setupAction).toMatch(/uses: actions\/cache@[0-9a-f]{40}/);
     expect(setupAction).toContain("if: inputs.restore-turbo-cache == 'true'");
     expect(setupAction).toContain("path: .turbo");
     expect(setupAction).toContain("runner.os");
     expect(setupAction).toContain("runner.arch");
-    expect(setupAction).toContain("hashFiles('pnpm-lock.yaml', 'turbo.json')");
+    expect(setupAction).toContain("hashFiles('bun.lock', 'bunfig.toml', 'turbo.json')");
     expect(setupAction).toContain("github.sha");
     expect(setupAction).toContain("restore-keys:");
     expect(standardCi).toContain(
@@ -573,12 +574,12 @@ describe("hosted CI policy", () => {
     );
 
     expect(mainSmoke).toContain("github.ref == 'refs/heads/main'");
-    expect(mainSmoke).toContain("pnpm build");
-    expect(mainSmoke).toContain("pnpm typecheck");
-    expect(mainSmoke).toContain("pnpm lint");
+    expect(mainSmoke).toContain("bun run build");
+    expect(mainSmoke).toContain("bun run typecheck");
+    expect(mainSmoke).toContain("bun run lint");
     expect(mainSmoke).not.toContain("test:pre-push");
     expect(mainSmoke).not.toContain("setup-bun");
-    expect(mainSmoke).toMatch(/uses: actions\/cache@[0-9a-f]{40}/);
+    expect(mainSmoke).not.toMatch(/uses: actions\/cache@[0-9a-f]{40}/);
     expect(standardCi).not.toMatch(/path:\s+.*station-build-id/);
   });
 });

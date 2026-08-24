@@ -8,7 +8,11 @@ describe("setup toolchain", () => {
     "24.2.1",
     "24.18.0",
   ])("accepts supported Node.js version %s", async (nodeVersion) => {
-    const { node } = await checkSetupToolchain({ nodeVersion, runner: pnpm11Runner });
+    const { node } = await checkSetupToolchain({
+      nodeVersion,
+      expectedBunVersion: "1.4.0",
+      runner: bun14Runner,
+    });
 
     expect(node).toMatchObject({
       status: "ok",
@@ -25,7 +29,11 @@ describe("setup toolchain", () => {
     "24.2.0.1",
     "25.0.0",
   ])("rejects unsupported or malformed Node.js version %s", async (nodeVersion) => {
-    const { node } = await checkSetupToolchain({ nodeVersion, runner: pnpm11Runner });
+    const { node } = await checkSetupToolchain({
+      nodeVersion,
+      expectedBunVersion: "1.4.0",
+      runner: bun14Runner,
+    });
 
     expect(node).toMatchObject({
       status: "incompatible",
@@ -35,10 +43,10 @@ describe("setup toolchain", () => {
   });
 });
 
-const pnpm11Runner = async () => ({
-  command: "pnpm",
+const bun14Runner = async () => ({
+  command: "bun",
   args: ["--version"],
-  stdout: "11.0.0\n",
+  stdout: "1.4.0\n",
   stderr: "",
   exitCode: 0,
 });

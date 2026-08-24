@@ -40,7 +40,7 @@ if (isInsideTmux(process.env) || process.env.STATION_RESET_TMUX === "1") {
   }
 }
 
-const restart = spawnSync("pnpm", ["stn", "observer", "restart"], {
+const restart = spawnSync("bun", ["run", "stn", "--", "observer", "restart"], {
   cwd: repoRoot,
   stdio: "inherit",
   env: process.env,
@@ -51,7 +51,7 @@ if ((restart.status ?? 1) !== 0) {
   process.exit();
 }
 
-const result = spawnSync("pnpm", ["stn"], {
+const result = spawnSync("bun", ["run", "stn"], {
   cwd: repoRoot,
   stdio: "inherit",
   env: process.env,

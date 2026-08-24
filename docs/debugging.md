@@ -42,7 +42,7 @@ Use the narrowest tool that can answer the question:
 | Redacted shareable evidence | `stn debug bundle --trace <traceId>` / `--command <commandId>` / `--latest-failure` |
 | Provider hook setup | `stn hooks doctor <target>` for worktrunk, claude, codex, cursor, or opencode |
 | Observer event hook setup | `stn event-hooks doctor` |
-| Setup and tool readiness | `stn setup check --json`, `stn setup system --check`, or `pnpm setup:system:check` |
+| Setup and tool readiness | `stn setup check --json`, `stn setup system --check`, or `bun run setup:system:check` |
 
 Use `stn debug logs [query]` for bounded historical log inspection when there is no
 trace, command, or diagnostic ID yet. It reads structured JSONL logs from the
@@ -188,7 +188,7 @@ run/runtime-owners/v1/
 
 `run/runtime-owners/v1` contains private (`0700` directory, `0600` files) disposable-runtime records for native development HMR and the supervised setup guided E2E lane. Binary smoke uses the same relative record path beneath private checkout-and-mode-keyed state in the OS temporary directory so an ordinary next start can find a prior random smoke root. A matching next start may recover only a dead owner's exact registered process group after PID, PGID, OS start, launch-token, script, and executable evidence agree. Device-and-inode-pinned cleanup roots remain on the next record until exact deletion succeeds. A malformed, insecure, replaced, reused, or unavailable identity blocks cleanup and preserves the record for diagnosis. These records classify socket and persistence roots but never authorize signals to persistent Observer, Station Host, or Host-owned PTYs.
 
-Use `pnpm station:runtime-inventory [-- --json]` to inspect registered disposable owners without changing them. The report distinguishes a live persistent Host/PTY cohort from a disposable launcher record, returns only keys and root classifications, and names unavailable or ambiguous evidence as a refusal. It never prints raw commands, environment, terminal contents, prompts, credentials, or absolute private paths; use its logical `logs/cli.jsonl` location with `stn debug logs "runtime." --component cli` for the correlated lifecycle evidence. For the checkout-local devbox, run `cd station && bun run station:isolated inventory`.
+Use `bun run station:runtime-inventory [-- --json]` to inspect registered disposable owners without changing them. The report distinguishes a live persistent Host/PTY cohort from a disposable launcher record, returns only keys and root classifications, and names unavailable or ambiguous evidence as a refusal. It never prints raw commands, environment, terminal contents, prompts, credentials, or absolute private paths; use its logical `logs/cli.jsonl` location with `stn debug logs "runtime." --component cli` for the correlated lifecycle evidence. For the checkout-local devbox, run `cd station && bun run station:isolated inventory`.
 
 For terminal placement, run `stn session current` from the caller terminal and
 reuse only its unexpired `source` in a raw sibling request. A detached request
@@ -196,7 +196,7 @@ has no source. If a command is rejected, inspect `stn debug trace <commandId>`
 for the placement or cleanup code. Debug export redacts `authorityId` and does
 not include raw caller claims or provider-private proof.
 
-`pnpm station:runtime-prune -- --runtime <run_uuid>` is the read-only plan for one inventory record. An eligible plan prints a stable SHA-256 digest; apply only by rerunning with `--yes --expect-plan <sha256>`. Apply serializes with runtime startup, requires the same plan after acquiring the runtime-key lock, and revalidates the exact owner, group, checkout, pinned cleanup roots, registered Host sockets, and live PTYs before every signal or recursive deletion. A stale digest, active owner, PID reuse, inaccessible Host, protected PTY overlap, malformed record, or root replacement refuses cleanup and retains the record. `runtime.prune.applied` means the group and pinned binary-smoke roots were confirmed absent before record retirement; `runtime.cleanup.refused` and `runtime.cleanup.failed` retain evidence for another inspection. The command never extends `agent:cleanup`, reset, or Observer reap behavior.
+`bun run station:runtime-prune -- --runtime <run_uuid>` is the read-only plan for one inventory record. An eligible plan prints a stable SHA-256 digest; apply only by rerunning with `--yes --expect-plan <sha256>`. Apply serializes with runtime startup, requires the same plan after acquiring the runtime-key lock, and revalidates the exact owner, group, checkout, pinned cleanup roots, registered Host sockets, and live PTYs before every signal or recursive deletion. A stale digest, active owner, PID reuse, inaccessible Host, protected PTY overlap, malformed record, or root replacement refuses cleanup and retains the record. `runtime.prune.applied` means the group and pinned binary-smoke roots were confirmed absent before record retirement; `runtime.cleanup.refused` and `runtime.cleanup.failed` retain evidence for another inspection. The command never extends `agent:cleanup`, reset, or Observer reap behavior.
 
 `observer.sock.pid` is mode `0600` for the default socket and contains exactly:
 
@@ -311,7 +311,7 @@ activation does not target the Station
 Host or hosted agents and does not reset `.dev-state`. Resolve inaccessible
 ownership before retrying a `preserved` result. Inspect status first for
 `unknown`. For `stopped`, the isolated Observer may be down while Host-owned
-PTYs remain live; rerun the same `pnpm station:devbox start` or `dev` command.
+PTYs remain live; rerun the same `bun run station:devbox start` or `dev` command.
 Do not use reset as routine build recovery. Exact activation never signals,
 reaps, invokes devbox Host teardown, or hands off a later non-exact owner.
 
@@ -322,9 +322,9 @@ make a private preservation archive before stopping, unlinking, resuming, or
 replacing anything:
 
 ```bash
-pnpm station:sessions:save -- --devbox
-pnpm station:sessions:save -- --config ~/.config/station/config.toml
-pnpm station:sessions:verify -- ~/.local/state/station-session-rescues/<timestamp>
+bun run station:sessions:save -- --devbox
+bun run station:sessions:save -- --config ~/.config/station/config.toml
+bun run station:sessions:verify -- ~/.local/state/station-session-rescues/<timestamp>
 ```
 
 The save command is read-only with respect to Station, provider sessions, and
@@ -349,7 +349,7 @@ handle per active session, matches the same project/worktree identities in the
 target, and refuses any target worktree that already owns a session:
 
 ```bash
-pnpm station:sessions:migrate -- \
+bun run station:sessions:migrate -- \
   --archive ~/.local/state/station-session-rescues/<timestamp> \
   --target-config ~/.config/station/config.toml \
   --source-devbox-root ~/Developer/station
@@ -364,7 +364,7 @@ conflicts, and prints a SHA-256 digest over that evidence. It never starts an
 Observer or edits configuration. Apply must bind confirmation to that evidence:
 
 ```bash
-pnpm station:sessions:migrate -- \
+bun run station:sessions:migrate -- \
   --archive ~/.local/state/station-session-rescues/<timestamp> \
   --target-config ~/.config/station/config.toml \
   --source-devbox-root ~/Developer/station \
@@ -439,7 +439,7 @@ display build differs and the incumbent Host still owns live PTYs. Reopen the
 matching Host build and account for those terminals before replacement.
 
 A missing, invalid, or checkout/output-mismatched `station-build-id` stops a
-source client before it can claim compatibility. Run `pnpm build`, then relaunch
+source client before it can claim compatibility. Run `bun run build`, then relaunch
 the client; a scoped `tsc` output is not an identified whole-repository build.
 
 ## Reading Evidence
@@ -488,9 +488,9 @@ When Station "does nothing" or panes read "exited", inspect the `cli`, `tui`, an
   `ps -t "$(tty | sed 's#^/dev/##')" -o pid=,command=` and only then send
   `kill -TERM <independently-verified-station-pid>` yourself.
 - The host the UI dials must match both its host protocol and Station display build version. `host.start` in `station-host.jsonl` records both versions. `HOST_UPGRADE_BLOCKED` means a different display build owns live PTYs and handoff was not opted in; `HOST_VERSION_INCOMPATIBLE` means the running host is legacy, uses another display build, or speaks another protocol. `HOST_HANDOFF_INVALID_STATE` / `HOST_HANDOFF_MANIFEST_INVALID` diagnose negotiated handoff misuse or a bad manifest. `HOST_CLIENT_IDENTITY_MISMATCH` instead means one connection omitted or changed its UI correlation identity. Compatibility failures preserve the Host; correlation failures reject only the malformed client request. These are separate from Observer immutable-selector admission.
-- The host socket defaults to `<state_dir>/run/station-host.sock` (beside `observer.sock`); override with `STATION_HOST_SOCKET_PATH`. Inspect with `pnpm stn host status` or `bun run host:list` in `station/`. Opt into live ownership transfer with `pnpm stn host handoff [--dry-run] [--fidelity processes|screen]` (default busy-host behavior remains refuse).
+- The host socket defaults to `<state_dir>/run/station-host.sock` (beside `observer.sock`); override with `STATION_HOST_SOCKET_PATH`. Inspect with `bun run stn host status` or `bun run host:list` in `station/`. Opt into live ownership transfer with `bun run stn host handoff [--dry-run] [--fidelity processes|screen]` (default busy-host behavior remains refuse).
 - Host reuse/replace keys on Host protocol major equality plus exact display `buildVersion` string equality (`stationBuildInfo().version`). It does **not** key on `compiled` vs source, and does **not** use Observer's content `buildIdentity`. Same display version ⇒ reuse (handoff refused as unnecessary). Different display versions + matching protocol ⇒ replace (handoff only when opted in). Protocol major skew ⇒ refuse (never handoffs). The successor process form follows whoever requests the handoff (`bun hostMain.ts` from source CLI, `<stn> __station-host` from a binary).
-- `pnpm station:devbox` always launches a Bun source host (`STATION_HOST_ENTRY=hostMain.ts`) under checkout-local `.dev-state`. Do not point a binary `stn host handoff` at that socket unless you intend to flip packaging; afterward run `pnpm station:devbox stop` then `start`, or another deliberate handoff, before treating the lane as normal. `station:devbox status` warns when the listening host's build does not match this checkout's expected source CLI build.
+- `bun run station:devbox` always launches a Bun source host (`STATION_HOST_ENTRY=hostMain.ts`) under checkout-local `.dev-state`. Do not point a binary `stn host handoff` at that socket unless you intend to flip packaging; afterward run `bun run station:devbox stop` then `start`, or another deliberate handoff, before treating the lane as normal. `station:devbox status` warns when the listening host's build does not match this checkout's expected source CLI build.
 - Orphaned PTY bridges park under `<state_dir>/run/pty-bridges/` when their host dies without an intentional stop, or when `beginHandoff` releases owner pipes without SIGTERM: `<ptyId>.sock` is the live control socket, `<ptyId>.park.json` the redaction-safe park state (ids, pid, geometry, timestamps — never PTY data), `<ptyId>.scrollback.json` a persisted replay export when one was written, and optional `<ptyId>.screen.json` a best-effort semantic snapshot for fidelity `screen`. A live socket answering `exit-status` means the agent is still parked and adoptable; a clean host startup reaps the dead ones automatically (`host.orphan-reap` in `station-host.jsonl` reports the counts). Unadopted parks self-reap at the TTL (`STATION_PTY_ORPHAN_TTL_MS`, default 24h). If `<ptyId>.park.json` exists without `<ptyId>.sock`, check for `<ptyId>.park.json.listen-error` — on macOS an overlong unix socket path (`sun_path` ≈ 104 bytes) fails listen with `EINVAL`, and `beginHandoff` refuses rather than returning an unadoptable manifest.
 - Never kill a version-mismatched host or remove its socket until a matching build proves that its PTY list is empty. Reopen with the build named by the error to finish or explicitly close live terminals, then retry; current-protocol idle hosts replace themselves automatically. A legacy or different-protocol host requires an explicit stop only after its sessions are accounted for.
 - Successful `agent.attach` entries in `station-host.jsonl` report `replayKind` (`raw-complete`, `semantic-truncation-recovery`, or `live-reset-recovery`), replay entry/byte counts, recorded geometry, and capture duration without terminal contents. `live-reset-recovery` means historical output could not be reconstructed exactly, so Station applied Host-captured control-only reset data, restored interaction modes and a valid active-buffer cursor anchor, nudged geometry for a child repaint, and retained live I/O. The associated `pty.snapshot.degraded` entry classifies the content-free cause as `unsupported-state`, `model-update-failed`, or `serialization-failed`; unsupported state also carries an optional stable, content-free `detail` classification. `HOST_SNAPSHOT_PENDING` is retried because later output may finish an incomplete parser sequence. `HOST_SNAPSHOT_FAILED` is no longer an expected live-reconstruction outcome; if it appears, confirm the PTY in `host:list` and treat it as a Host/client regression rather than an Observer session exit.

@@ -36,7 +36,7 @@ if [[ "$has_mode" -eq 0 ]]; then
 fi
 
 if [[ ! -f "$entry" ]]; then
-  echo "stn has not been built. Run: pnpm build" >&2
+  echo "stn has not been built. Run: bun run build" >&2
   exit 1
 fi
 

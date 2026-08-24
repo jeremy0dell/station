@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { constants } from "node:os";
+import { dirname } from "node:path";
 import type { StationConfig, TmuxConfig } from "@station/config";
 import {
   TUI_STARTUP_RECONCILE_REASON,
@@ -317,14 +318,14 @@ async function spawnRenderer(
   const sourcePersistentDashboard =
     override === undefined && !compiled && persistentPopup && entry === "dashboard";
   if (sourcePersistentDashboard) {
-    const linkResult = await runStationLink(spawnProcess, workspaceDir, childEnv);
-    if (linkResult.code !== 0) {
+    const buildResult = await ensureStationBuild(spawnProcess, workspaceDir, childEnv);
+    if (buildResult.code !== 0) {
       await recordSpawnFailure({
         tag: "TuiCommandError",
         code: "TUI_RENDERER_PRELAUNCH_FAILED",
         message: "The Station renderer prelaunch step failed.",
       });
-      return linkResult;
+      return buildResult;
     }
   }
   const developmentArgv = ["bun", "run", "--silent", "--cwd", workspaceDir, entry] as const;
@@ -432,15 +433,16 @@ function rendererProcessCode(exitCode: number | null, signal: NodeJS.Signals | n
   return signalNumber === undefined ? 1 : 128 + signalNumber;
 }
 
-async function runStationLink(
+async function ensureStationBuild(
   spawnProcess: typeof spawn,
   workspaceDir: string,
   env: NodeJS.ProcessEnv,
 ): Promise<TuiRunResult> {
-  const child = spawnProcess("bun", ["run", "--silent", "--cwd", workspaceDir, "link:station"], {
-    stdio: "inherit",
-    env,
-  });
+  const child = spawnProcess(
+    "bun",
+    ["run", "--silent", "--cwd", dirname(workspaceDir), "build:ensure"],
+    { stdio: "inherit", env },
+  );
   return new Promise<TuiRunResult>((resolve) => {
     let settled = false;
     const finish = (code: number) => {

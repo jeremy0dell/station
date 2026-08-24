@@ -86,7 +86,7 @@ function parseOptions(arguments_) {
 }
 
 function printHelp() {
-  process.stdout.write(`Usage: pnpm setup:guided:sandbox -- [options]
+  process.stdout.write(`Usage: bun run setup:guided:sandbox -- [options]
 
 Run the real guided setup UI inside a disposable, manually interactive environment.
 
@@ -94,7 +94,7 @@ Options:
   --profile <name>  first-run (default), multi, missing-tools, or everything-missing
   --keep            retain the sandbox, shims, logs, and rerunnable launcher
   --prepare-only    prepare and retain the sandbox without launching setup
-  --skip-build      use the current build instead of running pnpm build first
+  --skip-build      use the current build instead of running bun run build first
   -h, --help        show this help
 
 Profiles:
@@ -106,9 +106,21 @@ Profiles:
 }
 
 function buildCheckout() {
-  const result = spawnSync("pnpm", ["build"], { cwd: repoRoot, stdio: "inherit" });
+  const versionCheck = spawnSync(
+    process.execPath,
+    [join(repoRoot, "scripts", "bun-version.mjs"), "--check"],
+    {
+      cwd: repoRoot,
+      stdio: "inherit",
+    },
+  );
+  if (versionCheck.error !== undefined) throw versionCheck.error;
+  if (versionCheck.status !== 0) {
+    throw new Error(`Bun version check exited ${String(versionCheck.status)}`);
+  }
+  const result = spawnSync("bun", ["run", "build"], { cwd: repoRoot, stdio: "inherit" });
   if (result.error !== undefined) throw result.error;
-  if (result.status !== 0) throw new Error(`pnpm build exited ${String(result.status)}`);
+  if (result.status !== 0) throw new Error(`bun run build exited ${String(result.status)}`);
 }
 
 async function createSandbox(profile) {
@@ -153,7 +165,6 @@ async function createSandbox(profile) {
   await writeBrewShim(bin, helperPath, logPath);
   await writeCurlShim(bin, logPath);
   await writeNpmShim(bin, helperPath, logPath);
-  await writePnpmShim(bin, logPath);
   await writeXcodeSelectShim(bin, logPath);
   await writeFailureShim(bin, "gh", logPath);
 
@@ -259,7 +270,18 @@ case "$name" in
   agent) [ "\${1:-}" = "--version" ] && echo "cursor-agent 1.0.0"; exit 0 ;;
   opencode) [ "\${1:-}" = "--version" ] && echo "opencode 1.0.0"; exit 0 ;;
   pi) [ "\${1:-}" = "--version" ] && echo "pi 0.80.10"; exit 0 ;;
-  bun) [ "\${1:-}" = "--version" ] && echo "1.3.14"; exit 0 ;;
+  bun)
+    if [ "\${1:-}" = "--version" ]; then echo "1.4.0"; exit 0; fi
+    case " $* " in
+      *station:link*)
+        ln -sf ${shellQuote(join(repoRoot, "bin", "stn"))} "$STATION_SETUP_SANDBOX_BIN/stn"
+        ln -sf ${shellQuote(join(repoRoot, "bin", "stn-ingress"))} "$STATION_SETUP_SANDBOX_BIN/stn-ingress"
+        ln -sf ${shellQuote(join(repoRoot, "integrations", "terminal", "tmux", "bin", "stn-popup"))} "$STATION_SETUP_SANDBOX_BIN/stn-tmux-popup"
+        echo "sandbox launchers linked"
+        ;;
+      *) echo "sandbox blocked unexpected bun command: $*" >&2; exit 2 ;;
+    esac
+    ;;
   hunk) [ "\${1:-}" = "--version" ] && echo "hunk 0.17.7"; exit 0 ;;
   stn|stn-ingress|stn-tmux-popup) exit 0 ;;
   *) echo "unsupported sandbox command: $name" >&2; exit 2 ;;
@@ -344,23 +366,6 @@ esac
 mkdir -p "$(dirname "$target")"
 ln -sf ${shellQuote(helperPath)} "$target"
 echo "sandbox npm installed \${target##*/}"
-`,
-  );
-}
-
-async function writePnpmShim(bin, logPath) {
-  await writeExecutable(
-    join(bin, "pnpm"),
-    `${logInvocation(logPath)}
-case " $* " in
-  *station:link*)
-    ln -sf ${shellQuote(join(repoRoot, "bin", "stn"))} "$STATION_SETUP_SANDBOX_BIN/stn"
-    ln -sf ${shellQuote(join(repoRoot, "bin", "stn-ingress"))} "$STATION_SETUP_SANDBOX_BIN/stn-ingress"
-    ln -sf ${shellQuote(join(repoRoot, "integrations", "terminal", "tmux", "bin", "stn-popup"))} "$STATION_SETUP_SANDBOX_BIN/stn-tmux-popup"
-    echo "sandbox launchers linked"
-    ;;
-  *) echo "sandbox blocked unexpected pnpm command: $*" >&2; exit 2 ;;
-esac
 `,
   );
 }

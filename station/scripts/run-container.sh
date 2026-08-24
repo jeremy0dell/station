@@ -32,7 +32,7 @@ if ! command -v docker >/dev/null 2>&1; then
   cat >&2 <<EOF
 Docker is not available on PATH.
 
-Install or start Docker deliberately, or use host mode after activating Bun 1.3.14:
+Install or start Docker deliberately, or use host mode after activating Bun 1.4.0:
 
   ${root}/scripts/run-host.sh
 EOF
@@ -42,16 +42,15 @@ fi
 docker build \
   -t "${image}" \
   -f "${root}/.devcontainer/Dockerfile" \
-  "${root}"
+  "${repo_root}"
 
-# The whole repo is mounted (not just the Station tree) so the @station package
-# links resolve against the host-built dists and the host pnpm node_modules.
+# The whole repo is mounted so the unified Bun workspace and root lock are used.
 docker run --rm -it \
   --mount "type=bind,src=${repo_root},dst=/workspace" \
-  --mount "type=volume,src=station-station-node-modules,dst=/workspace/station/node_modules" \
+  --mount "type=volume,src=station-station-node-modules,dst=/workspace/node_modules" \
   --mount "type=volume,src=station-station-bun-cache,dst=/home/bun/.bun/install/cache" \
-  --workdir /workspace/station \
+  --workdir /workspace \
   -e TERM="${TERM:-xterm-256color}" \
   -e STATION_SOURCE="${STATION_SOURCE:-}" \
   "${image}" \
-  sh -lc "bun install --frozen-lockfile && bun run ${script}"
+  sh -lc "bun install --frozen-lockfile && bun run --cwd station ${script}"

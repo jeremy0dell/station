@@ -95,7 +95,7 @@ describe("setup guided feedback e2e", () => {
       expect(result.stdout).toContain(
         "These bare launchers do not resolve to this checkout on PATH: stn, stn-ingress, stn-tmux-popup",
       );
-      expect(result.stdout).toContain(`Run: pnpm --dir ${process.cwd()} station:link`);
+      expect(result.stdout).toContain(`Run: bun run --cwd ${process.cwd()} station:link`);
       expect(result.stdout).toContain(`'${join(process.cwd(), "bin", "stn")}' doctor`);
       expect(result.stdout).toContain("Use stn instead of the absolute path (optional):");
       expect(result.stdout).toContain(

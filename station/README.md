@@ -1,15 +1,16 @@
 # Station Workspace
 
-Station runs on its own Bun lane, intentionally outside the root pnpm
-workspace, so OpenTUI, Bun, and native renderer / PTY dependencies stay off
-the main pnpm/Node toolchain.
+Station is the Bun-executed `@station/workspace` package in the repository's
+root Bun workspace. Its OpenTUI, native-renderer, and PTY dependencies remain
+declared on this package, while Node 24 remains the authoritative source runtime
+for the CLI, Observer, and default PTY bridge.
 
 ## Runtime
 
-- Bun: `1.3.14`
+- Bun: `1.4.0`
 - Node: required for the default Station-local `node-pty` bridge
 - Native `cc`: required only to build the opt-in controlling-terminal helper
-- OpenTUI: `@opentui/core@0.4.0`, `@opentui/react@0.4.0`
+- OpenTUI: `@opentui/core@0.4.1`, `@opentui/react@0.4.1`
 - React: `19.2.7`
 
 The host scripts check dependencies and fail clearly. They do not install Bun,
@@ -38,7 +39,7 @@ station/scripts/run-host.sh --hot
 station/scripts/run-host.sh --hot --mock
 ```
 
-Host mode requires Bun `1.3.14`. The default PTY bridge also requires Node;
+Host mode requires Bun `1.4.0`. The default PTY bridge also requires Node;
 set `STATION_NODE=/path/to/node` to override its executable. The opt-in
 `STATION_PTY_IMPL=bun` path instead requires the helper built by
 `bun run build:ctty-helper`. Host mode is for explicit local development only.
@@ -105,27 +106,24 @@ saved working directory, and any pane whose PTY is still live in the
 `docs/architecture.md` for the host/warm-cold-reattach model and
 `docs/local-development.md` for the dev host workflow.
 
-## Consuming The Shared @station Packages
+## Root Workspace Dependencies
 
-Live observer mode consumes the repo's built packages: `@station/client`,
-`@station/dashboard-core`, and their `@station/contracts`, `@station/protocol`, and
-`@station/runtime` graph. Build them at the repo root before running Station:
+Station declares each directly imported `@station/*` package with `workspace:*`.
+One root install links those packages through Bun's isolated linker, and the
+developer-facing Station scripts check the published build identity before
+launching or testing:
 
 ```bash
-pnpm install
-pnpm build
+bun install
+bun run build
+bun run --cwd station station
 ```
 
-`scripts/link-station-packages.sh` symlinks the directly imported `@station`
-packages into `station/node_modules`; the linked packages resolve their
-own dependencies through the repo's pnpm layout. Bun's `file:` dependencies
-copy the package without its transitive graph and Bun's `link:` protocol routes
-through the global `bun link` registry, so neither works from this isolated
-workspace — the symlink script is the proven mechanism. `bun install` prunes
-the links, so every package script that needs them (`station`, `dev`, `test`,
-`typecheck`) re-runs the link script first, and `scripts/doctor.sh` checks the
-dists exist. The container lane mounts the repo root so the same links resolve
-inside the container.
+`build:ensure` returns immediately when current inputs, package output, and the
+published identity agree; otherwise it performs the root build once. Bare
+launchers, hooks, ingress delivery, and compiled binaries never build during
+runtime work and continue to reject stale output. `scripts/doctor.sh` checks the
+root install and build identity without mutating either.
 
 ## Terminal PTY
 

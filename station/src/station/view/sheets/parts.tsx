@@ -5,7 +5,6 @@
 import { TextAttributes, type ColorInput } from "@opentui/core";
 import type { TextProps } from "@opentui/react";
 import { isValidElement, type ReactNode } from "react";
-import stringWidth from "string-width";
 import type { StationMouseTarget } from "../../input/stationMouse.js";
 import {
   useStationHoverState,
@@ -37,12 +36,12 @@ const SHEET_FOOTER_PREFIX = " ";
 
 /** Selects the expanded copy only when every cell fits the available width. */
 export function responsiveSheetText(width: number, variants: ResponsiveSheetText): string {
-  return stringWidth(variants.expanded) <= width ? variants.expanded : variants.compact;
+  return Bun.stringWidth(variants.expanded) <= width ? variants.expanded : variants.compact;
 }
 
 /** Accounts for the footer's leading inset when selecting responsive copy. */
 export function responsiveSheetFooterText(width: number, variants: ResponsiveSheetText): string {
-  const textWidth = Math.max(0, width - stringWidth(SHEET_FOOTER_PREFIX));
+  const textWidth = Math.max(0, width - Bun.stringWidth(SHEET_FOOTER_PREFIX));
   return responsiveSheetText(textWidth, variants);
 }
 

@@ -289,7 +289,7 @@ function printPlan(title, actions, dryRun) {
 }
 
 function printResetHelp() {
-  process.stdout.write(`Usage: pnpm agent:reset [-- --yes]
+  process.stdout.write(`Usage: bun run agent:reset [-- --yes]
 
 Runs agent cleanup, then resets managed station worktree state. Dry-run by default.
 

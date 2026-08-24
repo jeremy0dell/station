@@ -16,7 +16,7 @@ while [ -h "$script" ]; do
     *) script=$script_dir/$link ;;
   esac
 done
-# pnpm's global shim enters through a symlinked package directory, so resolve the checkout itself.
+# Bun's global link enters through a symlinked package directory, so resolve the checkout itself.
 root=$(CDPATH= cd -- "$(dirname -- "$script")/../../../.." 2>/dev/null && pwd -P || true)
 
 if [ "${STATION_SETUP_LAUNCHER_PROBE:-}" = 1 ] && [ "$#" -eq 1 ] && [ "$1" = "--help" ]; then

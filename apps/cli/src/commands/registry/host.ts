@@ -18,17 +18,13 @@ export const hostCliCommand: CliCommandNode = {
       description: "Handoff fidelity; screen degrades to processes when capture fails.",
     },
   ],
-  examples: [
-    "pnpm stn host status",
-    "pnpm stn host handoff --dry-run",
-    "pnpm stn host handoff --fidelity screen",
-  ],
+  examples: ["stn host status", "stn host handoff --dry-run", "stn host handoff --fidelity screen"],
   children: [
     {
       name: "status",
       description: "Report host health, compatibility, and handoff eligibility.",
       usage: ["stn host status"],
-      examples: ["pnpm stn host status"],
+      examples: ["stn host status"],
     },
     {
       name: "handoff",
@@ -44,7 +40,7 @@ export const hostCliCommand: CliCommandNode = {
           description: "Transfer fidelity level.",
         },
       ],
-      examples: ["pnpm stn host handoff --dry-run"],
+      examples: ["stn host handoff --dry-run"],
     },
   ],
 };

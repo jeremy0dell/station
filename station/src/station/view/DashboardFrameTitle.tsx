@@ -1,6 +1,5 @@
 import { TextAttributes } from "@opentui/core";
 import { useStore } from "zustand/react";
-import stringWidth from "string-width";
 import type { DashboardStateSource } from "@station/dashboard-core/runtime";
 import { headerStrip, observerHeaderStatusForConnection, selectFleetSummary } from "@station/dashboard-core/selectors";
 import { tuiScreenBehavior } from "@station/dashboard-core/state";
@@ -61,14 +60,14 @@ export function DashboardFrameTitle({
   const status = observerHeaderStatusForConnection(observerConnectionStatus, snapshot !== undefined);
   const affordance = ` ${WIDGET_SETTINGS_AFFORDANCE} `;
   const stripBudget =
-    frame.width - 2 * EDGE - stringWidth(title) - stringWidth(affordance) - 2;
+    frame.width - 2 * EDGE - Bun.stringWidth(title) - Bun.stringWidth(affordance) - 2;
   const strip = headerStrip({
     widgets: resolveTopRowWidgets(topRowWidgets, snapshot),
     ...(status === undefined ? {} : { status }),
     maxWidth: Math.max(0, stripBudget),
   });
   const right = strip.length > 0 ? ` ${strip}${affordance}` : affordance;
-  const rightLeft = frame.left + frame.width - EDGE - stringWidth(right);
+  const rightLeft = frame.left + frame.width - EDGE - Bun.stringWidth(right);
 
   return (
     <>

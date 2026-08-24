@@ -186,6 +186,26 @@ export async function verifyBuildIdentity(identity, root = repoRoot) {
   }
 }
 
+/**
+ * Checks the published identity against current inputs and outputs without mutation.
+ */
+export async function checkBuildIdentity(root = repoRoot) {
+  let identity;
+  try {
+    identity = await readBuildIdentity(root);
+  } catch (error) {
+    throw new Error("Station build identity is missing or invalid; run bun run build.", {
+      cause: error,
+    });
+  }
+  if (!(await verifyBuildIdentity(identity, root))) {
+    throw new Error(
+      "Station build identity does not match the current checkout and production outputs; run bun run build.",
+    );
+  }
+  return identity;
+}
+
 /** Atomically publishes one validated identity through a private fsynced temporary file. */
 export async function publishBuildIdentity(identity, root = repoRoot) {
   if (!BUILD_IDENTITY_PATTERN.test(identity)) {
@@ -238,16 +258,35 @@ export async function buildWithIdentity(root, runBuildTask) {
   }
 }
 
+/**
+ * Returns the current identity without work, or performs one build and publishes
+ * its identity when inputs or production outputs are stale.
+ */
+export async function ensureBuildIdentity(root, runBuildTask) {
+  try {
+    return await checkBuildIdentity(root);
+  } catch {
+    await buildWithIdentity(root, runBuildTask);
+    return readBuildIdentity(root);
+  }
+}
+
 async function build() {
   await buildWithIdentity(repoRoot, () =>
-    runBuildChild("pnpm", ["exec", "turbo", "run", "build"], repoRoot),
+    runBuildChild("bun", ["run", "turbo", "run", "build"], repoRoot),
+  );
+}
+
+async function ensureBuild() {
+  await ensureBuildIdentity(repoRoot, () =>
+    runBuildChild("bun", ["run", "turbo", "run", "build"], repoRoot),
   );
 }
 
 async function requireCurrentBuildIdentity(identity) {
   if (!(await verifyBuildIdentity(identity, repoRoot))) {
     throw new Error(
-      "Station build identity does not match the current checkout and production outputs; run pnpm build.",
+      "Station build identity does not match the current checkout and production outputs; run bun run build.",
     );
   }
 }
@@ -274,7 +313,8 @@ export async function runBuildChild(command, args, cwd, env = process.env) {
 }
 
 async function runGit(root, args) {
-  const { stdout } = await execFileAsync("git", ["-C", root, ...args], {
+  // Build admission must not change when a launcher inherits a different global Git ignore file.
+  const { stdout } = await execFileAsync("git", ["-C", root, "-c", "core.excludesFile=", ...args], {
     encoding: "buffer",
     env: environmentWithoutGitLocals(),
     maxBuffer: 64 * 1024 * 1024,
@@ -325,10 +365,14 @@ if (invokedPath === fileURLToPath(import.meta.url)) {
     const args = process.argv.slice(2);
     if (args.length === 0) {
       await build();
+    } else if (args.length === 1 && args[0] === "--check") {
+      await checkBuildIdentity(repoRoot);
+    } else if (args.length === 1 && args[0] === "--ensure") {
+      await ensureBuild();
     } else if (args.length === 2 && args[0] === "--verify" && args[1] !== undefined) {
       await requireCurrentBuildIdentity(args[1]);
     } else {
-      throw new Error("Usage: build-identity.mjs [--verify <identity>]");
+      throw new Error("Usage: build-identity.mjs [--check|--ensure|--verify <identity>]");
     }
   } catch (error) {
     process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);

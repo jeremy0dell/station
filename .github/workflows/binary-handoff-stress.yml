@@ -35,14 +35,14 @@ jobs:
             exit 2
           fi
       - name: Build immutable current artifact
-        run: pnpm build:binary -- --version 0.0.0-local
+        run: bun run build:binary -- --version 0.0.0-local
       - name: Run binary handoff stress
         id: binary_handoff_stress_run
         env:
           ROUNDS: ${{ inputs.rounds }}
           STATION_BINARY_SMOKE_EVIDENCE_DIR: ${{ runner.temp }}/station-binary-smoke-evidence
         run: >-
-          pnpm stress:binary-handoff --
+          bun run stress:binary-handoff --
           --expected-version 0.0.0-local
           --rounds "$ROUNDS"
           --round-timeout-ms 30000

@@ -6,14 +6,14 @@ Opt-in tests that exercise the real Claude Code CLI. They are skipped unless exp
 
 - `claude` installed and logged in (`claude --version`, `claude auth status`)
 - `tmux` installed (`tmux -V`)
-- The repo built (`pnpm build`) — the hook capture test runs the real `bin/stn-ingress`
+- The repo built (`bun run build`) — the hook capture test runs the real `bin/stn-ingress`
 
 ## Run
 
 ```sh
-STATION_REAL_CLAUDE=1 pnpm test:e2e:claude:real
+STATION_REAL_CLAUDE=1 bun run test:e2e:claude:real
 # or the exact nightly lane:
-pnpm test:agent:nightly
+bun run test:agent:nightly
 ```
 
 ## Nightly CI

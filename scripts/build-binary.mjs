@@ -3,8 +3,8 @@ import { cp, mkdir, rm, symlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { readBuildIdentity, verifyBuildIdentity } from "./build-identity.mjs";
+import { assertBunVersion, requiredBunVersion } from "./bun-version.mjs";
 
-const REQUIRED_BUN_VERSION = "1.3.14";
 const SEMVER =
   /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
 const repoRoot = fileURLToPath(new URL("../", import.meta.url));
@@ -75,8 +75,11 @@ async function replaceSymlink(path, target) {
 }
 
 async function main() {
-  if (Bun.version !== REQUIRED_BUN_VERSION) {
-    fail(`build:binary requires Bun ${REQUIRED_BUN_VERSION}; found ${Bun.version}.`);
+  const expectedBunVersion = await requiredBunVersion(repoRoot);
+  try {
+    assertBunVersion(Bun.version, expectedBunVersion);
+  } catch (error) {
+    fail(error instanceof Error ? error.message : String(error));
   }
   const { version } = parseArgs(process.argv.slice(2));
   const outputDir = join(stationRoot, "dist", "bin");
@@ -84,7 +87,7 @@ async function main() {
   const piBundlePath = join(stationRoot, "dist", "piExtension.mjs");
 
   await rm(outputPath, { force: true });
-  await run("pnpm", ["build"], repoRoot);
+  await run("bun", ["run", "build"], repoRoot);
   let buildIdentity;
   try {
     buildIdentity = await readBuildIdentity(repoRoot);
@@ -94,7 +97,6 @@ async function main() {
   if (buildIdentity === undefined || !(await verifyBuildIdentity(buildIdentity, repoRoot))) {
     fail("Station build inputs changed after the source build; rebuild from a stable checkout.");
   }
-  await run("bun", ["run", "link:station"], stationRoot);
   await run("bun", ["run", "build:ctty-helper"], stationRoot);
 
   await mkdir(dirname(piBundlePath), { recursive: true });

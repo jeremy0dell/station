@@ -13070,16 +13070,10 @@
       ],
       "imports": [
         {
-          "specifier": "bun:sqlite",
-          "resolvedPath": "bun:sqlite",
-          "edgeKind": "runtime",
-          "bindings": []
-        },
-        {
           "specifier": "node:sqlite",
           "resolvedPath": "node:sqlite",
           "edgeKind": "runtime",
-          "bindings": []
+          "bindings": ["DatabaseSync"]
         },
         {
           "specifier": "zod",
@@ -14586,7 +14580,7 @@
       "declaration": "createDevCheckoutUpdateChannel",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Translates a clean upstream-tracking checkout into a pinned fast-forward with frozen dependency preparation, rebuild, and relinking.",
+      "purpose": "Translates a clean upstream-tracking checkout into a pinned fast-forward with one frozen root Bun install, rebuild, native-helper repair, and launcher relink.",
       "dependencies": [
         {
           "path": "apps/cli/src/update/updateChannel.ts",

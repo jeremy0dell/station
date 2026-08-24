@@ -40,7 +40,8 @@ function isCiInfrastructurePath(path) {
 function isInstallerValidationPath(path) {
   return (
     path === "package.json" ||
-    path === "pnpm-lock.yaml" ||
+    path === "bun.lock" ||
+    path === "bunfig.toml" ||
     path === "LICENSE" ||
     path === "scripts/install.sh" ||
     path.startsWith("scripts/release/") ||
@@ -54,7 +55,8 @@ function isInstallerValidationPath(path) {
 function isClaimStressPath(path) {
   return (
     path === "package.json" ||
-    path === "pnpm-lock.yaml" ||
+    path === "bun.lock" ||
+    path === "bunfig.toml" ||
     path.startsWith("apps/observer/") ||
     path.startsWith("apps/cli/src/observerProcess/") ||
     path === "apps/cli/src/ingress/observerStartup.ts" ||

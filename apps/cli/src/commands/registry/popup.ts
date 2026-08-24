@@ -25,7 +25,7 @@ export const popupCliCommand: CliCommandNode = {
       description: "Keep the popup lifecycle session available for reuse.",
     },
   ],
-  examples: ["pnpm stn popup", "pnpm stn popup --persistent"],
+  examples: ["stn popup", "stn popup --persistent"],
 };
 
 async function handlePopupConfigError(error: unknown, context: CliCommandConfigErrorContext) {

@@ -11,7 +11,7 @@ export const worktrunkCliCommand: CliCommandNode = {
   description: "Manage Worktrunk-specific lifecycle hook helpers.",
   requiresConfig: true,
   usage: ["stn worktrunk hooks plan|install|uninstall|doctor [options]"],
-  examples: ["pnpm stn worktrunk hooks doctor", "pnpm stn worktrunk hooks plan"],
+  examples: ["stn worktrunk hooks doctor", "stn worktrunk hooks plan"],
   children: [
     {
       name: "hooks",
@@ -35,7 +35,7 @@ export const worktrunkCliCommand: CliCommandNode = {
         },
         { name: "--hook-bin <command>", description: "Use a specific stn-ingress command." },
       ],
-      examples: ["pnpm stn worktrunk hooks doctor", "pnpm stn worktrunk hooks install --yes"],
+      examples: ["stn worktrunk hooks doctor", "stn worktrunk hooks install --yes"],
       children: ["plan", "install", "uninstall", "doctor"].map((action) =>
         worktrunkHookActionCommand(action),
       ),
@@ -62,6 +62,6 @@ function worktrunkHookActionCommand(action: string): CliCommandNode {
       { name: "--worktrunk-config <path>", description: "Use a specific Worktrunk config file." },
       { name: "--hook-bin <command>", description: "Use a specific stn-ingress command." },
     ],
-    examples: [`pnpm stn worktrunk hooks ${action}${actionNeedsYes(action) ? " --yes" : ""}`],
+    examples: [`stn worktrunk hooks ${action}${actionNeedsYes(action) ? " --yes" : ""}`],
   };
 }

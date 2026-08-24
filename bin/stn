@@ -11,7 +11,7 @@ while [ -h "$script" ]; do
   esac
 done
 
-# pnpm's global shim enters through a symlinked package directory, so resolve the checkout itself.
+# Bun's global link enters through a symlinked package directory, so resolve the checkout itself.
 root=$(CDPATH= cd -- "$(dirname -- "$script")/.." && pwd -P)
 tmux_popup=$root/integrations/terminal/tmux/bin/stn-popup
 entry=$root/apps/cli/dist/main.js
@@ -22,7 +22,7 @@ if [ -x "$tmux_popup" ] && STATION_FAST_POPUP_NO_FALLBACK=1 "$tmux_popup" "$@"; 
 fi
 
 if [ ! -f "$entry" ]; then
-  printf '%s\n' "stn has not been built. Run: pnpm build" >&2
+  printf '%s\n' "stn has not been built. Run: bun run build" >&2
   exit 1
 fi
 

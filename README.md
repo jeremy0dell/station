@@ -76,7 +76,7 @@ The version-stamped installer downloads only that tag's archive and
 `SHA256SUMS`, verifies the checksum and archive manifest, and atomically installs
 `stn`, `stn-ingress`, and `stn-tmux-popup` in `~/.local/bin`. It needs `curl`
 and either `sha256sum` or `shasum`; it does not need a GitHub account, GitHub
-CLI, Homebrew, Node.js, pnpm, Bun, or a source checkout.
+CLI, Homebrew, Node.js, Bun, or a source checkout.
 
 `stn setup` is a separate guided step. On macOS it can install Homebrew for
 third-party workflow tools, then use official Homebrew packages for Codex,
@@ -193,14 +193,13 @@ Start at the [documentation home](docs/README.md), or go directly to:
 
 ## Development
 
-Source development uses Node.js 24.2+ (and below 25), pnpm 11, and Bun
-1.3.14.
+Source development uses Node.js 24.2+ (and below 25) with Bun 1.4.0 as the
+repository package manager and script dispatcher.
 
 ```sh
-pnpm install
-pnpm build
-cd station && bun install && cd ..
-pnpm test:all
+bun install
+bun run build
+bun run test:all
 ```
 
 See [Development](docs/development.md), [Testing](tests/README.md), and

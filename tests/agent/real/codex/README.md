@@ -12,7 +12,7 @@ Run it only when the local machine has:
 STATION_REAL_CODEX=1 \
 STATION_CODEX_BIN="$(command -v codex)" \
 STATION_TMUX_BIN="$(command -v tmux)" \
-pnpm test:e2e:codex:real
+bun run test:e2e:codex:real
 ```
 
 Optional:

@@ -66,14 +66,14 @@ jobs:
       - name: Documentation validation
         if: needs.classify.outputs.docs_only == 'true'
         run: |
-          pnpm lint
-          pnpm test:diagnostics:policy
+          bun run lint
+          bun run test:diagnostics:policy
       - name: Production static validation
         if: needs.classify.outputs.docs_only != 'true'
         run: |
-          pnpm build
-          pnpm typecheck
-          pnpm lint
+          bun run build
+          bun run typecheck
+          bun run lint
 
   fast_tests:
     name: fast-tests
@@ -88,7 +88,7 @@ jobs:
       - uses: ./.github/actions/setup-ci
         with:
           restore-turbo-cache: ${{ github.event_name == 'pull_request' }}
-      - run: pnpm test:ci:fast
+      - run: bun run test:ci:fast
 
   integration_tests:
     name: integration-tests
@@ -103,7 +103,7 @@ jobs:
       - uses: ./.github/actions/setup-ci
         with:
           restore-turbo-cache: ${{ github.event_name == 'pull_request' }}
-      - run: pnpm test:integration
+      - run: bun run test:integration
 
   setup_e2e:
     name: setup-e2e (${{ matrix.lane }})
@@ -128,11 +128,11 @@ jobs:
       - uses: ./.github/actions/setup-ci
         with:
           restore-turbo-cache: ${{ github.event_name == 'pull_request' }}
-      - run: pnpm build
+      - run: bun run build
       - name: Run setup E2E shard
         env:
           STATION_SETUP_E2E_ALL_SHELLS: ${{ needs.classify.outputs.shell_matrix }}
-        run: pnpm ${{ matrix.script }}
+        run: bun run ${{ matrix.script }}
 
   observer_e2e:
     name: observer-e2e
@@ -147,8 +147,8 @@ jobs:
       - uses: ./.github/actions/setup-ci
         with:
           restore-turbo-cache: ${{ github.event_name == 'pull_request' }}
-      - run: pnpm build
-      - run: pnpm test:e2e:observer
+      - run: bun run build
+      - run: bun run test:e2e:observer
 
   installer_smoke:
     name: installer-smoke
@@ -164,7 +164,7 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-ci
-      - run: pnpm smoke:install
+      - run: bun run smoke:install
 
   sqlite_cross_runtime:
     name: sqlite-cross-runtime
@@ -178,17 +178,16 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/setup-ci
         with:
-          bun: "true"
           restore-turbo-cache: ${{ github.event_name == 'pull_request' }}
-      - run: pnpm build
+      - run: bun run build
       - name: Cross-runtime SQLite and claim checks
         env:
           CLAIM_STRESS: ${{ needs.classify.outputs.claim_stress }}
         run: |
           if [[ "$GITHUB_REF_TYPE" == tag || "$CLAIM_STRESS" == true ]]; then
-            pnpm test:sqlite:bun
+            bun run test:sqlite:bun
           else
-            pnpm test:sqlite:bun:pr
+            bun run test:sqlite:bun:pr
           fi
 
   station_tests:
@@ -205,8 +204,8 @@ jobs:
         with:
           station-dependencies: "true"
           restore-turbo-cache: ${{ github.event_name == 'pull_request' }}
-      - run: pnpm build
-      - run: pnpm test:ci:station
+      - run: bun run build
+      - run: bun run test:ci:station
 
   binary_smoke:
     name: binary-smoke
@@ -229,7 +228,7 @@ jobs:
         id: binary_smoke_run
         env:
           STATION_BINARY_SMOKE_EVIDENCE_DIR: ${{ runner.temp }}/station-binary-smoke-evidence
-        run: pnpm test:ci:binary
+        run: bun run test:ci:binary
       - name: Upload binary smoke failure evidence
         if: ${{ failure() && steps.binary_smoke_run.outcome == 'failure' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -290,24 +289,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: ./.github/actions/setup-ci
         with:
-          node-version: 24.x
-      - name: Enable pnpm 11
-        run: |
-          corepack enable
-          corepack prepare pnpm@11.0.0 --activate
-      - name: Restore Turbo cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: .turbo
-          key: turbo-${{ runner.os }}-${{ runner.arch }}-node24-pnpm11-${{ hashFiles('pnpm-lock.yaml', 'turbo.json') }}-${{ github.sha }}
-          restore-keys: |
-            turbo-${{ runner.os }}-${{ runner.arch }}-node24-pnpm11-${{ hashFiles('pnpm-lock.yaml', 'turbo.json') }}-
-      - name: Install
-        run: pnpm install --frozen-lockfile
+          restore-turbo-cache: "true"
       - name: Smoke
         run: |
-          pnpm build
-          pnpm typecheck
-          pnpm lint
+          bun run build
+          bun run typecheck
+          bun run lint

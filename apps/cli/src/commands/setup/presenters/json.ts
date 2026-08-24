@@ -808,7 +808,7 @@ function setupActions(
           selected: operation.selected,
           label: "Link STATION launchers",
           message: "Link stn, stn-ingress, and stn-tmux-popup globally for bare terminal commands.",
-          command: ["pnpm", "--dir", facts.launchers.packageRoot, "station:link"],
+          command: ["bun", "run", "--cwd", facts.launchers.packageRoot, "station:link"],
         });
         break;
       case "configure-worktrunk-shell":

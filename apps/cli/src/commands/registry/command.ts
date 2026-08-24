@@ -14,7 +14,7 @@ export const commandCliCommand: CliCommandNode = {
     "stn command get <commandId> [--timeout-ms <ms>]",
   ],
   examples: [
-    'printf \'%s\\n\' \'{"type":"observer.reconcile","payload":{"reason":"manual"}}\' | pnpm stn command dispatch --stdin --wait',
+    'printf \'%s\\n\' \'{"type":"observer.reconcile","payload":{"reason":"manual"}}\' | stn command dispatch --stdin --wait',
   ],
   notes: [
     "Command dispatch input is validated against shared STATION command schemas.",
@@ -34,7 +34,7 @@ export const commandCliCommand: CliCommandNode = {
         { name: "--timeout-ms <ms>", description: "Override dispatch and wait timeout." },
       ],
       examples: [
-        'printf \'%s\\n\' \'{"type":"observer.reconcile","payload":{"reason":"manual"}}\' | pnpm stn command dispatch --stdin --wait',
+        'printf \'%s\\n\' \'{"type":"observer.reconcile","payload":{"reason":"manual"}}\' | stn command dispatch --stdin --wait',
       ],
     },
     {

@@ -7,7 +7,9 @@ import {
   buildIdentityPath,
   buildInputMode,
   buildWithIdentity,
+  checkBuildIdentity,
   computeBuildIdentity,
+  ensureBuildIdentity,
   publishBuildIdentity,
   readBuildIdentity,
   runBuildChild,
@@ -108,6 +110,81 @@ describe("build identity", () => {
       "export const build = 'stale-output';\n",
     );
     await expect(verifyBuildIdentity(identity, root)).resolves.toBe(false);
+  });
+
+  it("checks a current identity without mutating it", async () => {
+    const root = await createRepository();
+    roots.push(root);
+    const identity = await computeBuildIdentity(root);
+    await publishBuildIdentity(identity, root);
+    const before = await readFile(buildIdentityPath(root), "utf8");
+
+    await expect(checkBuildIdentity(root)).resolves.toBe(identity);
+    await expect(readFile(buildIdentityPath(root), "utf8")).resolves.toBe(before);
+  });
+
+  it("rejects missing, stale-input, and stale-output identities without mutation", async () => {
+    const root = await createRepository();
+    roots.push(root);
+
+    await expect(checkBuildIdentity(root)).rejects.toThrow("missing or invalid");
+    await expect(readBuildIdentity(root)).rejects.toMatchObject({ code: "ENOENT" });
+
+    const identity = await computeBuildIdentity(root);
+    await publishBuildIdentity(identity, root);
+    await writeFile(join(root, "tracked.txt"), "changed\n");
+    await expect(checkBuildIdentity(root)).rejects.toThrow("does not match");
+    await expect(readBuildIdentity(root)).resolves.toBe(identity);
+
+    await writeFile(join(root, "tracked.txt"), "tracked\n");
+    await writeFile(
+      join(root, "packages", "example", "dist", "index.js"),
+      "export const build = 'stale-output';\n",
+    );
+    await expect(checkBuildIdentity(root)).rejects.toThrow("does not match");
+    await expect(readBuildIdentity(root)).resolves.toBe(identity);
+  });
+
+  it("ensures current output without rebuilding and rebuilds stale states once", async () => {
+    const root = await createRepository();
+    roots.push(root);
+    const current = await computeBuildIdentity(root);
+    await publishBuildIdentity(current, root);
+    let builds = 0;
+
+    await expect(
+      ensureBuildIdentity(root, async () => {
+        builds += 1;
+      }),
+    ).resolves.toBe(current);
+    expect(builds).toBe(0);
+
+    await rm(buildIdentityPath(root));
+    await expect(
+      ensureBuildIdentity(root, async () => {
+        builds += 1;
+      }),
+    ).resolves.toBe(current);
+    expect(builds).toBe(1);
+
+    await writeFile(join(root, "tracked.txt"), "changed\n");
+    await expect(
+      ensureBuildIdentity(root, async () => {
+        builds += 1;
+      }),
+    ).resolves.toMatch(/^[0-9a-f]{64}$/u);
+    expect(builds).toBe(2);
+
+    await writeFile(
+      join(root, "packages", "example", "dist", "index.js"),
+      "export const build = 'stale-output';\n",
+    );
+    await expect(
+      ensureBuildIdentity(root, async () => {
+        builds += 1;
+      }),
+    ).resolves.toMatch(/^[0-9a-f]{64}$/u);
+    expect(builds).toBe(3);
   });
 
   it("publishes the stable identity after an injected build succeeds", async () => {

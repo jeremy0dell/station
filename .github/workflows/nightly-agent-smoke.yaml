@@ -29,20 +29,11 @@ jobs:
             exit 1
           fi
 
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 24.x
-      - name: Enable pnpm 11
-        run: |
-          corepack enable
-          corepack prepare pnpm@11.0.0 --activate
-
-      - name: Install workspace
-        run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup-ci
       # The real-claude lane runs on node + tmux + claude (no Bun renderer), so
       # the build only needs the CLI/observer/provider-hooks — bin/stn-ingress.
       - name: Build
-        run: pnpm build
+        run: bun run build
 
       - name: Install tmux and the Claude Code CLI
         run: |
@@ -96,4 +87,4 @@ jobs:
             echo "::error::The dedicated nightly ANTHROPIC_API_KEY is not configured."
             exit 1
           fi
-          pnpm test:agent:nightly
+          bun run test:agent:nightly

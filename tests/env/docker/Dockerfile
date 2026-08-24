@@ -14,8 +14,10 @@
 # contract). Only the Linux-coverable profiles have a stage here.
 
 # ---- builder: install + build the workspace once -------------------------------
+FROM oven/bun:1.4.0 AS bun
+
 FROM node:24-bookworm AS builder
-RUN corepack enable && corepack prepare pnpm@11.0.0 --activate
+COPY --from=bun /usr/local/bin/bun /usr/local/bin/bun
 WORKDIR /app
 COPY . .
 # The checkout's real .git is outside Docker context, while build identity still
@@ -23,22 +25,24 @@ COPY . .
 RUN git init -q && git config user.email setup@test && git config user.name setup-test \
   && git add -A && git commit -qm setup-container
 # The CLI/observer build is enough for `stn`; the Bun TUI workspace is not needed.
-RUN CI=true pnpm install --frozen-lockfile --ignore-scripts && pnpm build
+RUN CI=true bun install --frozen-lockfile --ignore-scripts --filter '!@station/workspace' \
+  && bun run build
 
 # ---- base: the built CLI on a full toolchain -----------------------------------
 # git + tmux present; an agent CLI is faked with a tiny shim so the harness check
 # passes. This stage is the "happy-path-linux" profile.
 FROM node:24-bookworm AS happy-linux
-RUN corepack enable && corepack prepare pnpm@11.0.0 --activate \
-  && apt-get update && apt-get install -y --no-install-recommends git tmux \
+RUN apt-get update && apt-get install -y --no-install-recommends git tmux \
   && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=builder /app /app
-# Fake Worktrunk, Bun, Hunk, and an agent CLI on PATH (presence is enough).
-RUN for tool in wt bun hunk codex; do \
+# Fake Worktrunk, Hunk, and an agent CLI on PATH (presence is enough).
+RUN for tool in wt hunk codex; do \
       printf '#!/bin/sh\necho "%s stub"\nexit 0\n' "$tool" > "/usr/local/bin/$tool" && \
       chmod +x "/usr/local/bin/$tool"; \
-    done
+    done \
+  && printf '#!/bin/sh\n[ "$1" = --version ] && echo 1.4.0\nexit 0\n' > /usr/local/bin/bun \
+  && chmod +x /usr/local/bin/bun
 RUN git init -q /work && git -C /work config user.email t@t && git -C /work config user.name t
 WORKDIR /work
 ENV STATION_FAST_POPUP_NO_FALLBACK=1

@@ -36,7 +36,6 @@ async function main() {
     launch: {
       cwd: stationRoot,
       steps: [
-        { command: "bun", args: ["run", "link:station"] },
         { command: "bun", args: ["run", "repair:node-pty"] },
         { command: "bun", args: ["--hot", "src/main.tsx"] },
       ],
@@ -53,7 +52,7 @@ async function resolveNativeHmrRuntime() {
   } catch (cause) {
     throw new RuntimeOwnerError(
       "NATIVE_HMR_WORKSPACE_NOT_BUILT",
-      "Station consumes built workspace packages. Run `pnpm build` at the repository root first.",
+      "Station consumes built workspace packages. Run `bun run build` at the repository root first.",
       { cause },
     );
   }

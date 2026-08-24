@@ -2313,19 +2313,13 @@ async function buildAlternateBinary({ worktreePath, expectedVersion }) {
   await assertOnlyAlternateProductionChange(worktreePath);
 
   const buildEnv = environmentWithoutGitLocals({ ...process.env, CI: "1" });
-  await run("pnpm", ["install", "--frozen-lockfile", "--ignore-scripts"], {
+  await run("bun", ["install", "--frozen-lockfile", "--ignore-scripts"], {
     cwd: worktreePath,
     env: buildEnv,
     terminateDescendants: true,
     timeoutMs: 300_000,
   });
-  await run("bun", ["install", "--frozen-lockfile", "--ignore-scripts"], {
-    cwd: join(worktreePath, "station"),
-    env: buildEnv,
-    terminateDescendants: true,
-    timeoutMs: 300_000,
-  });
-  await run("pnpm", ["build:binary", "--", "--version", expectedVersion], {
+  await run("bun", ["run", "build:binary", "--", "--version", expectedVersion], {
     cwd: worktreePath,
     env: buildEnv,
     terminateDescendants: true,
