@@ -135,6 +135,40 @@ export const ObserverSqliteHealthSummarySchema = z
   })
   .passthrough();
 
+export const SessionGroupRepairBlockerSchema = z.discriminatedUnion("scope", [
+  z
+    .object({
+      scope: z.literal("project"),
+      providerType: z.literal("worktree"),
+      providerId: ProviderIdSchema,
+      projectId: ProjectIdSchema,
+      code: nonEmptyStringSchema,
+    })
+    .strict(),
+  z
+    .object({
+      scope: z.literal("global"),
+      providerType: z.enum(["terminal", "harness"]),
+      providerId: ProviderIdSchema,
+      code: nonEmptyStringSchema,
+    })
+    .strict(),
+]);
+
+export type SessionGroupRepairBlocker = z.infer<typeof SessionGroupRepairBlockerSchema>;
+
+/** Public diagnostic summary of the provider authority used for one durable Group repair. */
+export const SessionGroupRepairSummarySchema = z
+  .object({
+    status: z.enum(["applied", "partially_scoped", "skipped"]),
+    absenceAuthorityProjectIds: z.array(ProjectIdSchema),
+    preservedProjectIds: z.array(ProjectIdSchema),
+    blockers: z.array(SessionGroupRepairBlockerSchema),
+  })
+  .strict();
+
+export type SessionGroupRepairSummary = z.infer<typeof SessionGroupRepairSummarySchema>;
+
 export const ObserverReconcileTimingSchema = z
   .object({
     reason: nonEmptyStringSchema,
@@ -147,6 +181,7 @@ export const ObserverReconcileTimingSchema = z
     harnessRunsObserved: z.number().int().nonnegative().optional(),
     eventsEmitted: z.number().int().nonnegative().optional(),
     errors: z.array(SafeErrorSchema).optional(),
+    sessionGroupRepair: SessionGroupRepairSummarySchema.optional(),
   })
   .strict();
 

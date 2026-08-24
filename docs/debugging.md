@@ -80,6 +80,15 @@ new redacted bundle. `reconcile`, `command dispatch`, `project add/remove`,
 hook install/uninstall, and setup apply commands intentionally mutate runtime,
 config, hooks, or local machine state.
 
+Observer health reports the latest durable Group-repair decision at
+`lastReconcile.sessionGroupRepair`. `applied` means every configured project authorized absent-member
+pruning, `partially_scoped` means only the named `absenceAuthorityProjectIds` did, and `skipped`
+means none did. `preservedProjectIds` names assignments protected from absence pruning, while strict
+`blockers` identify an indeterminate worktree project or the terminal/harness provider that blocked
+repair globally. The structured `Reconcile finished.` log carries the same summary. Provider errors
+remain the evidence for why a read was indeterminate; the repair summary is authority evidence, not a
+duplicate failure.
+
 ## Provider Command Failures
 
 When a provider command fails, use the correlation ids before inspecting the

@@ -52,6 +52,7 @@ import {
   RepositoryPullRequestRequestSchema,
   RepositoryRemoteSchema,
   SafeErrorSchema,
+  SessionGroupRepairSummarySchema,
   SessionGroupViewSchema,
   SessionMigrationJournalEntrySchema,
   SessionMigrationLockSchema,
@@ -2080,6 +2081,35 @@ describe("contract schemas", () => {
       "harness event report spool record",
     );
 
+    const sessionGroupRepair = {
+      status: "partially_scoped",
+      absenceAuthorityProjectIds: ["web"],
+      preservedProjectIds: ["api"],
+      blockers: [
+        {
+          scope: "project",
+          providerType: "worktree",
+          providerId: "worktrunk",
+          projectId: "api",
+          code: "PROVIDER_TIMEOUT",
+        },
+      ],
+    } as const;
+    expect(SessionGroupRepairSummarySchema.parse(sessionGroupRepair)).toEqual(sessionGroupRepair);
+    expectFails(
+      SessionGroupRepairSummarySchema,
+      { ...sessionGroupRepair, extra: true },
+      "Session Group repair summary with an unknown field",
+    );
+    expectFails(
+      SessionGroupRepairSummarySchema,
+      {
+        ...sessionGroupRepair,
+        blockers: [{ ...sessionGroupRepair.blockers[0], extra: true }],
+      },
+      "Session Group repair blocker with an unknown field",
+    );
+
     expectParses(
       ObserverHealthSchema,
       {
@@ -2091,6 +2121,13 @@ describe("contract schemas", () => {
         socketPath: "/tmp/station/observer.sock",
         stateDir: "/tmp/station/state",
         hookSpoolDepth: 0,
+        lastReconcile: {
+          reason: "scheduled",
+          startedAt: "2026-05-20T12:00:00.000Z",
+          finishedAt: "2026-05-20T12:00:01.000Z",
+          durationMs: 1_000,
+          sessionGroupRepair,
+        },
         harnessIngressQueue: {
           depth: 0,
           enqueued: 10,

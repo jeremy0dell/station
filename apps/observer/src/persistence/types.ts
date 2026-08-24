@@ -6,6 +6,7 @@ import type {
   HarnessEventObservation,
   HarnessRunObservation,
   ObservedStatus,
+  ProjectId,
   ProviderHealth,
   ProviderId,
   SafeError,
@@ -54,6 +55,12 @@ export type SessionGroupRepairEvidence =
 export type SessionGroupRepairResult = {
   groups: SessionGroupView[];
   repairs: SessionGroupRepairEvidence[];
+};
+
+export type SessionGroupRepairInput = {
+  sessions: Array<{ id: string; projectId: ProjectId }>;
+  absenceAuthorityProjectIds: ProjectId[];
+  updatedAt?: string;
 };
 
 export type PersistedCommandStatus = "accepted" | "started" | "succeeded" | "failed";

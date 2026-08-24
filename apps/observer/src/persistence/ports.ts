@@ -32,6 +32,7 @@ import type {
   ProviderObservationsIngressDedupeResult,
   RecordProviderObservationInput,
   SessionGroupMemberExpectation,
+  SessionGroupRepairInput,
   SessionGroupRepairResult,
   SessionGroupStoreResult,
   SessionHarnessDerivedStateRepair,
@@ -235,7 +236,9 @@ export interface SessionStore {
  * DRIVEN PORT
  *
  * Maintains recorded project-local Group mutation and atomic reconcile repair of definitions,
- * exclusive membership, and parentage. Fresh-session placement is owned by SessionStore.
+ * exclusive membership, and parentage. Reconcile must name the projects whose complete provider
+ * evidence authorizes absent-member pruning; identity and parent corruption repair remains
+ * unconditional. Fresh-session placement is owned by SessionStore.
  */
 export interface SessionGroupStore {
   listSessionGroups(): Promise<SessionGroupView[]>;
@@ -271,10 +274,7 @@ export interface SessionGroupStore {
     expectedVersion: number;
     updatedAt?: string;
   }): Promise<SessionGroupStoreResult>;
-  repairSessionGroups(input: {
-    sessions: Array<{ id: string; projectId: string }>;
-    updatedAt?: string;
-  }): Promise<SessionGroupRepairResult>;
+  repairSessionGroups(input: SessionGroupRepairInput): Promise<SessionGroupRepairResult>;
 }
 
 /**
