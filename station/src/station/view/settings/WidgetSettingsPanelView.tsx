@@ -1,7 +1,7 @@
 import { TextAttributes, type ColorInput } from "@opentui/core";
 import type { DashboardScreenView, DashboardStateView, WidgetSettingsFocus } from "@station/dashboard-core/state";
 import { widgetSettingsPanelModel } from "@station/dashboard-core/selectors";
-import type { WidgetSettingsLine } from "@station/dashboard-core/selectors";
+import type { WidgetSettingsItem } from "@station/dashboard-core/selectors";
 import { SemanticScrollRegion } from "../layout/SemanticScrollViewport.js";
 import { semanticItemRenderableId } from "../layout/scrollViewport.js";
 import { widgetSettingsFrame } from "../layout/settingsPanelFrame.js";
@@ -35,8 +35,8 @@ export function WidgetSettingsPanelView({
   const dispatch = useStationMouse();
   const model = widgetSettingsPanelModel(screen, widgets, widgetsPersisted);
   const frame = widgetSettingsFrame(columns);
-  const itemIds = model.lines.map(widgetLineId);
-  const followedItemId = model.lines.find(isActiveWidgetLine);
+  const itemIds = model.items.map(widgetItemId);
+  const followedItem = model.items.find(isActiveWidgetItem);
   return (
     <box
       position="absolute"
@@ -77,13 +77,13 @@ export function WidgetSettingsPanelView({
         </text>
         <SemanticScrollRegion
           itemIds={itemIds}
-          followedItemId={followedItemId === undefined ? undefined : widgetLineId(followedItemId)}
+          followedItemId={followedItem === undefined ? undefined : widgetItemId(followedItem)}
           fill={false}
         >
-          {model.lines.map((line) => (
-            <PanelLine
-              key={lineKey(line)}
-              line={line}
+          {model.items.map((item) => (
+            <PanelItem
+              key={itemKey(item)}
+              item={item}
               width={frame.innerWidth}
               focus={model.focus}
               surfaceBackground={surfaceBackground}
@@ -104,38 +104,38 @@ export function WidgetSettingsPanelView({
   );
 }
 
-function lineKey(line: WidgetSettingsLine): string {
-  if (line.kind === "widget") {
-    return `widget:${line.index}`;
+function itemKey(item: WidgetSettingsItem): string {
+  if (item.kind === "widget") {
+    return `widget:${item.index}`;
   }
-  if (line.kind === "pickerChoice") {
-    return `pick:${line.index}`;
+  if (item.kind === "pickerChoice") {
+    return `pick:${item.index}`;
   }
-  return line.kind;
+  return item.kind;
 }
 
-function widgetLineId(line: WidgetSettingsLine): string {
-  return `widget-settings:${lineKey(line)}`;
+function widgetItemId(item: WidgetSettingsItem): string {
+  return `widget-settings:${itemKey(item)}`;
 }
 
-function isActiveWidgetLine(line: WidgetSettingsLine): boolean {
-  switch (line.kind) {
+function isActiveWidgetItem(item: WidgetSettingsItem): boolean {
+  switch (item.kind) {
     case "widget":
     case "add":
     case "pickerChoice":
-      return line.active;
+      return item.active;
     case "empty":
       return false;
   }
 }
 
-function PanelLine({
-  line,
+function PanelItem({
+  item,
   width,
   focus,
   surfaceBackground,
 }: {
-  line: WidgetSettingsLine;
+  item: WidgetSettingsItem;
   width: number;
   focus: WidgetSettingsFocus;
   surfaceBackground: ColorInput;
@@ -143,22 +143,22 @@ function PanelLine({
   const theme = useStationTheme();
   const dispatch = useStationMouse();
   const [hover, setHover] = useStationHoverState();
-  if (line.kind === "empty") {
+  if (item.kind === "empty") {
     return (
       <text
-        id={semanticItemRenderableId(widgetLineId(line))}
+        id={semanticItemRenderableId(widgetItemId(item))}
         fg={toOpenTuiColor(theme.text.muted)}
         bg={surfaceBackground}
         {...UNSELECTABLE_TEXT}
       >
-        {fit(`   ${line.label}`, width)}
+        {fit(`   ${item.label}`, width)}
       </text>
     );
   }
-  if (line.kind === "add") {
+  if (item.kind === "add") {
     return (
       <text
-        id={semanticItemRenderableId(widgetLineId(line))}
+        id={semanticItemRenderableId(widgetItemId(item))}
         fg={toOpenTuiColor(theme.action.primary)}
         bg={hover ? toOpenTuiColor(theme.interaction.hover) : surfaceBackground}
         {...UNSELECTABLE_TEXT}
@@ -166,13 +166,13 @@ function PanelLine({
         onMouseOver={() => setHover(true)}
         onMouseOut={() => setHover(false)}
       >
-        {fit(`   ${line.label}`, width)}
+        {fit(`   ${item.label}`, width)}
       </text>
     );
   }
-  if (line.kind === "pickerChoice") {
+  if (item.kind === "pickerChoice") {
     let background: ColorInput = surfaceBackground;
-    if (line.active) {
+    if (item.active) {
       background = toOpenTuiColor(theme.interaction.keyboardFocus);
     }
     if (hover) {
@@ -180,42 +180,42 @@ function PanelLine({
     }
     return (
       <text
-        id={semanticItemRenderableId(widgetLineId(line))}
-        fg={toOpenTuiColor(line.active ? theme.action.primary : theme.text.primary)}
+        id={semanticItemRenderableId(widgetItemId(item))}
+        fg={toOpenTuiColor(item.active ? theme.action.primary : theme.text.primary)}
         bg={background}
         {...UNSELECTABLE_TEXT}
-        {...stationMouseProps(dispatch, { kind: "widgetSettingsPickerChoice", index: line.index })}
+        {...stationMouseProps(dispatch, { kind: "widgetSettingsPickerChoice", index: item.index })}
         onMouseOver={() => setHover(true)}
         onMouseOut={() => setHover(false)}
       >
-        {fit(` ${line.active ? "▸" : " "} ${line.label}`, width)}
+        {fit(` ${item.active ? "▸" : " "} ${item.label}`, width)}
       </text>
     );
   }
   // The list dims behind the picker so the active surface is unambiguous.
   const dimmed = focus === "picker";
-  const chip = line.enabled ? "[on ]" : "[off]";
-  const marker = line.active && !dimmed ? "▸" : " ";
+  const chip = item.enabled ? "[on ]" : "[off]";
+  const marker = item.active && !dimmed ? "▸" : " ";
   let rowColor: ColorInput = toOpenTuiColor(theme.text.muted);
-  if (!dimmed && line.active) {
+  if (!dimmed && item.active) {
     rowColor = toOpenTuiColor(theme.action.primary);
-  } else if (!dimmed && line.enabled) {
+  } else if (!dimmed && item.enabled) {
     rowColor = toOpenTuiColor(theme.text.primary);
   }
   return (
-    <box id={semanticItemRenderableId(widgetLineId(line))} flexDirection="row">
+    <box id={semanticItemRenderableId(widgetItemId(item))} flexDirection="row">
       <text
         fg={rowColor}
         bg={hover && !dimmed ? toOpenTuiColor(theme.interaction.hover) : surfaceBackground}
         {...UNSELECTABLE_TEXT}
-        {...stationMouseProps(dispatch, { kind: "widgetSettingsRow", index: line.index })}
+        {...stationMouseProps(dispatch, { kind: "widgetSettingsRow", index: item.index })}
         onMouseOver={() => setHover(true)}
         onMouseOut={() => setHover(false)}
       >
-        {fit(` ${marker} ${chip} ${line.label}`, width - 2)}
+        {fit(` ${marker} ${chip} ${item.label}`, width - 2)}
       </text>
       <RemoveMark
-        index={line.index}
+        index={item.index}
         rowHovered={hover && !dimmed}
         surfaceBackground={surfaceBackground}
       />

@@ -72,7 +72,7 @@ export {
   toastDetail,
   toastTitle,
 } from "../components/ToastOverlay/content.js";
-export type { WidgetSettingsLine } from "../components/WidgetSettingsPanel/content.js";
+export type { WidgetSettingsItem } from "../components/WidgetSettingsPanel/content.js";
 export { widgetSettingsPanelModel } from "../components/WidgetSettingsPanel/content.js";
 export type {
   RowColor,

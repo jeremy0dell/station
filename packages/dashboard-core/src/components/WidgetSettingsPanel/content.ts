@@ -8,7 +8,7 @@ import type {
   WidgetSettingsFocus,
 } from "../../state/types.js";
 
-export type WidgetSettingsLine =
+export type WidgetSettingsItem =
   | { kind: "widget"; index: number; label: string; enabled: boolean; active: boolean }
   | { kind: "empty"; label: string }
   | { kind: "add"; label: string; active: boolean }
@@ -18,7 +18,7 @@ export type WidgetSettingsPanelModel = {
   title: string;
   /** Config-scope reminder under the title. */
   note: string;
-  lines: readonly WidgetSettingsLine[];
+  items: readonly WidgetSettingsItem[];
   footer: string;
   focus: WidgetSettingsFocus;
 };
@@ -32,7 +32,7 @@ export function widgetSettingsPanelModel(
     return {
       title: "add widget",
       note: "weather and tz require config.toml",
-      lines: ADDABLE_WIDGET_TYPES.map((type, index) => ({
+      items: ADDABLE_WIDGET_TYPES.map((type, index) => ({
         kind: "pickerChoice",
         index,
         label: widgetSettingsRowLabel({ type }),
@@ -42,7 +42,7 @@ export function widgetSettingsPanelModel(
       focus: "picker",
     };
   }
-  const lines: WidgetSettingsLine[] =
+  const items: WidgetSettingsItem[] =
     widgets.length === 0
       ? [{ kind: "empty", label: "no widgets yet" }]
       : widgets.map((widget, index) => ({
@@ -52,13 +52,13 @@ export function widgetSettingsPanelModel(
           enabled: widget.enabled !== false,
           active: index === screen.cursor,
         }));
-  lines.push({ kind: "add", label: "[ + add widget ]", active: false });
+  items.push({ kind: "add", label: "[ + add widget ]", active: false });
   return {
     title: "widgets",
     note: widgetsPersisted
       ? "saved to config.toml"
       : "session only · create config.toml to persist",
-    lines,
+    items,
     footer: "↵ toggle   [ ] reorder   x remove   a add   esc close",
     focus: "list",
   };
