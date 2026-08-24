@@ -236,6 +236,9 @@ edge, and scrolls only its body. Settings containers own their navigation/detail
 nesting and let focused content drive the shared scroll region. Anchored surfaces
 measure their owner, anchor, intrinsic content, border, and viewport after OpenTUI
 layout; feature state owns neither offsets nor visible-index windows.
+Context-menu focus, pointer hits, and activation cross renderer/input boundaries
+as `ContextMenuItemId`; ordered keyboard movement resolves a new ID without
+persisting an array position.
 
 `DashboardRoot` composes a flexible notice region above intrinsic bottom chrome.
 The prompt, divider, and footer are ordinary children of `DashboardChromeView`;

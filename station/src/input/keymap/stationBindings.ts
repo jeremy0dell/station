@@ -382,9 +382,9 @@ export function createStationMouseBindings(
       return { kind: "overlay-close", overlayId: STATION_OVERLAY_ID };
     },
     contextMenuBackdrop: () => ({ kind: "context-menu-close" }),
-    contextMenuItem: (target) => ({ kind: "context-menu-select", itemIndex: target.itemIndex }),
-    // Hover only moves the highlight; the click (contextMenuItem) selects. This
-    // keeps mouse highlight in lockstep with keyboard arrows on one index.
-    contextMenuItemHover: (target) => ({ kind: "context-menu-set-active", index: target.itemIndex }),
+    contextMenuItem: (target) => ({ kind: "context-menu-select", itemId: target.itemId }),
+    // Hover only moves the highlight; the click (contextMenuItem) selects. Both
+    // converge with keyboard arrows on one semantic item identity.
+    contextMenuItemHover: (target) => ({ kind: "context-menu-set-active", itemId: target.itemId }),
   };
 }

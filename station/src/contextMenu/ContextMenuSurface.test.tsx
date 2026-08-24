@@ -46,7 +46,7 @@ describe("ContextMenuSurface", () => {
     }
   });
 
-  it("routes item mouse targets with normalized click events", async () => {
+  it("routes semantic item identities with normalized click events", async () => {
     const calls: Array<{ target: MouseTargetRef; event: StationMouseEvent }> = [];
     const setup = await renderSurface((target, event) => {
       calls.push({ target, event });
@@ -59,7 +59,7 @@ describe("ContextMenuSurface", () => {
       await setup.mockMouse.click(closeColumn, closeRow, MouseButtons.LEFT);
       expect(calls).toEqual([
         {
-          target: { kind: "contextMenuItem", itemIndex: 2 },
+          target: { kind: "contextMenuItem", itemId: "pane.close" },
           event: {
             type: "down",
             button: "left",
@@ -110,7 +110,7 @@ describe("ContextMenuSurface", () => {
     }
   });
 
-  it("renders Group keyboard shortcuts and separators without changing item indices", async () => {
+  it("renders Group shortcuts and separators without changing semantic identities", async () => {
     const calls: MouseTargetRef[] = [];
     const items: readonly ContextMenuItem[] = [
       {
@@ -146,7 +146,7 @@ describe("ContextMenuSurface", () => {
         <box id={TEST_BOUNDARY_ID} width={24} height="100%">
           <ContextMenuSurface
             items={items}
-            activeIndex={0}
+            activeItemId="group.quickSession"
             anchor={{ x: 0, y: -1 }}
             preferredWidth={22}
             boundaryId={TEST_BOUNDARY_ID}
@@ -175,7 +175,7 @@ describe("ContextMenuSurface", () => {
       const removeRow = lines.findIndex((line) => line.includes("Remove Group…"));
       const removeColumn = lines[removeRow]?.indexOf("Remove Group…") ?? -1;
       await setup.mockMouse.click(removeColumn, removeRow, MouseButtons.LEFT);
-      expect(calls.at(-1)).toEqual({ kind: "contextMenuItem", itemIndex: 3 });
+      expect(calls.at(-1)).toEqual({ kind: "contextMenuItem", itemId: "group.remove" });
     } finally {
       setup.renderer.destroy();
     }
@@ -189,8 +189,11 @@ describe("ContextMenuSurface", () => {
     });
     try {
       await setup.mockMouse.moveTo(2, 2);
-      // Hover over the middle row highlights it (index 1) without selecting.
-      expect(calls.at(-1)?.target).toEqual({ kind: "contextMenuItemHover", itemIndex: 1 });
+      // Hover over the middle row highlights it by identity without selecting.
+      expect(calls.at(-1)?.target).toEqual({
+        kind: "contextMenuItemHover",
+        itemId: "pane.splitBelow",
+      });
       expect(calls.at(-1)?.event.type).toBe("move");
     } finally {
       setup.renderer.destroy();
@@ -212,7 +215,7 @@ describe("ContextMenuSurface", () => {
         <box id={TEST_BOUNDARY_ID} width={14} height="100%">
           <ContextMenuSurface
             items={items}
-            activeIndex={0}
+            activeItemId="pane.automation.verbose"
             anchor={{ x: 0, y: -1 }}
             preferredWidth={14}
             boundaryId={TEST_BOUNDARY_ID}
@@ -237,7 +240,10 @@ describe("ContextMenuSurface", () => {
         verbose.screenY + 1,
         MouseButtons.LEFT,
       );
-      expect(calls.at(-1)).toEqual({ kind: "contextMenuItem", itemIndex: 0 });
+      expect(calls.at(-1)).toEqual({
+        kind: "contextMenuItem",
+        itemId: "pane.automation.verbose",
+      });
     } finally {
       setup.renderer.destroy();
     }
@@ -255,7 +261,7 @@ describe("ContextMenuSurface", () => {
         <box id={TEST_BOUNDARY_ID} width={24} height="100%">
           <ContextMenuSurface
             items={items}
-            activeIndex={13}
+            activeItemId="pane.automation.action-13"
             anchor={{ x: 20, y: 7 }}
             preferredWidth={18}
             boundaryId={TEST_BOUNDARY_ID}
@@ -298,7 +304,7 @@ async function renderSurface(
       <box id={TEST_BOUNDARY_ID} width={24} height="100%">
         <ContextMenuSurface
           items={ITEMS}
-          activeIndex={2}
+          activeItemId="pane.close"
           anchor={{ x: 0, y: -1 }}
           preferredWidth={18}
           boundaryId={TEST_BOUNDARY_ID}

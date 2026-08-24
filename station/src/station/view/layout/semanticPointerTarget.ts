@@ -5,14 +5,14 @@ import { semanticItemRenderableId } from "./scrollViewport.js";
  * Resolves a terminal-cell pointer to a semantic child at the renderer boundary.
  * OpenTUI can report a scroll surface instead of its child at the final clipped cell.
  */
-export function semanticItemIndexAtPointer(
+export function semanticItemIdAtPointer<ItemId extends string>(
   container: BaseRenderable | null,
-  itemIds: readonly string[],
+  itemIds: readonly ItemId[],
   x: number,
   y: number,
-): number {
-  if (container === null) return -1;
-  return itemIds.findIndex((itemId) => {
+): ItemId | undefined {
+  if (container === null) return undefined;
+  return itemIds.find((itemId) => {
     const renderable = container.findDescendantById(semanticItemRenderableId(itemId));
     return (
       renderable instanceof Renderable &&

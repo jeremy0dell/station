@@ -16,7 +16,7 @@ export type ContextMenuTarget =
 export type ContextMenuState = {
   target: ContextMenuTarget;
   anchor: ContextMenuAnchor;
-  activeIndex: number;
+  activeItemId: ContextMenuItemId | undefined;
 };
 
 export type ContextMenuItemId =

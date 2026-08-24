@@ -332,7 +332,7 @@ describe("createStationInputRuntime", () => {
     expect(store.getState().input.contextMenu).toMatchObject({
       target: { kind: "pane", paneId: MAIN_PANE_ID },
       anchor: { x: 4, y: 2 },
-      activeIndex: 0,
+      activeItemId: "pane.splitRight",
     });
     expect(store.getState().input.focus).toEqual({ kind: "contextMenu" });
 
@@ -348,7 +348,7 @@ describe("createStationInputRuntime", () => {
 
     expect(runtime.handleSequence("\x1b[B")).toBe(true);
     expect(runtime.handleSequence("\x1b[B")).toBe(true);
-    expect(store.getState().input.contextMenu?.activeIndex).toBe(2);
+    expect(store.getState().input.contextMenu?.activeItemId).toBe("pane.close");
     expect(runtime.handleSequence("\r")).toBe(true);
 
     expect(store.getState().workspace.panes.map((pane) => pane.id)).toEqual([MAIN_PANE_ID]);
@@ -400,9 +400,12 @@ describe("createStationInputRuntime", () => {
     };
     const { runtime, scripted, store, registry } = harness({ automations: [automation] });
     // Right-click the main pane, then pick the automation. It sits after the two
-    // split actions (index 2), so it is selected explicitly, not by default Enter.
+    // split actions, so it is selected explicitly by identity, not by default Enter.
     runtime.dispatchMouse({ kind: "pane", paneId: MAIN_PANE_ID }, RIGHT_DOWN);
-    runtime.dispatchMouse({ kind: "contextMenuItemHover", itemIndex: 2 }, HOVER);
+    runtime.dispatchMouse(
+      { kind: "contextMenuItemHover", itemId: "pane.automation.see-diff" },
+      HOVER,
+    );
     expect(runtime.handleSequence("\r")).toBe(true);
 
     expect(store.getState().workspace.panes.map((pane) => pane.id)).toEqual([
@@ -431,7 +434,10 @@ describe("createStationInputRuntime", () => {
     };
     const { runtime, scripted, registry } = harness({ automations: [automation] });
     runtime.dispatchMouse({ kind: "pane", paneId: MAIN_PANE_ID }, RIGHT_DOWN);
-    runtime.dispatchMouse({ kind: "contextMenuItemHover", itemIndex: 2 }, HOVER);
+    runtime.dispatchMouse(
+      { kind: "contextMenuItemHover", itemId: "pane.automation.stage-prompt" },
+      HOVER,
+    );
     expect(runtime.handleSequence("\r")).toBe(true);
 
     registry.resize("pane-split-0", { cols: 36, rows: 8 });
@@ -453,7 +459,10 @@ describe("createStationInputRuntime", () => {
     };
     const { runtime, store } = harness({ automations: [automation] });
     runtime.dispatchMouse({ kind: "pane", paneId: MAIN_PANE_ID }, RIGHT_DOWN);
-    runtime.dispatchMouse({ kind: "contextMenuItemHover", itemIndex: 2 }, HOVER);
+    runtime.dispatchMouse(
+      { kind: "contextMenuItemHover", itemId: "pane.automation.triage" },
+      HOVER,
+    );
     expect(runtime.handleSequence("\r")).toBe(true);
 
     const panes = store.getState().workspace.panes;
@@ -481,7 +490,10 @@ describe("createStationInputRuntime", () => {
     };
     const { runtime, scripted, registry } = harness({ automations: [automation] });
     runtime.dispatchMouse({ kind: "pane", paneId: MAIN_PANE_ID }, RIGHT_DOWN);
-    runtime.dispatchMouse({ kind: "contextMenuItemHover", itemIndex: 2 }, HOVER);
+    runtime.dispatchMouse(
+      { kind: "contextMenuItemHover", itemId: "pane.automation.see-diff" },
+      HOVER,
+    );
     expect(runtime.handleSequence("\r")).toBe(true);
 
     // The split pane never laid out (no resize), so its PTY never spawned. Closing
@@ -519,7 +531,10 @@ describe("createStationInputRuntime", () => {
     try {
       const { runtime, scripted, registry } = harness({ automations: [automation] });
       runtime.dispatchMouse({ kind: "pane", paneId: MAIN_PANE_ID }, RIGHT_DOWN);
-      runtime.dispatchMouse({ kind: "contextMenuItemHover", itemIndex: 2 }, HOVER);
+      runtime.dispatchMouse(
+        { kind: "contextMenuItemHover", itemId: "pane.automation.see-diff" },
+        HOVER,
+      );
       expect(runtime.handleSequence("\r")).toBe(true);
 
       expect(longTimers).toHaveLength(1);
@@ -576,11 +591,28 @@ describe("createStationInputRuntime", () => {
     const { runtime, store } = harness();
     store.actions.createPane("pane-second");
     expect(runtime.dispatchMouse({ kind: "pane", paneId: "pane-second" }, RIGHT_DOWN)).toBe(true);
-    expect(store.getState().input.contextMenu?.activeIndex).toBe(0);
+    expect(store.getState().input.contextMenu?.activeItemId).toBe("pane.splitRight");
 
     const hover: StationMouseEvent = { ...LEFT_DOWN, type: "move" };
-    expect(runtime.dispatchMouse({ kind: "contextMenuItemHover", itemIndex: 2 }, hover)).toBe(true);
-    expect(store.getState().input.contextMenu?.activeIndex).toBe(2);
+    expect(
+      runtime.dispatchMouse({ kind: "contextMenuItemHover", itemId: "pane.close" }, hover),
+    ).toBe(true);
+    expect(store.getState().input.contextMenu?.activeItemId).toBe("pane.close");
+  });
+
+  it("does not activate a fallback when a pointer identity is stale", () => {
+    const { runtime, store } = harness();
+    runtime.dispatchMouse({ kind: "pane", paneId: MAIN_PANE_ID }, RIGHT_DOWN);
+
+    expect(
+      runtime.dispatchMouse(
+        { kind: "contextMenuItem", itemId: "station.renameSession" },
+        LEFT_DOWN,
+      ),
+    ).toBe(true);
+
+    expect(store.getState().workspace.panes).toHaveLength(1);
+    expect(store.getState().input.contextMenu).not.toBeNull();
   });
 
   it("closes the context menu before Ctrl-O can toggle the overlay underneath", () => {
@@ -1420,9 +1452,12 @@ describe("createStationInputRuntime pane split/focus/close", () => {
 
     // A primary-agent pane's menu leads with Rename, so its order is
     // [Rename, Split Right, Split Below, See diff, Close]: the automation is at
-    // index 3, after the two splits.
+    // after the two splits.
     runtime.dispatchMouse({ kind: "pane", paneId: agentPaneId }, RIGHT_DOWN);
-    runtime.dispatchMouse({ kind: "contextMenuItemHover", itemIndex: 3 }, HOVER);
+    runtime.dispatchMouse(
+      { kind: "contextMenuItemHover", itemId: "pane.automation.see-diff" },
+      HOVER,
+    );
     expect(runtime.handleSequence("\r")).toBe(true);
     registry.resize("pane-split-0", { cols: 36, rows: 8 });
 
@@ -1574,7 +1609,7 @@ describe("createStationInputRuntime pane split/focus/close", () => {
   it("context-menu Split Right creates a right split off the right-clicked pane and closes the menu", () => {
     const { runtime, store } = harness();
     runtime.dispatchMouse({ kind: "pane", paneId: MAIN_PANE_ID }, RIGHT_DOWN);
-    // Split Right is item index 0 (the default active index).
+    // Split Right is the default semantic item.
     expect(runtime.handleSequence("\r")).toBe(true);
     const created = store
       .getState()
@@ -1586,7 +1621,7 @@ describe("createStationInputRuntime pane split/focus/close", () => {
   it("context-menu Split Below uses the below direction", () => {
     const { runtime, store } = harness();
     runtime.dispatchMouse({ kind: "pane", paneId: MAIN_PANE_ID }, RIGHT_DOWN);
-    runtime.dispatchMouse({ kind: "contextMenuItem", itemIndex: 1 }, LEFT_DOWN);
+    runtime.dispatchMouse({ kind: "contextMenuItem", itemId: "pane.splitBelow" }, LEFT_DOWN);
     const created = store.getState().workspace.panes.find((pane) => pane.split !== null);
     expect(created?.split).toEqual({ anchorPaneId: MAIN_PANE_ID, direction: "below" });
   });

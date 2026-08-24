@@ -1,7 +1,7 @@
 import type { MouseEvent } from "@opentui/core";
 import { normalizeStationMouseEvent, type StationMouseEvent } from "../input/mouse.js";
 import type { MouseTargetRef } from "../input/router.js";
-import type { ContextMenuAnchor, ContextMenuItem } from "./types.js";
+import type { ContextMenuAnchor, ContextMenuItem, ContextMenuItemId } from "./types.js";
 import { ContextMenuSurface } from "./ContextMenuSurface.js";
 
 export type ContextMenuLayerProps = {
@@ -10,7 +10,7 @@ export type ContextMenuLayerProps = {
   anchor: ContextMenuAnchor;
   preferredWidth: number;
   items: readonly ContextMenuItem[];
-  activeIndex: number;
+  activeItemId: ContextMenuItemId | undefined;
   dispatchMouse: (target: MouseTargetRef, event: StationMouseEvent) => boolean;
 };
 
@@ -20,7 +20,7 @@ export function ContextMenuLayer({
   anchor,
   preferredWidth,
   items,
-  activeIndex,
+  activeItemId,
   dispatchMouse,
 }: ContextMenuLayerProps) {
   return (
@@ -39,7 +39,7 @@ export function ContextMenuLayer({
     >
       <ContextMenuSurface
         items={items}
-        activeIndex={activeIndex}
+        activeItemId={activeItemId}
         anchor={anchor}
         preferredWidth={preferredWidth}
         boundaryId="station-context-menu-boundary"

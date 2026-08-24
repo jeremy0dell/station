@@ -1,4 +1,8 @@
-import type { ContextMenuAnchor, ContextMenuTarget } from "../../contextMenu/types.js";
+import type {
+  ContextMenuAnchor,
+  ContextMenuItemId,
+  ContextMenuTarget,
+} from "../../contextMenu/types.js";
 import type { FocusTarget, StationState } from "../types.js";
 import { fallbackFocus, hasPane, withActivePane } from "./paneFocus.js";
 
@@ -27,6 +31,7 @@ export function openContextMenuState(
   state: StationState,
   target: ContextMenuTarget,
   anchor: ContextMenuAnchor,
+  activeItemId?: ContextMenuItemId,
 ): StationState {
   let next = state;
   if (target.kind === "pane" && hasPane(state.workspace.panes, target.paneId)) {
@@ -36,7 +41,7 @@ export function openContextMenuState(
     ...next,
     input: {
       ...next.input,
-      contextMenu: { target, anchor, activeIndex: 0 },
+      contextMenu: { target, anchor, activeItemId },
       focus: { kind: "contextMenu" },
     },
   };

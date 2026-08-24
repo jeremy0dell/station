@@ -4,7 +4,7 @@ import type { StationMouseTarget } from "../input/stationMouse.js";
 import { toOpenTuiColor, toOpenTuiOpaqueColor, useStationTheme } from "../../theme/index.js";
 import { SemanticScrollRegion } from "./layout/SemanticScrollViewport.js";
 import { semanticItemRenderableId } from "./layout/scrollViewport.js";
-import { semanticItemIndexAtPointer } from "./layout/semanticPointerTarget.js";
+import { semanticItemIdAtPointer } from "./layout/semanticPointerTarget.js";
 import { useAnchoredMenuPlacement } from "./layout/useAnchoredMenuPlacement.js";
 import {
   stationMouseProps,
@@ -52,8 +52,8 @@ export function DashboardMenuView({ menu, boundaryId, anchorRenderableId }: Dash
   const backdropMouseProps = stationMouseProps(dispatch, { kind: "sheetBackdrop" });
   const dispatchPointer = (event: MouseEvent): void => {
     event.stopPropagation();
-    const itemIndex = semanticItemIndexAtPointer(menuRef.current, itemIds, event.x, event.y);
-    const item = menu.items[itemIndex];
+    const itemId = semanticItemIdAtPointer(menuRef.current, itemIds, event.x, event.y);
+    const item = menu.items.find((candidate) => candidate.id === itemId);
     dispatch(item?.target ?? { kind: "sheetBackdrop" }, event);
   };
   const titleProps: { title?: string } = {};
@@ -78,8 +78,8 @@ export function DashboardMenuView({ menu, boundaryId, anchorRenderableId }: Dash
       {...backdropMouseProps}
       onMouseDown={dispatchPointer}
       onMouseMove={(event: MouseEvent) => {
-        const itemIndex = semanticItemIndexAtPointer(menuRef.current, itemIds, event.x, event.y);
-        setHoveredItemId(hoverEnabled ? menu.items[itemIndex]?.id : undefined);
+        const itemId = semanticItemIdAtPointer(menuRef.current, itemIds, event.x, event.y);
+        setHoveredItemId(hoverEnabled ? itemId : undefined);
       }}
       onMouseOut={() => setHoveredItemId(undefined)}
     >

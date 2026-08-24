@@ -49,7 +49,7 @@ export function ContextMenuRoot({
       anchor={menu.anchor}
       preferredWidth={measureContextMenuWidth(items)}
       items={items}
-      activeIndex={menu.activeIndex}
+      activeItemId={menu.activeItemId}
       dispatchMouse={dispatchMouse}
     />
   );

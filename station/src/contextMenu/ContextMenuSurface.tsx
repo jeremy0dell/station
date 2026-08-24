@@ -4,14 +4,15 @@ import { normalizeStationMouseEvent, type StationMouseEvent } from "../input/mou
 import type { MouseTargetRef } from "../input/router.js";
 import { SemanticScrollRegion } from "../station/view/layout/SemanticScrollViewport.js";
 import { semanticItemRenderableId } from "../station/view/layout/scrollViewport.js";
-import { semanticItemIndexAtPointer } from "../station/view/layout/semanticPointerTarget.js";
+import { semanticItemIdAtPointer } from "../station/view/layout/semanticPointerTarget.js";
 import {
   toOpenTuiColor,
   toOpenTuiOpaqueColor,
   useStationTheme,
   type StationTheme,
 } from "../theme/index.js";
-import type { ContextMenuAnchor, ContextMenuItem } from "./types.js";
+import { resolveContextMenuActiveItem } from "./selection.js";
+import type { ContextMenuAnchor, ContextMenuItem, ContextMenuItemId } from "./types.js";
 import { usePointerAnchoredMenuPlacement } from "./usePointerAnchoredMenuPlacement.js";
 
 const CONTEXT_MENU_VIEWPORT_ID = "station-context-menu-items";
@@ -22,7 +23,7 @@ export function contextMenuItemRenderableId(itemId: string): string {
 
 export type ContextMenuSurfaceProps = {
   items: readonly ContextMenuItem[];
-  activeIndex: number;
+  activeItemId: ContextMenuItemId | undefined;
   anchor: ContextMenuAnchor;
   preferredWidth: number;
   boundaryId: string;
@@ -31,7 +32,7 @@ export type ContextMenuSurfaceProps = {
 
 export function ContextMenuSurface({
   items,
-  activeIndex,
+  activeItemId,
   anchor,
   preferredWidth,
   boundaryId,
@@ -45,17 +46,17 @@ export function ContextMenuSurface({
     preferredWidth,
   });
   const itemIds = items.map((item) => item.id);
-  const followedItemId = items[activeIndex]?.id;
+  const followedItemId = resolveContextMenuActiveItem(items, activeItemId)?.id;
   const dispatchPointer = (
     event: MouseEvent,
     kind: "contextMenuItem" | "contextMenuItemHover",
   ): void => {
     event.stopPropagation();
-    const itemIndex = semanticItemIndexAtPointer(surfaceRef.current, itemIds, event.x, event.y);
-    if (itemIndex < 0 || (kind === "contextMenuItemHover" && itemIndex === activeIndex)) {
+    const itemId = semanticItemIdAtPointer(surfaceRef.current, itemIds, event.x, event.y);
+    if (itemId === undefined || (kind === "contextMenuItemHover" && itemId === followedItemId)) {
       return;
     }
-    dispatchMouse({ kind, itemIndex }, normalizeStationMouseEvent(event));
+    dispatchMouse({ kind, itemId }, normalizeStationMouseEvent(event));
   };
   return (
     <box
@@ -84,12 +85,12 @@ export function ContextMenuSurface({
         fill={false}
         viewportId={CONTEXT_MENU_VIEWPORT_ID}
       >
-        {items.map((item, itemIndex) => (
+        {items.map((item) => (
           <Fragment key={item.id}>
             {item.separatorBefore === true ? <ContextMenuSeparator /> : null}
             <ContextMenuItemRow
               item={item}
-              active={itemIndex === activeIndex}
+              active={item.id === followedItemId}
             />
           </Fragment>
         ))}

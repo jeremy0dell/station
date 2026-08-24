@@ -1,4 +1,8 @@
-import type { ContextMenuAnchor, ContextMenuTarget } from "../contextMenu/types.js";
+import type {
+  ContextMenuAnchor,
+  ContextMenuItemId,
+  ContextMenuTarget,
+} from "../contextMenu/types.js";
 import type { StationMouseEvent } from "./mouse.js";
 import type { FocusTarget, OverlayId, PaneId, StationState } from "../state/types.js";
 import type { StationMouseTarget } from "../station/input/stationMouse.js";
@@ -36,10 +40,10 @@ export type RouteOutcome =
   /**
    * Set the highlighted item absolutely (mouse hover), distinct from the
    * delta-based keyboard `context-menu-move`. Hover and arrow keys must agree
-   * on one highlight, so both land on `setContextMenuActiveIndex`.
+   * on one highlight, so both land on the same semantic item identity.
    */
-  | { kind: "context-menu-set-active"; index: number }
-  | { kind: "context-menu-select"; itemIndex?: number }
+  | { kind: "context-menu-set-active"; itemId: ContextMenuItemId }
+  | { kind: "context-menu-select"; itemId?: ContextMenuItemId }
   | { kind: "context-menu-shortcut"; key: string }
   | { kind: "open-url"; url: string }
   | { kind: "swallowed" }
@@ -58,8 +62,8 @@ export type MouseTargetRef =
   | { kind: "station"; target: StationMouseTarget }
   | { kind: "stationBackdrop" }
   | { kind: "contextMenuBackdrop" }
-  | { kind: "contextMenuItem"; itemIndex: number }
-  | { kind: "contextMenuItemHover"; itemIndex: number };
+  | { kind: "contextMenuItem"; itemId: ContextMenuItemId }
+  | { kind: "contextMenuItemHover"; itemId: ContextMenuItemId };
 
 /**
  * One handler per mouse target kind, declared next to the key bindings so a

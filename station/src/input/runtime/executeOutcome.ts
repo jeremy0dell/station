@@ -1,4 +1,9 @@
 import { buildContextMenuItems, resolveContextMenuAction } from "../../contextMenu/items.js";
+import {
+  moveContextMenuActiveItem,
+  resolveContextMenuActiveItem,
+} from "../../contextMenu/selection.js";
+import type { ContextMenuItemId } from "../../contextMenu/types.js";
 import { STATION_OVERLAY_ID } from "../../state/types.js";
 import { attentionKeysFromSnapshot } from "../../stationButton/status.js";
 import type { RouteOutcome } from "../router.js";
@@ -45,7 +50,7 @@ export function executeOutcome(outcome: RouteOutcome, effects: StationInputEffec
       effects.store.actions.closeOverlay();
       return true;
     case "context-menu-open":
-      effects.store.actions.openContextMenu(outcome.target, outcome.anchor);
+      openContextMenu(outcome.target, outcome.anchor, effects);
       return true;
     case "context-menu-close":
       effects.store.actions.closeContextMenu();
@@ -54,10 +59,10 @@ export function executeOutcome(outcome: RouteOutcome, effects: StationInputEffec
       moveContextMenuSelection(outcome.delta, effects);
       return true;
     case "context-menu-set-active":
-      effects.store.actions.setContextMenuActiveIndex(outcome.index);
+      effects.store.actions.setContextMenuActiveItemId(outcome.itemId);
       return true;
     case "context-menu-select":
-      selectContextMenuItem(effects, outcome.itemIndex);
+      selectContextMenuItem(effects, outcome.itemId);
       return true;
     case "context-menu-shortcut":
       selectContextMenuShortcut(effects, outcome.key);
@@ -70,6 +75,21 @@ export function executeOutcome(outcome: RouteOutcome, effects: StationInputEffec
     case "ignored":
       return false;
   }
+}
+
+function openContextMenu(
+  target: Extract<RouteOutcome, { kind: "context-menu-open" }>["target"],
+  anchor: Extract<RouteOutcome, { kind: "context-menu-open" }>["anchor"],
+  effects: StationInputEffects,
+): void {
+  const state = effects.store.getState();
+  const firstItem = buildContextMenuItems(
+    target,
+    state,
+    effects.dashboardRuntime?.state.getState(),
+    effects.automations,
+  )[0];
+  effects.store.actions.openContextMenu(target, anchor, firstItem?.id);
 }
 
 function moveContextMenuSelection(delta: -1 | 1, effects: StationInputEffects): void {
@@ -88,8 +108,8 @@ function moveContextMenuSelection(delta: -1 | 1, effects: StationInputEffects): 
   if (items.length === 0) {
     return;
   }
-  const next = (menu.activeIndex + delta + items.length) % items.length;
-  store.actions.setContextMenuActiveIndex(next);
+  const next = moveContextMenuActiveItem(items, menu.activeItemId, delta);
+  if (next !== undefined) store.actions.setContextMenuActiveItemId(next);
 }
 
 function selectContextMenuShortcut(effects: StationInputEffects, key: string): void {
@@ -102,11 +122,14 @@ function selectContextMenuShortcut(effects: StationInputEffects, key: string): v
     effects.dashboardRuntime?.state.getState(),
     effects.automations,
   );
-  const index = items.findIndex((item) => item.shortcut === key);
-  if (index >= 0) selectContextMenuItem(effects, index);
+  const item = items.find((candidate) => candidate.shortcut === key);
+  if (item !== undefined) selectContextMenuItem(effects, item.id);
 }
 
-function selectContextMenuItem(effects: StationInputEffects, itemIndex: number | undefined): void {
+function selectContextMenuItem(
+  effects: StationInputEffects,
+  itemId: ContextMenuItemId | undefined,
+): void {
   const store = effects.store;
   const state = store.getState();
   const menu = state.input.contextMenu;
@@ -120,7 +143,10 @@ function selectContextMenuItem(effects: StationInputEffects, itemIndex: number |
     dashboardRuntime?.state.getState(),
     effects.automations,
   );
-  const item = items[itemIndex ?? menu.activeIndex];
+  const item =
+    itemId === undefined
+      ? resolveContextMenuActiveItem(items, menu.activeItemId)
+      : items.find((candidate) => candidate.id === itemId);
   const action = resolveContextMenuAction(item);
   if (action === undefined) {
     return;
