@@ -7,6 +7,7 @@ import type {
   ProviderHookAdapter,
   ProviderHookEvent,
   ProviderHookReceipt,
+  SafeError,
   SessionRecoveryHandle,
   StationEvent,
 } from "@station/contracts";
@@ -148,6 +149,12 @@ export function createProviderHookIngress(
       if (adapter?.toHarnessEventReport !== undefined) {
         // Adapter-normalized harness hooks must pass the native-execution gate on the report path.
         if (reportHarnessEvent === undefined) {
+          const error: SafeError = {
+            tag: "HookIngestionError",
+            code: "HARNESS_REPORT_INGRESS_UNAVAILABLE",
+            message: "Harness hook normalization requires the report ingress handoff.",
+            provider: event.provider,
+          };
           return ProviderHookReceiptSchema.parse({
             schemaVersion: STATION_SCHEMA_VERSION,
             hookId: id,
@@ -156,12 +163,7 @@ export function createProviderHookIngress(
             accepted: false,
             status: "rejected",
             receivedAt: event.receivedAt,
-            error: {
-              tag: "HookIngestionError",
-              code: "HARNESS_REPORT_INGRESS_UNAVAILABLE",
-              message: "Harness hook normalization requires the report ingress handoff.",
-              provider: event.provider,
-            },
+            error,
           });
         }
         return ingestViaHookAdapter({
@@ -350,14 +352,17 @@ export function createHarnessEventReportIngestion(
             observedAt: report.observedAt,
             expiresAt: providerObservationExpiresAt(report.observedAt, retentionDays),
           };
+          const persistInput = {
+            event: reportedEvent,
+            eventOptions: { source: "hook", createdAt: report.observedAt },
+            dedupe: { kind: "harness_report", id: report.reportId },
+            observation: storedObservation,
+            harnessExecution,
+          };
           const result =
-            await options.persistence.recordEventAndProviderObservationWithIngressDedupe({
-              event: reportedEvent,
-              eventOptions: { source: "hook", createdAt: report.observedAt },
-              dedupe: { kind: "harness_report", id: report.reportId },
-              observation: storedObservation,
-              harnessExecution,
-            });
+            await options.persistence.recordEventAndProviderObservationWithIngressDedupe(
+              persistInput,
+            );
           if (!result.deduped) {
             options.eventBus?.publish(reportedEvent);
           }

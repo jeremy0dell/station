@@ -218,13 +218,12 @@ export class WorktrunkProvider implements WorktreeProvider {
         message: `${result.message} Config: ${result.configPath}.`,
       };
       if (result.status !== "ok") {
+        const ownershipConflict =
+          result.ownership?.status === "different-owner" ||
+          result.ownership?.status === "unknown-owner";
         check.error = {
           tag: "WorktrunkHookSetupError",
-          code:
-            result.ownership?.status === "different-owner" ||
-            result.ownership?.status === "unknown-owner"
-              ? "WORKTRUNK_HOOK_OWNERSHIP_CONFLICT"
-              : "WORKTRUNK_HOOKS_MISSING",
+          code: ownershipConflict ? "WORKTRUNK_HOOK_OWNERSHIP_CONFLICT" : "WORKTRUNK_HOOKS_MISSING",
           message: result.message,
           provider: this.id,
         };
@@ -649,17 +648,14 @@ export class WorktrunkProvider implements WorktreeProvider {
       await Promise.all(
         batch.map(async (project, batchIndex) => {
           const inspection = await this.#inspectStaleRegistration(project, options);
-          switch (inspection.status) {
-            case "skipped":
-              return;
-            case "completed":
-              completed += 1;
-              if (inspection.check !== undefined) {
-                checks[offset + batchIndex] = inspection.check;
-              }
-              return;
-            case "failed":
-              checks[offset + batchIndex] = inspection.check;
+          if (inspection.status === "skipped") {
+            return;
+          }
+          if (inspection.status === "completed") {
+            completed += 1;
+          }
+          if (inspection.check !== undefined) {
+            checks[offset + batchIndex] = inspection.check;
           }
         }),
       );
@@ -759,16 +755,14 @@ export class WorktrunkProvider implements WorktreeProvider {
     env?: Record<string, string>,
   ) {
     const operation = `provider.worktrunk.${worktrunkSubcommand(args)}`;
+    const unavailable = fallback.code === "WORKTRUNK_UNAVAILABLE";
     const result = await runRuntimeBoundaryWithRetryAndTimeout(
       {
         operation,
         clock: this.#clock,
         timeoutMs: policy.timeoutMs ?? this.#timeoutMs,
         error: {
-          tag:
-            fallback.code === "WORKTRUNK_UNAVAILABLE"
-              ? "ProviderUnavailableError"
-              : "WorktreeProviderError",
+          tag: unavailable ? "ProviderUnavailableError" : "WorktreeProviderError",
           code: fallback.code,
           message: fallback.message,
           provider: this.id,

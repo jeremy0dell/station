@@ -32,26 +32,30 @@ export function transitionAddProjectFlow(
 ): AddProjectTransition {
   switch (action.type) {
     case "startOpen":
-      return state.mode === "start"
-        ? { state, effects: [{ type: "loadDirectory", path: action.path }] }
-        : { state };
+      if (state.mode !== "start") {
+        return { state };
+      }
+      return { state, effects: [{ type: "loadDirectory", path: action.path }] };
     case "chooseOpen":
-      return state.mode === "choose"
-        ? { state, effects: [{ type: "loadDirectory", path: action.path }] }
-        : { state };
+      if (state.mode !== "choose") {
+        return { state };
+      }
+      return { state, effects: [{ type: "loadDirectory", path: action.path }] };
     case "chooseParent":
-      return state.mode === "choose"
-        ? {
-            state,
-            effects: [
-              { type: "loadDirectory", path: parentPath?.(state.currentPath) ?? state.currentPath },
-            ],
-          }
-        : { state };
+      if (state.mode !== "choose") {
+        return { state };
+      }
+      return {
+        state,
+        effects: [
+          { type: "loadDirectory", path: parentPath?.(state.currentPath) ?? state.currentPath },
+        ],
+      };
     case "chooseSelected":
-      return state.mode === "choose"
-        ? { state, effects: [{ type: "reviewFolder", path: action.path }] }
-        : { state };
+      if (state.mode !== "choose") {
+        return { state };
+      }
+      return { state, effects: [{ type: "reviewFolder", path: action.path }] };
     case "folderLoaded":
       return {
         state: chooseStateForLoadedFolder(state, action.result.path, action.result.entries),
@@ -61,93 +65,105 @@ export function transitionAddProjectFlow(
         state: chooseStateForLoadedFolder(state, action.path, [], { error: action.error }),
       };
     case "folderSearchLoaded":
-      return state.mode === "choose" && action.result.query === normalizedFilter(state.filter)
-        ? {
-            state: withoutSearchError({
-              ...state,
-              searchEntries: action.result.entries,
-              searching: false,
-              searchTruncated: action.result.truncated,
-            }),
-          }
-        : { state };
+      if (state.mode !== "choose" || action.result.query !== normalizedFilter(state.filter)) {
+        return { state };
+      }
+      return {
+        state: withoutSearchError({
+          ...state,
+          searchEntries: action.result.entries,
+          searching: false,
+          searchTruncated: action.result.truncated,
+        }),
+      };
     case "folderSearchFailed":
-      return state.mode === "choose" && action.query === normalizedFilter(state.filter)
-        ? {
-            state: {
-              ...state,
-              searchEntries: [],
-              searching: false,
-              searchTruncated: false,
-              searchError: action.error,
-            },
-          }
-        : { state };
+      if (state.mode !== "choose" || action.query !== normalizedFilter(state.filter)) {
+        return { state };
+      }
+      return {
+        state: {
+          ...state,
+          searchEntries: [],
+          searching: false,
+          searchTruncated: false,
+          searchError: action.error,
+        },
+      };
     case "folderReviewed":
       return { state: reviewStateForFolder(state, action.review) };
     case "folderReviewFailed":
       return { state: failedStateForError(state, action.path, action.error) };
     case "filterStart":
-      return state.mode === "choose" ? { state: { ...state, filterMode: true } } : { state };
+      if (state.mode !== "choose") {
+        return { state };
+      }
+      return { state: { ...state, filterMode: true } };
     case "filterInput":
       return updateFilter(state, `${state.mode === "choose" ? state.filter : ""}${action.value}`);
     case "filterBackspace":
       return updateFilter(state, state.mode === "choose" ? state.filter.slice(0, -1) : "");
     case "filterClear":
-      return state.mode === "choose"
-        ? {
-            state: withoutSearchError({
-              ...state,
-              filter: "",
-              filterMode: false,
-              searchEntries: [],
-              searching: false,
-              searchTruncated: false,
-            }),
-          }
-        : { state };
+      if (state.mode !== "choose") {
+        return { state };
+      }
+      return {
+        state: withoutSearchError({
+          ...state,
+          filter: "",
+          filterMode: false,
+          searchEntries: [],
+          searching: false,
+          searchTruncated: false,
+        }),
+      };
     case "submit":
       return submitReview(state);
     case "submitted":
       return { state: successStateForProject(state, action.label, action.root) };
     case "submitFailed":
-      return state.mode === "review"
-        ? { state: failedStateForError(state, state.selectedPath, action.error) }
-        : { state };
+      if (state.mode !== "review") {
+        return { state };
+      }
+      return { state: failedStateForError(state, state.selectedPath, action.error) };
     case "editIdStart":
-      return state.mode === "review" && !state.submitting
-        ? {
-            state: {
-              ...state,
-              actionFocus: "editId",
-              editingId: createEditableTextInputState(state.id),
-              editIdActionFocus: "save",
-            },
-          }
-        : { state };
+      if (state.mode !== "review" || state.submitting) {
+        return { state };
+      }
+      return {
+        state: {
+          ...state,
+          actionFocus: "editId",
+          editingId: createEditableTextInputState(state.id),
+          editIdActionFocus: "save",
+        },
+      };
     case "editIdInput":
-      return state.mode === "review" && state.editingId !== undefined
-        ? {
-            state: {
-              ...state,
-              editingId: transitionEditableTextInput(state.editingId, action.action),
-            },
-          }
-        : { state };
+      if (state.mode !== "review" || state.editingId === undefined) {
+        return { state };
+      }
+      return {
+        state: {
+          ...state,
+          editingId: transitionEditableTextInput(state.editingId, action.action),
+        },
+      };
     case "editIdCommit":
-      return state.mode === "review" && state.editingId !== undefined
-        ? { state: commitEditedProjectId(state) }
-        : { state };
+      if (state.mode !== "review" || state.editingId === undefined) {
+        return { state };
+      }
+      return { state: commitEditedProjectId(state) };
     case "editIdCancel":
-      return state.mode === "review" && state.editingId !== undefined
-        ? { state: reviewWithoutEditingId(state) }
-        : { state };
+      if (state.mode !== "review" || state.editingId === undefined) {
+        return { state };
+      }
+      return { state: reviewWithoutEditingId(state) };
     case "actionFocus":
       return { state: moveActionFocus(state, action.dir) };
     case "backToChoose":
-      return state.mode === "review" || state.mode === "failed"
-        ? { state, effects: [{ type: "loadDirectory", path: state.selectedPath }] }
-        : { state };
+      if (state.mode !== "review" && state.mode !== "failed") {
+        return { state };
+      }
+      return { state, effects: [{ type: "loadDirectory", path: state.selectedPath }] };
   }
 }
 

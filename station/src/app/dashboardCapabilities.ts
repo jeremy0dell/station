@@ -83,14 +83,13 @@ export function createDashboardCapabilities(
 
         try {
           const refreshed = await options.observerService.loadSnapshot();
-          if (
-            findSessionPlacementByBranch(
-              refreshed,
-              request.project.id,
-              request.hiddenBranch,
-              request.group,
-            ) !== undefined
-          ) {
+          const placed = findSessionPlacementByBranch(
+            refreshed,
+            request.project.id,
+            request.hiddenBranch,
+            request.group,
+          );
+          if (placed !== undefined) {
             return { kind: "success" };
           }
         } catch {
@@ -151,20 +150,18 @@ export function createDashboardCapabilities(
         if (session.origin === "external") {
           return observerActivation.activate(request);
         }
+        const launched = options.managedLaunch.activate(agentWorktreePaneId(row.id), {
+          projectId: row.projectId,
+          worktreeId: row.id,
+          cwd: row.path,
+          ...(request.preferredObserverAction === "fresh"
+            ? { freshStart: { expectedSessionId: session.id } }
+            : {}),
+        });
         return dashboardExecution(
-          options.managedLaunch
-            .activate(agentWorktreePaneId(row.id), {
-              projectId: row.projectId,
-              worktreeId: row.id,
-              cwd: row.path,
-              ...(request.preferredObserverAction === "fresh"
-                ? { freshStart: { expectedSessionId: session.id } }
-                : {}),
-            })
-            .then((result) => settleNativeActivation(options.store, result, session.title)),
+          launched.then((result) => settleNativeActivation(options.store, result, session.title)),
           {
-            optimistic:
-              request.preferredObserverAction === "focus" ? "none" : "pending-start",
+            optimistic: request.preferredObserverAction === "focus" ? "none" : "pending-start",
             successDisposition: "wait-for-canonical",
           },
         );

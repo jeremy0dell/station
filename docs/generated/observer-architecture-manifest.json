@@ -3855,6 +3855,7 @@
             "ProviderHookAdapter",
             "ProviderHookEvent",
             "ProviderHookReceipt",
+            "SafeError",
             "SessionRecoveryHandle",
             "StationEvent"
           ]

@@ -619,23 +619,19 @@ function operationText(
         ),
       };
     }
-    case "write-config":
+    case "write-config": {
+      const creating = operation.change === "create";
       return {
         label: resolveSetupMessage(
-          setupMessageRef(
-            operation.change === "create"
-              ? "action.config-create-label"
-              : "action.config-update-label",
-          ),
+          setupMessageRef(creating ? "action.config-create-label" : "action.config-update-label"),
         ),
         explanation: resolveSetupMessage(
           setupMessageRef(
-            operation.change === "create"
-              ? "action.config-create-message"
-              : "action.config-update-message",
+            creating ? "action.config-create-message" : "action.config-update-message",
           ),
         ),
       };
+    }
     case "activate-observer-config":
       return {
         label: resolveSetupMessage(setupMessageRef("label.observer-activation")),

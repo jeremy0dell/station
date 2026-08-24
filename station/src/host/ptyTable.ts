@@ -769,22 +769,12 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
           captureDurationMs = performance.now() - captureStartedAt;
           if (entry.exited || !entriesByPtyId.has(ptyRef.ptyId)) {
             detachAttachment(entry, attachment);
-            throw new StationHostProviderError(
-              "HOST_ATTACH_GONE",
-              `Host PTY "${ptyRef.ptyId}" exited while its snapshot was captured.`,
-              { cause: error },
-            );
+            throw attachGoneDuringSnapshot(ptyRef.ptyId, error);
           }
           if (error instanceof TerminalSnapshotUnavailableError) {
             const failure = terminalSnapshotFailure(error);
             emit("pty.snapshot.degraded", { ptyId: ptyRef.ptyId, ...failure });
-            replay = {
-              kind: "live-reset-recovery",
-              initialCols: recorded.cols,
-              initialRows: recorded.rows,
-              events: [],
-              resetData: error.resetData,
-            };
+            replay = liveResetReplay(recorded, error);
           } else {
             detachAttachment(entry, attachment);
             throw snapshotCaptureFailure(ptyRef.ptyId, error);
@@ -901,6 +891,27 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
         reap(entry, { type: "exit", ptyId: entry.ptyId, exitCode: 0 }, "host-stop");
       }
     },
+  };
+}
+
+function attachGoneDuringSnapshot(ptyId: string, error: unknown): StationHostProviderError {
+  return new StationHostProviderError(
+    "HOST_ATTACH_GONE",
+    `Host PTY "${ptyId}" exited while its snapshot was captured.`,
+    { cause: error },
+  );
+}
+
+function liveResetReplay(
+  recorded: { cols: number; rows: number },
+  error: TerminalSnapshotUnavailableError,
+): Extract<HostAttachAck["replay"], { kind: "live-reset-recovery" }> {
+  return {
+    kind: "live-reset-recovery",
+    initialCols: recorded.cols,
+    initialRows: recorded.rows,
+    events: [],
+    resetData: error.resetData,
   };
 }
 

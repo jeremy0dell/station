@@ -105,14 +105,13 @@ async function prepareExternalLaunchForWorktree(
       }
       const attachment = await managedTerminal.attachmentForTarget(target.id);
       if (attachment !== undefined) {
+        const harnessProvider =
+          target.harnessBinding?.harnessProvider ?? row.agent?.harness ?? project.defaults.harness;
         return {
           outcome: {
             kind: "existing-session",
             sessionId: target.sessionId,
-            harnessProvider:
-              target.harnessBinding?.harnessProvider ??
-              row.agent?.harness ??
-              project.defaults.harness,
+            harnessProvider,
             attachment,
           },
           reconcile: false,

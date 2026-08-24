@@ -147,12 +147,15 @@ export function createObserverReapExclusion(
         value = await operation();
       } catch {
         const release = claim.release();
+        if (release.status === "released") {
+          return {
+            status: "failed",
+            reason: "Duplicate cleanup failed while holding the boot claim.",
+          };
+        }
         return {
           status: "failed",
-          reason:
-            release.status === "released"
-              ? "Duplicate cleanup failed while holding the boot claim."
-              : "Duplicate cleanup and boot claim release both failed.",
+          reason: "Duplicate cleanup and boot claim release both failed.",
         };
       }
       const release = claim.release();
