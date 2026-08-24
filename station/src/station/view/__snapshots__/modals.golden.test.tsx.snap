@@ -22,7 +22,7 @@ FLEET  ●╭──────────────────────�
  [a] ? m│  Tab S/P/A    build filter conditions · F applies builder    │ -1 #10 
         │  1-9/a-z      open visible session or toggle condition       │        
  ▼ empty│  N/A/R/C/F/P  new/add/rename/fold/fork/settings              │qs] [▾] 
-        │  W            widgets                                        │        
+ no sess│  W            widgets                                        │        
 ────────╰──────────────────────────────────────────────────────────────╯─────── 
 ↵ activate  N new  ⇥ next  / filter  X delete  ? help  Q/esc:close              
 "
@@ -50,7 +50,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
  [a] ? metadata-refresh                   opencode  unknown           +3 -1 #10 
                                                                                 
  ▼ empty-project  0 sessions                                      [sh] [qs] [▾] 
-                                                                                
+ no sessions yet · [ + add session ]                                            
 ─────────────────────────────────────────────────────────────────────────────── 
 ↵ activate  N new  ⇥ next  / filter  X delete  ? help  Q/esc:close              
 "
@@ -215,7 +215,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
  [a] ? metadata-refresh                   opencode  unknown           +3 -1 #10 
                                                                                 
  ▼ empty-project  0 sessions                                      [sh] [qs] [▾] 
-                                                                                
+ no sessions yet · [ + add session ]                                            
 ─────────────────────────────────────────────────────────────────────────────── 
  FILTER   ←→ cursor  Enter apply  Tab condition  Ctrl-U clear  Esc cancel       
 "
@@ -243,7 +243,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
  [a] ? metadata-refresh                   opencode  unknown           +3 -1 #10 
                                                                                 
  ▼ empty-project  0 sessions                                      [sh] [qs] [▾] 
-                                                                                
+ no sessions yet · [ + add session ]                                            
 ─────────────────────────────────────────────────────────────────────────────── 
  CONDITION   S/P/A edit  ↑↓ move  Enter select  F apply filter  Esc text        
 "
@@ -271,7 +271,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
  [a] ? metadata-refresh                   opencode  unknown           +3 -1 #10 
                                                                                 
  ▼ empty-project  0 sessions                                      [sh] [qs] [▾] 
-                                                                                
+ no sessions yet · [ + add session ]                                            
 ─────────────────────────────────────────────────────────────────────────────── 
  CONDITION   ← fields  ↑↓ move  Space/slot toggle  Enter done  Esc close        
 "
@@ -459,7 +459,7 @@ FLE│ Project settings                                                       �
  [a│                          │                                             │10 
    │                          │                                             │   
  ▼ │                          │                                             │▾] 
-   │                          │ ✓ current · ↑↓ ↵ · 1-9/a-z                  │   
+ no│                          │ ✓ current · ↑↓ ↵ · 1-9/a-z                  │   
 ───│ ↑↓ move   →/enter edit   esc close                                     │── 
 ↵ a└────────────────────────────────────────────────────────────────────────┘   
 "
@@ -519,7 +519,7 @@ FLE│ Project settings                                                       �
  [a│                          │                                             │10 
    │                          │                                             │   
  ▼ │                          │                                             │▾] 
-   │                          │ [ Remove project (R) ]                      │   
+ no│                          │ [ Remove project (R) ]                      │   
 ───│ ←/esc back                                                             │── 
 ↵ a└────────────────────────────────────────────────────────────────────────┘   
 "
@@ -547,7 +547,7 @@ FLE│ Project settings                                                       �
  [a│                          │                                             │10 
    │                          │                                             │   
  ▼ │                          │                                             │▾] 
-   │                          │ ✓ current · ↑↓ ↵ · 1-9/a-z                  │   
+ no│                          │ ✓ current · ↑↓ ↵ · 1-9/a-z                  │   
 ───│ ↑↓ move   →/enter edit   esc close                                     │── 
 ↵ a└────────────────────────────────────────────────────────────────────────┘   
 "
@@ -1456,8 +1456,8 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 exports[`modal flow golden frames renders the first project sheet 1`] = `
 "                                                                                
 ─────────────────────────────────────────────────────────────────────────────── 
-                                                                                
 [ + Add your first project (A) ]                                                
+                                                                                
                                                                                 
                                                                                 
                                                                                 
@@ -1691,7 +1691,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
  [a] ? metadata-refresh                   opencode  unknown           +3 -1 #10
 
  ▼ empty-project  0 sessions                                      [sh] [qs] [▾]
-
+ no sessions yet · [ + add session ]
 ───────────────────────────────────────────────────────────────────────────────
 ↵ activate  N new  ⇥ next  / filter  X delete  ? help  Q/esc:close
 "
@@ -1719,7 +1719,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
  [a] ? metadata-refresh                   opencode  unknown           +3 -1 #10
 
  ▼ empty-project  0 sessions                                      [sh] [qs] [▾]
-
+ no sessions yet · [ + add session ]
 ───────────────────────────────────────────────────────────────────────────────
 ↵ activate  N new  ⇥ next  / filter  X delete  ? help  Q/esc:close
 "

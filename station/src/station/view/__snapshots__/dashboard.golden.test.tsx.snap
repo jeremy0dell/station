@@ -22,7 +22,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
  [a] ? metadata-refresh                   opencode  unknown           +3 -1 #10 
                                                                                 
  ▼ empty-project  0 sessions                                      [sh] [qs] [▾] 
-                                                                                
+ no sessions yet · [ + add session ]                                            
 ─────────────────────────────────────────────────────────────────────────────── 
 ↵ activate  N new  ⇥ next  / filter  X delete  ? help  Q/esc:close              
 "
@@ -327,8 +327,8 @@ FLEET  ● 0 ready  ⠋ 1 working  ! 3
 exports[`dashboard golden frames renders no-projects at 80x24 1`] = `
 "                                                                                
 ─────────────────────────────────────────────────────────────────────────────── 
-                                                                                
 [ + Add your first project (A) ]                                                
+                                                                                
                                                                                 
                                                                                 
                                                                                 
@@ -355,8 +355,8 @@ exports[`dashboard golden frames renders no-projects at 80x24 1`] = `
 exports[`dashboard golden frames renders no-projects at 120x40 1`] = `
 "                                                                                                                        
 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 
-                                                                                                                        
 [ + Add your first project (A) ]                                                                                        
+                                                                                                                        
                                                                                                                         
                                                                                                                         
                                                                                                                         
@@ -399,8 +399,8 @@ exports[`dashboard golden frames renders no-projects at 120x40 1`] = `
 exports[`dashboard golden frames renders no-projects at 60x16 1`] = `
 "                                                            
 ─────────────────────────────────────────────────────────── 
-                                                            
 [ + Add your first project (A) ]                            
+                                                            
                                                             
                                                             
                                                             
@@ -419,8 +419,8 @@ exports[`dashboard golden frames renders no-projects at 60x16 1`] = `
 exports[`dashboard golden frames renders no-projects at 40x12 1`] = `
 "                                        
 ─────────────────────────────────────── 
-                                        
 [ + Add your first project (A) ]        
+                                        
                                         
                                         
                                         
@@ -650,7 +650,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
  [a] ? metadata-refresh                   opencode  unknown           +3 -1 #10 
                                                                                 
  ▼ empty-project  0 sessions                                      [sh] [qs] [▾] 
-                                                                                
+ no sessions yet · [ + add session ]                                            
 ─────────────────────────────────────────────────────────────────────────────── 
  FILTER   ←→ cursor  Enter apply  Tab condition  Ctrl-U clear  Esc cancel       
 "
@@ -670,7 +670,7 @@ FILTER working · Status=Working                2/10 matches
  ▼ scripts  2 sessions · 2 agents             [sh] [qs] [▾] 
                                                             
  ▼ empty-project  0 sessions                  [sh] [qs] [▾] 
-                                                            
+ no sessions yet · [ + add session ]                        
 ─────────────────────────────────────────────────────────── 
 / edit  Esc clear  ↵ activate  N new  Q:close               
 "

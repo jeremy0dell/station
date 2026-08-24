@@ -240,8 +240,10 @@ layout; feature state owns neither offsets nor visible-index windows.
 `DashboardRoot` composes a flexible notice region above intrinsic bottom chrome.
 The prompt, divider, and footer are ordinary children of `DashboardChromeView`;
 the toast is bounded within the notice region and grows upward without reserving
-prompt/footer rows. Active screens share one overlay layer and do not force the
-dashboard to reflow. Native and standalone renderers use this same composition.
+prompt/footer rows. Optional table headers and overflow indicators are absent
+when they have no semantic content; blank renderables never reserve their space.
+Active screens share one overlay layer and do not force the dashboard to reflow.
+Native and standalone renderers use this same composition.
 
 ## Intentional terminal-cell boundaries
 

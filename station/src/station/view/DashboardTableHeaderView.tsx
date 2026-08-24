@@ -13,8 +13,6 @@ export function DashboardTableHeaderView({ model }: { model: DashboardTableHeade
       return <ColumnHeaderRow layout={model.layout} />;
     case "aboveOverflow":
       return <DashboardScrollIndicatorView direction="above" overflow={model.overflow} />;
-    case "empty":
-      return <box height={1} flexShrink={0} />;
     default:
       return assertNeverDashboardTableHeaderModel(model);
   }
@@ -34,19 +32,18 @@ export function DashboardScrollIndicatorView({
   const theme = useStationTheme();
   const dispatch = useStationMouse();
   const hiddenSessions = direction === "above" ? overflow.above : overflow.below;
+  if (hiddenSessions === 0) return null;
   return (
     <text
       height={1}
       flexShrink={0}
       fg={toOpenTuiColor(theme.text.muted)}
-      {...(hiddenSessions === 0
-        ? {}
-        : stationMouseProps(dispatch, {
-            kind: "scrollIndicator",
-            direction: direction === "above" ? "up" : "down",
-          }))}
+      {...stationMouseProps(dispatch, {
+        kind: "scrollIndicator",
+        direction: direction === "above" ? "up" : "down",
+      })}
     >
-      {hiddenSessions > 0 ? scrollIndicatorLabel(direction, overflow) : " "}
+      {scrollIndicatorLabel(direction, overflow)}
     </text>
   );
 }

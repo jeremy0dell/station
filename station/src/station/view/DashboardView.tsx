@@ -122,6 +122,7 @@ export function DashboardView({
       flexShrink={1}
       minHeight={0}
       flexDirection="column"
+      paddingTop={1}
       paddingRight={1}
       position="relative"
     >
@@ -139,27 +140,28 @@ export function DashboardView({
           {...stationMouseProps(dispatch, { kind: "screenBackdrop" })}
         />
       ) : null}
-      <text flexShrink={0}> </text>
       {firstRun ? null : (
         <FleetBar summary={fleet} counts={snapshot.counts} columns={contentColumns} />
       )}
       <DashboardDividerView />
-      <box
-        flexShrink={0}
-        position="relative"
-        {...(conditionPanelActive ? { zIndex: 10 } : {})}
-      >
-        <DashboardTableHeaderView model={tableHeader} />
-        {conditionPanelActive ? (
-          <box position="absolute" top="100%" left={0}>
-            <DashboardFilterConditionView
-              screen={screen}
-              columns={contentColumns}
-              boundaryId={DASHBOARD_LAYOUT_BOUNDARY_ID}
-            />
-          </box>
-        ) : null}
-      </box>
+      {tableHeader !== undefined || conditionPanelActive ? (
+        <box
+          flexShrink={0}
+          position="relative"
+          {...(conditionPanelActive ? { zIndex: 10 } : {})}
+        >
+          {tableHeader === undefined ? null : <DashboardTableHeaderView model={tableHeader} />}
+          {conditionPanelActive ? (
+            <box position="absolute" top="100%" left={0}>
+              <DashboardFilterConditionView
+                screen={screen}
+                columns={contentColumns}
+                boundaryId={DASHBOARD_LAYOUT_BOUNDARY_ID}
+              />
+            </box>
+          ) : null}
+        </box>
+      ) : null}
       {firstRun ? (
         <box flexDirection="column" flexGrow={1}>
           <FirstProjectButton columns={contentColumns} />

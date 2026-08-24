@@ -48,7 +48,7 @@ describe("dashboard table header model", () => {
       persistentFilter: projection(),
     });
 
-    expect(model.kind).toBe("persistentFilter");
+    expect(model?.kind).toBe("persistentFilter");
   });
 
   it("gives above overflow precedence over the available column layout", () => {
@@ -67,10 +67,8 @@ describe("dashboard table header model", () => {
     });
   });
 
-  it("uses one empty header row when no layout exists", () => {
-    expect(dashboardTableHeaderModel({ layout: undefined, overflow: NO_OVERFLOW })).toEqual({
-      kind: "empty",
-    });
+  it("omits the header when no semantic header content exists", () => {
+    expect(dashboardTableHeaderModel({ layout: undefined, overflow: NO_OVERFLOW })).toBeUndefined();
   });
 });
 

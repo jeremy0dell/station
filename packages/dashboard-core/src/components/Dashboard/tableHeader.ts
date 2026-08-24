@@ -38,8 +38,7 @@ export type DashboardFilterHeaderModel = {
 export type DashboardTableHeaderModel =
   | { kind: "persistentFilter"; filter: DashboardFilterHeaderModel }
   | { kind: "columns"; layout: RowGridLayout }
-  | { kind: "aboveOverflow"; overflow: DashboardSessionOverflow }
-  | { kind: "empty" };
+  | { kind: "aboveOverflow"; overflow: DashboardSessionOverflow };
 
 export function dashboardTableHeaderModel({
   layout,
@@ -51,7 +50,7 @@ export function dashboardTableHeaderModel({
   overflow: DashboardSessionOverflow;
   columns?: number;
   persistentFilter?: DashboardPersistentFilterProjection;
-}): DashboardTableHeaderModel {
+}): DashboardTableHeaderModel | undefined {
   if (persistentFilter !== undefined) {
     return {
       kind: "persistentFilter",
@@ -69,7 +68,7 @@ export function dashboardTableHeaderModel({
   if (layout !== undefined) {
     return { kind: "columns", layout };
   }
-  return { kind: "empty" };
+  return undefined;
 }
 
 export function dashboardPersistentFilterHeaderModel({
