@@ -14,6 +14,7 @@ import type { AddProjectFlowState } from "../flows/addProject/types.js";
 import type { NewSessionFlowState } from "../flows/newSession.js";
 import type { DashboardFocus, GroupOrderingMode } from "../selectors/dashboardTree.js";
 import type { ClientNotice } from "../services/types.js";
+import type { HelpEntryId } from "./helpEntries.js";
 import type { TuiLocalRows } from "./localRows.js";
 import type { ReadonlyDeep } from "./readonly.js";
 import type { TuiSelectionState } from "./selection/types.js";
@@ -156,7 +157,7 @@ export type GroupSettingsPendingMutation = "rename" | "membership" | "delete";
 
 export type TuiScreen =
   | { name: "dashboard" }
-  | { name: "help" }
+  | { name: "help"; focusedEntryId?: HelpEntryId }
   | { name: "projectMenu"; projectId: ProjectId; focus: ProjectMenuActionId }
   | {
       name: "groupMenu";

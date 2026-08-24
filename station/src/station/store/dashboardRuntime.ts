@@ -8,6 +8,7 @@ import type { DashboardCapabilities, DashboardRuntime, TuiFolderService } from "
 import type { DashboardGroupHeaderActionVisibility } from "@station/dashboard-core/state";
 import type { TuiWidgetConfig } from "@station/dashboard-core/widgets";
 import type { StationClient } from "../../sources/types.js";
+import { stationHelpEntryOrder } from "../helpEntries.js";
 import {
   createDashboardScrollController,
   type DashboardScrollController,
@@ -48,6 +49,7 @@ export function createStationDashboardRuntime(
     capabilities,
     clientLabel: "Station",
     visibleDashboardRows: layout.visibleRows,
+    helpEntries: stationHelpEntryOrder,
   };
   if (options.folderService !== undefined) {
     runtimeOptions.folderService = options.folderService;

@@ -1,3 +1,4 @@
+import type { HelpEntryOrderSource } from "./helpEntries.js";
 import type { TuiKey } from "./keys.js";
 import type { DashboardVisibleRowsSource } from "./layoutVisibility.js";
 import type { TuiOperation } from "./operations/types.js";
@@ -33,6 +34,7 @@ export type TuiRuntimeContext = {
   cwd: string;
   homeDir: string;
   visibleDashboardRows?: DashboardVisibleRowsSource;
+  helpEntries?: HelpEntryOrderSource;
 };
 
 export function handleTuiKey(
@@ -72,7 +74,7 @@ export function handleTuiKey(
     case "dashboard":
       return handleDashboardKey(state, key, context);
     case "help":
-      return handleHelpKey(state, key);
+      return handleHelpKey(state, key, context.helpEntries);
     case "projectMenu":
       return handleProjectMenuKey(state, key);
     case "groupMenu":

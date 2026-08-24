@@ -13,8 +13,9 @@ import type {
   DashboardRuntime,
   DashboardRuntimeOptions,
   TuiFolderService,
- } from "@station/dashboard-core/runtime";
+} from "@station/dashboard-core/runtime";
 import { manyProjectsSnapshot } from "../../fixtures/scenarios.js";
+import { stationHelpEntryOrder } from "../../helpEntries.js";
 import { FakeStationSource } from "./fakeStationSource.js";
 import { FakeTuiObserverService } from "./fakeObserverService.js";
 import {
@@ -89,6 +90,7 @@ export function createStationTestDashboardRuntime(
     ...runtimeOptions,
     source: clientState,
     capabilities: resolvedCapabilities,
+    helpEntries: runtimeOptions.helpEntries ?? stationHelpEntryOrder,
     visibleDashboardRows: runtimeOptions.visibleDashboardRows ?? layout.visibleRows,
   });
   return { ...runtime, clientState, layout };

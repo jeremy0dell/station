@@ -20,7 +20,7 @@ describe("HelpOverlayView", () => {
     function ResponsiveHelp() {
       const [size, updateSize] = useState({ columns: 30, rows: 8 });
       setSize = updateSize;
-      return <HelpOverlayView {...size} />;
+      return <HelpOverlayView {...size} focusedEntryId="help:dashboard:help-refresh" />;
     }
 
     const setup = await testRender(
@@ -50,7 +50,8 @@ describe("HelpOverlayView", () => {
     expect(viewport).toBeDefined();
     expect(wrapped?.height).toBeGreaterThan(1);
     expect(finalEntry).toBeDefined();
-    expect(setup.captureCharFrame()).not.toContain("retain-close filter");
+    expect(setup.captureCharFrame()).toContain("refresh");
+    expect(setup.captureCharFrame()).toContain("↑ more");
 
     await act(async () => {
       for (let index = 0; index < 60; index += 1) {
@@ -72,5 +73,6 @@ describe("HelpOverlayView", () => {
     expect(surface?.height).toBeLessThanOrEqual(6);
     expect(wrapped?.height).toBeGreaterThan(2);
     expect(finalEntry).toBeDefined();
+    expect(setup.captureCharFrame()).toContain("▸");
   });
 });

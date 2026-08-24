@@ -22,6 +22,7 @@ import { VtPrefix } from "../terminal/protocol/syntax.js";
 import { openExternalUrl } from "../openUrl.js";
 import { createStationClient } from "../sources/createStationClient.js";
 import { sanitizePastedText } from "../station/input/sequenceToTuiKey.js";
+import { stationHelpEntryOrder } from "../station/helpEntries.js";
 import { createDashboardScrollController } from "../station/view/layout/scrollViewport.js";
 import {
   createStationThemeController,
@@ -115,6 +116,7 @@ export async function runDashboardMain(): Promise<void> {
     capabilities,
     clientLabel: "station",
     visibleDashboardRows: dashboardLayout.visibleRows,
+    helpEntries: stationHelpEntryOrder,
     initialState: {
       widgets: tuiConfig.config?.widgets ?? [],
       widgetsPersisted: tuiConfig.configPath !== undefined,

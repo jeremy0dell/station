@@ -79,6 +79,29 @@ describe("TUI screen transitions", () => {
     expect(dismissedError.state.toasts).toEqual([]);
   });
 
+  it("moves Help focus by stable identity and supports semantic endpoints", () => {
+    const base = createInitialTuiState({ initialSnapshot: createDashboardSnapshot() });
+    const context = {
+      cwd: "/workspace",
+      homeDir: "/home/example",
+      helpEntries: {
+        entryIds: () => ["help:first", "help:middle", "help:last"],
+      },
+    };
+    const opened = handleTuiKey(base, { input: "H" }, context).state;
+
+    const first = handleTuiKey(opened, { input: "", downArrow: true }, context).state;
+    expect(first.screen).toEqual({ name: "help", focusedEntryId: "help:first" });
+    const middle = handleTuiKey(first, { input: "", downArrow: true }, context).state;
+    expect(middle.screen).toEqual({ name: "help", focusedEntryId: "help:middle" });
+    const previous = handleTuiKey(middle, { input: "", upArrow: true }, context).state;
+    expect(previous.screen).toEqual({ name: "help", focusedEntryId: "help:first" });
+    const last = handleTuiKey(previous, { input: "", pageDown: true }, context).state;
+    expect(last.screen).toEqual({ name: "help", focusedEntryId: "help:last" });
+    const firstAgain = handleTuiKey(last, { input: "", pageUp: true }, context).state;
+    expect(firstAgain.screen).toEqual({ name: "help", focusedEntryId: "help:first" });
+  });
+
   it("opens remove session slot selection from the dashboard", () => {
     const state = createInitialTuiState({ initialSnapshot: createDashboardSnapshot() });
     const transition = handleTuiKey(state, { input: "X" });

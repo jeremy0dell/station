@@ -6,6 +6,7 @@ import type { ObserverService } from "../services/types.js";
 import { type DashboardActions, handleTuiAction } from "./actions.js";
 import type { DashboardCapabilities } from "./capabilities/execution.js";
 import { clearDashboardFocus, focusDashboardSession } from "./dashboardFocus.js";
+import type { HelpEntryOrderSource } from "./helpEntries.js";
 import type { DashboardVisibleRowsSource } from "./layoutVisibility.js";
 import {
   createTuiLocalOperationRunner,
@@ -49,6 +50,8 @@ export type DashboardRuntimeOptions = {
   clientLabel?: string;
   /** Semantic identities intersecting the renderer viewport; physical geometry stays outside core. */
   visibleDashboardRows?: DashboardVisibleRowsSource;
+  /** Semantic Help order; focus remains identity-based while Station resolves box geometry. */
+  helpEntries?: HelpEntryOrderSource;
 };
 
 /**
@@ -111,6 +114,7 @@ export function createDashboardRuntime(options: DashboardRuntimeOptions): Dashbo
           ...(options.visibleDashboardRows === undefined
             ? {}
             : { visibleDashboardRows: options.visibleDashboardRows }),
+          ...(options.helpEntries === undefined ? {} : { helpEntries: options.helpEntries }),
         }),
       );
     },
@@ -128,6 +132,7 @@ export function createDashboardRuntime(options: DashboardRuntimeOptions): Dashbo
           ...(options.visibleDashboardRows === undefined
             ? {}
             : { visibleDashboardRows: options.visibleDashboardRows }),
+          ...(options.helpEntries === undefined ? {} : { helpEntries: options.helpEntries }),
         }),
       );
     },

@@ -77,7 +77,13 @@ function renderActiveScreenOverlay({
       return null;
     }
     case "help":
-      return <HelpOverlayView columns={columns} rows={rows} />;
+      return (
+        <HelpOverlayView
+          columns={columns}
+          rows={rows}
+          focusedEntryId={screen.focusedEntryId}
+        />
+      );
     case "projectMenu":
     case "groupMenu":
       return null;

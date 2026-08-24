@@ -12,14 +12,17 @@ export function SemanticScrollRegion<ItemId extends string>({
   children,
   fill = true,
   viewportId,
+  controller: suppliedController,
 }: {
   itemIds: readonly ItemId[];
   followedItemId?: ItemId;
   children: ReactNode;
   fill?: boolean;
   viewportId?: string;
+  controller?: ScrollViewportController<ItemId>;
 }) {
-  const controller = useMemo(() => createScrollViewportController<ItemId>(), []);
+  const localController = useMemo(() => createScrollViewportController<ItemId>(), []);
+  const controller = suppliedController ?? localController;
   useEffect(() => {
     controller.follow(followedItemId);
     queueMicrotask(controller.reflow);

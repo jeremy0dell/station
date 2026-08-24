@@ -12,6 +12,8 @@ describe("sequenceToTuiKey", () => {
     expect(sequenceToTuiKey("\x1b[B")).toEqual({ input: "", downArrow: true });
     expect(sequenceToTuiKey("\x1b[C")).toEqual({ input: "", rightArrow: true });
     expect(sequenceToTuiKey("\x1b[D")).toEqual({ input: "", leftArrow: true });
+    expect(sequenceToTuiKey("\x1b[5~")).toEqual({ input: "", pageUp: true });
+    expect(sequenceToTuiKey("\x1b[6~")).toEqual({ input: "", pageDown: true });
     expect(sequenceToTuiKey("\x1bOA")).toEqual({ input: "", upArrow: true });
   });
 

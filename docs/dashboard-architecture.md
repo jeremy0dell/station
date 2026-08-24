@@ -235,7 +235,10 @@ title/context/body/actions/footer slots and one stable preferred box for the lif
 of a workflow; it shrinks only at the terminal edge and scrolls only its body.
 Settings containers own their navigation/detail nesting and use one centered
 preferred box across sections and pickers, with focused content driving the shared
-scroll region. These preferred dimensions are Station renderer-boundary policy;
+scroll region. Help uses the same split of responsibility: dashboard-core stores
+only the focused Help entry ID and resolves ordered keyboard movement, while
+Station follows that ID through measured boxes in a bounded panel and derives its
+continuation cue from the identities intersecting the viewport. These preferred dimensions are Station renderer-boundary policy;
 dashboard-core neither observes them nor changes semantic state in response.
 Anchored surfaces
 measure their owner, anchor, intrinsic content, border, and viewport after OpenTUI
