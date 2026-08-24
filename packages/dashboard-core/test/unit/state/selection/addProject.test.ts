@@ -4,6 +4,7 @@ import { deriveTuiInputMode } from "../../../../src/state/keymap.js";
 import { createInitialTuiState } from "../../../../src/state/screen.js";
 import {
   applyAddProjectFolderLoaded,
+  applyAddProjectFolderRefreshed,
   applyAddProjectFolderReviewed,
   applyAddProjectFolderReviewFailed,
   applyAddProjectFolderSearchLoaded,
@@ -137,6 +138,33 @@ describe("add-project shared selection", () => {
       name: "addProject",
       flow: { filter: "", filterMode: false },
     });
+  });
+
+  it("retains path identity across refresh and chooses the nearest survivor after deletion", () => {
+    let state = chooseState([
+      { name: "aardvark", path: "/workspace/aardvark", kind: "directory" },
+      { name: "alpha", path: "/workspace/alpha", kind: "directory" },
+      { name: "station", path: "/workspace/station", kind: "directory" },
+    ]);
+    state = selectAddProjectRow(state, "/workspace/station");
+
+    const retained = applyAddProjectFolderRefreshed(state, {
+      path: "/workspace",
+      entries: [
+        { name: "station", path: "/workspace/station", kind: "directory" },
+        { name: "aardvark", path: "/workspace/aardvark", kind: "directory" },
+      ],
+    });
+    expect(retained.selection.get("addProjectChoose")).toBe("/workspace/station");
+
+    const replaced = applyAddProjectFolderRefreshed(state, {
+      path: "/workspace",
+      entries: [
+        { name: "aardvark", path: "/workspace/aardvark", kind: "directory" },
+        { name: "renamed", path: "/workspace/renamed", kind: "directory" },
+      ],
+    });
+    expect(replaced.selection.get("addProjectChoose")).toBe("/workspace/renamed");
   });
 
   it("uses the same pasted-path review for Enter and semantic Choose", () => {

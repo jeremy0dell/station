@@ -359,7 +359,8 @@ export function applyAddProjectFolderRefreshed(
   if (refreshed.screen.name !== "addProject" || refreshed.screen.flow.mode !== "choose") {
     return refreshed;
   }
-  const replacement = addProjectRows(refreshed.screen.flow)[selectedIndex];
+  const refreshedRows = addProjectRows(refreshed.screen.flow);
+  const replacement = refreshedRows[Math.min(selectedIndex, refreshedRows.length - 1)];
   return replacement === undefined
     ? refreshed
     : selectAddProjectRowById(refreshed, replacement.path);
