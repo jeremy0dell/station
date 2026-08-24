@@ -126,7 +126,7 @@ export function SheetChoiceLine({
   note,
   itemId,
 }: {
-  choiceKey: string;
+  choiceKey: string | undefined;
   label: string;
   detail: string;
   color?: StationColor | undefined;
@@ -137,8 +137,8 @@ export function SheetChoiceLine({
   selected?: boolean;
   /** Right-aligned dim status (e.g. "updating…") shown in the row's free space. */
   note?: string | undefined;
-  /** Semantic identity used by the sheet viewport for focus-follow. */
-  itemId?: string;
+  /** Semantic identity shared by focus-follow and pointer activation. */
+  itemId: string;
 }) {
   const theme = useStationTheme();
   const dispatch = useStationMouse();
@@ -147,7 +147,7 @@ export function SheetChoiceLine({
   // Cursor and canonical selection stay independent without changing row width.
   const cursor = selected ? "▸" : " ";
   const marker = current ? "✓" : " ";
-  const keyPrefix = `${choiceKey} `;
+  const keyPrefix = choiceKey === undefined ? "  " : `${choiceKey} `;
   const content = detail.length === 0 ? label : `${label} ${detail}`;
   const contentWidth = Math.max(0, width - 2 - cellWidth(keyPrefix));
   const noteText = note ?? "";
@@ -162,10 +162,10 @@ export function SheetChoiceLine({
   );
   return (
     <SheetText
-      {...(itemId === undefined ? {} : { id: semanticItemRenderableId(itemId) })}
+      id={semanticItemRenderableId(itemId)}
       fg={toOpenTuiColor(focused ? theme.status.success : theme.text.primary)}
       {...(focused ? { bg: toOpenTuiColor(theme.interaction.hover) } : {})}
-      {...stationMouseProps(dispatch, { kind: "sheetChoice", choiceKey })}
+      {...stationMouseProps(dispatch, { kind: "sheetListItem", itemId })}
       onMouseOver={() => setHover(true)}
       onMouseOut={() => setHover(false)}
       width={width}

@@ -400,16 +400,16 @@ const CASES: ModalCase[] = [
     expect: ["Project Settings", "↑↓ move   ↵ select   1-9/a-z jump   Esc cancel", "station"],
   },
   {
-    name: "new session long project picker in a tall terminal",
+    name: "new session project picker reaches beyond the shortcut alphabet",
     keys: [
       { input: "N" },
       { input: "P" },
-      ...Array.from({ length: 29 }, () => ({ input: "", downArrow: true })),
+      ...Array.from({ length: 39 }, () => ({ input: "", downArrow: true })),
     ],
-    snapshot: () => overflowProjectsSnapshot(30),
+    snapshot: () => overflowProjectsSnapshot(40),
     size: { width: 80, height: 40 },
     trimSnapshotTrailingWhitespace: true,
-    expect: ["Choose Project", "▸ u sheet-project-29", "Esc back"],
+    expect: ["Choose Project", "▸   sheet-project-39", "Esc back"],
   },
   {
     name: "group settings general",

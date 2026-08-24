@@ -1,6 +1,9 @@
 import type { ProviderId } from "@station/contracts";
 import { selectNewSessionHarnessChoices } from "@station/dashboard-core/selectors";
-import type { KeyedChoice, NewSessionHarnessOption } from "@station/dashboard-core/selectors";
+import type {
+  NewSessionHarnessOption,
+  SelectionChoice,
+} from "@station/dashboard-core/selectors";
 import type { DashboardScreenView, DashboardSnapshotView, DashboardStateView } from "@station/dashboard-core/state";
 import { AgentChoiceListView } from "./AgentChoiceListView.js";
 import { bottomSheetContentWidth } from "../layout/bottomSheetFrame.js";
@@ -59,7 +62,7 @@ function ProjectDefaultAgentPicker({
   currentId,
   selectedId,
 }: {
-  choices: readonly KeyedChoice<NewSessionHarnessOption>[];
+  choices: readonly SelectionChoice<NewSessionHarnessOption>[];
   width: number;
   currentId?: NewSessionHarnessOption["id"];
   selectedId?: NewSessionHarnessOption["id"];

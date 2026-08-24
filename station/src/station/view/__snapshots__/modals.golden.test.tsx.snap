@@ -509,50 +509,6 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 "
 `;
 
-exports[`modal flow golden frames renders the new session long project picker in a tall terminal 1`] = `
-"
-FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle
-───────────────────────────────────────────────────────────────────────────────
-       SESSION                                 AGENT     STATUS       DIFF · PR
- ▼ sheet-project-00  5 sessions · 4 agents                        [sh] [qs] [▾]
- no sessions yet · [ + add session ]
-
- ▼ sheet-project-01  5 sessions · 4 agents                        [sh] [qs] [▾]
- no sessions yet · [ + add session ]
-
- ▼ sheet-project-02  5 sessions · 4 agents                        [sh] [qs] [▾]
- no sessions yet · [ + add session ]
-
- ▼ sheet-project-03  5 sessions · 4 agents                        [sh] [qs] [▾]
- no sessions yet · [ + add session ]
-
- ▼ sheet-project-04  5 sessions · 4 agents                        [sh] [qs] [▾]
- no sessions yet · [ + add session ]
-
- ▼ sheet-project-05  5 sessions · 4 agents                        [sh] [qs] [▾]
- no sessions yet · [ + add session ]
-
- ▼ sheet-project-06  5 sessions · 4 agents                        [sh] [qs] [▾]
- no sessions yet · [ + add session ]
-
- ▼ sheet-project-07  5 sessions · 4 agents                        [sh] [qs] [▾]
- no sessions yet · [ + add session ]
-
-┌──────────────────────────────────────────────────────────────────────────────┐
-│ Choose Project                                                               │
-│  n sheet-project-22 healthy                                                  │
-│  o sheet-project-23 healthy                                                  │
-│  p sheet-project-24 healthy                                                  │
-│  q sheet-project-25 healthy                                                  │
-│  r sheet-project-26 healthy                                                  │
-│  s sheet-project-27 healthy                                                  │
-│  t sheet-project-28 healthy                                                  │
-│▸ u sheet-project-29 healthy                                                  │
-│ ↑↓ move   ↵ select   1-9/a-z jump   Esc back                                 │
-└──────────────────────────────────────────────────────────────────────────────┘
-"
-`;
-
 exports[`modal flow golden frames renders the group settings general 1`] = `
 "                                                                                
 FLEET  ● 0 ready  ⠋ 3 working  ! 1 needs you  x 1 exited  ○ 6 idle  1 · 12 · 11 
@@ -2286,5 +2242,49 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
  no sessions yet · [ + add session ]                                            
 ─────────────────────────────────────────────────────────────────────────────── 
  CONDITION   S/P/A edit  ↑↓ move  Enter select  F apply filter  Esc text        
+"
+`;
+
+exports[`modal flow golden frames renders the new session project picker reaches beyond the shortcut alphabet 1`] = `
+"
+FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle
+───────────────────────────────────────────────────────────────────────────────
+       SESSION                                 AGENT     STATUS       DIFF · PR
+ ▼ sheet-project-00  5 sessions · 4 agents                        [sh] [qs] [▾]
+ no sessions yet · [ + add session ]
+
+ ▼ sheet-project-01  5 sessions · 4 agents                        [sh] [qs] [▾]
+ no sessions yet · [ + add session ]
+
+ ▼ sheet-project-02  5 sessions · 4 agents                        [sh] [qs] [▾]
+ no sessions yet · [ + add session ]
+
+ ▼ sheet-project-03  5 sessions · 4 agents                        [sh] [qs] [▾]
+ no sessions yet · [ + add session ]
+
+ ▼ sheet-project-04  5 sessions · 4 agents                        [sh] [qs] [▾]
+ no sessions yet · [ + add session ]
+
+ ▼ sheet-project-05  5 sessions · 4 agents                        [sh] [qs] [▾]
+ no sessions yet · [ + add session ]
+
+ ▼ sheet-project-06  5 sessions · 4 agents                        [sh] [qs] [▾]
+ no sessions yet · [ + add session ]
+
+ ▼ sheet-project-07  5 sessions · 4 agents                        [sh] [qs] [▾]
+ no sessions yet · [ + add session ]
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ Choose Project                                                               │
+│  x sheet-project-32 healthy                                                  │
+│  y sheet-project-33 healthy                                                  │
+│  z sheet-project-34 healthy                                                  │
+│    sheet-project-35 healthy                                                  │
+│    sheet-project-36 healthy                                                  │
+│    sheet-project-37 healthy                                                  │
+│    sheet-project-38 healthy                                                  │
+│▸   sheet-project-39 healthy                                                  │
+│ ↑↓ move   ↵ select   1-9/a-z jump   Esc back                                 │
+└──────────────────────────────────────────────────────────────────────────────┘
 "
 `;

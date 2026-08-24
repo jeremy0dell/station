@@ -8,6 +8,7 @@ import {
 import {
   choiceValueByKey,
   isSelectionKey,
+  keyedSelectionChoices,
   selectNewSessionHarnessChoices,
   selectProjectDefaultHarness,
 } from "../../selectors/selectors.js";
@@ -171,7 +172,7 @@ function selectAgent(
     return { state: toDashboard(state) };
   }
   const option = choiceValueByKey(
-    selectNewSessionHarnessChoices(state.snapshot, project),
+    keyedSelectionChoices(selectNewSessionHarnessChoices(state.snapshot, project)),
     key.input,
   );
   return option === undefined ? { state } : commitProjectSettingsAgentById(state, option.id);

@@ -1,12 +1,19 @@
 // Pins the mouse router's modal guards to keyboard modality (the screen ×
-// target matrix) and mouse/keyboard equivalence: a row click must produce
-// exactly the state the row's slot key produces, in every mode where rows
-// are interactive.
+// target matrix) and mouse/keyboard equivalence: a row click must run the
+// same registered semantic commit as focused Enter. Shortcut slots are only
+// optional accelerators, so pointer routing cannot depend on them.
 import { describe, expect, it } from "bun:test";
 import type { ProviderId, StationSnapshot } from "@station/contracts";
 import type { DashboardRuntimeOptions } from "@station/dashboard-core/runtime";
 import { dashboardRowIds, selectDashboardSlots } from "@station/dashboard-core/selectors";
-import { addProjectSelectedIndex, removeProjectConfirmPhrase } from "@station/dashboard-core/state";
+import {
+  addProjectSelectedIndex,
+  moveToGroupExistingChoiceId,
+  NEW_SESSION_CREATE_GROUP_CHOICE_ID,
+  NEW_SESSION_UNGROUPED_CHOICE_ID,
+  newSessionExistingGroupChoiceId,
+  removeProjectConfirmPhrase,
+} from "@station/dashboard-core/state";
 import type { StationMouseEvent } from "../../input/mouse.js";
 import {
   groupedManyProjectsSnapshot,
@@ -756,7 +763,7 @@ describe("routeStationMouse", () => {
       flow: { mode: "pickProject" },
     });
 
-    routeStationMouse({ kind: "sheetChoice", choiceKey: "1" }, LEFT_DOWN, store);
+    routeStationMouse({ kind: "sheetListItem", itemId: "station" }, LEFT_DOWN, store);
     expect(store.state.getState().screen).toMatchObject({
       name: "newSession",
       flow: { mode: "review" },
@@ -765,10 +772,31 @@ describe("routeStationMouse", () => {
     // Outside picker modes a stray choice click is inert (no text injection).
     store.actions.handleKey({ input: "", escape: true });
     store.actions.handleKey({ input: "/" });
-    routeStationMouse({ kind: "sheetChoice", choiceKey: "1" }, LEFT_DOWN, store);
+    routeStationMouse({ kind: "sheetListItem", itemId: "station" }, LEFT_DOWN, store);
     expect(store.state.getState().screen).toMatchObject({
       name: "persistentFilter",
       draft: { value: "", cursor: 0 },
+    });
+  });
+
+  it("activates a picker item beyond the shortcut alphabet by semantic identity", () => {
+    const snapshot = manyProjectsSnapshot();
+    const template = snapshot.projects[0];
+    if (template === undefined) throw new Error("missing project fixture");
+    const projects = Array.from({ length: 40 }, (_, index) => ({
+      ...template,
+      id: `project-${index}` as typeof template.id,
+      label: `project-${index}`,
+    }));
+    const store = makeStore({ ...snapshot, projects });
+    store.actions.handleKey({ input: "N" });
+    store.actions.handleKey({ input: "P" });
+
+    routeStationMouse({ kind: "sheetListItem", itemId: "project-39" }, LEFT_DOWN, store);
+
+    expect(store.state.getState().screen).toMatchObject({
+      name: "newSession",
+      flow: { mode: "review", selectedProjectId: "project-39" },
     });
   });
 
@@ -777,7 +805,14 @@ describe("routeStationMouse", () => {
     store.actions.handleKey({ input: "N" });
     store.actions.handleKey({ input: "G" });
 
-    routeStationMouse({ kind: "sheetChoice", choiceKey: "1" }, LEFT_DOWN, store);
+    routeStationMouse(
+      {
+        kind: "sheetListItem",
+        itemId: newSessionExistingGroupChoiceId("group_design_refresh"),
+      },
+      LEFT_DOWN,
+      store,
+    );
     expect(store.state.getState().screen).toMatchObject({
       flow: {
         mode: "review",
@@ -786,13 +821,21 @@ describe("routeStationMouse", () => {
     });
 
     store.actions.handleKey({ input: "G" });
-    routeStationMouse({ kind: "sheetChoice", choiceKey: "U" }, LEFT_DOWN, store);
+    routeStationMouse(
+      { kind: "sheetListItem", itemId: NEW_SESSION_UNGROUPED_CHOICE_ID },
+      LEFT_DOWN,
+      store,
+    );
     expect(store.state.getState().screen).toMatchObject({
       flow: { mode: "review", groupSelection: { kind: "ungrouped" } },
     });
 
     store.actions.handleKey({ input: "G" });
-    routeStationMouse({ kind: "sheetChoice", choiceKey: "N" }, LEFT_DOWN, store);
+    routeStationMouse(
+      { kind: "sheetListItem", itemId: NEW_SESSION_CREATE_GROUP_CHOICE_ID },
+      LEFT_DOWN,
+      store,
+    );
     expect(store.state.getState().screen).toMatchObject({
       flow: { mode: "editGroupDraft" },
     });
@@ -808,7 +851,11 @@ describe("routeStationMouse", () => {
     });
 
     store.actions.handleKey({ input: "G" });
-    routeStationMouse({ kind: "sheetChoice", choiceKey: "N" }, LEFT_DOWN, store);
+    routeStationMouse(
+      { kind: "sheetListItem", itemId: NEW_SESSION_CREATE_GROUP_CHOICE_ID },
+      LEFT_DOWN,
+      store,
+    );
     store.actions.handleKey({ input: "Discarded" });
     routeStationMouse(
       { kind: "newSessionAction", actionId: "editGroupDraft.back" },
@@ -822,7 +869,14 @@ describe("routeStationMouse", () => {
     const store = makeStore(groupedManyProjectsSnapshot());
     store.actions.dispatch({ type: "moveToGroup.open", rowId: "ses_wt_group_contracts" });
 
-    routeStationMouse({ kind: "sheetChoice", choiceKey: "2" }, LEFT_DOWN, store);
+    routeStationMouse(
+      {
+        kind: "sheetListItem",
+        itemId: moveToGroupExistingChoiceId("group_observer_hardening"),
+      },
+      LEFT_DOWN,
+      store,
+    );
     expect(store.state.getState().screen).toMatchObject({
       name: "moveToGroup",
       step: "chooseDestination",
@@ -1114,7 +1168,11 @@ describe("routeStationMouse", () => {
       store,
     );
 
-    const outcome = routeStationMouse({ kind: "sheetChoice", choiceKey: "2" }, LEFT_DOWN, store);
+    const outcome = routeStationMouse(
+      { kind: "sheetListItem", itemId: "opencode" },
+      LEFT_DOWN,
+      store,
+    );
 
     await waitFor(() => fixture.service.loadCount === 1);
     expect(outcome).toEqual({ kind: "handled" });

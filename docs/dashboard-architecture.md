@@ -224,6 +224,10 @@ menu and native Group-header context menu resolve Q/N/S/R through one validated
 stable-ID action path; native presentation does not own workflow behavior.
 Invalid, hidden, filtered, or stale cell targets are inert. Chooser modes accept
 only canonical session identity cells and retain their existing slot semantics.
+Semantic picker lists likewise retain every item in cursor order. `1-9/a-z`
+keys are optional accelerators on the first 35 choices, not a membership cap;
+later choices remain renderable, focusable, scroll-followed, Enter-activatable,
+and pointer-activatable by stable item ID through the same registered-list commit.
 
 ## Adjacent layout surfaces
 

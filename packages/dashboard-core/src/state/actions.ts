@@ -71,6 +71,7 @@ import {
   widgetSettingsRemoveAt,
   widgetSettingsToggleAt,
 } from "./screens/widgetSettings.js";
+import { activateCurrentListItem } from "./selection/middleware.js";
 import type { TuiRuntimeContext, TuiTransition } from "./transition.js";
 import type {
   CreateGroupReturnTarget,
@@ -157,6 +158,7 @@ export type TuiSemanticAction =
 
 /** State-only dashboard events for focus, screens, semantic selection, and widget transitions. */
 export type DashboardStateAction =
+  | { type: "selection.item.activate"; itemId: string }
   | { type: "newSession.open"; projectId?: ProjectId; groupId?: SessionGroupId }
   | { type: "projectSettings.focusItem"; itemId: ProjectSettingsItemId }
   | { type: "addProject.selectRow"; index: number }
@@ -261,6 +263,8 @@ function handleDashboardStateAction(
   action: DashboardStateAction,
 ): TuiTransition {
   switch (action.type) {
+    case "selection.item.activate":
+      return activateCurrentListItem(state, action.itemId);
     case "newSession.open":
       return openNewSession(state, {
         ...(action.projectId === undefined ? {} : { projectId: action.projectId }),

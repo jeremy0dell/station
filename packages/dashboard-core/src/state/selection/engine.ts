@@ -39,6 +39,18 @@ export function commitCurrentCursor(
   return id === undefined ? { state } : spec.commit(state, id, "cursor");
 }
 
+/** Focuses and commits one semantic list item, independent of shortcut availability. */
+export function activateListItem(
+  spec: RegisteredListSpec,
+  state: DashboardState,
+  itemId: string,
+): TuiTransition {
+  if (!selectableIds(spec, state).includes(itemId)) {
+    return { state };
+  }
+  return spec.commit(withCursor(state, spec.listId, itemId), itemId, "cursor");
+}
+
 /** Move the cursor one selectable row; clamp (never wrap) and seed from the edge if unset. */
 export function moveCursor(
   spec: RegisteredListSpec,

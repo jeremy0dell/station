@@ -76,7 +76,9 @@ export function DashboardView({
   const firstRun = snapshot.projects.length === 0;
   const fleet = selectFleetSummary(snapshot);
   const keyByRow = new Map(
-    slots.displayRowChoices.map((choice) => [choice.value.id, choice.key]),
+    slots.displayRowChoices.flatMap((choice) =>
+      choice.key === undefined ? [] : [[choice.value.id, choice.key] as const],
+    ),
   );
   const { headerLayout, layoutByItem } = firstRun
     ? { headerLayout: undefined, layoutByItem: new Map<string, RowGridLayout>() }

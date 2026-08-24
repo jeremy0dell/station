@@ -11,7 +11,12 @@ import {
   type DashboardTreeRow,
   selectDashboardTree,
 } from "./dashboardTree.js";
-import { type KeyedChoice, keyChoices } from "./selectors.js";
+import {
+  type KeyedChoice,
+  keyedSelectionChoices,
+  type SelectionChoice,
+  selectionChoices,
+} from "./selectors.js";
 
 /** Session-item counts around the renderer-reported semantic visibility window. */
 export type DashboardSessionOverflow = {
@@ -28,7 +33,7 @@ export type DashboardSessionOverflow = {
 export type DashboardSlots = {
   readonly tree: DashboardTreeProjection;
   readonly rowChoices: readonly KeyedChoice<DashboardSessionRow>[];
-  readonly displayRowChoices: readonly KeyedChoice<DashboardSessionRow>[];
+  readonly displayRowChoices: readonly SelectionChoice<DashboardSessionRow>[];
   readonly sessionOverflow: DashboardSessionOverflow;
   readonly persistentFilter?: DashboardPersistentFilterProjection;
 };
@@ -42,7 +47,7 @@ export function selectDashboardSlots(
   const selectedScreen = activeScreen ?? { name: "dashboard" };
   const tree = selectDashboardTree(snapshot, state, selectedScreen);
   const rows = visibleTreeRows(tree, visibleRowIds);
-  const displayRowChoices = keyChoices(displaySessionRows(rows));
+  const displayRowChoices = selectionChoices(displaySessionRows(rows));
   const pendingStartWorktreeIds = new Set(
     rows.flatMap(({ payload }) =>
       payload.type === "session" && payload.pendingStart !== undefined
@@ -52,7 +57,7 @@ export function selectDashboardSlots(
   );
   return {
     tree,
-    rowChoices: displayRowChoices.filter(
+    rowChoices: keyedSelectionChoices(displayRowChoices).filter(
       (choice) => !pendingStartWorktreeIds.has(choice.value.worktree.id),
     ),
     displayRowChoices,

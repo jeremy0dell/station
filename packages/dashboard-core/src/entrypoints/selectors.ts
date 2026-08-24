@@ -120,6 +120,7 @@ export type {
   MoveToGroupSessionContext,
   NewSessionGroupOption,
   NewSessionHarnessOption,
+  SelectionChoice,
 } from "../selectors/selectors.js";
 export {
   selectMoveToGroupChoices,

@@ -26,7 +26,6 @@ import {
   dismissStationToasts,
   dispatchRowSlot,
   dispatchStationAction,
-  dispatchStationKey,
 } from "./stationActions.js";
 import type { DashboardScrollController } from "../view/layout/scrollViewport.js";
 
@@ -56,7 +55,7 @@ export type StationMouseTarget =
   | { kind: "body" }
   | { kind: "scrollIndicator"; direction: "up" | "down" }
   | { kind: "toast" }
-  | { kind: "sheetChoice"; choiceKey: string }
+  | { kind: "sheetListItem"; itemId: string }
   | { kind: "removeWorktreeAction"; actionId: RemoveWorktreeActionId }
   | { kind: "freshStartAction"; actionId: FreshStartActionId }
   | { kind: "projectSettingsItem"; itemId: ProjectSettingsItemId }
@@ -171,9 +170,9 @@ export function routeStationMouse(
     case "toast":
       dismissStationToasts(runtime);
       return { kind: "handled" };
-    case "sheetChoice":
+    case "sheetListItem":
       if (SHEET_CHOICE_MODES.has(mode)) {
-        dispatchStationKey(runtime, { input: target.choiceKey });
+        runtime.actions.dispatch({ type: "selection.item.activate", itemId: target.itemId });
       }
       return { kind: "handled" };
     case "removeWorktreeAction":

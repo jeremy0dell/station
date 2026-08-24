@@ -129,6 +129,7 @@ const STATE_ACTION_CASES: readonly StateActionCase[] = [
 ];
 
 const STALE_STATE_ACTIONS: readonly DashboardStateAction[] = [
+  { type: "selection.item.activate", itemId: "missing" },
   { type: "projectSettings.focusItem", itemId: "agent" },
   { type: "addProject.selectRow", index: 0 },
   { type: "screen.clickAway" },

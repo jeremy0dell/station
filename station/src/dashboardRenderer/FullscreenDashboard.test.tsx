@@ -5,7 +5,10 @@ import { testRender } from "@opentui/react/test-utils";
 import { dashboardRowIds } from "@station/dashboard-core/selectors";
 import type { TuiWidgetConfig } from "@station/dashboard-core/widgets";
 import { act } from "react";
-import { groupedManyProjectsSnapshot } from "../station/fixtures/scenarios.js";
+import {
+  groupedManyProjectsSnapshot,
+  manyProjectsSnapshot,
+} from "../station/fixtures/scenarios.js";
 import { groupActionRenderableId } from "../station/view/GroupHeaderView.js";
 import { makeStationTestRuntime } from "../station/test/support/makeStationTestRuntime.js";
 import {
@@ -437,6 +440,33 @@ describe("FullscreenDashboard mouse composition", () => {
     });
     expect(setup.captureCharFrame()).toContain("▶ Design refresh 2 sessions");
     expect(setup.captureCharFrame()).not.toContain("group-contracts");
+  });
+
+  it("converges keyboard focus and pointer activation beyond picker shortcuts", async () => {
+    const snapshot = manyProjectsSnapshot();
+    const template = snapshot.projects[0];
+    if (template === undefined) throw new Error("missing project fixture");
+    const projects = Array.from({ length: 40 }, (_, index) => ({
+      ...template,
+      id: `project-${index}` as typeof template.id,
+      label: `project-${index}`,
+    }));
+    const fixture = makeStationTestRuntime({ snapshot: { ...snapshot, projects } });
+    fixture.runtime.actions.handleKey({ input: "C" });
+    for (let index = 1; index < projects.length; index += 1) {
+      fixture.runtime.actions.handleKey({ input: "", downArrow: true });
+    }
+    const setup = await render(fixture.runtime, { width: 80, height: 24 });
+    const target = cellFor(setup.captureCharFrame(), "project-39 healthy");
+    expect(setup.captureCharFrame()).toContain("▸   project-39 healthy");
+
+    await actOn(async () => {
+      await setup.mockMouse.click(target.col, target.row, MouseButtons.LEFT);
+      await setup.flush();
+    });
+
+    expect(fixture.runtime.state.getState().screen).toEqual({ name: "dashboard" });
+    expect([...fixture.runtime.state.getState().collapsedProjectIds]).toContain("project-39");
   });
 
   it("does not activate a dashboard row when the same click dismisses a bounded screen", async () => {

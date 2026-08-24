@@ -2,7 +2,11 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { MouseButtons } from "@opentui/core/testing";
 import { testRender } from "@opentui/react/test-utils";
 import type { DashboardScreenView } from "@station/dashboard-core/state";
-import { MOVE_TO_GROUP_CREATE_CHOICE_ID } from "@station/dashboard-core/state";
+import {
+  MOVE_TO_GROUP_CREATE_CHOICE_ID,
+  MOVE_TO_GROUP_UNGROUPED_CHOICE_ID,
+  moveToGroupExistingChoiceId,
+} from "@station/dashboard-core/state";
 import { act } from "react";
 import { nativeStationTheme, StationThemeProvider } from "../../../theme/index.js";
 import { groupedManyProjectsSnapshot } from "../../fixtures/scenarios.js";
@@ -83,9 +87,12 @@ describe("MoveToGroupSheetView", () => {
       const row = lines.findIndex((line) => line.includes(label));
       await setup.mockMouse.click(lines[row]?.indexOf(label) ?? -1, row, MouseButtons.LEFT);
     }
-    expect(targets.filter((target) => target.kind === "sheetChoice")).toEqual([
-      { kind: "sheetChoice", choiceKey: "U" },
-      { kind: "sheetChoice", choiceKey: "2" },
+    expect(targets.filter((target) => target.kind === "sheetListItem")).toEqual([
+      { kind: "sheetListItem", itemId: MOVE_TO_GROUP_UNGROUPED_CHOICE_ID },
+      {
+        kind: "sheetListItem",
+        itemId: moveToGroupExistingChoiceId("group_observer_hardening"),
+      },
     ]);
 
     const { setup: createSetup, targets: createTargets } = await render(
@@ -106,8 +113,8 @@ describe("MoveToGroupSheetView", () => {
       createRow,
       MouseButtons.LEFT,
     );
-    expect(createTargets.filter((target) => target.kind === "sheetChoice")).toEqual([
-      { kind: "sheetChoice", choiceKey: "N" },
+    expect(createTargets.filter((target) => target.kind === "sheetListItem")).toEqual([
+      { kind: "sheetListItem", itemId: MOVE_TO_GROUP_CREATE_CHOICE_ID },
     ]);
 
     const { setup: currentSetup } = await render(
