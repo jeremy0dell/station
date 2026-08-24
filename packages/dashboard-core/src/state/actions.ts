@@ -155,7 +155,7 @@ export type TuiSemanticAction =
   | { type: "groupSettings.save" }
   | { type: "groupSettings.back" };
 
-/** State-only dashboard events for focus, screen, selection, scrolling, and widget transitions. */
+/** State-only dashboard events for focus, screens, semantic selection, and widget transitions. */
 export type DashboardStateAction =
   | { type: "newSession.open"; projectId?: ProjectId; groupId?: SessionGroupId }
   | { type: "projectSettings.focusItem"; itemId: ProjectSettingsItemId }

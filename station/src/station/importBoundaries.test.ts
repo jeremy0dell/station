@@ -449,6 +449,22 @@ const DASHBOARD_RUNTIME_IMPORT_INVENTORY = [
   "station/store/dashboardRuntime.ts: import DashboardRuntime from @station/dashboard-core/runtime",
 ] as const;
 const DASHBOARD_INTERNAL_IMPORT_INVENTORY = [] as const;
+const OPENTUI_LAYOUT_GEOMETRY_NAMES = new Set([
+  "BaseRenderable",
+  "BoxRenderable",
+  "Renderable",
+  "ScrollBoxRenderable",
+  "Yoga",
+]);
+const OPENTUI_LAYOUT_GEOMETRY_OWNERS = new Set([
+  "contextMenu/usePointerAnchoredMenuPlacement.ts",
+  "station/view/layout/SemanticScrollViewport.tsx",
+  "station/view/layout/renderBoxInsets.ts",
+  "station/view/layout/scrollViewport.ts",
+  "station/view/layout/semanticPointerTarget.ts",
+  "station/view/layout/useAncestorBoundedHeight.ts",
+  "station/view/layout/useAnchoredMenuPlacement.ts",
+]);
 const TERMINAL_INTEGRATION_IMPORT_INVENTORY = [
   "main.tsx: import ensureStationHostRunning from @station/terminal",
 ] as const;
@@ -620,6 +636,7 @@ describe("station production boundaries", () => {
           reference.specifier === "@station/dashboard-core/runtime" ||
           reference.specifier === "@station/dashboard-core/state" ||
           reference.specifier === "@station/dashboard-core/selectors" ||
+          reference.specifier === "@station/dashboard-core/text" ||
           reference.specifier === "@station/dashboard-core/widgets";
         if (!isRoleEntrypoint) {
           violations.push(...referenceDescriptors(module, reference));
@@ -627,6 +644,26 @@ describe("station production boundaries", () => {
       }
     }
     expect(violations).toEqual([]);
+  });
+
+  it("confines OpenTUI layout geometry to named renderer-boundary modules", () => {
+    const owners = new Set<string>();
+    const violations: string[] = [];
+    for (const module of PRODUCTION_MODULES) {
+      for (const reference of moduleReferencesOf(module)) {
+        if (reference.specifier !== "@opentui/core") continue;
+        const geometryNames = reference.importedNames.filter((name) =>
+          OPENTUI_LAYOUT_GEOMETRY_NAMES.has(name),
+        );
+        if (geometryNames.length === 0 || module.relativePath.startsWith("terminal/")) continue;
+        owners.add(module.relativePath);
+        if (!OPENTUI_LAYOUT_GEOMETRY_OWNERS.has(module.relativePath)) {
+          violations.push(...referenceDescriptors(module, reference, geometryNames));
+        }
+      }
+    }
+    expect(violations.sort()).toEqual([]);
+    expect([...owners].sort()).toEqual([...OPENTUI_LAYOUT_GEOMETRY_OWNERS].sort());
   });
 });
 

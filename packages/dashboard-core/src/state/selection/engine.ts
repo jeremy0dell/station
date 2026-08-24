@@ -59,9 +59,9 @@ export function moveCursor(
 }
 
 /**
- * The dispatch heart. Slots (viewport-relative) resolve before cursor keys
- * (full-list). Returns undefined for anything the list doesn't own, so the
- * screen reducer keeps every bespoke chord.
+ * The dispatch heart. Renderer-visible semantic slots resolve before full-list cursor keys.
+ * Returns undefined for anything the list doesn't own, so the screen reducer keeps every
+ * bespoke chord.
  */
 export function resolveListKey(
   spec: RegisteredListSpec,
