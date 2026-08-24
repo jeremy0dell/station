@@ -1,9 +1,8 @@
 import { TextAttributes } from "@opentui/core";
 import {
-  cellWidth,
   groupSettingsPanelModel,
-  truncateCells,
 } from "@station/dashboard-core/selectors";
+import { cellWidth, truncateCells } from "@station/dashboard-core/text";
 import type {
   DashboardScreenView,
   DashboardSnapshotView,

@@ -1,6 +1,5 @@
 import type { ProviderId } from "@station/contracts";
 import {
-  cellWidth,
   newSessionEditGroupDraftContent,
   newSessionEditNameContent,
   newSessionReviewContent,
@@ -8,6 +7,7 @@ import {
   selectNewSessionHarnessChoices,
   selectNewSessionProjectChoices,
 } from "@station/dashboard-core/selectors";
+import { cellWidth } from "@station/dashboard-core/text";
 import {
   NEW_SESSION_CREATE_GROUP_CHOICE_ID,
   NEW_SESSION_GROUP_LIST_ID,

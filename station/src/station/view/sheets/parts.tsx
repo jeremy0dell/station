@@ -1,9 +1,7 @@
-// OpenTUI translation of apps/tui's bottom-sheet line primitives
-// (AddProjectBottomSheet/parts.tsx + the per-sheet helpers): width-fitted
-// single-line rows. Ink's dimColor becomes the DIM attribute; named colors
-// come from the theme.
+// Compact controls intentionally remain terminal-cell leaf layouts. Their parent
+// sheet boxes own intrinsic height, scrolling, clipping, padding, and framing.
 import { TextAttributes, type ColorInput } from "@opentui/core";
-import { cellWidth, clipCells } from "@station/dashboard-core/selectors";
+import { cellWidth, clipCells } from "@station/dashboard-core/text";
 import type { TextProps } from "@opentui/react";
 import { isValidElement, type ReactNode } from "react";
 import type { StationMouseTarget } from "../../input/stationMouse.js";

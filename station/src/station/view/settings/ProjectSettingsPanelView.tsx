@@ -1,10 +1,10 @@
 import { TextAttributes } from "@opentui/core";
 import type { ProviderId } from "@station/contracts";
 import {
-  clipCells,
   selectNewSessionHarnessChoices,
   selectProjectDefaultHarness,
 } from "@station/dashboard-core/selectors";
+import { clipCells } from "@station/dashboard-core/text";
 import {
   isRemoveProjectArmed,
   PROJECT_SETTINGS_AGENT_LIST_ID,

@@ -1,4 +1,4 @@
-import { cellWidth } from "@station/dashboard-core/selectors";
+import { cellWidth } from "@station/dashboard-core/text";
 
 export type FilterConditionFrame = {
   readonly width: number;

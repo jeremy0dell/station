@@ -1,5 +1,5 @@
 // OpenTUI port of apps/tui's RenameSessionBottomSheet.
-import { truncateCells } from "@station/dashboard-core/selectors";
+import { truncateCells } from "@station/dashboard-core/text";
 import type { DashboardScreenView } from "@station/dashboard-core/state";
 import { EditableTextInputView } from "../EditableTextInputView.js";
 import { toOpenTuiColor, useStationTheme } from "../../../theme/index.js";

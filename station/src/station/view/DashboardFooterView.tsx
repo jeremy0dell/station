@@ -2,7 +2,8 @@ import type { ColorInput } from "@opentui/core";
 import type { ReactNode } from "react";
 import { useStore } from "zustand/react";
 import type { DashboardStateSource } from "@station/dashboard-core/runtime";
-import { dashboardFooterModel, truncateCells } from "@station/dashboard-core/selectors";
+import { dashboardFooterModel } from "@station/dashboard-core/selectors";
+import { truncateCells } from "@station/dashboard-core/text";
 import type { DashboardFooterModel } from "@station/dashboard-core/selectors";
 import {
   activeTuiToast,

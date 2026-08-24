@@ -1,8 +1,8 @@
 import {
-  cellWidth,
   selectMoveToGroupChoices,
   selectMoveToGroupSessionContext,
 } from "@station/dashboard-core/selectors";
+import { cellWidth } from "@station/dashboard-core/text";
 import {
   MOVE_TO_GROUP_CREATE_CHOICE_ID,
   MOVE_TO_GROUP_LIST_ID,

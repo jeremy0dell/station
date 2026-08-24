@@ -1,5 +1,6 @@
 import { TextAttributes, type ColorInput } from "@opentui/core";
-import { cellWidth, dashboardFilterConditionPanelModel, truncateCells } from "@station/dashboard-core/selectors";
+import { dashboardFilterConditionPanelModel } from "@station/dashboard-core/selectors";
+import { cellWidth, truncateCells } from "@station/dashboard-core/text";
 import type { DashboardFilterConditionPanelAction, DashboardFilterConditionPanelRow } from "@station/dashboard-core/selectors";
 import type { DashboardScreenView } from "@station/dashboard-core/state";
 import {

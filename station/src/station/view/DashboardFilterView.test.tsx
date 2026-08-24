@@ -3,6 +3,7 @@ import { rgbToHex } from "@opentui/core";
 import { testRender } from "@opentui/react/test-utils";
 import { dashboardPersistentFilterHeaderModel, dashboardPersistentFilterSummarySegments } from "@station/dashboard-core/selectors";
 import type { DashboardPersistentFilterProjection } from "@station/dashboard-core/selectors";
+import { cellWidth } from "@station/dashboard-core/text";
 import { spanAtFrameCell } from "../../terminal/testing/frameProbe.js";
 import {
   nativeStationTheme,
@@ -153,7 +154,7 @@ describe("DashboardFilterView", () => {
     const line = setup.captureCharFrame().split("\n")[0] ?? "";
 
     expect(line).not.toContain("\n");
-    expect(line.length).toBeLessThanOrEqual(width);
+    expect(cellWidth(line)).toBeLessThanOrEqual(width);
     expect(line).toContain("▏");
   });
 });

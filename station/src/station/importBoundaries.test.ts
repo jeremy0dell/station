@@ -456,6 +456,12 @@ const OPENTUI_LAYOUT_GEOMETRY_NAMES = new Set([
   "ScrollBoxRenderable",
   "Yoga",
 ]);
+const DASHBOARD_TEXT_NAMES = new Set([
+  "cellWidth",
+  "clipCells",
+  "textCellUnits",
+  "truncateCells",
+]);
 const OPENTUI_LAYOUT_GEOMETRY_OWNERS = new Set([
   "contextMenu/usePointerAnchoredMenuPlacement.ts",
   "station/view/layout/SemanticScrollViewport.tsx",
@@ -648,11 +654,18 @@ describe("station production boundaries", () => {
 
   it("uses the shared terminal-cell text contract", () => {
     const failures = PRODUCTION_MODULES.flatMap((module) =>
-      moduleReferencesOf(module).flatMap((reference) =>
-        reference.specifier === "string-width"
-          ? referenceDescriptors(module, reference)
-          : [],
-      ),
+      moduleReferencesOf(module).flatMap((reference) => {
+        if (reference.specifier === "string-width") {
+          return referenceDescriptors(module, reference);
+        }
+        if (reference.specifier === "@station/dashboard-core/selectors") {
+          const misplacedNames = reference.importedNames.filter((name) =>
+            DASHBOARD_TEXT_NAMES.has(name),
+          );
+          return referenceDescriptors(module, reference, misplacedNames);
+        }
+        return [];
+      }),
     );
     expect(failures.sort()).toEqual([]);
   });

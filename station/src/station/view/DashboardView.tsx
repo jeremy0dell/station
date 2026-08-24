@@ -1,6 +1,5 @@
 import { TextAttributes } from "@opentui/core";
 import {
-  cellWidth,
   dashboardRowGridInput,
   dashboardRowIds,
   dashboardTableHeaderModel,
@@ -11,7 +10,6 @@ import {
   selectDashboardSlots,
   selectFleetSummary,
   textSegment,
-  truncateCells,
   type DashboardRowId,
   type DashboardTreeBranch,
   type DashboardTreeRow,
@@ -19,6 +17,7 @@ import {
   type RowGridLayout,
   type RowGridRowInput,
 } from "@station/dashboard-core/selectors";
+import { cellWidth, truncateCells } from "@station/dashboard-core/text";
 import type {
   DashboardScreenView,
   DashboardSnapshotView,

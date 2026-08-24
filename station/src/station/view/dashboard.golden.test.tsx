@@ -594,7 +594,11 @@ describe("dashboard golden frames", () => {
     await setup.mockMouse.click(Math.floor(rightEdge / 2), frameStartRow, MouseButtons.LEFT);
     await setup.mockMouse.click(leftEdge, headerRow, MouseButtons.LEFT);
     await setup.mockMouse.click(quick - 2, headerRow, MouseButtons.LEFT);
-    await setup.mockMouse.click(quick + "[qs]".length, headerRow, MouseButtons.LEFT);
+    await setup.mockMouse.click(
+      cellWidth(line.slice(0, quick)) + cellWidth("[qs]"),
+      headerRow,
+      MouseButtons.LEFT,
+    );
     await setup.mockMouse.click(rightEdge, headerRow, MouseButtons.LEFT);
     await setup.mockMouse.click(leftEdge, memberRow, MouseButtons.LEFT);
     await setup.mockMouse.click(rightEdge, memberRow, MouseButtons.LEFT);
@@ -1111,7 +1115,7 @@ describe("dashboard golden frames", () => {
       const lines = setup.captureCharFrame().split("\n");
       const row = lines.findIndex((line) => line.includes("[ + add session ]"));
       const col = lines[row]?.indexOf("[ + add session ]") ?? -1;
-      const after = col + "[ + add session ]".length;
+      const after = cellWidth((lines[row] ?? "").slice(0, col)) + cellWidth("[ + add session ]");
       expect(row).toBeGreaterThan(0);
       expect(col).toBeGreaterThan(0);
 
@@ -1229,7 +1233,7 @@ describe("dashboard golden frames", () => {
         const shellStart = line.indexOf(shellLabel);
         const quickStart = line.indexOf(quickLabel);
         const defaultStart = line.indexOf("[▾]");
-        const primaryEnd = line.slice(0, shellStart - 1).trimEnd().length;
+        const primaryEnd = cellWidth(line.slice(0, shellStart - 1).trimEnd());
         expect(row).toBeGreaterThan(0);
         expect(line.trimStart()).toMatch(/^(?:▸)?▼ station/u);
         expect(line).not.toContain("▏");
@@ -1291,7 +1295,7 @@ describe("dashboard golden frames", () => {
     const shell = line.indexOf("[shell]");
     const quick = line.indexOf("[quick session]");
     const picker = line.indexOf("[▾]");
-    const inert = line.slice(0, shell).trimEnd().length + 1;
+    const inert = cellWidth(line.slice(0, shell).trimEnd()) + 1;
 
     await setup.mockMouse.click(1, row, MouseButtons.LEFT);
     await setup.mockMouse.click(inert, row, MouseButtons.LEFT);

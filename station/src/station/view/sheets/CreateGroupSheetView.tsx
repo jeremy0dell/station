@@ -1,4 +1,5 @@
-import { cellWidth, createGroupSheetContent } from "@station/dashboard-core/selectors";
+import { createGroupSheetContent } from "@station/dashboard-core/selectors";
+import { cellWidth } from "@station/dashboard-core/text";
 import type { DashboardScreenView } from "@station/dashboard-core/state";
 import { EditableTextInputView } from "../EditableTextInputView.js";
 import { bottomSheetContentWidth, BottomSheetFrameView } from "./BottomSheetFrameView.js";

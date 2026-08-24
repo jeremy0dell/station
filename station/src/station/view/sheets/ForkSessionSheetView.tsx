@@ -1,6 +1,6 @@
 // Fork details share semantic controls across pointer and keyboard activation;
 // only submit invokes the managed-session capability, so Copy-focused Enter remains a core toggle.
-import { cellWidth } from "@station/dashboard-core/selectors";
+import { cellWidth } from "@station/dashboard-core/text";
 import type { DashboardScreenView } from "@station/dashboard-core/state";
 import { EditableTextInputView } from "../EditableTextInputView.js";
 import { bottomSheetContentWidth, BottomSheetFrameView } from "./BottomSheetFrameView.js";

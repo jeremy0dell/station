@@ -4,6 +4,7 @@ import { MouseButtons } from "@opentui/core/testing";
 import { testRender } from "@opentui/react/test-utils";
 import { nativeStationTheme, StationThemeProvider } from "../../theme/index.js";
 import type { ClientNotice } from "@station/dashboard-core/runtime";
+import { cellWidth } from "@station/dashboard-core/text";
 import { act } from "react";
 import { spanAtFrameCell } from "../../terminal/testing/frameProbe.js";
 import { manyProjectsSnapshot } from "../fixtures/scenarios.js";
@@ -96,7 +97,7 @@ describe("ToastOverlayView actions", () => {
     await fixture.setup.mockMouse.drag(
       message.col,
       message.row,
-      message.col + "Worktrunk".length,
+      message.col + cellWidth("Worktrunk"),
       message.row,
     );
     expect(fixture.setup.renderer.getSelection()?.getSelectedText()).toBe("Worktrunk");

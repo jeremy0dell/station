@@ -3,7 +3,7 @@ import { rgbToHex } from "@opentui/core";
 import { MouseButtons } from "@opentui/core/testing";
 import { testRender } from "@opentui/react/test-utils";
 import { act } from "react";
-import { cellWidth } from "@station/dashboard-core/selectors";
+import { cellWidth } from "@station/dashboard-core/text";
 import { spanAtFrameCell } from "../../../terminal/testing/frameProbe.js";
 import type { StationMouseTarget } from "../../input/stationMouse.js";
 import { StationHoverProvider, StationMouseProvider } from "../stationMouseContext.js";
@@ -135,16 +135,18 @@ describe("responsive sheet text", () => {
   } as const;
 
   it("selects copy from measured available width", () => {
-    const expandedWidth = variants.expanded.length;
+    const expandedWidth = cellWidth(variants.expanded);
     expect(responsiveSheetText(expandedWidth, variants)).toBe(variants.expanded);
-    const narrowerWidth = expandedWidth - " ".length;
+    const narrowerWidth = expandedWidth - cellWidth(" ");
     expect(responsiveSheetText(narrowerWidth, variants)).toBe(variants.compact);
   });
 
   it("reserves the footer inset before selecting copy", () => {
     const expandedFooter = ` ${variants.expanded}`;
-    expect(responsiveSheetFooterText(expandedFooter.length, variants)).toBe(variants.expanded);
-    expect(responsiveSheetFooterText(variants.expanded.length, variants)).toBe(variants.compact);
+    expect(responsiveSheetFooterText(cellWidth(expandedFooter), variants)).toBe(variants.expanded);
+    expect(responsiveSheetFooterText(cellWidth(variants.expanded), variants)).toBe(
+      variants.compact,
+    );
   });
 });
 
