@@ -1,0 +1,589 @@
+import {
+  type UpdateConvergencePlanningInput,
+  UpdateConvergencePlanningInputSchema,
+  UpdateConvergencePlanSchema,
+  type UpdateReapRecoveryPreflight,
+  UpdateReapRecoveryPreflightSchema,
+  updateReapEvidenceIsComplete,
+} from "@station/contracts";
+import { describe, expect, it } from "vitest";
+import { deriveUpdateConvergencePlan } from "../../src/update/convergencePlan.js";
+
+const buildIdentity = "b".repeat(64);
+const incumbentBuildIdentity = "a".repeat(64);
+const artifact = { version: "1.0.0", revision: "revision-1" };
+const observerSelector = `${artifact.version}+station.${buildIdentity}`;
+
+describe("deriveUpdateConvergencePlan", () => {
+  it.each([
+    {
+      name: "no runtime",
+      evidence: preflight(),
+      expected: ["actionable", "start", "no-op", "no-op"],
+    },
+    {
+      name: "healthy matching runtime",
+      evidence: preflight({ observer: matchingObserver(), host: matchingHost() }),
+      expected: ["converged", "no-op", "no-op", "no-op"],
+    },
+    {
+      name: "unhealthy matching Observer",
+      evidence: preflight({ observer: matchingObserver("degraded"), host: matchingHost() }),
+      expected: ["actionable", "restart", "no-op", "no-op"],
+    },
+    {
+      name: "older Observer",
+      evidence: preflight({ observer: differentObserver("0.9.0"), host: matchingHost() }),
+      expected: ["actionable", "restart", "no-op", "no-op"],
+    },
+    {
+      name: "old idle Host",
+      evidence: preflight({ observer: matchingObserver(), host: differentHost([]) }),
+      expected: ["actionable", "no-op", "no-op", "replace-idle"],
+    },
+    {
+      name: "old busy bridge-backed Host",
+      evidence: preflight({
+        observer: matchingObserver("healthy", "unknown"),
+        host: differentHost([terminal("bridge-releasable")]),
+        terminalDispositions: [disposition("preservable", "unknown")],
+      }),
+      expected: ["actionable", "no-op", "preserve-via-handoff", "handoff"],
+    },
+    {
+      name: "old busy non-bridge Host",
+      evidence: preflight({
+        observer: matchingObserver(),
+        host: differentHost([terminal("non-releasable")]),
+        terminalDispositions: [disposition("non-preservable", "recoverable")],
+      }),
+      expected: ["reap-required", "no-op", "reap-required", "await-reap"],
+    },
+    {
+      name: "non-resumable auxiliary terminal",
+      evidence: preflight({
+        observer: matchingObserver(),
+        host: differentHost([terminal("non-releasable", "aux")]),
+        terminalDispositions: [
+          disposition("non-preservable", "non-resumable", "1", ["aux_terminal_not_resumable"]),
+        ],
+      }),
+      expected: ["reap-required", "no-op", "reap-required", "await-reap"],
+    },
+  ])("classifies $name", ({ evidence, expected }) => {
+    const result = derive(input({ preflight: evidence }));
+    expect([
+      result.outcome,
+      result.phases.observerConvergence.action,
+      result.phases.terminalConvergence.action,
+      result.phases.hostConvergence.action,
+    ]).toEqual(expected);
+  });
+
+  it.each([
+    {
+      name: "candidate precedes",
+      observer: differentObserver("1.0.0", incumbentBuildIdentity),
+      expected: { outcome: "actionable", action: "restart", precedence: "candidate-precedes" },
+    },
+    {
+      name: "incumbent precedes",
+      observer: differentObserver("2.0.0"),
+      expected: { outcome: "blocked", action: "blocked", precedence: "incumbent-precedes" },
+    },
+    {
+      name: "same-version singleton refuses a higher incumbent selector",
+      observer: differentObserver("1.0.0", "c".repeat(64)),
+      expected: { outcome: "blocked", action: "blocked", precedence: "refused" },
+    },
+  ])("applies Observer build precedence when $name", ({ observer, expected }) => {
+    const result = derive(input({ preflight: preflight({ observer, host: matchingHost() }) }));
+    expect({ outcome: result.outcome, ...result.phases.observerConvergence }).toMatchObject(
+      expected,
+    );
+  });
+
+  it("reinspects target-dependent runtime after a different artifact is installed", () => {
+    const changed = preflight({
+      installed: { version: "0.9.0", revision: "revision-0" },
+      observer: differentObserver("0.9.0"),
+      host: differentHost([]),
+    });
+    const result = derive(
+      input({
+        preflight: changed,
+        targetRuntime: { status: "not-yet-provable" },
+      }),
+    );
+
+    expect(result.selectedTarget.artifact).toEqual(changed.target);
+    expect(result.phases.artifactApplication.action).toBe("apply");
+    expect(result.phases.observerConvergence.action).toBe("reinspect");
+    expect(result.phases.terminalConvergence.action).toBe("reinspect");
+    expect(result.phases.hostConvergence.action).toBe("reinspect");
+    expect(result.phases.persistedStateReconcile).toEqual({
+      action: "await-artifact",
+      reason: "target-build-not-yet-provable",
+    });
+    expect(result.outcome).toBe("actionable");
+  });
+
+  it.each([
+    "processes",
+    "screen",
+  ] as const)("carries exact %s fidelity through terminal and Host handoff decisions", (fidelity) => {
+    const result = derive(
+      input({
+        handoff: { action: "preserve", fidelity },
+        preflight: preflight({
+          observer: matchingObserver(),
+          host: differentHost([terminal("bridge-releasable")]),
+          terminalDispositions: [disposition("preservable", "unknown")],
+        }),
+      }),
+    );
+    expect(result.phases.terminalConvergence).toMatchObject({
+      action: "preserve-via-handoff",
+      fidelity,
+    });
+    expect(result.phases.hostConvergence).toMatchObject({ action: "handoff", fidelity });
+  });
+
+  it("requires recovery only for non-preservable terminals in a mixed inventory", () => {
+    const mixed = derive(
+      input({
+        preflight: preflight({
+          observer: matchingObserver("healthy", "unknown"),
+          host: differentHost([
+            terminal("bridge-releasable", "agent", "1"),
+            terminal("non-releasable", "agent", "2"),
+          ]),
+          terminalDispositions: [
+            disposition("preservable", "unknown", "1"),
+            disposition("non-preservable", "non-resumable", "2"),
+          ],
+        }),
+      }),
+    );
+    expect(mixed.outcome).toBe("reap-required");
+    expect(mixed.phases.terminalConvergence).toMatchObject({
+      action: "reap-required",
+      terminals: [
+        { terminalTargetId: "terminal-1", reapRecovery: "unknown" },
+        { terminalTargetId: "terminal-2", reapRecovery: "non-resumable" },
+      ],
+    });
+
+    const afterReap = derive(
+      input({
+        preflight: preflight({
+          observer: matchingObserver("healthy", "unknown"),
+          host: differentHost([terminal("bridge-releasable")]),
+          terminalDispositions: [disposition("preservable", "unknown")],
+        }),
+      }),
+    );
+    expect(afterReap.outcome).toBe("actionable");
+    expect(afterReap.phases.terminalConvergence.action).toBe("preserve-via-handoff");
+  });
+
+  it("blocks incomplete evidence only when it is relevant to the selected action", () => {
+    const irrelevantRecovery = derive(
+      input({
+        preflight: preflight({
+          observer: matchingObserver("healthy", "unknown"),
+          host: differentHost([terminal("bridge-releasable")]),
+          terminalDispositions: [disposition("preservable", "unknown")],
+        }),
+      }),
+    );
+    expect(irrelevantRecovery.outcome).toBe("actionable");
+
+    const destructiveRecovery = derive(
+      input({
+        preflight: preflight({
+          observer: matchingObserver("healthy", "unknown"),
+          host: differentHost([terminal("non-releasable")]),
+          terminalDispositions: [disposition("non-preservable", "unknown")],
+        }),
+      }),
+    );
+    expect(destructiveRecovery.outcome).toBe("blocked");
+    expect(destructiveRecovery.phases.terminalConvergence).toMatchObject({
+      action: "blocked",
+      reason: "recovery-incomplete",
+    });
+  });
+
+  it.each([
+    {
+      name: "Observer evidence",
+      preflight: preflight({
+        observer: {
+          status: "unknown",
+          reason: "identity-unavailable",
+          error: safeError("OBSERVER_UNKNOWN"),
+        },
+        host: matchingHost(),
+      }),
+      phase: "observerConvergence" as const,
+    },
+    {
+      name: "Host inventory",
+      preflight: preflight({
+        observer: matchingObserver(),
+        host: {
+          status: "unknown",
+          reason: "inventory-failed",
+          error: safeError("HOST_UNKNOWN"),
+        },
+      }),
+      phase: "hostConvergence" as const,
+    },
+    {
+      name: "terminal handoff support",
+      preflight: preflight({
+        observer: matchingObserver(),
+        host: differentHost([terminal("unknown")]),
+        terminalDispositions: [disposition("unknown", "unknown")],
+      }),
+      phase: "terminalConvergence" as const,
+    },
+  ])("blocks incomplete $name", (testCase) => {
+    const result = derive(input({ preflight: testCase.preflight }));
+    expect(result.outcome).toBe("blocked");
+    expect(result.phases[testCase.phase].action).toBe("blocked");
+  });
+
+  it("keeps hook decisions provider-neutral, ordered, and action-relevant", () => {
+    const result = derive(
+      input({
+        preflight: preflight({
+          observer: matchingObserver(),
+          host: matchingHost(),
+          hookProviderIds: ["claude", "codex", "cursor", "pi"],
+          hooks: [
+            {
+              provider: "claude",
+              status: "configured-disabled",
+              followUp: { action: "enable-hooks" },
+            },
+            { provider: "codex", status: "needs-repair", reason: "owned-drift" },
+            { provider: "cursor", status: "unsupported" },
+            {
+              provider: "pi",
+              status: "ownership-conflict",
+              ownership: "different-owner",
+              followUp: { action: "run-explicit-takeover" },
+            },
+          ],
+        }),
+      }),
+    );
+
+    expect(result.outcome).toBe("blocked");
+    expect(result.phases.hookReconciliation).toEqual({
+      action: "blocked",
+      reason: "hook-evidence-blocked",
+      providers: [
+        { provider: "claude", action: "no-op", reason: "configured-disabled" },
+        { provider: "codex", action: "reconcile", reason: "owned-drift" },
+        { provider: "cursor", action: "no-op", reason: "unsupported" },
+        { provider: "pi", action: "blocked", reason: "ownership-conflict" },
+      ],
+    });
+  });
+
+  it("reconciles healthy hooks after a selected artifact change", () => {
+    const evidence = preflight({
+      installed: { version: "0.9.0" },
+      hookProviderIds: ["codex"],
+      hooks: [{ provider: "codex", status: "healthy" }],
+    });
+    const result = derive(
+      input({ preflight: evidence, targetRuntime: { status: "not-yet-provable" } }),
+    );
+    expect(result.phases.hookReconciliation).toMatchObject({
+      action: "reconcile",
+      providers: [{ provider: "codex", reason: "selected-artifact-change" }],
+    });
+  });
+
+  it("represents explicit no-handoff as intentionally incomplete", () => {
+    const result = derive(
+      input({
+        handoff: { action: "leave-in-place" },
+        preflight: preflight({
+          observer: matchingObserver(),
+          host: differentHost([terminal("bridge-releasable")]),
+          terminalDispositions: [disposition("preservable", "recoverable")],
+        }),
+      }),
+    );
+    expect(result.outcome).toBe("intentionally-incomplete");
+    expect(result.phases.hostConvergence.action).toBe("leave-in-place");
+    expect(result.phases.finalVerification.action).toBe("not-planned");
+  });
+
+  it.each([
+    {
+      name: "unknown runtime evidence",
+      evidence: preflight({
+        observer: { status: "unknown", reason: "inspection-failed", error: safeError("UNKNOWN") },
+      }),
+    },
+    {
+      name: "complete reap consequences",
+      evidence: preflight({
+        observer: matchingObserver(),
+        host: differentHost([terminal("non-releasable")]),
+        terminalDispositions: [disposition("non-preservable", "non-resumable")],
+      }),
+    },
+  ])("defers a changed package-manager target with $name retained", ({ evidence }) => {
+    const deferredEvidence = UpdateReapRecoveryPreflightSchema.parse({
+      ...evidence,
+      installed: { version: "0.9.0", revision: "revision-0" },
+    });
+    const result = derive(
+      input({
+        preflight: deferredEvidence,
+        targetRuntime: { status: "not-yet-provable" },
+        installation: {
+          whenRequired: "defer",
+          owner: "homebrew",
+          command: { kind: "manager", argv: ["brew", "upgrade", "station"] },
+        },
+      }),
+    );
+    expect(result.outcome).toBe("deferred");
+    expect(result.phases.artifactApplication.action).toBe("defer");
+    expect(result.phases.persistedStateReconcile).toEqual({
+      action: "await-artifact",
+      reason: "package-manager-deferred",
+    });
+    expect(result.phases.finalVerification).toEqual({
+      action: "await-artifact",
+      reason: "package-manager-deferred",
+    });
+  });
+
+  it("does not defer when the selected artifact is already installed", () => {
+    const result = derive(
+      input({
+        preflight: preflight({ observer: matchingObserver(), host: matchingHost() }),
+        installation: {
+          whenRequired: "defer",
+          owner: "homebrew",
+          command: { kind: "manager", argv: ["brew", "upgrade", "station"] },
+        },
+      }),
+    );
+    expect(result.outcome).toBe("converged");
+    expect(result.phases.artifactApplication.action).toBe("no-op");
+  });
+
+  it("fails closed on contradictory selected-runtime, Observer, Host, and terminal facts", () => {
+    const invalidTarget = derive(
+      input({
+        targetRuntime: {
+          status: "known",
+          buildIdentity,
+          observerSelector: `9.0.0+station.${buildIdentity}`,
+        },
+        preflight: preflight({ observer: matchingObserver(), host: matchingHost() }),
+      }),
+    );
+    expect(invalidTarget.outcome).toBe("blocked");
+    expect(invalidTarget.phases.observerConvergence).toMatchObject({
+      action: "blocked",
+      reason: "selected-target-identity-invalid",
+    });
+
+    const contradictoryHost = derive(
+      input({
+        preflight: preflight({
+          observer: matchingObserver(),
+          host: { ...matchingHost(), buildIdentity: incumbentBuildIdentity },
+        }),
+      }),
+    );
+    expect(contradictoryHost.phases.hostConvergence).toMatchObject({
+      action: "blocked",
+      reason: "evidence-contradictory",
+    });
+
+    const contradictoryTerminal = derive(
+      input({
+        preflight: preflight({
+          observer: matchingObserver(),
+          host: differentHost([terminal("bridge-releasable")]),
+          terminalDispositions: [disposition("non-preservable", "non-resumable")],
+        }),
+      }),
+    );
+    expect(contradictoryTerminal.phases.terminalConvergence).toMatchObject({
+      action: "blocked",
+      reason: "evidence-contradictory",
+    });
+  });
+
+  it("retains exact optional artifact identity and emits no counts or authority", () => {
+    const result = derive(input());
+    expect(result.selectedTarget.artifact).toEqual(artifact);
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toContain("Count");
+    expect(serialized).not.toContain("processGroup");
+    expect(serialized).not.toContain("signal");
+    expect(result.authorization).toBe("none");
+  });
+});
+
+function derive(value: UpdateConvergencePlanningInput) {
+  const result = deriveUpdateConvergencePlan(value);
+  expect(UpdateConvergencePlanSchema.parse(result)).toEqual(result);
+  return result;
+}
+
+function input(overrides: Partial<UpdateConvergencePlanningInput> = {}) {
+  return UpdateConvergencePlanningInputSchema.parse({
+    preflight: preflight(),
+    targetRuntime: { status: "known", buildIdentity, observerSelector },
+    installation: {
+      whenRequired: "apply",
+      owner: "installer-binary",
+      command: { kind: "none" },
+    },
+    handoff: { action: "preserve", fidelity: "processes" },
+    ...overrides,
+  });
+}
+
+function preflight(
+  overrides: Partial<UpdateReapRecoveryPreflight> = {},
+): UpdateReapRecoveryPreflight {
+  const evidence = {
+    observer: { status: "absent" as const },
+    host: { status: "absent" as const },
+    hookProviderIds: [],
+    hooks: [],
+    terminalDispositions: [],
+    ...overrides,
+  };
+  return UpdateReapRecoveryPreflightSchema.parse({
+    schemaVersion: 1,
+    boundary: { authorization: "none", actions: "not-included", digest: "not-included" },
+    installed: artifact,
+    target: artifact,
+    ...evidence,
+    evidenceComplete: updateReapEvidenceIsComplete(evidence),
+  });
+}
+
+function matchingObserver(
+  health: "healthy" | "degraded" | "unavailable" = "healthy",
+  recovery: "assessed" | "unknown" = "assessed",
+): UpdateReapRecoveryPreflight["observer"] {
+  return {
+    status: "exact",
+    buildVersion: observerSelector,
+    relation: "matching-target",
+    health,
+    recovery:
+      recovery === "assessed"
+        ? {
+            status: "assessed",
+            assessment: {
+              schemaVersion: 1,
+              resumeEnabled: true,
+              providerCapabilities: [],
+              sessions: [],
+            },
+          }
+        : { status: "unknown", reason: "api-unavailable", error: safeError("RECOVERY_UNKNOWN") },
+  };
+}
+
+function differentObserver(
+  version: string,
+  identity = incumbentBuildIdentity,
+): UpdateReapRecoveryPreflight["observer"] {
+  return {
+    ...matchingObserver(),
+    buildVersion: `${version}+station.${identity}`,
+    relation: "different",
+  };
+}
+
+function matchingHost(): Extract<UpdateReapRecoveryPreflight["host"], { status: "inspected" }> {
+  return {
+    status: "inspected",
+    buildVersion: artifact.version,
+    buildIdentity,
+    protocolVersion: 8,
+    relation: "matching-target",
+    compatibility: "reuse",
+    terminals: [],
+  };
+}
+
+function differentHost(
+  terminals: Extract<UpdateReapRecoveryPreflight["host"], { status: "inspected" }>["terminals"],
+): Extract<UpdateReapRecoveryPreflight["host"], { status: "inspected" }> {
+  return {
+    status: "inspected",
+    buildVersion: "0.9.0",
+    buildIdentity: incumbentBuildIdentity,
+    protocolVersion: 8,
+    relation: "different",
+    compatibility: "replace",
+    terminals,
+  };
+}
+
+function terminal(
+  handoffSupport: "bridge-releasable" | "non-releasable" | "unknown",
+  kind: "agent" | "aux" = "agent",
+  identity = "1",
+) {
+  return {
+    kind,
+    terminalTargetId: `terminal-${identity}`,
+    ptyId: `pty-${identity}`,
+    ptyInstanceId: `pty-instance-${identity}`,
+    projectId: `project-${identity}`,
+    worktreeId: `worktree-${identity}`,
+    sessionId: `session-${identity}`,
+    harnessProvider: "codex",
+    alive: true,
+    handoffSupport,
+  };
+}
+
+function disposition(
+  handoff: "preservable" | "non-preservable" | "unknown",
+  reapRecovery: "recoverable" | "non-resumable" | "unknown",
+  identity = "1",
+  explicitReasons: UpdateReapRecoveryPreflight["terminalDispositions"][number]["reasons"] = [],
+) {
+  const reasons = [...explicitReasons];
+  if (handoff === "unknown") reasons.push("handoff_support_unknown");
+  if (reapRecovery === "unknown") reasons.push("session_recovery_unknown");
+  if (reapRecovery === "non-resumable" && reasons.length === 0) {
+    reasons.push("session_non_resumable");
+  }
+  reasons.sort();
+  return {
+    terminalTargetId: `terminal-${identity}`,
+    ptyId: `pty-${identity}`,
+    ptyInstanceId: `pty-instance-${identity}`,
+    sessionId: `session-${identity}`,
+    handoff,
+    reapRecovery,
+    reasons,
+  };
+}
+
+function safeError(code: string) {
+  return { tag: "UpdatePreflightError", code, message: "Evidence unavailable." };
+}

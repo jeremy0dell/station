@@ -14494,6 +14494,22 @@
       ]
     },
     {
+      "path": "apps/cli/src/update/convergencePlan.ts",
+      "declaration": "deriveUpdateConvergencePlan",
+      "kind": "function",
+      "role": "POLICY",
+      "purpose": "Derives one deterministic, provider-neutral live-convergence plan from #639's aggregate and resolved intent. The result describes work only; it grants no process, lifecycle, or reap authority, and Observer ordering delegates to the build-only singleton precedence policy.",
+      "dependencies": [
+        {
+          "path": "apps/observer/src/runtime/observerHandoff.ts",
+          "declaration": "classifyObserverBuildPrecedence",
+          "kind": "function",
+          "role": "POLICY",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
       "path": "apps/cli/src/update/devCheckoutUpdate.ts",
       "declaration": "createDevCheckoutUpdateChannel",
       "kind": "function",

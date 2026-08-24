@@ -251,7 +251,7 @@ describe("createUpdateRecoveryPreflightPorts", () => {
     expect(getSessionRecoveryAssessment).toHaveBeenCalledOnce();
   });
 
-  it("keeps matching and legacy idle Host build evidence explicit", async () => {
+  it("keeps unproven and older idle Host build evidence explicit", async () => {
     const targetBuildVersion = "1.1.0+station.target";
     const cases = [
       {
@@ -260,7 +260,7 @@ describe("createUpdateRecoveryPreflightPorts", () => {
         expected: {
           status: "inspected",
           buildVersion: targetBuildVersion,
-          relation: "matching-target",
+          relation: "unknown",
           compatibility: "reuse",
           terminals: [],
         },
@@ -359,6 +359,105 @@ describe("createUpdateRecoveryPreflightPorts", () => {
         relation: testCase.expectedRelation,
       });
     }
+  });
+
+  it.each([
+    "observer",
+    "host",
+  ] as const)("compares %s immutable identity for same-display targets without a revision", async (runtime) => {
+    const target = { version: "1.0.0" };
+    const cases = [
+      { runningIdentity: "current-build-identity", expectedRelation: "matching-target" },
+      { runningIdentity: undefined, expectedRelation: "unknown" },
+      { runningIdentity: "different-build-identity", expectedRelation: "different" },
+    ] as const;
+
+    for (const testCase of cases) {
+      const exactObserverSelector = `1.0.0+station.${"a".repeat(64)}`;
+      const observerBuildVersion =
+        testCase.runningIdentity === "current-build-identity"
+          ? exactObserverSelector
+          : testCase.runningIdentity === undefined
+            ? "1.0.0"
+            : `1.0.0+station.${"b".repeat(64)}`;
+      const ports = createUpdateRecoveryPreflightPorts({
+        config: testConfig(),
+        providers: providerRegistry(),
+        currentBuildIdentity: "current-build-identity",
+        currentObserverBuildVersion: exactObserverSelector,
+        observerStatus: async () => ({
+          status: "running",
+          paths: observerPaths(),
+          health: {
+            schemaVersion: STATION_SCHEMA_VERSION,
+            status: "healthy",
+            pid: identity.pid,
+            startedAt: now,
+            version: observerBuildVersion,
+            socketPath,
+          },
+        }),
+        readObserverIdentity: async () => ({ ...identity, version: observerBuildVersion }),
+        observerIdentitySource: {
+          processStartToken: () => identity.osStartTime,
+          readObserverProcess: () => ({ ...processEntry, buildVersion: observerBuildVersion }),
+        },
+        observerDeps: {
+          clientFactory: () =>
+            ({ getSessionRecoveryAssessment: async () => emptyAssessment() }) as ReturnType<
+              typeof createObserverClient
+            >,
+        },
+        hostStatus: async () => ({
+          action: "status",
+          socketPath: "/private/runtime/host.sock",
+          probe: "listening",
+          health: { ok: true, protocolVersion: 8, buildVersion: target.version },
+          compatibility: { action: "reuse" },
+          livePtyCount: 0,
+          handoffEligible: false,
+          ptys: [],
+          ...(testCase.runningIdentity === undefined
+            ? {}
+            : { buildIdentity: testCase.runningIdentity }),
+        }),
+      });
+
+      const evidence =
+        runtime === "observer"
+          ? await ports.inspectObserver({ installed: target, target })
+          : await ports.inspectHost({ installed: target, target });
+      expect(evidence).toMatchObject({
+        status: runtime === "observer" ? "exact" : "inspected",
+        relation: testCase.expectedRelation,
+      });
+    }
+  });
+
+  it("keeps a same-display not-yet-installed target relation conservative", async () => {
+    const target = { version: "1.0.0" };
+    const ports = createUpdateRecoveryPreflightPorts({
+      config: testConfig(),
+      providers: providerRegistry(),
+      currentBuildIdentity: "current-build-identity",
+      currentObserverBuildVersion: "current-build-identity",
+      observerStatus: async () => ({ status: "stopped", paths: observerPaths() }),
+      hostStatus: async () => ({
+        action: "status",
+        socketPath: "/private/runtime/host.sock",
+        probe: "listening",
+        health: { ok: true, protocolVersion: 8, buildVersion: target.version },
+        compatibility: { action: "replace", runningBuildVersion: target.version },
+        buildIdentity: "different-build-identity",
+        livePtyCount: 0,
+        handoffEligible: false,
+        ptys: [],
+      }),
+    });
+
+    await expect(
+      ports.inspectHost({ installed: { version: "0.9.0" }, target }),
+    ).resolves.toMatchObject({ relation: "unknown" });
   });
 });
 
