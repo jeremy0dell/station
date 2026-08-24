@@ -57,8 +57,17 @@ export function WelcomeScreen({
         alignItems="center"
         overflow="hidden"
       >
-        <WelcomeIdentity full={fullWordmark} />
-        <box height={1} flexShrink={1} />
+        <box
+          width="100%"
+          minHeight={0}
+          flexShrink={1}
+          flexDirection="column"
+          alignItems="center"
+          paddingBottom={1}
+          overflow="hidden"
+        >
+          <WelcomeIdentity full={fullWordmark} />
+        </box>
         <WelcomeActions
           canContinue={canContinue}
           dispatchMouse={dispatchMouse}
@@ -185,7 +194,7 @@ function WelcomeActions({
       overflow="hidden"
     >
       {canContinue ? (
-        <>
+        <box width="100%" flexShrink={0} marginBottom={1}>
           <WelcomeButton
             id="station-welcome-continue"
             label={CONTINUE_LABEL}
@@ -194,8 +203,7 @@ function WelcomeActions({
             focused={focused}
             shimmer
           />
-          <box height={1} flexShrink={1} />
-        </>
+        </box>
       ) : null}
       <WelcomeButton
         id="station-welcome-open"
