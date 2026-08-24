@@ -2188,3 +2188,103 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 ↵ activate  N new  M move to group  A add  ⇥ next-needs-me  / filter  X delete  ? help  Q/esc:close
 "
 `;
+
+exports[`modal flow golden frames renders the persistent filter condition fields at minimum size 1`] = `
+"                                        
+FLEET  ● 0 ready  ⠋ 2 working  ! 0      
+─────────────────────────────────────── 
+▏ FILTER /▏               10/10 matches 
+┌────────────────────────────────┐] [▾] 
+│ FILTER CONDITIONS           [×]│      
+│▸ S Status                 Any ›│t     
+│  P Project                Any ›│      
+│  A Agent                  Any ›│g     
+└────────────────────────────────┘      
+─────────────────────────────────────── 
+ CONDITION  S/P/A edit F apply Esc text 
+"
+`;
+
+exports[`modal flow golden frames keeps the condition popover anchored through an intrinsic stage transition 1`] = `
+"                                                                                
+FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
+─────────────────────────────────────────────────────────────────────────────── 
+▏ FILTER /▏                                                       10/10 matches 
+┌────────────────────────────────┐                                [sh] [qs] [▾] 
+│ FILTER CONDITIONS           [×]│        codex     idle           +14 -6 #70 ✓ 
+│▸ S Status                 Any ›│        codex     no agent                    
+│  P Project                Any ›│        codex     idle                  #73 ✓ 
+│  A Agent                  Any ›│        codex     starting                    
+│                                │        codex     working      +412 -96 #76 … 
+│  Apply filter (F)              │                                              
+└────────────────────────────────┘                                [sh] [qs] [▾] 
+ [6] x batch-export                       opencode  exited                 #8 ✓ 
+ [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 … 
+ [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓ 
+                                                                                
+ ▼ scripts  2 sessions · 2 agents                                 [sh] [qs] [▾] 
+ [9] ○ api-cache                          opencode  idle           +14 -6 #5 x1 
+ [a] ? metadata-refresh                   opencode  unknown           +3 -1 #10 
+                                                                                
+ ▼ empty-project  0 sessions                                      [sh] [qs] [▾] 
+ no sessions yet · [ + add session ]                                            
+─────────────────────────────────────────────────────────────────────────────── 
+ CONDITION   S/P/A edit  ↑↓ move  Enter select  F apply filter  Esc text        
+"
+`;
+
+exports[`modal flow golden frames keeps the condition popover anchored through an intrinsic stage transition 2`] = `
+"                                                                                
+FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
+─────────────────────────────────────────────────────────────────────────────── 
+▏ FILTER /▏                                                       10/10 matches 
+┌────────────────────────────────┐                                [sh] [qs] [▾] 
+│[←] STATUS CONDITION         [×]│        codex     idle           +14 -6 #70 ✓ 
+│▸ 1 [ ] Needs attention         │        codex     no agent                    
+│  2 [ ] Stuck                   │        codex     idle                  #73 ✓ 
+│  3 [ ] Working                 │        codex     starting                    
+│  4 [ ] Starting                │        codex     working      +412 -96 #76 … 
+│  5 [ ] Idle                    │                                              
+│  6 [ ] Exited                  │                                [sh] [qs] [▾] 
+│  7 [ ] No agent                │        opencode  exited                 #8 ✓ 
+│  8 [ ] Unknown                 │        opencode  working        +32 -8 #16 … 
+│  Done (Enter)                  │        opencode  idle             +1 -1 #4 ✓ 
+└────────────────────────────────┘                                              
+ ▼ scripts  2 sessions · 2 agents                                 [sh] [qs] [▾] 
+ [9] ○ api-cache                          opencode  idle           +14 -6 #5 x1 
+ [a] ? metadata-refresh                   opencode  unknown           +3 -1 #10 
+                                                                                
+ ▼ empty-project  0 sessions                                      [sh] [qs] [▾] 
+ no sessions yet · [ + add session ]                                            
+─────────────────────────────────────────────────────────────────────────────── 
+ CONDITION   ← fields  ↑↓ move  Space/slot toggle  Enter done  Esc close        
+"
+`;
+
+exports[`modal flow golden frames keeps the condition popover anchored through an intrinsic stage transition 3`] = `
+"                                                                                
+FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
+─────────────────────────────────────────────────────────────────────────────── 
+▏ FILTER /▏                                                       10/10 matches 
+┌────────────────────────────────┐                                [sh] [qs] [▾] 
+│ FILTER CONDITIONS           [×]│        codex     idle           +14 -6 #70 ✓ 
+│▸ S Status                 Any ›│        codex     no agent                    
+│  P Project                Any ›│        codex     idle                  #73 ✓ 
+│  A Agent                  Any ›│        codex     starting                    
+│                                │        codex     working      +412 -96 #76 … 
+│  Apply filter (F)              │                                              
+└────────────────────────────────┘                                [sh] [qs] [▾] 
+ [6] x batch-export                       opencode  exited                 #8 ✓ 
+ [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 … 
+ [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓ 
+                                                                                
+ ▼ scripts  2 sessions · 2 agents                                 [sh] [qs] [▾] 
+ [9] ○ api-cache                          opencode  idle           +14 -6 #5 x1 
+ [a] ? metadata-refresh                   opencode  unknown           +3 -1 #10 
+                                                                                
+ ▼ empty-project  0 sessions                                      [sh] [qs] [▾] 
+ no sessions yet · [ + add session ]                                            
+─────────────────────────────────────────────────────────────────────────────── 
+ CONDITION   S/P/A edit  ↑↓ move  Enter select  F apply filter  Esc text        
+"
+`;

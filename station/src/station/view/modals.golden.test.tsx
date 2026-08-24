@@ -2,8 +2,14 @@
 // the parity checklist, reached by driving the real machine with real keys,
 // rendered over the dashboard at 80x24. Snapshots live in __snapshots__.
 import { afterEach, describe, expect, it } from "bun:test";
-import { rgbToHex, TextRenderable, type BaseRenderable } from "@opentui/core";
+import {
+  rgbToHex,
+  TextRenderable,
+  type BaseRenderable,
+  type BoxRenderable,
+} from "@opentui/core";
 import { testRender } from "@opentui/react/test-utils";
+import { act } from "react";
 import {
   nativeStationTheme,
   stationColorSnapshotValue,
@@ -47,6 +53,7 @@ import {
 type GoldenDashboardState = ReturnType<typeof createInitialTuiState>;
 import { makeStationTestRuntime } from "../test/support/makeStationTestRuntime.js";
 import { DashboardRoot } from "./DashboardRoot.js";
+import { FILTER_CONDITION_PANEL_ID } from "./DashboardFilterConditionView.js";
 import { StationMouseProvider } from "./stationMouseContext.js";
 import { WidgetSettingsPanelView } from "./settings/WidgetSettingsPanelView.js";
 
@@ -310,6 +317,12 @@ const CASES: ModalCase[] = [
       "Apply filter (F)",
       "F apply filter",
     ],
+  },
+  {
+    name: "persistent filter condition fields at minimum size",
+    keys: [{ input: "/" }, { input: "i", ctrl: true }],
+    size: { width: 40, height: 12 },
+    expect: ["FILTER CONDITIONS", "S Status", "P Project", "A Agent", "F apply"],
   },
   {
     name: "persistent filter status condition values",
@@ -1047,6 +1060,51 @@ describe("modal flow golden frames", () => {
     });
   }
 
+  it("keeps the condition popover anchored through an intrinsic stage transition", async () => {
+    const store = makeStore(manyProjectsSnapshot());
+    store.actions.handleKey({ input: "/" });
+    store.actions.handleKey({ input: "i", ctrl: true });
+    const setup = await testRender(
+      <StationThemeProvider theme={nativeStationTheme}>
+        <DashboardRoot
+          state={store.state}
+          actions={store.actions}
+          layout={store.layout}
+          columns={SIZE.width}
+          rows={SIZE.height}
+          onCopyNotice={() => {}}
+        />
+      </StationThemeProvider>,
+      SIZE,
+    );
+    teardowns.push(() => setup.renderer.destroy());
+    await setup.renderOnce();
+    await setup.flush();
+
+    const fields = conditionPanelGeometry(setup.renderer.root);
+    expect(setup.captureCharFrame()).toMatchSnapshot();
+
+    await act(async () => {
+      store.actions.handleKey({ input: "S" });
+      await Promise.resolve();
+    });
+    await setup.flush();
+    await setup.renderOnce();
+    const values = conditionPanelGeometry(setup.renderer.root);
+    expect(values).toMatchObject({ x: fields.x, y: fields.y, width: fields.width });
+    expect(values.height).toBeGreaterThan(fields.height);
+    expect(setup.captureCharFrame()).toMatchSnapshot();
+
+    await act(async () => {
+      store.actions.handleKey({ input: "", leftArrow: true });
+      await Promise.resolve();
+    });
+    await setup.flush();
+    await setup.renderOnce();
+    expect(conditionPanelGeometry(setup.renderer.root)).toEqual(fields);
+    expect(setup.captureCharFrame()).toMatchSnapshot();
+  });
+
   it("renders Help, sheets, settings, and prompts with opaque adaptive light roles", async () => {
     const representatives: ReadonlyArray<{
       name: string;
@@ -1209,4 +1267,15 @@ function collectTextRenderables(renderable: BaseRenderable): TextRenderable[] {
     collected.push(...collectTextRenderables(child));
   }
   return collected;
+}
+
+function conditionPanelGeometry(root: BaseRenderable): {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+} {
+  const panel = root.findDescendantById(FILTER_CONDITION_PANEL_ID) as BoxRenderable | undefined;
+  if (panel === undefined) throw new Error("filter condition panel must render");
+  return { x: panel.x, y: panel.y, width: panel.width, height: panel.height };
 }

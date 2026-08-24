@@ -243,6 +243,10 @@ dashboard-core neither observes them nor changes semantic state in response.
 Anchored surfaces
 measure their owner, anchor, intrinsic content, border, and viewport after OpenTUI
 layout; feature state owns neither offsets nor visible-index windows.
+An anchored popover may change intrinsic height when its semantic option set changes,
+but its anchor and width stay stable, and the owner boundary clamps both stages to the
+same available height at a short terminal edge. Stable workflow sizing remains the
+responsibility of sheets and settings panels rather than unrelated popovers.
 Context-menu focus, pointer hits, and activation cross renderer/input boundaries
 as `ContextMenuItemId`; ordered keyboard movement resolves a new ID without
 persisting an array position.
