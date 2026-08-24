@@ -34,7 +34,7 @@ export function WidgetSettingsPanelView({
   const surfaceBackground = toOpenTuiOpaqueColor(theme.surfaces.settings);
   const dispatch = useStationMouse();
   const model = widgetSettingsPanelModel(screen, widgets, widgetsPersisted);
-  const frame = widgetSettingsFrame(columns, rows);
+  const frame = widgetSettingsFrame(columns);
   const itemIds = model.lines.map(widgetLineId);
   const followedItemId = model.lines.find(isActiveWidgetLine);
   return (
@@ -50,8 +50,9 @@ export function WidgetSettingsPanelView({
       {...stationMouseProps(dispatch, { kind: "sheetBackdrop" })}
     >
       <box
+        id="station-widget-settings-panel"
         width={frame.width}
-        maxHeight={frame.maxHeight}
+        maxHeight="100%"
         border
         borderColor={toOpenTuiColor(theme.interaction.hairline)}
         backgroundColor={surfaceBackground}

@@ -1,7 +1,6 @@
 export type SettingsPanelFrame = {
   readonly width: number;
   readonly innerWidth: number;
-  readonly height: number;
   readonly paneMode: "split" | "single";
   readonly listWidth: number;
   readonly detailWidth: number;
@@ -9,15 +8,14 @@ export type SettingsPanelFrame = {
 
 const MIN_PANEL_WIDTH = 46;
 const MAX_PANEL_WIDTH = 88;
-const MAX_PANEL_HEIGHT = 20;
 const SCREEN_MARGIN_X = 6;
 const LIST_COLUMN_RATIO = 0.4;
 const LIST_COLUMN_MIN = 16;
 const LIST_COLUMN_MAX = 26;
 const SINGLE_PANE_MAX_INNER_WIDTH = 53;
 
-/** OpenTUI boundary for responsive panel dimensions; semantic content never consumes these values. */
-export function settingsPanelFrame(columns: number, rows: number): SettingsPanelFrame {
+/** OpenTUI boundary for responsive inline dimensions; parent flex boxes own block sizing. */
+export function settingsPanelFrame(columns: number): SettingsPanelFrame {
   const availableColumns = Math.max(1, columns);
   const width = Math.min(
     availableColumns,
@@ -33,7 +31,6 @@ export function settingsPanelFrame(columns: number, rows: number): SettingsPanel
   return {
     width,
     innerWidth,
-    height: Math.min(Math.max(1, rows), MAX_PANEL_HEIGHT),
     paneMode: innerWidth <= SINGLE_PANE_MAX_INNER_WIDTH ? "single" : "split",
     listWidth,
     detailWidth: Math.max(1, innerWidth - listWidth - 1),
@@ -43,13 +40,12 @@ export function settingsPanelFrame(columns: number, rows: number): SettingsPanel
 export type WidgetSettingsFrame = {
   readonly width: number;
   readonly innerWidth: number;
-  readonly maxHeight: number;
 };
 
 const WIDGET_PANEL_WIDTH = 48;
 const WIDGET_PANEL_MIN_WIDTH = 28;
 
-export function widgetSettingsFrame(columns: number, rows: number): WidgetSettingsFrame {
+export function widgetSettingsFrame(columns: number): WidgetSettingsFrame {
   const width = Math.min(
     Math.max(1, columns),
     Math.min(WIDGET_PANEL_WIDTH, Math.max(WIDGET_PANEL_MIN_WIDTH, columns - 2)),
@@ -57,6 +53,5 @@ export function widgetSettingsFrame(columns: number, rows: number): WidgetSettin
   return {
     width,
     innerWidth: Math.max(1, width - 2),
-    maxHeight: Math.min(Math.max(1, rows), MAX_PANEL_HEIGHT),
   };
 }

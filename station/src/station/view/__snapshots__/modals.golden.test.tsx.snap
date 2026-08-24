@@ -378,16 +378,16 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 `;
 
 exports[`modal flow golden frames renders the group settings general 1`] = `
-"                                                                                
-FLEET  ● 0 ready  ⠋ 3 working  ! 1 needs you  x 1 exited  ○ 6 idle  1 · 12 · 11 
-───┌────────────────────────────────────────────────────────────────────────┐── 
-   │ Group settings · Design refresh                                        │PR 
- ▼ │ Design refresh           │ General                                     │▾] 
-╭──│▸ General                 │  Name Design refresh                        │─╮ 
-│ ▼│  Sessions                │ Save renames; sessions stay attached.       │]│ 
-│ [│  Remove Group            │                                             │…│ 
-│ [│                          │ Project station (read-only)                 │✓│ 
-╰──│                          │ /Users/example/Developer/station            │─╯ 
+"   ┌────────────────────────────────────────────────────────────────────────┐   
+FLE│ Group settings · Design refresh                                        │11 
+───│ Design refresh           │ General                                     │── 
+   │▸ General                 │  Name Design refresh                        │PR 
+ ▼ │  Sessions                │ Save renames; sessions stay attached.       │▾] 
+╭──│  Remove Group            │                                             │─╮ 
+│ ▼│                          │ Project station (read-only)                 │]│ 
+│ [│                          │ /Users/example/Developer/station            │…│ 
+│ [│                          │                                             │✓│ 
+╰──│                          │                                             │─╯ 
 ╭──│                          │                                             │─╮ 
 │ ▼│                          │                                             │]│ 
 │ [│                          │                                             │6│ 
@@ -397,11 +397,11 @@ FLEET  ● 0 ready  ⠋ 3 working  ! 1 needs you  x 1 exited  ○ 6 idle  1 · 1
 │ [│                          │                                             │7│ 
 │ [│                          │                                             │1│ 
 │ [│                          │                                             │…│ 
-╰──│                          │  Save (Enter)    Cancel (Esc)               │─╯ 
-╭──│ ↑↓ or G/S/R select · →/enter edit · esc back                           │─╮ 
-▼ 6└────────────────────────────────────────────────────────────────────────┘   
-─────────────────────────────────────────────────────────────────────────────── 
-↵ activate  N new  ⇥ next  / filter  X delete  ? help  Q/esc:close              
+╰──│                          │                                             │─╯ 
+╭──│                          │                                             │─╮ 
+▼ 6│                          │  Save (Enter)    Cancel (Esc)               │   
+───│ ↑↓ or G/S/R select · →/enter edit · esc back                           │── 
+↵ a└────────────────────────────────────────────────────────────────────────┘   
 "
 `;
 
@@ -438,13 +438,13 @@ exports[`modal flow golden frames renders the group settings remove short 1`] = 
 `;
 
 exports[`modal flow golden frames renders the project settings panel 1`] = `
-"                                                                                
-FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
-───┌────────────────────────────────────────────────────────────────────────┐── 
-   │ Project settings                                                       │PR 
- ▼ │ station                  │ Default agent                               │▾] 
- [1│▸ Default agent           │ ✓1 codex ● update v0.3.0 → v0.4.0           │ ✓ 
- [2│  Remove project          │  2 opencode unknown                         │   
+"   ┌────────────────────────────────────────────────────────────────────────┐   
+FLE│ Project settings                                                       │le 
+───│ station                  │ Default agent                               │── 
+   │▸ Default agent           │ ✓1 codex ● update v0.3.0 → v0.4.0           │PR 
+ ▼ │  Remove project          │  2 opencode unknown                         │▾] 
+ [1│                          │                                             │ ✓ 
+ [2│                          │                                             │   
  [3│                          │                                             │ ✓ 
  [4│                          │                                             │   
  [5│                          │                                             │ … 
@@ -457,11 +457,11 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
  ▼ │                          │                                             │▾] 
  [9│                          │                                             │x1 
  [a│                          │                                             │10 
+   │                          │                                             │   
+ ▼ │                          │                                             │▾] 
    │                          │ ✓ current · ↑↓ ↵ · 1-9/a-z                  │   
- ▼ │ ↑↓ move   →/enter edit   esc close                                     │▾] 
-   └────────────────────────────────────────────────────────────────────────┘   
-─────────────────────────────────────────────────────────────────────────────── 
-↵ activate  N new  ⇥ next  / filter  X delete  ? help  Q/esc:close              
+───│ ↑↓ move   →/enter edit   esc close                                     │── 
+↵ a└────────────────────────────────────────────────────────────────────────┘   
 "
 `;
 
@@ -498,16 +498,16 @@ exports[`modal flow golden frames renders the project settings compact detail 1`
 `;
 
 exports[`modal flow golden frames renders the project settings remove pane 1`] = `
-"                                                                                
-FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
-───┌────────────────────────────────────────────────────────────────────────┐── 
-   │ Project settings                                                       │PR 
- ▼ │ station                  │ Remove project                              │▾] 
- [1│  Default agent           │ Removes it from Station.                    │ ✓ 
- [2│▸ Remove project          │ Worktrees & files stay on disk.             │   
- [3│                          │                                             │ ✓ 
- [4│                          │ Type "delete station" to confirm            │   
- [5│                          │ ▸ |delete station                           │ … 
+"   ┌────────────────────────────────────────────────────────────────────────┐   
+FLE│ Project settings                                                       │le 
+───│ station                  │ Remove project                              │── 
+   │  Default agent           │ Removes it from Station.                    │PR 
+ ▼ │▸ Remove project          │ Worktrees & files stay on disk.             │▾] 
+ [1│                          │                                             │ ✓ 
+ [2│                          │ Type "delete station" to confirm            │   
+ [3│                          │ ▸ |delete station                           │ ✓ 
+ [4│                          │                                             │   
+ [5│                          │                                             │ … 
    │                          │                                             │   
  ▼ │                          │                                             │▾] 
  [6│                          │                                             │ ✓ 
@@ -517,22 +517,22 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
  ▼ │                          │                                             │▾] 
  [9│                          │                                             │x1 
  [a│                          │                                             │10 
+   │                          │                                             │   
+ ▼ │                          │                                             │▾] 
    │                          │ [ Remove project (R) ]                      │   
- ▼ │ ←/esc back                                                             │▾] 
-   └────────────────────────────────────────────────────────────────────────┘   
-─────────────────────────────────────────────────────────────────────────────── 
-↵ activate  N new  ⇥ next  / filter  X delete  ? help  Q/esc:close              
+───│ ←/esc back                                                             │── 
+↵ a└────────────────────────────────────────────────────────────────────────┘   
 "
 `;
 
 exports[`modal flow golden frames renders the project settings optimistic default 1`] = `
-"                                                                                
-FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
-───┌────────────────────────────────────────────────────────────────────────┐── 
-   │ Project settings                                                       │PR 
- ▼ │ station                  │ Default agent                               │▾] 
- [1│▸ Default agent           │  1 codex ● update v0.3.0 → v0.4.0           │ ✓ 
- [2│  Remove project          │ ✓2 opencode unknown                updating…│   
+"   ┌────────────────────────────────────────────────────────────────────────┐   
+FLE│ Project settings                                                       │le 
+───│ station                  │ Default agent                               │── 
+   │▸ Default agent           │  1 codex ● update v0.3.0 → v0.4.0           │PR 
+ ▼ │  Remove project          │ ✓2 opencode unknown                updating…│▾] 
+ [1│                          │                                             │ ✓ 
+ [2│                          │                                             │   
  [3│                          │                                             │ ✓ 
  [4│                          │                                             │   
  [5│                          │                                             │ … 
@@ -545,11 +545,11 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
  ▼ │                          │                                             │▾] 
  [9│                          │                                             │x1 
  [a│                          │                                             │10 
+   │                          │                                             │   
+ ▼ │                          │                                             │▾] 
    │                          │ ✓ current · ↑↓ ↵ · 1-9/a-z                  │   
- ▼ │ ↑↓ move   →/enter edit   esc close                                     │▾] 
-   └────────────────────────────────────────────────────────────────────────┘   
-─────────────────────────────────────────────────────────────────────────────── 
-↵ activate  N new  ⇥ next  / filter  X delete  ? help  Q/esc:close              
+───│ ↑↓ move   →/enter edit   esc close                                     │── 
+↵ a└────────────────────────────────────────────────────────────────────────┘   
 "
 `;
 

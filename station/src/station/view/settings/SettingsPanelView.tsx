@@ -52,7 +52,7 @@ export function SettingsPanelView({
 }: SettingsPanelViewProps) {
   const theme = useStationTheme();
   const dispatch = useStationMouse();
-  const frame = settingsPanelFrame(columns, rows);
+  const frame = settingsPanelFrame(columns);
   const singlePane = frame.paneMode === "single";
   const showList = !singlePane || focus === "list";
   const showDetail = !singlePane || focus === "detail";
@@ -79,8 +79,9 @@ export function SettingsPanelView({
       {...stationMouseProps(dispatch, { kind: "sheetBackdrop" })}
     >
       <box
+        id="station-settings-panel"
         width={frame.width}
-        height={frame.height}
+        height="100%"
         border
         borderColor={toOpenTuiColor(theme.interaction.hairline)}
         backgroundColor={toOpenTuiOpaqueColor(theme.surfaces.settings)}

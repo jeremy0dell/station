@@ -49,4 +49,32 @@ describe("WidgetSettingsPanelView", () => {
       ),
     ).toBeDefined();
   });
+
+  it("grows intrinsic content beyond the former fixed cap while remaining parent-bounded", async () => {
+    const widgets: TuiWidgetConfig[] = Array.from({ length: 28 }, (_, index) => ({
+      type: index % 2 === 0 ? "time" : "moon",
+    }));
+    const setup = await testRender(
+      <StationThemeProvider theme={nativeStationTheme}>
+        <StationHoverProvider value>
+          <StationMouseProvider value={() => {}}>
+            <WidgetSettingsPanelView
+              screen={{ name: "widgetSettings", focus: "list", cursor: 27, pickerCursor: 0 }}
+              widgets={widgets}
+              widgetsPersisted
+              columns={80}
+              rows={40}
+            />
+          </StationMouseProvider>
+        </StationHoverProvider>
+      </StationThemeProvider>,
+      { width: 80, height: 40 },
+    );
+    teardowns.push(() => setup.renderer.destroy());
+    await setup.renderOnce();
+
+    const panel = setup.renderer.root.findDescendantById("station-widget-settings-panel");
+    expect(panel?.height).toBeGreaterThan(20);
+    expect(panel?.height).toBeLessThanOrEqual(40);
+  });
 });

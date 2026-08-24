@@ -86,6 +86,13 @@ describe("SettingsPanelView", () => {
     expect(detail.setup.captureCharFrame()).not.toContain("General");
   });
 
+  it("lets the parent flex surface size a tall panel beyond the former fixed cap", async () => {
+    const { setup } = await render("list", { width: 80, height: 32 });
+    const panel = setup.renderer.root.findDescendantById("station-settings-panel");
+
+    expect(panel?.height).toBe(32);
+  });
+
   it("emits each feature-owned semantic item target", async () => {
     const { setup, targets } = await render("list");
     const lines = setup.captureCharFrame().split("\n");
