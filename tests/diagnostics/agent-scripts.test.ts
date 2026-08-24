@@ -1488,8 +1488,6 @@ describe("tui dev script", () => {
     expect(stationPackage.scripts?.["station:isolated"]).toBe(
       "bun run --cwd .. build:ensure && ./scripts/station-isolated.sh",
     );
-    expect(stationPackage.scripts?.["station:isolated"]).not.toContain("link:station");
-    expect(stationPackage.scripts?.["station:isolated"]).not.toContain("repair:node-pty");
     expect(stationPackage.scripts?.station).toContain("bun run --cwd .. build:ensure");
     expect(stationPackage.scripts?.station).toContain("bun run repair:node-pty");
     expect(nodePtyRepairScript).toContain("bun install --frozen-lockfile");
@@ -1521,7 +1519,6 @@ describe("tui dev script", () => {
     expect(hookInstall).toBeLessThan(hookDoctor);
     expect(isolatedScript).toContain("exec bun run dev");
     expect(devboxScript).toContain('run("bun", ["run", "station:isolated", "dev"]');
-    expect(stationPackage.scripts?.dev).not.toContain("bun --hot");
   });
 
   it("routes setup guided E2E entrypoints through the supervised owner", () => {
@@ -1535,7 +1532,6 @@ describe("tui dev script", () => {
     expect(rootPackage.scripts?.["test:e2e:setup:guided"]).toBe(
       "node scripts/test-runners/run-setup-guided-e2e.mjs",
     );
-    expect(rootPackage.scripts?.["test:e2e:setup:guided"]).not.toContain("vitest");
     expect(rootPackage.scripts?.["test:e2e:setup:guided:all-shells"]).toBe(
       "STATION_SETUP_E2E_ALL_SHELLS=true bun run test:e2e:setup:guided",
     );

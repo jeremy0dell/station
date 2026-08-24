@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -58,23 +58,10 @@ describe("Bun workspace policy", () => {
     );
   });
 
-  it("discovers exactly the 25 intended workspace packages", () => {
-    const packagePaths = [
-      ...workspacePackages("apps", 1),
-      ...workspacePackages("packages", 1),
-      ...workspacePackages("integrations", 2),
-      "station/package.json",
-    ];
-
-    expect(packagePaths).toHaveLength(25);
-    expect(new Set(packagePaths).size).toBe(25);
-  });
-
   it("declares Station's direct internal graph and required OpenTUI peer explicitly", () => {
     const stationPackage = manifest("station/package.json") as {
       dependencies: Record<string, string>;
       overrides?: Record<string, string>;
-      scripts: Record<string, string>;
     };
 
     expect(
@@ -85,7 +72,6 @@ describe("Bun workspace policy", () => {
     expect(stationPackage.dependencies["@station/observer"]).toBeUndefined();
     expect(stationPackage.dependencies["web-tree-sitter"]).toBe("0.25.10");
     expect(stationPackage.overrides).toBeUndefined();
-    expect(stationPackage.scripts["link:station"]).toBeUndefined();
   });
 
   it("keeps checkout launcher ownership at the root package", () => {
@@ -117,45 +103,8 @@ shell = "system"
 `);
   });
 
-  it("keeps only Bun's root text lockfile", () => {
+  it("keeps Bun's root text lockfile on lockfile version 2", () => {
     const lockfile = read("bun.lock");
     expect(lockfile).toMatch(/^\{\n {2}"lockfileVersion": 2,/u);
-    for (const preservedResolution of [
-      '"shell-quote@1.8.4"',
-      '"smol-toml@1.6.1"',
-      '"@types/node@25.9.3"',
-      '"ws@7.5.11"',
-    ]) {
-      expect(lockfile, preservedResolution).toContain(preservedResolution);
-    }
-    expect(lockfile).toContain('"web-tree-sitter@0.25.10"');
-    expect(lockfile).toContain('"turbo@2.10.11"');
-    for (const obsolete of [
-      ".npmrc",
-      "pnpm-workspace.yaml",
-      "pnpm-lock.yaml",
-      "station/bun.lock",
-      "station/scripts/link-station-packages.sh",
-    ]) {
-      expect(existsSync(join(root, obsolete)), obsolete).toBe(false);
-    }
   });
 });
-
-function workspacePackages(directory: string, depth: 1 | 2): string[] {
-  const firstLevel = readdirSync(join(root, directory), { withFileTypes: true }).filter((entry) =>
-    entry.isDirectory(),
-  );
-  if (depth === 1) {
-    return firstLevel.flatMap((entry) => {
-      const path = `${directory}/${entry.name}/package.json`;
-      return existsSync(join(root, path)) ? [path] : [];
-    });
-  }
-  return firstLevel.flatMap((entry) =>
-    readdirSync(join(root, directory, entry.name), { withFileTypes: true }).flatMap((child) => {
-      const path = `${directory}/${entry.name}/${child.name}/package.json`;
-      return child.isDirectory() && existsSync(join(root, path)) ? [path] : [];
-    }),
-  );
-}

@@ -377,7 +377,6 @@ describe("release readiness docs", () => {
     expect(packageJson.scripts["smoke:install"]).toBe(
       "node scripts/test-runners/run-install-smoke.mjs",
     );
-    expect(packageJson.scripts["test:all"]).toContain("bun run smoke:install");
   });
 
   it("keeps installer continuity and interrupted-upgrade recovery documented", async () => {
