@@ -30,4 +30,5 @@ export * from "./tuiRendererControl.js";
 export * from "./uiLifecycle.js";
 export * from "./update.js";
 export * from "./updateArtifact.js";
+export * from "./updateConvergencePlan.js";
 export * from "./updateRecoveryPreflight.js";

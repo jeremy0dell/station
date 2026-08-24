@@ -206,12 +206,14 @@ async function inspectObserverRecoveryEvidence(input: {
     );
   }
 
+  const runningObserverBuild = parseStationObserverBuildVersion(health.version);
   const exact: Extract<UpdateReapObserverEvidence, { status: "exact" }> = {
     status: "exact",
     buildVersion: health.version,
     relation: runtimeBuildRelation({
-      runningDisplayVersion: parseStationObserverBuildVersion(health.version).version,
-      runningBuildIdentity: health.version,
+      runningDisplayVersion: runningObserverBuild.version,
+      runningBuildIdentity:
+        runningObserverBuild.buildIdentity === undefined ? undefined : health.version,
       currentBuildIdentity: input.currentObserverBuildVersion,
       artifacts: input.artifacts,
     }),
@@ -373,8 +375,8 @@ function runtimeBuildRelation(input: {
 }): "matching-target" | "different" | "unknown" {
   if (input.runningDisplayVersion === undefined) return "unknown";
   if (input.runningDisplayVersion !== input.artifacts.target.version) return "different";
-  if (input.artifacts.target.revision === undefined) return "matching-target";
   if (input.runningBuildIdentity === undefined) return "unknown";
+  // Display equality never substitutes for the immutable identity of an already-installed target.
   if (input.runningBuildIdentity === input.currentBuildIdentity) {
     return updateArtifactsMatch(input.artifacts.installed, input.artifacts.target)
       ? "matching-target"
