@@ -65,8 +65,7 @@ function makeStore(
   snapshot?: StationSnapshot,
   initialState?: DashboardRuntimeOptions["initialState"],
 ): StationTestDashboardRuntime {
-  // Enough rows to keep the same visible window as before the pinned fleet bar +
-  // column header, so the station-project rows stay slot-addressable.
+  // Router tests omit renderer geometry, so every semantic target remains slot-addressable.
   return makeStationTestRuntime({
     ...(snapshot === undefined ? {} : { snapshot }),
     ...(initialState === undefined ? {} : { initialState }),

@@ -324,26 +324,26 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 exports[`modal flow golden frames renders the collapse project sheet scrolls a long semantic list 1`] = `
 "┌──────────────────────────────────────────────────────────────────────────────┐
 │ Collapse Project                                                             │
-│  6 filler-1 healthy                                                          │
-│  7 filler-2 healthy                                                          │
-│  8 filler-3 healthy                                                          │
-│  9 filler-4 healthy                                                          │
-│  a filler-5 healthy                                                          │
-│  b filler-6 healthy                                                          │
-│  c filler-7 healthy                                                          │
-│  d filler-8 healthy                                                          │
-│  e filler-9 healthy                                                          │
-│  f filler-10 healthy                                                         │
-│  g filler-11 healthy                                                         │
-│  h filler-12 healthy                                                         │
-│  i filler-13 healthy                                                         │
-│  j filler-14 healthy                                                         │
-│  k filler-15 healthy                                                         │
-│  l filler-16 healthy                                                         │
-│  m filler-17 healthy                                                         │
-│  n filler-18 healthy                                                         │
-│  o filler-19 healthy                                                         │
-│▸ p filler-20 healthy                                                         │
+│  6 overflow-project-1 healthy                                                │
+│  7 overflow-project-2 healthy                                                │
+│  8 overflow-project-3 healthy                                                │
+│  9 overflow-project-4 healthy                                                │
+│  a overflow-project-5 healthy                                                │
+│  b overflow-project-6 healthy                                                │
+│  c overflow-project-7 healthy                                                │
+│  d overflow-project-8 healthy                                                │
+│  e overflow-project-9 healthy                                                │
+│  f overflow-project-10 healthy                                               │
+│  g overflow-project-11 healthy                                               │
+│  h overflow-project-12 healthy                                               │
+│  i overflow-project-13 healthy                                               │
+│  j overflow-project-14 healthy                                               │
+│  k overflow-project-15 healthy                                               │
+│  l overflow-project-16 healthy                                               │
+│  m overflow-project-17 healthy                                               │
+│  n overflow-project-18 healthy                                               │
+│  o overflow-project-19 healthy                                               │
+│▸ p overflow-project-20 healthy                                               │
 │ ↑↓ move   ↵ select   1-9/a-z jump   Esc cancel                               │
 └──────────────────────────────────────────────────────────────────────────────┘
 "

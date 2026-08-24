@@ -285,8 +285,8 @@ const CASES: ModalCase[] = [
       if (station === undefined) throw new Error("fixture has no projects");
       const extras = Array.from({ length: 21 }, (_, index) => ({
         ...station,
-        id: `filler-${index}` as typeof station.id,
-        label: `filler-${index}`,
+        id: `overflow-project-${index}` as typeof station.id,
+        label: `overflow-project-${index}`,
       }));
       return { ...base, projects: [...base.projects, ...extras] };
     },
@@ -294,7 +294,7 @@ const CASES: ModalCase[] = [
     expect: [
       "Collapse Project",
       "↑↓ move   ↵ select   1-9/a-z jump   Esc cancel",
-      "▸ p filler-20 healthy",
+      "▸ p overflow-project-20 healthy",
     ],
   },
   {
