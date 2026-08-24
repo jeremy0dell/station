@@ -168,7 +168,7 @@ function selectContextMenuItem(
       if (dashboardRuntime !== undefined) {
         dashboardRuntime.actions.dispatch({
           type: "renameSession.openEdit",
-          rowId: action.rowId,
+          rowId: action.sessionId,
           returnTo: "dashboard",
         });
         dismissCurrentAttention(effects);
@@ -177,14 +177,17 @@ function selectContextMenuItem(
       return;
     case "moveToGroup":
       if (dashboardRuntime !== undefined) {
-        dashboardRuntime.actions.dispatch({ type: "moveToGroup.open", rowId: action.rowId });
+        dashboardRuntime.actions.dispatch({ type: "moveToGroup.open", rowId: action.sessionId });
         dismissCurrentAttention(effects);
         effects.store.actions.openOverlay(STATION_OVERLAY_ID);
       }
       return;
     case "removeWorktree":
       if (dashboardRuntime !== undefined) {
-        dashboardRuntime.actions.dispatch({ type: "removeWorktree.openConfirm", rowId: action.rowId });
+        dashboardRuntime.actions.dispatch({
+          type: "removeWorktree.openConfirm",
+          rowId: action.sessionId,
+        });
       }
       return;
     case "quickGroup":
@@ -228,7 +231,7 @@ function selectContextMenuItem(
       if (dashboardRuntime !== undefined) {
         dashboardRuntime.actions.dispatch({
           type: "forkSession.openDetails",
-          rowId: action.rowId,
+          rowId: action.sessionId,
           returnTo: "dashboard",
         });
         dismissCurrentAttention(effects);

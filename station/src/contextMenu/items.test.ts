@@ -105,8 +105,13 @@ describe("buildContextMenuItems", () => {
     const store = createStationStore();
     const paneId = agentWorktreePaneId("wt_station_idle");
     store.actions.createPane(paneId, { role: "primary-agent" });
+    const stationState = createInitialTuiState({ initialSnapshot: manyProjectsSnapshot() });
 
-    const items = buildContextMenuItems({ kind: "pane", paneId }, store.getState());
+    const items = buildContextMenuItems(
+      { kind: "pane", paneId },
+      store.getState(),
+      stationState,
+    );
 
     expect(items.map((item) => item.label)).toEqual([
       "Rename",
@@ -116,8 +121,18 @@ describe("buildContextMenuItems", () => {
     ]);
     expect(resolveContextMenuAction(items[0])).toEqual({
       kind: "renameSession",
-      rowId: "wt_station_idle",
+      sessionId: STATION_IDLE_SESSION_ID,
     });
+  });
+
+  it("does not offer pane rename without a canonical Station session", () => {
+    const store = createStationStore();
+    const paneId = agentWorktreePaneId("wt_station_idle");
+    store.actions.createPane(paneId, { role: "primary-agent" });
+
+    expect(
+      buildContextMenuItems({ kind: "pane", paneId }, store.getState()).map(({ id }) => id),
+    ).toEqual(["pane.splitRight", "pane.splitBelow", "pane.close"]);
   });
 
   it("disables close pane for main, last, and unknown panes", () => {
@@ -157,23 +172,23 @@ describe("buildContextMenuItems", () => {
       {
         id: "station.renameSession",
         label: "Rename Session",
-        action: { kind: "renameSession", rowId: STATION_IDLE_SESSION_ID },
+        action: { kind: "renameSession", sessionId: STATION_IDLE_SESSION_ID },
       },
       {
         id: "station.moveToGroup",
         label: "Move to Group…",
-        action: { kind: "moveToGroup", rowId: STATION_IDLE_SESSION_ID },
+        action: { kind: "moveToGroup", sessionId: STATION_IDLE_SESSION_ID },
       },
       {
         id: "station.forkSession",
         label: "Fork Session",
-        action: { kind: "forkSession", rowId: STATION_IDLE_SESSION_ID },
+        action: { kind: "forkSession", sessionId: STATION_IDLE_SESSION_ID },
       },
       {
         id: "station.removeWorktree",
         label: "Delete Session",
         danger: true,
-        action: { kind: "removeWorktree", rowId: STATION_IDLE_SESSION_ID },
+        action: { kind: "removeWorktree", sessionId: STATION_IDLE_SESSION_ID },
       },
     ]);
   });
@@ -275,23 +290,23 @@ describe("buildContextMenuItems", () => {
       {
         id: "station.renameSession",
         label: "Rename Session",
-        action: { kind: "renameSession", rowId: "ses_wt_station_none" },
+        action: { kind: "renameSession", sessionId: "ses_wt_station_none" },
       },
       {
         id: "station.moveToGroup",
         label: "Move to Group…",
-        action: { kind: "moveToGroup", rowId: "ses_wt_station_none" },
+        action: { kind: "moveToGroup", sessionId: "ses_wt_station_none" },
       },
       {
         id: "station.forkSession",
         label: "Fork Session",
-        action: { kind: "forkSession", rowId: "ses_wt_station_none" },
+        action: { kind: "forkSession", sessionId: "ses_wt_station_none" },
       },
       {
         id: "station.removeWorktree",
         label: "Delete Session",
         danger: true,
-        action: { kind: "removeWorktree", rowId: "ses_wt_station_none" },
+        action: { kind: "removeWorktree", sessionId: "ses_wt_station_none" },
       },
     ]);
   });
@@ -330,18 +345,18 @@ describe("buildContextMenuItems", () => {
       {
         id: "station.moveToGroup",
         label: "Move to Group…",
-        action: { kind: "moveToGroup", rowId: "run_wt_station_idle" },
+        action: { kind: "moveToGroup", sessionId: "run_wt_station_idle" },
       },
       {
         id: "station.forkSession",
         label: "Fork Session",
-        action: { kind: "forkSession", rowId: "run_wt_station_idle" },
+        action: { kind: "forkSession", sessionId: "run_wt_station_idle" },
       },
       {
         id: "station.removeWorktree",
         label: "Delete Worktree…",
         danger: true,
-        action: { kind: "removeWorktree", rowId: "run_wt_station_idle" },
+        action: { kind: "removeWorktree", sessionId: "run_wt_station_idle" },
       },
     ]);
   });
@@ -405,17 +420,17 @@ describe("buildContextMenuItems", () => {
       {
         id: "station.renameSession",
         label: "Rename Session",
-        action: { kind: "renameSession", rowId: STATION_IDLE_SESSION_ID },
+        action: { kind: "renameSession", sessionId: STATION_IDLE_SESSION_ID },
       },
       {
         id: "station.moveToGroup",
         label: "Move to Group…",
-        action: { kind: "moveToGroup", rowId: STATION_IDLE_SESSION_ID },
+        action: { kind: "moveToGroup", sessionId: STATION_IDLE_SESSION_ID },
       },
       {
         id: "station.forkSession",
         label: "Fork Session",
-        action: { kind: "forkSession", rowId: STATION_IDLE_SESSION_ID },
+        action: { kind: "forkSession", sessionId: STATION_IDLE_SESSION_ID },
       },
     ]);
   });
