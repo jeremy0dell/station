@@ -40,6 +40,7 @@ describe("observer managed-session capability", () => {
         title: "Feature session",
         branch: "feature-session-123",
         harness: { provider: "codex" },
+        placement: { intent: "detached" },
         group: { kind: "create", name: "Release" },
       },
     });
@@ -106,6 +107,7 @@ describe("observer managed-session capability", () => {
           groupId: "group_active",
         },
         harness: { provider: "codex" },
+        placement: { intent: "detached" },
       },
     });
   });

@@ -25,6 +25,13 @@ import { RepositoryRemoteSchema } from "./observations.js";
 import type { ProviderHookHealth, ProviderHookReconciliationResult } from "./providerHooks.js";
 import type { HarnessResumeOptions } from "./recovery.js";
 import { nonEmptyStringSchema } from "./shared.js";
+import type {
+  ResolvedTerminalPlacement,
+  TerminalCallerContextRequest,
+  TerminalPlacementIntent,
+  TerminalPlacementRequest,
+  TerminalPlacementSource,
+} from "./terminalPlacement.js";
 
 export const ProviderTypeSchema = z.enum(["worktree", "terminal", "harness", "repository"]);
 export const ProviderHealthStatusSchema = z.enum(["healthy", "degraded", "unavailable", "unknown"]);
@@ -276,9 +283,26 @@ export type OpenWorkspaceRequest = {
   sessionId?: SessionId;
 };
 
+export type OpenPlacedWorkspaceRequest = OpenWorkspaceRequest & {
+  placement: TerminalPlacementRequest;
+};
+
 export type OpenWorkspaceResult = {
   target: TerminalIdentityBinding;
   agentEndpointId: string;
+};
+
+export type OpenPlacedWorkspaceResult = OpenWorkspaceResult & {
+  placement: ResolvedTerminalPlacement;
+  /** Opaque authority for releasing only this provisional placement binding. */
+  bindingToken: string;
+};
+
+export type ReleasePlacedTerminalTargetRequest = {
+  targetId: TerminalTargetId;
+  sessionId: SessionId;
+  generation: string;
+  bindingToken: string;
 };
 
 export type TerminalCapture = {
@@ -426,7 +450,9 @@ export interface WorktreeProvider {
 /**
  * DRIVEN PORT
  *
- * Supplies terminal topology and lifecycle through provider-owned target identities without exposing provider mechanics.
+ * Supplies ordinary terminal topology and lifecycle through provider-owned target
+ * identities without exposing provider mechanics. Caller-relative placement is a
+ * separate optional role.
  */
 export interface TerminalProvider {
   id: ProviderId;
@@ -440,6 +466,30 @@ export interface TerminalProvider {
   closeTarget(targetId: TerminalTargetId): Promise<void>;
   captureTarget?(targetId: TerminalTargetId): Promise<TerminalCapture>;
   sendInput?(targetId: TerminalTargetId, input: string): Promise<void>;
+}
+
+/**
+ * DRIVEN PORT
+ *
+ * Resolves a caller claim into provider-private proof and a short-lived public
+ * authority. Claims are merely hints from process environment; adapters prove
+ * live topology and bounded process ancestry before minting authority. A
+ * presented placement is validated once before worktree mutation and again in
+ * `openPlacedWorkspace` immediately before terminal mutation. Implementations
+ * must reject expiry, generation change, topology mismatch, and unknown intent;
+ * they must never fall back to a current, recent, focused, or configured target.
+ */
+export interface TerminalPlacementPort {
+  id: ProviderId;
+  supportedIntents: readonly TerminalPlacementIntent[];
+  resolveCurrentPlacement?(
+    caller: TerminalCallerContextRequest,
+  ): Promise<TerminalPlacementSource | undefined>;
+  validatePlacement(placement: TerminalPlacementRequest): Promise<void>;
+  openPlacedWorkspace(request: OpenPlacedWorkspaceRequest): Promise<OpenPlacedWorkspaceResult>;
+  releasePlacedTarget(
+    request: ReleasePlacedTerminalTargetRequest,
+  ): Promise<{ status: "released" | "already-absent" }>;
 }
 
 export type ManagedTerminalLaunchProcessResult =

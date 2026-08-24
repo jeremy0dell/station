@@ -4,6 +4,10 @@ Status: current contributor reference for the OpenTUI Station terminal UI in `st
 
 Station is the terminal UI client. It renders observer snapshots and events, owns local interaction state, and dispatches typed observer commands. It does not derive runtime truth from providers. The classic Ink TUI (`apps/tui`) was retired; Station is now the sole terminal UI.
 
+Observer-backed dashboard Create and Fork commands explicitly request detached
+placement. They do not infer a terminal origin, change focus, or dispatch a
+follow-up `terminal.focus`; terminal focus remains a separate user action.
+
 ## Renderer And Entry Points
 
 Station is built on OpenTUI (`@opentui/core` + `@opentui/react`) and `react`, running on its own Bun lane outside the root pnpm workspace (see `station/README.md`). There are two Bun entry points:

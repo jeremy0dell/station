@@ -3,6 +3,7 @@ export * from "./dependency.js";
 export * from "./errors.js";
 export * from "./launch.js";
 export * from "./parse.js";
+export * from "./placement/index.js";
 export * from "./popup.js";
 export * from "./provider.js";
 export * from "./shell.js";

@@ -7,6 +7,7 @@ import {
   type RuntimeSafeError,
   stationBuildInfo,
 } from "@station/runtime";
+import { captureTmuxCallerClaims } from "@station/tmux";
 import { parseRequiredOptionValue } from "./args.js";
 import type { CliRunOptions, CliRunResult } from "./cliTypes.js";
 import {
@@ -19,6 +20,7 @@ import {
 import type { CliEnv } from "./env.js";
 import { isCliHelpFlag, renderCliHelpFromArgs } from "./help.js";
 import { probeHarnessHooksStatus } from "./observerProviders.js";
+import { escapeTerminalBytes, formatCliJson, formatCliOutput } from "./terminalOutput.js";
 import { resolveDefaultIngressLauncher } from "./worktrunkHookExpectation.js";
 
 export type { CliRunOptions, CliRunResult } from "./cliTypes.js";
@@ -32,7 +34,7 @@ export async function runCli(
   argv = process.argv.slice(2),
   options: CliRunOptions = {},
 ): Promise<CliRunResult> {
-  const commandOptions = withProviderHookSetupComposition(options);
+  const commandOptions = withCliComposition(options);
   const { args, configPath } = parseGlobalOptions(argv);
   const help = renderCliHelpFromArgs(args);
   if (help !== undefined) {
@@ -100,7 +102,9 @@ export async function runCliMain(
   argv: readonly string[] = process.argv.slice(2),
   options: CliRunOptions = {},
 ): Promise<void> {
-  const processOptions = withProcessComposition(options);
+  const currentBuildInfo =
+    options.updateDeps?.currentBuildInfo ?? (options.updateDeps?.buildInfo ?? stationBuildInfo)();
+  const processOptions = withProcessComposition(options, currentBuildInfo);
   let suppressOutput = false;
   try {
     suppressOutput = shouldSuppressCliProcessOutput(parseGlobalOptions([...argv]).args);
@@ -114,7 +118,7 @@ export async function runCliMain(
     }
     if (suppressOutput) {
       if (result.code !== 0 && result.output !== undefined) {
-        process.stderr.write(`${JSON.stringify(result.output, null, 2)}\n`);
+        process.stderr.write(formatCliOutput(result));
       }
       process.exit(result.code);
     }
@@ -125,20 +129,25 @@ export async function runCliMain(
   }
 }
 
-function withProcessComposition(options: CliRunOptions): CliRunOptions {
+function withProcessComposition(
+  options: CliRunOptions,
+  currentBuildInfo: ReturnType<typeof stationBuildInfo>,
+): CliRunOptions {
   const providerHookIngressLauncher =
     options.providerHookIngressLauncher ?? resolveDefaultIngressLauncher();
   return {
     ...options,
+    updateDeps: { ...options.updateDeps, currentBuildInfo },
     providerHookIngressLauncher,
     providerHookArtifactOwner:
       options.providerHookArtifactOwner ??
-      providerHookArtifactOwner(providerHookIngressLauncher, stationBuildInfo()),
+      providerHookArtifactOwner(providerHookIngressLauncher, currentBuildInfo),
   };
 }
 
-function withProviderHookSetupComposition(options: CliRunOptions): CliRunOptions {
+function withCliComposition(options: CliRunOptions): CliRunOptions {
   const setupDeps = { ...options.setupDeps };
+  const sessionDeps = { ...options.sessionDeps };
   if (options.providerHookIngressLauncher !== undefined) {
     setupDeps.providerHookIngressLauncher = options.providerHookIngressLauncher;
   }
@@ -154,8 +163,10 @@ function withProviderHookSetupComposition(options: CliRunOptions): CliRunOptions
         ? {}
         : { artifactOwner: options.providerHookArtifactOwner }),
     });
+  sessionDeps.captureCallerClaims ??= captureTmuxCallerClaims;
   return {
     ...options,
+    sessionDeps,
     setupDeps,
   };
 }
@@ -172,41 +183,33 @@ export function shouldSuppressCliProcessOutput(invoked: readonly string[]): bool
   return command === undefined || command === "tui" || command === "popup" || command === "observe";
 }
 
-function formatCliOutput(result: CliRunResult): string {
-  if (result.outputFormat === "text") {
-    const text = String(result.output ?? "");
-    return text.endsWith("\n") ? text : `${text}\n`;
-  }
-  return `${JSON.stringify(result.output, null, 2)}\n`;
-}
-
 function formatCliError(error: unknown): string {
   if (isSafeError(error)) {
     return formatSafeError(error);
   }
   if (error instanceof Error) {
-    return error.message;
+    return escapeTerminalBytes(error.message);
   }
   if (typeof error === "object" && error !== null) {
     try {
-      return JSON.stringify(error, null, 2);
+      return formatCliJson(error);
     } catch {
-      return String(error);
+      return escapeTerminalBytes(String(error));
     }
   }
-  return String(error);
+  return escapeTerminalBytes(String(error));
 }
 
 function formatSafeError(error: RuntimeSafeError): string {
-  const lines = [`${error.message} (${error.code})`];
+  const lines = [`${escapeTerminalBytes(error.message)} (${escapeTerminalBytes(error.code)})`];
   if (error.hint !== undefined) {
-    lines.push(`Hint: ${error.hint}`);
+    lines.push(`Hint: ${escapeTerminalBytes(error.hint)}`);
   }
   if (error.diagnosticId !== undefined) {
-    lines.push(`Diagnostic: ${error.diagnosticId}`);
+    lines.push(`Diagnostic: ${escapeTerminalBytes(error.diagnosticId)}`);
   }
   if (error.traceId !== undefined) {
-    lines.push(`Trace: ${error.traceId}`);
+    lines.push(`Trace: ${escapeTerminalBytes(error.traceId)}`);
   }
   return lines.join("\n");
 }

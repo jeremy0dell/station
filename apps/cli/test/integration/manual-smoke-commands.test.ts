@@ -210,6 +210,20 @@ describe("CLI manual-smoke commands", () => {
     expect(textOutput(projectAdd)).toContain("Behavior Notes:");
   });
 
+  it("resolves session parent help and current help and manual topics", async () => {
+    const session = await runCli(["session", "--help"]);
+    const currentHelp = await runCli(["session", "current", "--help"]);
+    const currentManual = await runCli(["session", "current", "--man"]);
+
+    expect(session).toMatchObject({ code: 0, outputFormat: "text" });
+    expect(textOutput(session)).toContain("Usage:\n  stn session current");
+    expect(currentHelp).toMatchObject({ code: 0, outputFormat: "text" });
+    expect(textOutput(currentHelp)).toContain("pnpm stn session current");
+    expect(currentManual).toMatchObject({ code: 0, outputFormat: "text" });
+    expect(textOutput(currentManual)).toContain("Behavior Notes:");
+    expect(textOutput(currentManual)).toContain("Detached placement is source-free");
+  });
+
   it("resolves hook action target help without running hook commands", async () => {
     const result = await runCli(["hooks", "install", "codex", "--help"]);
 

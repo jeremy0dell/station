@@ -190,6 +190,12 @@ run/runtime-owners/v1/
 
 Use `pnpm station:runtime-inventory [-- --json]` to inspect registered disposable owners without changing them. The report distinguishes a live persistent Host/PTY cohort from a disposable launcher record, returns only keys and root classifications, and names unavailable or ambiguous evidence as a refusal. It never prints raw commands, environment, terminal contents, prompts, credentials, or absolute private paths; use its logical `logs/cli.jsonl` location with `stn debug logs "runtime." --component cli` for the correlated lifecycle evidence. For the checkout-local devbox, run `cd station && bun run station:isolated inventory`.
 
+For terminal placement, run `stn session current` from the caller terminal and
+reuse only its unexpired `source` in a raw sibling request. A detached request
+has no source. If a command is rejected, inspect `stn debug trace <commandId>`
+for the placement or cleanup code. Debug export redacts `authorityId` and does
+not include raw caller claims or provider-private proof.
+
 `pnpm station:runtime-prune -- --runtime <run_uuid>` is the read-only plan for one inventory record. An eligible plan prints a stable SHA-256 digest; apply only by rerunning with `--yes --expect-plan <sha256>`. Apply serializes with runtime startup, requires the same plan after acquiring the runtime-key lock, and revalidates the exact owner, group, checkout, pinned cleanup roots, registered Host sockets, and live PTYs before every signal or recursive deletion. A stale digest, active owner, PID reuse, inaccessible Host, protected PTY overlap, malformed record, or root replacement refuses cleanup and retains the record. `runtime.prune.applied` means the group and pinned binary-smoke roots were confirmed absent before record retirement; `runtime.cleanup.refused` and `runtime.cleanup.failed` retain evidence for another inspection. The command never extends `agent:cleanup`, reset, or Observer reap behavior.
 
 `observer.sock.pid` is mode `0600` for the default socket and contains exactly:
@@ -268,20 +274,21 @@ Auto-starting `snapshot`, `doctor`, `command`, `reconcile`, `observe`, and
 `debug bundle` boundaries preserve failures as the strict `{ error, cause?,
 startupEvidence? }` lifecycle envelope instead of flattening them into prose.
 Setup activation retains the same fields in its failed operation/session
-outcome. Update report schema version 2 adds the provider-neutral
-`hookReconciliation` result and `hook-reconciliation` step. Schema version 3
-adds the optional `recoveryPreflight` assessment; compatible readers retain
-explicit version 1 and version 2 parsers instead of accepting version backports.
-Use `stn update --dry-run --reap --json` to collect the redacted aggregate
+outcome. The current update report uses numeric discriminator `4` with strict
+`preview` and `result` shapes; older discriminator literals and report shapes
+are rejected. Every `stn update --dry-run --json`, with or without
+`--reap`, contains exactly one `initial` aggregate and one canonical `plan` to collect redacted
 Observer, Host, terminal, retained-session, resume-capability, handle-count,
-and hook-health evidence without changing runtime state. The public projection
-omits recovery inventory, provider-native state, and executable handle IDs.
+and hook-health evidence without changing runtime state. The public projection aliases
+project, worktree, session, terminal-target, PTY, and PTY-instance identities within one report.
+Public command, trace, and diagnostic IDs remain available for correlation, and provider IDs,
+artifact revisions, and immutable build identities remain canonical.
 Unknown or drifting identity remains typed in the report, including an exact
 live Observer whose socket is missing and a legacy Host whose same-version
 revision cannot be proved. Non-resumable dispositions are explicit. The
 assessment contains no executable action or digest. A same-version
-dry-run reports planned hook and Observer convergence plus enabled Host
-preservation evaluation, but runs no hook, Observer, or Host command. A
+dry-run inspects current hook, Observer, Host, terminal, and recovery facts before reporting
+convergence, but runs no hook, Observer, or Host mutation command. A
 same-version apply resumes an interrupted crossover through the
 current launcher: hook reconciliation, idempotent `observer start`, and any
 preflighted Host handoff. An installed successor uses that successor launcher

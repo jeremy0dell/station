@@ -93,6 +93,7 @@ describeRealClaude("real Claude session.create", () => {
         createPath: () => worktreePath,
       }),
       terminal,
+      terminalPlacements: [terminal.placement],
       harnesses: [
         createClaudeHarnessProvider({
           command: shimPath,
@@ -136,6 +137,7 @@ describeRealClaude("real Claude session.create", () => {
             provider: "tmux",
             layout: "agent-build-shell",
           },
+          placement: { intent: "detached" },
         },
       });
       await queue.drain();

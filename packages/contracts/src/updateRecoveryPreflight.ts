@@ -321,7 +321,7 @@ export const UpdateReapRecoveryPreflightSchema = z
           const disposition = preflight.terminalDispositions[index];
           return (
             disposition === undefined ||
-            compareTerminalIdentity(terminal, disposition) !== 0 ||
+            compareUpdateReapTerminalIdentity(terminal, disposition) !== 0 ||
             terminal.sessionId !== disposition.sessionId
           );
         })
@@ -349,7 +349,8 @@ export const UpdateReapRecoveryPreflightSchema = z
   });
 export type UpdateReapRecoveryPreflight = z.infer<typeof UpdateReapRecoveryPreflightSchema>;
 
-function compareTerminalIdentity(
+/** Orders canonical physical PTY identity; Station session identity is deliberately excluded. */
+export function compareUpdateReapTerminalIdentity(
   left: {
     terminalTargetId: string;
     ptyId: string;
@@ -377,7 +378,7 @@ function strictlySortedTerminals(
 ): boolean {
   return terminals.every((terminal, index) => {
     const previous = terminals[index - 1];
-    return previous === undefined || compareTerminalIdentity(previous, terminal) < 0;
+    return previous === undefined || compareUpdateReapTerminalIdentity(previous, terminal) < 0;
   });
 }
 

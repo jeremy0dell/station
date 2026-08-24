@@ -25,6 +25,7 @@ import {
   protocolSafeError,
   protocolSuccessResponse,
   ReconcileParamsSchema,
+  SessionCurrentParamsSchema,
   SnapshotGetParamsSchema,
 } from "./messages.js";
 import { listenUnixSocket, type NdjsonConnection, type UnixSocketServer } from "./transport.js";
@@ -164,6 +165,10 @@ async function routeSingleResponseRequest(
       }
       case "session.recoveryAssessment": {
         return await api.getSessionRecoveryAssessment();
+      }
+      case "session.current": {
+        const params = SessionCurrentParamsSchema.parse(request.params);
+        return await api.getCurrentSessionContext(params);
       }
       case "command.dispatch": {
         const params = CommandDispatchParamsSchema.parse(request.params);

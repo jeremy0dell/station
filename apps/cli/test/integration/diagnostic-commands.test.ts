@@ -978,6 +978,7 @@ function failedWorktrunkDiagnosticSnapshot(): DiagnosticSnapshot {
             branch: "feature",
             harness: { provider: "codex" },
             terminal: { provider: "tmux", layout: "agent-build-shell" },
+            placement: { intent: "detached" },
           },
         },
         status: "failed",

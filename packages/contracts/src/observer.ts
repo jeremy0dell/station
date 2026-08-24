@@ -44,6 +44,10 @@ import {
   userFacingTitleSchema,
 } from "./shared.js";
 import { type StationSnapshot, StationSnapshotSchema } from "./snapshot.js";
+import type {
+  CurrentSessionContextSchema,
+  TerminalCallerContextRequestSchema,
+} from "./terminalPlacement.js";
 
 /** Maximum encoded size of one child-to-parent Observer startup failure report. */
 export const OBSERVER_STARTUP_FAILURE_REPORT_MAX_BYTES = 64 * 1024;
@@ -369,9 +373,9 @@ export type WorktreeCancelRemovalResult = z.infer<typeof WorktreeCancelRemovalRe
 /**
  * DRIVING PORT
  *
- * Exposes Observer state, recovery-readiness, coherent recovery-inventory, and read-only
- * recovery-assessment queries,
- * plus handshakes, ingress reports, maintenance, and lifecycle operations to external actors.
+ * Exposes Observer state, recovery-readiness, coherent recovery-inventory, read-only
+ * recovery-assessment, and transient current-session queries, plus handshakes, ingress reports,
+ * maintenance, and lifecycle operations to external actors.
  */
 export type ObserverApi = {
   health(): Promise<ObserverHealth>;
@@ -380,6 +384,10 @@ export type ObserverApi = {
   getSessionRecoveryReadiness(): Promise<SessionRecoveryReadiness>;
   getSessionRecoveryInventory(): Promise<ObserverRecoveryInventory>;
   getSessionRecoveryAssessment(): Promise<ObserverRecoveryAssessment>;
+  /** Resolve transient untrusted caller claims without retaining raw claim or provider proof. */
+  getCurrentSessionContext(
+    caller: z.infer<typeof TerminalCallerContextRequestSchema>,
+  ): Promise<z.infer<typeof CurrentSessionContextSchema>>;
   subscribe(filter?: EventFilter): AsyncIterable<StationEvent>;
   dispatch(command: StationCommand): Promise<CommandReceipt>;
   getCommand(commandId: CommandId): Promise<CommandRecord | undefined>;

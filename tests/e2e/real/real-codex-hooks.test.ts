@@ -95,8 +95,8 @@ describeReal("real Codex hook ingestion", () => {
         terminal: {
           provider: "tmux",
           layout: "agent-build-shell",
-          focus: true,
         },
+        placement: { intent: "detached" },
         initialPrompt: sentinel.prompt,
       },
     };

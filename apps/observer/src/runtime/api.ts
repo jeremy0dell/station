@@ -90,6 +90,7 @@ import {
   type CreateReconcileSchedulerOptions,
   createReconcileScheduler,
 } from "./reconcileScheduler.js";
+import { resolveCurrentSessionContext } from "./sessionContext.js";
 import { createSpoolDrainer, type SpoolDrainDeps } from "./spoolDrain.js";
 
 export type CreateObserverApiOptions = {
@@ -293,6 +294,10 @@ export function createObserverApi(options: CreateObserverApiOptions): ObserverAp
         ...(options.providers === undefined ? {} : { providers: options.providers }),
         ...(options.config === undefined ? {} : { config: options.config }),
       });
+    },
+    getCurrentSessionContext: async (caller) => {
+      const providers = assertProviderRegistryAvailable(options);
+      return resolveCurrentSessionContext({ providers, core: options.core, caller });
     },
     subscribe: (filter?: EventFilter): AsyncIterable<StationEvent> =>
       options.eventBus.subscribe(filter),

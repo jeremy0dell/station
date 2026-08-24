@@ -82,8 +82,7 @@ async function runCreate(
   disposition: "remove-immediately" | "retain-failed",
 ): Promise<DashboardExecutionResult> {
   try {
-    const focusTarget = await resolveFocusTarget(options);
-    let command = buildCreateSessionCommand({
+    const command = buildCreateSessionCommand({
       project: request.project,
       title: request.title,
       branch: request.hiddenBranch,
@@ -93,24 +92,10 @@ async function runCreate(
     if (command.type !== "session.create") {
       return invalidCommandFailure("session.create", disposition);
     }
-    if (focusTarget !== undefined) {
-      command = {
-        ...command,
-        payload: {
-          ...command.payload,
-          terminal: {
-            ...command.payload.terminal,
-            focus: true,
-            origin: focusTarget.origin,
-          },
-        },
-      };
-    }
     const result = await dispatchAndWait(options, command, disposition);
     if (result.kind !== "success") {
       return result;
     }
-    await focusTarget?.onFocusSuccess?.();
     return { kind: "success" };
   } catch (error: unknown) {
     return {
@@ -190,14 +175,4 @@ function invalidCommandFailure(
       message: `Could not construct ${type}.`,
     },
   };
-}
-
-async function resolveFocusTarget(
-  options: ObserverManagedSessionCapabilitiesOptions,
-): Promise<DashboardFocusTarget | undefined> {
-  const resolved = await options.resolveFocusTarget?.();
-  if (resolved !== undefined) {
-    return resolved;
-  }
-  return options.focusOrigin === undefined ? undefined : { origin: options.focusOrigin };
 }

@@ -130,12 +130,19 @@ Worktrunk, and recreate it under the managed root.
 
 ### `[terminal.tmux]` — terminal provider (optional)
 
+Raw `session.create` and `session.fork` commands must name a terminal and carry
+an explicit placement request. `sibling` uses an unexpired source returned by
+`stn session current`; `detached` is source-free and creates an unselected tmux
+window in the configured workbench. Native Station does not support raw
+placement; its renderer-managed launch path is separate.
+
 | Key | Type | Notes |
 | --- | --- | --- |
 | `command` | string | tmux binary path/name. Overrides `STATION_TMUX_BIN`; fallback is `tmux`. |
 | `session_prefix` | string | |
 | `topology` | `workbench` | Single-value enum. |
 | `workbench_session` | string | |
+| `workbench_socket_path` | string | Optional fixed tmux socket endpoint. `~` and relative paths resolve against the directory containing the global `config.toml`. When set, all tmux terminal operations use `tmux -S`; caller `TMUX` values remain evidence only. Popup ownership stays on the invoking tmux server and ignores this setting. |
 | `window_naming` | `project-branch` | Single-value enum. |
 | `primary_agent_pane` | bool | |
 | `popup_width` / `popup_height` / `popup_position` | string | Free-form, e.g. `"50%"`, `"C"`. |

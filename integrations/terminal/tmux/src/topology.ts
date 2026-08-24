@@ -1,10 +1,11 @@
 import type { TmuxConfig, TmuxPopupScope } from "@station/config";
-import { normalizeObservedPath } from "@station/contracts";
+import { normalizeObservedPath, type TerminalTargetId } from "@station/contracts";
 import { stableName } from "@station/runtime";
 
 export type TmuxWorkbenchConfig = {
   topology: "workbench";
   workbenchSession: string;
+  workbenchSocketPath?: string;
   windowNaming: "project-branch";
   primaryAgentPane: boolean;
   popupWidth: string;
@@ -38,7 +39,7 @@ export const defaultTmuxWorkbenchSessionOptions: readonly TmuxSessionOption[] = 
 ];
 
 export function resolveTmuxWorkbenchConfig(config: TmuxConfig = {}): TmuxWorkbenchConfig {
-  return {
+  const resolved: TmuxWorkbenchConfig = {
     topology: config.topology ?? defaultTmuxWorkbenchConfig.topology,
     workbenchSession: config.workbenchSession ?? defaultTmuxWorkbenchConfig.workbenchSession,
     windowNaming: config.windowNaming ?? defaultTmuxWorkbenchConfig.windowNaming,
@@ -49,6 +50,10 @@ export function resolveTmuxWorkbenchConfig(config: TmuxConfig = {}): TmuxWorkben
     popupScope: config.popupScope ?? defaultTmuxWorkbenchConfig.popupScope,
     popupStatusBar: config.popupStatusBar ?? defaultTmuxWorkbenchConfig.popupStatusBar,
   };
+  if (config.workbenchSocketPath !== undefined) {
+    resolved.workbenchSocketPath = config.workbenchSocketPath;
+  }
+  return resolved;
 }
 
 export function tmuxSessionOptionArgs(sessionId: string, option: TmuxSessionOption): string[] {
@@ -65,7 +70,7 @@ export function buildWorkbenchWindowName(input: {
   worktreeId?: string;
   path?: string;
   forceHash?: boolean;
-}): string {
+}): TerminalTargetId {
   const identityPath = input.path === undefined ? "" : normalizeObservedPath(input.path);
   return stableName({
     profile: "tmux-window",
@@ -73,34 +78,6 @@ export function buildWorkbenchWindowName(input: {
     unique: ["tmux-window", input.projectId, input.worktreeId ?? "", identityPath, input.branch],
     hash: input.forceHash === true ? "always" : "auto",
   });
-}
-
-export function buildTmuxTargetId(input: {
-  sessionId: string;
-  windowId: string;
-  paneId: string;
-}): string {
-  return `tmux:${input.sessionId}:${input.windowId}:${input.paneId}`;
-}
-
-export function parseTmuxTargetId(targetId: string): {
-  sessionId: string;
-  windowId: string;
-  paneId: string;
-} {
-  const [provider, sessionId, windowId, paneId, ...extra] = targetId.split(":");
-  if (
-    provider !== "tmux" ||
-    sessionId === undefined ||
-    windowId === undefined ||
-    paneId === undefined
-  ) {
-    throw new Error(`Invalid tmux target id: ${targetId}`);
-  }
-  if (extra.length > 0) {
-    throw new Error(`Invalid tmux target id: ${targetId}`);
-  }
-  return { sessionId, windowId, paneId };
 }
 
 export function tmuxWindowTarget(input: { sessionId: string; windowNameOrId: string }): string {

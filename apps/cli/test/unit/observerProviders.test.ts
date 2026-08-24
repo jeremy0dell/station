@@ -109,6 +109,26 @@ describe("observer providers", () => {
     expect("terminalOperations" in registry).toBe(false);
   });
 
+  it("registers tmux placement explicitly while Station remains ordinary-only", () => {
+    const registry = createProviderRegistry({
+      ...config,
+      defaults: { ...config.defaults, terminal: "tmux" },
+      terminal: {
+        tmux: { workbenchSocketPath: "/tmp/station-workbench.sock" },
+      },
+      projects: config.projects.map((project) => ({
+        ...project,
+        defaults: { ...project.defaults, terminal: "tmux" },
+      })),
+    });
+
+    expect(registry.terminalPlacements.get("tmux")).toMatchObject({
+      id: "tmux",
+      supportedIntents: ["sibling", "detached"],
+    });
+    expect(registry.terminalPlacements.has("native")).toBe(false);
+  });
+
   it("registers OpenCode hook normalization at the CLI composition root", () => {
     const registry = createProviderRegistry(config);
 

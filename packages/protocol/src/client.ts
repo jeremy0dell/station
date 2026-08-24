@@ -10,6 +10,7 @@ import type {
   ProviderHookEvent,
   StationCommand,
   StationEvent,
+  TerminalCallerContextRequest,
 } from "@station/contracts";
 import { STATION_SCHEMA_VERSION, StationEventSchema } from "@station/contracts";
 import { Effect, isSafeError, runRuntimeBoundaryWithTimeout } from "@station/runtime";
@@ -123,6 +124,8 @@ export function createObserverClient(options: CreateObserverClientOptions): Obse
       requestProtocolMethod(options, requestId(), "session.recoveryInventory"),
     getSessionRecoveryAssessment: async () =>
       requestProtocolMethod(options, requestId(), "session.recoveryAssessment"),
+    getCurrentSessionContext: async (caller: TerminalCallerContextRequest) =>
+      requestProtocolMethod(options, requestId(), "session.current", caller),
     dispatch: async (command: StationCommand) =>
       requestProtocolMethod(options, requestId(), "command.dispatch", { command }),
     getCommand: async (commandId: CommandId) => {

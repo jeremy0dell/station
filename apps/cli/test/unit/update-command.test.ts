@@ -40,28 +40,25 @@ describe("stn update command", () => {
     expect(detectAndPlan).not.toHaveBeenCalled();
   });
 
-  it("emits report v3 with aggregate recovery facts without applying or crossing runtimes", async () => {
+  it("emits one current convergence report without applying or crossing runtimes", async () => {
     const fixture = probeFixture("installer-binary");
     const recovery = recoveryPreflightFixture();
     const commandRunner = vi.fn();
 
-    const result = await runUpdateCommand(
-      ["--dry-run", "--reap", "--no-handoff", "--json"],
-      commandOptions(),
-      {
-        probes: [fixture.probe],
-        commandRunner,
-        buildInfo: testBuildInfo,
-        recoveryPreflight: recovery.run,
-      },
-    );
+    const result = await runUpdateCommand(["--dry-run", "--reap", "--json"], commandOptions(), {
+      probes: [fixture.probe],
+      commandRunner,
+      buildInfo: testBuildInfo,
+      recoveryPreflight: recovery.run,
+    });
 
     expect(result).toMatchObject({
-      code: 0,
+      code: 1,
       output: {
-        schemaVersion: 3,
-        status: "planned",
-        recoveryPreflight: {
+        schemaVersion: 4,
+        kind: "preview",
+        plan: { outcome: "reap-required" },
+        initial: {
           boundary: {
             authorization: "none",
             actions: "not-included",
@@ -70,7 +67,7 @@ describe("stn update command", () => {
           hooks: [{ provider: "codex", status: "needs-repair" }],
           terminalDispositions: [
             {
-              terminalTargetId: "terminal-a",
+              terminalTargetId: "public-terminal-target-00000001",
               handoff: "non-preservable",
               reapRecovery: "non-resumable",
               reasons: ["session_non_resumable"],
@@ -92,7 +89,6 @@ describe("stn update command", () => {
 
   it("keeps a current-build dry-run reap non-mutating and textually unmistakable", async () => {
     const fixture = probeFixture("installer-binary", { planStatus: "current" });
-    const recovery = recoveryPreflightFixture();
     const commandRunner = vi.fn();
 
     const result = await runUpdateCommand(
@@ -102,14 +98,39 @@ describe("stn update command", () => {
         probes: [fixture.probe],
         commandRunner,
         buildInfo: testBuildInfo,
-        recoveryPreflight: recovery.run,
+        recoveryPreflight: previewPreflight("leave-in-place"),
       },
     );
 
     expect(result).toMatchObject({ code: 0, outputFormat: "text" });
-    expect(result.output).toContain("reapRecovery=NON-RESUMABLE");
-    expect(result.output).toContain("actions: not included (#640)");
-    expect(result.output).toContain("digest: not included (#640)");
+    expect(result.output).toContain("No actions executed");
+    expect(result.output).toContain("outcome: intentionally incomplete (--no-handoff)");
+    expect(result.output).toContain("recovery: evidence=complete; authorization=none");
+    expect(result.output).toContain("terminals: none");
+    expect(fixture.apply).not.toHaveBeenCalled();
+    expect(commandRunner).not.toHaveBeenCalled();
+  });
+
+  it("reports blocked convergence without calling mutating capabilities", async () => {
+    const fixture = probeFixture("installer-binary");
+    const buildInfo = vi.fn(testBuildInfo);
+    const commandRunner = vi.fn();
+    const recoveryPreflight = previewPreflight("blocked");
+    const result = await runUpdateCommand(["--dry-run", "--json"], commandOptions(), {
+      probes: [fixture.probe],
+      buildInfo,
+      commandRunner,
+      recoveryPreflight,
+    });
+
+    expect(result).toMatchObject({
+      code: 1,
+      output: { kind: "preview", plan: { outcome: "blocked" } },
+    });
+    expect(buildInfo).toHaveBeenCalledOnce();
+    expect(recoveryPreflight).toHaveBeenCalledWith(
+      expect.objectContaining({ currentBuildInfo: testBuildInfo() }),
+    );
     expect(fixture.apply).not.toHaveBeenCalled();
     expect(commandRunner).not.toHaveBeenCalled();
   });
@@ -139,7 +160,8 @@ describe("stn update command", () => {
       expect(result).toEqual({
         code: 0,
         output: {
-          schemaVersion: 3,
+          schemaVersion: 4,
+          kind: "result",
           channel: "installer-binary",
           status: "current",
           current: { version: "1.0.0" },
@@ -214,27 +236,16 @@ describe("stn update command", () => {
           commandRunner,
           buildInfo: testBuildInfo,
           hostDeps: liveHost.hostDeps,
+          recoveryPreflight: previewPreflight("converged"),
         },
       );
 
       expect(result).toMatchObject({
         code: 0,
         output: {
-          schemaVersion: 3,
-          status: "current",
-          steps: [
-            { id: "detect", status: "completed" },
-            { id: "plan", status: "completed" },
-            { id: "apply", status: "skipped" },
-            { id: "hook-reconciliation", status: "planned" },
-            { id: "observer-restart", status: "planned" },
-            {
-              id: "host-handoff",
-              status: "planned",
-              detail:
-                "The selected launcher would evaluate the active Host and preserve processes state if replacement is needed.",
-            },
-          ],
+          schemaVersion: 4,
+          kind: "preview",
+          plan: { outcome: "converged" },
         },
       });
       expect(fixture.apply).not.toHaveBeenCalled();
@@ -292,23 +303,17 @@ describe("stn update command", () => {
       probes: [fixture.probe],
       commandRunner,
       buildInfo: testBuildInfo,
+      recoveryPreflight: previewPreflight("absent"),
     });
 
     expect(result.code).toBe(0);
     expect(result.output).toMatchObject({
-      schemaVersion: 3,
+      schemaVersion: 4,
+      kind: "preview",
       channel: "installer-binary",
-      status: "planned",
       current: { version: "1.0.0" },
       target: { version: "1.1.0" },
-      steps: [
-        { id: "detect", status: "completed" },
-        { id: "plan", status: "completed" },
-        { id: "apply", status: "planned" },
-        { id: "hook-reconciliation", status: "planned" },
-        { id: "observer-restart", status: "planned" },
-        { id: "host-handoff", status: "skipped" },
-      ],
+      plan: { outcome: "actionable", phases: { artifactApplication: { action: "apply" } } },
     });
     expect(fixture.apply).not.toHaveBeenCalled();
     expect(commandRunner).not.toHaveBeenCalled();
@@ -331,27 +336,24 @@ describe("stn update command", () => {
           probes: [fixture.probe],
           hostDeps: liveHost.hostDeps,
           buildInfo: testBuildInfo,
+          recoveryPreflight: previewPreflight("absent"),
         },
       );
 
       expect(result.output).toMatchObject({
-        status: "planned",
-        steps: [
-          { id: "detect", status: "completed" },
-          { id: "plan", status: "completed" },
-          {
-            id: "apply",
-            status: "deferred",
-            command: ["/opt/npm", "install", "--global", "station@1.1.0"],
+        kind: "preview",
+        plan: {
+          outcome: "deferred",
+          phases: {
+            artifactApplication: {
+              action: "defer",
+              command: {
+                kind: "manager",
+                argv: ["/opt/npm", "install", "--global", "station@1.1.0"],
+              },
+            },
           },
-          { id: "hook-reconciliation", status: "skipped" },
-          { id: "observer-restart", status: "skipped" },
-          {
-            id: "host-handoff",
-            status: "skipped",
-            detail: "No live Host handoff is needed.",
-          },
-        ],
+        },
       });
       expect(fixture.apply).not.toHaveBeenCalled();
       expect(liveHost.clientFactory).not.toHaveBeenCalled();
@@ -367,23 +369,24 @@ describe("stn update command", () => {
     const result = await runUpdateCommand(
       ["--dry-run", "--drive-package-manager", "--json"],
       commandOptions(),
-      { probes: [fixture.probe], buildInfo: testBuildInfo },
+      {
+        probes: [fixture.probe],
+        buildInfo: testBuildInfo,
+        recoveryPreflight: previewPreflight("absent"),
+      },
     );
 
     expect(result.output).toMatchObject({
-      status: "planned",
-      steps: [
-        { id: "detect", status: "completed" },
-        { id: "plan", status: "completed" },
-        {
-          id: "apply",
-          status: "planned",
-          command: ["/opt/mise", "upgrade", "station"],
+      kind: "preview",
+      plan: {
+        outcome: "actionable",
+        phases: {
+          artifactApplication: {
+            action: "apply",
+            command: { kind: "manager", argv: ["/opt/mise", "upgrade", "station"] },
+          },
         },
-        { id: "hook-reconciliation", status: "planned" },
-        { id: "observer-restart", status: "planned" },
-        { id: "host-handoff", status: "skipped" },
-      ],
+      },
     });
     expect(fixture.apply).not.toHaveBeenCalled();
   });
@@ -505,7 +508,8 @@ describe("stn update command", () => {
     expect(result).toMatchObject({
       code: 1,
       output: {
-        schemaVersion: 3,
+        schemaVersion: 4,
+        kind: "result",
         status: "failed",
         hookReconciliation: {
           status: "post-write-doctor-failed",
@@ -930,12 +934,16 @@ describe("stn update command", () => {
 
   it("rejects manager driving for non-manager channels", async () => {
     const fixture = probeFixture("installer-binary");
+    const recoveryPreflight = previewPreflight("absent");
     await expect(
-      runUpdateCommand(["--drive-package-manager"], commandOptions(), {
+      runUpdateCommand(["--dry-run", "--drive-package-manager"], commandOptions(), {
         probes: [fixture.probe],
         buildInfo: testBuildInfo,
+        recoveryPreflight,
       }),
     ).rejects.toMatchObject({ code: "UPDATE_FLAG_INVALID" });
+    expect(recoveryPreflight).not.toHaveBeenCalled();
+    expect(fixture.apply).not.toHaveBeenCalled();
   });
 
   it("rejects unknown and duplicate flags before detection", async () => {
@@ -980,6 +988,86 @@ function commandOptions() {
 
 function liveHostCommandOptions(config: StationConfig) {
   return { config, configPath: "/tmp/config.toml", cliEntryPath: "/repo/apps/cli/dist/main.js" };
+}
+
+function previewPreflight(kind: "absent" | "converged" | "blocked" | "leave-in-place") {
+  return vi.fn(
+    async ({
+      installed,
+      target,
+      currentBuildInfo,
+    }: Parameters<NonNullable<Parameters<typeof runUpdateCommand>[2]["recoveryPreflight"]>>[0]) => {
+      const hooks =
+        kind === "blocked"
+          ? [
+              {
+                provider: "codex" as const,
+                status: "ownership-conflict" as const,
+                ownership: "different-owner" as const,
+                followUp: { action: "run-explicit-takeover" as const },
+              },
+            ]
+          : [{ provider: "codex" as const, status: "healthy" as const }];
+      if (kind === "absent" || kind === "blocked") {
+        return {
+          schemaVersion: 1 as const,
+          boundary: {
+            authorization: "none" as const,
+            actions: "not-included" as const,
+            digest: "not-included" as const,
+          },
+          installed,
+          target,
+          observer: { status: "absent" as const },
+          host: { status: "absent" as const },
+          hookProviderIds: ["codex" as const],
+          hooks,
+          terminalDispositions: [],
+          evidenceComplete: false,
+        };
+      }
+      return {
+        schemaVersion: 1 as const,
+        boundary: {
+          authorization: "none" as const,
+          actions: "not-included" as const,
+          digest: "not-included" as const,
+        },
+        installed,
+        target,
+        observer: {
+          status: "exact" as const,
+          buildVersion: `1.0.0+station.${currentBuildInfo.buildIdentity}`,
+          relation: "matching-target" as const,
+          health: "healthy" as const,
+          recovery: {
+            status: "assessed" as const,
+            assessment: {
+              schemaVersion: 1 as const,
+              resumeEnabled: true,
+              providerCapabilities: [],
+              sessions: [],
+            },
+          },
+        },
+        host: {
+          status: "inspected" as const,
+          buildVersion: kind === "leave-in-place" ? "0.9.0" : target.version,
+          buildIdentity:
+            kind === "leave-in-place" ? "b".repeat(64) : currentBuildInfo.buildIdentity,
+          protocolVersion: HOST_PROTOCOL_VERSION,
+          relation:
+            kind === "leave-in-place" ? ("different" as const) : ("matching-target" as const),
+          compatibility: kind === "leave-in-place" ? ("replace" as const) : ("reuse" as const),
+          terminals: [],
+        },
+        hookProviderIds: ["codex" as const],
+        hooks,
+        terminalDispositions: [],
+        evidenceComplete: true,
+      };
+    },
+  );
 }
 
 function recoveryPreflightFixture() {

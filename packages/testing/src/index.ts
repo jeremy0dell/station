@@ -9,21 +9,28 @@ import type {
   HarnessRunObservation,
   HarnessStopRequest,
   HarnessStopResult,
+  OpenPlacedWorkspaceRequest,
+  OpenPlacedWorkspaceResult,
   OpenWorkspaceRequest,
   OpenWorkspaceResult,
   ProviderHealth,
   ProviderId,
   ProviderProjectConfig,
+  ReleasePlacedTerminalTargetRequest,
   RemoveWorktreeRequest,
   RemoveWorktreeResult,
   RepositoryRemote,
   SafeError,
+  TerminalCallerContextRequest,
   TerminalCapabilities,
   TerminalCapture,
   TerminalFocusContext,
   TerminalHarnessBinding,
   TerminalLaunchProcessRequest,
   TerminalLaunchProcessResult,
+  TerminalPlacementPort,
+  TerminalPlacementRequest,
+  TerminalPlacementSource,
   TerminalProvider,
   TerminalState,
   TerminalTargetId,
@@ -46,6 +53,9 @@ type FakeTerminalProviderMethod =
   | "health"
   | "listTargets"
   | "openWorkspace"
+  | "validatePlacement"
+  | "openPlacedWorkspace"
+  | "releasePlacedTarget"
   | "launchProcess"
   | "focusTarget"
   | "closeTarget"
@@ -124,6 +134,7 @@ export type FakeTerminalProviderOptions = {
   capabilities?: Partial<TerminalCapabilities>;
   failures?: FakeProviderFailures<FakeTerminalProviderMethod>;
   onLaunch?: (request: TerminalLaunchProcessRequest) => void | Promise<void>;
+  currentPlacement?: TerminalPlacementSource;
 };
 
 export type FakeHarnessProviderOptions = {
@@ -410,6 +421,7 @@ function withFakeRegistrationIdentity(worktree: WorktreeObservation): WorktreeOb
 
 export class FakeTerminalProvider implements TerminalProvider {
   readonly id: ProviderId;
+  readonly placement: FakeTerminalPlacementPort;
 
   readonly #now: FakeProviderClock | undefined;
   readonly #targets: TerminalTargetObservation[];
@@ -433,6 +445,12 @@ export class FakeTerminalProvider implements TerminalProvider {
     };
     this.#failures = options.failures;
     this.#onLaunch = options.onLaunch;
+    this.placement = new FakeTerminalPlacementPort(this, {
+      ...(options.currentPlacement === undefined
+        ? {}
+        : { currentPlacement: options.currentPlacement }),
+      ...(options.failures === undefined ? {} : { failures: options.failures }),
+    });
   }
 
   capabilities(): TerminalCapabilities {
@@ -544,6 +562,109 @@ export class FakeTerminalProvider implements TerminalProvider {
       focusContexts: [...this.#focusContexts],
       closed: [...this.#closed],
     };
+  }
+}
+
+type FakePlacedBinding = {
+  sessionId: string;
+  generation: string;
+  bindingToken: string;
+};
+
+export class FakeTerminalPlacementPort implements TerminalPlacementPort {
+  readonly id: ProviderId;
+  readonly supportedIntents = ["sibling", "detached"] as const;
+
+  readonly #terminal: FakeTerminalProvider;
+  readonly #currentPlacement: TerminalPlacementSource | undefined;
+  readonly #failures: FakeProviderFailures<FakeTerminalProviderMethod> | undefined;
+  readonly #bindings = new Map<TerminalTargetId, FakePlacedBinding>();
+  #sequence = 0;
+
+  constructor(
+    terminal: FakeTerminalProvider,
+    options: {
+      currentPlacement?: TerminalPlacementSource;
+      failures?: FakeProviderFailures<FakeTerminalProviderMethod>;
+    } = {},
+  ) {
+    this.id = terminal.id;
+    this.#terminal = terminal;
+    this.#currentPlacement = options.currentPlacement;
+    this.#failures = options.failures;
+  }
+
+  async resolveCurrentPlacement(
+    _caller: TerminalCallerContextRequest,
+  ): Promise<TerminalPlacementSource | undefined> {
+    return this.#currentPlacement;
+  }
+
+  async validatePlacement(placement: TerminalPlacementRequest): Promise<void> {
+    maybeThrow(this.#failures, "validatePlacement");
+    if (placement.intent === "sibling" && placement.source.provider !== this.id) {
+      throw {
+        tag: "TerminalProviderError",
+        code: "TERMINAL_PLACEMENT_PROVIDER_MISMATCH",
+        message: "The fake placement source belongs to another provider.",
+        provider: this.id,
+      } satisfies SafeError;
+    }
+  }
+
+  async openPlacedWorkspace(
+    request: OpenPlacedWorkspaceRequest,
+  ): Promise<OpenPlacedWorkspaceResult> {
+    maybeThrow(this.#failures, "openPlacedWorkspace");
+    await this.validatePlacement(request.placement);
+    const opened = await this.#terminal.openWorkspace(request);
+    const generation =
+      request.placement.intent === "sibling"
+        ? request.placement.source.generation
+        : `fake-generation-${++this.#sequence}`;
+    const bindingToken = `fake-placement-binding-${this.#sequence}`;
+    const sessionId = request.sessionId ?? `fake-session-${this.#sequence}`;
+    this.#bindings.set(opened.target.targetId, { sessionId, generation, bindingToken });
+    const placement: OpenPlacedWorkspaceResult["placement"] =
+      request.placement.intent === "sibling"
+        ? {
+            intent: "sibling",
+            provider: this.id,
+            targetId: opened.target.targetId,
+            generation,
+            presentation: "presented",
+          }
+        : {
+            intent: "detached",
+            provider: this.id,
+            targetId: opened.target.targetId,
+            generation,
+            presentation: "detached",
+          };
+    return { ...opened, placement, bindingToken };
+  }
+
+  async releasePlacedTarget(
+    request: ReleasePlacedTerminalTargetRequest,
+  ): Promise<{ status: "released" | "already-absent" }> {
+    maybeThrow(this.#failures, "releasePlacedTarget");
+    const binding = this.#bindings.get(request.targetId);
+    if (binding === undefined) return { status: "already-absent" };
+    if (
+      binding.sessionId !== request.sessionId ||
+      binding.generation !== request.generation ||
+      binding.bindingToken !== request.bindingToken
+    ) {
+      throw {
+        tag: "TerminalProviderError",
+        code: "TERMINAL_CLEANUP_UNCERTAIN",
+        message: "The fake placed target no longer matches cleanup authority.",
+        provider: this.id,
+      } satisfies SafeError;
+    }
+    this.#bindings.delete(request.targetId);
+    await this.#terminal.closeTarget(request.targetId);
+    return { status: "released" };
   }
 }
 

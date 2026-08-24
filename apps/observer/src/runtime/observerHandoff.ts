@@ -54,7 +54,7 @@ const HandoffCandidateSchema = z
   })
   .strict();
 
-/** Returns whether an Observer argv selector is valid legacy SemVer or an exact Station build. */
+/** Returns whether an Observer argv selector is valid unadorned SemVer or an exact Station build. */
 export function observerBuildSelectorIsValid(selector: string): boolean {
   const build = parseStationObserverBuildVersion(selector);
   return (
@@ -64,6 +64,13 @@ export function observerBuildSelectorIsValid(selector: string): boolean {
 }
 
 export type ObserverHandoffCandidate = z.infer<typeof HandoffCandidateSchema>;
+
+/** Selector ordering only; it never authorizes process replacement or lifecycle mutation. */
+export type ObserverBuildPrecedenceResult =
+  | { outcome: "exact-build" }
+  | { outcome: "candidate-precedes" }
+  | { outcome: "incumbent-precedes" }
+  | { outcome: "refused"; reason: string };
 
 export type ObserverIncumbentDecision =
   | { action: "attach"; reason: "exact-build" | "incumbent-wins" }
@@ -134,55 +141,51 @@ type ObserverHandoffDeps = {
 /**
  * POLICY
  *
- * Selects one stable Observer build winner without process or transport I/O,
- * refusing ambiguous same-version handoffs instead of silently reusing them.
+ * Orders Observer build selectors without process or lifecycle authority,
+ * preserving singleton SemVer, immutable-build, and public-version-line rules.
  */
-export function classifyObserverIncumbent(input: {
-  candidate: ObserverHandoffCandidate;
-  incumbent: Pick<ObserverHealth, "version" | "startedAt" | "pid">;
-}): ObserverIncumbentDecision {
-  const candidate = HandoffCandidateSchema.safeParse(input.candidate);
-  if (!candidate.success) {
-    return { action: "refuse", reason: "The candidate Observer identity is invalid." };
-  }
-  const candidateBuild = parseStationObserverBuildVersion(candidate.data.version);
+export function classifyObserverBuildPrecedence(input: {
+  candidateSelector: string;
+  incumbentSelector: string | undefined;
+}): ObserverBuildPrecedenceResult {
+  const candidateBuild = parseStationObserverBuildVersion(input.candidateSelector);
   if (
     candidateBuild.buildIdentity === undefined &&
-    hasStationObserverBuildIdentityMarker(candidate.data.version)
+    hasStationObserverBuildIdentityMarker(input.candidateSelector)
   ) {
-    return { action: "refuse", reason: "The candidate Observer build identity is invalid." };
+    return { outcome: "refused", reason: "The candidate Observer build identity is invalid." };
   }
   const candidateVersion = SemVerSchema.safeParse(candidateBuild.version);
   if (!candidateVersion.success) {
-    return { action: "refuse", reason: "The candidate Observer version is not valid SemVer." };
+    return { outcome: "refused", reason: "The candidate Observer version is not valid SemVer." };
   }
-  if (input.incumbent.version === undefined) {
-    return { action: "refuse", reason: "The incumbent Observer did not report a version." };
+  if (input.incumbentSelector === undefined) {
+    return { outcome: "refused", reason: "The incumbent Observer did not report a version." };
   }
-  const incumbentBuild = parseStationObserverBuildVersion(input.incumbent.version);
+  const incumbentBuild = parseStationObserverBuildVersion(input.incumbentSelector);
   if (
     incumbentBuild.buildIdentity === undefined &&
-    hasStationObserverBuildIdentityMarker(input.incumbent.version)
+    hasStationObserverBuildIdentityMarker(input.incumbentSelector)
   ) {
-    return { action: "refuse", reason: "The incumbent Observer build identity is invalid." };
+    return { outcome: "refused", reason: "The incumbent Observer build identity is invalid." };
   }
   const incumbentVersion = SemVerSchema.safeParse(incumbentBuild.version);
   if (!incumbentVersion.success) {
-    return { action: "refuse", reason: "The incumbent Observer version is not valid SemVer." };
+    return { outcome: "refused", reason: "The incumbent Observer version is not valid SemVer." };
   }
-  if (candidate.data.version === input.incumbent.version) {
+  if (input.candidateSelector === input.incumbentSelector) {
     if (candidateBuild.buildIdentity === undefined) {
       return {
-        action: "refuse",
+        outcome: "refused",
         reason: "Same-version Observer reuse requires immutable build identity.",
       };
     }
-    return { action: "attach", reason: "exact-build" };
+    return { outcome: "exact-build" };
   }
   if (candidateBuild.version === incumbentBuild.version) {
     if (candidateBuild.buildIdentity === undefined || incumbentBuild.buildIdentity === undefined) {
       return {
-        action: "refuse",
+        outcome: "refused",
         reason: "Same-version Observer handoff requires build identity from both contenders.",
       };
     }
@@ -192,7 +195,7 @@ export function classifyObserverIncumbent(input: {
     );
     if (identityOrder <= 0) {
       return {
-        action: "refuse",
+        outcome: "refused",
         reason: "A different build of this Station version already owns the Observer socket.",
       };
     }
@@ -202,7 +205,7 @@ export function classifyObserverIncumbent(input: {
     incumbentBuild.version,
   );
   const precedence = resetPrecedence ?? compareSemVer(candidateVersion.data, incumbentVersion.data);
-  if (precedence < 0) return { action: "attach", reason: "incumbent-wins" };
+  if (precedence < 0) return { outcome: "incumbent-precedes" };
   if (precedence === 0) {
     // Display-version strings are stable across the CLI parent and Observer child;
     // their process timestamps and PIDs are not the same contender identity.
@@ -210,7 +213,37 @@ export function classifyObserverIncumbent(input: {
       candidateVersion.data.version,
       incumbentVersion.data.version,
     );
-    if (buildOrder < 0) return { action: "attach", reason: "incumbent-wins" };
+    if (buildOrder < 0) return { outcome: "incumbent-precedes" };
+  }
+  return { outcome: "candidate-precedes" };
+}
+
+/**
+ * POLICY
+ *
+ * Maps shared build precedence to singleton attach, replace, or refusal,
+ * requiring complete contender identity before admitting replacement.
+ */
+export function classifyObserverIncumbent(input: {
+  candidate: ObserverHandoffCandidate;
+  incumbent: Pick<ObserverHealth, "version" | "startedAt" | "pid">;
+}): ObserverIncumbentDecision {
+  const candidate = HandoffCandidateSchema.safeParse(input.candidate);
+  if (!candidate.success) {
+    return { action: "refuse", reason: "The candidate Observer identity is invalid." };
+  }
+  const precedence = classifyObserverBuildPrecedence({
+    candidateSelector: candidate.data.version,
+    incumbentSelector: input.incumbent.version,
+  });
+  if (precedence.outcome === "exact-build") {
+    return { action: "attach", reason: "exact-build" };
+  }
+  if (precedence.outcome === "incumbent-precedes") {
+    return { action: "attach", reason: "incumbent-wins" };
+  }
+  if (precedence.outcome === "refused") {
+    return { action: "refuse", reason: precedence.reason };
   }
   const incumbentStartedAt = TimestampSchema.safeParse(input.incumbent.startedAt);
   if (!incumbentStartedAt.success || input.incumbent.pid === undefined) {

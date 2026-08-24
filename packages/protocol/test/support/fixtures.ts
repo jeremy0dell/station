@@ -44,6 +44,16 @@ export function createFakeObserverApi(
       providerCapabilities: [],
       sessions: [],
     }),
+    getCurrentSessionContext: async () => ({
+      source: {
+        provider: "fake-terminal",
+        targetId: "target_1",
+        generation: "generation_1",
+        authorityId: "authority_1",
+        expiresAt: protocolTestNow,
+      },
+      presentation: "presented",
+    }),
     subscribe: () => stream([]),
     dispatch: async () => ({ commandId: "cmd_1", accepted: true, status: "accepted" }),
     getCommand: async () => undefined,

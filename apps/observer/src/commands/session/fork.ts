@@ -11,7 +11,11 @@ import type { ObserverEventBus } from "../../runtime/eventBus.js";
 import type { StationLogger } from "../../stationLogger.js";
 import { assertCommandType } from "../assertCommand.js";
 import type { HarnessLaunchPreflight } from "../harnessLaunchPreflight.js";
-import { resolveHarnessProviderOrThrow, resolveTerminalProviderOrThrow } from "../providers.js";
+import {
+  resolveHarnessProviderOrThrow,
+  resolveTerminalPlacementPortOrThrow,
+  resolveTerminalProviderOrThrow,
+} from "../providers.js";
 import type { CommandHandler } from "../queue.js";
 import { reconcileAndPublish } from "../reconcile.js";
 import { ensureAgentWorkspace } from "../terminalOperations.js";
@@ -20,6 +24,7 @@ import {
   defaultSessionCommandIdFactory,
   discardSessionSeedBestEffort,
   findProjectOrThrow,
+  isTerminalCleanupUncertain,
   publishSessionCreated,
   rememberedHarnessProviderForWorktree,
   removeWorktreeBestEffort,
@@ -49,7 +54,9 @@ export type CreateSessionForkHandlerOptions = {
  *
  * Resolves and preflights the selected harness, forks an existing worktree onto an internal
  * branch, and atomically seeds its title with the source session's current Group when requested
- * before launching a fresh agent; cleanup retires only fork-owned state after verified rollback.
+ * before launching a fresh agent with pre-mutation placement authorization and
+ * provider-side revalidation immediately before terminal mutation; cleanup
+ * retires only fork-owned state after verified rollback.
  */
 export function createSessionForkHandler(options: CreateSessionForkHandlerOptions): CommandHandler {
   const idFactory = {
@@ -63,8 +70,13 @@ export function createSessionForkHandler(options: CreateSessionForkHandlerOption
 
     const payload = context.command.payload;
     const project = findProjectOrThrow(options.getProjects(), payload.projectId);
-    const terminalProviderId = payload.terminal?.provider ?? project.defaults.terminal;
+    const terminalProviderId = payload.terminal.provider;
     const terminal = resolveTerminalProviderOrThrow(options.providers, terminalProviderId);
+    const placementPort = resolveTerminalPlacementPortOrThrow(
+      options.providers,
+      terminalProviderId,
+      payload.placement,
+    );
 
     const snapshot = options.core.getSnapshot();
     const sourceRow = snapshot.rows.find((candidate) => candidate.id === payload.sourceWorktreeId);
@@ -117,6 +129,19 @@ export function createSessionForkHandler(options: CreateSessionForkHandlerOption
     let groupProvenance: SessionSeedGroupProvenance | undefined;
 
     try {
+      await runProviderMutation(
+        {
+          ...runtime,
+          operation: `provider.${placementPort.id}.validatePlacement`,
+          fallback: {
+            tag: "TerminalProviderError",
+            code: "TERMINAL_PLACEMENT_REJECTED",
+            message: "The requested terminal placement is no longer valid.",
+            provider: placementPort.id,
+          },
+        },
+        () => placementPort.validatePlacement(payload.placement),
+      );
       const worktree = await runProviderMutation(
         {
           ...runtime,
@@ -162,9 +187,9 @@ export function createSessionForkHandler(options: CreateSessionForkHandlerOption
         worktree,
         sessionId,
         harnessOptions: payload.harness,
-        layout: payload.terminal?.layout ?? project.defaults.layout,
-        focus: payload.terminal?.focus,
-        origin: payload.terminal?.origin,
+        layout: payload.terminal.layout ?? project.defaults.layout,
+        placementPort,
+        placement: payload.placement,
         initialPrompt: payload.initialPrompt,
         context,
         clock: options.clock,
@@ -172,6 +197,25 @@ export function createSessionForkHandler(options: CreateSessionForkHandlerOption
       });
       throwIfAborted(context.signal);
     } catch (error) {
+      if (isTerminalCleanupUncertain(error)) {
+        try {
+          await reconcileAndPublish({
+            core: options.core,
+            eventBus: options.eventBus,
+            clock: options.clock,
+            reason: "command:session.fork:cleanup-uncertain",
+            trace: context.trace,
+          });
+        } catch (reconcileError) {
+          await options.logger?.warn("Observer could not publish retained cleanup state.", {
+            commandId: context.commandId,
+            traceId: context.trace.traceId,
+            operation: "session.fork.cleanup-uncertain.reconcile",
+            error: reconcileError,
+          });
+        }
+        throw error;
+      }
       const worktreeRemoved =
         createdWorktree === undefined
           ? false
@@ -186,7 +230,7 @@ export function createSessionForkHandler(options: CreateSessionForkHandlerOption
               logger: options.logger,
               clock: options.clock,
             });
-      if (sessionSeeded) {
+      if (sessionSeeded && worktreeRemoved) {
         await discardSessionSeedBestEffort({
           persistence: options.persistence,
           sessionId,
