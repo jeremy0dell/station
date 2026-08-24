@@ -82,6 +82,74 @@ describe("deriveUpdateConvergencePlan", () => {
 
   it.each([
     {
+      name: "idle",
+      terminals: [],
+      dispositions: [],
+      expected: ["actionable", "no-op", "replace-idle"],
+    },
+    {
+      name: "bridge-backed",
+      terminals: [terminal("bridge-releasable")],
+      dispositions: [disposition("preservable", "recoverable")],
+      expected: ["actionable", "preserve-via-handoff", "handoff"],
+    },
+    {
+      name: "non-bridge",
+      terminals: [terminal("non-releasable")],
+      dispositions: [disposition("non-preservable", "recoverable")],
+      expected: ["reap-required", "reap-required", "await-reap"],
+    },
+  ])("treats same-display immutable Host drift as replacement-required for $name inventory", ({
+    terminals,
+    dispositions,
+    expected,
+  }) => {
+    const result = derive(
+      input({
+        preflight: preflight({
+          observer: matchingObserver(),
+          host: sameDisplayDriftHost(terminals),
+          terminalDispositions: dispositions,
+        }),
+      }),
+    );
+    expect([
+      result.outcome,
+      result.phases.terminalConvergence.action,
+      result.phases.hostConvergence.action,
+    ]).toEqual(expected);
+  });
+
+  it.each([
+    {
+      name: "different display",
+      host: { ...differentHost([]), compatibility: "reuse" as const },
+    },
+    {
+      name: "missing same-display identity",
+      host: {
+        status: "inspected" as const,
+        buildVersion: artifact.version,
+        protocolVersion: 8,
+        relation: "different" as const,
+        compatibility: "reuse" as const,
+        terminals: [],
+      },
+    },
+    {
+      name: "self-contradictory exact identity",
+      host: { ...sameDisplayDriftHost([]), buildIdentity },
+    },
+  ])("blocks contradictory reuse/different Host evidence with $name", ({ host }) => {
+    const result = derive(input({ preflight: preflight({ observer: matchingObserver(), host }) }));
+    expect(result.phases.hostConvergence).toEqual({
+      action: "blocked",
+      reason: "evidence-contradictory",
+    });
+  });
+
+  it.each([
+    {
       name: "candidate precedes",
       observer: differentObserver("1.0.0", incumbentBuildIdentity),
       expected: { outcome: "actionable", action: "restart", precedence: "candidate-precedes" },
@@ -326,6 +394,192 @@ describe("deriveUpdateConvergencePlan", () => {
   });
 
   it.each([
+    { name: "old idle Host", host: differentHost([]) },
+    {
+      name: "unknown Host inventory",
+      host: {
+        status: "unknown" as const,
+        reason: "inventory-failed" as const,
+        error: safeError("HOST_UNKNOWN"),
+      },
+    },
+    { name: "unknown Host relation", host: { ...differentHost([]), relation: "unknown" as const } },
+    {
+      name: "protocol-refused Host",
+      host: { ...differentHost([]), compatibility: "refuse" as const },
+    },
+  ])("leaves $name intentionally incomplete when handoff is disabled", ({ host }) => {
+    const result = derive(
+      input({
+        handoff: { action: "leave-in-place" },
+        preflight: preflight({ observer: matchingObserver(), host }),
+      }),
+    );
+    expect(result.outcome).toBe("intentionally-incomplete");
+    expect(result.phases.terminalConvergence.action).toBe("leave-in-place");
+    expect(result.phases.hostConvergence.action).toBe("leave-in-place");
+  });
+
+  it("honors no-handoff before future-target Host comparison", () => {
+    const result = derive(
+      input({
+        handoff: { action: "leave-in-place" },
+        targetRuntime: { status: "not-yet-provable" },
+        preflight: preflight({
+          installed: { version: "0.9.0", revision: "revision-0" },
+          observer: differentObserver("0.9.0"),
+          host: differentHost([]),
+        }),
+      }),
+    );
+    expect(result.outcome).toBe("intentionally-incomplete");
+    expect(result.phases.hostConvergence.action).toBe("leave-in-place");
+  });
+
+  it.each([
+    { name: "absent", host: { status: "absent" as const }, expected: "absent" },
+    { name: "exact matching", host: matchingHost(), expected: "matching-target" },
+  ])("keeps an $name Host no-op when handoff is disabled", ({ host, expected }) => {
+    const result = derive(
+      input({
+        handoff: { action: "leave-in-place" },
+        preflight: preflight({ observer: matchingObserver(), host }),
+      }),
+    );
+    expect(result.phases.hostConvergence).toEqual({ action: "no-op", reason: expected });
+  });
+
+  it("keeps Observer uncertainty blocking when no-handoff makes Host evidence irrelevant", () => {
+    const result = derive(
+      input({
+        handoff: { action: "leave-in-place" },
+        preflight: preflight({
+          observer: {
+            status: "unknown",
+            reason: "identity-unavailable",
+            error: safeError("OBSERVER_UNKNOWN"),
+          },
+          host: {
+            status: "unknown",
+            reason: "inventory-failed",
+            error: safeError("HOST_UNKNOWN"),
+          },
+        }),
+      }),
+    );
+    expect(result.outcome).toBe("blocked");
+    expect(result.phases.observerConvergence.action).toBe("blocked");
+    expect(result.phases.hostConvergence.action).toBe("leave-in-place");
+  });
+
+  it.each([
+    {
+      name: "matching Host",
+      host: { ...matchingHost(), terminals: [{ ...terminal("bridge-releasable"), alive: false }] },
+      disposition: disposition("preservable", "recoverable"),
+    },
+    {
+      name: "different bridge Host",
+      host: differentHost([{ ...terminal("bridge-releasable"), alive: false }]),
+      disposition: disposition("preservable", "recoverable"),
+    },
+    {
+      name: "different non-bridge Host",
+      host: differentHost([{ ...terminal("non-releasable"), alive: false }]),
+      disposition: disposition("non-preservable", "recoverable"),
+    },
+  ])("blocks dead entries in an inspected $name inventory", ({
+    host,
+    disposition: terminalDisposition,
+  }) => {
+    const result = derive(
+      input({
+        handoff: { action: "leave-in-place" },
+        preflight: preflight({
+          observer: matchingObserver(),
+          host,
+          terminalDispositions: [terminalDisposition],
+        }),
+      }),
+    );
+    expect(result.outcome).toBe("blocked");
+    expect(result.phases.hostConvergence).toEqual({
+      action: "blocked",
+      reason: "evidence-contradictory",
+    });
+  });
+
+  it.each([
+    {
+      name: "unknown Observer",
+      evidence: preflight({
+        installed: { version: "0.9.0", revision: "revision-0" },
+        observer: {
+          status: "unknown",
+          reason: "inspection-failed",
+          error: safeError("OBSERVER_UNKNOWN"),
+        },
+      }),
+      expected: ["blocked", "blocked", "no-op", "no-op"],
+    },
+    {
+      name: "unknown Host",
+      evidence: preflight({
+        installed: { version: "0.9.0", revision: "revision-0" },
+        observer: differentObserver("0.9.0"),
+        host: {
+          status: "unknown",
+          reason: "inventory-failed",
+          error: safeError("HOST_UNKNOWN"),
+        },
+      }),
+      expected: ["blocked", "reinspect", "blocked", "blocked"],
+    },
+    {
+      name: "proven-different non-bridge Host",
+      evidence: preflight({
+        installed: { version: "0.9.0", revision: "revision-0" },
+        observer: differentObserver("0.9.0"),
+        host: differentHost([terminal("non-releasable")]),
+        terminalDispositions: [disposition("non-preservable", "recoverable")],
+      }),
+      expected: ["reap-required", "reinspect", "reap-required", "await-reap"],
+    },
+    {
+      name: "proven-different bridge Host",
+      evidence: preflight({
+        installed: { version: "0.9.0", revision: "revision-0" },
+        observer: differentObserver("0.9.0"),
+        host: differentHost([terminal("bridge-releasable")]),
+        terminalDispositions: [disposition("preservable", "recoverable")],
+      }),
+      expected: ["actionable", "reinspect", "reinspect", "reinspect"],
+    },
+    {
+      name: "proven-different idle Host",
+      evidence: preflight({
+        installed: { version: "0.9.0", revision: "revision-0" },
+        observer: differentObserver("0.9.0"),
+        host: differentHost([]),
+      }),
+      expected: ["actionable", "reinspect", "reinspect", "reinspect"],
+    },
+  ])("retains conclusive $name evidence before a future target build is provable", ({
+    evidence,
+    expected,
+  }) => {
+    const result = derive(
+      input({ preflight: evidence, targetRuntime: { status: "not-yet-provable" } }),
+    );
+    expect([
+      result.outcome,
+      result.phases.observerConvergence.action,
+      result.phases.terminalConvergence.action,
+      result.phases.hostConvergence.action,
+    ]).toEqual(expected);
+  });
+
+  it.each([
     {
       name: "unknown runtime evidence",
       evidence: preflight({
@@ -383,7 +637,7 @@ describe("deriveUpdateConvergencePlan", () => {
     expect(result.phases.artifactApplication.action).toBe("no-op");
   });
 
-  it("fails closed on contradictory selected-runtime, Observer, Host, and terminal facts", () => {
+  it("fails closed on contradictory selected-runtime and Host facts", () => {
     const invalidTarget = derive(
       input({
         targetRuntime: {
@@ -409,20 +663,6 @@ describe("deriveUpdateConvergencePlan", () => {
       }),
     );
     expect(contradictoryHost.phases.hostConvergence).toMatchObject({
-      action: "blocked",
-      reason: "evidence-contradictory",
-    });
-
-    const contradictoryTerminal = derive(
-      input({
-        preflight: preflight({
-          observer: matchingObserver(),
-          host: differentHost([terminal("bridge-releasable")]),
-          terminalDispositions: [disposition("non-preservable", "non-resumable")],
-        }),
-      }),
-    );
-    expect(contradictoryTerminal.phases.terminalConvergence).toMatchObject({
       action: "blocked",
       reason: "evidence-contradictory",
     });
@@ -537,6 +777,20 @@ function differentHost(
     protocolVersion: 8,
     relation: "different",
     compatibility: "replace",
+    terminals,
+  };
+}
+
+function sameDisplayDriftHost(
+  terminals: Extract<UpdateReapRecoveryPreflight["host"], { status: "inspected" }>["terminals"],
+): Extract<UpdateReapRecoveryPreflight["host"], { status: "inspected" }> {
+  return {
+    status: "inspected",
+    buildVersion: artifact.version,
+    buildIdentity: incumbentBuildIdentity,
+    protocolVersion: 8,
+    relation: "different",
+    compatibility: "reuse",
     terminals,
   };
 }

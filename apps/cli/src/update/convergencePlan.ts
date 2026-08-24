@@ -130,15 +130,18 @@ function observerDecision(
   input: UpdateConvergencePlanningInput,
   runtimeValid: boolean,
 ): Phases["observerConvergence"] {
+  if (!runtimeValid) return { action: "blocked", reason: "selected-target-identity-invalid" };
+  const observer = input.preflight.observer;
+  if (observer.status === "unknown") {
+    return { action: "blocked", reason: "evidence-unknown" };
+  }
+  if (observer.status === "exact" && observer.relation === "unknown") {
+    return { action: "blocked", reason: "evidence-unknown" };
+  }
   if (input.targetRuntime.status === "not-yet-provable") {
     return { action: "reinspect", reason: "target-build-not-yet-provable" };
   }
-  if (!runtimeValid) return { action: "blocked", reason: "selected-target-identity-invalid" };
-  const observer = input.preflight.observer;
   if (observer.status === "absent") return { action: "start", reason: "absent" };
-  if (observer.status === "unknown" || observer.relation === "unknown") {
-    return { action: "blocked", reason: "evidence-unknown" };
-  }
   const precedence = classifyObserverBuildPrecedence({
     candidateSelector: input.targetRuntime.observerSelector,
     incumbentSelector: observer.buildVersion,
@@ -176,56 +179,71 @@ function hostDecision(input: UpdateConvergencePlanningInput, runtimeValid: boole
     terminalReason: PhaseWithAction<Phases["terminalConvergence"], "blocked">["reason"],
   ): HostPhases =>
     pair({ action: "blocked", reason: terminalReason }, { action: "blocked", reason: hostReason });
-  if (input.targetRuntime.status === "not-yet-provable")
-    return pair(
-      { action: "reinspect", reason: "target-build-not-yet-provable" },
-      { action: "reinspect", reason: "target-build-not-yet-provable" },
-    );
   if (!runtimeValid) return blocked("evidence-contradictory", "evidence-contradictory");
   if (host.status === "absent")
     return pair({ action: "no-op", reason: "no-terminals" }, { action: "no-op", reason: "absent" });
-  if (host.status === "unknown") return blocked("inventory-incomplete", "inventory-incomplete");
-  if (host.relation === "unknown") return blocked("identity-incomplete", "inventory-incomplete");
-  if (host.compatibility === "refuse") return blocked("protocol-refused", "inventory-incomplete");
-  if (host.relation === "matching-target") {
-    if (
-      host.compatibility !== "reuse" ||
-      host.buildVersion !== input.preflight.target.version ||
-      host.buildIdentity !== input.targetRuntime.buildIdentity
-    )
-      return blocked("evidence-contradictory", "evidence-contradictory");
+  if (host.status === "inspected" && host.terminals.some((terminal) => !terminal.alive)) {
+    return blocked("evidence-contradictory", "evidence-contradictory");
+  }
+  if (host.status === "inspected" && hostRelationContradictsTarget(input, host)) {
+    return blocked("evidence-contradictory", "evidence-contradictory");
+  }
+  if (
+    host.status === "inspected" &&
+    input.targetRuntime.status === "known" &&
+    host.relation === "matching-target" &&
+    host.compatibility === "reuse"
+  ) {
     return pair(
       { action: "no-op", reason: "matching-host" },
       { action: "no-op", reason: "matching-target" },
     );
   }
-  if (
-    host.compatibility !== "replace" ||
-    (host.buildVersion === input.preflight.target.version &&
-      host.buildIdentity === input.targetRuntime.buildIdentity)
-  ) {
+  if (input.handoff.action === "leave-in-place") {
+    return pair(
+      { action: "leave-in-place", reason: "handoff-disabled" },
+      { action: "leave-in-place", reason: "handoff-disabled" },
+    );
+  }
+  if (host.status === "unknown") return blocked("inventory-incomplete", "inventory-incomplete");
+  if (host.relation === "unknown") return blocked("identity-incomplete", "inventory-incomplete");
+  if (input.targetRuntime.status === "not-yet-provable") {
+    if (
+      host.relation !== "different" ||
+      host.buildVersion === undefined ||
+      host.buildVersion === input.preflight.target.version
+    ) {
+      return pair(
+        { action: "reinspect", reason: "target-build-not-yet-provable" },
+        { action: "reinspect", reason: "target-build-not-yet-provable" },
+      );
+    }
+    if (terminals.some(({ handoff }) => handoff === "unknown")) {
+      return blocked("inventory-incomplete", "handoff-support-unknown");
+    }
+    const nonPreservable = terminals.filter(({ handoff }) => handoff === "non-preservable");
+    if (nonPreservable.some(({ reapRecovery }) => reapRecovery === "unknown")) {
+      return blocked("recovery-incomplete", "recovery-incomplete");
+    }
+    if (nonPreservable.length > 0) {
+      return pair(
+        { action: "reap-required", reason: "non-preservable-terminals" },
+        { action: "await-reap", reason: "non-preservable-terminals" },
+      );
+    }
+    return pair(
+      { action: "reinspect", reason: "target-build-not-yet-provable" },
+      { action: "reinspect", reason: "target-build-not-yet-provable" },
+    );
+  }
+  if (host.compatibility === "refuse") return blocked("protocol-refused", "inventory-incomplete");
+  if (host.relation !== "different" || !hostReplacementIsSupported(input, host)) {
     return blocked("evidence-contradictory", "evidence-contradictory");
   }
-  const handoffMatches = terminals.every((terminal, index) => {
-    const support = host.terminals[index]?.handoffSupport;
-    const expected =
-      support === "bridge-releasable"
-        ? "preservable"
-        : support === "non-releasable"
-          ? "non-preservable"
-          : "unknown";
-    return terminal.handoff === expected;
-  });
-  if (!handoffMatches) return blocked("evidence-contradictory", "evidence-contradictory");
   if (terminals.length === 0)
     return pair(
       { action: "no-op", reason: "no-terminals" },
       { action: "replace-idle", reason: "different-idle-host" },
-    );
-  if (input.handoff.action === "leave-in-place")
-    return pair(
-      { action: "leave-in-place", reason: "handoff-disabled" },
-      { action: "leave-in-place", reason: "handoff-disabled" },
     );
   if (terminals.some(({ handoff }) => handoff === "unknown")) {
     return blocked("inventory-incomplete", "handoff-support-unknown");
@@ -243,6 +261,32 @@ function hostDecision(input: UpdateConvergencePlanningInput, runtimeValid: boole
   return pair(
     { action: "preserve-via-handoff", reason: "bridge-preservation", fidelity },
     { action: "handoff", reason: "busy-different-host", fidelity },
+  );
+}
+
+function hostRelationContradictsTarget(
+  input: UpdateConvergencePlanningInput,
+  host: Extract<UpdateConvergencePlanningInput["preflight"]["host"], { status: "inspected" }>,
+): boolean {
+  if (input.targetRuntime.status === "not-yet-provable" || host.relation === "unknown")
+    return false;
+  const displayMatches = host.buildVersion === input.preflight.target.version;
+  const identityMatches = host.buildIdentity === input.targetRuntime.buildIdentity;
+  if (host.relation === "matching-target") return !displayMatches || !identityMatches;
+  return identityMatches || (displayMatches && host.buildIdentity === undefined);
+}
+
+function hostReplacementIsSupported(
+  input: UpdateConvergencePlanningInput,
+  host: Extract<UpdateConvergencePlanningInput["preflight"]["host"], { status: "inspected" }>,
+): boolean {
+  if (input.targetRuntime.status !== "known") return false;
+  if (host.compatibility === "replace") return true;
+  return (
+    host.compatibility === "reuse" &&
+    host.buildVersion === input.preflight.target.version &&
+    host.buildIdentity !== undefined &&
+    host.buildIdentity !== input.targetRuntime.buildIdentity
   );
 }
 

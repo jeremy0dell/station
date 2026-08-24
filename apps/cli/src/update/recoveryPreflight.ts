@@ -1,5 +1,6 @@
 import {
   compareCodeUnitStrings,
+  compareUpdateReapTerminalIdentity,
   type ProviderHookHealth,
   ProviderHookHealthSchema,
   type ProviderId,
@@ -101,7 +102,7 @@ async function inspectHost(
   try {
     const host = await ports.inspectHost(artifacts);
     return host.status === "inspected"
-      ? { ...host, terminals: [...host.terminals].sort(compareTerminalIdentity) }
+      ? { ...host, terminals: [...host.terminals].sort(compareUpdateReapTerminalIdentity) }
       : host;
   } catch (error) {
     return {
@@ -214,18 +215,7 @@ function terminalDispositionsFor(
         reasons: Array.from(new Set(reasons)).sort(compareCodeUnitStrings),
       };
     })
-    .sort(compareTerminalIdentity);
-}
-
-function compareTerminalIdentity(
-  left: Pick<UpdateReapTerminalDisposition, "terminalTargetId" | "ptyId" | "ptyInstanceId">,
-  right: Pick<UpdateReapTerminalDisposition, "terminalTargetId" | "ptyId" | "ptyInstanceId">,
-): number {
-  return (
-    compareCodeUnitStrings(left.terminalTargetId, right.terminalTargetId) ||
-    compareCodeUnitStrings(left.ptyId, right.ptyId) ||
-    compareCodeUnitStrings(left.ptyInstanceId, right.ptyInstanceId)
-  );
+    .sort(compareUpdateReapTerminalIdentity);
 }
 
 export function redactedPreflightError(

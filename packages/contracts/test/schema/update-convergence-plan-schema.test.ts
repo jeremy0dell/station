@@ -122,7 +122,13 @@ describe("UpdateConvergencePlanSchema", () => {
           action: "preserve-via-handoff",
           reason: "bridge-preservation",
           fidelity: "processes",
-          terminals: [terminalFact({ handoff: "preservable", reapRecovery: "unknown" })],
+          terminals: [
+            terminalFact({
+              handoff: "preservable",
+              reapRecovery: "unknown",
+              reasons: ["session_recovery_unknown"],
+            }),
+          ],
         },
         hostConvergence: {
           action: "handoff",
@@ -234,6 +240,64 @@ describe("UpdateConvergencePlanSchema", () => {
             action: "reap-required",
             reason: "non-preservable-terminals",
             terminals: [terminalFact("2"), terminalFact("1")],
+          },
+        },
+      }).success,
+    ).toBe(false);
+  });
+
+  it("uses canonical physical PTY identity for terminal uniqueness", () => {
+    const duplicatePhysicalPty = [terminalFact(), terminalFact({ sessionId: "session-different" })];
+    expect(
+      UpdateConvergencePlanSchema.safeParse(
+        convergedPlan({
+          outcome: "reap-required",
+          phases: {
+            ...convergedPlan().phases,
+            terminalConvergence: {
+              action: "reap-required",
+              reason: "non-preservable-terminals",
+              terminals: duplicatePhysicalPty,
+            },
+          },
+        }),
+      ).success,
+    ).toBe(false);
+
+    const separatorCollision = [
+      terminalFact({
+        terminalTargetId: "a",
+        ptyId: "b\0c",
+        ptyInstanceId: "d",
+        sessionId: "session-a",
+      }),
+      terminalFact({
+        terminalTargetId: "a\0b",
+        ptyId: "c",
+        ptyInstanceId: "d",
+        sessionId: "session-b",
+      }),
+    ];
+    const plan = convergedPlan({
+      outcome: "reap-required",
+      phases: {
+        ...convergedPlan().phases,
+        terminalConvergence: {
+          action: "reap-required",
+          reason: "non-preservable-terminals",
+          terminals: separatorCollision,
+        },
+      },
+    });
+    expect(UpdateConvergencePlanSchema.safeParse(plan).success).toBe(true);
+    expect(
+      UpdateConvergencePlanSchema.safeParse({
+        ...plan,
+        phases: {
+          ...plan.phases,
+          terminalConvergence: {
+            ...plan.phases.terminalConvergence,
+            terminals: [...separatorCollision].reverse(),
           },
         },
       }).success,

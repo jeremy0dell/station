@@ -5,6 +5,7 @@ import { compareCodeUnitStrings } from "./shared.js";
 import { UpdateChannelIdSchema, UpdateCommandArgvSchema } from "./update.js";
 import { UpdateArtifactSchema } from "./updateArtifact.js";
 import {
+  compareUpdateReapTerminalIdentity,
   UpdateReapRecoveryPreflightSchema,
   UpdateReapTerminalDispositionSchema,
 } from "./updateRecoveryPreflight.js";
@@ -231,12 +232,13 @@ export const UpdateConvergencePlanSchema = z
     const providers = plan.phases.hookReconciliation.providers.map((entry) => entry.provider);
     if (!strictlySorted(providers))
       addOrderIssue(context, ["phases", "hookReconciliation", "providers"], "Hook decisions");
-    const terminalKeys = plan.phases.terminalConvergence.terminals.map((terminal) =>
-      [terminal.terminalTargetId, terminal.ptyId, terminal.ptyInstanceId, terminal.sessionId].join(
-        "\0",
-      ),
-    );
-    if (!strictlySorted(terminalKeys))
+    const terminals = plan.phases.terminalConvergence.terminals;
+    if (
+      terminals.some((terminal, index) => {
+        const previous = terminals[index - 1];
+        return previous !== undefined && compareUpdateReapTerminalIdentity(previous, terminal) >= 0;
+      })
+    )
       addOrderIssue(context, ["phases", "terminalConvergence", "terminals"], "Terminal facts");
     const terminalFidelity =
       plan.phases.terminalConvergence.action === "preserve-via-handoff"
