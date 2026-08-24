@@ -29,24 +29,29 @@ describe("registered stn update command", () => {
         apply,
       }),
     };
+    const build = {
+      compiled: false,
+      version: "1.0.0",
+      buildIdentity: "a".repeat(64),
+    };
+    const buildInfo = vi.fn(() => build);
+    const recoveryPreflight = vi.fn(emptyPreflight);
 
     const result = await runCli(["--config", configPath, "update", "--dry-run", "--json"], {
       updateDeps: {
         probes: [probe],
-        buildInfo: () => ({
-          compiled: false,
-          version: "1.0.0",
-          buildIdentity: "a".repeat(64),
-        }),
+        buildInfo,
+        recoveryPreflight,
       },
     });
 
     expect(result).toMatchObject({
       code: 0,
       output: {
-        schemaVersion: 3,
+        schemaVersion: 4,
+        kind: "preview",
         channel: "installer-binary",
-        status: "planned",
+        plan: { outcome: "actionable" },
       },
     });
     expect(apply).not.toHaveBeenCalled();
@@ -56,34 +61,17 @@ describe("registered stn update command", () => {
       {
         updateDeps: {
           probes: [probe],
-          buildInfo: () => ({
-            compiled: false,
-            version: "1.0.0",
-            buildIdentity: "a".repeat(64),
-          }),
-          recoveryPreflight: async ({ installed, target }) => ({
-            schemaVersion: 1,
-            boundary: {
-              authorization: "none",
-              actions: "not-included",
-              digest: "not-included",
-            },
-            installed,
-            target,
-            observer: { status: "absent" },
-            host: { status: "absent" },
-            hooks: [],
-            terminalDispositions: [],
-            evidenceComplete: false,
-          }),
+          buildInfo,
+          recoveryPreflight,
         },
       },
     );
     expect(reapResult).toMatchObject({
       code: 0,
       output: {
-        schemaVersion: 3,
-        recoveryPreflight: {
+        schemaVersion: 4,
+        kind: "preview",
+        initial: {
           boundary: {
             authorization: "none",
             actions: "not-included",
@@ -95,6 +83,11 @@ describe("registered stn update command", () => {
         },
       },
     });
+    expect(buildInfo).toHaveBeenCalledTimes(2);
+    expect(recoveryPreflight).toHaveBeenCalledTimes(2);
+    for (const [input] of recoveryPreflight.mock.calls) {
+      expect(input.currentBuildInfo).toBe(build);
+    }
     expect(apply).not.toHaveBeenCalled();
   });
 
@@ -107,3 +100,28 @@ describe("registered stn update command", () => {
     expect(result.output).toContain("--no-handoff");
   });
 });
+
+async function emptyPreflight({
+  installed,
+  target,
+}: {
+  installed: { version: string; revision?: string };
+  target: { version: string; revision?: string };
+}) {
+  return {
+    schemaVersion: 1 as const,
+    boundary: {
+      authorization: "none" as const,
+      actions: "not-included" as const,
+      digest: "not-included" as const,
+    },
+    installed,
+    target,
+    observer: { status: "absent" as const },
+    host: { status: "absent" as const },
+    hookProviderIds: [],
+    hooks: [],
+    terminalDispositions: [],
+    evidenceComplete: false,
+  };
+}

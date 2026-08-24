@@ -442,6 +442,63 @@ async function runScenario(input) {
     if (input.invocation === "tmux") {
       tmuxServer = await startTmuxServer(tmuxPath, env, tmuxTempDir, input.name, processIdentities);
     }
+    const dryRunStateInput = {
+      installedBinary,
+      installDir,
+      dataHome,
+      configPath,
+      stateDir,
+      socketPath,
+      hostSocketPath,
+      observerBuildVersion: incumbentObserver.version,
+      hostBuildVersion: input.options.incumbentVersion,
+      busyHost: input.busyHost,
+    };
+    const beforeDryRun = await captureDryRunState(dryRunStateInput);
+    const dryRunResult =
+      input.invocation === "external"
+        ? await run(installedBinary, ["update", "--dry-run", "--json"], {
+            env,
+            timeoutMs: childTimeoutMs,
+            allowedExitCodes: [0, 1],
+          })
+        : await runInTmuxPane(
+            tmuxServer,
+            "dry-run",
+            [installedBinary, "update", "--dry-run", "--json"],
+            scenarioRoot,
+          );
+    const dryRunReport = UpdateCommandReportSchema.parse(
+      parseJson(dryRunResult.stdout, `${input.name} compiled dry-run report`),
+    );
+    assertDryUpdateReport(dryRunReport, input);
+    const expectedDryRunCode = ["blocked", "reap-required"].includes(dryRunReport.plan.outcome)
+      ? 1
+      : 0;
+    assertEqual(dryRunResult.code, expectedDryRunCode, `${input.name} dry-run outcome exit code`);
+    assertDeepEqual(
+      await captureDryRunState(dryRunStateInput),
+      beforeDryRun,
+      `${input.name} dry-run persistent and runtime state`,
+    );
+    assertEqual(
+      await processIdentityMatches(processIdentities.get("incumbent-observer")),
+      true,
+      `${input.name} dry run preserves incumbent Observer`,
+    );
+    if (input.busyHost) {
+      assertEqual(
+        await processIdentityMatches(processIdentities.get("incumbent-host")),
+        true,
+        `${input.name} dry run preserves incumbent Host`,
+      );
+      assertEqual(
+        await processIdentityMatches(processIdentities.get("pty-payload")),
+        true,
+        `${input.name} dry run preserves PTY payload`,
+      );
+    }
+
     const expectedUpdateCode =
       input.busyHost && input.options.busyHostOutcome === "preserved-refusal" ? 1 : 0;
     const updateResult =
@@ -886,6 +943,96 @@ async function assertTargetAssetsUnchanged(target) {
   assertDeepEqual(current, target.assetSnapshots, `${target.mode} target asset identity`);
 }
 
+async function captureDryRunState(input) {
+  const observer = createObserverClient({
+    socketPath: input.socketPath,
+    timeoutMs: 5000,
+    expectedBuildVersion: input.observerBuildVersion,
+  });
+  const observerHealth = await observer.health();
+  const observerIdentity = {
+    schemaVersion: observerHealth.schemaVersion,
+    pid: observerHealth.pid,
+    startedAt: observerHealth.startedAt,
+    version: observerHealth.version,
+    socketPath: observerHealth.socketPath,
+    stateDir: observerHealth.stateDir,
+  };
+  const recoveryInventory = await observer.getSessionRecoveryInventory();
+  let host;
+  if (input.busyHost) {
+    const client = createStationHostClient({
+      socketPath: input.hostSocketPath,
+      timeoutMs: 3000,
+      expectedBuildVersion: input.hostBuildVersion,
+    });
+    try {
+      host = { health: await client.health(), inventory: await client.list() };
+    } finally {
+      client.dispose();
+    }
+  }
+  return {
+    artifactAndReceipt: await snapshotEntries([
+      input.installedBinary,
+      join(input.installDir, ".station-install-receipt"),
+      join(input.dataHome, "station", "LICENSE"),
+    ]),
+    configAndHooks: await snapshotEntries([
+      input.configPath,
+      join(input.installDir, "stn-ingress"),
+      join(input.installDir, "stn-tmux-popup"),
+    ]),
+    observer: {
+      files: await snapshotEntries([
+        join(input.stateDir, "observer.sqlite"),
+        join(input.stateDir, "observer.sqlite-wal"),
+        join(input.stateDir, "diagnostics"),
+        join(input.stateDir, "spool", "hooks"),
+        input.socketPath,
+      ]),
+      holders: readUnixSocketHolderPids(input.socketPath),
+      identity: observerIdentity,
+      recoveryInventory,
+    },
+    host: {
+      socket: await snapshotEntry(input.hostSocketPath),
+      holders: input.busyHost ? readUnixSocketHolderPids(input.hostSocketPath) : [],
+      evidence: host,
+    },
+  };
+}
+
+async function snapshotEntries(paths) {
+  return Promise.all(paths.map(snapshotEntry));
+}
+
+async function snapshotEntry(path) {
+  let metadata;
+  try {
+    metadata = await lstat(path, { bigint: true });
+  } catch (error) {
+    if (error?.code === "ENOENT") return { path, kind: "absent" };
+    throw error;
+  }
+  const common = {
+    path,
+    device: String(metadata.dev),
+    inode: String(metadata.ino),
+    mode: String(metadata.mode),
+  };
+  if (metadata.isFile()) {
+    return { ...common, kind: "file", size: String(metadata.size), sha256: await sha256File(path) };
+  }
+  if (metadata.isSymbolicLink())
+    return { ...common, kind: "symlink", target: await readlink(path) };
+  if (metadata.isDirectory()) {
+    return { ...common, kind: "directory", entries: (await readdir(path)).sort() };
+  }
+  if (metadata.isSocket()) return { ...common, kind: "socket" };
+  return { ...common, kind: "other", size: String(metadata.size) };
+}
+
 async function writeReleaseTransport(input) {
   const transportDir = join(input.scenarioRoot, "transport");
   await mkdir(transportDir, { recursive: true, mode: 0o700 });
@@ -958,6 +1105,8 @@ async function assertExactTransportRequests(transportDir, input) {
     .sort();
   const expected = [
     releaseApiTagUrl(`v${input.options.incumbentVersion}`),
+    releaseApiTagUrl(`v${input.options.incumbentVersion}`),
+    "https://api.github.com/repos/jeremy0dell/station/releases?per_page=100&page=1",
     "https://api.github.com/repos/jeremy0dell/station/releases?per_page=100&page=1",
     releaseDownloadUrl(input.target.tag, "install.sh"),
     releaseDownloadUrl(input.target.tag, "SHA256SUMS"),
@@ -1370,12 +1519,8 @@ async function verifyBareLaunches(input) {
 }
 
 function assertUpdateReport(report, input, installedBinary, configPath) {
-  assertEqual(report.schemaVersion, 3, `${input.name} update schema`);
-  assertEqual(
-    report.recoveryPreflight,
-    undefined,
-    `${input.name} ordinary update omits reap recovery preflight`,
-  );
+  assertEqual(report.schemaVersion, 4, `${input.name} update schema`);
+  assertEqual(report.kind, "result", `${input.name} update result kind`);
   assertEqual(report.channel, "installer-binary", `${input.name} update channel`);
   const refusal = input.busyHost && input.options.busyHostOutcome === "preserved-refusal";
   assertEqual(report.status, refusal ? "failed" : "updated", `${input.name} update status`);
@@ -1431,6 +1576,17 @@ function assertUpdateReport(report, input, installedBinary, configPath) {
     ],
     `${input.name} exact update step outcomes`,
   );
+}
+
+function assertDryUpdateReport(report, input) {
+  assertEqual(report.schemaVersion, 4, `${input.name} dry-run schema`);
+  assertEqual(report.kind, "preview", `${input.name} dry-run kind`);
+  assertEqual(report.channel, "installer-binary", `${input.name} dry-run channel`);
+  assertEqual(report.current?.version, input.options.incumbentVersion, `${input.name} dry current`);
+  assertEqual(report.target?.version, input.target.version, `${input.name} dry target`);
+  assertEqual(report.initial?.boundary.authorization, "none", `${input.name} dry authorization`);
+  assertEqual(report.plan?.authorization, "none", `${input.name} dry plan authorization`);
+  assertEqual("recoveryPreflight" in report, false, `${input.name} dry omits nested preflight`);
 }
 
 function assertVisibleRefusal(result, label) {

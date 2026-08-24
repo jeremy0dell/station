@@ -267,15 +267,17 @@ stn update --dry-run --reap
 stn update --dry-run --reap --json
 ```
 
-`--dry-run --reap` adds one read-only recovery preflight to the update report.
-It captures the installed and target builds, one live Observer graph snapshot,
+Every `--dry-run`, with or without `--reap`, includes one read-only initial
+aggregate and one canonical live-convergence plan in the update report. The
+aggregate captures the installed and target builds, one live Observer graph snapshot,
 one retained-session inventory query through the Observer API, exact
 Station-owned terminal evidence, Host handoff support, provider resume
 capability and deterministic handle selection, and provider-neutral hook
 health. Every affected terminal and retained session receives a disposition;
-non-resumable consequences are called out explicitly. The preflight does not
+non-resumable consequences are called out explicitly. The dry run does not
 install, signal, restart, reconcile hooks, resume sessions, authorize actions,
-or produce an execution digest. `--reap` without `--dry-run` is rejected before
+or produce an execution digest. `--reap` does not authorize recovery and produces
+the same single report; without `--dry-run` it is rejected before
 update detection or mutation; destructive execution remains a later command
 boundary.
 

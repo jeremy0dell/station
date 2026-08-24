@@ -11,15 +11,22 @@ import { createInstallerBinaryUpdateChannel } from "./installerBinaryUpdate.js";
 import { createMiseUpdateChannel } from "./miseUpdate.js";
 import { createNpmGlobalUpdateChannel } from "./npmGlobalUpdate.js";
 
+/**
+ * COMPOSITION ROOT
+ *
+ * Chooses concrete channel adapters. A supplied build is the caller's invocation capture;
+ * otherwise this standalone composition captures one value for every build-aware probe.
+ */
 export function createDefaultUpdateProbes(
   options: { cliEntryPath: string; env?: CliEnv },
   deps: {
-    buildInfo?: () => StationBuildInfo;
+    buildInfo?: StationBuildInfo;
     executablePath?: string;
     commandRunner?: ExternalCommandRunner;
   } = {},
 ): UpdateChannelProbe[] {
-  const buildInfo = deps.buildInfo ?? stationBuildInfo;
+  const capturedBuildInfo = deps.buildInfo ?? stationBuildInfo();
+  const buildInfo = () => capturedBuildInfo;
   const runtimePath = deps.executablePath ?? process.execPath;
   const shared = {
     runtimePath,

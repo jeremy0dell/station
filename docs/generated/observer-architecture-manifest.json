@@ -13722,7 +13722,7 @@
       "declaration": "runUpdateCommand",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Selects one owned install channel and optionally aggregates non-authorizing recovery facts. Apply mode then preflights Host preservation, reconciles hooks through the selected launcher, and crosses runtimes; recovery preflight itself exposes no mutation capability.",
+      "purpose": "Selects one owned install channel from one captured build identity. Preview validates manager intent, aggregates read-only runtime facts, and returns one canonical plan before mutation. Apply mode retains Host preservation, hook reconciliation, and runtime crossover behavior.",
       "dependencies": [
         {
           "path": "apps/cli/src/commands/update/scenario.ts",
@@ -13732,8 +13732,29 @@
           "edgeKind": "runtime"
         },
         {
+          "path": "apps/cli/src/update/convergencePlan.ts",
+          "declaration": "deriveUpdateConvergencePlan",
+          "kind": "function",
+          "role": "POLICY",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/update/updateInstallationIntent.ts",
+          "declaration": "resolveUpdateInstallationIntent",
+          "kind": "function",
+          "role": "POLICY",
+          "edgeKind": "runtime"
+        },
+        {
           "path": "packages/contracts/src/providerHooks.ts",
           "declaration": "providerHookReconciliationSucceeded",
+          "kind": "function",
+          "role": "POLICY",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "packages/contracts/src/updateReport.ts",
+          "declaration": "projectPublicUpdateReport",
           "kind": "function",
           "role": "POLICY",
           "edgeKind": "runtime"
@@ -13745,7 +13766,7 @@
       "declaration": "resolveUpdateScenario",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Resolves the selected update path and preflights default Host preservation before mutation.",
+      "purpose": "Resolves the non-dry update path and preflights default Host preservation before mutation.",
       "dependencies": [
         {
           "path": "apps/cli/src/commands/host/index.ts",
@@ -14517,6 +14538,50 @@
       ]
     },
     {
+      "path": "apps/cli/src/update/defaultUpdateProbes.ts",
+      "declaration": "createDefaultUpdateProbes",
+      "kind": "function",
+      "role": "COMPOSITION ROOT",
+      "purpose": "Chooses concrete channel adapters. A supplied build is the caller's invocation capture; otherwise this standalone composition captures one value for every build-aware probe.",
+      "dependencies": [
+        {
+          "path": "apps/cli/src/update/devCheckoutUpdate.ts",
+          "declaration": "createDevCheckoutUpdateChannel",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/update/homebrewUpdate.ts",
+          "declaration": "createHomebrewUpdateChannel",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/update/installerBinaryUpdate.ts",
+          "declaration": "createInstallerBinaryUpdateChannel",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/update/miseUpdate.ts",
+          "declaration": "createMiseUpdateChannel",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/update/npmGlobalUpdate.ts",
+          "declaration": "createNpmGlobalUpdateChannel",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
       "path": "apps/cli/src/update/devCheckoutUpdate.ts",
       "declaration": "createDevCheckoutUpdateChannel",
       "kind": "function",
@@ -14624,7 +14689,7 @@
       "declaration": "createUpdateRecoveryPreflightPorts",
       "kind": "function",
       "role": "COMPOSITION ROOT",
-      "purpose": "Binds recovery preflight to read-only local process evidence, Observer protocol queries, strict Host inventory, and the provider-neutral hook-health use case. No lifecycle or repair capability is exposed through these ports.",
+      "purpose": "Binds recovery preflight to read-only local process evidence, Observer protocol queries, strict Host inventory, and the provider-neutral hook-health use case. Both runtime selectors derive from one composition-captured build identity; no lifecycle or repair capability is exposed.",
       "dependencies": [
         {
           "path": "apps/cli/src/commands/host/index.ts",
@@ -14698,6 +14763,14 @@
       "kind": "interface",
       "role": "DRIVEN PORT",
       "purpose": "Defines one install owner's typed detect, plan, apply, and optional adapter-owned recovery lifecycle.",
+      "dependencies": []
+    },
+    {
+      "path": "apps/cli/src/update/updateInstallationIntent.ts",
+      "declaration": "resolveUpdateInstallationIntent",
+      "kind": "function",
+      "role": "POLICY",
+      "purpose": "Resolves package-manager ownership intent shared by preview planning and non-dry execution.",
       "dependencies": []
     },
     {
@@ -16899,6 +16972,14 @@
       "kind": "interface",
       "role": "DRIVEN PORT",
       "purpose": "Locates provider-owned files required to recover one exact native execution without exposing provider storage conventions to migration orchestration.",
+      "dependencies": []
+    },
+    {
+      "path": "packages/contracts/src/updateReport.ts",
+      "declaration": "projectPublicUpdateReport",
+      "kind": "function",
+      "role": "POLICY",
+      "purpose": "Projects the six structural local identities into one ephemeral update-report namespace.",
       "dependencies": []
     },
     {

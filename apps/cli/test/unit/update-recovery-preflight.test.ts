@@ -6,7 +6,6 @@ import type {
 } from "@station/contracts";
 import { describe, expect, it, vi } from "vitest";
 import {
-  renderUpdateRecoveryPreflight,
   runUpdateRecoveryPreflight,
   type UpdateRecoveryPreflightPorts,
 } from "../../src/update/recoveryPreflight";
@@ -40,7 +39,6 @@ describe("runUpdateRecoveryPreflight", () => {
       evidenceComplete: false,
     });
     expect(readHookHealth).toHaveBeenCalledOnce();
-    expect(renderUpdateRecoveryPreflight(result)).toContain("sessions:\n  unknown");
   });
 
   it("settles, sorts, and composes every terminal with retained-session recovery", async () => {
@@ -96,12 +94,6 @@ describe("runUpdateRecoveryPreflight", () => {
       },
     ]);
     expect(result.evidenceComplete).toBe(true);
-    const text = renderUpdateRecoveryPreflight(result);
-    expect(text).toContain("reapRecovery=NON-RESUMABLE");
-    expect(text).toContain("session-z: NON-RESUMABLE");
-    expect(text).toContain("handle: selected eligible=1 rejected=0");
-    expect(text).toContain("actions: not included (#640)");
-    expect(text).not.toContain("/private/worktree");
   });
 
   it("reports every throwing source with redacted SafeErrors in one pass", async () => {
@@ -249,7 +241,7 @@ describe("runUpdateRecoveryPreflight", () => {
     expect(result.evidenceComplete).toBe(false);
   });
 
-  it("uses code-unit ordering and escapes terminal control characters in text", async () => {
+  it("uses code-unit ordering for provider and terminal evidence", async () => {
     const injectedId = "terminal\n\u001b[31m";
     const result = await runUpdateRecoveryPreflight({
       installed: { version: "1.0.0", revision: "revision\n\u001b]8;;bad" },
@@ -273,10 +265,6 @@ describe("runUpdateRecoveryPreflight", () => {
       "a",
       injectedId,
     ]);
-    const text = renderUpdateRecoveryPreflight(result);
-    expect(text).toContain("revision\\u000a\\u001b]8;;bad");
-    expect(text).toContain("terminal\\u000a\\u001b[31m");
-    expect(text).not.toContain(injectedId);
   });
 });
 
