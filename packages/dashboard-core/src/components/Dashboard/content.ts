@@ -83,11 +83,11 @@ export function fleetCountsLabel(
     counts.sessions,
     "session",
   )} · ${counts.agents} ${plural(counts.agents, "agent")}`;
-  if (full.length <= maxWidth) {
+  if (stringWidth(full) <= maxWidth) {
     return full;
   }
   const compact = `${counts.projects} · ${counts.sessions} · ${counts.agents}`;
-  return compact.length <= maxWidth ? compact : "";
+  return stringWidth(compact) <= maxWidth ? compact : "";
 }
 
 export function projectHeaderLabelParts(
