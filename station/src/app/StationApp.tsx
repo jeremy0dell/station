@@ -94,14 +94,15 @@ export function StationApp({
         automations={automations}
       />
       <StationToast store={store} />
-      {/* Floats at the top-right above everything; only its own hitbox captures
-          mouse events, so clicks elsewhere reach the panes underneath. */}
+      {/* The launcher is redundant while its overlay is open and would otherwise
+          obscure the overlay's title and content on a short terminal. */}
       <StationButton
         store={store}
         dashboardState={dashboardState}
         clientState={clientState}
         dispatchMouse={dispatchMouse}
         island={island}
+        visible={!overlayVisible}
       />
     </box>
   );
