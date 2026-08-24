@@ -708,14 +708,14 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
  [6] x batch-export                              opencode  exited                             #8 ✓
  [7] ⠋ provider-hooks                            opencode  working                    +32 -8 #16 …
  [8] ○ trace-bundle                              opencode  idle                         +1 -1 #4 ✓
-
- ▼ scripts  2 sessions · 2 agents                                      [shell] [quick session] [▾]
- [9] ○ api-cache         │ needs attention                                  [ copy ][ dismiss ] │1
- [a] ? metadata-refresh  │ Worktrunk failed to remove the selected checkout because the main    │0
-                         │ worktree cannot be removed while Station is running there.           │
- ▼ empty-project  0 sessi│ Open a different linked checkout, select the session again, and      │]
- no sessions yet · [ + ad│ retry after confirming the worktree path and branch. | trace         │
-                         │ trace_worktree_remove_123 | diagnostic diag_worktree_remove_456      │
+                         ┌──────────────────────────────────────────────────────────────────────┐
+ ▼ scripts  2 sessions · │ needs attention                                  [ copy ][ dismiss ] │]
+ [9] ○ api-cache         │ Worktrunk failed to remove the selected checkout because the main    │1
+ [a] ? metadata-refresh  │ worktree cannot be removed while Station is running there.           │0
+                         │ Open a different linked checkout, select the session again, and      │
+ ▼ empty-project  0 sessi│ retry after confirming the worktree path and branch. | trace         │]
+ no sessions yet · [ + ad│ trace_worktree_remove_123 | diagnostic diag_worktree_remove_456      │
+                         └──────────────────────────────────────────────────────────────────────┘
 ──────────────────────────────────────────────────────────────────────────────────────────────────
 ↵ activate  N new  ⇥ next  / filter  X delete  ? help  Esc:dismiss  Q:close
 "
@@ -730,21 +730,21 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0
  [1] ○ cli-help-man        idle
  [2] - docs-cleanup        no agent
  [3] ○ pty-buffer          idle
- [4] + session-resume      starting
- [5] ⠋ station-overlay     working
-  │ needs attention        [copy][x] │
- ▼│ Worktrunk failed to remove the   │]
- [│ selected checkout because the    │
+ [┌──────────────────────────────────┐
+ [│ needs attention        [copy][x] │
+  │ Worktrunk failed to remove the   │
+ ▼│ selected checkout because the    │]
  [│ main worktree cannot be removed  │
  [│ while Station is running there.  │
-  │ Open a different linked          │
- ▼│ checkout, select the session     │]
- [│ again, and retry after           │
+ [│ Open a different linked          │
+  │ checkout, select the session     │
+ ▼│ again, and retry after           │]
  [│ confirming the worktree path     │
-  │ and branch. | trace              │
- ▼│ trace_worktree_remove_123 |      │]
- n│ diagnostic                       │
-  │ diag_worktree_remove_456         │
+ [│ and branch. | trace              │
+  │ trace_worktree_remove_123 |      │
+ ▼│ diagnostic                       │]
+ n│ diag_worktree_remove_456         │
+  └──────────────────────────────────┘
 ───────────────────────────────────────
 Esc:dismiss  Q:close
 "

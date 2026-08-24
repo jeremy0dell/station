@@ -23,6 +23,11 @@ const NOTICE: ClientNotice = {
   traceId: "trace_worktree_remove_123",
   diagnosticId: "diag_worktree_remove_456",
 };
+const COMMAND_TIMEOUT_NOTICE: ClientNotice = {
+  kind: "error",
+  message: "The Station timed out while waiting for command completion.",
+  traceId: "trace_command_timeout_123",
+};
 const COPY_TEXT = [
   "needs attention",
   NOTICE.message,
@@ -37,6 +42,25 @@ afterEach(() => {
 });
 
 describe("ToastOverlayView actions", () => {
+  it("renders a complete standard-size notice frame", async () => {
+    const fixture = await renderNotice(COMMAND_TIMEOUT_NOTICE);
+    const surface = fixture.setup.renderer.root.findDescendantById("station-toast-surface");
+    expect(surface).toBeDefined();
+    if (surface === undefined) {
+      throw new Error("toast surface must render");
+    }
+
+    const golden = renderableGolden(fixture.frame(), surface);
+    const lines = golden.split("\n");
+    expect(lines[0]).toMatch(/^┌─+┐$/u);
+    expect(lines.at(-1)).toMatch(/^└─+┘$/u);
+    for (const line of lines.slice(1, -1)) {
+      expect(line.startsWith("│")).toBe(true);
+      expect(line.endsWith("│")).toBe(true);
+    }
+    expect(golden).toMatchSnapshot();
+  });
+
   it("keeps a wrapped prompt and notice in disjoint structural regions through resize", async () => {
     const { runtime } = makeStationTestRuntime({ snapshot: manyProjectsSnapshot() });
     const copied: string[] = [];
@@ -99,11 +123,9 @@ describe("ToastOverlayView actions", () => {
       await setup.flush();
     });
     expect(toastBody?.scrollTop).toBeGreaterThan(0);
-    await act(async () => {
-      toastBody?.scrollTo(toastBody.scrollHeight);
-      await setup.renderOnce();
-    });
-    expect(setup.captureCharFrame()).toContain("diagnostic");
+    if (toastBody !== undefined) {
+      await scrollBodyUntilFrameContains(setup, toastBody, "diagnostic");
+    }
 
     await act(async () => {
       setup.renderer.resize(22, 5);
@@ -121,6 +143,9 @@ describe("ToastOverlayView actions", () => {
     expect((footer?.y ?? 5) + (footer?.height ?? 0)).toBeLessThanOrEqual(5);
     const bodyClip = setup.renderer.root.findDescendantById("station-toast-body-clip");
     expect(bodyClip?.height).toBeGreaterThanOrEqual(1);
+    if (toastBody !== undefined) {
+      await scrollBodyUntilFrameContains(setup, toastBody, "diagnostic");
+    }
     const compactFrame = setup.captureCharFrame();
     expect(compactFrame).toContain("diagnostic");
     expect(compactGolden(compactFrame)).toMatchSnapshot();
@@ -215,7 +240,7 @@ describe("ToastOverlayView actions", () => {
   });
 });
 
-async function renderNotice() {
+async function renderNotice(notice: ClientNotice = NOTICE) {
   const { runtime: store } = makeStationTestRuntime({
     snapshot: manyProjectsSnapshot(),
     seedInitialSnapshot: false,
@@ -250,7 +275,7 @@ async function renderNotice() {
   teardowns.push(() => setup.renderer.destroy());
   await setup.renderOnce();
   await act(async () => {
-    store.actions.pushToast(NOTICE);
+    store.actions.pushToast(notice);
     await Promise.resolve();
   });
   await setup.flush();
@@ -272,6 +297,32 @@ function cellFor(frame: string, label: string): { row: number; col: number } {
 
 function compactGolden(frame: string): string {
   return frame.replace(/[ \t]+$/gm, "");
+}
+
+function renderableGolden(
+  frame: string,
+  renderable: { x: number; y: number; width: number; height: number },
+): string {
+  return frame
+    .split("\n")
+    .slice(renderable.y, renderable.y + renderable.height)
+    .map((line) => line.slice(renderable.x, renderable.x + renderable.width))
+    .join("\n");
+}
+
+async function scrollBodyUntilFrameContains(
+  setup: Awaited<ReturnType<typeof testRender>>,
+  body: ScrollBoxRenderable,
+  expected: string,
+): Promise<void> {
+  for (let scrollTop = 0; scrollTop <= body.scrollHeight; scrollTop += 1) {
+    await act(async () => {
+      body.scrollTo(scrollTop);
+      await setup.renderOnce();
+    });
+    if (setup.captureCharFrame().includes(expected)) return;
+  }
+  throw new Error(`Toast body never revealed ${expected}.`);
 }
 
 function ResponsiveDashboardRoot(

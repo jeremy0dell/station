@@ -1,6 +1,6 @@
 // Render layer: a bottom-anchored notice that grows upward for actionable errors.
 // Only the header dismiss control routes dismissal; body text stays selectable.
-import { MouseButton, TextAttributes } from "@opentui/core";
+import { MouseButton, TextAttributes, type BorderSides } from "@opentui/core";
 import {
   toastBorderColor,
   toastCopyText,
@@ -23,6 +23,7 @@ import { useStationHoverState, useStationMouse, stationMouseProps } from "./stat
 
 export type ToastOverlayViewProps = {
   columns: number;
+  rows: number;
   toast: TuiToastEntry | undefined;
   hiddenByScreen: boolean;
   onCopyNotice: (text: string) => void;
@@ -30,6 +31,7 @@ export type ToastOverlayViewProps = {
 
 export function ToastOverlayView({
   columns,
+  rows,
   toast,
   hiddenByScreen,
   onCopyNotice,
@@ -44,6 +46,9 @@ export function ToastOverlayView({
   const geometry = toastSurfaceGeometry(columns);
   const header = toastHeaderModel(geometry.width, toastTitle(toast));
   const bodyIds = detail === undefined ? ["toast:message"] : ["toast:message", "toast:detail"];
+  // Below eight terminal rows, prompt and controls can leave too little room for two horizontal edges.
+  const border: true | BorderSides[] =
+    Math.max(1, Math.floor(rows)) >= 8 ? true : ["left", "right"];
 
   // OpenTUI adds every box to its hit grid, so the flex anchor itself must have no pointer area.
   return (
@@ -61,13 +66,14 @@ export function ToastOverlayView({
       overflow="visible"
       zIndex={20}
     >
+      {/* Keep the bordered surface unclipped so OpenTUI does not drop its final content hit row. */}
       <box
         id="station-toast-surface"
         width={geometry.width}
         maxHeight="100%"
         flexShrink={1}
-        border={["left", "right"]}
-        overflow="hidden"
+        border={border}
+        overflow="visible"
         borderColor={toOpenTuiColor(toastBorderThemeColor(theme, toastBorderColor(toast)))}
         backgroundColor={surfaceBackground}
         flexDirection="column"

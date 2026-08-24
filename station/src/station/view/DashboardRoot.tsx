@@ -91,6 +91,7 @@ export function DashboardRoot({
   const toastOverlay = (
     <ToastOverlayView
       columns={columns}
+      rows={rows}
       toast={activeToast}
       hiddenByScreen={toastHiddenByScreen}
       onCopyNotice={onCopyNotice}

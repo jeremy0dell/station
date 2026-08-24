@@ -1,13 +1,21 @@
 // Bun Snapshot v1, https://bun.sh/docs/test/snapshots
 
+exports[`ToastOverlayView actions renders a complete standard-size notice frame 1`] = `
+"┌──────────────────────────────────────────────────────────────────────┐
+│ needs attention                                  [ copy ][ dismiss ] │
+│ The Station timed out while waiting for command completion.          │
+│ trace trace_command_timeout_123                                      │
+└──────────────────────────────────────────────────────────────────────┘"
+`;
+
 exports[`ToastOverlayView actions keeps a wrapped prompt and notice in disjoint structural regions through resize 1`] = `
-"  │ needs attention        [copy][x] │
-FL│ Worktrunk failed to remove the   │
-──│ selected checkout because the    │─
-  │ main worktree cannot be removed  │
- ▼│ while Station is running there.  │]
- [│ Open a different linked          │
-▼ │ checkout, select the session     │
+"  ┌──────────────────────────────────┐
+FL│ needs attention        [copy][x] │
+──│ Worktrunk failed to remove the   │─
+  │ selected checkout because the    │
+ ▼│ main worktree cannot be removed  │]
+ [│ while Station is running there.  │
+▼ └──────────────────────────────────┘
 Rename: ↑↓ move · ↵ choose · 1-9/a-z
 or click
 
@@ -17,10 +25,10 @@ Esc:dismiss  Q:close
 `;
 
 exports[`ToastOverlayView actions keeps a wrapped prompt and notice in disjoint structural regions through resize 2`] = `
-"  │ need…[copy][x] │
-FL│ Worktrunk      │
-──│ failed to      │─
-  │ remove the     │…
+"  ┌────────────────┐
+FL│ need…[copy][x] │
+──│ Worktrunk      │─
+  └────────────────┘…
 Rename: ↑↓ move · ↵
 
 ─────────────────────
