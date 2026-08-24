@@ -113,6 +113,7 @@ export function DashboardView({
           (group) => group.id === screen.groupId && group.projectId === screen.projectId,
         )
       : undefined;
+  // DashboardFrameTitle overlays the owning frame's top edge, so its inset belongs here.
   return (
     <box
       id={DASHBOARD_LAYOUT_BOUNDARY_ID}

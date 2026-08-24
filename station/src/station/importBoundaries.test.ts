@@ -416,6 +416,26 @@ function directSetStateCalls(modules: readonly SourceModule[]): string[] {
   return calls.sort();
 }
 
+function blankTextRenderables(modules: readonly SourceModule[]): string[] {
+  const failures: string[] = [];
+  for (const module of modules) {
+    const visit = (node: ts.Node): void => {
+      if (
+        ts.isJsxElement(node) &&
+        node.openingElement.tagName.getText(module.sourceFile) === "text" &&
+        node.children.length > 0 &&
+        node.children.every((child) => ts.isJsxText(child) && child.text.trim().length === 0)
+      ) {
+        const position = module.sourceFile.getLineAndCharacterOfPosition(node.getStart());
+        failures.push(`${module.relativePath}:${position.line + 1}`);
+      }
+      ts.forEachChild(node, visit);
+    };
+    ts.forEachChild(module.sourceFile, visit);
+  }
+  return failures.sort();
+}
+
 function isDashboardInternalPath(specifier: string): boolean {
   return DASHBOARD_CORE_INTERNAL_PATHS.some(
     (path) => specifier === path || specifier.startsWith(`${path}/`),
@@ -605,6 +625,10 @@ describe("station production boundaries", () => {
       )
       .sort();
     expect(directSetStateCalls(PRODUCTION_MODULES)).toEqual(expected);
+  });
+
+  it("uses box spacing instead of blank text renderables", () => {
+    expect(blankTextRenderables(PRODUCTION_MODULES)).toEqual([]);
   });
 
   it("freezes imports of the full dashboard runtime and operation internals", () => {

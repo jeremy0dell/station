@@ -35,7 +35,8 @@ type FullscreenDashboardInput = {
  * fullscreen counterpart to Station's in-app `StationOverlay`: it drops the
  * backdrop, centering, and border so the same `DashboardRoot` owns the whole
  * screen (the CLI `tui`/`popup` surface that replaced the retired Ink UI).
- * The reserved first row reuses Station's title and configured-widget chrome.
+ * The dashboard container's structural top inset hosts Station's title and
+ * configured-widget border chrome.
  *
  * Mouse targets dispatch semantic dashboard actions; only URL presentation
  * remains a direct renderer callback.

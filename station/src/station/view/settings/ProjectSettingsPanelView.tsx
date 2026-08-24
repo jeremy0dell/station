@@ -222,8 +222,8 @@ function RemoveButton({ armed, width }: { armed: boolean; width: number }) {
   const label = clipCells("[ Remove project (R) ]", Math.max(0, width - 1));
   return (
     <box flexDirection="row">
-      <text> </text>
       <text
+        marginLeft={1}
         fg={toOpenTuiColor(
           hot ? theme.text.inverse : armed ? theme.status.danger : theme.text.muted,
         )}

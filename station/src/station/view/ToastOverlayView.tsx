@@ -70,7 +70,6 @@ export function ToastOverlayView({
             {toastTitle(toast)}
           </text>
           <ToastCopyControl key={toast.id} text={toastCopyText(toast)} onCopy={onCopyNotice} />
-          <text selectable={false}> </text>
           <ToastDismissControl />
         </box>
         <text fg={toOpenTuiColor(theme.text.primary)} wrapMode="word" selectable>
@@ -149,6 +148,7 @@ function ToastDismissControl() {
   const [hover, setHover] = useStationHoverState();
   return (
     <text
+      marginLeft={1}
       flexShrink={0}
       fg={toOpenTuiColor(hover ? theme.text.inverse : theme.text.muted)}
       {...(hover ? { bg: toOpenTuiColor(theme.status.danger) } : {})}
