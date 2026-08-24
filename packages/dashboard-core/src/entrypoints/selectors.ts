@@ -77,13 +77,7 @@ export type {
   RowGridRowInput,
   RowSegment,
 } from "../components/WorktreeRow/layout.js";
-export {
-  cellWidth,
-  clipCells,
-  layoutWorktreeRowGrid,
-  textSegment,
-  truncateCells,
-} from "../components/WorktreeRow/layout.js";
+export { layoutWorktreeRowGrid, textSegment } from "../components/WorktreeRow/layout.js";
 
 export { isReadyToRead } from "../selectors/agentStatus.js";
 
@@ -133,3 +127,4 @@ export {
   selectProjectChooserChoices,
   selectProjectDefaultHarness,
 } from "../selectors/selectors.js";
+export { cellWidth, clipCells, truncateCells } from "../text/cells.js";

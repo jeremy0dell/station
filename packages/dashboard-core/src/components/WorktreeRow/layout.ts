@@ -1,4 +1,6 @@
-import stringWidth from "string-width";
+import { cellWidth, clipCells } from "../../text/cells.js";
+
+export { cellWidth, clipCells, truncateCells } from "../../text/cells.js";
 
 // Semantic only — dashboard-core stays color-value-free; renderer theme adapters resolve roles.
 export type RowColor = "blue" | "cyan" | "gray" | "green" | "red" | "yellow" | "purple";
@@ -148,19 +150,6 @@ export const DEFAULT_WORKTREE_ROW_GRID: RowGridConfig = {
   ],
 };
 
-type GraphemeSegment = {
-  segment: string;
-};
-
-type GraphemeSegmenter = {
-  segment(input: string): Iterable<GraphemeSegment>;
-};
-
-type SegmenterConstructor = new (
-  locales?: string | string[],
-  options?: { granularity?: "grapheme" },
-) => GraphemeSegmenter;
-
 type MetadataMode = "full" | "compact" | "none";
 
 type MetadataLayout = {
@@ -178,8 +167,6 @@ const ROW_GRID_CELL_KEYS: readonly RowGridCellKey[] = [
   "metadata",
 ];
 const METADATA_MODES: readonly MetadataMode[] = ["full", "compact", "none"];
-const graphemeSegmenter = createGraphemeSegmenter();
-
 export function layoutWorktreeRowGrid(input: {
   columns: number;
   rows: readonly RowGridRowInput[];
@@ -250,25 +237,8 @@ export function layoutWorktreeRowGrid(input: {
   return fallbackLayouts(columns, input.rows);
 }
 
-export function cellWidth(text: string): number {
-  return stringWidth(sanitizeText(text));
-}
-
 export function segmentsWidth(segments: readonly RowSegment[]): number {
   return segments.reduce((total, segment) => total + segmentWidth(segment), 0);
-}
-
-export function truncateCells(text: string, cells: number): string {
-  const normalized = sanitizeText(text);
-  const limit = normalizeCells(cells);
-  if (limit <= 0) return "";
-  if (cellWidth(normalized) <= limit) return normalized;
-  const ellipsis = "…";
-  const ellipsisWidth = cellWidth(ellipsis);
-  if (limit < ellipsisWidth) {
-    return clipCells(normalized, limit);
-  }
-  return `${clipCells(normalized, limit - ellipsisWidth)}${ellipsis}`;
 }
 
 export function hardClipSegments(segments: readonly RowSegment[], cells: number): RowSegment[] {
@@ -812,28 +782,6 @@ function segmentWidth(segment: RowSegment): number {
   return segment.kind === "throbber" ? 1 : cellWidth(segment.text);
 }
 
-/** Clips sanitized text to terminal cells without splitting a grapheme cluster. */
-export function clipCells(text: string, cells: number): string {
-  let remaining = normalizeCells(cells);
-  let clipped = "";
-  for (const grapheme of graphemes(text)) {
-    if (remaining <= 0) break;
-    const width = cellWidth(grapheme);
-    if (width > remaining) break;
-    clipped += grapheme;
-    remaining -= width;
-  }
-  return clipped;
-}
-
-function graphemes(text: string): string[] {
-  const normalized = sanitizeText(text);
-  if (graphemeSegmenter === undefined) {
-    return Array.from(normalized);
-  }
-  return Array.from(graphemeSegmenter.segment(normalized), (segment) => segment.segment);
-}
-
 function copyTextSegment(segment: Extract<RowSegment, { kind: "text" }>, text: string): RowSegment {
   const copied: Extract<RowSegment, { kind: "text" }> = {
     kind: "text",
@@ -872,11 +820,4 @@ function emptyMetadataLayout(): MetadataLayout {
     segments: [],
     visibleGroups: [],
   };
-}
-
-function createGraphemeSegmenter(): GraphemeSegmenter | undefined {
-  const Segmenter = (Intl as typeof Intl & { Segmenter?: SegmenterConstructor }).Segmenter;
-  return Segmenter === undefined
-    ? undefined
-    : new Segmenter(undefined, { granularity: "grapheme" });
 }

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import * as runtimeEntry from "../../src/entrypoints/runtime.js";
 import * as selectorsEntry from "../../src/entrypoints/selectors.js";
 import * as stateEntry from "../../src/entrypoints/state.js";
+import * as textEntry from "../../src/entrypoints/text.js";
 import * as widgetsEntry from "../../src/entrypoints/widgets.js";
 
 // #168 rule 3: private mutable state models never cross the package surface.
@@ -46,11 +47,13 @@ const SELECTORS_VALUES = [
 ];
 
 const WIDGET_VALUES = ["createUseTopRowWidgets", "resolveTopRowWidgets"];
+const TEXT_VALUES = ["cellWidth", "clipCells", "textCellUnits", "truncateCells"];
 
 describe("dashboard-core role entrypoints", () => {
   const entries = [
     ["runtime", runtimeEntry, RUNTIME_VALUES],
     ["state", stateEntry, STATE_VALUES],
+    ["text", textEntry, TEXT_VALUES],
     ["selectors", selectorsEntry, SELECTORS_VALUES],
     ["widgets", widgetsEntry, WIDGET_VALUES],
   ] as const;

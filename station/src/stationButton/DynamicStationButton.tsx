@@ -1,5 +1,6 @@
 import type { MouseEvent } from "@opentui/core";
-import { type ReactNode, useState } from "react";
+import { textCellUnits } from "@station/dashboard-core/text";
+import { type ReactNode, useMemo, useState } from "react";
 import {
   isPrimaryMouseEvent,
   isRightMouseEvent,
@@ -25,7 +26,6 @@ import {
   COLLAPSED_ATTENTION_COLS,
   COLLAPSED_BASE_COLS,
   CONTENT_INDENT,
-  type Dims,
   GRADIENT_EDGE,
   ICON_COLS,
   ICON_PAD,
@@ -35,11 +35,12 @@ import {
   type IslandDisplayInput,
   lerp,
   paintedCount,
-  ROLLUP_MAX_LINES,
   sessionSummary,
+  type StationButtonCellSize,
+  stationButtonTargetCellSize,
+  STATION_BUTTON_ROLLUP_ENTRY_LIMIT,
   STATION_BUTTON_Z_INDEX,
   STATION_ICON,
-  targetDims,
 } from "./layout.js";
 import { useTweenAmount } from "./hooks/useTweenAmount.js";
 import { useTweenedOptionalValue } from "./hooks/useTweenedOptionalValue.js";
@@ -254,18 +255,35 @@ function GradientText({
   reveal: number;
   color: StationColor;
 }): ReactNode {
-  const theme = useStationTheme();
   if (reveal >= 1) {
     return <text fg={toOpenTuiColor(color)}>{text}</text>;
   }
-  const front = reveal * (text.length + GRADIENT_EDGE);
+  return <RevealingGradientText text={text} reveal={reveal} color={color} />;
+}
+
+function RevealingGradientText({
+  text,
+  reveal,
+  color,
+}: {
+  text: string;
+  reveal: number;
+  color: StationColor;
+}): ReactNode {
+  const theme = useStationTheme();
+  const units = useMemo(() => textCellUnits(text), [text]);
+  const textCells = units.at(-1)?.endCell ?? 0;
+  const front = reveal * (textCells + GRADIENT_EDGE);
   return (
     <box flexDirection="row">
-      {Array.from(text, (char, i) => {
-        const local = Math.min(1, Math.max(0, (front - i) / GRADIENT_EDGE));
+      {units.map((unit) => {
+        const local = Math.min(1, Math.max(0, (front - unit.startCell) / GRADIENT_EDGE));
         return (
-          <text key={i} fg={toOpenTuiColor(tweenStationColor(theme.text.inverse, color, local))}>
-            {char}
+          <text
+            key={unit.sourceIndex}
+            fg={toOpenTuiColor(tweenStationColor(theme.text.inverse, color, local))}
+          >
+            {unit.text}
           </text>
         );
       })}
@@ -419,7 +437,7 @@ function ExpandedRollup(props: {
   entries: readonly ProjectRollupEntry[];
 }): ReactNode {
   const { color, reveal, entries } = props;
-  const shown = entries.slice(0, ROLLUP_MAX_LINES);
+  const shown = entries.slice(0, STATION_BUTTON_ROLLUP_ENTRY_LIMIT);
   const folded = entries.length - shown.length;
   return (
     <box flexDirection="column">
@@ -467,7 +485,7 @@ function ExpandedAttention(props: {
 
 type ButtonTransition = {
   open: number;
-  dims: Dims;
+  dims: StationButtonCellSize;
   display: IslandDisplay;
   textReveal: number;
   celebrationReveal: number;
@@ -484,8 +502,8 @@ function useButtonTransition(input: IslandDisplayInput, expanded: boolean): Butt
     tweenedCelebration.value,
     tweenedCelebration.amount,
   );
-  const opened = targetDims(islandDisplay(input, true));
-  const dims: Dims = {
+  const opened = stationButtonTargetCellSize(islandDisplay(input, true));
+  const dims: StationButtonCellSize = {
     width: Math.round(lerp(collapsed.dims.width, opened.width, open)),
     height: Math.round(lerp(collapsed.dims.height, opened.height, open)),
   };
@@ -503,7 +521,7 @@ function collapsedButtonState(
   input: IslandDisplayInput,
   celebration: IslandCelebration | undefined,
   amount: number,
-): { dims: Dims; display: IslandDisplay } {
+): { dims: StationButtonCellSize; display: IslandDisplay } {
   const restingInput: IslandDisplayInput = { status: input.status };
   if (input.restCounts !== undefined) {
     restingInput.restCounts = input.restCounts;
@@ -513,9 +531,9 @@ function collapsedButtonState(
   if (celebration !== undefined && amount > 0) {
     collapsedInput.celebration = celebration;
   }
-  const resting = targetDims(islandDisplay(restingInput, false));
+  const resting = stationButtonTargetCellSize(islandDisplay(restingInput, false));
   const display = islandDisplay(collapsedInput, false);
-  const notified = targetDims(display);
+  const notified = stationButtonTargetCellSize(display);
   return {
     dims: {
       width: Math.round(lerp(resting.width, notified.width, amount)),

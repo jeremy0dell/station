@@ -1,5 +1,10 @@
-// Geometry and sizing math for the station button (no React, no colors).
+/**
+ * Explicit terminal-cell geometry for the isolated, animated Station button.
+ * Semantic status selects an IslandDisplay first; only this renderer boundary fixes target sizes
+ * so a top-right-anchored hover surface cannot move out from under the pointer while it morphs.
+ */
 
+import { cellWidth, truncateCells } from "@station/dashboard-core/text";
 import type { ProjectRollupEntry, StationButtonStatus } from "./status.js";
 
 // Terminal glyph form of the black vector mark in station/assets/station-icon.svg.
@@ -30,6 +35,7 @@ const ATTENTION_HINT_LINE = "↵ or click to focus";
 // The budget keeps the legacy single-session line (the widest painted variant) so
 // the card width never tracks the live session name or queue depth.
 const ATTENTION_LINES = ["needs your attention", ATTENTION_HINT_LINE] as const;
+const ATTENTION_BODY_COLS = longest(ATTENTION_LINES);
 // Stable count (2 digits, plural) so card width doesn't resize under cursor on count changes.
 const STABLE_SUMMARY_COUNT = 88;
 // Fixed name budget so a live session-name change can't resize this top-right-anchored card out
@@ -38,8 +44,8 @@ const STABLE_NAME_COLS = 20;
 // Counts and queue depths paint at most two digits so no live tick can outgrow
 // the stable width budgets.
 const MAX_PAINTED_COUNT = 99;
-/** Per-project roll-up lines before the card folds the rest into "+N more". */
-export const ROLLUP_MAX_LINES = 5;
+/** Compact single-cell project entries before the terminal widget renders a semantic fold. */
+export const STATION_BUTTON_ROLLUP_ENTRY_LIMIT = 5;
 const ROLLUP_GLYPH_COLS = 2; // status glyph + space before the project name
 const CELEBRATION_TITLE_COLS = 28;
 
@@ -48,9 +54,9 @@ export const STATION_BUTTON_Z_INDEX = 50;
 
 export const ANIM_MS = 150;
 export const FRAME_MS = 10;
-export const GRADIENT_EDGE = 4; // chars of soft fade at the text's revealing front
+export const GRADIENT_EDGE = 4; // cells of soft fade at the text's revealing front
 
-export type Dims = { width: number; height: number };
+export type StationButtonCellSize = { width: number; height: number };
 
 export type IslandCelebration = { prNumber: number; title?: string | undefined };
 
@@ -61,7 +67,7 @@ export type IslandDisplayInput = {
   celebration?: IslandCelebration | undefined;
 };
 
-/** What the island paints; one value drives both the content and targetDims. */
+/** What the island paints; one value drives both content and terminal-cell target size. */
 export type IslandDisplay =
   | { kind: "mark" }
   | { kind: "alertMark" }
@@ -129,28 +135,26 @@ export function attentionLines(needsYouCount: number): readonly [string, string]
 export function celebrationText(celebration: IslandCelebration): string {
   const base = `✓ #${celebration.prNumber} merged`;
   const title = celebration.title?.trim();
-  if (title === undefined || title.length === 0) {
+  if (title === undefined || title === "") {
     return base;
   }
-  const clamped =
-    title.length <= CELEBRATION_TITLE_COLS
-      ? title
-      : `${title.slice(0, CELEBRATION_TITLE_COLS - 1)}…`;
+  const clamped = truncateCells(title, CELEBRATION_TITLE_COLS);
   return `${base} · ${clamped}`;
 }
 
-/** Painted roll-up rows: the first ROLLUP_MAX_LINES entries, plus one "+N more" fold. */
-function rollupLineCount(entryCount: number): number {
-  return entryCount <= ROLLUP_MAX_LINES ? entryCount : ROLLUP_MAX_LINES + 1;
+function rollupCellRows(entryCount: number): number {
+  return entryCount <= STATION_BUTTON_ROLLUP_ENTRY_LIMIT
+    ? entryCount
+    : STATION_BUTTON_ROLLUP_ENTRY_LIMIT + 1;
 }
 
-// Truncate the attention card's session name to the reserved column budget so
-// the painted name never exceeds the (stabilized) card width.
+// Truncate the attention card's session name to the reserved cell budget so
+// the painted name never exceeds the stabilized card width.
 export function clampSessionName(name: string): string {
-  return name.length <= STABLE_NAME_COLS ? name : `${name.slice(0, STABLE_NAME_COLS - 1)}…`;
+  return truncateCells(name, STABLE_NAME_COLS);
 }
 
-export function targetDims(display: IslandDisplay): Dims {
+export function stationButtonTargetCellSize(display: IslandDisplay): StationButtonCellSize {
   switch (display.kind) {
     case "mark":
       return { width: COLLAPSED_BASE_COLS, height: COLLAPSED_BASE_ROWS };
@@ -159,15 +163,15 @@ export function targetDims(display: IslandDisplay): Dims {
     case "counts":
       return { width: collapsedCountCols(countLaneCount(display)), height: COLLAPSED_BASE_ROWS };
     case "celebration": {
-      const interior = ICON_COLS + 1 + celebrationText(display.celebration).length;
+      const interior = ICON_COLS + 1 + cellWidth(celebrationText(display.celebration));
       return { width: interior + 2 * ICON_PAD + 2, height: COLLAPSED_BASE_ROWS };
     }
     case "alertCard": {
       // Clamp the name's contribution so the card width never tracks the live
       // session name (the painted name is truncated to match — clampSessionName).
-      const nameCols = Math.min(display.sessionName.length, STABLE_NAME_COLS);
+      const nameCols = Math.min(cellWidth(display.sessionName), STABLE_NAME_COLS);
       const iconRow = ICON_COLS + 1 + nameCols;
-      const body = CONTENT_INDENT + longest(ATTENTION_LINES);
+      const body = CONTENT_INDENT + ATTENTION_BODY_COLS;
       return {
         width: Math.max(iconRow, body) + EXPANDED_RIGHT_PAD + 2,
         height: EXPANDED_ATTENTION_ROWS,
@@ -179,7 +183,10 @@ export function targetDims(display: IslandDisplay): Dims {
       return {
         width: CONTENT_INDENT + ROLLUP_GLYPH_COLS + STABLE_NAME_COLS + EXPANDED_RIGHT_PAD + 2,
         height:
-          EXPANDED_BORDER_ROWS + 1 + rollupLineCount(display.entries.length) + EXPANDED_BOTTOM_PAD_ROWS,
+          EXPANDED_BORDER_ROWS +
+          1 +
+          rollupCellRows(display.entries.length) +
+          EXPANDED_BOTTOM_PAD_ROWS,
       };
     case "summary": {
       // Measure with a stable count, not the live values: the card is anchored top-right, so a width
@@ -219,11 +226,11 @@ function collapsedCountCols(laneCount: number): number {
 }
 
 function summaryColumns(verb: string): number {
-  return sessionSummary(STABLE_SUMMARY_COUNT, verb).length;
+  return cellWidth(sessionSummary(STABLE_SUMMARY_COUNT, verb));
 }
 
 function longest(lines: readonly string[]): number {
-  return lines.reduce((max, line) => Math.max(max, line.length), 0);
+  return lines.reduce((max, line) => Math.max(max, cellWidth(line)), 0);
 }
 
 export function lerp(a: number, b: number, t: number): number {

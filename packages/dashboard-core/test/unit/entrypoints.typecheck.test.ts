@@ -54,6 +54,7 @@ import type {
   TuiSemanticAction,
   TuiToastEntry,
 } from "../../src/entrypoints/state.js";
+import type { TextCellUnit } from "../../src/entrypoints/text.js";
 import type {
   TopRowWidgetRuntimeDeps,
   TopRowWidgetView,
@@ -66,6 +67,7 @@ it("typechecks the role entrypoint contracts", () => {
 });
 
 export type EntrypointTypecheckWitness = [
+  TextCellUnit,
   DashboardRuntime,
   DashboardRuntimeOptions,
   DashboardStateSource,
