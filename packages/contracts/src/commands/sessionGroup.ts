@@ -3,49 +3,6 @@ import { ProjectIdSchema, SessionGroupIdSchema, SessionIdSchema } from "../ids.j
 
 export const SessionGroupNameSchema = z.string().trim().min(1);
 
-export const SourceSessionGroupPlacementIntentSchema = z
-  .object({
-    kind: z.literal("source"),
-    sourceSessionId: SessionIdSchema,
-    groupId: SessionGroupIdSchema,
-  })
-  .strict();
-
-export type SourceSessionGroupPlacementIntent = z.infer<
-  typeof SourceSessionGroupPlacementIntentSchema
->;
-
-export const ExistingSessionGroupPlacementIntentSchema = z
-  .object({
-    kind: z.literal("existing"),
-    groupId: SessionGroupIdSchema,
-  })
-  .strict();
-
-export const CreateSessionGroupPlacementIntentSchema = z
-  .object({
-    kind: z.literal("create"),
-    name: SessionGroupNameSchema,
-  })
-  .strict();
-
-export const SessionGroupPlacementIntentSchema = z.discriminatedUnion("kind", [
-  ExistingSessionGroupPlacementIntentSchema,
-  CreateSessionGroupPlacementIntentSchema,
-]);
-
-export type SessionGroupPlacementIntent = z.infer<typeof SessionGroupPlacementIntentSchema>;
-
-export const FreshSessionGroupPlacementIntentSchema = z.discriminatedUnion("kind", [
-  ExistingSessionGroupPlacementIntentSchema,
-  CreateSessionGroupPlacementIntentSchema,
-  SourceSessionGroupPlacementIntentSchema,
-]);
-
-export type FreshSessionGroupPlacementIntent = z.infer<
-  typeof FreshSessionGroupPlacementIntentSchema
->;
-
 const uniqueSessionIdsSchema = z.array(SessionIdSchema).superRefine((sessionIds, context) => {
   if (new Set(sessionIds).size !== sessionIds.length) {
     context.addIssue({ code: "custom", message: "Session ids must be unique." });

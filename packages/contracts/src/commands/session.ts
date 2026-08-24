@@ -2,6 +2,7 @@ import { z } from "zod";
 import {
   ProjectIdSchema,
   ProviderIdSchema,
+  SessionGroupIdSchema,
   SessionIdSchema,
   TerminalTargetIdSchema,
   WorktreeIdSchema,
@@ -9,10 +10,7 @@ import {
 import { SessionRecoveryHandleSchema } from "../recovery.js";
 import { nonEmptyStringSchema, userFacingTitleSchema } from "../shared.js";
 import { TerminalPlacementRequestSchema } from "../terminalPlacement.js";
-import {
-  SessionGroupPlacementIntentSchema,
-  SourceSessionGroupPlacementIntentSchema,
-} from "./sessionGroup.js";
+import { SessionGroupNameSchema } from "./sessionGroup.js";
 import { CommandSourceSchema } from "./source.js";
 import { SessionTerminalCommandOptionsSchema, TerminalCommandOptionsSchema } from "./terminal.js";
 
@@ -33,6 +31,49 @@ export const StartAgentHarnessCommandOptionsSchema = z
     profile: nonEmptyStringSchema.optional(),
   })
   .strict();
+
+export const SourceSessionGroupPlacementIntentSchema = z
+  .object({
+    kind: z.literal("source"),
+    sourceSessionId: SessionIdSchema,
+    groupId: SessionGroupIdSchema,
+  })
+  .strict();
+
+export type SourceSessionGroupPlacementIntent = z.infer<
+  typeof SourceSessionGroupPlacementIntentSchema
+>;
+
+export const ExistingSessionGroupPlacementIntentSchema = z
+  .object({
+    kind: z.literal("existing"),
+    groupId: SessionGroupIdSchema,
+  })
+  .strict();
+
+export const CreateSessionGroupPlacementIntentSchema = z
+  .object({
+    kind: z.literal("create"),
+    name: SessionGroupNameSchema,
+  })
+  .strict();
+
+export const SessionGroupPlacementIntentSchema = z.discriminatedUnion("kind", [
+  ExistingSessionGroupPlacementIntentSchema,
+  CreateSessionGroupPlacementIntentSchema,
+]);
+
+export type SessionGroupPlacementIntent = z.infer<typeof SessionGroupPlacementIntentSchema>;
+
+export const FreshSessionGroupPlacementIntentSchema = z.discriminatedUnion("kind", [
+  ExistingSessionGroupPlacementIntentSchema,
+  CreateSessionGroupPlacementIntentSchema,
+  SourceSessionGroupPlacementIntentSchema,
+]);
+
+export type FreshSessionGroupPlacementIntent = z.infer<
+  typeof FreshSessionGroupPlacementIntentSchema
+>;
 
 export const CreateSessionPayloadSchema = z
   .object({

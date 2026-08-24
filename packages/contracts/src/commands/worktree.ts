@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { ProjectIdSchema, ProviderIdSchema, WorktreeIdSchema } from "../ids.js";
 import { nonEmptyStringSchema } from "../shared.js";
-import { SourceSessionGroupPlacementIntentSchema } from "./sessionGroup.js";
+import { SourceSessionGroupPlacementIntentSchema } from "./session.js";
 import { CommandSourceSchema } from "./source.js";
 
 export const CreateWorktreePayloadSchema = z
