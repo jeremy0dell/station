@@ -36,7 +36,7 @@ type FullscreenDashboardInput = {
  * backdrop, centering, and border so the same `DashboardRoot` owns the whole
  * screen (the CLI `tui`/`popup` surface that replaced the retired Ink UI).
  * The dashboard container's structural top inset hosts Station's title and
- * configured-widget border chrome.
+ * configured-widget frame title.
  *
  * Mouse targets dispatch semantic dashboard actions; only URL presentation
  * remains a direct renderer callback.

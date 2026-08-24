@@ -240,8 +240,8 @@ Context-menu focus, pointer hits, and activation cross renderer/input boundaries
 as `ContextMenuItemId`; ordered keyboard movement resolves a new ID without
 persisting an array position.
 
-`DashboardRoot` composes a flexible notice region above intrinsic bottom chrome.
-The prompt, divider, and footer are ordinary children of `DashboardChromeView`;
+`DashboardRoot` composes a flexible notice region above intrinsic dashboard controls.
+The prompt, divider, and footer are ordinary children of `DashboardControlsView`;
 the toast is bounded within the notice region and grows upward without reserving
 prompt/footer rows. Optional table headers and overflow indicators are absent
 when they have no semantic content; blank renderables never reserve their space.

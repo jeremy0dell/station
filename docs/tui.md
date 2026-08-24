@@ -13,7 +13,7 @@ Station is built on OpenTUI (`@opentui/core` + `@opentui/react`) and `react`, ru
   observer data and commands, no panes).
 
 Both entry points load `[tui].widgets` from the runtime config and render the same
-configured-widget title chrome; widget settings update that shared config when a
+configured-widget title strip; widget settings update that shared config when a
 config path is available.
 
 Launch is driven by `apps/cli/src/commands/tui.ts`. The launcher mints one

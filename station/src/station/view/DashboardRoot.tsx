@@ -16,7 +16,7 @@ import {
   tuiScreenBehavior,
  } from "@station/dashboard-core/state";
 import { ActiveScreenOverlayView } from "./ActiveScreenOverlayView.js";
-import { DashboardChromeView } from "./DashboardChromeView.js";
+import { DashboardControlsView } from "./DashboardControlsView.js";
 import { DashboardView } from "./DashboardView.js";
 import {
   StationHoverProvider,
@@ -106,7 +106,7 @@ export function DashboardRoot({
           <DashboardNoticeRegion overlay={toastOverlay}>
             <DashboardLoadingContentView content={content} />
           </DashboardNoticeRegion>
-          <DashboardChromeView state={state} screen={screen} columns={contentColumns} />
+          <DashboardControlsView state={state} screen={screen} columns={contentColumns} />
         </StationHoverProvider>
       </box>
     );
@@ -134,7 +134,7 @@ export function DashboardRoot({
             columns={columns}
           />
         </DashboardNoticeRegion>
-        <DashboardChromeView state={state} screen={screen} columns={contentColumns} />
+        <DashboardControlsView state={state} screen={screen} columns={contentColumns} />
       </StationHoverProvider>
       <ActiveScreenOverlayView
         snapshot={snapshot}

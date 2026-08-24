@@ -73,7 +73,7 @@ afterEach(async () => {
 });
 
 describe("FullscreenDashboard surface ownership", () => {
-  it("uses terminal-default background intent for its canvas and title chrome", async () => {
+  it("uses terminal-default background intent for its canvas and frame title", async () => {
     const fixture = makeStationTestRuntime();
     const setup = await render(fixture.runtime);
 

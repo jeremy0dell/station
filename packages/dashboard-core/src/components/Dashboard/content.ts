@@ -170,7 +170,7 @@ export function observerHeaderStatusForConnection(
 
 export type CommandPromptModel = { text: string; tone: "warning" | "danger" };
 
-/** Semantic prompt content for screens that augment the dashboard chrome. */
+/** Semantic prompt content for screens that augment the dashboard controls. */
 export function commandPromptForScreen(
   screen: DashboardScreenView,
 ): CommandPromptModel | undefined {

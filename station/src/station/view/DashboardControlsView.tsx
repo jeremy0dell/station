@@ -4,8 +4,8 @@ import { CommandPromptView } from "./CommandPromptView.js";
 import { DashboardDividerView } from "./DashboardDividerView.js";
 import { DashboardFooterView } from "./DashboardFooterView.js";
 
-/** Intrinsic bottom chrome; children own their content while this parent owns their order. */
-export function DashboardChromeView({
+/** Orders the intrinsic prompt, divider, and footer controls below dashboard content. */
+export function DashboardControlsView({
   state,
   screen,
   columns,
@@ -16,7 +16,7 @@ export function DashboardChromeView({
 }) {
   return (
     <box
-      id="station-dashboard-chrome"
+      id="station-dashboard-controls"
       width="100%"
       minHeight={0}
       flexShrink={1}

@@ -60,22 +60,22 @@ describe("ToastOverlayView actions", () => {
     await setup.flush();
 
     const prompt = setup.renderer.root.findDescendantById("station-command-prompt");
-    const chrome = setup.renderer.root.findDescendantById("station-dashboard-chrome");
+    const controls = setup.renderer.root.findDescendantById("station-dashboard-controls");
     const toast = setup.renderer.root.findDescendantById("station-toast-surface");
     expect(prompt?.height).toBeGreaterThan(1);
-    expect(chrome).toBeDefined();
+    expect(controls).toBeDefined();
     expect(toast).toBeDefined();
-    if (chrome === undefined || toast === undefined) {
-      throw new Error("dashboard chrome and toast surface must render");
+    if (controls === undefined || toast === undefined) {
+      throw new Error("dashboard controls and toast surface must render");
     }
-    expect(toast.y + toast.height).toBeLessThanOrEqual(chrome.y);
+    expect(toast.y + toast.height).toBeLessThanOrEqual(controls.y);
 
     await act(async () => {
       setup.renderer.resize(22, 12);
       await setup.flush();
       await setup.renderOnce();
     });
-    expect(toast.y + toast.height).toBeLessThanOrEqual(chrome.y);
+    expect(toast.y + toast.height).toBeLessThanOrEqual(controls.y);
     expect(setup.captureCharFrame()).toContain("Rename:");
 
     await act(async () => {

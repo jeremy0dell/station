@@ -62,7 +62,7 @@ describe("DashboardFrameTitle", () => {
     return setup;
   }
 
-  it("shows the identity, the overview subtitle, and the widget strip as gray chrome", async () => {
+  it("shows the identity, overview subtitle, and widget strip in the gray frame title", async () => {
     const setup = await renderTitle({
       snapshot: manyProjectsSnapshot(),
       widgets: [

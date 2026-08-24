@@ -21,7 +21,7 @@ import { createScriptedTerminal, type ScriptedTerminal } from "./testing/scripte
 import { waitFor } from "./testing/waitFor.js";
 import type { StationTerminalSize, StationTerminalSpawnOptions } from "./types.js";
 
-// Pane chrome: 1 border on each side. The origin-anchor test below derives
+// Pane frame: 1 border on each side. The origin-anchor test below derives
 // this empirically; everything else trusts the constant.
 const ORIGIN = { x: 1, y: 1 };
 const SURFACE = { width: 40, height: 12 };

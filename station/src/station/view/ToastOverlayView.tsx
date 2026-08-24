@@ -39,7 +39,7 @@ export function ToastOverlayView({
 
   const detail = toastDetail(toast);
   const geometry = toastSurfaceGeometry(columns);
-  // This is local breathing room inside the notice region; dashboard chrome is outside the parent.
+  // This is local breathing room inside the notice region; dashboard controls are outside the parent.
   const visualBottomInset = 1;
 
   return (
