@@ -161,7 +161,7 @@ export type DashboardStateAction =
   | { type: "selection.item.activate"; itemId: string }
   | { type: "newSession.open"; projectId?: ProjectId; groupId?: SessionGroupId }
   | { type: "projectSettings.focusItem"; itemId: ProjectSettingsItemId }
-  | { type: "addProject.selectRow"; index: number }
+  | { type: "addProject.selectRow"; itemId: string }
   | { type: "screen.clickAway" }
   | { type: "renameSession.openEdit"; rowId: SessionId; returnTo: "dashboard" }
   | { type: "moveToGroup.open"; rowId: SessionId }
@@ -273,7 +273,7 @@ function handleDashboardStateAction(
     case "projectSettings.focusItem":
       return stateTransition(focusProjectSettingsItem(state, action.itemId));
     case "addProject.selectRow":
-      return stateTransition(selectAddProjectRow(state, action.index));
+      return stateTransition(selectAddProjectRow(state, action.itemId));
     case "screen.clickAway":
     case "renameSession.openEdit":
     case "moveToGroup.open":

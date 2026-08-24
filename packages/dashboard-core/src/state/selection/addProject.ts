@@ -6,10 +6,6 @@ import type { TuiSelectionState } from "./types.js";
 export const ADD_PROJECT_START_LIST_ID = "addProjectStart";
 export const ADD_PROJECT_CHOOSE_LIST_ID = "addProjectChoose";
 
-function startChoiceId(index: number): string {
-  return String(index);
-}
-
 export function addProjectSelectedIndex(state: DashboardStateView): number | undefined {
   return state.screen.name === "addProject"
     ? addProjectSelectedIndexForFlow(state.screen.flow, state.selection)
@@ -21,12 +17,10 @@ export function addProjectSelectedIndexForFlow(
   selection: TuiSelectionState,
 ): number | undefined {
   if (flow.mode === "start") {
-    const value = selection.get(ADD_PROJECT_START_LIST_ID);
-    if (value === undefined) {
-      return undefined;
-    }
-    const index = Number(value);
-    return Number.isInteger(index) && index >= 0 && index < flow.choices.length ? index : undefined;
+    const path = selection.get(ADD_PROJECT_START_LIST_ID);
+    if (path === undefined) return undefined;
+    const index = flow.choices.findIndex((choice) => choice.path === path);
+    return index < 0 ? undefined : index;
   }
   if (flow.mode === "choose") {
     const path = selection.get(ADD_PROJECT_CHOOSE_LIST_ID);
@@ -61,17 +55,14 @@ export function reconcileAddProjectSelection(
   const flow = state.screen.flow;
   if (flow.mode === "start") {
     const current = state.selection.get(ADD_PROJECT_START_LIST_ID);
-    const currentIndex = current === undefined ? -1 : Number(current);
     const keepCurrent =
       !reset &&
       previousFlow?.mode === "start" &&
-      Number.isInteger(currentIndex) &&
-      currentIndex >= 0 &&
-      currentIndex < flow.choices.length;
+      flow.choices.some((choice) => choice.path === current);
     return withSelection(
       state,
       ADD_PROJECT_START_LIST_ID,
-      keepCurrent ? current : flow.choices.length === 0 ? undefined : startChoiceId(0),
+      keepCurrent ? current : flow.choices[0]?.path,
     );
   }
   if (flow.mode === "choose") {
@@ -85,37 +76,25 @@ export function reconcileAddProjectSelection(
   return state;
 }
 
-/** Mouse selection writes the same cursor used by arrows and Enter. */
-export function selectAddProjectRowByIndex(state: DashboardState, index: number): DashboardState {
+/** Pointer selection writes the stable path identity used by arrows and Enter. */
+export function selectAddProjectRowById(state: DashboardState, itemId: string): DashboardState {
   if (state.screen.name !== "addProject") {
     return state;
   }
   const flow = state.screen.flow;
   if (flow.mode === "start") {
-    const selected = clampedItem(flow.choices, index);
+    const selected = flow.choices.find((choice) => choice.path === itemId);
     return selected === undefined
       ? state
-      : withSelection(state, ADD_PROJECT_START_LIST_ID, startChoiceId(selected.index));
+      : withSelection(state, ADD_PROJECT_START_LIST_ID, selected.path);
   }
   if (flow.mode === "choose") {
-    const selected = clampedItem(addProjectRows(flow), index);
+    const selected = addProjectRows(flow).find((row) => row.path === itemId);
     return selected === undefined
       ? state
-      : withSelection(state, ADD_PROJECT_CHOOSE_LIST_ID, selected.value.path);
+      : withSelection(state, ADD_PROJECT_CHOOSE_LIST_ID, selected.path);
   }
   return state;
-}
-
-function clampedItem<T>(
-  items: readonly T[],
-  index: number,
-): { index: number; value: T } | undefined {
-  if (items.length === 0) {
-    return undefined;
-  }
-  const clampedIndex = Math.min(items.length - 1, Math.max(0, index));
-  const value = items[clampedIndex];
-  return value === undefined ? undefined : { index: clampedIndex, value };
 }
 
 function withSelection(

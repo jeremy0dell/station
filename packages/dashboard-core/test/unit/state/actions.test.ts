@@ -52,9 +52,9 @@ const STATE_ACTION_CASES: readonly StateActionCase[] = [
   },
   {
     name: "addProject.selectRow",
-    action: { type: "addProject.selectRow", index: 1 },
+    action: { type: "addProject.selectRow", itemId: "/home/example" },
     state: addProjectStartState,
-    reduce: (state) => selectAddProjectRow(state, 1),
+    reduce: (state) => selectAddProjectRow(state, "/home/example"),
   },
   {
     name: "screen.clickAway",
@@ -131,7 +131,7 @@ const STATE_ACTION_CASES: readonly StateActionCase[] = [
 const STALE_STATE_ACTIONS: readonly DashboardStateAction[] = [
   { type: "selection.item.activate", itemId: "missing" },
   { type: "projectSettings.focusItem", itemId: "agent" },
-  { type: "addProject.selectRow", index: 0 },
+  { type: "addProject.selectRow", itemId: "missing" },
   { type: "screen.clickAway" },
   {
     type: "renameSession.openEdit",

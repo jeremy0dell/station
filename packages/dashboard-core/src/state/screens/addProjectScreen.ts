@@ -8,6 +8,7 @@ import {
 } from "../../flows/addProject/actions.js";
 import { createAddProjectFlow } from "../../flows/addProject/flow.js";
 import { pastedPathCandidate } from "../../flows/addProject/input.js";
+import { addProjectRows } from "../../flows/addProject/rows.js";
 import type {
   AddProjectChooseState,
   AddProjectFlowAction,
@@ -26,7 +27,7 @@ import { isReturnKey } from "../keys.js";
 import {
   addProjectSelectedIndexForFlow,
   reconcileAddProjectSelection,
-  selectAddProjectRowByIndex,
+  selectAddProjectRowById,
   selectedAddProjectFolderRow,
 } from "../selection/addProject.js";
 import { commitCurrentCursor } from "../selection/engine.js";
@@ -311,9 +312,9 @@ function transitionIntent(action: AddProjectFlowAction): AddProjectInputIntent {
   return { type: "transition", action };
 }
 
-/** Mouse selection writes the canonical cursor shared by arrows and Enter. */
-export function selectAddProjectRow(state: DashboardState, index: number): DashboardState {
-  return selectAddProjectRowByIndex(state, index);
+/** Pointer selection writes the canonical semantic cursor shared by arrows and Enter. */
+export function selectAddProjectRow(state: DashboardState, itemId: string): DashboardState {
+  return selectAddProjectRowById(state, itemId);
 }
 
 export function applyAddProjectFolderLoaded(
@@ -355,7 +356,13 @@ export function applyAddProjectFolderRefreshed(
   ) {
     return refreshed;
   }
-  return selectAddProjectRowByIndex(refreshed, selectedIndex);
+  if (refreshed.screen.name !== "addProject" || refreshed.screen.flow.mode !== "choose") {
+    return refreshed;
+  }
+  const replacement = addProjectRows(refreshed.screen.flow)[selectedIndex];
+  return replacement === undefined
+    ? refreshed
+    : selectAddProjectRowById(refreshed, replacement.path);
 }
 
 export function applyAddProjectFolderLoadFailed(

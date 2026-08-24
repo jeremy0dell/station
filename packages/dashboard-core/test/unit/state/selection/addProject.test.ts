@@ -58,8 +58,9 @@ describe("add-project shared selection", () => {
   });
 
   it("uses the same canonical cursor for mouse selection", () => {
-    const moved = selectAddProjectRow(startState(), 99);
+    const moved = selectAddProjectRow(startState(), "/Users/example");
     expect(addProjectSelectedIndex(moved)).toBe(1);
+    expect(moved.selection.get("addProjectStart")).toBe("/Users/example");
   });
 
   it("opens the selected start path with Right and closes with Escape", () => {

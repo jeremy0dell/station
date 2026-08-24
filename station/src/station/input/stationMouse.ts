@@ -69,7 +69,7 @@ export type StationMouseTarget =
   | { kind: "widgetSettingsRemove"; index: number }
   | { kind: "widgetSettingsAdd" }
   | { kind: "widgetSettingsPickerChoice"; index: number }
-  | { kind: "addProjectRow"; index: number }
+  | { kind: "addProjectRow"; itemId: string }
   | { kind: "addProjectAction"; actionId: AddProjectActionId }
   | { kind: "newSessionAction"; actionId: NewSessionActionId }
   | { kind: "projectMenuAction"; actionId: ProjectMenuInputActionId }
@@ -249,7 +249,7 @@ export function routeStationMouse(
       return { kind: "handled" };
     case "addProjectRow":
       if (ADD_PROJECT_ROW_MODES.has(mode)) {
-        runtime.actions.dispatch({ type: "addProject.selectRow", index: target.index });
+        runtime.actions.dispatch({ type: "addProject.selectRow", itemId: target.itemId });
       }
       return { kind: "handled" };
     case "addProjectAction":

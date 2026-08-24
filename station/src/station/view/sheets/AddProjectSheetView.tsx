@@ -96,7 +96,7 @@ function StartChoices({
           selected={index === selectedIndex}
           label={choice.label}
           detail={choice.detail}
-          mouseTarget={{ kind: "addProjectRow", index }}
+          mouseTarget={{ kind: "addProjectRow", itemId: choice.path }}
           itemId={startChoiceItemId(choice.path)}
         />
       ))}
@@ -148,7 +148,7 @@ function FolderPicker({
           selected={index === selectedIndex}
           label={rowLabel(row)}
           detail={rowDetail(row.kind)}
-          mouseTarget={{ kind: "addProjectRow", index }}
+          mouseTarget={{ kind: "addProjectRow", itemId: row.path }}
           itemId={folderRowItemId(row)}
         />
       ))}

@@ -219,6 +219,9 @@ describe("AddProjectSheetView", () => {
       selectedRow,
       MouseButtons.LEFT,
     );
-    expect(choose.targets.at(-1)).toEqual({ kind: "addProjectRow", index: 40 });
+    expect(choose.targets.at(-1)).toEqual({
+      kind: "addProjectRow",
+      itemId: "/workspace/project-39",
+    });
   });
 });

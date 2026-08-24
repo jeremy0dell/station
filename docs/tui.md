@@ -665,7 +665,9 @@ The zero-project dashboard renders **Add your first project** as a pointer
 target that dispatches `dashboard.addProject`, producing the same Add Project
 transition as `A` and focused `Enter`. Add Project controls dispatch stable
 action IDs; core resolves those IDs to the same intents used by direct commands
-and focused activation. Folder rows remain single-click selection targets. Choose
+and focused activation. Start and folder rows carry their canonical path across
+selection, focus-follow, pointer routing, and Enter; array position is never an
+input target. Folder rows remain single-click selection targets. Choose
 prefers a pasted absolute or home-relative path and otherwise commits the registered-list
 cursor used by keyboard Enter; Open is enabled only for a navigable child or search row.
 The chooser pins its current Folder and optional Search context above the semantic scrolling body,
