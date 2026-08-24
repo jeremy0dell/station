@@ -1,4 +1,4 @@
-import stringWidth from "string-width";
+import { cellWidth } from "@station/dashboard-core/text";
 import type { ContextMenuAnchor, ContextMenuItem } from "./types.js";
 
 export type ContextMenuSize = {
@@ -24,8 +24,8 @@ export function measureContextMenuWidth(items: readonly ContextMenuItem[]): numb
     1,
     ...items.map(
       (item) =>
-        stringWidth(item.label) +
-        (item.shortcut === undefined ? 0 : stringWidth(item.shortcut) + 1),
+        cellWidth(item.label) +
+        (item.shortcut === undefined ? 0 : cellWidth(item.shortcut) + 1),
     ),
   );
   return labelWidth + HORIZONTAL_PADDING + BORDER_CELLS;

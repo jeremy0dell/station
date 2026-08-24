@@ -13,8 +13,8 @@ import type {
   DashboardRuntimeOptions,
 } from "@station/dashboard-core/runtime";
 import { dashboardRowIds } from "@station/dashboard-core/selectors";
+import { cellWidth } from "@station/dashboard-core/text";
 import { act } from "react";
-import stringWidth from "string-width";
 import { spanAtFrameCell } from "../../terminal/testing/frameProbe.js";
 import {
   attentionAndFailuresSnapshot,
@@ -417,8 +417,8 @@ describe("dashboard golden frames", () => {
     expect(group).not.toContain("�");
     expect(project?.trimEnd().endsWith("[sh] [qs] [▾]")).toBe(true);
     expect(group?.trimEnd().endsWith("[qs] [▾]│")).toBe(true);
-    expect(stringWidth(project ?? "")).toBe(40);
-    expect(stringWidth(group ?? "")).toBe(40);
+    expect(cellWidth(project ?? "")).toBe(40);
+    expect(cellWidth(group ?? "")).toBe(40);
   });
 
   it("paints exact Group focus targets and focused-member containment", async () => {

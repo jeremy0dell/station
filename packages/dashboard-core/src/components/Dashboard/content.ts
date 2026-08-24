@@ -1,10 +1,10 @@
-import stringWidth from "string-width";
 import type { DashboardSessionOverflow } from "../../selectors/dashboardSlots.js";
 import type {
   DashboardScreenView,
   DashboardSnapshotView,
   DashboardStateView,
 } from "../../state/types.js";
+import { cellWidth } from "../../text/cells.js";
 
 type DashboardProjectView = DashboardSnapshotView["projects"][number];
 type DashboardObserverConnectionStatusView = DashboardStateView["observerConnectionStatus"];
@@ -39,7 +39,7 @@ export function headerStrip({
       if (joined.length === 0) {
         continue;
       }
-      if (stringWidth(joined) <= maxWidth) {
+      if (cellWidth(joined) <= maxWidth) {
         return joined;
       }
     }
@@ -83,11 +83,11 @@ export function fleetCountsLabel(
     counts.sessions,
     "session",
   )} · ${counts.agents} ${plural(counts.agents, "agent")}`;
-  if (stringWidth(full) <= maxWidth) {
+  if (cellWidth(full) <= maxWidth) {
     return full;
   }
   const compact = `${counts.projects} · ${counts.sessions} · ${counts.agents}`;
-  return stringWidth(compact) <= maxWidth ? compact : "";
+  return cellWidth(compact) <= maxWidth ? compact : "";
 }
 
 export function projectHeaderLabelParts(

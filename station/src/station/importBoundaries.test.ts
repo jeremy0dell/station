@@ -646,6 +646,17 @@ describe("station production boundaries", () => {
     expect(violations).toEqual([]);
   });
 
+  it("uses the shared terminal-cell text contract", () => {
+    const failures = PRODUCTION_MODULES.flatMap((module) =>
+      moduleReferencesOf(module).flatMap((reference) =>
+        reference.specifier === "string-width"
+          ? referenceDescriptors(module, reference)
+          : [],
+      ),
+    );
+    expect(failures.sort()).toEqual([]);
+  });
+
   it("confines OpenTUI layout geometry to named renderer-boundary modules", () => {
     const owners = new Set<string>();
     const violations: string[] = [];
