@@ -279,10 +279,22 @@ export type TuiScreen =
       removeDraft: EditableTextInputState;
       pending?: GroupSettingsPendingMutation;
     }
-  | { name: "widgetSettings"; focus: WidgetSettingsFocus; cursor: number; pickerCursor: number };
+  | {
+      name: "widgetSettings";
+      focus: WidgetSettingsFocus;
+      /** Stable identities paired with `widgets` while this settings screen is open. */
+      widgetItemIds: readonly WidgetSettingsItemId[];
+      activeWidgetItemId?: WidgetSettingsItemId;
+      activePickerType: AddableWidgetType;
+      nextWidgetIdentity: number;
+    };
 
 /** Whether the widget list or the add-widget picker owns keyboard input. */
 export type WidgetSettingsFocus = "list" | "picker";
+
+export type WidgetSettingsItemId = `widget:${number}`;
+
+export type AddableWidgetType = "time" | "fleet" | "prs" | "moon";
 
 /** Left-list item ids; extend alongside the registry in screens/projectSettings.ts. */
 export type ProjectSettingsItemId = "agent" | "remove";

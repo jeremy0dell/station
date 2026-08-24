@@ -1,5 +1,10 @@
 import { TextAttributes, type ColorInput } from "@opentui/core";
-import type { DashboardScreenView, DashboardStateView, WidgetSettingsFocus } from "@station/dashboard-core/state";
+import type {
+  DashboardScreenView,
+  DashboardStateView,
+  WidgetSettingsFocus,
+  WidgetSettingsItemId,
+} from "@station/dashboard-core/state";
 import { widgetSettingsPanelModel } from "@station/dashboard-core/selectors";
 import type { WidgetSettingsItem } from "@station/dashboard-core/selectors";
 import { SemanticScrollRegion } from "../layout/SemanticScrollViewport.js";
@@ -105,13 +110,7 @@ export function WidgetSettingsPanelView({
 }
 
 function itemKey(item: WidgetSettingsItem): string {
-  if (item.kind === "widget") {
-    return `widget:${item.index}`;
-  }
-  if (item.kind === "pickerChoice") {
-    return `pick:${item.index}`;
-  }
-  return item.kind;
+  return item.itemId;
 }
 
 function widgetItemId(item: WidgetSettingsItem): string {
@@ -184,7 +183,10 @@ function PanelItem({
         fg={toOpenTuiColor(item.active ? theme.action.primary : theme.text.primary)}
         bg={background}
         {...UNSELECTABLE_TEXT}
-        {...stationMouseProps(dispatch, { kind: "widgetSettingsPickerChoice", index: item.index })}
+        {...stationMouseProps(dispatch, {
+          kind: "widgetSettingsPickerChoice",
+          widgetType: item.widgetType,
+        })}
         onMouseOver={() => setHover(true)}
         onMouseOut={() => setHover(false)}
       >
@@ -208,14 +210,14 @@ function PanelItem({
         fg={rowColor}
         bg={hover && !dimmed ? toOpenTuiColor(theme.interaction.hover) : surfaceBackground}
         {...UNSELECTABLE_TEXT}
-        {...stationMouseProps(dispatch, { kind: "widgetSettingsRow", index: item.index })}
+        {...stationMouseProps(dispatch, { kind: "widgetSettingsRow", itemId: item.itemId })}
         onMouseOver={() => setHover(true)}
         onMouseOut={() => setHover(false)}
       >
         {fit(` ${marker} ${chip} ${item.label}`, width - 2)}
       </text>
       <RemoveMark
-        index={item.index}
+        itemId={item.itemId}
         rowHovered={hover && !dimmed}
         surfaceBackground={surfaceBackground}
       />
@@ -225,11 +227,11 @@ function PanelItem({
 
 // Its own element so the click hits only the remove action, never row-toggle.
 function RemoveMark({
-  index,
+  itemId,
   rowHovered,
   surfaceBackground,
 }: {
-  index: number;
+  itemId: WidgetSettingsItemId;
   rowHovered: boolean;
   surfaceBackground: ColorInput;
 }) {
@@ -246,7 +248,7 @@ function RemoveMark({
       fg={toOpenTuiColor(color)}
       bg={surfaceBackground}
       {...UNSELECTABLE_TEXT}
-      {...stationMouseProps(dispatch, { kind: "widgetSettingsRemove", index })}
+      {...stationMouseProps(dispatch, { kind: "widgetSettingsRemove", itemId })}
       onMouseOver={() => setHover(true)}
       onMouseOut={() => setHover(false)}
     >

@@ -19,10 +19,10 @@ import { openRemoveWorktreeConfirmForRow } from "../../../src/state/screens/remo
 import { openRenameEditForRow } from "../../../src/state/screens/sessionRows.js";
 import {
   openWidgetSettings,
-  widgetSettingsAddFromPicker,
+  widgetSettingsAddType,
   widgetSettingsOpenPicker,
-  widgetSettingsRemoveAt,
-  widgetSettingsToggleAt,
+  widgetSettingsRemoveItem,
+  widgetSettingsToggleItem,
 } from "../../../src/state/screens/widgetSettings.js";
 import { handleTuiKey } from "../../../src/state/transition.js";
 import type { DashboardState } from "../../../src/state/types.js";
@@ -104,15 +104,15 @@ const STATE_ACTION_CASES: readonly StateActionCase[] = [
   },
   {
     name: "widgetSettings.toggle",
-    action: { type: "widgetSettings.toggle", index: 1 },
+    action: { type: "widgetSettings.toggle", itemId: "widget:1" },
     state: widgetSettingsState,
-    reduce: (state) => widgetSettingsToggleAt(state, 1),
+    reduce: (state) => widgetSettingsToggleItem(state, "widget:1"),
   },
   {
     name: "widgetSettings.remove",
-    action: { type: "widgetSettings.remove", index: 0 },
+    action: { type: "widgetSettings.remove", itemId: "widget:0" },
     state: widgetSettingsState,
-    reduce: (state) => widgetSettingsRemoveAt(state, 0),
+    reduce: (state) => widgetSettingsRemoveItem(state, "widget:0"),
   },
   {
     name: "widgetSettings.openPicker",
@@ -122,9 +122,9 @@ const STATE_ACTION_CASES: readonly StateActionCase[] = [
   },
   {
     name: "widgetSettings.addFromPicker",
-    action: { type: "widgetSettings.addFromPicker", index: 2 },
+    action: { type: "widgetSettings.addFromPicker", widgetType: "prs" },
     state: widgetSettingsState,
-    reduce: (state) => widgetSettingsAddFromPicker(state, 2),
+    reduce: (state) => widgetSettingsAddType(state, "prs"),
   },
 ];
 
@@ -147,10 +147,10 @@ const STALE_STATE_ACTIONS: readonly DashboardStateAction[] = [
     rowId: "missing",
     returnTo: "dashboard",
   },
-  { type: "widgetSettings.toggle", index: 0 },
-  { type: "widgetSettings.remove", index: 0 },
+  { type: "widgetSettings.toggle", itemId: "widget:0" },
+  { type: "widgetSettings.remove", itemId: "widget:0" },
   { type: "widgetSettings.openPicker" },
-  { type: "widgetSettings.addFromPicker", index: 0 },
+  { type: "widgetSettings.addFromPicker", widgetType: "time" },
 ];
 
 describe("semantic TUI actions", () => {
@@ -356,11 +356,11 @@ describe("dashboard state actions", () => {
   it("keeps invalid widget rows inert", () => {
     const state = widgetSettingsState();
 
-    expect(handleTuiAction(state, { type: "widgetSettings.toggle", index: 99 }, context)).toEqual({
-      state,
-    });
     expect(
-      handleTuiAction(state, { type: "widgetSettings.addFromPicker", index: 99 }, context),
+      handleTuiAction(state, { type: "widgetSettings.toggle", itemId: "widget:99" }, context),
+    ).toEqual({ state });
+    expect(
+      handleTuiAction(state, { type: "widgetSettings.remove", itemId: "widget:99" }, context),
     ).toEqual({ state });
   });
 

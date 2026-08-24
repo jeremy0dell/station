@@ -769,9 +769,12 @@ root = "${projectRoot}"
 
     composition.start();
     composition.dashboard.actions.dispatch({ type: "widgetSettings.open" });
-    composition.dashboard.actions.dispatch({ type: "widgetSettings.remove", index: 0 });
+    composition.dashboard.actions.dispatch({ type: "widgetSettings.remove", itemId: "widget:0" });
     composition.dashboard.actions.dispatch({ type: "widgetSettings.openPicker" });
-    composition.dashboard.actions.dispatch({ type: "widgetSettings.addFromPicker", index: 3 });
+    composition.dashboard.actions.dispatch({
+      type: "widgetSettings.addFromPicker",
+      widgetType: "moon",
+    });
 
     await waitFor(() => readFileSync(configPath, "utf8").includes('type = "moon"'));
     const sourceText = readFileSync(configPath, "utf8");

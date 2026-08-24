@@ -66,14 +66,15 @@ import {
 import { openRenameEditForRow } from "./screens/sessionRows.js";
 import {
   openWidgetSettings,
-  widgetSettingsAddFromPicker,
+  widgetSettingsAddType,
   widgetSettingsOpenPicker,
-  widgetSettingsRemoveAt,
-  widgetSettingsToggleAt,
+  widgetSettingsRemoveItem,
+  widgetSettingsToggleItem,
 } from "./screens/widgetSettings.js";
 import { activateCurrentListItem } from "./selection/middleware.js";
 import type { TuiRuntimeContext, TuiTransition } from "./transition.js";
 import type {
+  AddableWidgetType,
   CreateGroupReturnTarget,
   DashboardFilterConditionField,
   DashboardState,
@@ -81,6 +82,7 @@ import type {
   GroupSettingsDetailFocus,
   GroupSettingsSection,
   ProjectSettingsItemId,
+  WidgetSettingsItemId,
 } from "./types.js";
 
 /**
@@ -171,10 +173,10 @@ export type DashboardStateAction =
   | { type: "groupSettings.open"; groupId: SessionGroupId; section: GroupSettingsSection }
   | { type: "forkSession.openDetails"; rowId: SessionId; returnTo: "dashboard" }
   | { type: "widgetSettings.open" }
-  | { type: "widgetSettings.toggle"; index: number }
-  | { type: "widgetSettings.remove"; index: number }
+  | { type: "widgetSettings.toggle"; itemId: WidgetSettingsItemId }
+  | { type: "widgetSettings.remove"; itemId: WidgetSettingsItemId }
   | { type: "widgetSettings.openPicker" }
-  | { type: "widgetSettings.addFromPicker"; index: number };
+  | { type: "widgetSettings.addFromPicker"; widgetType: AddableWidgetType };
 
 /** Closed renderer-neutral action/event set accepted by dashboard state. */
 export type DashboardAction = TuiSemanticAction | DashboardStateAction;
@@ -338,13 +340,13 @@ function handleDashboardWidgetAction(
     case "widgetSettings.open":
       return stateTransition(openWidgetSettings(state));
     case "widgetSettings.toggle":
-      return stateTransition(widgetSettingsToggleAt(state, action.index));
+      return stateTransition(widgetSettingsToggleItem(state, action.itemId));
     case "widgetSettings.remove":
-      return stateTransition(widgetSettingsRemoveAt(state, action.index));
+      return stateTransition(widgetSettingsRemoveItem(state, action.itemId));
     case "widgetSettings.openPicker":
       return stateTransition(widgetSettingsOpenPicker(state));
     case "widgetSettings.addFromPicker":
-      return stateTransition(widgetSettingsAddFromPicker(state, action.index));
+      return stateTransition(widgetSettingsAddType(state, action.widgetType));
     default:
       return assertNeverAction(action);
   }

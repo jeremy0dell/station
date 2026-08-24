@@ -151,7 +151,12 @@ function withLongWidgetList(state: GoldenDashboardState): GoldenDashboardState {
     widgets: Array.from({ length: 28 }, (_, index) => ({
       type: index % 2 === 0 ? ("time" as const) : ("moon" as const),
     })),
-    screen: { ...state.screen, cursor: 27 },
+    screen: {
+      ...state.screen,
+      widgetItemIds: Array.from({ length: 28 }, (_, index) => `widget:${index}` as const),
+      activeWidgetItemId: "widget:27",
+      nextWidgetIdentity: 28,
+    },
   };
 }
 
@@ -926,14 +931,23 @@ const CASES: ModalCase[] = [
     name: "widget settings panel",
     keys: [{ input: "W" }],
     trimSnapshotTrailingWhitespace: true,
-    prepare: (state) => ({
-      ...state,
-      widgets: [
-        { type: "time" },
-        { type: "weather", city: "New York, NY", label: "NYC", enabled: false },
-        { type: "moon" },
-      ],
-    }),
+    prepare: (state) => {
+      if (state.screen.name !== "widgetSettings") return state;
+      return {
+        ...state,
+        widgets: [
+          { type: "time" },
+          { type: "weather", city: "New York, NY", label: "NYC", enabled: false },
+          { type: "moon" },
+        ],
+        screen: {
+          ...state.screen,
+          widgetItemIds: ["widget:0", "widget:1", "widget:2"],
+          activeWidgetItemId: "widget:0",
+          nextWidgetIdentity: 3,
+        },
+      };
+    },
     expect: [
       "widgets",
       "saved to config.toml",
@@ -1240,7 +1254,14 @@ describe("modal flow golden frames", () => {
       <StationThemeProvider theme={nativeStationTheme}>
         <StationMouseProvider value={() => {}}>
           <WidgetSettingsPanelView
-            screen={{ name: "widgetSettings", focus: "list", cursor: 0, pickerCursor: 0 }}
+            screen={{
+              name: "widgetSettings",
+              focus: "list",
+              widgetItemIds: ["widget:0", "widget:1"],
+              activeWidgetItemId: "widget:0",
+              activePickerType: "time",
+              nextWidgetIdentity: 2,
+            }}
             widgets={[{ type: "time" }, { type: "moon", enabled: false }]}
             widgetsPersisted
             columns={SIZE.width}

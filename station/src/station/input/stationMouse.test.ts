@@ -1434,15 +1434,15 @@ describe("routeStationMouse widget settings", () => {
 
   it("toggles a clicked row and moves the cursor onto it", () => {
     const store = panelStore();
-    routeStationMouse({ kind: "widgetSettingsRow", index: 1 }, LEFT_DOWN, store);
+    routeStationMouse({ kind: "widgetSettingsRow", itemId: "widget:1" }, LEFT_DOWN, store);
     expect(store.state.getState().widgets[1]).toEqual({ type: "moon", enabled: false });
     const screen = store.state.getState().screen;
-    expect(screen.name === "widgetSettings" && screen.cursor).toBe(1);
+    expect(screen.name === "widgetSettings" && screen.activeWidgetItemId).toBe("widget:1");
   });
 
   it("removes via the row's ×", () => {
     const store = panelStore();
-    routeStationMouse({ kind: "widgetSettingsRemove", index: 0 }, LEFT_DOWN, store);
+    routeStationMouse({ kind: "widgetSettingsRemove", itemId: "widget:0" }, LEFT_DOWN, store);
     expect(store.state.getState().widgets.map((widget) => widget.type)).toEqual(["moon"]);
   });
 
@@ -1451,7 +1451,11 @@ describe("routeStationMouse widget settings", () => {
     routeStationMouse({ kind: "widgetSettingsAdd" }, LEFT_DOWN, store);
     const picking = store.state.getState().screen;
     expect(picking.name === "widgetSettings" && picking.focus).toBe("picker");
-    routeStationMouse({ kind: "widgetSettingsPickerChoice", index: 1 }, LEFT_DOWN, store);
+    routeStationMouse(
+      { kind: "widgetSettingsPickerChoice", widgetType: "fleet" },
+      LEFT_DOWN,
+      store,
+    );
     expect(store.state.getState().widgets.at(-1)).toEqual({ type: "fleet" });
     const done = store.state.getState().screen;
     expect(done.name === "widgetSettings" && done.focus).toBe("list");
@@ -1459,7 +1463,7 @@ describe("routeStationMouse widget settings", () => {
 
   it("ignores panel targets outside the widgetSettings mode", () => {
     const store = makeStore(undefined, { widgets: [{ type: "time" }] });
-    routeStationMouse({ kind: "widgetSettingsRow", index: 0 }, LEFT_DOWN, store);
+    routeStationMouse({ kind: "widgetSettingsRow", itemId: "widget:0" }, LEFT_DOWN, store);
     expect(store.state.getState().widgets[0]).toEqual({ type: "time" });
   });
 

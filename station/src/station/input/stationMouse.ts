@@ -7,6 +7,7 @@ import type {
 } from "@station/dashboard-core/selectors";
 import { deriveTuiInputMode, isRemoveProjectArmed, LIST_REGISTRY } from "@station/dashboard-core/state";
 import type {
+  AddableWidgetType,
   AddProjectActionId,
   DashboardFilterConditionField,
   ForkSessionActionId,
@@ -17,6 +18,7 @@ import type {
   NewSessionActionId,
   PersistentFilterActionId,
   ProjectSettingsItemId,
+  WidgetSettingsItemId,
   ProjectMenuInputActionId,
   RemoveWorktreeActionId,
   TuiInputMode,
@@ -65,10 +67,10 @@ export type StationMouseTarget =
   | { kind: "groupSettingsSession"; sessionId: SessionId }
   | { kind: "groupSettingsAction"; actionId: "save" | "back" }
   | { kind: "widgetSettingsOpen" }
-  | { kind: "widgetSettingsRow"; index: number }
-  | { kind: "widgetSettingsRemove"; index: number }
+  | { kind: "widgetSettingsRow"; itemId: WidgetSettingsItemId }
+  | { kind: "widgetSettingsRemove"; itemId: WidgetSettingsItemId }
   | { kind: "widgetSettingsAdd" }
-  | { kind: "widgetSettingsPickerChoice"; index: number }
+  | { kind: "widgetSettingsPickerChoice"; widgetType: AddableWidgetType }
   | { kind: "addProjectRow"; itemId: string }
   | { kind: "addProjectAction"; actionId: AddProjectActionId }
   | { kind: "newSessionAction"; actionId: NewSessionActionId }
@@ -231,12 +233,12 @@ export function routeStationMouse(
       return { kind: "handled" };
     case "widgetSettingsRow":
       if (mode === "widgetSettings") {
-        runtime.actions.dispatch({ type: "widgetSettings.toggle", index: target.index });
+        runtime.actions.dispatch({ type: "widgetSettings.toggle", itemId: target.itemId });
       }
       return { kind: "handled" };
     case "widgetSettingsRemove":
       if (mode === "widgetSettings") {
-        runtime.actions.dispatch({ type: "widgetSettings.remove", index: target.index });
+        runtime.actions.dispatch({ type: "widgetSettings.remove", itemId: target.itemId });
       }
       return { kind: "handled" };
     case "widgetSettingsAdd":
@@ -244,7 +246,10 @@ export function routeStationMouse(
       return { kind: "handled" };
     case "widgetSettingsPickerChoice":
       if (mode === "widgetSettings") {
-        runtime.actions.dispatch({ type: "widgetSettings.addFromPicker", index: target.index });
+        runtime.actions.dispatch({
+          type: "widgetSettings.addFromPicker",
+          widgetType: target.widgetType,
+        });
       }
       return { kind: "handled" };
     case "addProjectRow":

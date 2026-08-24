@@ -3,16 +3,30 @@ import {
   widgetSettingsRowLabel,
 } from "../../state/screens/widgetSettings.js";
 import type {
+  AddableWidgetType,
   DashboardScreenView,
   DashboardStateView,
   WidgetSettingsFocus,
+  WidgetSettingsItemId,
 } from "../../state/types.js";
 
 export type WidgetSettingsItem =
-  | { kind: "widget"; index: number; label: string; enabled: boolean; active: boolean }
-  | { kind: "empty"; label: string }
-  | { kind: "add"; label: string; active: boolean }
-  | { kind: "pickerChoice"; index: number; label: string; active: boolean };
+  | {
+      kind: "widget";
+      itemId: WidgetSettingsItemId;
+      label: string;
+      enabled: boolean;
+      active: boolean;
+    }
+  | { kind: "empty"; itemId: "empty"; label: string }
+  | { kind: "add"; itemId: "add"; label: string; active: boolean }
+  | {
+      kind: "pickerChoice";
+      itemId: `picker:${AddableWidgetType}`;
+      widgetType: AddableWidgetType;
+      label: string;
+      active: boolean;
+    };
 
 export type WidgetSettingsPanelModel = {
   title: string;
@@ -32,11 +46,12 @@ export function widgetSettingsPanelModel(
     return {
       title: "add widget",
       note: "weather and tz require config.toml",
-      items: ADDABLE_WIDGET_TYPES.map((type, index) => ({
+      items: ADDABLE_WIDGET_TYPES.map((type) => ({
         kind: "pickerChoice",
-        index,
+        itemId: `picker:${type}`,
+        widgetType: type,
         label: widgetSettingsRowLabel({ type }),
-        active: index === screen.pickerCursor,
+        active: type === screen.activePickerType,
       })),
       footer: "↵ add   esc back",
       focus: "picker",
@@ -44,15 +59,22 @@ export function widgetSettingsPanelModel(
   }
   const items: WidgetSettingsItem[] =
     widgets.length === 0
-      ? [{ kind: "empty", label: "no widgets yet" }]
-      : widgets.map((widget, index) => ({
-          kind: "widget",
-          index,
-          label: widgetSettingsRowLabel(widget),
-          enabled: widget.enabled !== false,
-          active: index === screen.cursor,
-        }));
-  items.push({ kind: "add", label: "[ + add widget ]", active: false });
+      ? [{ kind: "empty", itemId: "empty", label: "no widgets yet" }]
+      : widgets.flatMap((widget, index) => {
+          const itemId = screen.widgetItemIds[index];
+          return itemId === undefined
+            ? []
+            : [
+                {
+                  kind: "widget" as const,
+                  itemId,
+                  label: widgetSettingsRowLabel(widget),
+                  enabled: widget.enabled !== false,
+                  active: itemId === screen.activeWidgetItemId,
+                },
+              ];
+        });
+  items.push({ kind: "add", itemId: "add", label: "[ + add widget ]", active: false });
   return {
     title: "widgets",
     note: widgetsPersisted

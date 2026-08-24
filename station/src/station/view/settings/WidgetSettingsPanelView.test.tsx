@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it } from "bun:test";
+import { MouseButtons } from "@opentui/core/testing";
 import { testRender } from "@opentui/react/test-utils";
 import type { TuiWidgetConfig } from "@station/contracts";
+import type { StationMouseTarget } from "../../input/stationMouse.js";
 import { nativeStationTheme, StationThemeProvider } from "../../../theme/index.js";
 import { semanticItemRenderableId } from "../layout/scrollViewport.js";
 import { StationHoverProvider, StationMouseProvider } from "../stationMouseContext.js";
@@ -21,7 +23,14 @@ describe("WidgetSettingsPanelView", () => {
         <StationHoverProvider value>
           <StationMouseProvider value={() => {}}>
             <WidgetSettingsPanelView
-              screen={{ name: "widgetSettings", focus: "list", cursor: 14, pickerCursor: 0 }}
+              screen={{
+                name: "widgetSettings",
+                focus: "list",
+                widgetItemIds: Array.from({ length: 15 }, (_, index) => `widget:${index}` as const),
+                activeWidgetItemId: "widget:14",
+                activePickerType: "time",
+                nextWidgetIdentity: 15,
+              }}
               widgets={widgets}
               widgetsPersisted
               columns={48}
@@ -61,7 +70,14 @@ describe("WidgetSettingsPanelView", () => {
         <StationHoverProvider value>
           <StationMouseProvider value={() => {}}>
             <WidgetSettingsPanelView
-              screen={{ name: "widgetSettings", focus: "list", cursor: 27, pickerCursor: 0 }}
+              screen={{
+                name: "widgetSettings",
+                focus: "list",
+                widgetItemIds: Array.from({ length: 28 }, (_, index) => `widget:${index}` as const),
+                activeWidgetItemId: "widget:27",
+                activePickerType: "time",
+                nextWidgetIdentity: 28,
+              }}
               widgets={widgets}
               widgetsPersisted
               columns={80}
@@ -86,5 +102,45 @@ describe("WidgetSettingsPanelView", () => {
         semanticItemRenderableId("widget-settings:widget:0"),
       ),
     ).toBeDefined();
+  });
+
+  it("routes a rendered widget row by the same stable identity keyboard focus retains", async () => {
+    const targets: StationMouseTarget[] = [];
+    const setup = await testRender(
+      <StationThemeProvider theme={nativeStationTheme}>
+        <StationHoverProvider value>
+          <StationMouseProvider value={(target) => targets.push(target)}>
+            <WidgetSettingsPanelView
+              screen={{
+                name: "widgetSettings",
+                focus: "list",
+                widgetItemIds: ["widget:0", "widget:1"],
+                activeWidgetItemId: "widget:1",
+                activePickerType: "time",
+                nextWidgetIdentity: 2,
+              }}
+              widgets={[{ type: "time" }, { type: "moon" }]}
+              widgetsPersisted
+              columns={48}
+              rows={12}
+            />
+          </StationMouseProvider>
+        </StationHoverProvider>
+      </StationThemeProvider>,
+      { width: 48, height: 12 },
+    );
+    teardowns.push(() => setup.renderer.destroy());
+    await setup.renderOnce();
+    const lines = setup.captureCharFrame().split("\n");
+    const row = lines.findIndex((line) => line.includes("moon"));
+    const column = lines[row]?.indexOf("moon") ?? -1;
+
+    await setup.mockMouse.click(column, row, MouseButtons.LEFT);
+
+    expect(
+      targets.some(
+        (target) => target.kind === "widgetSettingsRow" && target.itemId === "widget:1",
+      ),
+    ).toBe(true);
   });
 });

@@ -25,8 +25,14 @@ describe("widgetSettingsPanelModel items", () => {
   it("projects stable semantic items instead of a painted-line model", () => {
     const screen = widgetSettingsScreen();
     expect(widgetSettingsPanelModel(screen, [{ type: "time" }]).items).toEqual([
-      { kind: "widget", index: 0, label: "time", enabled: true, active: true },
-      { kind: "add", label: "[ + add widget ]", active: false },
+      {
+        kind: "widget",
+        itemId: "widget:0",
+        label: "time",
+        enabled: true,
+        active: true,
+      },
+      { kind: "add", itemId: "add", label: "[ + add widget ]", active: false },
     ]);
   });
 });
