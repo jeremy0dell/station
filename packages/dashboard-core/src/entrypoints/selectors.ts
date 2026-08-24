@@ -55,7 +55,7 @@ export type {
 export { createGroupSheetContent } from "../components/GroupCreateSheet/content.js";
 export type {
   GroupSettingsPanelModel,
-  GroupSettingsSessionLine,
+  GroupSettingsSessionItem,
 } from "../components/GroupSettingsPanel/content.js";
 export { groupSettingsPanelModel } from "../components/GroupSettingsPanel/content.js";
 export {

@@ -193,14 +193,19 @@ function SessionsDetail({ model, screen, width }: DetailProps) {
         </text>
       ) : (
         model.sessions.map((session) => (
-          <SessionRow key={session.sessionId} session={session} width={width} pending={model.pending} />
+          <SessionItem
+            key={session.sessionId}
+            session={session}
+            width={width}
+            pending={model.pending}
+          />
         ))
       )}
     </SettingsPanelDetailView>
   );
 }
 
-function SessionRow({
+function SessionItem({
   session,
   width,
   pending,

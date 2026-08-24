@@ -8,7 +8,7 @@ import type { DashboardScreenView, DashboardSnapshotView } from "../../state/typ
 
 type GroupSettingsScreenView = Extract<DashboardScreenView, { name: "groupSettings" }>;
 
-export type GroupSettingsSessionLine = {
+export type GroupSettingsSessionItem = {
   sessionId: SessionId;
   slot: string;
   title: string;
@@ -31,7 +31,7 @@ export type GroupSettingsPanelModel = {
     name: string;
     memberCount: number;
   };
-  sessions: readonly GroupSettingsSessionLine[];
+  sessions: readonly GroupSettingsSessionItem[];
   sessionCount: number;
   membershipChanged: boolean;
   removePhrase: string;
@@ -57,11 +57,11 @@ export function groupSettingsPanelModel(
   }
   const projectSessions = snapshot.sessions.filter((session) => session.projectId === project.id);
   const keys = "123456789abcdefghijklmnopqrstuvwxyz";
-  const sessions = projectSessions.map((session, index): GroupSettingsSessionLine => {
+  const sessions = projectSessions.map((session, index): GroupSettingsSessionItem => {
     const currentGroup = groupsBySessionId.get(session.id);
     const currentGroupId = currentGroup?.id ?? null;
     const checked = screen.desiredSessionIds.has(session.id);
-    const line: GroupSettingsSessionLine = {
+    const item: GroupSettingsSessionItem = {
       sessionId: session.id,
       slot: keys[index] ?? "·",
       title: session.title,
@@ -74,8 +74,8 @@ export function groupSettingsPanelModel(
       currentGroupId,
       membershipLabel: sessionMembershipLabel(checked, currentGroup, screen.groupId),
     };
-    if (currentGroup !== undefined) line.currentGroupName = currentGroup.name;
-    return line;
+    if (currentGroup !== undefined) item.currentGroupName = currentGroup.name;
+    return item;
   });
 
   return {
