@@ -125,43 +125,34 @@ export function scrollIndicatorLabel(
   return `▼ ${overflow.below} below · showing ${overflow.visible} of ${overflow.total}`;
 }
 
-export type SnapshotLoadingLine = {
-  id: string;
-  text: string;
-  color?: "gray";
-};
+export type SnapshotLoadingContent =
+  | { kind: "loading"; title: string }
+  | { kind: "unavailable"; title: string; hint: string }
+  | { kind: "reconnecting"; title: string; detail: string; hint: string };
 
-export function snapshotLoadingLines(
+/** Semantic copy for the dashboard body while no Observer snapshot is available. */
+export function snapshotLoadingContent(
   loading: boolean,
   observerConnectionStatus: DashboardObserverConnectionStatusView,
-): SnapshotLoadingLine[] {
+): SnapshotLoadingContent {
   if (observerConnectionStatus.state === "reconnecting") {
-    return [
-      { id: "top-spacer", text: " " },
-      { id: "title", text: "waiting for observer" },
-      { id: "status", text: "retrying connection", color: "gray" },
-      { id: "bottom-spacer", text: " " },
-      {
-        id: "hint",
-        text: "The dashboard will appear when the observer is ready.",
-        color: "gray",
-      },
-    ];
+    return {
+      kind: "reconnecting",
+      title: "waiting for observer",
+      detail: "retrying connection",
+      hint: "The dashboard will appear when the observer is ready.",
+    };
   }
 
   if (!loading) {
-    return [
-      { id: "top-spacer", text: " " },
-      { id: "title", text: "observer snapshot unavailable" },
-      {
-        id: "hint",
-        text: "Check the error details and try refreshing when ready.",
-        color: "gray",
-      },
-    ];
+    return {
+      kind: "unavailable",
+      title: "observer snapshot unavailable",
+      hint: "Check the error details and try refreshing when ready.",
+    };
   }
 
-  return [{ id: "loading", text: "Loading observer snapshot...", color: "gray" }];
+  return { kind: "loading", title: "Loading observer snapshot..." };
 }
 
 export function observerHeaderStatusForConnection(

@@ -5,7 +5,10 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { useStore } from "zustand/react";
 import type { DashboardActions, DashboardStateSource } from "@station/dashboard-core/runtime";
-import { snapshotLoadingLines } from "@station/dashboard-core/selectors";
+import {
+  snapshotLoadingContent,
+  type SnapshotLoadingContent,
+} from "@station/dashboard-core/selectors";
 import {
   activeTuiToast,
   isTuiToastHiddenByScreen,
@@ -41,7 +44,6 @@ export function DashboardRoot({
   rows,
   onCopyNotice,
 }: DashboardRootProps) {
-  const theme = useStationTheme();
   const snapshot = useStore(state, (state) => state.snapshot);
   const loading = useStore(state, (state) => state.loading);
   const screen = useStore(state, (state) => state.screen);
@@ -96,23 +98,13 @@ export function DashboardRoot({
   );
 
   if (loading || snapshot === undefined) {
+    const content = snapshotLoadingContent(loading, observerConnectionStatus);
     // Keep both root branches padding-free because OpenTUI retains a removed inset during reconciliation.
     return (
       <box width="100%" flexGrow={1} minHeight={0} flexDirection="column">
         <StationHoverProvider value={backgroundHoverEnabled}>
           <DashboardNoticeRegion overlay={toastOverlay}>
-            <box flexDirection="column" flexGrow={1} minHeight={0}>
-              {snapshotLoadingLines(loading, observerConnectionStatus).map((line, index) => (
-                <text
-                  key={`${index}:${line.text}`}
-                  fg={toOpenTuiColor(
-                    line.color === "gray" ? theme.text.muted : theme.text.primary,
-                  )}
-                >
-                  {line.text}
-                </text>
-              ))}
-            </box>
+            <DashboardLoadingContentView content={content} />
           </DashboardNoticeRegion>
           <DashboardChromeView state={state} screen={screen} columns={contentColumns} />
         </StationHoverProvider>
@@ -154,6 +146,29 @@ export function DashboardRoot({
         widgets={liveWidgets}
         widgetsPersisted={widgetsPersisted}
       />
+    </box>
+  );
+}
+
+function DashboardLoadingContentView({ content }: { content: SnapshotLoadingContent }) {
+  const theme = useStationTheme();
+  const muted = toOpenTuiColor(theme.text.muted);
+  return (
+    <box
+      flexDirection="column"
+      flexGrow={1}
+      minHeight={0}
+      paddingTop={content.kind === "loading" ? 0 : 1}
+    >
+      <text fg={content.kind === "loading" ? muted : toOpenTuiColor(theme.text.primary)}>
+        {content.title}
+      </text>
+      {content.kind === "reconnecting" ? <text fg={muted}>{content.detail}</text> : null}
+      {content.kind === "loading" ? null : (
+        <text marginTop={content.kind === "reconnecting" ? 1 : 0} fg={muted}>
+          {content.hint}
+        </text>
+      )}
     </box>
   );
 }

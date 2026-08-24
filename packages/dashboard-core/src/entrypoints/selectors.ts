@@ -7,7 +7,10 @@
  * mutation, lifecycle, or effects live here.
  */
 
-export type { CommandPromptModel } from "../components/Dashboard/content.js";
+export type {
+  CommandPromptModel,
+  SnapshotLoadingContent,
+} from "../components/Dashboard/content.js";
 export {
   commandPromptForScreen,
   emptyProjectLabel,
@@ -17,7 +20,7 @@ export {
   observerHeaderStatusForConnection,
   projectHeaderLabelParts,
   scrollIndicatorLabel,
-  snapshotLoadingLines,
+  snapshotLoadingContent,
 } from "../components/Dashboard/content.js";
 export type {
   DashboardFilterConditionPanelAction,
