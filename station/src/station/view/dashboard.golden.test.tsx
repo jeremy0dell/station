@@ -1454,6 +1454,52 @@ describe("dashboard golden frames", () => {
     );
   });
 
+  it("keeps Project and Group menu hover active while their dashboard rows are inert", async () => {
+    for (const testCase of [
+      {
+        snapshot: manyProjectsSnapshot(),
+        rowId: dashboardRowIds.project("station"),
+        label: "Project settings…",
+      },
+      {
+        snapshot: groupedManyProjectsSnapshot(),
+        rowId: dashboardRowIds.group("group_design_refresh"),
+        label: "Group settings…",
+      },
+    ]) {
+      const setup = await renderDashboard({
+        width: 80,
+        height: 24,
+        snapshot: testCase.snapshot,
+      });
+      await act(async () => {
+        setup.store.actions.dispatch({
+          type: "dashboard.cell.activate",
+          rowId: testCase.rowId,
+          cellId: "menu",
+        });
+        await Promise.resolve();
+      });
+      await setup.flush();
+
+      const lines = setup.captureCharFrame().split("\n");
+      const row = lines.findIndex((line) => line.includes(testCase.label));
+      const column = lines[row]?.indexOf(testCase.label) ?? -1;
+      expect(row).toBeGreaterThanOrEqual(0);
+      expect(column).toBeGreaterThanOrEqual(0);
+
+      await act(async () => {
+        await setup.mockMouse.moveTo(column, row);
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      });
+      await setup.flush();
+
+      expect(spanBgHex(spanAtFrameCell(setup.captureSpans(), row, column))).toBe(
+        stationColorSnapshotValue(nativeStationTheme.contextMenu.selected),
+      );
+    }
+  });
+
   it("suppresses popup hover styling without removing click targets", async () => {
     let clicked: StationMouseTarget | undefined;
     const setup = await renderDashboard({
@@ -1481,6 +1527,25 @@ describe("dashboard golden frames", () => {
       kind: "dashboardCell",
       cellId: "identity",
     });
+
+    await act(async () => {
+      setup.store.actions.dispatch({
+        type: "dashboard.cell.activate",
+        rowId: dashboardRowIds.project("station"),
+        cellId: "menu",
+      });
+      await Promise.resolve();
+    });
+    await setup.flush();
+    const menuLines = setup.captureCharFrame().split("\n");
+    const settingsRow = menuLines.findIndex((line) => line.includes("Project settings…"));
+    const settingsColumn = menuLines[settingsRow]?.indexOf("Project settings…") ?? -1;
+    await setup.mockMouse.moveTo(settingsColumn, settingsRow);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    await setup.flush();
+    expect(
+      spanBgHex(spanAtFrameCell(setup.captureSpans(), settingsRow, settingsColumn)),
+    ).not.toBe(stationColorSnapshotValue(nativeStationTheme.contextMenu.selected));
   });
 
   it("wraps the complete actionable error at wide and narrow widths", async () => {

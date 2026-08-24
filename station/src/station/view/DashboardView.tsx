@@ -32,7 +32,12 @@ import { SegmentLinkTargets, Segments } from "./segments.js";
 import { Throbber } from "./Throbber.js";
 import { FLEET_STATUS_ORDER, STATION_STATUS_UI } from "../statusUi.js";
 import { toOpenTuiColor, useStationTheme } from "../../theme/index.js";
-import { useStationHoverState, useStationMouse, stationMouseProps } from "./stationMouseContext.js";
+import {
+  StationHoverProvider,
+  useStationHoverState,
+  useStationMouse,
+  stationMouseProps,
+} from "./stationMouseContext.js";
 import { memo, useLayoutEffect, useMemo } from "react";
 import {
   DashboardScrollViewport,
@@ -56,6 +61,7 @@ export type DashboardViewProps = {
   screen: DashboardScreenView;
   layout: DashboardScrollController;
   columns: number;
+  menuHoverEnabled: boolean;
 };
 
 export function DashboardView({
@@ -64,6 +70,7 @@ export function DashboardView({
   screen,
   layout,
   columns,
+  menuHoverEnabled,
 }: DashboardViewProps) {
   const theme = useStationTheme();
   const visibleRowIds = useDashboardVisibleRows(layout);
@@ -183,21 +190,25 @@ export function DashboardView({
       )}
       <DashboardScrollIndicatorView direction="below" overflow={slots.sessionOverflow} />
       {screen.name === "projectMenu" && menuAnchorRenderableId !== undefined ? (
-        <ProjectMenuView
-          screen={screen}
-          boundaryId={DASHBOARD_LAYOUT_BOUNDARY_ID}
-          anchorRenderableId={menuAnchorRenderableId}
-        />
+        <StationHoverProvider value={menuHoverEnabled}>
+          <ProjectMenuView
+            screen={screen}
+            boundaryId={DASHBOARD_LAYOUT_BOUNDARY_ID}
+            anchorRenderableId={menuAnchorRenderableId}
+          />
+        </StationHoverProvider>
       ) : null}
       {screen.name === "groupMenu" &&
       menuAnchorRenderableId !== undefined &&
       menuGroup !== undefined ? (
-        <GroupMenuView
-          screen={screen}
-          groupName={menuGroup.name}
-          boundaryId={DASHBOARD_LAYOUT_BOUNDARY_ID}
-          anchorRenderableId={menuAnchorRenderableId}
-        />
+        <StationHoverProvider value={menuHoverEnabled}>
+          <GroupMenuView
+            screen={screen}
+            groupName={menuGroup.name}
+            boundaryId={DASHBOARD_LAYOUT_BOUNDARY_ID}
+            anchorRenderableId={menuAnchorRenderableId}
+          />
+        </StationHoverProvider>
       ) : null}
     </box>
   );

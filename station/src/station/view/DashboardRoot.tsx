@@ -133,6 +133,7 @@ export function DashboardRoot({
             screen={screen}
             layout={layout}
             columns={columns}
+            menuHoverEnabled={hoverEnabled}
           />
         </DashboardNoticeRegion>
         <DashboardControlsView state={state} screen={screen} columns={contentColumns} />
