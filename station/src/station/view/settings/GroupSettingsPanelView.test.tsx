@@ -147,7 +147,8 @@ describe("GroupSettingsPanelView", () => {
     const frame = setup.captureCharFrame();
 
     expect(frame).toContain("Remove Group");
-    expect(frame).toContain("remain open");
+    expect(frame).toContain("Sessions stay open; become ungrouped.");
+    expect(frame).toContain("Confirm: delete Design refresh");
     expect(frame).toContain("Remove");
     expect(frame).toContain("Back");
   });

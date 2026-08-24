@@ -34,7 +34,7 @@ export function WidgetSettingsPanelView({
   const surfaceBackground = toOpenTuiOpaqueColor(theme.surfaces.settings);
   const dispatch = useStationMouse();
   const model = widgetSettingsPanelModel(screen, widgets, widgetsPersisted);
-  const frame = widgetSettingsFrame(columns);
+  const frame = widgetSettingsFrame(columns, rows);
   const itemIds = model.items.map(widgetItemId);
   const followedItem = model.items.find(isActiveWidgetItem);
   return (
@@ -52,7 +52,7 @@ export function WidgetSettingsPanelView({
       <box
         id="station-widget-settings-panel"
         width={frame.width}
-        maxHeight="100%"
+        height={frame.height}
         border
         borderColor={toOpenTuiColor(theme.interaction.hairline)}
         backgroundColor={surfaceBackground}
@@ -78,7 +78,7 @@ export function WidgetSettingsPanelView({
         <SemanticScrollRegion
           itemIds={itemIds}
           followedItemId={followedItem === undefined ? undefined : widgetItemId(followedItem)}
-          fill={false}
+          fill
         >
           {model.items.map((item) => (
             <PanelItem

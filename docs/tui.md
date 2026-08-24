@@ -402,6 +402,7 @@ reattach; pane borders and neighboring panes must remain unlinked.
 - Group ordering is the renderer-local union `"groups-first" | "alphabetical-interleaved"`. Groups-first is the default and places alphabetized Group blocks before project-root sessions. Alphabetical interleaving compares Group names with root-session display titles while keeping every Group block intact. Both modes retain canonical arrays, collapse and filter state, and continuous slots assigned only to rendered sessions; no user-facing config key selects the mode.
 - Group frames use the quiet hairline role by default, bright working color while the header is focused, and dim working color while a direct member has focus. Disclosure remains explicit through `▼` and `▶`. A focused dashboard session row carries `▏`, while the exact focused Project or Group header target carries `▸` in addition to compact focus fill. Member focus and hover keep the ordinary dashboard fills. Borders, separators, and whitespace are inert; coordinate clipping may intersect any part of the structural box without changing Group ownership.
 - Mount complete semantic item trees inside `SemanticScrollViewport`/`SemanticScrollRegion`. These Station layout adapters alone translate stable IDs to OpenTUI `y`/`height`, scroll by cell deltas, follow focus, and report intersecting identities. Dashboard-core receives identities only for slots and overflow, never terminal dimensions, child heights, item offsets, or pre-sliced content. A mixed-height or oversized child must not change feature focus/collapse state.
+- Bottom sheets and settings use stable preferred renderer-owned boxes instead of growing with list length or stretching to terminal height. They shrink at the terminal edge, keep titles, workflow context, actions, and footer help pinned, and give remaining space to one semantic scrolling body. Replacing sheet stages or settings lists must not move the outer frame; a long folder, Project, agent, or Group list stays mounted and follows semantic focus inside that frame.
 - Use `@station/dashboard-core/text` for terminal-cell measurement, grapheme-safe clipping, and truncation. JavaScript string indices and lengths are not terminal geometry. Compact one-cell row grids remain valid leaf presentations but do not define dashboard composition.
 - The tmux popup runs the same interactive observer-backed dashboard without
   native Station panes. Its close behavior and footer copy must match popup
@@ -606,8 +607,11 @@ and inert. Explicit Cancel/Back returns to the invoking Group menu cell; success
 the owning Project header. Canonical Group, Project, or session removal while settings is open uses
 ordinary screen reconciliation and deterministic dashboard focus fallback without a Group-specific
 notice or failure screen. Project and Group Settings share one responsive shell that stays within
-the terminal frame, uses two panes when space permits, and presents the active list or detail pane
-at compact widths.
+the terminal frame, remains centered at its preferred height on tall terminals, uses two panes when
+space permits, and presents the active list or detail pane at compact widths. Compact detail mode
+uses the shell title instead of repeating a second pane title; destructive details preserve their
+safety consequence, confirmation phrase, editor, action, and exit help at the minimum supported
+40×8 frame without wrapped text painting over another control.
 
 Bounded screens use one active-screen overlay layer. Dashboard-core exposes the narrow
 `TuiScreenBehavior` contract, and the owning screen module supplies its safe `clickAway`
@@ -661,6 +665,11 @@ action IDs; core resolves those IDs to the same intents used by direct commands
 and focused activation. Folder rows remain single-click selection targets. Choose
 prefers a pasted absolute or home-relative path and otherwise commits the registered-list
 cursor used by keyboard Enter; Open is enabled only for a navigable child or search row.
+The chooser pins its current Folder and optional Search context above the semantic scrolling body,
+so traversing a long directory never hides the location being browsed. Every Add Project stage uses
+the same preferred sheet box; moving from a long folder list to Review changes body content without
+moving the sheet's top edge. Narrow action groups retain distinguishable labels even when shortcut
+copy must be omitted.
 Review, id editing, success, and failure use a visible action focus cursor. Their actions
 render through shared compact sheet buttons instead of stretching each control across the sheet.
 Ordinary sheet commands must use `SheetButtonRow`: fitting controls keep their natural width and

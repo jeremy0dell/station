@@ -107,6 +107,47 @@ function markNewSessionSubmitting(state: GoldenDashboardState): GoldenDashboardS
   };
 }
 
+function openLongAddProjectChooser(
+  state: GoldenDashboardState,
+  entryCount: number,
+): GoldenDashboardState {
+  let choosing = applyAddProjectFolderLoaded(state, {
+    path: "/Users/example/Developer",
+    entries: Array.from({ length: entryCount }, (_, index) => ({
+      name: `project-${String(index).padStart(2, "0")}`,
+      path: `/Users/example/Developer/project-${String(index).padStart(2, "0")}`,
+      kind: "directory" as const,
+    })),
+  });
+  for (let index = 0; index < entryCount; index += 1) {
+    choosing = handleTuiKey(choosing, { input: "", downArrow: true }).state;
+  }
+  return choosing;
+}
+
+function overflowProjectsSnapshot(projectCount: number): ReturnType<typeof manyProjectsSnapshot> {
+  const base = manyProjectsSnapshot();
+  const station = base.projects[0];
+  if (station === undefined) throw new Error("fixture has no projects");
+  const projects = Array.from({ length: projectCount }, (_, index) => ({
+    ...station,
+    id: `sheet-project-${index}` as typeof station.id,
+    label: `sheet-project-${String(index).padStart(2, "0")}`,
+  }));
+  return { ...base, projects };
+}
+
+function withLongWidgetList(state: GoldenDashboardState): GoldenDashboardState {
+  if (state.screen.name !== "widgetSettings") return state;
+  return {
+    ...state,
+    widgets: Array.from({ length: 28 }, (_, index) => ({
+      type: index % 2 === 0 ? ("time" as const) : ("moon" as const),
+    })),
+    screen: { ...state.screen, cursor: 27 },
+  };
+}
+
 const CASES: ModalCase[] = [
   {
     name: "help overlay",
@@ -196,8 +237,21 @@ const CASES: ModalCase[] = [
       "Current    Design refresh",
       "U Ungrouped",
       "1 Design refresh",
-      "N Create new Group…",
+      "N create",
     ],
+  },
+  {
+    name: "move to group follows the final semantic destination",
+    keys: [],
+    snapshot: groupedManyProjectsSnapshot,
+    prepare: (state) => {
+      let opened = openMoveToGroupForRow(state, "ses_wt_group_contracts");
+      for (let index = 0; index < 7; index += 1) {
+        opened = handleTuiKey(opened, { input: "", downArrow: true }).state;
+      }
+      return opened;
+    },
+    expect: ["Move to Group", "▸ N Create new Group…", "N create", "Esc cancel"],
   },
   {
     name: "move to group create sheet",
@@ -304,6 +358,18 @@ const CASES: ModalCase[] = [
     expect: ["Project Settings", "↑↓ move   ↵ select   1-9/a-z jump   Esc cancel", "station"],
   },
   {
+    name: "new session long project picker in a tall terminal",
+    keys: [
+      { input: "N" },
+      { input: "P" },
+      ...Array.from({ length: 29 }, () => ({ input: "", downArrow: true })),
+    ],
+    snapshot: () => overflowProjectsSnapshot(30),
+    size: { width: 80, height: 40 },
+    trimSnapshotTrailingWhitespace: true,
+    expect: ["Choose Project", "▸ u sheet-project-29", "Esc back"],
+  },
+  {
     name: "group settings general",
     keys: [{ input: "", rightArrow: true }],
     snapshot: groupedManyProjectsSnapshot,
@@ -317,6 +383,14 @@ const CASES: ModalCase[] = [
       "Save",
       "Cancel",
     ],
+  },
+  {
+    name: "group settings stays compact in a tall terminal",
+    keys: [{ input: "", rightArrow: true }],
+    snapshot: groupedManyProjectsSnapshot,
+    size: { width: 120, height: 40 },
+    prepare: (state) => openGroupSettings(state, "group_design_refresh", "general"),
+    expect: ["Group settings · Design refresh", "Project station (read-only)", "Save", "Cancel"],
   },
   {
     name: "group settings sessions compact",
@@ -341,11 +415,42 @@ const CASES: ModalCase[] = [
         groupId: "group_design_refresh",
         actionId: "remove",
       }).state,
-    expect: ["Remove Group", "remain open", "delete Design refresh", "Remove", "Back"],
+    expect: [
+      "Remove Group",
+      "Sessions stay open; become ungrouped.",
+      "delete Design refresh",
+      "Remove",
+      "Back",
+    ],
+  },
+  {
+    name: "group settings remove minimum-height safety",
+    keys: [],
+    snapshot: groupedManyProjectsSnapshot,
+    size: { width: 40, height: 8 },
+    prepare: (state) =>
+      activateSessionGroupMenuAction(state, {
+        projectId: "station",
+        groupId: "group_design_refresh",
+        actionId: "remove",
+      }).state,
+    expect: [
+      "Remove Group",
+      "Sessions stay open; become ungrouped.",
+      "delete Design refresh",
+      "Remove",
+      "Back",
+    ],
   },
   {
     name: "project settings panel",
     keys: [{ input: "P" }, { input: "1" }],
+    expect: ["Project settings", "Default agent", "Remove project", "✓ current"],
+  },
+  {
+    name: "project settings stays compact in a tall terminal",
+    keys: [{ input: "P" }, { input: "1" }],
+    size: { width: 120, height: 40 },
     expect: ["Project settings", "Default agent", "Remove project", "✓ current"],
   },
   {
@@ -377,6 +482,17 @@ const CASES: ModalCase[] = [
       { input: "\r", return: true },
     ],
     expect: ["Remove project", "Worktrees & files stay on disk.", "[ Remove project (R) ]"],
+  },
+  {
+    name: "project settings remove minimum-height safety",
+    keys: [
+      { input: "P" },
+      { input: "1" },
+      { input: "", downArrow: true },
+      { input: "\r", return: true },
+    ],
+    size: { width: 40, height: 8 },
+    expect: ["Remove project", "Files stay; removed from Station.", "[ Remove project (R) ]"],
   },
   {
     name: "project settings optimistic default",
@@ -630,7 +746,17 @@ const CASES: ModalCase[] = [
     name: "new session pick Group",
     keys: [{ input: "N" }, { input: "G" }],
     snapshot: groupedManyProjectsSnapshot,
-    expect: ["Choose Group", "U Ungrouped", "1 Design refresh", "N Create new Group"],
+    expect: ["Choose Group", "U Ungrouped", "1 Design refresh", "N create"],
+  },
+  {
+    name: "new session follows the final Group choice",
+    keys: [
+      { input: "N" },
+      { input: "G" },
+      ...Array.from({ length: 7 }, () => ({ input: "", downArrow: true })),
+    ],
+    snapshot: groupedManyProjectsSnapshot,
+    expect: ["Choose Group", "▸ N Create new Group", "N create", "Esc back"],
   },
   {
     name: "new session edit inline Group",
@@ -682,6 +808,22 @@ const CASES: ModalCase[] = [
         ],
       }),
     expect: ["Choose Project Folder", "Choose (↵)", "Open (→)", "Parent (←)", "Search (/)"],
+  },
+  {
+    name: "add project long folder picker in a tall terminal",
+    keys: [{ input: "A" }],
+    size: { width: 120, height: 40 },
+    trimSnapshotTrailingWhitespace: true,
+    prepare: (state) => openLongAddProjectChooser(state, 40),
+    expect: ["Choose Project Folder", "project-39/", "Folder", "Choose (↵)", "Cancel (Esc)"],
+  },
+  {
+    name: "add project long folder picker at minimum height",
+    keys: [{ input: "A" }],
+    size: { width: 40, height: 12 },
+    trimSnapshotTrailingWhitespace: true,
+    prepare: (state) => openLongAddProjectChooser(state, 40),
+    expect: ["Choose Project Folder", "project-39/", "Folder", "Find", "Exit"],
   },
   {
     name: "add project review actions",
@@ -761,6 +903,14 @@ const CASES: ModalCase[] = [
     ],
   },
   {
+    name: "widget settings long list in a tall terminal",
+    keys: [{ input: "W" }],
+    size: { width: 120, height: 40 },
+    trimSnapshotTrailingWhitespace: true,
+    prepare: withLongWidgetList,
+    expect: ["widgets", "▸ [on ] moon", "↵ toggle"],
+  },
+  {
     name: "widget settings picker",
     keys: [{ input: "W" }, { input: "a" }],
     trimSnapshotTrailingWhitespace: true,
@@ -773,6 +923,13 @@ const CASES: ModalCase[] = [
       "moon",
       "↵ add   esc back",
     ],
+  },
+  {
+    name: "widget settings picker in a tall terminal",
+    keys: [{ input: "W" }, { input: "a" }],
+    size: { width: 120, height: 40 },
+    trimSnapshotTrailingWhitespace: true,
+    expect: ["add widget", "weather and tz require config.toml", "↵ add   esc back"],
   },
 ];
 

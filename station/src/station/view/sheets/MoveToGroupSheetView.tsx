@@ -15,7 +15,8 @@ import type {
   DashboardStateView,
 } from "@station/dashboard-core/state";
 import { EditableTextInputView } from "../EditableTextInputView.js";
-import { bottomSheetContentWidth, BottomSheetFrameView } from "./BottomSheetFrameView.js";
+import { bottomSheetContentWidth } from "../layout/bottomSheetFrame.js";
+import { BottomSheetFrameView } from "./BottomSheetFrameView.js";
 import {
   SheetButtonRow,
   SheetChoiceLine,

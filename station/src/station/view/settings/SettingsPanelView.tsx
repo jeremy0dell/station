@@ -25,6 +25,7 @@ export type SettingsPanelItemView = {
 export type SettingsPanelDetailLayout = {
   width: number;
   focused: boolean;
+  showHeader: boolean;
 };
 
 export type SettingsPanelViewProps = {
@@ -52,7 +53,7 @@ export function SettingsPanelView({
 }: SettingsPanelViewProps) {
   const theme = useStationTheme();
   const dispatch = useStationMouse();
-  const frame = settingsPanelFrame(columns);
+  const frame = settingsPanelFrame(columns, rows);
   const singlePane = frame.paneMode === "single";
   const showList = !singlePane || focus === "list";
   const showDetail = !singlePane || focus === "detail";
@@ -81,7 +82,7 @@ export function SettingsPanelView({
       <box
         id="station-settings-panel"
         width={frame.width}
-        height="100%"
+        height={frame.height}
         border
         borderColor={toOpenTuiColor(theme.interaction.hairline)}
         backgroundColor={toOpenTuiOpaqueColor(theme.surfaces.settings)}
@@ -121,7 +122,11 @@ export function SettingsPanelView({
           {!singlePane ? <SettingsPanelDivider /> : null}
           {showDetail ? (
             <box flexDirection="column" width={detailWidth} flexShrink={1} minHeight={0}>
-              {renderDetail({ width: detailWidth, focused: focus === "detail" })}
+              {renderDetail({
+                width: detailWidth,
+                focused: focus === "detail",
+                showHeader: !singlePane,
+              })}
             </box>
           ) : null}
         </box>
@@ -140,6 +145,7 @@ export function SettingsPanelView({
 export function SettingsPanelDetailView({
   width,
   title,
+  showHeader = true,
   focused,
   danger = false,
   bodyItemIds = [],
@@ -150,6 +156,7 @@ export function SettingsPanelDetailView({
 }: {
   width: number;
   title: string;
+  showHeader?: boolean;
   focused: boolean;
   danger?: boolean;
   bodyItemIds?: readonly string[];
@@ -160,9 +167,11 @@ export function SettingsPanelDetailView({
 }) {
   return (
     <box width={width} height="100%" flexDirection="column" minHeight={0}>
-      <box flexShrink={0}>
-        <SettingsPaneHeader label={title} width={width} focused={focused} danger={danger} />
-      </box>
+      {showHeader ? (
+        <box flexShrink={0}>
+          <SettingsPaneHeader label={title} width={width} focused={focused} danger={danger} />
+        </box>
+      ) : null}
       <SemanticScrollRegion
         itemIds={bodyItemIds}
         followedItemId={followedBodyItemId}

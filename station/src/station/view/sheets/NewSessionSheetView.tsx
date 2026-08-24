@@ -22,8 +22,9 @@ import type {
 } from "@station/dashboard-core/state";
 import { providerHealthColor, useStationTheme } from "../../../theme/index.js";
 import { EditableTextInputView } from "../EditableTextInputView.js";
+import { bottomSheetContentWidth } from "../layout/bottomSheetFrame.js";
 import { AgentChoiceListView } from "./AgentChoiceListView.js";
-import { bottomSheetContentWidth, BottomSheetFrameView } from "./BottomSheetFrameView.js";
+import { BottomSheetFrameView } from "./BottomSheetFrameView.js";
 import {
   SheetButtonRow,
   SheetChoiceLine,

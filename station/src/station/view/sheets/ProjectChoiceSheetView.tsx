@@ -2,7 +2,8 @@ import type { ProjectId } from "@station/contracts";
 import { selectProjectChooserChoices } from "@station/dashboard-core/selectors";
 import type { DashboardSnapshotView, DashboardStateView } from "@station/dashboard-core/state";
 import { providerHealthColor, useStationTheme } from "../../../theme/index.js";
-import { bottomSheetContentWidth, BottomSheetFrameView } from "./BottomSheetFrameView.js";
+import { bottomSheetContentWidth } from "../layout/bottomSheetFrame.js";
+import { BottomSheetFrameView } from "./BottomSheetFrameView.js";
 import { SheetChoiceLine, SheetFooter } from "./parts.js";
 
 export type ProjectChooserMode = "projectCollapse" | "projectSettingsPicker";

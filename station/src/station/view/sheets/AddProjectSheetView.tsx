@@ -1,7 +1,8 @@
 import { addProjectActions, addProjectRows, addProjectSelectedIndexForFlow } from "@station/dashboard-core/state";
 import type { AddProjectFlowStateView, TuiSelectionState } from "@station/dashboard-core/state";
 import { EditableTextInputView } from "../EditableTextInputView.js";
-import { bottomSheetContentWidth, BottomSheetFrameView } from "./BottomSheetFrameView.js";
+import { bottomSheetContentWidth } from "../layout/bottomSheetFrame.js";
+import { BottomSheetFrameView } from "./BottomSheetFrameView.js";
 import {
   SheetButtonRow,
   type SheetButtonSpec,
@@ -30,6 +31,9 @@ export function AddProjectSheetView({ state, selection, columns, rows }: AddProj
       columns={columns}
       rows={rows}
       title={titleForState(state)}
+      bodyHeader={
+        state.mode === "choose" ? <FolderPickerContext state={state} width={contentWidth} /> : undefined
+      }
       bodyItemIds={bodyItemIds}
       followedBodyItemId={selectedIndex === undefined ? undefined : bodyItemIds[selectedIndex]}
       bodyPaddingBottom={state.mode === "review" && state.gitRoot !== undefined ? 1 : 0}
@@ -110,12 +114,9 @@ function FolderPicker({
   width: number;
 }) {
   const rows = addProjectRows(state);
-  const hasSearchPrompt = state.filterMode || state.filter.length > 0;
   if (state.filter.length > 0 && rows.length === 0) {
     return (
       <>
-        <SheetMetaLine width={width} label="Folder" value={state.currentPath} />
-        <SheetMetaLine width={width} label="Search" value={state.filter} />
         <SheetMessageLine width={width} tone="muted">
           {state.searching ? "Searching likely code folders..." : "0 matches"}
         </SheetMessageLine>
@@ -130,20 +131,6 @@ function FolderPicker({
   }
   return (
     <>
-      <box flexDirection="column" marginBottom={hasSearchPrompt ? 0 : 1}>
-        <SheetMetaLine width={width} label="Folder" value={state.currentPath} />
-        {hasSearchPrompt ? (
-          <SheetMetaLine
-            width={width}
-            label="Search"
-            value={
-              state.filter.length > 0
-                ? `${state.filter}   ${matchSummary(state, rows.length)}`
-                : ""
-            }
-          />
-        ) : null}
-      </box>
       {state.error === undefined ? null : (
         <SheetMessageLine width={width} tone="danger">
           {state.error.message}
@@ -166,6 +153,31 @@ function FolderPicker({
         />
       ))}
     </>
+  );
+}
+
+function FolderPickerContext({
+  state,
+  width,
+}: {
+  state: Extract<AddProjectFlowStateView, { mode: "choose" }>;
+  width: number;
+}) {
+  const rows = addProjectRows(state);
+  const hasSearchPrompt = state.filterMode || state.filter.length > 0;
+  return (
+    <box flexDirection="column" marginBottom={hasSearchPrompt ? 0 : 1}>
+      <SheetMetaLine width={width} label="Folder" value={state.currentPath} />
+      {hasSearchPrompt ? (
+        <SheetMetaLine
+          width={width}
+          label="Search"
+          value={
+            state.filter.length > 0 ? `${state.filter}   ${matchSummary(state, rows.length)}` : ""
+          }
+        />
+      ) : null}
+    </box>
   );
 }
 

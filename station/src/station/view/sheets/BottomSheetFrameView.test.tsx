@@ -15,6 +15,27 @@ afterEach(async () => {
 });
 
 describe("BottomSheetFrameView", () => {
+  it("uses one compact preferred frame while the semantic body absorbs spare content", async () => {
+    const setup = await testRender(
+      <StationThemeProvider theme={nativeStationTheme}>
+        <StationHoverProvider value>
+          <StationMouseProvider value={() => {}}>
+            <BottomSheetFrameView columns={80} rows={40} title="Compact sheet">
+              <SheetLine width={78}>Short content</SheetLine>
+            </BottomSheetFrameView>
+          </StationMouseProvider>
+        </StationHoverProvider>
+      </StationThemeProvider>,
+      { width: 80, height: 40 },
+    );
+    teardowns.push(() => setup.renderer.destroy());
+    await setup.renderOnce();
+
+    const sheet = setup.renderer.root.findDescendantById("station-bottom-sheet");
+    expect(sheet?.height).toBe(12);
+    expect(sheet?.y).toBe(28);
+  });
+
   it("keeps semantic focus visible when mixed-height content above it grows and the terminal shrinks", async () => {
     let setExpanded: Dispatch<SetStateAction<boolean>> | undefined;
 

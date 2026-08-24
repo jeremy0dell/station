@@ -35,6 +35,8 @@ describe("WidgetSettingsPanelView", () => {
     teardowns.push(() => setup.renderer.destroy());
     await setup.renderOnce();
     await setup.flush();
+    await setup.renderOnce();
+    await setup.flush();
 
     expect(setup.captureCharFrame()).toContain("▸ [on ] time");
     expect(setup.captureCharFrame()).toContain("↵ toggle");
@@ -50,7 +52,7 @@ describe("WidgetSettingsPanelView", () => {
     ).toBeDefined();
   });
 
-  it("grows intrinsic content beyond the former fixed cap while remaining parent-bounded", async () => {
+  it("scrolls long content inside the same compact preferred-height panel", async () => {
     const widgets: TuiWidgetConfig[] = Array.from({ length: 28 }, (_, index) => ({
       type: index % 2 === 0 ? "time" : "moon",
     }));
@@ -72,9 +74,17 @@ describe("WidgetSettingsPanelView", () => {
     );
     teardowns.push(() => setup.renderer.destroy());
     await setup.renderOnce();
+    await setup.flush();
+    await setup.renderOnce();
 
     const panel = setup.renderer.root.findDescendantById("station-widget-settings-panel");
-    expect(panel?.height).toBeGreaterThan(20);
-    expect(panel?.height).toBeLessThanOrEqual(40);
+    expect(panel?.height).toBe(20);
+    expect(panel?.y).toBe(10);
+    expect(setup.captureCharFrame()).toContain("▸ [on ] moon");
+    expect(
+      setup.renderer.root.findDescendantById(
+        semanticItemRenderableId("widget-settings:widget:0"),
+      ),
+    ).toBeDefined();
   });
 });

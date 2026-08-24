@@ -60,7 +60,9 @@ export function GroupSettingsPanelView({
         disabled: model.pending,
         mouseTarget: { kind: "groupSettingsSection", section: item.id },
       }))}
-      renderDetail={({ width }) => <DetailPane model={model} screen={screen} width={width} />}
+      renderDetail={({ width, showHeader }) => (
+        <DetailPane model={model} screen={screen} width={width} showHeader={showHeader} />
+      )}
     />
   );
 }
@@ -69,22 +71,24 @@ function DetailPane({
   model,
   screen,
   width,
+  showHeader,
 }: {
   model: NonNullable<ReturnType<typeof groupSettingsPanelModel>>;
   screen: GroupSettingsScreen;
   width: number;
+  showHeader: boolean;
 }) {
   switch (screen.section) {
     case "general":
-      return <GeneralDetail model={model} screen={screen} width={width} />;
+      return <GeneralDetail model={model} screen={screen} width={width} showHeader={showHeader} />;
     case "sessions":
-      return <SessionsDetail model={model} screen={screen} width={width} />;
+      return <SessionsDetail model={model} screen={screen} width={width} showHeader={showHeader} />;
     case "remove":
-      return <RemoveDetail model={model} screen={screen} width={width} />;
+      return <RemoveDetail model={model} screen={screen} width={width} showHeader={showHeader} />;
   }
 }
 
-function GeneralDetail({ model, screen, width }: DetailProps) {
+function GeneralDetail({ model, screen, width, showHeader }: DetailProps) {
   const theme = useStationTheme();
   const saveEnabled =
     screen.pending === undefined &&
@@ -94,6 +98,7 @@ function GeneralDetail({ model, screen, width }: DetailProps) {
     <SettingsPanelDetailView
       width={width}
       title="General"
+      showHeader={showHeader}
       focused={screen.focus === "detail"}
       bodyItemIds={["group-settings:general-name"]}
       followedBodyItemId={screen.detailFocus === "name" ? "group-settings:general-name" : undefined}
@@ -146,12 +151,13 @@ function GeneralDetail({ model, screen, width }: DetailProps) {
   );
 }
 
-function SessionsDetail({ model, screen, width }: DetailProps) {
+function SessionsDetail({ model, screen, width, showHeader }: DetailProps) {
   const theme = useStationTheme();
   return (
     <SettingsPanelDetailView
       width={width}
       title="Sessions"
+      showHeader={showHeader}
       focused={screen.focus === "detail"}
       bodyItemIds={model.sessions.map((session) => session.sessionId)}
       followedBodyItemId={screen.detailFocus === "sessionList" ? screen.sessionCursor : undefined}
@@ -249,13 +255,14 @@ function SessionItem({
   );
 }
 
-function RemoveDetail({ model, screen, width }: DetailProps) {
+function RemoveDetail({ model, screen, width, showHeader }: DetailProps) {
   const theme = useStationTheme();
   const sessionWord = model.group.memberCount === 1 ? "session" : "sessions";
   return (
     <SettingsPanelDetailView
       width={width}
       title="Remove Group"
+      showHeader={showHeader}
       focused={screen.focus === "detail"}
       danger
       bodyItemIds={["group-settings:remove-confirm"]}
@@ -287,18 +294,31 @@ function RemoveDetail({ model, screen, width }: DetailProps) {
         />
       }
     >
-      <text fg={toOpenTuiColor(theme.text.primary)} attributes={TextAttributes.BOLD}>
-        {fit(` Its ${model.group.memberCount} ${sessionWord} remain open`, width)}
-      </text>
-      <text fg={toOpenTuiColor(theme.text.primary)} attributes={TextAttributes.BOLD}>
-        {fit(" and become ungrouped.", width)}
-      </text>
-      <text fg={toOpenTuiColor(theme.text.muted)} attributes={TextAttributes.DIM}>
-        {fit(` Type "${model.removePhrase}"`, width)}
-      </text>
-      <text fg={toOpenTuiColor(theme.text.muted)} attributes={TextAttributes.DIM}>
-        {fit(" to confirm.", width)}
-      </text>
+      {showHeader ? (
+        <>
+          <text fg={toOpenTuiColor(theme.text.primary)} attributes={TextAttributes.BOLD}>
+            {fit(` Its ${model.group.memberCount} ${sessionWord} remain open`, width)}
+          </text>
+          <text fg={toOpenTuiColor(theme.text.primary)} attributes={TextAttributes.BOLD}>
+            {fit(" and become ungrouped.", width)}
+          </text>
+          <text fg={toOpenTuiColor(theme.text.muted)} attributes={TextAttributes.DIM}>
+            {fit(` Type "${model.removePhrase}"`, width)}
+          </text>
+          <text fg={toOpenTuiColor(theme.text.muted)} attributes={TextAttributes.DIM}>
+            {fit(" to confirm.", width)}
+          </text>
+        </>
+      ) : (
+        <>
+          <text fg={toOpenTuiColor(theme.text.primary)} attributes={TextAttributes.BOLD}>
+            {fit(" Sessions stay open; become ungrouped.", width)}
+          </text>
+          <text fg={toOpenTuiColor(theme.text.muted)} attributes={TextAttributes.DIM}>
+            {fit(` Confirm: ${model.removePhrase}`, width)}
+          </text>
+        </>
+      )}
       <ControlInputLine
         screen={screen}
         control="removeConfirm"
@@ -315,6 +335,7 @@ type DetailProps = {
   model: NonNullable<ReturnType<typeof groupSettingsPanelModel>>;
   screen: GroupSettingsScreen;
   width: number;
+  showHeader: boolean;
 };
 
 function ControlInputLine({
@@ -341,6 +362,8 @@ function ControlInputLine({
   return (
     <text
       id={semanticItemRenderableId(itemId)}
+      width={width}
+      wrapMode="none"
       fg={toOpenTuiColor(theme.text.primary)}
       {...(focused ? { bg: toOpenTuiColor(theme.interaction.keyboardFocus) } : {})}
       {...(screen.pending === undefined

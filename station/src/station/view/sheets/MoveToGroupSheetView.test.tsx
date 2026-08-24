@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { MouseButtons } from "@opentui/core/testing";
 import { testRender } from "@opentui/react/test-utils";
 import type { DashboardScreenView } from "@station/dashboard-core/state";
+import { MOVE_TO_GROUP_CREATE_CHOICE_ID } from "@station/dashboard-core/state";
 import { act } from "react";
 import { nativeStationTheme, StationThemeProvider } from "../../../theme/index.js";
 import { groupedManyProjectsSnapshot } from "../../fixtures/scenarios.js";
@@ -72,15 +73,40 @@ describe("MoveToGroupSheetView", () => {
     expect(currentLine).not.toContain("▸");
     expect(focusedLine).toContain("▸ 2 Observer hardening");
     expect(focusedLine).not.toContain("✓");
-    expect(frame).toContain("N Create new Group…");
+    expect(
+      setup.renderer.root.findDescendantById(
+        semanticItemRenderableId(MOVE_TO_GROUP_CREATE_CHOICE_ID),
+      ),
+    ).toBeDefined();
 
-    for (const label of ["U Ungrouped", "2 Observer hardening", "N Create new Group…"]) {
+    for (const label of ["U Ungrouped", "2 Observer hardening"]) {
       const row = lines.findIndex((line) => line.includes(label));
       await setup.mockMouse.click(lines[row]?.indexOf(label) ?? -1, row, MouseButtons.LEFT);
     }
     expect(targets.filter((target) => target.kind === "sheetChoice")).toEqual([
       { kind: "sheetChoice", choiceKey: "U" },
       { kind: "sheetChoice", choiceKey: "2" },
+    ]);
+
+    const { setup: createSetup, targets: createTargets } = await render(
+      {
+        name: "moveToGroup",
+        step: "chooseDestination",
+        sessionId: "ses_wt_group_contracts",
+        sessionTitle: "group-contracts",
+        submitting: false,
+      },
+      new Map([["moveToGroupDestination", MOVE_TO_GROUP_CREATE_CHOICE_ID]]),
+    );
+    const createLines = createSetup.captureCharFrame().split("\n");
+    const createRow = createLines.findIndex((line) => line.includes("N Create new Group…"));
+    expect(createRow).toBeGreaterThanOrEqual(0);
+    await createSetup.mockMouse.click(
+      createLines[createRow]?.indexOf("N Create new Group…") ?? -1,
+      createRow,
+      MouseButtons.LEFT,
+    );
+    expect(createTargets.filter((target) => target.kind === "sheetChoice")).toEqual([
       { kind: "sheetChoice", choiceKey: "N" },
     ]);
 

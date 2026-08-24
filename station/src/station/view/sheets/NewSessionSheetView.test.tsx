@@ -3,11 +3,16 @@ import { type BaseRenderable, rgbToHex, TextRenderable } from "@opentui/core";
 import { MouseButtons } from "@opentui/core/testing";
 import { testRender } from "@opentui/react/test-utils";
 import { act } from "react";
-import { createNewSessionFlow, transitionNewSessionFlow } from "@station/dashboard-core/state";
+import {
+  createNewSessionFlow,
+  NEW_SESSION_CREATE_GROUP_CHOICE_ID,
+  transitionNewSessionFlow,
+} from "@station/dashboard-core/state";
 import type { StationSnapshot } from "@station/contracts";
 import { spanAtFrameCell } from "../../../terminal/testing/frameProbe.js";
 import { groupedManyProjectsSnapshot, manyProjectsSnapshot } from "../../fixtures/scenarios.js";
 import type { StationMouseTarget } from "../../input/stationMouse.js";
+import { semanticItemRenderableId } from "../layout/scrollViewport.js";
 import { StationHoverProvider, StationMouseProvider } from "../stationMouseContext.js";
 import {
   nativeStationTheme,
@@ -108,7 +113,11 @@ describe("NewSessionSheetView", () => {
     const pickerFrame = picked.setup.captureCharFrame();
     expect(pickerFrame).toContain("U Ungrouped");
     expect(pickerFrame).toContain("1 Design refresh");
-    expect(pickerFrame).toContain("N Create new Group");
+    expect(
+      picked.setup.renderer.root.findDescendantById(
+        semanticItemRenderableId(NEW_SESSION_CREATE_GROUP_CHOICE_ID),
+      ),
+    ).toBeDefined();
 
     const editor = transitionNewSessionFlow(picker, { type: "editGroupDraft" });
     if (editor?.mode !== "editGroupDraft") throw new Error("expected Group editor");

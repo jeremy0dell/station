@@ -3,7 +3,8 @@ import { selectNewSessionHarnessChoices } from "@station/dashboard-core/selector
 import type { KeyedChoice, NewSessionHarnessOption } from "@station/dashboard-core/selectors";
 import type { DashboardScreenView, DashboardSnapshotView, DashboardStateView } from "@station/dashboard-core/state";
 import { AgentChoiceListView } from "./AgentChoiceListView.js";
-import { bottomSheetContentWidth, BottomSheetFrameView } from "./BottomSheetFrameView.js";
+import { bottomSheetContentWidth } from "../layout/bottomSheetFrame.js";
+import { BottomSheetFrameView } from "./BottomSheetFrameView.js";
 import { SheetFooter } from "./parts.js";
 
 export type ProjectDefaultAgentSheetViewProps = {

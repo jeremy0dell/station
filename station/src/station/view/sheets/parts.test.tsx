@@ -17,6 +17,7 @@ import {
   responsiveSheetFooterText,
   responsiveSheetText,
   SheetButtonRow,
+  SheetChoiceLine,
   type SheetButtonSpec,
 } from "./parts.js";
 
@@ -157,5 +158,32 @@ describe("sheet terminal-cell fitting", () => {
     expect(fit("界a", 2)).toBe("界");
     expect(cellWidth(fit("e\u0301", 2))).toBe(2);
     expect(fit("e\u0301", 2)).toBe("e\u0301 ");
+  });
+
+  it("keeps a long wide-glyph choice inside one semantic box", async () => {
+    const setup = await testRender(
+      <StationThemeProvider theme={nativeStationTheme}>
+        <StationHoverProvider value>
+          <StationMouseProvider value={() => {}}>
+            <SheetChoiceLine
+              choiceKey="1"
+              label="界界界界界界界界 project with a long name"
+              detail="healthy"
+              width={20}
+              selected
+              itemId="wide-choice"
+            />
+          </StationMouseProvider>
+        </StationHoverProvider>
+      </StationThemeProvider>,
+      { width: 20, height: 2 },
+    );
+    teardowns.push(() => setup.renderer.destroy());
+    await setup.renderOnce();
+
+    expect(setup.captureCharFrame().split("\n")[1]?.trim()).toBe("");
+    expect(
+      setup.renderer.root.findDescendantById("station-semantic-item:wide-choice")?.height,
+    ).toBe(1);
   });
 });

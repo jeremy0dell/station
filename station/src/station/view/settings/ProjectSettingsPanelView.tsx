@@ -75,12 +75,13 @@ export function ProjectSettingsPanelView({
         active: item.id === screen.activeId,
         mouseTarget: { kind: "projectSettingsItem", itemId: item.id },
       }))}
-      renderDetail={({ width, focused }) => (
+      renderDetail={({ width, focused, showHeader }) => (
         <DetailPane
           snapshot={snapshot}
           screen={screen}
           width={width}
           focused={focused}
+          showHeader={showHeader}
           localRows={localRows}
           selectedAgentId={selectedAgentId}
         />
@@ -94,6 +95,7 @@ function DetailPane({
   screen,
   width,
   focused,
+  showHeader,
   localRows,
   selectedAgentId,
 }: {
@@ -101,11 +103,14 @@ function DetailPane({
   screen: ProjectSettingsScreen;
   width: number;
   focused: boolean;
+  showHeader: boolean;
   localRows: DashboardLocalRowsView;
   selectedAgentId?: ProviderId;
 }) {
   if (screen.activeId === "remove") {
-    return <RemoveDetail screen={screen} width={width} focused={focused} />;
+    return (
+      <RemoveDetail screen={screen} width={width} focused={focused} showHeader={showHeader} />
+    );
   }
   return (
     <AgentDetail
@@ -113,6 +118,7 @@ function DetailPane({
       screen={screen}
       width={width}
       focused={focused}
+      showHeader={showHeader}
       localRows={localRows}
       selectedAgentId={selectedAgentId}
     />
@@ -124,6 +130,7 @@ function AgentDetail({
   screen,
   width,
   focused,
+  showHeader,
   localRows,
   selectedAgentId,
 }: {
@@ -131,6 +138,7 @@ function AgentDetail({
   screen: ProjectSettingsScreen;
   width: number;
   focused: boolean;
+  showHeader: boolean;
   localRows: DashboardLocalRowsView;
   selectedAgentId?: ProviderId;
 }) {
@@ -143,6 +151,7 @@ function AgentDetail({
     <SettingsPanelDetailView
       width={width}
       title="Default agent"
+      showHeader={showHeader}
       focused={focused}
       bodyItemIds={choices.map((choice) => choice.value.id)}
       followedBodyItemId={focused ? selectedAgentId : undefined}
@@ -175,10 +184,12 @@ function RemoveDetail({
   screen,
   width,
   focused,
+  showHeader,
 }: {
   screen: ProjectSettingsScreen;
   width: number;
   focused: boolean;
+  showHeader: boolean;
 }) {
   const theme = useStationTheme();
   const armed = isRemoveProjectArmed(screen);
@@ -187,22 +198,39 @@ function RemoveDetail({
     <SettingsPanelDetailView
       width={width}
       title="Remove project"
+      showHeader={showHeader}
       focused={focused}
       danger
       bodyItemIds={["project-settings:remove-input"]}
       followedBodyItemId="project-settings:remove-input"
       actions={<RemoveButton armed={armed} width={width} />}
     >
-      <text fg={toOpenTuiColor(theme.text.primary)}>{fit(" Removes it from Station.", width)}</text>
-      <text fg={toOpenTuiColor(theme.text.primary)}>
-        {fit(" Worktrees & files stay on disk.", width)}
-      </text>
-      <box flexDirection="column" marginTop={1} marginBottom={1}>
+      {showHeader ? (
+        <>
+          <text fg={toOpenTuiColor(theme.text.primary)}>
+            {fit(" Removes it from Station.", width)}
+          </text>
+          <text fg={toOpenTuiColor(theme.text.primary)}>
+            {fit(" Worktrees & files stay on disk.", width)}
+          </text>
+        </>
+      ) : (
+        <text fg={toOpenTuiColor(theme.text.primary)}>
+          {fit(" Files stay; removed from Station.", width)}
+        </text>
+      )}
+      <box
+        flexDirection="column"
+        marginTop={showHeader ? 1 : 0}
+        marginBottom={showHeader ? 1 : 0}
+      >
         <text fg={toOpenTuiColor(theme.text.primary)} attributes={TextAttributes.DIM}>
-          {fit(` Type "${phrase}" to confirm`, width)}
+          {fit(showHeader ? ` Type "${phrase}" to confirm` : ` Confirm: ${phrase}`, width)}
         </text>
         <text
           id={semanticItemRenderableId("project-settings:remove-input")}
+          width={width}
+          wrapMode="none"
           fg={toOpenTuiColor(theme.text.primary)}
         >
           {" ▸ "}

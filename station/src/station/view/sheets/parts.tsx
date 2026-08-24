@@ -148,14 +148,18 @@ export function SheetChoiceLine({
   const cursor = selected ? "▸" : " ";
   const marker = current ? "✓" : " ";
   const keyPrefix = `${choiceKey} `;
-  const detailPrefix = `${label} `;
-  const detailWidth = Math.max(0, width - 2 - cellWidth(keyPrefix) - cellWidth(detailPrefix));
-  const visibleDetail = clipCells(detail, detailWidth);
-  // Whatever the detail leaves unused is split into a gap then the right-aligned
-  // note, so the row stays exactly `width` wide whether or not a note is set.
-  const free = Math.max(0, detailWidth - cellWidth(visibleDetail));
-  const visibleNote = clipCells(note ?? "", free);
-  const gap = spaces(free - cellWidth(visibleNote));
+  const content = detail.length === 0 ? label : `${label} ${detail}`;
+  const contentWidth = Math.max(0, width - 2 - cellWidth(keyPrefix));
+  const noteText = note ?? "";
+  const noteWidth = Math.min(cellWidth(noteText), Math.max(0, contentWidth - 2));
+  const visibleNote = clipCells(noteText, noteWidth);
+  const visibleContent = clipCells(
+    content,
+    Math.max(0, contentWidth - (noteWidth > 0 ? noteWidth + 1 : 0)),
+  );
+  const gap = spaces(
+    Math.max(0, contentWidth - cellWidth(visibleContent) - cellWidth(visibleNote)),
+  );
   return (
     <SheetText
       {...(itemId === undefined ? {} : { id: semanticItemRenderableId(itemId) })}
@@ -164,12 +168,13 @@ export function SheetChoiceLine({
       {...stationMouseProps(dispatch, { kind: "sheetChoice", choiceKey })}
       onMouseOver={() => setHover(true)}
       onMouseOut={() => setHover(false)}
+      width={width}
+      wrapMode="none"
     >
       {cursor}
       <span {...(current ? { fg: toOpenTuiColor(theme.action.primary) } : {})}>{marker}</span>
       {keyPrefix}
-      {detailPrefix}
-      <span {...(color === undefined ? {} : { fg: toOpenTuiColor(color) })}>{visibleDetail}</span>
+      <span {...(color === undefined ? {} : { fg: toOpenTuiColor(color) })}>{visibleContent}</span>
       {gap}
       <span attributes={TextAttributes.DIM}>{visibleNote}</span>
     </SheetText>
@@ -242,7 +247,8 @@ function SheetButton({
   const shortcutText = `(${shortcut})`;
   const available = Math.max(0, fixedWidth - cellWidth(marker));
   const shortcutCells = cellWidth(shortcutText);
-  const showShortcut = available > shortcutCells + 1;
+  // One-cell abbreviations make distinct actions such as Use and Up ambiguous.
+  const showShortcut = available >= shortcutCells + 3;
   const labelWidth = Math.max(0, available - (showShortcut ? shortcutCells + 1 : 0));
   const visibleLabel = clipCells(label, labelWidth);
   const renderedShortcut = showShortcut ? ` ${shortcutText}` : "";

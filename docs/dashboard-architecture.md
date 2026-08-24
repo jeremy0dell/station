@@ -231,9 +231,13 @@ Sheets, settings panels, Help, filter conditions, dashboard menus, and context
 menus use the same `SemanticScrollRegion` contract: callers provide stable item
 IDs and complete intrinsic content; the scroll container owns clipping and follows
 the selected identity through measured coordinates. A bottom sheet owns semantic
-title/body/actions/footer slots, constrains its intrinsic height at the terminal
-edge, and scrolls only its body. Settings containers own their navigation/detail
-nesting and let focused content drive the shared scroll region. Anchored surfaces
+title/context/body/actions/footer slots and one stable preferred box for the lifetime
+of a workflow; it shrinks only at the terminal edge and scrolls only its body.
+Settings containers own their navigation/detail nesting and use one centered
+preferred box across sections and pickers, with focused content driving the shared
+scroll region. These preferred dimensions are Station renderer-boundary policy;
+dashboard-core neither observes them nor changes semantic state in response.
+Anchored surfaces
 measure their owner, anchor, intrinsic content, border, and viewport after OpenTUI
 layout; feature state owns neither offsets nor visible-index windows.
 Context-menu focus, pointer hits, and activation cross renderer/input boundaries

@@ -1,5 +1,6 @@
 import type { DashboardScreenView } from "@station/dashboard-core/state";
-import { bottomSheetContentWidth, BottomSheetFrameView } from "./BottomSheetFrameView.js";
+import { bottomSheetContentWidth } from "../layout/bottomSheetFrame.js";
+import { BottomSheetFrameView } from "./BottomSheetFrameView.js";
 import {
   compactSheetWidth,
   responsiveSheetFooterText,

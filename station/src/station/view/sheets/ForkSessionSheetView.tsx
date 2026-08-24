@@ -3,7 +3,8 @@
 import { cellWidth } from "@station/dashboard-core/text";
 import type { DashboardScreenView } from "@station/dashboard-core/state";
 import { EditableTextInputView } from "../EditableTextInputView.js";
-import { bottomSheetContentWidth, BottomSheetFrameView } from "./BottomSheetFrameView.js";
+import { bottomSheetContentWidth } from "../layout/bottomSheetFrame.js";
+import { BottomSheetFrameView } from "./BottomSheetFrameView.js";
 import {
   compactSheetWidth,
   responsiveSheetFooterText,
