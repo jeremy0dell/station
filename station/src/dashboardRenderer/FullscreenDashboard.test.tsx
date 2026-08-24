@@ -1,11 +1,12 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { rgbToHex } from "@opentui/core";
+import { Renderable, rgbToHex } from "@opentui/core";
 import { MouseButtons } from "@opentui/core/testing";
 import { testRender } from "@opentui/react/test-utils";
 import { dashboardRowIds } from "@station/dashboard-core/selectors";
 import type { TuiWidgetConfig } from "@station/dashboard-core/widgets";
 import { act } from "react";
 import { groupedManyProjectsSnapshot } from "../station/fixtures/scenarios.js";
+import { groupActionRenderableId } from "../station/view/GroupHeaderView.js";
 import { makeStationTestRuntime } from "../station/test/support/makeStationTestRuntime.js";
 import {
   stationColorSnapshotValue,
@@ -362,9 +363,14 @@ describe("FullscreenDashboard mouse composition", () => {
       ),
     ).toHaveLength(1);
     let group = groupLine();
-    await actOn(() =>
-      setup.mockMouse.click(group.line.indexOf("[quick session]"), group.row, MouseButtons.LEFT),
-    );
+    await actOn(async () => {
+      await setup.mockMouse.click(
+        group.line.indexOf("[quick session]"),
+        group.row,
+        MouseButtons.LEFT,
+      );
+      await setup.flush();
+    });
     expect(fixture.runtime.state.getState().dashboardFocus).toEqual({
       rowId: groupId,
       cellId: "quickSession",
@@ -373,9 +379,19 @@ describe("FullscreenDashboard mouse composition", () => {
     expect([...fixture.runtime.state.getState().collapsedGroupIds]).toEqual([]);
 
     group = groupLine();
-    await actOn(() =>
-      setup.mockMouse.click(group.line.indexOf("[▾]"), group.row, MouseButtons.LEFT),
+    const menuTarget = setup.renderer.root.findDescendantById(
+      groupActionRenderableId(groupId, "menu"),
     );
+    expect(menuTarget).toBeDefined();
+    expect(group.line.indexOf("[▾]")).toBe(menuTarget?.screenX);
+    const hit = Renderable.renderablesByNumber.get(
+      setup.renderer.hitTest(group.line.indexOf("[▾]"), group.row),
+    );
+    expect(hit?.num).toBe(menuTarget?.num);
+    await actOn(async () => {
+      await setup.mockMouse.click(group.line.indexOf("[▾]"), group.row, MouseButtons.LEFT);
+      await setup.flush();
+    });
     expect(fixture.runtime.state.getState().dashboardFocus).toEqual({
       rowId: groupId,
       cellId: "menu",
@@ -389,18 +405,29 @@ describe("FullscreenDashboard mouse composition", () => {
     });
     expect(setup.captureCharFrame()).toContain("Group settings…");
     const settings = cellFor(setup.captureCharFrame(), "Group settings…");
-    await actOn(() => setup.mockMouse.click(settings.col, settings.row, MouseButtons.LEFT));
+    await actOn(async () => {
+      await setup.mockMouse.click(settings.col, settings.row, MouseButtons.LEFT);
+      await setup.flush();
+    });
     expect(fixture.runtime.state.getState().screen).toMatchObject({
       name: "groupSettings",
       groupId: "group_design_refresh",
       section: "general",
     });
-    await actOn(() => fixture.runtime.actions.dispatch({ type: "groupSettings.back" }));
+    await actOn(async () => {
+      fixture.runtime.actions.dispatch({ type: "groupSettings.back" });
+      await setup.flush();
+    });
 
     group = groupLine();
-    await actOn(() =>
-      setup.mockMouse.click(group.line.indexOf("Design refresh"), group.row, MouseButtons.LEFT),
-    );
+    await actOn(async () => {
+      await setup.mockMouse.click(
+        group.line.indexOf("Design refresh"),
+        group.row,
+        MouseButtons.LEFT,
+      );
+      await setup.flush();
+    });
     expect([...fixture.runtime.state.getState().collapsedGroupIds]).toEqual([
       "group_design_refresh",
     ]);

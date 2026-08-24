@@ -21,6 +21,13 @@ import { dashboardQuickSessionActionLabel } from "./dashboardHeaderActionLabels.
 
 const MENU_LABEL = "[▾]";
 
+export function groupActionRenderableId(
+  rowId: DashboardRowId,
+  cellId: "quickSession" | "menu",
+): string {
+  return `station-group-action:${rowId}:${cellId}`;
+}
+
 type GroupHeaderAction = {
   cellId: "quickSession" | "menu";
   label: string;
@@ -173,6 +180,7 @@ function GroupActionTarget({
   const [hover, setHover] = useStationHoverState();
   return (
     <text
+      id={groupActionRenderableId(rowId, cellId)}
       flexShrink={0}
       fg={toOpenTuiColor(hover ? theme.status.success : theme.text.muted)}
       attributes={dimmed ? TextAttributes.DIM : TextAttributes.NONE}

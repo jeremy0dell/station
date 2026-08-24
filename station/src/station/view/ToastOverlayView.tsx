@@ -45,23 +45,25 @@ export function ToastOverlayView({
   const header = toastHeaderModel(geometry.width, toastTitle(toast));
   const bodyIds = detail === undefined ? ["toast:message"] : ["toast:message", "toast:detail"];
 
+  // OpenTUI adds every box to its hit grid, so the flex anchor itself must have no pointer area.
   return (
     <box
       position="absolute"
-      id="station-toast-overlay"
+      id="station-toast-anchor"
       top={0}
       right={geometry.inset}
       bottom={0}
-      width={geometry.width}
+      width={0}
       maxHeight="100%"
-      zIndex={20}
       flexDirection="column"
+      alignItems="flex-end"
       justifyContent="flex-end"
-      overflow="hidden"
+      overflow="visible"
+      zIndex={20}
     >
       <box
         id="station-toast-surface"
-        width="100%"
+        width={geometry.width}
         maxHeight="100%"
         flexShrink={1}
         border={["left", "right"]}
