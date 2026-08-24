@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test";
+import { Renderable } from "@opentui/core";
 import { testRender } from "@opentui/react/test-utils";
 import { nativeStationTheme, StationThemeProvider } from "../../theme/index.js";
 import { act } from "react";
@@ -19,8 +20,8 @@ describe("GroupFrameView", () => {
           focus={{ focusedHeader: false, containsFocusedRow: false }}
         >
           <box id="mixed-child" flexDirection="column">
-            <text>first semantic cell</text>
-            <text>second semantic cell</text>
+            <text id="first-semantic-cell">first semantic cell</text>
+            <text id="last-semantic-cell">second semantic cell</text>
           </box>
         </GroupFrameView>
       </StationThemeProvider>,
@@ -39,6 +40,7 @@ describe("GroupFrameView", () => {
     expect(frame[first + 1]?.trimEnd().endsWith("│")).toBe(true);
     expect(frame[first - 1]?.trim()).toMatch(/^╭─+╮$/u);
     expect(frame[first + 2]?.trim()).toMatch(/^╰─+╯$/u);
+    expect(hitBottomCellId(setup, "last-semantic-cell")).toBe("last-semantic-cell");
 
     await act(async () => setup.renderer.resize(14, 6));
     await setup.renderOnce();
@@ -51,5 +53,19 @@ describe("GroupFrameView", () => {
     }
     expect(resized[resizedFirst - 1]?.trim()).toMatch(/^╭─+╮$/u);
     expect(resized[resizedFirst + 4]?.trim()).toMatch(/^╰─+╯$/u);
+    expect(hitBottomCellId(setup, "last-semantic-cell")).toBe("last-semantic-cell");
   });
 });
+
+function hitBottomCellId(
+  setup: Awaited<ReturnType<typeof testRender>>,
+  renderableId: string,
+): string | undefined {
+  const renderable = setup.renderer.root.findDescendantById(renderableId);
+  if (renderable === undefined) return undefined;
+  const hit = setup.renderer.hitTest(
+    renderable.screenX,
+    renderable.screenY + renderable.height - 1,
+  );
+  return Renderable.renderablesByNumber.get(hit)?.id;
+}

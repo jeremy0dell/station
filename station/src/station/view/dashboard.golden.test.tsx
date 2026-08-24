@@ -34,7 +34,11 @@ import {
 import { parseStationTerminalPaletteObservation } from "../../theme/terminalPalette/observation.js";
 import { lightTerminalColors } from "../../theme/terminalPalette/test/fixtures.js";
 import { createTerminalPaletteTheme } from "../../theme/terminalPalette/theme.js";
-import { StationHoverProvider, StationMouseProvider } from "./stationMouseContext.js";
+import {
+  StationHoverProvider,
+  StationMouseProvider,
+  type StationMouseDispatch,
+} from "./stationMouseContext.js";
 import { semanticItemRenderableId } from "./layout/scrollViewport.js";
 import { FullscreenDashboard } from "../../dashboardRenderer/FullscreenDashboard.js";
 
@@ -123,7 +127,7 @@ describe("dashboard golden frames", () => {
     height: number;
     snapshot?: StationSnapshot;
     connection?: StationClientConnectionState;
-    dispatchMouse?: (target: StationMouseTarget) => void;
+    dispatchMouse?: StationMouseDispatch;
     hoverEnabled?: boolean;
     toast?: ClientNotice;
     theme?: StationTheme;
@@ -152,7 +156,7 @@ describe("dashboard golden frames", () => {
       input.dispatchMouse === undefined ? (
         dashboard
       ) : (
-        <StationMouseProvider value={(target) => input.dispatchMouse?.(target)}>
+        <StationMouseProvider value={input.dispatchMouse}>
           {dashboard}
         </StationMouseProvider>
       );
@@ -636,6 +640,39 @@ describe("dashboard golden frames", () => {
     expect(spanBgHex(spanAtFrameCell(setup.captureSpans(), headerRow, quick))).toBe(
       stationColorSnapshotValue(nativeStationTheme.interaction.compactFocus),
     );
+  });
+
+  it("routes hover and right-click through the final Group member", async () => {
+    const calls: Array<{ target: StationMouseTarget; button: number }> = [];
+    const memberId = dashboardRowIds.session("ses_wt_group_keyboard");
+    const setup = await renderDashboard({
+      width: 80,
+      height: 24,
+      snapshot: groupedManyProjectsSnapshot(),
+      dispatchMouse: (target, event) => calls.push({ target, button: event.button }),
+    });
+    const lines = setup.captureCharFrame().split("\n");
+    const memberRow = lines.findIndex((line) => line.includes("group-keyboard"));
+    const memberColumn = lines[memberRow]?.indexOf("group-keyboard") ?? -1;
+
+    expect(memberRow).toBeGreaterThanOrEqual(0);
+    expect(memberColumn).toBeGreaterThanOrEqual(0);
+    await act(async () => {
+      await setup.mockMouse.moveTo(memberColumn, memberRow);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    await setup.flush();
+    expect(spanBgHex(spanAtFrameCell(setup.captureSpans(), memberRow, memberColumn))).toBe(
+      stationColorSnapshotValue(nativeStationTheme.interaction.hover),
+    );
+
+    await setup.mockMouse.click(memberColumn, memberRow, MouseButtons.RIGHT);
+    expect(calls).toEqual([
+      {
+        target: { kind: "dashboardCell", rowId: memberId, cellId: "identity" },
+        button: MouseButtons.RIGHT,
+      },
+    ]);
   });
 
   it("renders the persistent filter soft-preview editor at wide width", async () => {

@@ -18,6 +18,7 @@ export function GroupFrameView({
   const theme = useStationTheme();
   const emphasized = focus.focusedHeader || focus.containsFocusedRow;
   return (
+    // Keep the border unclipped: OpenTUI's bordered scissor drops the final content row from hit-testing.
     <box
       {...(renderableId === undefined ? {} : { id: renderableId })}
       width="100%"
@@ -27,7 +28,7 @@ export function GroupFrameView({
       borderColor={toOpenTuiColor(
         emphasized ? theme.status.working : theme.interaction.hairline,
       )}
-      overflow="hidden"
+      overflow="visible"
     >
       {children}
     </box>
