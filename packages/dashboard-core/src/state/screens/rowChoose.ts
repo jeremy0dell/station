@@ -9,12 +9,12 @@ import type { TuiTransition } from "../transition.js";
 import type { DashboardState } from "../types.js";
 
 /**
- * The shared choose-a-dashboard-row step behind remove/rename/fork. Arrows move
- * the session-only cursor, ↵ commits the focused row, and a slot key commits a
- * renderer-visible row — all three converge on `commit(state, id)`.
+ * The shared choose-a-session step behind remove/rename/fork. Arrows move the
+ * session-only cursor, ↵ commits the focused session, and a slot key commits a
+ * renderer-visible session — all three converge on `commit(state, id)`.
  * Esc is handled by each screen's own reducer. Reuses the dashboard's cursor
- * rather than the generic engine because these list the full dashboard row
- * stream while the renderer supplies the semantic identities intersecting its viewport.
+ * rather than the generic engine because these list the full semantic session
+ * sequence while the renderer supplies the identities intersecting its viewport.
  */
 export function handleDashboardRowChoiceKey(
   state: DashboardState,

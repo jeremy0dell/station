@@ -1,8 +1,8 @@
-// The STATION dashboard runtime is fed by Station's client source and owned by
-// createStation.ts, so filter, collapse, and scroll state survive overlay
-// toggles; overlayRowFocus separately treats row focus as transient. Native
-// Station is always a persistent popup whose dismiss is executed by the router,
-// so onDismiss records that capability without owning the effect.
+// createStation.ts owns one semantic runtime and its renderer scroll controller,
+// so filter/collapse plus measured scroll/follow survive overlay toggles;
+// overlayRowFocus separately treats row focus as transient. Native Station is
+// always a persistent popup whose dismiss is executed by the router, so
+// onDismiss records that capability without owning the effect.
 import { createDashboardRuntime } from "@station/dashboard-core/runtime";
 import type { DashboardCapabilities, DashboardRuntime, TuiFolderService } from "@station/dashboard-core/runtime";
 import type { DashboardGroupHeaderActionVisibility } from "@station/dashboard-core/state";
