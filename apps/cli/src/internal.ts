@@ -24,4 +24,5 @@ export type {
   ExactObserverIncumbentDisposition,
   ObserverProcessDeps,
 } from "./observerProcess.js";
+export * from "./persistedStateReconcile.js";
 export * from "./selfExec.js";

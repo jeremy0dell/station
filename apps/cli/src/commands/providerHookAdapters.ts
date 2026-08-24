@@ -158,6 +158,10 @@ export function runCodexHooksCommand(
   options?: ProviderHooksCommandOptions,
 ): Promise<CodexHookRepairResult>;
 export function runCodexHooksCommand(
+  args: ["reconcile", ...string[]],
+  options?: ProviderHooksCommandOptions,
+): Promise<ProviderHookReconciliationResult>;
+export function runCodexHooksCommand(
   args: string[],
   options?: ProviderHooksCommandOptions,
 ): Promise<CodexHooksCommandResult>;

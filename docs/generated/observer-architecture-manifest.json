@@ -587,7 +587,13 @@
           "name": "reconcileConfiguredHarnessHooksOrThrow",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Reconciles every composed provider capability within the caller's startup budget before Observer health is published."
+          "purpose": "Reconciles all configured provider hooks within one Observer startup budget."
+        },
+        {
+          "name": "reconcileHarnessHooks",
+          "kind": "function",
+          "role": "USE CASE",
+          "purpose": "Requests one provider-owned reconciliation and returns its provider-neutral result."
         },
         {
           "name": "ReconcileHarnessHooksOptions",
@@ -600,15 +606,15 @@
           "kind": "function",
           "role": "USE CASE",
           "purpose": "Requests one provider-owned reconciliation and rejects every unverified enabled outcome."
+        },
+        {
+          "name": "reconcileProviderHooks",
+          "kind": "function",
+          "role": "USE CASE",
+          "purpose": "Admits only canonical requested-provider results from one provider callback."
         }
       ],
       "imports": [
-        {
-          "specifier": "./providers.js",
-          "resolvedPath": "apps/observer/src/commands/providers.ts",
-          "edgeKind": "runtime",
-          "bindings": ["resolveHarnessProviderOrThrow"]
-        },
         {
           "specifier": "../diagnostics/errors.js",
           "resolvedPath": "apps/observer/src/diagnostics/errors.ts",
@@ -625,18 +631,21 @@
           "specifier": "@station/contracts",
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "runtime",
-          "bindings": ["SafeErrorSchema", "providerHookReconciliationSucceeded"]
+          "bindings": [
+            "ProviderHookReconciliationResultSchema",
+            "providerHookReconciliationSucceeded"
+          ]
         },
         {
           "specifier": "@station/contracts",
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "type-only",
           "bindings": [
-            "HarnessProvider",
             "ProviderHookReconciliationContext",
             "ProviderHookReconciliationResult",
             "ProviderId",
-            "SafeError"
+            "SafeError",
+            "SuccessfulProviderHookReconciliationResult"
           ]
         }
       ]
@@ -4627,6 +4636,30 @@
           "purpose": null
         },
         {
+          "name": "ExactObserverInspectionFailureReason",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ExactObserverInspectionPorts",
+          "kind": "type",
+          "role": "DRIVEN PORT",
+          "purpose": "Supplies read-only status, pidfile, cooperative process, and pinned recovery evidence."
+        },
+        {
+          "name": "ExactObserverOwnershipEvidence",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ExactObserverStatusEvidence",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "focusTerminal",
           "kind": "function",
           "role": null,
@@ -4685,6 +4718,12 @@
           "kind": "interface",
           "role": "DRIVEN PORT",
           "purpose": "Atomically records ingress acceptance, observations, native execution binding, recovery, and readiness under dedupe keys."
+        },
+        {
+          "name": "inspectExactObserverOwner",
+          "kind": "function",
+          "role": "USE CASE",
+          "purpose": "Captures and revalidates one coherent Observer generation around recovery inspection."
         },
         {
           "name": "inspectObserverDuplicates",
@@ -5227,6 +5266,12 @@
           "purpose": null
         },
         {
+          "name": "PinnedObserverRecoveryIdentity",
+          "kind": "interface",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "probeObserverSocket",
           "kind": "function",
           "role": "ADAPTER",
@@ -5440,7 +5485,13 @@
           "name": "reconcileConfiguredHarnessHooksOrThrow",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Reconciles every composed provider capability within the caller's startup budget before Observer health is published."
+          "purpose": "Reconciles all configured provider hooks within one Observer startup budget."
+        },
+        {
+          "name": "reconcileHarnessHooks",
+          "kind": "function",
+          "role": "USE CASE",
+          "purpose": "Requests one provider-owned reconciliation and returns its provider-neutral result."
         },
         {
           "name": "ReconcileHarnessHooksOptions",
@@ -5453,6 +5504,12 @@
           "kind": "function",
           "role": "USE CASE",
           "purpose": "Requests one provider-owned reconciliation and rejects every unverified enabled outcome."
+        },
+        {
+          "name": "reconcileProviderHooks",
+          "kind": "function",
+          "role": "USE CASE",
+          "purpose": "Admits only canonical requested-provider results from one provider callback."
         },
         {
           "name": "ReconcileScheduler",
@@ -5969,6 +6026,12 @@
         {
           "specifier": "./runtime/eventBus.js",
           "resolvedPath": "apps/observer/src/runtime/eventBus.ts",
+          "edgeKind": "runtime",
+          "bindings": ["*"]
+        },
+        {
+          "specifier": "./runtime/inspectExactObserverOwner.js",
+          "resolvedPath": "apps/observer/src/runtime/inspectExactObserverOwner.ts",
           "edgeKind": "runtime",
           "bindings": ["*"]
         },
@@ -11049,6 +11112,93 @@
       ]
     },
     {
+      "path": "apps/observer/src/runtime/inspectExactObserverOwner.ts",
+      "exports": [
+        {
+          "name": "ExactObserverInspectionFailureReason",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ExactObserverInspectionPorts",
+          "kind": "type",
+          "role": "DRIVEN PORT",
+          "purpose": "Supplies read-only status, pidfile, cooperative process, and pinned recovery evidence."
+        },
+        {
+          "name": "ExactObserverOwnershipEvidence",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ExactObserverStatusEvidence",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "inspectExactObserverOwner",
+          "kind": "function",
+          "role": "USE CASE",
+          "purpose": "Captures and revalidates one coherent Observer generation around recovery inspection."
+        },
+        {
+          "name": "PinnedObserverRecoveryIdentity",
+          "kind": "interface",
+          "role": null,
+          "purpose": null
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "../diagnostics/errors.js",
+          "resolvedPath": "apps/observer/src/diagnostics/errors.ts",
+          "edgeKind": "runtime",
+          "bindings": ["toSafeError"]
+        },
+        {
+          "specifier": "./observerCooperativeProcessIdentity.js",
+          "resolvedPath": "apps/observer/src/runtime/observerCooperativeProcessIdentity.ts",
+          "edgeKind": "runtime",
+          "bindings": ["verifyCooperativeObserverProcessIdentity"]
+        },
+        {
+          "specifier": "./observerCooperativeProcessIdentity.js",
+          "resolvedPath": "apps/observer/src/runtime/observerCooperativeProcessIdentity.ts",
+          "edgeKind": "type-only",
+          "bindings": [
+            "ObserverCooperativeProcessEntry",
+            "ObserverCooperativeProcessEvidenceSource"
+          ]
+        },
+        {
+          "specifier": "./observerProcessIdentity.js",
+          "resolvedPath": "apps/observer/src/runtime/observerProcessIdentity.ts",
+          "edgeKind": "runtime",
+          "bindings": ["observerProcessIdentitiesMatch"]
+        },
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "type-only",
+          "bindings": [
+            "ObserverHealth",
+            "ObserverProcessIdentity",
+            "ObserverRecoveryAssessment",
+            "SafeError"
+          ]
+        },
+        {
+          "specifier": "@station/runtime",
+          "resolvedPath": "packages/runtime/src/index.ts",
+          "edgeKind": "runtime",
+          "bindings": ["parseStationObserverBuildVersion"]
+        }
+      ]
+    },
+    {
       "path": "apps/observer/src/runtime/logging.ts",
       "exports": [
         {
@@ -11523,6 +11673,47 @@
       ]
     },
     {
+      "path": "apps/observer/src/runtime/observerCooperativeProcessIdentity.ts",
+      "exports": [
+        {
+          "name": "ObserverCooperativeProcessEntry",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ObserverCooperativeProcessEvidenceSource",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "purpose": "Supplies cooperative provenance without lifecycle authority or generic-reader exposure."
+        },
+        {
+          "name": "verifyCooperativeObserverProcessIdentity",
+          "kind": "function",
+          "role": "USE CASE",
+          "purpose": "Verifies cooperative provenance through the canonical exact identity policy."
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "./observerProcessIdentity.js",
+          "resolvedPath": "apps/observer/src/runtime/observerProcessIdentity.ts",
+          "edgeKind": "runtime",
+          "bindings": ["verifyObserverProcessIdentity"]
+        },
+        {
+          "specifier": "./observerProcessIdentity.js",
+          "resolvedPath": "apps/observer/src/runtime/observerProcessIdentity.ts",
+          "edgeKind": "type-only",
+          "bindings": [
+            "ObserverProcessEntry",
+            "ObserverProcessIdentityExpectation",
+            "ObserverProcessIdentityVerification"
+          ]
+        }
+      ]
+    },
+    {
       "path": "apps/observer/src/runtime/observerEvidenceRepair.ts",
       "exports": [
         {
@@ -11878,6 +12069,15 @@
         }
       ],
       "imports": [
+        {
+          "specifier": "./observerCooperativeProcessIdentity.js",
+          "resolvedPath": "apps/observer/src/runtime/observerCooperativeProcessIdentity.ts",
+          "edgeKind": "type-only",
+          "bindings": [
+            "ObserverCooperativeProcessEntry",
+            "ObserverCooperativeProcessEvidenceSource"
+          ]
+        },
         {
           "specifier": "./observerHandoff.js",
           "resolvedPath": "apps/observer/src/runtime/observerHandoff.ts",
@@ -13385,6 +13585,36 @@
       ]
     },
     {
+      "path": "apps/cli/src/commands/reconcile.ts",
+      "declaration": "runReconcileCommand",
+      "kind": "function",
+      "role": "COMPOSITION ROOT",
+      "purpose": "Proves one current Observer and binds only its reconcile method to the use case.",
+      "dependencies": [
+        {
+          "path": "apps/cli/src/observerProcess.ts",
+          "declaration": "startObserver",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/persistedStateReconcile.ts",
+          "declaration": "reconcilePersistedState",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "packages/protocol/src/client.ts",
+          "declaration": "createObserverClient",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
       "path": "apps/cli/src/commands/session.ts",
       "declaration": "runSessionCommand",
       "kind": "function",
@@ -14265,6 +14495,50 @@
       "dependencies": []
     },
     {
+      "path": "apps/cli/src/observerProcess/inspectExactObserverOwner.ts",
+      "declaration": "inspectExactObserverOwnerWithLocalAdapters",
+      "kind": "function",
+      "role": "COMPOSITION ROOT",
+      "purpose": "Binds local status, identity, process, and pinned recovery inspection adapters.",
+      "dependencies": [
+        {
+          "path": "apps/cli/src/observerProcess.ts",
+          "declaration": "getObserverStatus",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/observer/src/runtime/inspectExactObserverOwner.ts",
+          "declaration": "ExactObserverInspectionPorts",
+          "kind": "type",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        },
+        {
+          "path": "apps/observer/src/runtime/inspectExactObserverOwner.ts",
+          "declaration": "inspectExactObserverOwner",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/observer/src/runtime/observerProcessEvidence.ts",
+          "declaration": "createLocalObserverProcessEvidence",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "packages/protocol/src/client.ts",
+          "declaration": "createObserverClient",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
       "path": "apps/cli/src/observerProcess/spawn.ts",
       "declaration": "defaultSpawnObserver",
       "kind": "function",
@@ -14515,6 +14789,30 @@
       ]
     },
     {
+      "path": "apps/cli/src/persistedStateReconcile.ts",
+      "declaration": "PersistedStateReconcilePort",
+      "kind": "type",
+      "role": "DRIVEN PORT",
+      "purpose": "Creates reconcile-only authority pinned to one current Observer identity and timeout.",
+      "dependencies": []
+    },
+    {
+      "path": "apps/cli/src/persistedStateReconcile.ts",
+      "declaration": "reconcilePersistedState",
+      "kind": "function",
+      "role": "USE CASE",
+      "purpose": "Reconciles persisted state through one exact current Observer without lifecycle authority.",
+      "dependencies": [
+        {
+          "path": "apps/cli/src/persistedStateReconcile.ts",
+          "declaration": "PersistedStateReconcilePort",
+          "kind": "type",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
       "path": "apps/cli/src/update/convergencePlan.ts",
       "declaration": "deriveUpdateConvergencePlan",
       "kind": "function",
@@ -14689,7 +14987,7 @@
       "declaration": "createUpdateRecoveryPreflightPorts",
       "kind": "function",
       "role": "COMPOSITION ROOT",
-      "purpose": "Binds recovery preflight to read-only local process evidence, Observer protocol queries, strict Host inventory, and the provider-neutral hook-health use case. Both runtime selectors derive from one composition-captured build identity; no lifecycle or repair capability is exposed.",
+      "purpose": "Binds exact Observer inspection, strict Host inventory, and provider-neutral hook health.",
       "dependencies": [
         {
           "path": "apps/cli/src/commands/host/index.ts",
@@ -14699,10 +14997,10 @@
           "edgeKind": "runtime"
         },
         {
-          "path": "apps/cli/src/observerProcess.ts",
-          "declaration": "getObserverStatus",
+          "path": "apps/cli/src/observerProcess/inspectExactObserverOwner.ts",
+          "declaration": "inspectExactObserverOwnerWithLocalAdapters",
           "kind": "function",
-          "role": "ADAPTER",
+          "role": "COMPOSITION ROOT",
           "edgeKind": "runtime"
         },
         {
@@ -14717,34 +15015,6 @@
           "declaration": "readHarnessHookHealth",
           "kind": "function",
           "role": "USE CASE",
-          "edgeKind": "runtime"
-        },
-        {
-          "path": "apps/observer/src/runtime/observerProcessEvidence.ts",
-          "declaration": "createLocalObserverProcessEvidence",
-          "kind": "function",
-          "role": "ADAPTER",
-          "edgeKind": "runtime"
-        },
-        {
-          "path": "apps/observer/src/runtime/observerProcessIdentity.ts",
-          "declaration": "ObserverProcessIdentityEvidenceSource",
-          "kind": "interface",
-          "role": "DRIVEN PORT",
-          "edgeKind": "type-only"
-        },
-        {
-          "path": "apps/observer/src/runtime/observerProcessIdentity.ts",
-          "declaration": "verifyObserverProcessIdentity",
-          "kind": "function",
-          "role": "USE CASE",
-          "edgeKind": "runtime"
-        },
-        {
-          "path": "packages/protocol/src/client.ts",
-          "declaration": "createObserverClient",
-          "kind": "function",
-          "role": "ADAPTER",
           "edgeKind": "runtime"
         }
       ]
@@ -14786,21 +15056,30 @@
       "declaration": "reconcileConfiguredHarnessHooksOrThrow",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Reconciles every composed provider capability within the caller's startup budget before Observer health is published.",
+      "purpose": "Reconciles all configured provider hooks within one Observer startup budget.",
       "dependencies": [
         {
-          "path": "packages/contracts/src/providerHooks.ts",
-          "declaration": "providerHookReconciliationSucceeded",
+          "path": "apps/observer/src/commands/harnessHookReconciliation.ts",
+          "declaration": "reconcileHarnessHooksOrThrow",
           "kind": "function",
-          "role": "POLICY",
+          "role": "USE CASE",
           "edgeKind": "runtime"
-        },
+        }
+      ]
+    },
+    {
+      "path": "apps/observer/src/commands/harnessHookReconciliation.ts",
+      "declaration": "reconcileHarnessHooks",
+      "kind": "function",
+      "role": "USE CASE",
+      "purpose": "Requests one provider-owned reconciliation and returns its provider-neutral result.",
+      "dependencies": [
         {
-          "path": "packages/contracts/src/providers.ts",
-          "declaration": "HarnessProvider",
-          "kind": "interface",
-          "role": "DRIVEN PORT",
-          "edgeKind": "type-only"
+          "path": "apps/observer/src/commands/harnessHookReconciliation.ts",
+          "declaration": "reconcileProviderHooks",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
         }
       ]
     },
@@ -14812,20 +15091,28 @@
       "purpose": "Requests one provider-owned reconciliation and rejects every unverified enabled outcome.",
       "dependencies": [
         {
+          "path": "apps/observer/src/commands/harnessHookReconciliation.ts",
+          "declaration": "reconcileHarnessHooks",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
+        },
+        {
           "path": "packages/contracts/src/providerHooks.ts",
           "declaration": "providerHookReconciliationSucceeded",
           "kind": "function",
           "role": "POLICY",
           "edgeKind": "runtime"
-        },
-        {
-          "path": "packages/contracts/src/providers.ts",
-          "declaration": "HarnessProvider",
-          "kind": "interface",
-          "role": "DRIVEN PORT",
-          "edgeKind": "type-only"
         }
       ]
+    },
+    {
+      "path": "apps/observer/src/commands/harnessHookReconciliation.ts",
+      "declaration": "reconcileProviderHooks",
+      "kind": "function",
+      "role": "USE CASE",
+      "purpose": "Admits only canonical requested-provider results from one provider callback.",
+      "dependencies": []
     },
     {
       "path": "apps/observer/src/commands/harnessLaunchPreflight.ts",
@@ -15841,6 +16128,45 @@
       ]
     },
     {
+      "path": "apps/observer/src/runtime/inspectExactObserverOwner.ts",
+      "declaration": "ExactObserverInspectionPorts",
+      "kind": "type",
+      "role": "DRIVEN PORT",
+      "purpose": "Supplies read-only status, pidfile, cooperative process, and pinned recovery evidence.",
+      "dependencies": [
+        {
+          "path": "apps/observer/src/runtime/observerCooperativeProcessIdentity.ts",
+          "declaration": "ObserverCooperativeProcessEvidenceSource",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
+      "path": "apps/observer/src/runtime/inspectExactObserverOwner.ts",
+      "declaration": "inspectExactObserverOwner",
+      "kind": "function",
+      "role": "USE CASE",
+      "purpose": "Captures and revalidates one coherent Observer generation around recovery inspection.",
+      "dependencies": [
+        {
+          "path": "apps/observer/src/runtime/inspectExactObserverOwner.ts",
+          "declaration": "ExactObserverInspectionPorts",
+          "kind": "type",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        },
+        {
+          "path": "apps/observer/src/runtime/observerCooperativeProcessIdentity.ts",
+          "declaration": "verifyCooperativeObserverProcessIdentity",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
       "path": "apps/observer/src/runtime/logging.ts",
       "declaration": "createObserverLogger",
       "kind": "function",
@@ -16041,6 +16367,37 @@
           "kind": "interface",
           "role": "DRIVEN PORT",
           "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
+      "path": "apps/observer/src/runtime/observerCooperativeProcessIdentity.ts",
+      "declaration": "ObserverCooperativeProcessEvidenceSource",
+      "kind": "interface",
+      "role": "DRIVEN PORT",
+      "purpose": "Supplies cooperative provenance without lifecycle authority or generic-reader exposure.",
+      "dependencies": []
+    },
+    {
+      "path": "apps/observer/src/runtime/observerCooperativeProcessIdentity.ts",
+      "declaration": "verifyCooperativeObserverProcessIdentity",
+      "kind": "function",
+      "role": "USE CASE",
+      "purpose": "Verifies cooperative provenance through the canonical exact identity policy.",
+      "dependencies": [
+        {
+          "path": "apps/observer/src/runtime/observerCooperativeProcessIdentity.ts",
+          "declaration": "ObserverCooperativeProcessEvidenceSource",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        },
+        {
+          "path": "apps/observer/src/runtime/observerProcessIdentity.ts",
+          "declaration": "verifyObserverProcessIdentity",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
         }
       ]
     },

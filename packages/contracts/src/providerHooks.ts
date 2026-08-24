@@ -14,7 +14,7 @@ const configuredDisabledHealthSchema = z
   .object({
     provider: ProviderIdSchema,
     status: z.literal("configured-disabled"),
-    followUp: ProviderHookFollowUpSchema,
+    followUp: ProviderHookFollowUpSchema.extend({ action: z.literal("enable-hooks") }),
   })
   .strict();
 
@@ -45,7 +45,7 @@ const ownershipConflictHealthSchema = z
     provider: ProviderIdSchema,
     status: z.literal("ownership-conflict"),
     ownership: z.enum(["different-owner", "unknown-owner"]),
-    followUp: ProviderHookFollowUpSchema,
+    followUp: ProviderHookFollowUpSchema.extend({ action: z.literal("run-explicit-takeover") }),
   })
   .strict();
 
@@ -54,7 +54,7 @@ const inspectionFailedHealthSchema = z
     provider: ProviderIdSchema,
     status: z.literal("inspection-failed"),
     error: SafeErrorSchema,
-    followUp: ProviderHookFollowUpSchema,
+    followUp: ProviderHookFollowUpSchema.extend({ action: z.literal("run-doctor") }),
   })
   .strict();
 
@@ -76,7 +76,7 @@ const configuredDisabledReconciliationSchema = z
     status: z.literal("configured-disabled"),
     changed: z.literal(false),
     verified: z.literal(false),
-    followUp: ProviderHookFollowUpSchema,
+    followUp: ProviderHookFollowUpSchema.extend({ action: z.literal("enable-hooks") }),
   })
   .strict();
 
@@ -113,7 +113,7 @@ const ownershipConflictReconciliationSchema = z
     status: z.literal("ownership-conflict"),
     changed: z.literal(false),
     verified: z.literal(false),
-    followUp: ProviderHookFollowUpSchema,
+    followUp: ProviderHookFollowUpSchema.extend({ action: z.literal("run-explicit-takeover") }),
   })
   .strict();
 
@@ -124,7 +124,7 @@ const writeFailedReconciliationSchema = z
     changed: z.boolean(),
     verified: z.literal(false),
     error: SafeErrorSchema,
-    followUp: ProviderHookFollowUpSchema,
+    followUp: ProviderHookFollowUpSchema.extend({ action: z.literal("retry") }),
   })
   .strict();
 
@@ -135,7 +135,7 @@ const postWriteDoctorFailedReconciliationSchema = z
     changed: z.boolean(),
     verified: z.literal(false),
     error: SafeErrorSchema,
-    followUp: ProviderHookFollowUpSchema,
+    followUp: ProviderHookFollowUpSchema.extend({ action: z.literal("run-doctor") }),
   })
   .strict();
 
@@ -146,7 +146,7 @@ const inspectionFailedReconciliationSchema = z
     changed: z.literal(false),
     verified: z.literal(false),
     error: SafeErrorSchema,
-    followUp: ProviderHookFollowUpSchema,
+    followUp: ProviderHookFollowUpSchema.extend({ action: z.literal("run-doctor") }),
   })
   .strict();
 

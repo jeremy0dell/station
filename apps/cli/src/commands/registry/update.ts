@@ -111,9 +111,6 @@ function updateDeps(
       };
       if (loaded.configPath !== undefined) preflightOptions.configPath = loaded.configPath;
       if (hostDeps !== undefined) preflightOptions.hostDeps = hostDeps;
-      if (context.options.observerDeps !== undefined) {
-        preflightOptions.observerDeps = context.options.observerDeps;
-      }
       const ports = createUpdateRecoveryPreflightPorts(preflightOptions);
       return runUpdateRecoveryPreflight({ ...input, ports });
     };
