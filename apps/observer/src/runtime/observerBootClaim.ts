@@ -297,19 +297,20 @@ function createRelease(database: SqlDatabase): () => ObserverBootClaimReleaseRes
       errors.push(error);
     }
 
-    result =
-      errors.length === 0
-        ? { status: "released" }
-        : {
-            status: "failed",
-            error: observerBootClaimError(
-              new AggregateError(errors, "Observer boot claim release failed."),
-              {
-                code: "OBSERVER_BOOT_CLAIM_RELEASE_FAILED",
-                message: "Observer boot ownership could not be released cleanly.",
-              },
-            ),
-          };
+    if (errors.length === 0) {
+      result = { status: "released" };
+    } else {
+      result = {
+        status: "failed",
+        error: observerBootClaimError(
+          new AggregateError(errors, "Observer boot claim release failed."),
+          {
+            code: "OBSERVER_BOOT_CLAIM_RELEASE_FAILED",
+            message: "Observer boot ownership could not be released cleanly.",
+          },
+        ),
+      };
+    }
     return result;
   };
 }

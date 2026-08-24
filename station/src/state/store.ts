@@ -206,21 +206,21 @@ export function createStationStore(options?: StationStoreOptions): StationStore 
         ) {
           return;
         }
+        const panes = state.workspace.panes.map((pane) => {
+          if (pane.id !== paneId) {
+            return pane;
+          }
+          const worktreeId = pane.worktreeId ?? worktreeIdFromAgentPaneId(pane.id);
+          return {
+            ...pane,
+            role: "primary-agent",
+            agentIdentity: nextIdentity,
+            ...(worktreeId === undefined ? {} : { worktreeId }),
+          };
+        });
         setState({
           ...state,
-          workspace: {
-            ...state.workspace,
-            panes: state.workspace.panes.map((pane) => {
-              if (pane.id !== paneId) return pane;
-              const worktreeId = pane.worktreeId ?? worktreeIdFromAgentPaneId(pane.id);
-              return {
-                ...pane,
-                role: "primary-agent",
-                agentIdentity: nextIdentity,
-                ...(worktreeId === undefined ? {} : { worktreeId }),
-              };
-            }),
-          },
+          workspace: { ...state.workspace, panes },
         });
       },
       // Overlay-aware via the same withActivePane helper createPane uses: revealing

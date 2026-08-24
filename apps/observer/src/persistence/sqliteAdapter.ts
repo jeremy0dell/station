@@ -23,6 +23,7 @@ import * as sessionTurnReadinessStore from "./sessionTurnReadiness.js";
 import type {
   HarnessExecutionIngress,
   ObserverIdFactory,
+  PersistReconcileResultInput,
   SessionTurnReadinessMutation,
 } from "./types.js";
 import * as worktreeDisplayTitleStore from "./worktreeDisplayTitles.js";
@@ -280,13 +281,7 @@ export function createSqliteObserverPersistence(
 
     persistReconcileResult: (input) =>
       transaction((database) => {
-        const reconcileInput =
-          input.expiresAt === undefined && input.providerObservationRetentionDays === undefined
-            ? {
-                ...input,
-                providerObservationRetentionDays: providerObservationRetentionDays(),
-              }
-            : input;
+        const reconcileInput = withDefaultObservationRetention(input);
         correlationStore.persistReconcileResult(database, reconcileInput, {
           observedAt: input.observedAt ?? now(),
           idFactory,
@@ -575,4 +570,16 @@ function applySessionTurnReadinessMutation(
   sessionTurnReadinessStore.deleteSessionTurnReadiness(database, {
     sessionId: mutation.sessionId,
   });
+}
+
+function withDefaultObservationRetention(
+  input: PersistReconcileResultInput,
+): PersistReconcileResultInput {
+  if (input.expiresAt !== undefined || input.providerObservationRetentionDays !== undefined) {
+    return input;
+  }
+  return {
+    ...input,
+    providerObservationRetentionDays: providerObservationRetentionDays(),
+  };
 }

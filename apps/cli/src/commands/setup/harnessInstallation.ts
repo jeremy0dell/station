@@ -10,15 +10,16 @@ export function resolveSetupHarnessInstallation(input: {
   const macBrewAvailable = input.macos && input.brewAvailable;
   switch (input.harnessId) {
     case "codex":
-      return macBrewAvailable
-        ? {
-            command: ["brew", "install", "--cask", "homebrew/cask/codex"],
-            message: setupMessageRef("installer.codex-brew"),
-          }
-        : {
-            command: ["/bin/bash", "-c", codexInstallerCommand],
-            message: setupMessageRef("installer.codex-script"),
-          };
+      if (macBrewAvailable) {
+        return {
+          command: ["brew", "install", "--cask", "homebrew/cask/codex"],
+          message: setupMessageRef("installer.codex-brew"),
+        };
+      }
+      return {
+        command: ["/bin/bash", "-c", codexInstallerCommand],
+        message: setupMessageRef("installer.codex-script"),
+      };
     case "cursor":
       return {
         command: [
@@ -29,64 +30,70 @@ export function resolveSetupHarnessInstallation(input: {
         message: setupMessageRef("installer.cursor-script"),
       };
     case "opencode":
-      return input.brewAvailable
-        ? {
-            command: ["brew", "install", "homebrew/core/opencode"],
-            message: setupMessageRef("installer.opencode-brew"),
-          }
-        : {
-            command: [
-              "/bin/bash",
-              "-c",
-              downloadedInstallerCommand({
-                url: "https://opencode.ai/install",
-                execute:
-                  '/bin/bash "$installer" --no-modify-path && mkdir -p "$HOME/.local/bin" && ln -s "$HOME/.opencode/bin/opencode" "$HOME/.local/bin/opencode"',
-              }),
-            ],
-            message: setupMessageRef("installer.opencode-script"),
-          };
+      if (input.brewAvailable) {
+        return {
+          command: ["brew", "install", "homebrew/core/opencode"],
+          message: setupMessageRef("installer.opencode-brew"),
+        };
+      }
+      return {
+        command: [
+          "/bin/bash",
+          "-c",
+          downloadedInstallerCommand({
+            url: openCodeInstallerUrl,
+            execute: openCodeInstallerExecute,
+          }),
+        ],
+        message: setupMessageRef("installer.opencode-script"),
+      };
     case "pi":
-      return input.brewAvailable
-        ? {
-            command: ["brew", "install", "homebrew/core/pi-coding-agent"],
-            message: setupMessageRef("installer.pi-brew"),
-          }
-        : {
-            command: [
-              "npm",
-              "install",
-              "--global",
-              "--prefix",
-              `${input.homeDir}/.local`,
-              "--ignore-scripts",
-              "--no-fund",
-              "--no-audit",
-              "@earendil-works/pi-coding-agent",
-            ],
-            message: setupMessageRef("installer.pi-npm"),
-          };
+      if (input.brewAvailable) {
+        return {
+          command: ["brew", "install", "homebrew/core/pi-coding-agent"],
+          message: setupMessageRef("installer.pi-brew"),
+        };
+      }
+      return {
+        command: [
+          "npm",
+          "install",
+          "--global",
+          "--prefix",
+          `${input.homeDir}/.local`,
+          "--ignore-scripts",
+          "--no-fund",
+          "--no-audit",
+          "@earendil-works/pi-coding-agent",
+        ],
+        message: setupMessageRef("installer.pi-npm"),
+      };
     case "claude":
-      return macBrewAvailable
-        ? {
-            command: ["brew", "install", "--cask", "homebrew/cask/claude-code"],
-            message: setupMessageRef("installer.claude-brew"),
-          }
-        : {
-            command: [
-              "npm",
-              "install",
-              "--global",
-              "--prefix",
-              `${input.homeDir}/.local`,
-              "--no-fund",
-              "--no-audit",
-              "@anthropic-ai/claude-code",
-            ],
-            message: setupMessageRef("installer.claude-npm"),
-          };
+      if (macBrewAvailable) {
+        return {
+          command: ["brew", "install", "--cask", "homebrew/cask/claude-code"],
+          message: setupMessageRef("installer.claude-brew"),
+        };
+      }
+      return {
+        command: [
+          "npm",
+          "install",
+          "--global",
+          "--prefix",
+          `${input.homeDir}/.local`,
+          "--no-fund",
+          "--no-audit",
+          "@anthropic-ai/claude-code",
+        ],
+        message: setupMessageRef("installer.claude-npm"),
+      };
   }
 }
+
+const openCodeInstallerUrl = "https://opencode.ai/install";
+const openCodeInstallerExecute =
+  '/bin/bash "$installer" --no-modify-path && mkdir -p "$HOME/.local/bin" && ln -s "$HOME/.opencode/bin/opencode" "$HOME/.local/bin/opencode"';
 
 const codexInstallerCommand = [
   "set -eu",

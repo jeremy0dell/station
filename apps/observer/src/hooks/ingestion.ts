@@ -31,6 +31,7 @@ import {
   providerObservationExpiresAt,
   providerObservationRetentionDays,
 } from "../persistence/retention.js";
+import type { RecordProviderObservationInput } from "../persistence/types.js";
 import type { ProviderRegistry } from "../providers/registry.js";
 import type { ObserverEventBus } from "../runtime/eventBus.js";
 import { sessionTurnReadinessMutationFromHarnessObservation } from "./turnReadiness.js";
@@ -340,23 +341,21 @@ export function createHarnessEventReportIngestion(
             ...(recoveryHandle === undefined ? {} : { recoveryHandle }),
             ...(turnReadiness === undefined ? {} : { turnReadiness }),
           };
+          const storedObservation: RecordProviderObservationInput = {
+            provider: report.provider,
+            providerType: "harness",
+            entityKind: "harness_event",
+            entityKey: harnessEventReportEntityKey(report),
+            payload: observation,
+            observedAt: report.observedAt,
+            expiresAt: providerObservationExpiresAt(report.observedAt, retentionDays),
+          };
           const result =
             await options.persistence.recordEventAndProviderObservationWithIngressDedupe({
               event: reportedEvent,
-              eventOptions: {
-                source: "hook",
-                createdAt: report.observedAt,
-              },
+              eventOptions: { source: "hook", createdAt: report.observedAt },
               dedupe: { kind: "harness_report", id: report.reportId },
-              observation: {
-                provider: report.provider,
-                providerType: "harness",
-                entityKind: "harness_event",
-                entityKey: harnessEventReportEntityKey(report),
-                payload: observation,
-                observedAt: report.observedAt,
-                expiresAt: providerObservationExpiresAt(report.observedAt, retentionDays),
-              },
+              observation: storedObservation,
               harnessExecution,
             });
           if (!result.deduped) {

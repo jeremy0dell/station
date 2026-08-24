@@ -787,14 +787,7 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
             };
           } else {
             detachAttachment(entry, attachment);
-            const pending = error instanceof TerminalSnapshotPendingError;
-            throw new StationHostProviderError(
-              pending ? "HOST_SNAPSHOT_PENDING" : "HOST_SNAPSHOT_FAILED",
-              pending
-                ? `Host PTY "${ptyRef.ptyId}" ended between terminal parser boundaries; retrying may succeed after more output.`
-                : `Could not capture terminal state for host PTY "${ptyRef.ptyId}".`,
-              { cause: error },
-            );
+            throw snapshotCaptureFailure(ptyRef.ptyId, error);
           }
         }
       }
@@ -909,4 +902,15 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
       }
     },
   };
+}
+
+function snapshotCaptureFailure(ptyId: string, error: unknown): StationHostProviderError {
+  const pending = error instanceof TerminalSnapshotPendingError;
+  return new StationHostProviderError(
+    pending ? "HOST_SNAPSHOT_PENDING" : "HOST_SNAPSHOT_FAILED",
+    pending
+      ? `Host PTY "${ptyId}" ended between terminal parser boundaries; retrying may succeed after more output.`
+      : `Could not capture terminal state for host PTY "${ptyId}".`,
+    { cause: error },
+  );
 }

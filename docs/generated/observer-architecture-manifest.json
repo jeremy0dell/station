@@ -3802,6 +3802,12 @@
           "bindings": ["providerObservationExpiresAt", "providerObservationRetentionDays"]
         },
         {
+          "specifier": "../persistence/types.js",
+          "resolvedPath": "apps/observer/src/persistence/types.ts",
+          "edgeKind": "type-only",
+          "bindings": ["RecordProviderObservationInput"]
+        },
+        {
           "specifier": "../providers/registry.js",
           "resolvedPath": "apps/observer/src/providers/registry.ts",
           "edgeKind": "type-only",
@@ -8971,6 +8977,7 @@
           "bindings": [
             "HarnessExecutionIngress",
             "ObserverIdFactory",
+            "PersistReconcileResultInput",
             "SessionTurnReadinessMutation"
           ]
         },

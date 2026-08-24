@@ -27,28 +27,25 @@ export function AgentChoiceListView({
   return (
     <>
       {choices.map((choice) => {
-        const current = choice.value.id === currentId;
-        // The update nudge never displaces a problem status — unavailable or
-        // degraded providers keep their state as the row's detail.
+        const option = choice.value;
+        const current = option.id === currentId;
+        // Problem statuses stay as the row detail; only healthy/unknown rows may
+        // show an update nudge.
         const update =
-          choice.value.status === "healthy" || choice.value.status === "unknown"
-            ? choice.value.update
-            : undefined;
+          option.status === "healthy" || option.status === "unknown" ? option.update : undefined;
+        let detail = option.status;
+        let color = providerHealthColor(theme, option.status);
+        if (update !== undefined) {
+          detail = `● update v${update.installed} → v${update.latest}`;
+          color = theme.status.success;
+        }
         return (
           <SheetChoiceLine
-            key={choice.value.id}
+            key={option.id}
             choiceKey={choice.key}
-            label={choice.value.label}
-            detail={
-              update === undefined
-                ? choice.value.status
-                : `● update v${update.installed} → v${update.latest}`
-            }
-            color={
-              update === undefined
-                ? providerHealthColor(theme, choice.value.status)
-                : theme.status.success
-            }
+            label={option.label}
+            detail={detail}
+            color={color}
             width={width}
             current={current}
             selected={choice.value.id === selectedId}

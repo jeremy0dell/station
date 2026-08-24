@@ -95,16 +95,15 @@ export function createManagedLaunch(deps: ManagedLaunchDeps): ManagedLaunch {
         clientLabel: "Station",
       });
       if (execution.status !== "succeeded" && execution.status !== "accepted") {
-        const error =
-          execution.status === "rejected" && execution.receipt.error === undefined
-            ? {
-                ...execution.error,
-                tag: "ClientObserverError" as const,
-                code: `STATION_WORKTREE_${spec.verb.toUpperCase()}_REJECTED`,
-                message: `Station could not ${spec.verb} the worktree.`,
-              }
-            : execution.error;
-        return worktreeFailure(error);
+        if (execution.status === "rejected" && execution.receipt.error === undefined) {
+          return worktreeFailure({
+            ...execution.error,
+            tag: "ClientObserverError",
+            code: `STATION_WORKTREE_${spec.verb.toUpperCase()}_REJECTED`,
+            message: `Station could not ${spec.verb} the worktree.`,
+          });
+        }
+        return worktreeFailure(execution.error);
       }
       // A bare worktree does not prune the optimistic row; only canonical session projection does.
       const row = await waitForWorktreeByBranch(deps.clientState, spec.projectId, spec.branch);

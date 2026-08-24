@@ -585,29 +585,21 @@ function operationText(
         label: resolveSetupMessage(setupMessageRef("action.worktrunk-shell-label")),
         explanation: resolveSetupMessage(setupMessageRef("action.worktrunk-shell-message")),
       };
-    case "configure-tmux-popup":
+    case "configure-tmux-popup": {
+      const persisted = operation.scope === "persisted";
+      const binding = projection.facts.tmuxBinding;
+      const key = binding.status === "conflict" ? "Space" : binding.bindingKey;
       return {
         label: resolveSetupMessage(
-          setupMessageRef(
-            operation.scope === "persisted"
-              ? "action.tmux-persist-label"
-              : "action.tmux-live-label",
-          ),
+          setupMessageRef(persisted ? "action.tmux-persist-label" : "action.tmux-live-label"),
         ),
         explanation: resolveSetupMessage(
-          setupMessageRef(
-            operation.scope === "persisted"
-              ? "action.tmux-persist-message"
-              : "action.tmux-live-message",
-            {
-              key:
-                projection.facts.tmuxBinding.status === "conflict"
-                  ? "Space"
-                  : projection.facts.tmuxBinding.bindingKey,
-            },
-          ),
+          setupMessageRef(persisted ? "action.tmux-persist-message" : "action.tmux-live-message", {
+            key,
+          }),
         ),
       };
+    }
     case "prepare-worktrunk-tracking":
       return {
         label: resolveSetupMessage(setupMessageRef("action.worktrunk-hooks-label")),

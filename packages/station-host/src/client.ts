@@ -141,6 +141,13 @@ type FrameSink = {
 
 const defaultTimeoutMs = 5000;
 
+function frameIteratorResult(frame: HostFrame | undefined): IteratorResult<HostFrame> {
+  if (frame === undefined) {
+    return { done: true, value: undefined };
+  }
+  return { done: false, value: frame };
+}
+
 export function createStationHostClient(options: StationHostClientOptions): StationHostClient {
   const timeoutMs = options.timeoutMs ?? defaultTimeoutMs;
   const expectedBuildVersion = options.expectedBuildVersion ?? stationBuildInfo().version;
@@ -326,40 +333,29 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
     let ptyId: string | undefined;
     let attachmentId: string | undefined;
     let state: HostControlState | undefined;
-    const drain = () => {
+    // next() only parks; drain is the single path that completes a pull.
+    const drain = (): void => {
       while (waiters.length > 0 && (queue.length > 0 || ended)) {
         const waiter = waiters.shift();
-        if (waiter === undefined) break;
-        const next = queue.shift();
-        waiter(
-          next === undefined ? { done: true, value: undefined } : { done: false, value: next },
-        );
+        if (waiter === undefined) {
+          break;
+        }
+        waiter(frameIteratorResult(queue.shift()));
       }
     };
+    const pullFrame = (): Promise<IteratorResult<HostFrame>> =>
+      new Promise((resolve) => {
+        waiters.push(resolve);
+        drain();
+      });
     const sink: FrameSink = {
       get frames() {
         return {
           [Symbol.asyncIterator]: () => ({
-            next: () =>
-              new Promise<IteratorResult<HostFrame>>((resolve) => {
-                if (queue.length > 0) {
-                  const next = queue.shift();
-                  resolve(
-                    next === undefined
-                      ? { done: true, value: undefined }
-                      : { done: false, value: next },
-                  );
-                  return;
-                }
-                if (ended) {
-                  resolve({ done: true, value: undefined });
-                  return;
-                }
-                waiters.push(resolve);
-              }),
+            next: pullFrame,
             return: () => {
               sink.release();
-              return Promise.resolve({ done: true as const, value: undefined });
+              return Promise.resolve(frameIteratorResult(undefined));
             },
           }),
         };

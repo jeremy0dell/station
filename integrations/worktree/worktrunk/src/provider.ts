@@ -65,6 +65,11 @@ const defaultCapabilities: WorktreeCapabilities = {
   canSeedWorkingTree: true,
 };
 
+type StaleRegistrationInspection =
+  | { status: "skipped" }
+  | { status: "completed"; check?: ProviderDoctorCheck }
+  | { status: "failed"; check: ProviderDoctorCheck };
+
 /**
  * ADAPTER
  *
@@ -643,78 +648,19 @@ export class WorktrunkProvider implements WorktreeProvider {
       const batch = enabledProjects.slice(offset, offset + 4);
       await Promise.all(
         batch.map(async (project, batchIndex) => {
-          if (options.signal.aborted) return;
-          const index = offset + batchIndex;
-          if (
-            await isGitCheckoutConfiguredBare(project.root, {
-              ...(this.#runner === undefined ? {} : { runner: this.#runner }),
-              signal: options.signal,
-              timeoutMs: options.timeoutMs,
-            })
-          ) {
-            const providerError = projectRootBareError(project);
-            const error: SafeError = {
-              tag: providerError.tag,
-              code: providerError.code,
-              message: providerError.message,
-              provider: providerError.provider,
-              projectId: project.id,
-            };
-            if (providerError.hint !== undefined) error.hint = providerError.hint;
-            checks[index] = {
-              name: `worktrunk-project-root-${project.id}`,
-              status: "warn",
-              message: `${providerError.message} ${providerError.hint}`,
-              error,
-            };
-            completed += 1;
-            return;
+          const inspection = await this.#inspectStaleRegistration(project, options);
+          switch (inspection.status) {
+            case "skipped":
+              return;
+            case "completed":
+              completed += 1;
+              if (inspection.check !== undefined) {
+                checks[offset + batchIndex] = inspection.check;
+              }
+              return;
+            case "failed":
+              checks[offset + batchIndex] = inspection.check;
           }
-          let missing: WorktreeObservation[];
-          try {
-            missing = (
-              await this.#listWorktrees(project, {
-                retries: 0,
-                signal: options.signal,
-                timeoutMs: options.timeoutMs,
-              })
-            ).filter((observation) => observation.state !== "exists");
-            completed += 1;
-          } catch (cause) {
-            if (options.signal.aborted) return;
-            const failure = safeErrorFromUnknown(cause, {
-              tag: "WorktrunkStaleRegistrationDiagnosticError",
-              code: "WORKTRUNK_STALE_REGISTRATION_CHECK_FAILED",
-              message: `Worktrunk could not inspect stale registrations for ${project.label}.`,
-              provider: this.id,
-            });
-            const error: SafeError = {
-              tag: failure.tag,
-              code: failure.code,
-              message: failure.message,
-              projectId: project.id,
-            };
-            if (failure.hint !== undefined) error.hint = failure.hint;
-            if (failure.provider !== undefined) error.provider = failure.provider;
-            checks[index] = {
-              name: `worktrunk-stale-registrations-${project.id}`,
-              status: "warn",
-              message: error.message,
-              error,
-            };
-            return;
-          }
-          if (missing.length === 0) return;
-          const root = shellQuote(project.root);
-          checks[index] = {
-            name: `worktrunk-stale-registrations-${project.id}`,
-            status: "warn",
-            message: `Worktrunk found missing/prunable registrations for ${project.label}: ${missing
-              .map((item) => `${item.branch} (${item.path})`)
-              .join(
-                ", ",
-              )}. Inspect with git -C ${root} worktree prune --dry-run --verbose, then clean with git -C ${root} worktree prune --verbose.`,
-          };
         }),
       );
       if (options.signal.aborted) break;
@@ -730,6 +676,72 @@ export class WorktrunkProvider implements WorktreeProvider {
       });
     }
     return completedChecks;
+  }
+
+  async #inspectStaleRegistration(
+    project: ProviderProjectConfig,
+    options: { signal: AbortSignal; timeoutMs: number },
+  ): Promise<StaleRegistrationInspection> {
+    if (options.signal.aborted) {
+      return { status: "skipped" };
+    }
+    const gitOptions = {
+      ...(this.#runner === undefined ? {} : { runner: this.#runner }),
+      signal: options.signal,
+      timeoutMs: options.timeoutMs,
+    };
+    if (await isGitCheckoutConfiguredBare(project.root, gitOptions)) {
+      const providerError = projectRootBareError(project);
+      return {
+        status: "completed",
+        check: {
+          name: `worktrunk-project-root-${project.id}`,
+          status: "warn",
+          message: `${providerError.message} ${providerError.hint}`,
+          error: projectDoctorError(providerError, project.id),
+        },
+      };
+    }
+    let missing: WorktreeObservation[];
+    try {
+      missing = (
+        await this.#listWorktrees(project, {
+          retries: 0,
+          signal: options.signal,
+          timeoutMs: options.timeoutMs,
+        })
+      ).filter((observation) => observation.state !== "exists");
+    } catch (cause) {
+      if (options.signal.aborted) {
+        return { status: "skipped" };
+      }
+      const failure = safeErrorFromUnknown(cause, {
+        tag: "WorktrunkStaleRegistrationDiagnosticError",
+        code: "WORKTRUNK_STALE_REGISTRATION_CHECK_FAILED",
+        message: `Worktrunk could not inspect stale registrations for ${project.label}.`,
+        provider: this.id,
+      });
+      return {
+        status: "failed",
+        check: {
+          name: `worktrunk-stale-registrations-${project.id}`,
+          status: "warn",
+          message: failure.message,
+          error: projectDoctorError(failure, project.id),
+        },
+      };
+    }
+    if (missing.length === 0) {
+      return { status: "completed" };
+    }
+    return {
+      status: "completed",
+      check: {
+        name: `worktrunk-stale-registrations-${project.id}`,
+        status: "warn",
+        message: staleRegistrationMessage(project, missing),
+      },
+    };
   }
 
   async #run(
@@ -807,6 +819,27 @@ export class WorktrunkProvider implements WorktreeProvider {
       installHint: worktrunkInstallHint(this.#command),
     });
   }
+}
+
+function staleRegistrationMessage(
+  project: ProviderProjectConfig,
+  missing: readonly WorktreeObservation[],
+): string {
+  const registrations = missing.map((item) => `${item.branch} (${item.path})`).join(", ");
+  const root = shellQuote(project.root);
+  return `Worktrunk found missing/prunable registrations for ${project.label}: ${registrations}. Inspect with git -C ${root} worktree prune --dry-run --verbose, then clean with git -C ${root} worktree prune --verbose.`;
+}
+
+function projectDoctorError(error: SafeError, projectId: string): SafeError {
+  const next: SafeError = {
+    tag: error.tag,
+    code: error.code,
+    message: error.message,
+    projectId,
+  };
+  if (error.hint !== undefined) next.hint = error.hint;
+  if (error.provider !== undefined) next.provider = error.provider;
+  return next;
 }
 
 function projectRootBareError(project: ProviderProjectConfig): WorktrunkProviderError {
