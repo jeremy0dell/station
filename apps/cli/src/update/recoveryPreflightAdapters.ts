@@ -19,7 +19,7 @@ import {
 import { createObserverClient, type ExpectedObserverIdentity } from "@station/protocol";
 import {
   parseStationObserverBuildVersion,
-  stationBuildInfo,
+  type StationBuildInfo,
   stationObserverBuildVersion,
 } from "@station/runtime";
 import { type HostCommandDeps, runHostCommand } from "../commands/host/index.js";
@@ -37,18 +37,16 @@ export type CreateUpdateRecoveryPreflightPortsOptions = {
   providers: ProviderRegistry;
   observerStatus?: typeof getObserverStatus;
   hostStatus?: typeof runHostCommand;
-  /** Test seam for the immutable build identity of the current CLI/Host implementation. */
-  currentBuildIdentity?: string;
-  /** Test seam for the exact current Observer selector. */
-  currentObserverBuildVersion?: string;
+  /** Immutable identity captured once by update command composition. */
+  currentBuildInfo: StationBuildInfo;
 };
 
 /**
  * COMPOSITION ROOT
  *
  * Binds recovery preflight to read-only local process evidence, Observer protocol queries, strict
- * Host inventory, and the provider-neutral hook-health use case. No lifecycle or repair capability
- * is exposed through these ports.
+ * Host inventory, and the provider-neutral hook-health use case. Both runtime selectors derive from
+ * one composition-captured build identity; no lifecycle or repair capability is exposed.
  */
 export function createUpdateRecoveryPreflightPorts(
   options: CreateUpdateRecoveryPreflightPortsOptions,
@@ -57,9 +55,8 @@ export function createUpdateRecoveryPreflightPorts(
   const observerIdentitySource = options.observerIdentitySource ?? localObserverEvidence;
   const readIdentity = options.readObserverIdentity ?? localObserverEvidence.readProcessIdentity;
   const providers = options.providers;
-  const currentBuildIdentity = options.currentBuildIdentity ?? stationBuildInfo().buildIdentity;
-  const currentObserverBuildVersion =
-    options.currentObserverBuildVersion ?? stationObserverBuildVersion();
+  const currentBuildIdentity = options.currentBuildInfo.buildIdentity;
+  const currentObserverBuildVersion = stationObserverBuildVersion(options.currentBuildInfo);
   return {
     inspectObserver: (artifacts) =>
       inspectObserverRecoveryEvidence({

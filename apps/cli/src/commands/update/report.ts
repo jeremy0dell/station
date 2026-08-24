@@ -1,16 +1,19 @@
-import type {
-  ObserverLifecycleFailure,
-  UpdateCommandArgv,
-  UpdateCommandReport,
-  UpdateCommandStep,
-  UpdateCommandStepStatus,
+import {
+  type ObserverLifecycleFailure,
+  parseUpdateCommandReport,
+  projectPublicUpdateReport,
+  type UpdateCommandArgv,
+  type UpdateCommandReport,
+  type UpdateCommandStep,
+  type UpdateCommandStepStatus,
+  type UpdateReapRecoveryHandleResolution,
 } from "@station/contracts";
 import { publicSafeErrorFromUnknown, shellQuote } from "@station/runtime";
 import type { CliRunResult } from "../../cliTypes.js";
+import { escapeTerminalBytes } from "../../terminalOutput.js";
 import type { PlannedUpdateChannel } from "../../update/channelDetection.js";
-import { renderUpdateRecoveryPreflight } from "../../update/recoveryPreflight.js";
 import type { UpdateRequest } from "./args.js";
-import type { HostHandoffScenario, UpdateScenario } from "./scenario.js";
+import type { HostHandoffScenario } from "./scenario.js";
 
 export type { UpdateCommandReport, UpdateCommandStep } from "@station/contracts";
 
@@ -20,6 +23,11 @@ const updateFailureFallback = {
   message: "Station update failed.",
 } as const;
 
+type UpdateCommandResultReport = Extract<UpdateCommandReport, { kind: "result" }>;
+type UpdateCommandPreviewReport = Extract<UpdateCommandReport, { kind: "preview" }>;
+export type UpdateCommandResultDraft = Omit<UpdateCommandResultReport, "status">;
+type PreviewPhases = UpdateCommandPreviewReport["plan"]["phases"];
+
 function artifact(version: string, revision: string | undefined) {
   return { version, ...(revision === undefined ? {} : { revision }) };
 }
@@ -28,62 +36,6 @@ function hostHandoffDetail(hostHandoff: HostHandoffScenario): string {
   return hostHandoff.kind === "not-requested"
     ? "Host handoff was explicitly disabled."
     : "No live Host handoff is needed.";
-}
-
-function previewApplyStep(
-  scenario: Extract<UpdateScenario, { kind: "preview" }>,
-): UpdateCommandStep {
-  if (scenario.mutation.kind === "defer-to-package-manager") {
-    return updateStep(
-      "apply",
-      "deferred",
-      "The package manager owns mutation; rerun with --drive-package-manager to execute it.",
-      scenario.mutation.managerCommand,
-    );
-  }
-  return updateStep(
-    "apply",
-    "planned",
-    "The selected channel would apply the planned update.",
-    scenario.mutation.managerCommand,
-  );
-}
-
-function previewObserverRestartStep(
-  scenario: Extract<UpdateScenario, { kind: "preview" }>,
-): UpdateCommandStep {
-  if (scenario.mutation.kind === "apply") {
-    return updateStep(
-      "observer-restart",
-      "planned",
-      "The new launcher would restart the Observer.",
-    );
-  }
-  return updateStep("observer-restart", "skipped", "No Station build would be installed.");
-}
-
-function previewHookReconciliationStep(
-  scenario: Extract<UpdateScenario, { kind: "preview" }>,
-): UpdateCommandStep {
-  if (scenario.mutation.kind === "apply") {
-    return updateStep(
-      "hook-reconciliation",
-      "planned",
-      "The selected launcher would verify and repair configured provider hooks.",
-    );
-  }
-  return updateStep("hook-reconciliation", "skipped", "No Station build would be installed.");
-}
-
-function previewHostHandoffStep(hostHandoff: HostHandoffScenario): UpdateCommandStep {
-  if (hostHandoff.kind === "handoff") {
-    return updateStep(
-      "host-handoff",
-      "planned",
-      `The new launcher would hand off ${hostHandoff.fidelity} state.`,
-    );
-  }
-  return updateStep("host-handoff", "skipped", hostHandoffDetail(hostHandoff));
 }
 
 function updatedHostHandoffStep(hostHandoff: HostHandoffScenario): UpdateCommandStep {
@@ -98,18 +50,20 @@ function updatedHostHandoffStep(hostHandoff: HostHandoffScenario): UpdateCommand
 }
 
 function artifactText(value: UpdateCommandReport["current"]): string {
-  return value.revision === undefined ? value.version : `${value.version} (${value.revision})`;
+  return value.revision === undefined
+    ? escapeTerminalBytes(value.version)
+    : `${escapeTerminalBytes(value.version)} (${escapeTerminalBytes(value.revision)})`;
 }
 
 function formatCommand(command: readonly string[]): string {
-  return command.map((value) => shellQuote(value)).join(" ");
+  return command.map((value) => shellQuote(escapeTerminalBytes(value))).join(" ");
 }
 
-export function createUpdateReport(selected: PlannedUpdateChannel): UpdateCommandReport {
+export function createUpdateReport(selected: PlannedUpdateChannel): UpdateCommandResultDraft {
   return {
-    schemaVersion: 3,
+    schemaVersion: 4,
+    kind: "result",
     channel: selected.channel,
-    status: "planned",
     current: artifact(selected.plan.currentVersion, selected.plan.currentRevision),
     target: artifact(selected.plan.targetVersion, selected.plan.targetRevision),
     steps: [
@@ -121,65 +75,20 @@ export function createUpdateReport(selected: PlannedUpdateChannel): UpdateComman
   };
 }
 
-export function previewCurrentUpdateResult(
-  report: UpdateCommandReport,
-  request: UpdateRequest,
-): CliRunResult {
-  report.status = "current";
-  report.steps.push(
-    updateStep("apply", "skipped", "The selected installation already matches its target."),
-    updateStep(
-      "hook-reconciliation",
-      "planned",
-      "The selected launcher would verify and repair configured provider hooks.",
-    ),
-    updateStep(
-      "observer-restart",
-      "planned",
-      "The selected launcher would converge the Observer to the current build.",
-    ),
-    request.handoff === undefined
-      ? updateStep("host-handoff", "skipped", "Host handoff was explicitly disabled.")
-      : updateStep(
-          "host-handoff",
-          "planned",
-          `The selected launcher would evaluate the active Host and preserve ${request.handoff} state if replacement is needed.`,
-        ),
-  );
-  return updateCommandResult(report, request.output);
-}
-
 export function currentUpdateResult(
-  report: UpdateCommandReport,
+  report: UpdateCommandResultDraft,
   hostHandoff: HostHandoffScenario,
   output: UpdateRequest["output"],
 ): CliRunResult {
-  report.status = "current";
   report.steps.push(updatedHostHandoffStep(hostHandoff));
-  return updateCommandResult(report, output);
-}
-
-export function previewUpdateResult(
-  report: UpdateCommandReport,
-  scenario: Extract<UpdateScenario, { kind: "preview" }>,
-  output: UpdateRequest["output"],
-): CliRunResult {
-  report.status = "planned";
-  report.steps.push(
-    previewApplyStep(scenario),
-    previewHookReconciliationStep(scenario),
-    previewObserverRestartStep(scenario),
-    previewHostHandoffStep(scenario.hostHandoff),
-  );
-  return updateCommandResult(report, output);
+  return updateCommandResult({ ...report, status: "current" }, output);
 }
 
 export function deferredUpdateResult(
-  report: UpdateCommandReport,
+  report: UpdateCommandResultDraft,
   managerCommand: UpdateCommandArgv | undefined,
   output: UpdateRequest["output"],
 ): CliRunResult {
-  report.status = "deferred";
   report.steps.push(
     updateStep(
       "apply",
@@ -191,21 +100,20 @@ export function deferredUpdateResult(
     updateStep("observer-restart", "skipped", "No Station build was installed."),
     updateStep("host-handoff", "skipped", "No Station build was installed."),
   );
-  return updateCommandResult(report, output);
+  return updateCommandResult({ ...report, status: "deferred" }, output);
 }
 
 export function updatedUpdateResult(
-  report: UpdateCommandReport,
+  report: UpdateCommandResultDraft,
   hostHandoff: HostHandoffScenario,
   output: UpdateRequest["output"],
 ): CliRunResult {
   report.steps.push(updatedHostHandoffStep(hostHandoff));
-  report.status = "updated";
-  return updateCommandResult(report, output);
+  return updateCommandResult({ ...report, status: "updated" }, output);
 }
 
 export function failedUpdateResult(
-  report: UpdateCommandReport,
+  report: UpdateCommandResultDraft,
   phase: UpdateCommandStep["id"],
   error: unknown,
   recoveryCommands: readonly UpdateCommandArgv[],
@@ -213,7 +121,6 @@ export function failedUpdateResult(
   lifecycleFailure?: ObserverLifecycleFailure,
 ): CliRunResult {
   const safeError = publicSafeErrorFromUnknown(error, updateFailureFallback);
-  report.status = "failed";
   report.error = safeError;
   if (lifecycleFailure !== undefined) {
     report.cause = lifecycleFailure.cause ?? lifecycleFailure.error;
@@ -237,7 +144,7 @@ export function failedUpdateResult(
   } else if (phase === "observer-restart") {
     report.steps.push(updateStep("host-handoff", "skipped", "Observer crossover failed first."));
   }
-  return updateCommandResult(report, output);
+  return updateCommandResult({ ...report, status: "failed" }, output);
 }
 
 export function updateStep(
@@ -250,46 +157,188 @@ export function updateStep(
 }
 
 export function updateCommandResult(
-  report: UpdateCommandReport,
+  report: UpdateCommandResultReport,
   output: UpdateRequest["output"],
 ): CliRunResult {
+  const parsed = parseUpdateCommandReport(
+    projectPublicUpdateReport(report),
+  ) as UpdateCommandResultReport;
   const json = output === "json";
   return {
-    code: report.status === "failed" ? 1 : 0,
-    output: json ? report : renderUpdateReport(report),
+    code: parsed.status === "failed" ? 1 : 0,
+    output: json ? parsed : renderUpdateReport(parsed),
     ...(json ? {} : { outputFormat: "text" as const }),
   };
 }
 
-function renderUpdateReport(report: UpdateCommandReport): string {
+export function previewUpdateCommandResult(
+  report: UpdateCommandPreviewReport,
+  output: UpdateRequest["output"],
+): CliRunResult {
+  const parsed = parseUpdateCommandReport(report) as UpdateCommandPreviewReport;
+  const json = output === "json";
+  return {
+    code: parsed.plan.outcome === "blocked" || parsed.plan.outcome === "reap-required" ? 1 : 0,
+    output: json ? parsed : renderUpdateConvergenceReportText(parsed),
+    ...(json ? {} : { outputFormat: "text" as const }),
+  };
+}
+
+function renderUpdateReport(report: UpdateCommandResultReport): string {
   const lines = [
-    `channel: ${report.channel}`,
-    `status: ${report.status}`,
+    `channel: ${escapeTerminalBytes(report.channel)}`,
+    `status: ${escapeTerminalBytes(report.status)}`,
     `current: ${artifactText(report.current)}`,
     `target: ${artifactText(report.target)}`,
     "steps:",
   ];
   for (const item of report.steps) {
-    lines.push(`  ${item.id}: ${item.status} - ${item.detail}`);
+    lines.push(`  ${item.id}: ${item.status} - ${escapeTerminalBytes(item.detail)}`);
     if (item.command !== undefined) lines.push(`    ${formatCommand(item.command)}`);
   }
-  for (const warning of report.warnings) lines.push(`warning: ${warning.message}`);
+  for (const warning of report.warnings)
+    lines.push(`warning: ${escapeTerminalBytes(warning.message)}`);
   if (report.hookReconciliation !== undefined) {
-    lines.push(`hooks: ${report.hookReconciliation.status}`);
-  }
-  if (report.recoveryPreflight !== undefined) {
-    lines.push(...renderUpdateRecoveryPreflight(report.recoveryPreflight).trimEnd().split("\n"));
+    lines.push(`hooks: ${escapeTerminalBytes(report.hookReconciliation.status)}`);
   }
   if (report.error !== undefined)
-    lines.push(`error: ${report.error.message} (${report.error.code})`);
+    lines.push(
+      `error: ${escapeTerminalBytes(report.error.message)} (${escapeTerminalBytes(report.error.code)})`,
+    );
   if (report.cause !== undefined)
-    lines.push(`cause: ${report.cause.message} (${report.cause.code})`);
+    lines.push(
+      `cause: ${escapeTerminalBytes(report.cause.message)} (${escapeTerminalBytes(report.cause.code)})`,
+    );
   if (report.startupEvidence !== undefined) {
-    lines.push(`observer boot log: ${report.startupEvidence.bootLogPath}`);
+    lines.push(`observer boot log: ${escapeTerminalBytes(report.startupEvidence.bootLogPath)}`);
   }
   if (report.recoveryCommands.length > 0) {
     lines.push("recovery:");
     for (const command of report.recoveryCommands) lines.push(`  ${formatCommand(command)}`);
   }
   return `${lines.join("\n")}\n`;
+}
+
+const previewOutcomeText = {
+  converged: "no-op (converged)",
+  actionable: "safe actionable convergence",
+  deferred: "deferred to package manager",
+  "reap-required": "reap required; no recovery attempted",
+  "intentionally-incomplete": "intentionally incomplete (--no-handoff)",
+  blocked: "blocked",
+} as const satisfies Record<UpdateCommandPreviewReport["plan"]["outcome"], string>;
+
+export function renderUpdateConvergenceReportText(report: UpdateCommandPreviewReport): string {
+  const { plan } = report;
+  const providers = plan.phases.hookReconciliation.providers
+    .map(
+      (provider) =>
+        `${escapeTerminalBytes(provider.provider)}=${provider.action}/${provider.reason}`,
+    )
+    .join(", ");
+  const lines = [
+    "update dry run (No actions executed)",
+    `channel: ${escapeTerminalBytes(report.channel)}`,
+    `outcome: ${previewOutcomeText[plan.outcome]}`,
+    `current: ${artifactText(report.current)}`,
+    `target: ${artifactText(report.target)}`,
+    artifactPhaseText(plan.phases.artifactApplication),
+    `${phaseText("hooks", plan.phases.hookReconciliation)}${providers ? `; ${providers}` : ""}`,
+    phaseText("Observer", plan.phases.observerConvergence),
+    hostPhaseText(plan.phases.hostConvergence),
+    terminalPhaseText(plan.phases.terminalConvergence),
+    recoveryText(report),
+    phaseText("reconcile", plan.phases.persistedStateReconcile),
+    phaseText("verification", plan.phases.finalVerification),
+  ];
+  return `${lines.join("\n")}\n`;
+}
+
+function recoveryText(report: UpdateCommandPreviewReport): string {
+  const { initial } = report;
+  const lines = [
+    `recovery: evidence=${initial.evidenceComplete ? "complete" : "incomplete"}; authorization=none`,
+  ];
+  if (initial.terminalDispositions.length === 0) {
+    const consequence =
+      initial.host.status === "unknown"
+        ? "unknown (Host inventory unavailable)"
+        : `none${initial.host.status === "absent" ? " (Host absent)" : ""}`;
+    lines.push(`  terminals: ${consequence}`);
+  }
+  for (const terminal of initial.terminalDispositions) {
+    lines.push(
+      `  terminal ${escapeTerminalBytes(terminal.terminalTargetId)} pty=${escapeTerminalBytes(terminal.ptyId)}/${escapeTerminalBytes(terminal.ptyInstanceId)} session=${escapeTerminalBytes(terminal.sessionId)} handoff=${terminal.handoff} reap=${terminal.reapRecovery}`,
+    );
+    if (terminal.reasons.length > 0) lines.push(`    reasons: ${terminal.reasons.join(", ")}`);
+  }
+  if (initial.observer.status !== "exact" || initial.observer.recovery.status !== "assessed") {
+    lines.push("  sessions: unknown");
+  } else {
+    const assessment = initial.observer.recovery.assessment;
+    if (assessment.sessions.length === 0) lines.push("  sessions: none retained");
+    for (const session of assessment.sessions) {
+      lines.push(
+        `  session ${escapeTerminalBytes(session.sessionId)} disposition=${session.disposition} handle=${recoveryHandleText(session.handleResolution)}`,
+      );
+      if (session.reasons.length > 0) lines.push(`    reasons: ${session.reasons.join(", ")}`);
+    }
+    const capabilities = assessment.providerCapabilities
+      .map((capability) => `${escapeTerminalBytes(capability.provider)}=${capability.status}`)
+      .join(", ");
+    lines.push(`  resume capabilities: ${capabilities || "none reported"}`);
+  }
+  return lines.join("\n");
+}
+
+function recoveryHandleText(resolution: UpdateReapRecoveryHandleResolution): string {
+  if (resolution.kind === "selected")
+    return `selected eligible=${resolution.eligibleHandleCount} rejected=${resolution.rejectedHandleCount}`;
+  if (resolution.kind === "none") return `none rejected=${resolution.rejectedHandleCount}`;
+  return `unknown (${resolution.reasons.join(", ")})`;
+}
+
+function phaseText(label: string, phase: { action: string; reason: string }): string {
+  return `${label}: ${phase.action} (${phase.reason})`;
+}
+
+function artifactPhaseText(phase: PreviewPhases["artifactApplication"]): string {
+  const detail = phaseText("artifact", phase);
+  switch (phase.action) {
+    case "no-op":
+      return detail;
+    case "apply":
+      return phase.command.kind === "manager"
+        ? `${detail}; command: ${formatCommand(phase.command.argv)}`
+        : detail;
+    case "defer":
+      return `${detail}; command: ${formatCommand(phase.command.argv)}`;
+  }
+}
+
+function hostPhaseText(phase: PreviewPhases["hostConvergence"]): string {
+  switch (phase.action) {
+    case "handoff":
+      return `${phaseText("Host", phase)}; fidelity=${phase.fidelity}`;
+    case "no-op":
+    case "replace-idle":
+    case "await-reap":
+    case "leave-in-place":
+    case "reinspect":
+    case "blocked":
+      return phaseText("Host", phase);
+  }
+}
+
+function terminalPhaseText(phase: PreviewPhases["terminalConvergence"]): string {
+  switch (phase.action) {
+    case "preserve-via-handoff":
+      return `${phaseText("terminals", phase)}; fidelity=${phase.fidelity}`;
+    case "no-op":
+    case "reap-required":
+    case "leave-in-place":
+    case "reinspect":
+    case "blocked":
+      return phaseText("terminals", phase);
+  }
 }

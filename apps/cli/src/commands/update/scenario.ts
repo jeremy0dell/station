@@ -1,7 +1,6 @@
 import type { StationConfig } from "@station/config";
-import type { HostHandoffFidelity } from "@station/contracts";
+import type { HostHandoffFidelity, UpdateConvergencePlanningInput } from "@station/contracts";
 import type { PlannedUpdateChannel } from "../../update/channelDetection.js";
-import type { UpdateCommandArgv } from "../../update/updateChannel.js";
 import { updateErrorFromUnknown } from "../../update/updateError.js";
 import { type HostCommandDeps, runHostCommand } from "../host/index.js";
 import type { UpdateRequest } from "./args.js";
@@ -11,17 +10,8 @@ export type HostHandoffScenario =
   | { kind: "not-needed" }
   | { kind: "handoff"; fidelity: HostHandoffFidelity };
 
-export type PreviewMutation =
-  | { kind: "apply"; managerCommand?: UpdateCommandArgv }
-  | { kind: "defer-to-package-manager"; managerCommand: UpdateCommandArgv };
-
 export type UpdateScenario =
   | { kind: "already-current"; hostHandoff: HostHandoffScenario }
-  | {
-      kind: "preview";
-      mutation: PreviewMutation;
-      hostHandoff: HostHandoffScenario;
-    }
   | {
       kind: "defer-to-package-manager";
       drivePackageManager: false;
@@ -36,25 +26,10 @@ export type UpdateScenario =
 type UpdateScenarioInput = {
   selected: PlannedUpdateChannel;
   request: UpdateRequest;
+  installation: UpdateConvergencePlanningInput["installation"];
   config: StationConfig;
   hostDeps?: HostCommandDeps;
 };
-
-function skippedHostHandoff(request: UpdateRequest): HostHandoffScenario {
-  if (request.handoff === undefined) return { kind: "not-requested" };
-  return { kind: "not-needed" };
-}
-
-function previewMutation(
-  managerCommand: UpdateCommandArgv | undefined,
-  request: UpdateRequest,
-): PreviewMutation {
-  if (managerCommand !== undefined && request.packageManager === "defer") {
-    return { kind: "defer-to-package-manager", managerCommand };
-  }
-  if (managerCommand === undefined) return { kind: "apply" };
-  return { kind: "apply", managerCommand };
-}
 
 async function resolveHostHandoff(input: UpdateScenarioInput): Promise<HostHandoffScenario> {
   const { selected, request } = input;
@@ -113,44 +88,26 @@ async function resolveHostHandoff(input: UpdateScenarioInput): Promise<HostHando
 /**
  * ADAPTER
  *
- * Resolves the selected update path and preflights default Host preservation before mutation.
+ * Resolves the non-dry update path and preflights default Host preservation before mutation.
  */
 export async function resolveUpdateScenario(input: UpdateScenarioInput): Promise<UpdateScenario> {
-  const { selected, request } = input;
-  const managerCommand = selected.plan.managerCommand;
-  const managerOwned = managerCommand !== undefined;
-  if (request.packageManager === "drive" && !managerOwned) {
-    throw updateErrorFromUnknown(undefined, {
-      code: "UPDATE_FLAG_INVALID",
-      message: "--drive-package-manager requires a Homebrew, npm-global, or mise channel.",
-    });
-  }
+  const { selected, request, installation } = input;
 
   if (selected.plan.status === "current") {
-    const hostHandoff =
-      request.mode === "preview" ? skippedHostHandoff(request) : await resolveHostHandoff(input);
-    return { kind: "already-current", hostHandoff };
+    return { kind: "already-current", hostHandoff: await resolveHostHandoff(input) };
   }
 
-  const mutationRequested = !managerOwned || request.packageManager === "drive";
-  const hostHandoff = mutationRequested
-    ? await resolveHostHandoff(input)
-    : skippedHostHandoff(request);
-
-  if (request.mode === "preview") {
+  if (installation.whenRequired === "defer") {
     return {
-      kind: "preview",
-      mutation: previewMutation(managerCommand, request),
-      hostHandoff,
+      kind: "defer-to-package-manager",
+      drivePackageManager: false,
+      hostHandoff:
+        request.handoff === undefined ? { kind: "not-requested" } : { kind: "not-needed" },
     };
-  }
-
-  if (!mutationRequested) {
-    return { kind: "defer-to-package-manager", drivePackageManager: false, hostHandoff };
   }
   return {
     kind: "apply-update",
-    drivePackageManager: request.packageManager === "drive",
-    hostHandoff,
+    drivePackageManager: installation.command.kind === "manager",
+    hostHandoff: await resolveHostHandoff(input),
   };
 }

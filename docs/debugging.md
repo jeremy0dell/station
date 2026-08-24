@@ -274,20 +274,21 @@ Auto-starting `snapshot`, `doctor`, `command`, `reconcile`, `observe`, and
 `debug bundle` boundaries preserve failures as the strict `{ error, cause?,
 startupEvidence? }` lifecycle envelope instead of flattening them into prose.
 Setup activation retains the same fields in its failed operation/session
-outcome. Update report schema version 2 adds the provider-neutral
-`hookReconciliation` result and `hook-reconciliation` step. Schema version 3
-adds the optional `recoveryPreflight` assessment; compatible readers retain
-explicit version 1 and version 2 parsers instead of accepting version backports.
-Use `stn update --dry-run --reap --json` to collect the redacted aggregate
+outcome. The current update report uses numeric discriminator `4` with strict
+`preview` and `result` shapes; older discriminator literals and report shapes
+are rejected. Every `stn update --dry-run --json`, with or without
+`--reap`, contains exactly one `initial` aggregate and one canonical `plan` to collect redacted
 Observer, Host, terminal, retained-session, resume-capability, handle-count,
-and hook-health evidence without changing runtime state. The public projection
-omits recovery inventory, provider-native state, and executable handle IDs.
+and hook-health evidence without changing runtime state. The public projection aliases
+project, worktree, session, terminal-target, PTY, and PTY-instance identities within one report.
+Public command, trace, and diagnostic IDs remain available for correlation, and provider IDs,
+artifact revisions, and immutable build identities remain canonical.
 Unknown or drifting identity remains typed in the report, including an exact
 live Observer whose socket is missing and a legacy Host whose same-version
 revision cannot be proved. Non-resumable dispositions are explicit. The
 assessment contains no executable action or digest. A same-version
-dry-run reports planned hook and Observer convergence plus enabled Host
-preservation evaluation, but runs no hook, Observer, or Host command. A
+dry-run inspects current hook, Observer, Host, terminal, and recovery facts before reporting
+convergence, but runs no hook, Observer, or Host mutation command. A
 same-version apply resumes an interrupted crossover through the
 current launcher: hook reconciliation, idempotent `observer start`, and any
 preflighted Host handoff. An installed successor uses that successor launcher

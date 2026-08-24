@@ -5,15 +5,19 @@ import {
   ObserverRestartCommandResultSchema,
   type ProviderHookReconciliationResult,
   ProviderHookReconciliationResultSchema,
+  projectPublicUpdateReport,
   providerHookReconciliationSucceeded,
   type SafeError,
   type UpdateArtifact,
+  UpdateConvergencePlanningInputSchema,
   type UpdateReapRecoveryPreflight,
 } from "@station/contracts";
 import {
   type ExternalCommandRunner,
   runExternalCommand,
   type StationBuildInfo,
+  stationBuildInfo,
+  stationObserverBuildVersion,
 } from "@station/runtime";
 import type { CliRunResult } from "../cliTypes.js";
 import type { CliEnv } from "../env.js";
@@ -23,9 +27,10 @@ import {
   selectUpdateChannel,
   type UpdateChannelProbe,
 } from "../update/channelDetection.js";
-import { createDefaultUpdateProbes } from "../update/defaultUpdateProbes.js";
+import { deriveUpdateConvergencePlan } from "../update/convergencePlan.js";
 import type { UpdateApplyReportBase, UpdateCommandArgv } from "../update/updateChannel.js";
 import { updateErrorFromUnknown } from "../update/updateError.js";
+import { resolveUpdateInstallationIntent } from "../update/updateInstallationIntent.js";
 import type { HostCommandDeps } from "./host/index.js";
 import { parseUpdateRequest, type UpdateRequest } from "./update/args.js";
 import {
@@ -33,9 +38,8 @@ import {
   currentUpdateResult,
   deferredUpdateResult,
   failedUpdateResult,
-  previewCurrentUpdateResult,
-  previewUpdateResult,
-  type UpdateCommandReport,
+  previewUpdateCommandResult,
+  type UpdateCommandResultDraft,
   updatedUpdateResult,
   updateStep,
 } from "./update/report.js";
@@ -55,13 +59,15 @@ export type UpdateCommandOptions = {
 export type UpdateCommandDeps = {
   probes?: readonly UpdateChannelProbe[];
   buildInfo?: () => StationBuildInfo;
+  currentBuildInfo?: StationBuildInfo;
   executablePath?: string;
   commandRunner?: ExternalCommandRunner;
   hostDeps?: HostCommandDeps;
-  /** Runs the composed read-only assessment required only by `--dry-run --reap`. */
+  /** Runs the composed read-only assessment required by every update dry run. */
   recoveryPreflight?: (input: {
     installed: UpdateArtifact;
     target: UpdateArtifact;
+    currentBuildInfo: StationBuildInfo;
   }) => Promise<UpdateReapRecoveryPreflight>;
 };
 
@@ -69,15 +75,14 @@ type ExecutableUpdateScenario = Extract<
   UpdateScenario,
   { kind: "defer-to-package-manager" | "apply-update" }
 >;
-
 const OBSERVER_CROSSOVER_TIMEOUT_MS = 20_000;
 
 /**
  * ADAPTER
  *
- * Selects one owned install channel and optionally aggregates non-authorizing recovery facts.
- * Apply mode then preflights Host preservation, reconciles hooks through the selected launcher,
- * and crosses runtimes; recovery preflight itself exposes no mutation capability.
+ * Selects one owned install channel from one captured build identity. Preview validates manager
+ * intent, aggregates read-only runtime facts, and returns one canonical plan before mutation.
+ * Apply mode retains Host preservation, hook reconciliation, and runtime crossover behavior.
  */
 export async function runUpdateCommand(
   args: readonly string[],
@@ -85,12 +90,16 @@ export async function runUpdateCommand(
   deps: UpdateCommandDeps = {},
 ): Promise<CliRunResult> {
   const request = parseUpdateRequest(args);
+  const currentBuildInfo = deps.currentBuildInfo ?? (deps.buildInfo ?? stationBuildInfo)();
+  if (deps.probes === undefined) {
+    throw new Error("Update channel probes are unavailable in this CLI composition.");
+  }
   const selected = await selectUpdateChannel({
-    probes: deps.probes ?? createDefaultUpdateProbes(options, deps),
+    probes: deps.probes,
     ...(request.channel === undefined ? {} : { requested: request.channel }),
   });
-  const report = createUpdateReport(selected);
-  if (request.reap) {
+  const installation = resolveUpdateInstallationIntent(selected, request.packageManager);
+  if (request.mode === "preview") {
     if (deps.recoveryPreflight === undefined) {
       throw {
         tag: "UpdatePreflightError",
@@ -98,23 +107,51 @@ export async function runUpdateCommand(
         message: "Update recovery preflight is unavailable in this CLI composition.",
       } satisfies SafeError;
     }
-    report.recoveryPreflight = await deps.recoveryPreflight({
-      installed: report.current,
-      target: report.target,
+    const current = artifact(selected.plan.currentVersion, selected.plan.currentRevision);
+    const target = artifact(selected.plan.targetVersion, selected.plan.targetRevision);
+    const initial = await deps.recoveryPreflight({
+      installed: current,
+      target,
+      currentBuildInfo,
     });
+    const planningInput = UpdateConvergencePlanningInputSchema.parse({
+      preflight: initial,
+      targetRuntime: artifactsMatch(current, target)
+        ? {
+            status: "known",
+            buildIdentity: currentBuildInfo.buildIdentity,
+            observerSelector: stationObserverBuildVersion(currentBuildInfo),
+          }
+        : { status: "not-yet-provable" },
+      installation,
+      handoff:
+        request.handoff === undefined
+          ? { action: "leave-in-place" }
+          : { action: "preserve", fidelity: request.handoff },
+    });
+    const plan = deriveUpdateConvergencePlan(planningInput);
+    const report = projectPublicUpdateReport({
+      schemaVersion: 4,
+      kind: "preview",
+      channel: selected.channel,
+      current,
+      target,
+      initial,
+      plan,
+    });
+    return previewUpdateCommandResult(report, request.output);
   }
+  const report = createUpdateReport(selected);
   const scenario = await resolveUpdateScenario({
     selected,
     request,
+    installation,
     config: options.config,
     ...(deps.hostDeps === undefined ? {} : { hostDeps: deps.hostDeps }),
   });
 
   switch (scenario.kind) {
     case "already-current":
-      if (request.mode === "preview") {
-        return previewCurrentUpdateResult(report, request);
-      }
       return reconcileCurrentInstallation(
         selected,
         scenario.hostHandoff,
@@ -123,8 +160,6 @@ export async function runUpdateCommand(
         options,
         deps.commandRunner,
       );
-    case "preview":
-      return previewUpdateResult(report, scenario, request.output);
     case "defer-to-package-manager":
     case "apply-update":
       return executeSelectedUpdate(selected, scenario, report, request, options, deps);
@@ -134,7 +169,7 @@ export async function runUpdateCommand(
 async function executeSelectedUpdate(
   selected: PlannedUpdateChannel,
   scenario: ExecutableUpdateScenario,
-  report: UpdateCommandReport,
+  report: UpdateCommandResultDraft,
   request: UpdateRequest,
   options: UpdateCommandOptions,
   deps: UpdateCommandDeps,
@@ -200,7 +235,7 @@ type RuntimeCrossoverPlan = {
 
 async function crossOverRuntime(
   plan: RuntimeCrossoverPlan,
-  report: UpdateCommandReport,
+  report: UpdateCommandResultDraft,
   request: UpdateRequest,
   options: UpdateCommandOptions,
   commandRunner: ExternalCommandRunner | undefined,
@@ -301,7 +336,7 @@ async function crossOverRuntime(
 async function reconcileCurrentInstallation(
   selected: PlannedUpdateChannel,
   hostHandoff: HostHandoffScenario,
-  report: UpdateCommandReport,
+  report: UpdateCommandResultDraft,
   request: UpdateRequest,
   options: UpdateCommandOptions,
   commandRunner: ExternalCommandRunner | undefined,
@@ -331,7 +366,7 @@ async function reconcileCurrentInstallation(
 }
 
 async function reconcileUpdateHooks(
-  report: UpdateCommandReport,
+  report: UpdateCommandResultDraft,
   command: UpdateCommandArgv,
   runner: ExternalCommandRunner | undefined,
 ): Promise<SafeError | undefined> {
@@ -534,4 +569,12 @@ function retryUpdateCommand(
     ...(request.packageManager === "drive" ? ["--drive-package-manager"] : []),
     ...(request.handoff === undefined ? ["--no-handoff"] : [`--handoff=${request.handoff}`]),
   ]);
+}
+
+function artifact(version: string, revision: string | undefined): UpdateArtifact {
+  return { version, ...(revision === undefined ? {} : { revision }) };
+}
+
+function artifactsMatch(left: UpdateArtifact, right: UpdateArtifact): boolean {
+  return left.version === right.version && left.revision === right.revision;
 }

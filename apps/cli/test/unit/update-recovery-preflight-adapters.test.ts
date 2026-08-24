@@ -9,11 +9,13 @@ import { createUpdateRecoveryPreflightPorts } from "../../src/update/recoveryPre
 
 const now = "2026-08-21T12:00:00.000Z";
 const socketPath = "/private/runtime/observer.sock";
+const currentBuildIdentity = "a".repeat(64);
+const currentBuildInfo = { version: "1.0.0", compiled: false, buildIdentity: currentBuildIdentity };
 const identity: ObserverProcessIdentity = {
   pid: 4242,
   osStartTime: "Fri Aug 21 12:00:00 2026",
   processToken: "123e4567-e89b-42d3-a456-426614174000",
-  version: "1.0.0+station.observer",
+  version: `1.0.0+station.${currentBuildIdentity}`,
   socketPath,
 };
 const processEntry = {
@@ -64,8 +66,7 @@ describe("createUpdateRecoveryPreflightPorts", () => {
       const ports = createUpdateRecoveryPreflightPorts({
         config: testConfig(),
         providers: providerRegistry(),
-        currentBuildIdentity: "current-build-identity",
-        currentObserverBuildVersion: identity.version,
+        currentBuildInfo,
         observerStatus: async () => testCase.status,
         readObserverIdentity,
         observerDeps: { clientFactory },
@@ -92,8 +93,7 @@ describe("createUpdateRecoveryPreflightPorts", () => {
     const ports = createUpdateRecoveryPreflightPorts({
       config: testConfig(),
       providers,
-      currentBuildIdentity: "current-build-identity",
-      currentObserverBuildVersion: identity.version,
+      currentBuildInfo,
       observerStatus: async () => ({
         status: "running",
         paths: observerPaths(),
@@ -180,8 +180,7 @@ describe("createUpdateRecoveryPreflightPorts", () => {
     const ports = createUpdateRecoveryPreflightPorts({
       config: testConfig(),
       providers: providerRegistry(),
-      currentBuildIdentity: "current-build-identity",
-      currentObserverBuildVersion: identity.version,
+      currentBuildInfo,
       observerStatus: async () => ({ status: "stopped", paths: observerPaths() }),
       readObserverIdentity: async () => identity,
       observerIdentitySource: {
@@ -210,8 +209,7 @@ describe("createUpdateRecoveryPreflightPorts", () => {
     const ports = createUpdateRecoveryPreflightPorts({
       config: testConfig(),
       providers: providerRegistry(),
-      currentBuildIdentity: "current-build-identity",
-      currentObserverBuildVersion: identity.version,
+      currentBuildInfo,
       observerStatus: async () => ({
         status: "running",
         paths: observerPaths(),
@@ -281,8 +279,7 @@ describe("createUpdateRecoveryPreflightPorts", () => {
       const ports = createUpdateRecoveryPreflightPorts({
         config: testConfig(),
         providers: providerRegistry(),
-        currentBuildIdentity: "current-build-identity",
-        currentObserverBuildVersion: identity.version,
+        currentBuildInfo,
         observerStatus: async () => ({ status: "stopped", paths: observerPaths() }),
         hostStatus: async () => ({
           action: "status",
@@ -310,12 +307,12 @@ describe("createUpdateRecoveryPreflightPorts", () => {
     const cases = [
       {
         installed: target,
-        runningBuildIdentity: "current-build-identity",
+        runningBuildIdentity: currentBuildIdentity,
         expectedRelation: "matching-target",
       },
       {
         installed: { version: "1.1.0", revision: "installed-revision" },
-        runningBuildIdentity: "current-build-identity",
+        runningBuildIdentity: currentBuildIdentity,
         expectedRelation: "different",
       },
       {
@@ -334,8 +331,7 @@ describe("createUpdateRecoveryPreflightPorts", () => {
       const ports = createUpdateRecoveryPreflightPorts({
         config: testConfig(),
         providers: providerRegistry(),
-        currentBuildIdentity: "current-build-identity",
-        currentObserverBuildVersion: identity.version,
+        currentBuildInfo,
         observerStatus: async () => ({ status: "stopped", paths: observerPaths() }),
         hostStatus: async () => ({
           action: "status",
@@ -367,7 +363,7 @@ describe("createUpdateRecoveryPreflightPorts", () => {
   ] as const)("compares %s immutable identity for same-display targets without a revision", async (runtime) => {
     const target = { version: "1.0.0" };
     const cases = [
-      { runningIdentity: "current-build-identity", expectedRelation: "matching-target" },
+      { runningIdentity: currentBuildIdentity, expectedRelation: "matching-target" },
       { runningIdentity: undefined, expectedRelation: "unknown" },
       { runningIdentity: "different-build-identity", expectedRelation: "different" },
     ] as const;
@@ -375,7 +371,7 @@ describe("createUpdateRecoveryPreflightPorts", () => {
     for (const testCase of cases) {
       const exactObserverSelector = `1.0.0+station.${"a".repeat(64)}`;
       const observerBuildVersion =
-        testCase.runningIdentity === "current-build-identity"
+        testCase.runningIdentity === currentBuildIdentity
           ? exactObserverSelector
           : testCase.runningIdentity === undefined
             ? "1.0.0"
@@ -383,8 +379,7 @@ describe("createUpdateRecoveryPreflightPorts", () => {
       const ports = createUpdateRecoveryPreflightPorts({
         config: testConfig(),
         providers: providerRegistry(),
-        currentBuildIdentity: "current-build-identity",
-        currentObserverBuildVersion: exactObserverSelector,
+        currentBuildInfo,
         observerStatus: async () => ({
           status: "running",
           paths: observerPaths(),
@@ -439,8 +434,7 @@ describe("createUpdateRecoveryPreflightPorts", () => {
     const ports = createUpdateRecoveryPreflightPorts({
       config: testConfig(),
       providers: providerRegistry(),
-      currentBuildIdentity: "current-build-identity",
-      currentObserverBuildVersion: "current-build-identity",
+      currentBuildInfo,
       observerStatus: async () => ({ status: "stopped", paths: observerPaths() }),
       hostStatus: async () => ({
         action: "status",

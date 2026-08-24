@@ -1,7 +1,9 @@
+import { stationBuildInfo } from "@station/runtime";
 import {
   type CreateProviderRegistryOptions,
   createProviderRegistry,
 } from "../../observerProviders.js";
+import { createDefaultUpdateProbes } from "../../update/defaultUpdateProbes.js";
 import { runUpdateRecoveryPreflight } from "../../update/recoveryPreflight.js";
 import { createUpdateRecoveryPreflightPorts } from "../../update/recoveryPreflightAdapters.js";
 import { loadedConfigCommandOptions } from "../cliCommand/helpers.js";
@@ -24,7 +26,8 @@ export const updateCliCommand: CliCommandNode = {
     { name: "--dry-run", description: "Print the complete plan without applying it." },
     {
       name: "--reap",
-      description: "With --dry-run, disclose exact terminal-loss and recovery consequences.",
+      description:
+        "With --dry-run, keep read-only behavior; every dry run includes recovery facts.",
     },
     { name: "--json", description: "Print the update plan or result as JSON." },
     {
@@ -69,7 +72,6 @@ async function runUpdateCliCommand(context: CliCommandRunContext) {
   );
 }
 
-// Adds read-only recovery ports only for an admitted dry-run reap request.
 function updateDeps(
   context: CliCommandRunContext,
   loaded: ReturnType<typeof loadedConfigCommandOptions>,
@@ -79,11 +81,20 @@ function updateDeps(
     ...context.options.updateDeps,
     ...(hostDeps === undefined ? {} : { hostDeps }),
   };
-  if (
-    deps.recoveryPreflight === undefined &&
-    context.args.includes("--dry-run") &&
-    context.args.includes("--reap")
-  ) {
+  const currentBuildInfo = deps.currentBuildInfo ?? (deps.buildInfo ?? stationBuildInfo)();
+  deps.currentBuildInfo = currentBuildInfo;
+  deps.probes ??= createDefaultUpdateProbes(
+    {
+      cliEntryPath: context.cliEntryPath,
+      ...(context.options.env === undefined ? {} : { env: context.options.env }),
+    },
+    {
+      buildInfo: currentBuildInfo,
+      ...(deps.executablePath === undefined ? {} : { executablePath: deps.executablePath }),
+      ...(deps.commandRunner === undefined ? {} : { commandRunner: deps.commandRunner }),
+    },
+  );
+  if (deps.recoveryPreflight === undefined && context.args.includes("--dry-run")) {
     const registryOptions: CreateProviderRegistryOptions = {};
     if (loaded.configPath !== undefined) registryOptions.configPath = loaded.configPath;
     if (loaded.providerHookIngressLauncher !== undefined) {
@@ -92,17 +103,20 @@ function updateDeps(
     if (loaded.providerHookArtifactOwner !== undefined) {
       registryOptions.providerHookArtifactOwner = loaded.providerHookArtifactOwner;
     }
-    const preflightOptions: Parameters<typeof createUpdateRecoveryPreflightPorts>[0] = {
-      config: loaded.config,
-      providers: createProviderRegistry(loaded.config, registryOptions),
+    deps.recoveryPreflight = (input) => {
+      const preflightOptions: Parameters<typeof createUpdateRecoveryPreflightPorts>[0] = {
+        config: loaded.config,
+        providers: createProviderRegistry(loaded.config, registryOptions),
+        currentBuildInfo: input.currentBuildInfo,
+      };
+      if (loaded.configPath !== undefined) preflightOptions.configPath = loaded.configPath;
+      if (hostDeps !== undefined) preflightOptions.hostDeps = hostDeps;
+      if (context.options.observerDeps !== undefined) {
+        preflightOptions.observerDeps = context.options.observerDeps;
+      }
+      const ports = createUpdateRecoveryPreflightPorts(preflightOptions);
+      return runUpdateRecoveryPreflight({ ...input, ports });
     };
-    if (loaded.configPath !== undefined) preflightOptions.configPath = loaded.configPath;
-    if (hostDeps !== undefined) preflightOptions.hostDeps = hostDeps;
-    if (context.options.observerDeps !== undefined) {
-      preflightOptions.observerDeps = context.options.observerDeps;
-    }
-    const ports = createUpdateRecoveryPreflightPorts(preflightOptions);
-    deps.recoveryPreflight = (input) => runUpdateRecoveryPreflight({ ...input, ports });
   }
   return deps;
 }
