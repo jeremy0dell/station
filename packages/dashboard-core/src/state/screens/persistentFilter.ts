@@ -4,7 +4,6 @@ import {
   transitionEditableTextInput,
 } from "../../components/EditableTextInput/editing.js";
 import {
-  DASHBOARD_FILTER_CONDITION_FIELDS,
   dashboardPersistentFilterHasCriteria,
   normalizeDashboardFilterConditions,
 } from "../../selectors/dashboardFilterConditions.js";
@@ -146,7 +145,7 @@ function isConditionFilterApplyKey(
   return (
     editor?.stage === "field" &&
     (key.input.toUpperCase() === "F" ||
-      (isReturnKey(key) && editor.cursor === DASHBOARD_FILTER_CONDITION_FIELDS.length))
+      (isReturnKey(key) && editor.focusedItemId === "applyFilter"))
   );
 }
 

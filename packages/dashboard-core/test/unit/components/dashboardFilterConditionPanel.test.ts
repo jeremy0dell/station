@@ -24,7 +24,7 @@ function filterScreen(
 describe("dashboard filter condition panel", () => {
   it("renders the fixed field chooser with direct keys and staged summaries", () => {
     const model = dashboardFilterConditionPanelModel({
-      screen: filterScreen({ stage: "field", cursor: 1 }),
+      screen: filterScreen({ stage: "field", focusedItemId: "project" }),
     });
 
     expect(model).toMatchObject({
@@ -74,7 +74,7 @@ describe("dashboard filter condition panel", () => {
 
   it("focuses the final apply action after the three condition fields", () => {
     const model = dashboardFilterConditionPanelModel({
-      screen: filterScreen({ stage: "field", cursor: 3 }),
+      screen: filterScreen({ stage: "field", focusedItemId: "applyFilter" }),
     });
 
     expect(model?.rows.every((row) => row.marker === " ")).toBe(true);
@@ -96,7 +96,7 @@ describe("dashboard filter condition panel", () => {
       screen: filterScreen({
         stage: "values",
         field: "project",
-        cursor: 6,
+        focusedValueId: "project-6",
         options,
         selectedIds: ["project-6"],
       }),

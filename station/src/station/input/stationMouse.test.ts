@@ -503,7 +503,7 @@ describe("routeStationMouse", () => {
       draftConditions: [
         { field: "status", values: [{ id: "working", label: "Working" }] },
       ],
-      conditionEditor: { stage: "field", cursor: 0 },
+      conditionEditor: { stage: "field", focusedItemId: "status" },
     });
 
     routeStationMouse(
@@ -532,7 +532,7 @@ describe("routeStationMouse", () => {
     );
     expect(store.state.getState().screen).toMatchObject({
       name: "persistentFilter",
-      conditionEditor: { stage: "field", cursor: 0 },
+      conditionEditor: { stage: "field", focusedItemId: "status" },
     });
 
     routeStationMouse(

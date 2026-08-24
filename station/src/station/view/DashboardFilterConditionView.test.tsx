@@ -76,7 +76,10 @@ async function renderCondition(
 
 describe("DashboardFilterConditionView", () => {
   it("renders disclosure rows with staged summaries and semantic pointer targets", async () => {
-    const { setup, targets } = await renderCondition({ stage: "field", cursor: 0 });
+    const { setup, targets } = await renderCondition({
+      stage: "field",
+      focusedItemId: "status",
+    });
     const frame = setup.captureCharFrame();
 
     expect(frame).toContain("FILTER CONDITIONS");
@@ -113,7 +116,7 @@ describe("DashboardFilterConditionView", () => {
 
   it("keeps a first-value count when it fits and falls back to the count when it does not", async () => {
     const { setup } = await renderCondition(
-      { stage: "field", cursor: 0 },
+      { stage: "field", focusedItemId: "status" },
       [
         {
           field: "status",
@@ -139,11 +142,11 @@ describe("DashboardFilterConditionView", () => {
 
   it("keeps builder and value-menu text out of OpenTUI selection", async () => {
     const editors: PersistentFilterConditionEditor[] = [
-      { stage: "field", cursor: 0 },
+      { stage: "field", focusedItemId: "status" },
       {
         stage: "values",
         field: "status",
-        cursor: 0,
+        focusedValueId: "working",
         options: [{ id: "working", label: "Working" }],
         selectedIds: [],
       },
@@ -161,7 +164,7 @@ describe("DashboardFilterConditionView", () => {
     const { setup, targets } = await renderCondition({
       stage: "values",
       field: "status",
-      cursor: 2,
+      focusedValueId: "working",
       options: [
         { id: "needs_attention", label: "Needs attention" },
         { id: "stuck", label: "Stuck" },
@@ -204,7 +207,7 @@ describe("DashboardFilterConditionView", () => {
       {
         stage: "values",
         field: "project",
-        cursor: 13,
+        focusedValueId: "project-13",
         options,
         selectedIds: ["project-13"],
       },

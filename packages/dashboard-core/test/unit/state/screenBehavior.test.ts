@@ -84,7 +84,7 @@ const screenBehaviorCases: readonly [
       name: "persistentFilter",
       draft: createEditableTextInputState("api"),
       draftConditions: [],
-      conditionEditor: { stage: "field", cursor: 0 },
+      conditionEditor: { stage: "field", focusedItemId: "status" },
     },
     "present",
   ],

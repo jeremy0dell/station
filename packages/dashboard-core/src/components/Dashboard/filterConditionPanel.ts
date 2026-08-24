@@ -120,7 +120,7 @@ function conditionPanelActions(
     label: "Apply filter",
     shortcut: "F",
     placement: "footer",
-    focused: editor.cursor === DASHBOARD_FILTER_CONDITION_FIELDS.length,
+    focused: editor.focusedItemId === "applyFilter",
   };
   return [CLOSE_ACTION, applyAction];
 }
@@ -146,12 +146,12 @@ function conditionPanelFieldRows(
   screen: Extract<DashboardScreenView, { name: "persistentFilter" }>,
   editor: Extract<DashboardFilterConditionEditor, { stage: "field" }>,
 ): DashboardFilterConditionPanelFieldRow[] {
-  return DASHBOARD_FILTER_CONDITION_FIELDS.map((field, index) => {
+  return DASHBOARD_FILTER_CONDITION_FIELDS.map((field) => {
     const condition = screen.draftConditions.find((candidate) => candidate.field === field);
     const row: DashboardFilterConditionPanelFieldRow = {
       kind: "field",
       id: `field:${field}`,
-      marker: index === editor.cursor ? "▸" : " ",
+      marker: field === editor.focusedItemId ? "▸" : " ",
       key: dashboardFilterConditionFieldKey(field),
       label: dashboardFilterConditionFieldLabel(field),
       summary: conditionSelectionSummary(condition?.values ?? []),
@@ -169,7 +169,7 @@ function conditionPanelValueRows(
     const row: DashboardFilterConditionPanelValueRow = {
       kind: "value",
       id: `value:${editor.field}:${option.id}`,
-      marker: index === editor.cursor ? "▸" : " ",
+      marker: option.id === editor.focusedValueId ? "▸" : " ",
       key: dashboardFilterConditionSlot(index) ?? " ",
       label: option.label,
       checked: editor.selectedIds.includes(option.id),

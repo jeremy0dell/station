@@ -51,11 +51,16 @@ export type DashboardFilterConditionOption = {
 };
 
 export type DashboardFilterConditionEditor =
-  | { stage: "field"; cursor: number }
+  | {
+      stage: "field";
+      /** Stable field/action identity; array position never crosses the state boundary. */
+      focusedItemId: DashboardFilterConditionField | "applyFilter";
+    }
   | {
       stage: "values";
       field: DashboardFilterConditionField;
-      cursor: number;
+      /** Stable option identity followed by keyboard, pointer, and renderer scrolling. */
+      focusedValueId?: string;
       /** Frozen for the panel lifetime so snapshots cannot reassign visible slot keys. */
       options: readonly DashboardFilterConditionOption[];
       selectedIds: readonly string[];

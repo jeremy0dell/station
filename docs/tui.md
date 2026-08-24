@@ -481,6 +481,8 @@ dismisses while retaining dashboard-local state. The bounded summary/count repla
 and `/ edit` plus `Esc clear` are keyboard and pointer controls in the neutral dashboard footer.
 Narrow applied-filter footers shed secondary shortcuts before edit, clear, and close. While editing,
 the footer is a visually explicit bounded `FILTER` helper; the nested panel uses `CONDITION`.
+The nested panel stores the focused field/action or value ID; arrows derive adjacent
+order transiently, while pointer selection and scroll-follow retain the same identity.
 Draft and applied summaries use one syntax-colored order—free text, Status, Project, Agent—and the
 applied summary truncates as one line. Persistent filtering never uses the absolute
 `CommandPromptView` overlay. Sheets, Help, snapshot replacement, and warm popup reopen preserve the
