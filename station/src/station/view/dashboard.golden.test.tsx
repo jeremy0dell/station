@@ -1,6 +1,5 @@
-// Golden frames: every scenario at every surface size, captured immediately
-// after first render (before the 120ms throbber tick) so the working-row
-// throbber shows its first braille frame (⠋) deterministically.
+// Golden frames cover structural output; normalize the independently timed
+// throbber so renderer speed cannot change an otherwise identical snapshot.
 import { afterEach, describe, expect, it } from "bun:test";
 import { rgbToHex, TextAttributes, type BaseRenderable } from "@opentui/core";
 import { MouseButtons } from "@opentui/core/testing";
@@ -59,6 +58,12 @@ const SIZES = [
   { width: 60, height: 16 },
   { width: 40, height: 12 },
 ] as const;
+
+const BRAILLE_THROBBER_FRAME = /[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]/gu;
+
+function stableGoldenFrame(frame: string): string {
+  return frame.replace(BRAILLE_THROBBER_FRAME, "⠋");
+}
 
 const SNAPSHOT_SCENARIOS: ReadonlyArray<{ name: string; snapshot: () => StationSnapshot }> = [
   { name: "many-projects", snapshot: manyProjectsSnapshot },
@@ -179,7 +184,7 @@ describe("dashboard golden frames", () => {
     for (const size of SIZES) {
       it(`renders ${scenario.name} at ${size.width}x${size.height}`, async () => {
         const setup = await renderDashboard({ ...size, snapshot: scenario.snapshot() });
-        expect(setup.captureCharFrame()).toMatchSnapshot();
+        expect(stableGoldenFrame(setup.captureCharFrame())).toMatchSnapshot();
       });
     }
   }
@@ -210,7 +215,7 @@ describe("dashboard golden frames", () => {
     expect(collapsed.captureCharFrame()).not.toContain("runtime-cleanup");
     expect(collapsed.captureCharFrame()).toContain("[b]");
     expect(collapsed.captureCharFrame()).not.toContain("[c]");
-    expect(collapsed.captureCharFrame()).toMatchSnapshot();
+    expect(stableGoldenFrame(collapsed.captureCharFrame())).toMatchSnapshot();
 
     const interleaved = await renderDashboard({
       width: 120,
@@ -224,7 +229,7 @@ describe("dashboard golden frames", () => {
     const input = interleavedLines.findIndex((line) => line.includes("▼ Input parity"));
     expect(design).toBeLessThan(docs);
     expect(docs).toBeLessThan(input);
-    expect(interleaved.captureCharFrame()).toMatchSnapshot();
+    expect(stableGoldenFrame(interleaved.captureCharFrame())).toMatchSnapshot();
   });
 
   it("keeps a targeted Quick Session inside its semantic Group and Project boxes", async () => {
@@ -356,7 +361,7 @@ describe("dashboard golden frames", () => {
     expect(filteredFrame).toContain("▼ Design refresh 0 visible");
     expect(filteredFrame).toContain("▼ Post-launch 0 sessions");
     expect(filteredFrame).not.toContain("group-contracts");
-    expect(filteredFrame).toMatchSnapshot();
+    expect(stableGoldenFrame(filteredFrame)).toMatchSnapshot();
 
     const scrolled = await renderDashboard({
       width: 80,
@@ -368,7 +373,7 @@ describe("dashboard golden frames", () => {
     const scrolledFrame = scrolled.captureCharFrame();
     expect(scrolledFrame).toContain("▲");
     expect(scrolledFrame).toContain("│");
-    expect(scrolledFrame).toMatchSnapshot();
+    expect(stableGoldenFrame(scrolledFrame)).toMatchSnapshot();
   });
 
   it("uses the same responsive Quick Session label for Group and Project headers", async () => {
@@ -647,7 +652,7 @@ describe("dashboard golden frames", () => {
     await setup.flush();
 
     const frame = setup.captureCharFrame();
-    expect(frame).toMatchSnapshot();
+    expect(stableGoldenFrame(frame)).toMatchSnapshot();
     expect(frame).toContain("FILTER /cli▏");
     expect(frame).toContain("FILTER");
     const lines = frame.split("\n");
@@ -691,7 +696,7 @@ describe("dashboard golden frames", () => {
     });
     await setup.flush();
 
-    expect(setup.captureCharFrame()).toMatchSnapshot();
+    expect(stableGoldenFrame(setup.captureCharFrame())).toMatchSnapshot();
     expect(setup.captureCharFrame()).toContain("0/10 matches");
   });
 
@@ -716,7 +721,7 @@ describe("dashboard golden frames", () => {
     await setup.renderOnce();
 
     const frame = setup.captureCharFrame();
-    expect(frame).toMatchSnapshot();
+    expect(stableGoldenFrame(frame)).toMatchSnapshot();
     expect(frame).toContain("FILTER working · Status=Working");
     expect(frame).toContain("▼ scripts");
     expect(frame).toContain("▼ empty-project");
@@ -765,7 +770,7 @@ describe("dashboard golden frames", () => {
     });
     await setup.flush();
 
-    expect(setup.captureCharFrame()).toMatchSnapshot();
+    expect(stableGoldenFrame(setup.captureCharFrame())).toMatchSnapshot();
     expect(setup.captureCharFrame().split("\n")).toHaveLength(13);
   });
 
@@ -1473,7 +1478,7 @@ describe("dashboard golden frames", () => {
       expect(noticeText).toContain("diagnostic diag_worktree_remove_456");
       expect(noticeText).not.toContain("…");
       expect(frame).toContain("Esc:dismiss  Q:close");
-      expect(frame.replace(/[ \t]+$/gm, "")).toMatchSnapshot();
+      expect(stableGoldenFrame(frame.replace(/[ \t]+$/gm, ""))).toMatchSnapshot();
     }
   });
 });
