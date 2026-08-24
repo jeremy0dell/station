@@ -249,9 +249,12 @@ persisting an array position.
 
 `DashboardRoot` composes a flexible notice region above intrinsic dashboard controls.
 The prompt, divider, and footer are ordinary children of `DashboardControlsView`;
-the toast is bounded within the notice region and grows upward without reserving
-prompt/footer rows. Optional table headers and overflow indicators are absent
-when they have no semantic content; blank renderables never reserve their space.
+the toast owns an intrinsic action header and a semantic scroll body inside that
+region, growing upward without reserving prompt/footer rows or stretching to fill
+unused space. Its vertical frame keeps copy and dismiss reachable when there is no
+room for top/bottom border cells, and copying still exposes the complete notice when
+the body is clipped. Optional table headers and overflow indicators are absent when
+they have no semantic content; blank renderables never reserve their space.
 Active screens share one overlay layer and do not force the dashboard to reflow.
 Native and standalone renderers use this same composition.
 

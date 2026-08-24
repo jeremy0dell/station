@@ -8,6 +8,7 @@ import {
   toastTitle,
  } from "@station/dashboard-core/selectors";
 import type { TuiToastEntry } from "@station/dashboard-core/state";
+import { cellWidth, truncateCells } from "@station/dashboard-core/text";
 import { useEffect, useState } from "react";
 import {
   toastBorderThemeColor,
@@ -16,6 +17,8 @@ import {
   useStationTheme,
   type StationTheme,
 } from "../../theme/index.js";
+import { SemanticScrollRegion } from "./layout/SemanticScrollViewport.js";
+import { semanticItemRenderableId } from "./layout/scrollViewport.js";
 import { useStationHoverState, useStationMouse, stationMouseProps } from "./stationMouseContext.js";
 
 export type ToastOverlayViewProps = {
@@ -39,47 +42,95 @@ export function ToastOverlayView({
 
   const detail = toastDetail(toast);
   const geometry = toastSurfaceGeometry(columns);
-  // This is local breathing room inside the notice region; dashboard controls are outside the parent.
-  const visualBottomInset = 1;
+  const header = toastHeaderModel(geometry.width, toastTitle(toast));
+  const bodyIds = detail === undefined ? ["toast:message"] : ["toast:message", "toast:detail"];
 
   return (
     <box
       position="absolute"
-      id="station-toast-surface"
+      id="station-toast-overlay"
+      top={0}
       right={geometry.inset}
-      bottom={visualBottomInset}
+      bottom={0}
       width={geometry.width}
       maxHeight="100%"
       zIndex={20}
-      border
-      overflow="hidden"
-      borderColor={toOpenTuiColor(toastBorderThemeColor(theme, toastBorderColor(toast)))}
-      backgroundColor={surfaceBackground}
       flexDirection="column"
+      justifyContent="flex-end"
+      overflow="hidden"
     >
-      <box width="100%" flexDirection="column" paddingLeft={1} paddingRight={1}>
-        <box width="100%" flexDirection="row">
+      <box
+        id="station-toast-surface"
+        width="100%"
+        maxHeight="100%"
+        flexShrink={1}
+        border={["left", "right"]}
+        overflow="hidden"
+        borderColor={toOpenTuiColor(toastBorderThemeColor(theme, toastBorderColor(toast)))}
+        backgroundColor={surfaceBackground}
+        flexDirection="column"
+      >
+        <box
+          width="100%"
+          flexDirection="row"
+          paddingLeft={1}
+          paddingRight={1}
+          flexShrink={0}
+        >
           <text
-            flexGrow={1}
-            flexShrink={1}
+            width={header.titleWidth}
+            flexShrink={0}
             fg={toOpenTuiColor(theme.text.primary)}
             attributes={TextAttributes.BOLD}
-            wrapMode="word"
+            wrapMode="none"
             selectable
           >
-            {toastTitle(toast)}
+            {header.title}
           </text>
-          <ToastCopyControl key={toast.id} text={toastCopyText(toast)} onCopy={onCopyNotice} />
-          <ToastDismissControl />
+          <ToastCopyControl
+            key={toast.id}
+            label={header.copyLabel}
+            copiedLabel={header.copiedLabel}
+            text={toastCopyText(toast)}
+            onCopy={onCopyNotice}
+          />
+          <ToastDismissControl label={header.dismissLabel} />
         </box>
-        <text fg={toOpenTuiColor(theme.text.primary)} wrapMode="word" selectable>
-          {toast.toast.message}
-        </text>
-        {detail === undefined ? null : (
-          <text fg={toOpenTuiColor(theme.text.muted)} wrapMode="word" selectable>
-            {detail}
-          </text>
-        )}
+        <box
+          id="station-toast-body-clip"
+          width="100%"
+          minHeight={0}
+          flexShrink={1}
+          flexDirection="column"
+          overflow="hidden"
+        >
+          <SemanticScrollRegion itemIds={bodyIds} fill={false} viewportId="station-toast-body">
+            <box
+              id={semanticItemRenderableId("toast:message")}
+              width="100%"
+              flexDirection="column"
+              paddingLeft={1}
+              paddingRight={1}
+            >
+              <text fg={toOpenTuiColor(theme.text.primary)} wrapMode="word" selectable>
+                {toast.toast.message}
+              </text>
+            </box>
+            {detail === undefined ? null : (
+              <box
+                id={semanticItemRenderableId("toast:detail")}
+                width="100%"
+                flexDirection="column"
+                paddingLeft={1}
+                paddingRight={1}
+              >
+                <text fg={toOpenTuiColor(theme.text.muted)} wrapMode="word" selectable>
+                  {detail}
+                </text>
+              </box>
+            )}
+          </SemanticScrollRegion>
+        </box>
       </box>
     </box>
   );
@@ -94,7 +145,44 @@ function toastSurfaceGeometry(columns: number): { width: number; inset: number }
   };
 }
 
-function ToastCopyControl({ text, onCopy }: { text: string; onCopy: (text: string) => void }) {
+type ToastHeaderModel = {
+  title: string;
+  titleWidth: number;
+  copyLabel: string;
+  copiedLabel: string;
+  dismissLabel: string;
+};
+
+function toastHeaderModel(width: number, title: string): ToastHeaderModel {
+  const innerWidth = Math.max(1, width - 4);
+  const full = { copyLabel: "[ copy ]", copiedLabel: "[ copied ]", dismissLabel: "[ dismiss ]" };
+  const compact = { copyLabel: "[copy]", copiedLabel: "[ok]", dismissLabel: "[x]" };
+  const controls =
+    cellWidth(title) + cellWidth(full.copiedLabel) + cellWidth(full.dismissLabel) <= innerWidth
+      ? full
+      : compact;
+  const titleWidth = Math.max(
+    1,
+    innerWidth - cellWidth(controls.copyLabel) - cellWidth(controls.dismissLabel),
+  );
+  return {
+    title: truncateCells(title, titleWidth),
+    titleWidth,
+    ...controls,
+  };
+}
+
+function ToastCopyControl({
+  label,
+  copiedLabel,
+  text,
+  onCopy,
+}: {
+  label: string;
+  copiedLabel: string;
+  text: string;
+  onCopy: (text: string) => void;
+}) {
   const theme = useStationTheme();
   const [hover, setHover] = useStationHoverState();
   const [copyFeedbackToken, setCopyFeedbackToken] = useState(0);
@@ -110,6 +198,7 @@ function ToastCopyControl({ text, onCopy }: { text: string; onCopy: (text: strin
 
   return (
     <text
+      id="station-toast-copy"
       flexShrink={0}
       {...style}
       selectable={false}
@@ -124,7 +213,7 @@ function ToastCopyControl({ text, onCopy }: { text: string; onCopy: (text: strin
       onMouseOver={() => setHover(true)}
       onMouseOut={() => setHover(false)}
     >
-      {copied ? "[ copied ]" : "[ copy ]"}
+      {copied ? copiedLabel : label}
     </text>
   );
 }
@@ -142,13 +231,13 @@ function toastCopyControlStyle(theme: StationTheme, copied: boolean, hover: bool
   return { fg: toOpenTuiColor(theme.action.primary) };
 }
 
-function ToastDismissControl() {
+function ToastDismissControl({ label }: { label: string }) {
   const theme = useStationTheme();
   const dispatch = useStationMouse();
   const [hover, setHover] = useStationHoverState();
   return (
     <text
-      marginLeft={1}
+      id="station-toast-dismiss"
       flexShrink={0}
       fg={toOpenTuiColor(hover ? theme.text.inverse : theme.text.muted)}
       {...(hover ? { bg: toOpenTuiColor(theme.status.danger) } : {})}
@@ -157,7 +246,7 @@ function ToastDismissControl() {
       onMouseOver={() => setHover(true)}
       onMouseOut={() => setHover(false)}
     >
-      [ dismiss ]
+      {label}
     </text>
   );
 }

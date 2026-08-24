@@ -1458,20 +1458,42 @@ describe("dashboard golden frames", () => {
       });
       const frame = setup.captureCharFrame();
       const lines = frame.split("\n");
-      const top = lines.findIndex((line) => line.includes("┌"));
-      const bottom = lines.findIndex((line, index) => index > top && line.includes("└"));
-      const left = lines[top]?.indexOf("┌") ?? -1;
-      const right = lines[top]?.lastIndexOf("┐") ?? -1;
-      const noticeText = lines
-        .slice(top + 1, bottom)
-        .map((line) => line.slice(left + 1, right).trim())
+      const surface = setup.renderer.root.findDescendantById("station-toast-surface");
+      const noticeRegion = setup.renderer.root.findDescendantById(
+        "station-dashboard-notice-region",
+      );
+      const controls = setup.renderer.root.findDescendantById("station-dashboard-controls");
+      expect(surface).toBeDefined();
+      expect(noticeRegion).toBeDefined();
+      expect(controls).toBeDefined();
+      if (surface === undefined || noticeRegion === undefined || controls === undefined) {
+        throw new Error("toast surface, notice region, and dashboard controls must render");
+      }
+      const message = setup.renderer.root.findDescendantById(
+        semanticItemRenderableId("toast:message"),
+      );
+      const detail = setup.renderer.root.findDescendantById(
+        semanticItemRenderableId("toast:detail"),
+      );
+      expect(message).toBeDefined();
+      expect(detail).toBeDefined();
+      if (message === undefined || detail === undefined) {
+        throw new Error("toast message and detail must remain mounted");
+      }
+      const noticeText = [message, detail]
+        .flatMap((renderable) =>
+          lines
+            .slice(renderable.y, renderable.y + renderable.height)
+            .map((line) => line.slice(renderable.x, renderable.x + renderable.width).trim()),
+        )
         .join(" ")
         .replace(/\s+/g, " ");
 
-      expect(top).toBeGreaterThanOrEqual(3);
-      expect(bottom).toBeLessThan(size.height - 3);
-      expect(left).toBe(2 + Math.max(0, size.width - 76));
-      expect(size.width - right - 1).toBe(2);
+      expect(surface.y).toBeGreaterThanOrEqual(noticeRegion.y);
+      expect(surface.y + surface.height).toBeLessThanOrEqual(controls.y);
+      expect(surface.height).toBeLessThan(noticeRegion.height);
+      expect(surface.x).toBe(2 + Math.max(0, size.width - 76));
+      expect(size.width - surface.x - surface.width).toBe(2);
       expect(noticeText).toContain(WORKTREE_ERROR_MESSAGE);
       expect(noticeText).toContain(WORKTREE_ERROR_HINT);
       expect(noticeText).toContain("trace trace_worktree_remove_123");

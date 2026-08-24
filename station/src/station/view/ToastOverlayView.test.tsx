@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { rgbToHex } from "@opentui/core";
+import { rgbToHex, type ScrollBoxRenderable } from "@opentui/core";
 import { MouseButtons } from "@opentui/core/testing";
+import { useTerminalDimensions } from "@opentui/react";
 import { testRender } from "@opentui/react/test-utils";
 import { nativeStationTheme, StationThemeProvider } from "../../theme/index.js";
 import type { ClientNotice } from "@station/dashboard-core/runtime";
@@ -10,7 +11,8 @@ import { spanAtFrameCell } from "../../terminal/testing/frameProbe.js";
 import { manyProjectsSnapshot } from "../fixtures/scenarios.js";
 import type { StationMouseTarget } from "../input/stationMouse.js";
 import { makeStationTestRuntime } from "../test/support/makeStationTestRuntime.js";
-import { DashboardRoot } from "./DashboardRoot.js";
+import { DashboardRoot, type DashboardRootProps } from "./DashboardRoot.js";
+import { semanticItemRenderableId } from "./layout/scrollViewport.js";
 import { StationHoverProvider, StationMouseProvider } from "./stationMouseContext.js";
 
 const NOTICE: ClientNotice = {
@@ -37,20 +39,19 @@ afterEach(() => {
 describe("ToastOverlayView actions", () => {
   it("keeps a wrapped prompt and notice in disjoint structural regions through resize", async () => {
     const { runtime } = makeStationTestRuntime({ snapshot: manyProjectsSnapshot() });
+    const copied: string[] = [];
     runtime.start();
     runtime.actions.handleKey({ input: "R" });
     const setup = await testRender(
       <StationThemeProvider theme={nativeStationTheme}>
-        <DashboardRoot
+        <ResponsiveDashboardRoot
           state={runtime.state}
           actions={runtime.actions}
           layout={runtime.layout}
-          columns={28}
-          rows={16}
-          onCopyNotice={() => {}}
+          onCopyNotice={(text) => copied.push(text)}
         />
       </StationThemeProvider>,
-      { width: 28, height: 16 },
+      { width: 40, height: 12 },
     );
     teardowns.push(() => setup.renderer.destroy());
     await act(async () => {
@@ -61,35 +62,78 @@ describe("ToastOverlayView actions", () => {
 
     const prompt = setup.renderer.root.findDescendantById("station-command-prompt");
     const controls = setup.renderer.root.findDescendantById("station-dashboard-controls");
+    const noticeRegion = setup.renderer.root.findDescendantById(
+      "station-dashboard-notice-region",
+    );
     const toast = setup.renderer.root.findDescendantById("station-toast-surface");
     expect(prompt?.height).toBeGreaterThan(1);
     expect(controls).toBeDefined();
+    expect(noticeRegion).toBeDefined();
     expect(toast).toBeDefined();
-    if (controls === undefined || toast === undefined) {
-      throw new Error("dashboard controls and toast surface must render");
+    if (controls === undefined || noticeRegion === undefined || toast === undefined) {
+      throw new Error("dashboard controls, notice region, and toast surface must render");
     }
+    expect(toast.y).toBeGreaterThanOrEqual(noticeRegion.y);
     expect(toast.y + toast.height).toBeLessThanOrEqual(controls.y);
+    expect(compactGolden(setup.captureCharFrame())).toMatchSnapshot();
 
     await act(async () => {
-      setup.renderer.resize(22, 12);
-      await setup.flush();
-      await setup.renderOnce();
+      setup.renderer.resize(22, 8);
     });
+    await setup.renderOnce();
+    await setup.flush();
+    await setup.renderOnce();
+    expect(toast.y).toBeGreaterThanOrEqual(noticeRegion.y);
     expect(toast.y + toast.height).toBeLessThanOrEqual(controls.y);
     expect(setup.captureCharFrame()).toContain("Rename:");
+    expect(compactGolden(setup.captureCharFrame())).toMatchSnapshot();
+    const toastBody = setup.renderer.root.findDescendantById(
+      "station-toast-body",
+    ) as ScrollBoxRenderable | undefined;
+    expect(toastBody).toBeDefined();
+    expect(
+      setup.renderer.root.findDescendantById(semanticItemRenderableId("toast:detail")),
+    ).toBeDefined();
+    await act(async () => {
+      await setup.mockMouse.scroll(4, 2, "down");
+      await setup.flush();
+    });
+    expect(toastBody?.scrollTop).toBeGreaterThan(0);
+    await act(async () => {
+      toastBody?.scrollTo(toastBody.scrollHeight);
+      await setup.renderOnce();
+    });
+    expect(setup.captureCharFrame()).toContain("diagnostic");
 
     await act(async () => {
       setup.renderer.resize(22, 5);
-      await setup.flush();
-      await setup.renderOnce();
     });
+    await setup.renderOnce();
+    await setup.flush();
+    await setup.renderOnce();
+    await Promise.resolve();
+    await setup.flush();
+    await setup.renderOnce();
     const footer = setup.renderer.root.findDescendantById("station-dashboard-footer");
+    expect(toast.y).toBeGreaterThanOrEqual(noticeRegion.y);
+    expect(toast.y + toast.height).toBeLessThanOrEqual(controls.y);
     expect(footer?.height).toBe(1);
     expect((footer?.y ?? 5) + (footer?.height ?? 0)).toBeLessThanOrEqual(5);
+    const bodyClip = setup.renderer.root.findDescendantById("station-toast-body-clip");
+    expect(bodyClip?.height).toBeGreaterThanOrEqual(1);
+    const compactFrame = setup.captureCharFrame();
+    expect(compactFrame).toContain("diagnostic");
+    expect(compactGolden(compactFrame)).toMatchSnapshot();
+    const copy = cellFor(compactFrame, "[copy]");
+    await act(async () => {
+      await setup.mockMouse.click(copy.col, copy.row, MouseButtons.LEFT);
+    });
+    expect(copied).toEqual([COPY_TEXT]);
   });
 
   it("keeps drag selection inert and copies the complete readable notice explicitly", async () => {
     const fixture = await renderNotice();
+    expect(fixture.frame()).toContain("Worktrunk failed");
     const message = cellFor(fixture.frame(), "Worktrunk failed");
     const copy = cellFor(fixture.frame(), "[ copy ]");
     const dismiss = cellFor(fixture.frame(), "[ dismiss ]");
@@ -224,4 +268,15 @@ function cellFor(frame: string, label: string): { row: number; col: number } {
   expect(row).toBeGreaterThanOrEqual(0);
   expect(col).toBeGreaterThanOrEqual(0);
   return { row, col };
+}
+
+function compactGolden(frame: string): string {
+  return frame.replace(/[ \t]+$/gm, "");
+}
+
+function ResponsiveDashboardRoot(
+  props: Omit<DashboardRootProps, "columns" | "rows">,
+) {
+  const { width, height } = useTerminalDimensions();
+  return <DashboardRoot {...props} columns={width} rows={height} />;
 }
