@@ -1,10 +1,9 @@
 import { z } from "zod";
-import type { CommandReceipt, CommandRecord, StationCommand } from "./commands.js";
-import {
-  FreshSessionGroupPlacementIntentSchema,
-  RemoveWorktreePayloadSchema,
-  SessionFreshStartConsentSchema,
-} from "./commands.js";
+import type { CommandReceipt, CommandRecord } from "./commandLifecycle.js";
+import { SessionFreshStartConsentSchema } from "./commands/session.js";
+import { FreshSessionGroupPlacementIntentSchema } from "./commands/sessionGroup.js";
+import { RemoveWorktreePayloadSchema } from "./commands/worktree.js";
+import type { StationCommand } from "./commands.js";
 import type {
   DiagnosticCollectionOptions,
   DiagnosticSnapshot,

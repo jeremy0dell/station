@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { CommandRecordSchema } from "./commands.js";
+import { CommandRecordSchema } from "./commandLifecycle.js";
 import { ErrorEnvelopeSchema, SafeErrorSchema } from "./errors.js";
 import { StationEventSchema } from "./events.js";
 import {

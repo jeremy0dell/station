@@ -905,12 +905,6 @@
           "kind": "type",
           "role": null,
           "purpose": null
-        },
-        {
-          "name": "ResultCommandType",
-          "kind": "type",
-          "role": null,
-          "purpose": null
         }
       ],
       "imports": [
@@ -954,7 +948,12 @@
           "specifier": "@station/contracts",
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "runtime",
-          "bindings": ["CommandReceiptSchema", "StationCommandResultSchema", "StationCommandSchema"]
+          "bindings": [
+            "CommandReceiptSchema",
+            "StationCommandResultSchema",
+            "StationCommandResultTypeSchema",
+            "StationCommandSchema"
+          ]
         },
         {
           "specifier": "@station/contracts",
@@ -966,6 +965,7 @@
             "StationCommand",
             "StationCommandResult",
             "StationCommandResultFor",
+            "StationCommandResultType",
             "StationEvent",
             "TerminalClosePayload",
             "TerminalFocusPayload",
@@ -2815,6 +2815,7 @@
             "ProviderProjectConfig",
             "ResolvedTerminalPlacement",
             "SafeError",
+            "SessionCommandPlacementResult",
             "SessionView",
             "TerminalFocusOrigin",
             "TerminalPlacementPort",
@@ -5610,12 +5611,6 @@
         {
           "name": "resolveWorktreeRowOrThrow",
           "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "ResultCommandType",
-          "kind": "type",
           "role": null,
           "purpose": null
         },

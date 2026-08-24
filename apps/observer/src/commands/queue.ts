@@ -5,6 +5,7 @@ import type {
   StationCommand,
   StationCommandResult,
   StationCommandResultFor,
+  StationCommandResultType,
   StationEvent,
   TerminalClosePayload,
   TerminalFocusPayload,
@@ -13,6 +14,7 @@ import type {
 import {
   CommandReceiptSchema,
   StationCommandResultSchema,
+  StationCommandResultTypeSchema,
   StationCommandSchema,
 } from "@station/contracts";
 import { createTraceContext } from "@station/observability";
@@ -36,14 +38,12 @@ type CommandExecutionContext = Omit<CommandHandlerContext, "signal" | "beginComm
 
 export type CommandHandler = (context: CommandHandlerContext) => Promise<void>;
 
-export type ResultCommandType = StationCommandResult["type"];
-
-export type CommandResultHandler<TCommandType extends ResultCommandType> = (
+export type CommandResultHandler<TCommandType extends StationCommandResultType> = (
   context: CommandHandlerContext,
 ) => Promise<StationCommandResultFor<Extract<StationCommand, { type: TCommandType }>>>;
 
 export type ObserverCommandHandlers = {
-  [TCommandType in StationCommand["type"]]: TCommandType extends ResultCommandType
+  [TCommandType in StationCommand["type"]]: TCommandType extends StationCommandResultType
     ? CommandResultHandler<TCommandType>
     : CommandHandler;
 };
@@ -391,42 +391,17 @@ function validateCommandResult(
   command: StationCommand,
   handlerResult: StationCommandResult | undefined,
 ): StationCommandResult | undefined {
-  switch (command.type) {
-    case "worktree.create":
-    case "worktree.fork":
-    case "session.create":
-    case "session.fork":
-    case "sessionGroup.create": {
-      const parsed = StationCommandResultSchema.safeParse(handlerResult);
-      if (!parsed.success || parsed.data.type !== command.type) {
-        throw invalidCommandResultError(command.type);
-      }
-      return parsed.data;
-    }
-    case "worktree.remove":
-    case "session.startAgent":
-    case "session.resumeAgent":
-    case "session.importRecoveryHandle":
-    case "terminal.focus":
-    case "terminal.close":
-    case "session.close":
-    case "session.rename":
-    case "session.acknowledgeTurn":
-    case "observer.reconcile":
-    case "project.add":
-    case "project.remove":
-    case "project.setDefaultHarness":
-    case "sessionGroup.rename":
-    case "sessionGroup.updateMembership":
-    case "sessionGroup.reparent":
-    case "sessionGroup.delete":
-      if (handlerResult !== undefined) {
-        throw invalidCommandResultError(command.type);
-      }
-      return undefined;
+  const resultType = StationCommandResultTypeSchema.safeParse(command.type);
+  if (!resultType.success) {
+    if (handlerResult !== undefined) throw invalidCommandResultError(command.type);
+    return undefined;
   }
-  const _exhaustive: never = command;
-  return _exhaustive;
+
+  const parsed = StationCommandResultSchema.safeParse(handlerResult);
+  if (!parsed.success || parsed.data.type !== resultType.data) {
+    throw invalidCommandResultError(command.type);
+  }
+  return parsed.data;
 }
 
 function invalidCommandResultError(commandType: StationCommand["type"]) {

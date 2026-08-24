@@ -7,6 +7,7 @@ import type {
   ProviderProjectConfig,
   ResolvedTerminalPlacement,
   SafeError,
+  SessionCommandPlacementResult,
   SessionView,
   TerminalFocusOrigin,
   TerminalPlacementPort,
@@ -206,15 +207,7 @@ export async function ensureAgentWorkspace(
 export function commandPlacementResult(
   requested: TerminalPlacementRequest,
   resolved: ResolvedTerminalPlacement,
-):
-  | {
-      requestedPlacement: "sibling";
-      resolvedPlacement: Omit<Extract<ResolvedTerminalPlacement, { intent: "sibling" }>, "intent">;
-    }
-  | {
-      requestedPlacement: "detached";
-      resolvedPlacement: Omit<Extract<ResolvedTerminalPlacement, { intent: "detached" }>, "intent">;
-    } {
+): SessionCommandPlacementResult {
   if (requested.intent !== resolved.intent) {
     throw {
       tag: "TerminalProviderError",
