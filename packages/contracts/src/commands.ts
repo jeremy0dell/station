@@ -6,6 +6,7 @@ import {
   ProviderIdSchema,
   SessionGroupIdSchema,
   SessionIdSchema,
+  TerminalTargetIdSchema,
   TimestampSchema,
   WorktreeIdSchema,
 } from "./ids.js";
@@ -570,20 +571,146 @@ export const StationCommandSchema = z.discriminatedUnion("type", [
 
 export type StationCommand = z.infer<typeof StationCommandSchema>;
 
-export const CommandReceiptSchema = z
+export const WorktreeCreateCommandResultSchema = z
   .object({
-    commandId: CommandIdSchema,
-    traceId: nonEmptyStringSchema.optional(),
-    spanId: nonEmptyStringSchema.optional(),
-    accepted: z.boolean(),
-    status: z.enum(["accepted", "rejected"]),
+    type: z.literal("worktree.create"),
+    projectId: ProjectIdSchema,
+    worktreeId: WorktreeIdSchema,
+  })
+  .strict();
+export type WorktreeCreateCommandResult = z.infer<typeof WorktreeCreateCommandResultSchema>;
+
+export const WorktreeForkCommandResultSchema = z
+  .object({
+    type: z.literal("worktree.fork"),
+    projectId: ProjectIdSchema,
+    worktreeId: WorktreeIdSchema,
+  })
+  .strict();
+export type WorktreeForkCommandResult = z.infer<typeof WorktreeForkCommandResultSchema>;
+
+const ResolvedSessionCommandPlacementSchema = z
+  .object({
+    provider: ProviderIdSchema,
+    targetId: TerminalTargetIdSchema,
+    generation: nonEmptyStringSchema,
+    presentation: z.enum(["presented", "detached"]),
+  })
+  .strict();
+
+const SessionCommandResultFields = {
+  projectId: ProjectIdSchema,
+  worktreeId: WorktreeIdSchema,
+  sessionId: SessionIdSchema,
+  resolvedPlacement: ResolvedSessionCommandPlacementSchema,
+} as const;
+
+export const SessionCreateCommandResultSchema = z.discriminatedUnion("requestedPlacement", [
+  z
+    .object({
+      type: z.literal("session.create"),
+      ...SessionCommandResultFields,
+      requestedPlacement: z.literal("sibling"),
+      resolvedPlacement: ResolvedSessionCommandPlacementSchema.extend({
+        presentation: z.literal("presented"),
+      }),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("session.create"),
+      ...SessionCommandResultFields,
+      requestedPlacement: z.literal("detached"),
+      resolvedPlacement: ResolvedSessionCommandPlacementSchema.extend({
+        presentation: z.literal("detached"),
+      }),
+    })
+    .strict(),
+]);
+export type SessionCreateCommandResult = z.infer<typeof SessionCreateCommandResultSchema>;
+
+export const SessionForkCommandResultSchema = z.discriminatedUnion("requestedPlacement", [
+  z
+    .object({
+      type: z.literal("session.fork"),
+      ...SessionCommandResultFields,
+      requestedPlacement: z.literal("sibling"),
+      resolvedPlacement: ResolvedSessionCommandPlacementSchema.extend({
+        presentation: z.literal("presented"),
+      }),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("session.fork"),
+      ...SessionCommandResultFields,
+      requestedPlacement: z.literal("detached"),
+      resolvedPlacement: ResolvedSessionCommandPlacementSchema.extend({
+        presentation: z.literal("detached"),
+      }),
+    })
+    .strict(),
+]);
+export type SessionForkCommandResult = z.infer<typeof SessionForkCommandResultSchema>;
+
+export const SessionGroupCreateCommandResultSchema = z
+  .object({
+    type: z.literal("sessionGroup.create"),
+    projectId: ProjectIdSchema,
+    groupId: SessionGroupIdSchema,
+    version: z.number().int().positive(),
+  })
+  .strict();
+export type SessionGroupCreateCommandResult = z.infer<typeof SessionGroupCreateCommandResultSchema>;
+
+export const StationCommandResultSchema = z.discriminatedUnion("type", [
+  WorktreeCreateCommandResultSchema,
+  WorktreeForkCommandResultSchema,
+  SessionCreateCommandResultSchema,
+  SessionForkCommandResultSchema,
+  SessionGroupCreateCommandResultSchema,
+]);
+
+export type StationCommandResult = z.infer<typeof StationCommandResultSchema>;
+export type StationCommandResultFor<TCommand extends StationCommand> = Extract<
+  StationCommandResult,
+  { type: TCommand["type"] }
+>;
+
+const CommandReceiptIdentityFields = {
+  commandId: CommandIdSchema,
+  traceId: nonEmptyStringSchema.optional(),
+  spanId: nonEmptyStringSchema.optional(),
+} as const;
+
+export const AcceptedCommandReceiptSchema = z
+  .object({
+    ...CommandReceiptIdentityFields,
+    accepted: z.literal(true),
+    status: z.literal("accepted"),
+    error: z.never().optional(),
+  })
+  .strict();
+
+export const RejectedCommandReceiptSchema = z
+  .object({
+    ...CommandReceiptIdentityFields,
+    accepted: z.literal(false),
+    status: z.literal("rejected"),
     error: SafeErrorSchema.optional(),
   })
   .strict();
 
+export const CommandReceiptSchema = z.discriminatedUnion("status", [
+  AcceptedCommandReceiptSchema,
+  RejectedCommandReceiptSchema,
+]);
+
+export type AcceptedCommandReceipt = z.infer<typeof AcceptedCommandReceiptSchema>;
+export type RejectedCommandReceipt = z.infer<typeof RejectedCommandReceiptSchema>;
 export type CommandReceipt = z.infer<typeof CommandReceiptSchema>;
 
-export const CommandRecordSchema = z
+const CommandRecordBaseSchema = z
   .object({
     id: CommandIdSchema,
     type: StationCommandTypeSchema,
@@ -596,7 +723,80 @@ export const CommandRecordSchema = z
     spanId: nonEmptyStringSchema.optional(),
     error: SafeErrorSchema.optional(),
     diagnostics: z.array(DiagnosticDetailSchema).optional(),
+    result: StationCommandResultSchema.optional(),
   })
   .strict();
 
-export type CommandRecord = z.infer<typeof CommandRecordSchema>;
+type CommandRecordBase = z.infer<typeof CommandRecordBaseSchema>;
+export type CommandRecordInput = z.input<typeof CommandRecordBaseSchema>;
+
+export type CommandRecordFor<TCommand extends StationCommand> = TCommand extends StationCommand
+  ? Omit<CommandRecordBase, "type" | "command" | "result"> & {
+      type: TCommand["type"];
+      command: TCommand;
+      result?: StationCommandResultFor<TCommand>;
+    }
+  : never;
+
+export type CommandRecord = CommandRecordFor<StationCommand>;
+export type SucceededCommandRecord = CommandRecord & { status: "succeeded" };
+export type FailedCommandRecord = CommandRecord & { status: "failed"; result?: never };
+export type CommandExecutionOutcome =
+  | { status: "accepted"; receipt: AcceptedCommandReceipt }
+  | { status: "rejected"; receipt: RejectedCommandReceipt }
+  | { status: "succeeded"; receipt: AcceptedCommandReceipt; record: SucceededCommandRecord }
+  | { status: "failed"; receipt: AcceptedCommandReceipt; record: FailedCommandRecord };
+
+export const CommandRecordSchema = CommandRecordBaseSchema.superRefine((record, context) => {
+  if (record.type !== record.command.type) {
+    context.addIssue({
+      code: "custom",
+      message: "Command record type must match the embedded command type.",
+      path: ["type"],
+    });
+  }
+  if (record.result !== undefined && record.status !== "succeeded") {
+    context.addIssue({
+      code: "custom",
+      message: "Only a succeeded command record may contain a result.",
+      path: ["result"],
+    });
+  }
+  if (record.result !== undefined && record.result.type !== record.command.type) {
+    context.addIssue({
+      code: "custom",
+      message: "Command result type must match the embedded command type.",
+      path: ["result", "type"],
+    });
+  }
+}) as z.ZodType<CommandRecord>;
+
+const TerminalCommandOutcomeSchema = z
+  .object({
+    status: z.enum(["succeeded", "failed"]),
+    receipt: AcceptedCommandReceiptSchema,
+    record: CommandRecordSchema,
+  })
+  .strict()
+  .superRefine((outcome, context) => {
+    if (outcome.receipt.commandId !== outcome.record.id) {
+      context.addIssue({
+        code: "custom",
+        message: "Outcome receipt and record command ids must match.",
+        path: ["record", "id"],
+      });
+    }
+    if (outcome.status !== outcome.record.status) {
+      context.addIssue({
+        code: "custom",
+        message: "Outcome and record terminal statuses must match.",
+        path: ["record", "status"],
+      });
+    }
+  });
+
+export const CommandExecutionOutcomeSchema = z.union([
+  z.object({ status: z.literal("accepted"), receipt: AcceptedCommandReceiptSchema }).strict(),
+  z.object({ status: z.literal("rejected"), receipt: RejectedCommandReceiptSchema }).strict(),
+  TerminalCommandOutcomeSchema,
+]) as z.ZodType<CommandExecutionOutcome>;

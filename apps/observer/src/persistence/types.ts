@@ -14,6 +14,7 @@ import type {
   SessionId,
   SessionRecoveryHandle,
   StationCommand,
+  StationCommandResult,
   StationEvent,
   TerminalTargetObservation,
   WorktreeChangeSummary,
@@ -77,6 +78,7 @@ export type PersistedCommand = {
   spanId?: string;
   error?: SafeError;
   diagnostics?: DiagnosticDetail[];
+  result?: StationCommandResult;
 };
 
 export type PersistedEvent = {

@@ -3,6 +3,7 @@ import {
   ErrorEnvelopeSchema,
   SafeErrorSchema,
   SessionGroupViewSchema,
+  StationCommandResultSchema,
   StationCommandSchema,
   StationEventSchema,
 } from "@station/contracts";
@@ -30,6 +31,7 @@ export type SqliteCommandRow = {
   trace_id: string | null;
   span_id: string | null;
   error_json: string | null;
+  result_json: string | null;
 };
 
 export type SqliteCommandErrorRow = {
@@ -122,6 +124,9 @@ export function commandFromRow(row: SqliteCommandRow): PersistedCommand {
   if (row.span_id !== null) persistedCommand.spanId = row.span_id;
   if (row.error_json !== null) {
     persistedCommand.error = SafeErrorSchema.parse(parseJson(row.error_json));
+  }
+  if (row.result_json !== null) {
+    persistedCommand.result = StationCommandResultSchema.parse(parseJson(row.result_json));
   }
   return persistedCommand;
 }

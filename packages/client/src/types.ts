@@ -7,6 +7,7 @@ import type {
   CommandReceipt,
   SafeError,
   StationCommand,
+  StationCommandResult,
   StationEvent,
   StationSnapshot,
   WorktreeCancelRemovalParams,
@@ -26,6 +27,7 @@ export type StationClientCommandCompletion =
   | {
       status: "succeeded";
       commandId: CommandId;
+      result?: StationCommandResult;
     }
   | {
       status: "failed";

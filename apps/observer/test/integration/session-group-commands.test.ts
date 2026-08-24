@@ -54,6 +54,12 @@ describe.each(storageKinds)("recorded Session Group commands with %s persistence
       payload: { projectId: "web", name: "  Empty  " },
     });
     expect(empty.status).toBe("succeeded");
+    expect(empty.result).toEqual({
+      type: "sessionGroup.create",
+      projectId: "web",
+      groupId: "grp_1",
+      version: 1,
+    });
     expect(test.core.getSnapshot().sessionGroups).toEqual([
       expect.objectContaining({
         id: "grp_1",
@@ -73,6 +79,12 @@ describe.each(storageKinds)("recorded Session Group commands with %s persistence
       },
     });
     expect(membered.status).toBe("succeeded");
+    expect(membered.result).toEqual({
+      type: "sessionGroup.create",
+      projectId: "web",
+      groupId: "grp_2",
+      version: 1,
+    });
     expect(test.core.getSnapshot().sessionGroups).toEqual([
       expect.objectContaining({ id: "grp_1", sessionIds: [] }),
       expect.objectContaining({ id: "grp_2", sessionIds: ["ses_web_a"] }),

@@ -43,6 +43,42 @@ async function tempDbPath(): Promise<string> {
 }
 
 describe("observer persistence", () => {
+  it("preserves a successful command result across SQLite reopen", async () => {
+    const dbPath = await tempDbPath();
+    const sqlite = openObserverSqlite({ path: dbPath, clock: { now: () => new Date(now) } });
+    const persistence = createSqliteObserverPersistence({ sqlite });
+    const createCommand: StationCommand = {
+      type: "worktree.create",
+      payload: { projectId: "web", branch: "restart-result" },
+    };
+    await persistence.recordCommandAccepted({
+      commandId: "cmd_restart_result",
+      command: createCommand,
+      createdAt: now,
+    });
+    await persistence.markCommandSucceeded("cmd_restart_result", later, {
+      type: "worktree.create",
+      projectId: "web",
+      worktreeId: "wt_web_restart_result",
+    });
+    sqlite.close();
+
+    const reopened = openObserverSqlite({ path: dbPath });
+    try {
+      const reloaded = createSqliteObserverPersistence({ sqlite: reopened });
+      await expect(reloaded.getCommand("cmd_restart_result")).resolves.toMatchObject({
+        status: "succeeded",
+        result: {
+          type: "worktree.create",
+          projectId: "web",
+          worktreeId: "wt_web_restart_result",
+        },
+      });
+    } finally {
+      reopened.close();
+    }
+  });
+
   it("stores command lifecycle, event history, and SafeError separately from envelopes", async () => {
     const dbPath = await tempDbPath();
     const sqlite = openObserverSqlite({ path: dbPath, clock: { now: () => new Date(now) } });

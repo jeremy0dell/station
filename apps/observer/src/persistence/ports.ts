@@ -8,6 +8,7 @@ import type {
   SessionGroupView,
   SessionRecoveryHandle,
   StationCommand,
+  StationCommandResult,
   StationEvent,
 } from "@station/contracts";
 import type {
@@ -46,7 +47,8 @@ import type {
 /**
  * DRIVEN PORT
  *
- * Preserves the durable lifecycle and diagnostic history of Observer commands.
+ * Preserves durable Observer command lifecycle, diagnostic history, and typed
+ * success results before terminal completion is observable.
  */
 export interface CommandJournal {
   recordCommandAccepted(input: {
@@ -57,7 +59,11 @@ export interface CommandJournal {
     spanId?: string;
   }): Promise<PersistedCommand>;
   markCommandStarted(commandId: CommandId, startedAt?: string): Promise<PersistedCommand>;
-  markCommandSucceeded(commandId: CommandId, finishedAt?: string): Promise<PersistedCommand>;
+  markCommandSucceeded(
+    commandId: CommandId,
+    finishedAt?: string,
+    result?: StationCommandResult,
+  ): Promise<PersistedCommand>;
   markCommandFailed(input: {
     commandId: CommandId;
     safeError: SafeError;

@@ -46,7 +46,7 @@ describe("SQLite-only Observer persistence behavior", () => {
 
     const upgraded = openObserverSqlite({ path, clock: { now: () => new Date(now) } });
     try {
-      expect(upgraded.health().schemaVersion).toBe(17);
+      expect(upgraded.health().schemaVersion).toBe(latestSchemaVersion);
       const persistence = createSqliteObserverPersistence({ sqlite: upgraded });
       await persistence.createSessionGroup({
         id: "group_durable",
@@ -525,6 +525,7 @@ describe("SQLite-only Observer persistence behavior", () => {
         [15, "drop_recovery_breadcrumbs"],
         [16, "worktree_display_titles"],
         [17, "session_groups"],
+        [18, "command_results"],
       ]);
       await expect(persistence.listSessions()).resolves.toEqual([
         expect.objectContaining({

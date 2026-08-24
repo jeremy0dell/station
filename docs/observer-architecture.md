@@ -413,7 +413,8 @@ client -> transport validation -> ObserverApi.dispatch
        -> validate command -> persist accepted -> publish accepted
        -> serialize by command scope -> persist/publish started
        -> handler -> policies and driven ports -> reconcile when required
-       -> persist/publish succeeded or failed -> command query/completion wait
+       -> validate correlated result -> persist result and terminal status
+       -> publish succeeded or failed -> command query/completion wait reloads record
 ```
 
 Acceptance means the command has a durable ID and accepted record, not that its
@@ -421,6 +422,17 @@ operation succeeded. Commands touching the same narrow stable scope serialize;
 unrelated scopes may run concurrently. Failure is normalized into `SafeError`,
 persisted with trace correlation, and published. A failed command does not
 poison the following command in its scope.
+
+Successful `worktree.create`, `worktree.fork`, `session.create`, `session.fork`,
+and `sessionGroup.create` handlers return strict application identities. Session
+results additionally project only requested `sibling | detached` intent and the
+resolved provider, target, generation, and presentation proof. The queue rejects
+a missing, extra, malformed, or command-mismatched handler result before marking
+success. `CommandJournal` stores the result in the same success transition before
+`command.succeeded` is recorded or published. Completion subscribers use the
+event only as a wake-up signal and reload the terminal record; events never copy
+the result. Successful legacy and result-less records remain valid, while failed
+records never carry a result.
 
 Terminal target resolution follows operation intent. Focus accepts only live
 provider targets, while close may select a provider-reported stale target so
@@ -837,8 +849,8 @@ repository per table. Add, split, combine, or remove a port only when use-case
 ownership changes. An operation that must be atomic remains one port method even
 when it changes several tables:
 
-- `CommandJournal` owns command acceptance, transitions, lookup, history, and
-  command errors.
+- `CommandJournal` owns command acceptance, transitions, lookup, history, strict
+  optional success results, and command errors.
 - `EventJournal` owns ordinary event recording and queries.
 - `IngressJournal` owns atomic dedupe plus event, atomic report acceptance
   across diagnostic observation/native binding/recovery/readiness, and atomic
@@ -924,7 +936,8 @@ ObserverApi lane composes fake providers, the real core, event bus, command
 queue, production handlers, and ingress against the in-memory adapter without
 importing SQLite. A mandatory production E2E smoke also runs the built CLI,
 persists a successful command through SQLite, restarts the Observer, and reloads
-the exact record. Production runtime composition remains SQLite-only.
+the exact record including any success result. Production runtime composition
+remains SQLite-only.
 
 Migration rules:
 

@@ -140,6 +140,86 @@ describe("observer command queue", () => {
     sqlite.close();
   });
 
+  it("persists a validated result before publishing command success", async () => {
+    const ids = commandIds();
+    const sqlite = openObserverSqlite({ clock: { now: () => new Date(now) } });
+    const persistence = createSqliteObserverPersistence({
+      sqlite,
+      clock: { now: () => new Date(now) },
+      idFactory: ids,
+    });
+    let recordAtSuccess: ReturnType<typeof persistence.getCommand> | undefined;
+    const queue = createCommandQueue({
+      persistence,
+      clock: { now: () => new Date(now) },
+      idFactory: ids,
+      eventBus: {
+        publish: (event) => {
+          if (event.type === "command.succeeded") {
+            recordAtSuccess = persistence.getCommand(event.commandId);
+          }
+        },
+      },
+    });
+    queue.registerHandler("worktree.create", async () => ({
+      type: "worktree.create",
+      projectId: "web",
+      worktreeId: "wt_created",
+    }));
+
+    await queue.dispatch(createWorktreeCommand);
+    await queue.drain();
+
+    await expect(recordAtSuccess).resolves.toMatchObject({
+      status: "succeeded",
+      result: {
+        type: "worktree.create",
+        projectId: "web",
+        worktreeId: "wt_created",
+      },
+    });
+    sqlite.close();
+  });
+
+  it("fails handlers that omit, mismatch, or invent command results", async () => {
+    const { sqlite, persistence, queue } = createPersistenceAndQueue();
+    queue.registerHandler("worktree.create", async () => undefined);
+    queue.registerHandler("sessionGroup.create", async () => ({
+      type: "worktree.create",
+      projectId: "web",
+      worktreeId: "wt_wrong",
+    }));
+    queue.registerHandler("observer.reconcile", async () => ({
+      type: "worktree.create",
+      projectId: "web",
+      worktreeId: "wt_unexpected",
+    }));
+
+    await Promise.all([
+      queue.dispatch(createWorktreeCommand),
+      queue.dispatch(createSessionGroupCommand),
+      queue.dispatch(reconcileCommand),
+    ]);
+    await queue.drain();
+
+    expect((await persistence.listCommands()).map((command) => command.status)).toEqual([
+      "failed",
+      "failed",
+      "failed",
+    ]);
+    for (const commandId of ["cmd_1", "cmd_2", "cmd_3"] as const) {
+      await expect(persistence.getCommand(commandId)).resolves.toMatchObject({
+        error: { code: "COMMAND_RESULT_INVALID" },
+      });
+      expect((await persistence.listEvents({ commandId })).map((event) => event.type)).toEqual([
+        "command.accepted",
+        "command.started",
+        "command.failed",
+      ]);
+    }
+    sqlite.close();
+  });
+
   it("records failed commands with SafeError and internal envelope records", async () => {
     const { sqlite, persistence, queue } = createPersistenceAndQueue();
     queue.registerHandler("observer.reconcile", async () => {
@@ -381,7 +461,18 @@ describe("observer command queue", () => {
       if (commandId === "cmd_1") await firstBlocked;
     };
     queue.registerHandler("sessionGroup.reparent", handler);
-    queue.registerHandler("sessionGroup.create", handler);
+    queue.registerHandler("sessionGroup.create", async (context) => {
+      await handler(context);
+      return {
+        type: "sessionGroup.create",
+        projectId:
+          context.command.type === "sessionGroup.create"
+            ? context.command.payload.projectId
+            : "unexpected",
+        groupId: `grp_${context.commandId}`,
+        version: 1,
+      };
+    });
 
     await Promise.all([
       queue.dispatch(reparentSessionGroupCommand),

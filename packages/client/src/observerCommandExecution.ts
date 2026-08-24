@@ -2,6 +2,7 @@ import type {
   CommandReceipt,
   SafeError,
   StationCommand,
+  StationCommandResult,
   StationSnapshot,
 } from "@station/contracts";
 import { toSafeError } from "./errors.js";
@@ -18,7 +19,7 @@ import type { ObserverService } from "./types.js";
 export type ObserverCommandExecutionResult =
   | { status: "rejected"; receipt: CommandReceipt; error: SafeError }
   | { status: "accepted"; receipt: CommandReceipt }
-  | { status: "succeeded"; receipt: CommandReceipt }
+  | { status: "succeeded"; receipt: CommandReceipt; result?: StationCommandResult }
   | { status: "failed"; receipt: CommandReceipt; error: SafeError }
   | { status: "thrown"; error: SafeError; receipt?: CommandReceipt };
 
@@ -70,17 +71,20 @@ export async function executeObserverCommand(
     const snapshot = command.type.startsWith("sessionGroup.")
       ? await service.loadSnapshot()
       : undefined;
-    return completion.status === "succeeded"
-      ? { status: "succeeded", receipt }
-      : {
-          status: "failed",
-          receipt,
-          error: normalizeGroupAssignmentConflict(
-            withReceiptIdentity(completion.error, receipt),
-            command,
-            snapshot,
-          ),
-        };
+    if (completion.status === "succeeded") {
+      const succeeded: ObserverCommandExecutionResult = { status: "succeeded", receipt };
+      if (completion.result !== undefined) succeeded.result = completion.result;
+      return succeeded;
+    }
+    return {
+      status: "failed",
+      receipt,
+      error: normalizeGroupAssignmentConflict(
+        withReceiptIdentity(completion.error, receipt),
+        command,
+        snapshot,
+      ),
+    };
   } catch (error: unknown) {
     return {
       status: "thrown",

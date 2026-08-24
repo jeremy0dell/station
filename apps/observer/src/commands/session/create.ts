@@ -16,9 +16,9 @@ import {
   resolveTerminalPlacementPortOrThrow,
   resolveTerminalProviderOrThrow,
 } from "../providers.js";
-import type { CommandHandler } from "../queue.js";
+import type { CommandResultHandler } from "../queue.js";
 import { reconcileAndPublish } from "../reconcile.js";
-import { ensureAgentWorkspace } from "../terminalOperations.js";
+import { commandPlacementResult, ensureAgentWorkspace } from "../terminalOperations.js";
 import {
   defaultSessionCommandIdFactory,
   discardSessionSeedBestEffort,
@@ -52,11 +52,12 @@ export type CreateSessionCreateHandlerOptions = {
  * seeds its independent title with optional atomic root Group placement or inline Group creation,
  * and launches its primary agent only after explicit placement authorization before
  * worktree mutation and revalidation before terminal mutation; rollback removes
- * only state owned by this command.
+ * only state owned by this command. Success returns the exact created identities
+ * and the provider-resolved placement projection.
  */
 export function createSessionCreateHandler(
   options: CreateSessionCreateHandlerOptions,
-): CommandHandler {
+): CommandResultHandler<"session.create"> {
   const idFactory = {
     ...defaultSessionCommandIdFactory,
     ...options.idFactory,
@@ -89,6 +90,7 @@ export function createSessionCreateHandler(
     let createdWorktree: WorktreeObservation | undefined;
     let sessionSeeded = false;
     let groupProvenance: SessionSeedGroupProvenance | undefined;
+    let placementResult: ReturnType<typeof commandPlacementResult>;
 
     try {
       // Authorization must be fresh at the first irreversible worktree mutation.
@@ -141,7 +143,7 @@ export function createSessionCreateHandler(
       groupProvenance = seed.groupProvenance;
       throwIfAborted(context.signal);
 
-      await ensureAgentWorkspace({
+      const resolvedPlacement = await ensureAgentWorkspace({
         terminal,
         harness,
         launchPreflight: options.launchPreflight,
@@ -157,6 +159,7 @@ export function createSessionCreateHandler(
         clock: options.clock,
         logger: options.logger,
       });
+      placementResult = commandPlacementResult(payload.placement, resolvedPlacement);
       throwIfAborted(context.signal);
     } catch (error) {
       if (isTerminalCleanupUncertain(error)) {
@@ -223,5 +226,12 @@ export function createSessionCreateHandler(
       context,
       clock: options.clock,
     });
+    return {
+      type: "session.create",
+      projectId: project.id,
+      worktreeId: createdWorktree.id,
+      sessionId,
+      ...placementResult,
+    };
   };
 }

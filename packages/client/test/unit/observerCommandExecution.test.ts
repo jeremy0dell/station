@@ -58,10 +58,25 @@ describe("executeObserverCommand", () => {
   });
 
   it("normalizes successful and failed completion exactly once", async () => {
-    const succeeded = commandService();
+    const succeeded = commandService({
+      completion: {
+        status: "succeeded",
+        commandId: "cmd_accepted",
+        result: {
+          type: "worktree.create",
+          projectId: "web",
+          worktreeId: "wt_client_result",
+        },
+      },
+    });
     await expect(executeObserverCommand(succeeded, command)).resolves.toMatchObject({
       status: "succeeded",
       receipt: { commandId: "cmd_accepted" },
+      result: {
+        type: "worktree.create",
+        projectId: "web",
+        worktreeId: "wt_client_result",
+      },
     });
     expect(succeeded.dispatch).toHaveBeenCalledTimes(1);
     expect(succeeded.waitForCommandCompletion).toHaveBeenCalledTimes(1);
