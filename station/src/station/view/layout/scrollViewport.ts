@@ -18,6 +18,46 @@ export function intersectingSemanticItems<ItemId extends string>(
     .map((item) => item.id);
 }
 
+/**
+ * Resolves a viewport against top-to-bottom, non-overlapping semantic boxes.
+ * Binary search keeps ordinary scroll synchronization proportional to visible content.
+ */
+export function intersectingOrderedSemanticItems<ItemId extends string>(
+  viewport: { readonly top: number; readonly bottom: number },
+  itemIds: readonly ItemId[],
+  geometryFor: (id: ItemId) => SemanticItemGeometry<ItemId> | undefined,
+): ItemId[] {
+  let low = 0;
+  let high = itemIds.length;
+  while (low < high) {
+    const middle = Math.floor((low + high) / 2);
+    const id = itemIds[middle];
+    const item = id === undefined ? undefined : geometryFor(id);
+    if (item === undefined) {
+      return intersectingSemanticItems(
+        viewport,
+        itemIds.flatMap((candidateId) => {
+          const candidate = geometryFor(candidateId);
+          return candidate === undefined ? [] : [candidate];
+        }),
+      );
+    }
+    if (item.bottom <= viewport.top) low = middle + 1;
+    else high = middle;
+  }
+
+  const visible: ItemId[] = [];
+  for (let index = low; index < itemIds.length; index += 1) {
+    const id = itemIds[index];
+    if (id === undefined) break;
+    const item = geometryFor(id);
+    if (item === undefined) continue;
+    if (item.top >= viewport.bottom) break;
+    if (item.bottom > viewport.top) visible.push(id);
+  }
+  return visible;
+}
+
 /** Cell delta that reveals a semantic box; oversized boxes align their leading edge. */
 export function semanticRevealDelta(
   viewport: { readonly top: number; readonly bottom: number },
@@ -77,15 +117,13 @@ export function createScrollViewportController<
   };
   const synchronize = (): void => {
     if (viewport === undefined || viewport.viewport.height <= 0) return;
-    const next = intersectingSemanticItems(
+    const next = intersectingOrderedSemanticItems(
       {
         top: viewport.viewport.y,
         bottom: viewport.viewport.y + viewport.viewport.height,
       },
-      orderedIds.flatMap((id) => {
-        const item = geometryFor(id);
-        return item === undefined ? [] : [item];
-      }),
+      orderedIds,
+      geometryFor,
     );
     if (sameIds(visibleIds, next)) return;
     visibleIds = next;

@@ -1,5 +1,9 @@
 import { describe, expect, it } from "bun:test";
-import { intersectingSemanticItems, semanticRevealDelta } from "./scrollViewport.js";
+import {
+  intersectingOrderedSemanticItems,
+  intersectingSemanticItems,
+  semanticRevealDelta,
+} from "./scrollViewport.js";
 
 describe("semantic scroll viewport", () => {
   it("resolves visibility from mixed-height coordinates instead of item count", () => {
@@ -44,5 +48,40 @@ describe("semantic scroll viewport", () => {
         "end",
       ),
     ).toBe(2);
+  });
+
+  it("bounds geometry work while scrolling and resizing a large mixed-height tree", () => {
+    const itemIds = Array.from({ length: 10_000 }, (_, index) => `item-${index}`);
+    let top = 0;
+    const geometry = itemIds.map((id, index) => {
+        const height = index % 2 === 0 ? 1 : 4;
+        const item = { id, top, bottom: top + height };
+        top += height;
+        return item;
+      });
+    const geometryById = new Map(geometry.map((item) => [item.id, item] as const));
+    let geometryReads = 0;
+    for (let experiment = 0; experiment < 200; experiment += 1) {
+      const viewportTop = (experiment * 113) % (top - 32);
+      const viewportHeight = 8 + (experiment % 24);
+      const visible = intersectingOrderedSemanticItems(
+        { top: viewportTop, bottom: viewportTop + viewportHeight },
+        itemIds,
+        (id) => {
+          geometryReads += 1;
+          return geometryById.get(id);
+        },
+      );
+      expect(visible).toEqual(
+        intersectingSemanticItems(
+          { top: viewportTop, bottom: viewportTop + viewportHeight },
+          geometry,
+        ),
+      );
+    }
+
+    // log2(10,000) needs 14 probes; an alternating 1/4-cell tree contributes at most
+    // 14 visible candidates to these windows. Forty reads leaves room for edge probes.
+    expect(geometryReads).toBeLessThanOrEqual(200 * 40);
   });
 });
