@@ -231,37 +231,7 @@ export const UpdateReapTerminalDispositionSchema = z
     reapRecovery: z.enum(["recoverable", "non-resumable", "unknown"]),
     reasons: orderedTerminalReasonsSchema,
   })
-  .strict()
-  .superRefine((disposition, context) => {
-    const handoffUnknown = disposition.reasons.includes("handoff_support_unknown");
-    if ((disposition.handoff === "unknown") !== handoffUnknown) {
-      context.addIssue({
-        code: "custom",
-        path: ["reasons"],
-        message: "Unknown handoff requires only its matching handoff reason.",
-      });
-    }
-
-    const recoveryReasons = disposition.reasons.filter(
-      (reason) => reason !== "handoff_support_unknown",
-    );
-    const allowedRecoveryReasons: readonly UpdateReapTerminalDispositionReason[] =
-      disposition.reapRecovery === "recoverable"
-        ? []
-        : disposition.reapRecovery === "non-resumable"
-          ? ["aux_terminal_not_resumable", "retained_session_missing", "session_non_resumable"]
-          : ["retained_session_identity_mismatch", "session_recovery_unknown"];
-    const recoveryReasonsAreCoherent =
-      recoveryReasons.length === (disposition.reapRecovery === "recoverable" ? 0 : 1) &&
-      recoveryReasons.every((reason) => allowedRecoveryReasons.includes(reason));
-    if (!recoveryReasonsAreCoherent) {
-      context.addIssue({
-        code: "custom",
-        path: ["reasons"],
-        message: "Terminal recovery reasons must match the recovery disposition.",
-      });
-    }
-  });
+  .strict();
 export type UpdateReapTerminalDisposition = z.infer<typeof UpdateReapTerminalDispositionSchema>;
 
 type UpdateReapEvidenceSet = {
@@ -361,35 +331,6 @@ export const UpdateReapRecoveryPreflightSchema = z
           path: ["terminalDispositions"],
           message: "Every inspected Host terminal must have exactly one disposition.",
         });
-      }
-      for (const [index, terminal] of preflight.host.terminals.entries()) {
-        const disposition = preflight.terminalDispositions[index];
-        if (disposition === undefined) continue;
-        const handoffMatches =
-          (terminal.handoffSupport === "bridge-releasable" &&
-            disposition.handoff === "preservable") ||
-          (terminal.handoffSupport === "non-releasable" &&
-            disposition.handoff === "non-preservable") ||
-          (terminal.handoffSupport === "unknown" && disposition.handoff === "unknown");
-        if (!handoffMatches) {
-          context.addIssue({
-            code: "custom",
-            path: ["terminalDispositions", index, "handoff"],
-            message: "Terminal handoff disposition must match normalized Host evidence.",
-          });
-        }
-        const auxiliaryIsCoherent =
-          terminal.kind === "aux"
-            ? disposition.reapRecovery === "non-resumable" &&
-              disposition.reasons.includes("aux_terminal_not_resumable")
-            : !disposition.reasons.includes("aux_terminal_not_resumable");
-        if (!auxiliaryIsCoherent) {
-          context.addIssue({
-            code: "custom",
-            path: ["terminalDispositions", index, "reapRecovery"],
-            message: "Auxiliary terminal recovery disposition must remain non-resumable.",
-          });
-        }
       }
     } else if (preflight.terminalDispositions.length > 0) {
       context.addIssue({

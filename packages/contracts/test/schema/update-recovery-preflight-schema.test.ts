@@ -1,6 +1,5 @@
 import {
   UpdateReapRecoveryPreflightSchema,
-  UpdateReapTerminalDispositionSchema,
   updateReapEvidenceIsComplete,
 } from "@station/contracts";
 import { describe, expect, it } from "vitest";
@@ -129,81 +128,6 @@ describe("UpdateReapRecoveryPreflightSchema", () => {
         ...preflight,
         terminalDispositions: [
           { ...preflight.terminalDispositions[0], sessionId: "different-session" },
-        ],
-      }).success,
-    ).toBe(false);
-  });
-
-  it.each([
-    {
-      name: "recoverable recovery with a blocking reason",
-      value: { ...preflight.terminalDispositions[0], reasons: ["session_non_resumable"] },
-    },
-    {
-      name: "non-resumable recovery with an unknown reason",
-      value: {
-        ...preflight.terminalDispositions[0],
-        reapRecovery: "non-resumable",
-        reasons: ["session_recovery_unknown"],
-      },
-    },
-    {
-      name: "unknown recovery with a non-resumable reason",
-      value: {
-        ...preflight.terminalDispositions[0],
-        reapRecovery: "unknown",
-        reasons: ["session_non_resumable"],
-      },
-    },
-    {
-      name: "unknown handoff without its reason",
-      value: { ...preflight.terminalDispositions[0], handoff: "unknown" },
-    },
-    {
-      name: "known handoff with an unknown-handoff reason",
-      value: { ...preflight.terminalDispositions[0], reasons: ["handoff_support_unknown"] },
-    },
-  ])("rejects $name", ({ value }) => {
-    expect(UpdateReapTerminalDispositionSchema.safeParse(value).success).toBe(false);
-  });
-
-  it("binds normalized handoff and auxiliary recovery facts to Host evidence", () => {
-    expect(
-      UpdateReapRecoveryPreflightSchema.safeParse({
-        ...preflight,
-        terminalDispositions: [{ ...preflight.terminalDispositions[0], handoff: "preservable" }],
-      }).success,
-    ).toBe(false);
-
-    const auxiliaryHost = {
-      ...preflight.host,
-      terminals: [{ ...preflight.host.terminals[0], kind: "aux" as const }],
-    };
-    expect(
-      UpdateReapRecoveryPreflightSchema.safeParse({ ...preflight, host: auxiliaryHost }).success,
-    ).toBe(false);
-    expect(
-      UpdateReapRecoveryPreflightSchema.safeParse({
-        ...preflight,
-        host: auxiliaryHost,
-        terminalDispositions: [
-          {
-            ...preflight.terminalDispositions[0],
-            reapRecovery: "non-resumable",
-            reasons: ["session_non_resumable"],
-          },
-        ],
-      }).success,
-    ).toBe(false);
-    expect(
-      UpdateReapRecoveryPreflightSchema.safeParse({
-        ...preflight,
-        terminalDispositions: [
-          {
-            ...preflight.terminalDispositions[0],
-            reapRecovery: "non-resumable",
-            reasons: ["aux_terminal_not_resumable"],
-          },
         ],
       }).success,
     ).toBe(false);

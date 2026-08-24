@@ -131,7 +131,56 @@ const observerPhaseSchema = z.union([
 export const UpdateConvergenceTerminalFactSchema = UpdateReapTerminalDispositionSchema.safeExtend({
   kind: PtyHandoffKindSchema,
   alive: z.boolean(),
-}).strict();
+})
+  .strict()
+  .superRefine((terminal, context) => {
+    const handoffReason = terminal.reasons.includes("handoff_support_unknown");
+    if ((terminal.handoff === "unknown") !== handoffReason) {
+      context.addIssue({
+        code: "custom",
+        path: ["handoff"],
+        message: "Terminal handoff and its unknown-support reason must agree.",
+      });
+    }
+
+    const recoveryReasons = terminal.reasons.filter(
+      (reason) => reason !== "handoff_support_unknown",
+    );
+    const recoveryIsCoherent =
+      terminal.reapRecovery === "recoverable"
+        ? recoveryReasons.length === 0
+        : terminal.reapRecovery === "non-resumable"
+          ? recoveryReasons.length === 1 &&
+            [
+              "aux_terminal_not_resumable",
+              "retained_session_missing",
+              "session_non_resumable",
+            ].includes(recoveryReasons[0] ?? "")
+          : recoveryReasons.length === 1 &&
+            ["retained_session_identity_mismatch", "session_recovery_unknown"].includes(
+              recoveryReasons[0] ?? "",
+            );
+    if (!recoveryIsCoherent) {
+      context.addIssue({
+        code: "custom",
+        path: ["reapRecovery"],
+        message: "Terminal recovery and its single typed consequence reason must agree.",
+      });
+    }
+
+    const auxiliaryReason = terminal.reasons.includes("aux_terminal_not_resumable");
+    const auxiliaryIsCoherent =
+      terminal.kind === "aux"
+        ? terminal.reapRecovery === "non-resumable" && auxiliaryReason
+        : !auxiliaryReason;
+    if (!auxiliaryIsCoherent) {
+      context.addIssue({
+        code: "custom",
+        path: ["reapRecovery"],
+        message: "Terminal kind and auxiliary recovery facts must agree.",
+      });
+    }
+  });
 export type UpdateConvergenceTerminalFact = z.infer<typeof UpdateConvergenceTerminalFactSchema>;
 
 const terminalFields = { terminals: z.array(UpdateConvergenceTerminalFactSchema) };

@@ -14501,6 +14501,13 @@
       "purpose": "Derives one deterministic, provider-neutral live-convergence plan from #639's aggregate and resolved intent. The result describes work only; it grants no process, lifecycle, or reap authority, and Observer ordering delegates to the build-only singleton precedence policy.",
       "dependencies": [
         {
+          "path": "apps/cli/src/update/recoveryTerminalDispositions.ts",
+          "declaration": "deriveUpdateRecoveryTerminalDispositions",
+          "kind": "function",
+          "role": "POLICY",
+          "edgeKind": "runtime"
+        },
+        {
           "path": "apps/observer/src/runtime/observerHandoff.ts",
           "declaration": "classifyObserverBuildPrecedence",
           "kind": "function",
@@ -14594,6 +14601,13 @@
           "kind": "type",
           "role": "DRIVEN PORT",
           "edgeKind": "type-only"
+        },
+        {
+          "path": "apps/cli/src/update/recoveryTerminalDispositions.ts",
+          "declaration": "deriveUpdateRecoveryTerminalDispositions",
+          "kind": "function",
+          "role": "POLICY",
+          "edgeKind": "runtime"
         }
       ]
     },
@@ -14669,6 +14683,14 @@
           "edgeKind": "runtime"
         }
       ]
+    },
+    {
+      "path": "apps/cli/src/update/recoveryTerminalDispositions.ts",
+      "declaration": "deriveUpdateRecoveryTerminalDispositions",
+      "kind": "function",
+      "role": "POLICY",
+      "purpose": "Derives the one canonical set of terminal handoff and recovery dispositions from #639's raw aggregate evidence. The result describes consequences only and grants no recovery or reap authority.",
+      "dependencies": []
     },
     {
       "path": "apps/cli/src/update/updateChannel.ts",

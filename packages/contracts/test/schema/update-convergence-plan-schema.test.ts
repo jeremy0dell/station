@@ -304,6 +304,102 @@ describe("UpdateConvergencePlanSchema", () => {
     ).toBe(false);
   });
 
+  it("rejects local auxiliary recovery contradictions in either direction", () => {
+    const plan = convergedPlan({
+      outcome: "reap-required",
+      phases: {
+        ...convergedPlan().phases,
+        terminalConvergence: {
+          action: "reap-required",
+          reason: "non-preservable-terminals",
+          terminals: [
+            terminalFact({
+              kind: "aux",
+              reapRecovery: "non-resumable",
+              reasons: ["aux_terminal_not_resumable"],
+            }),
+          ],
+        },
+      },
+    });
+    expect(UpdateConvergencePlanSchema.safeParse(plan).success).toBe(true);
+
+    const auxiliaryWithoutItsReason = {
+      ...plan,
+      phases: {
+        ...plan.phases,
+        terminalConvergence: {
+          ...plan.phases.terminalConvergence,
+          terminals: [terminalFact({ kind: "aux", reapRecovery: "non-resumable", reasons: [] })],
+        },
+      },
+    };
+    expect(UpdateConvergencePlanSchema.safeParse(auxiliaryWithoutItsReason).success).toBe(false);
+
+    const recoverableAuxiliary = {
+      ...plan,
+      phases: {
+        ...plan.phases,
+        terminalConvergence: {
+          ...plan.phases.terminalConvergence,
+          terminals: [
+            terminalFact({
+              kind: "aux",
+              reapRecovery: "recoverable",
+              reasons: ["aux_terminal_not_resumable"],
+            }),
+          ],
+        },
+      },
+    };
+    expect(UpdateConvergencePlanSchema.safeParse(recoverableAuxiliary).success).toBe(false);
+
+    const agentWithAuxiliaryReason = {
+      ...plan,
+      phases: {
+        ...plan.phases,
+        terminalConvergence: {
+          ...plan.phases.terminalConvergence,
+          terminals: [terminalFact({ reasons: ["aux_terminal_not_resumable"] })],
+        },
+      },
+    };
+    expect(UpdateConvergencePlanSchema.safeParse(agentWithAuxiliaryReason).success).toBe(false);
+  });
+
+  it.each([
+    {
+      name: "recoverable terminal with a blocking recovery reason",
+      terminal: terminalFact({
+        reapRecovery: "recoverable",
+        reasons: ["session_non_resumable"],
+      }),
+    },
+    {
+      name: "known handoff with the unknown-support reason",
+      terminal: terminalFact({
+        reasons: ["handoff_support_unknown", "session_non_resumable"],
+      }),
+    },
+    {
+      name: "unknown handoff without the unknown-support reason",
+      terminal: terminalFact({ handoff: "unknown" }),
+    },
+  ])("rejects a produced fact with $name", ({ terminal }) => {
+    const plan = convergedPlan({
+      outcome: "reap-required",
+      phases: {
+        ...convergedPlan().phases,
+        terminalConvergence: {
+          action: "reap-required",
+          reason: "non-preservable-terminals",
+          terminals: [terminal],
+        },
+      },
+    });
+    expect(UpdateConvergencePlanSchema.safeParse(plan).success).toBe(false);
+  });
+
   it.each([
     ["schemaVersion", 4],
     ["digest", { algorithm: "sha256", value: buildIdentity }],

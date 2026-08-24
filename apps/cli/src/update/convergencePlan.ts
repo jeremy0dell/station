@@ -2,9 +2,12 @@ import type {
   UpdateConvergencePlan,
   UpdateConvergencePlanningInput,
   UpdateConvergenceTerminalFact,
+  UpdateReapTerminalDisposition,
 } from "@station/contracts";
+import { compareUpdateReapTerminalIdentity } from "@station/contracts";
 import { classifyObserverBuildPrecedence } from "@station/observer/internal";
 import { parseStationObserverBuildVersion } from "@station/runtime";
+import { deriveUpdateRecoveryTerminalDispositions } from "./recoveryTerminalDispositions.js";
 
 type Phases = UpdateConvergencePlan["phases"];
 type HostPhases = Pick<Phases, "terminalConvergence" | "hostConvergence">;
@@ -29,7 +32,13 @@ export function deriveUpdateConvergencePlan(
   const hookReconciliation = hookDecision(input, artifactApplication.action !== "no-op");
   const runtimeValid = selectedRuntimeIsValid(input);
   const observerConvergence = observerDecision(input, runtimeValid);
-  const hostPhases = hostDecision(input, runtimeValid);
+  const terminalDispositions = deriveUpdateRecoveryTerminalDispositions(input.preflight);
+  const hostPhases = hostDecision(
+    input,
+    runtimeValid,
+    terminalDispositions,
+    terminalDispositionsMatch(input.preflight.terminalDispositions, terminalDispositions),
+  );
   const outcome = planOutcome({
     artifactApplication,
     hookReconciliation,
@@ -135,13 +144,13 @@ function observerDecision(
   if (observer.status === "unknown") {
     return { action: "blocked", reason: "evidence-unknown" };
   }
-  if (observer.status === "exact" && observer.relation === "unknown") {
-    return { action: "blocked", reason: "evidence-unknown" };
-  }
   if (input.targetRuntime.status === "not-yet-provable") {
     return { action: "reinspect", reason: "target-build-not-yet-provable" };
   }
   if (observer.status === "absent") return { action: "start", reason: "absent" };
+  if (observer.relation === "unknown") {
+    return { action: "blocked", reason: "evidence-unknown" };
+  }
   const precedence = classifyObserverBuildPrecedence({
     candidateSelector: input.targetRuntime.observerSelector,
     incumbentSelector: observer.buildVersion,
@@ -164,9 +173,14 @@ function observerDecision(
     : { action: "blocked", reason: "singleton-refused", precedence: precedence.outcome };
 }
 
-function hostDecision(input: UpdateConvergencePlanningInput, runtimeValid: boolean): HostPhases {
+function hostDecision(
+  input: UpdateConvergencePlanningInput,
+  runtimeValid: boolean,
+  terminalDispositions: UpdateReapTerminalDisposition[],
+  terminalDispositionsAreCanonical: boolean,
+): HostPhases {
   const host = input.preflight.host;
-  const terminals = terminalFacts(input);
+  const terminals = terminalFacts(input, terminalDispositions);
   const pair = (
     terminal: TerminalPhaseWithoutFacts,
     hostDecision: Phases["hostConvergence"],
@@ -182,10 +196,13 @@ function hostDecision(input: UpdateConvergencePlanningInput, runtimeValid: boole
   if (!runtimeValid) return blocked("evidence-contradictory", "evidence-contradictory");
   if (host.status === "absent")
     return pair({ action: "no-op", reason: "no-terminals" }, { action: "no-op", reason: "absent" });
+  if (!terminalDispositionsAreCanonical) {
+    return blocked("evidence-contradictory", "evidence-contradictory");
+  }
   if (host.status === "inspected" && host.terminals.some((terminal) => !terminal.alive)) {
     return blocked("evidence-contradictory", "evidence-contradictory");
   }
-  if (host.status === "inspected" && hostRelationContradictsTarget(input, host)) {
+  if (host.status === "inspected" && hostEvidenceContradictsTarget(input, host)) {
     return blocked("evidence-contradictory", "evidence-contradictory");
   }
   if (
@@ -206,7 +223,7 @@ function hostDecision(input: UpdateConvergencePlanningInput, runtimeValid: boole
     );
   }
   if (host.status === "unknown") return blocked("inventory-incomplete", "inventory-incomplete");
-  if (host.relation === "unknown") return blocked("identity-incomplete", "inventory-incomplete");
+  if (host.compatibility === "refuse") return blocked("protocol-refused", "inventory-incomplete");
   if (input.targetRuntime.status === "not-yet-provable") {
     if (
       host.relation !== "different" ||
@@ -236,8 +253,8 @@ function hostDecision(input: UpdateConvergencePlanningInput, runtimeValid: boole
       { action: "reinspect", reason: "target-build-not-yet-provable" },
     );
   }
-  if (host.compatibility === "refuse") return blocked("protocol-refused", "inventory-incomplete");
-  if (host.relation !== "different" || !hostReplacementIsSupported(input, host)) {
+  if (host.relation === "unknown") return blocked("identity-incomplete", "inventory-incomplete");
+  if (host.relation !== "different") {
     return blocked("evidence-contradictory", "evidence-contradictory");
   }
   if (terminals.length === 0)
@@ -264,36 +281,33 @@ function hostDecision(input: UpdateConvergencePlanningInput, runtimeValid: boole
   );
 }
 
-function hostRelationContradictsTarget(
+function hostEvidenceContradictsTarget(
   input: UpdateConvergencePlanningInput,
   host: Extract<UpdateConvergencePlanningInput["preflight"]["host"], { status: "inspected" }>,
 ): boolean {
-  if (input.targetRuntime.status === "not-yet-provable" || host.relation === "unknown")
-    return false;
-  const displayMatches = host.buildVersion === input.preflight.target.version;
+  const buildVersion = host.buildVersion;
+  if (buildVersion === undefined) {
+    return host.relation !== "unknown" || host.compatibility !== "refuse";
+  }
+  const displayMatches = buildVersion === input.preflight.target.version;
+  if (host.compatibility === "reuse" && !displayMatches) return true;
+  if (host.compatibility === "replace" && displayMatches) return true;
+  if (!displayMatches) return host.relation !== "different";
+  if (host.buildIdentity === undefined) return host.relation !== "unknown";
+  if (input.targetRuntime.status === "not-yet-provable") {
+    return host.relation === "matching-target";
+  }
   const identityMatches = host.buildIdentity === input.targetRuntime.buildIdentity;
-  if (host.relation === "matching-target") return !displayMatches || !identityMatches;
-  return identityMatches || (displayMatches && host.buildIdentity === undefined);
+  return identityMatches ? host.relation !== "matching-target" : host.relation !== "different";
 }
 
-function hostReplacementIsSupported(
+function terminalFacts(
   input: UpdateConvergencePlanningInput,
-  host: Extract<UpdateConvergencePlanningInput["preflight"]["host"], { status: "inspected" }>,
-): boolean {
-  if (input.targetRuntime.status !== "known") return false;
-  if (host.compatibility === "replace") return true;
-  return (
-    host.compatibility === "reuse" &&
-    host.buildVersion === input.preflight.target.version &&
-    host.buildIdentity !== undefined &&
-    host.buildIdentity !== input.targetRuntime.buildIdentity
-  );
-}
-
-function terminalFacts(input: UpdateConvergencePlanningInput): UpdateConvergenceTerminalFact[] {
+  terminalDispositions: UpdateReapTerminalDisposition[],
+): UpdateConvergenceTerminalFact[] {
   if (input.preflight.host.status !== "inspected") return [];
   return input.preflight.host.terminals.map((terminal, index) => {
-    const disposition = input.preflight.terminalDispositions[index];
+    const disposition = terminalDispositions[index];
     if (disposition === undefined)
       throw new Error("Parsed update preflight omitted a terminal disposition.");
     return {
@@ -308,6 +322,27 @@ function terminalFacts(input: UpdateConvergencePlanningInput): UpdateConvergence
       reasons: disposition.reasons,
     };
   });
+}
+
+function terminalDispositionsMatch(
+  supplied: readonly UpdateReapTerminalDisposition[],
+  canonical: readonly UpdateReapTerminalDisposition[],
+): boolean {
+  return (
+    supplied.length === canonical.length &&
+    supplied.every((disposition, index) => {
+      const expected = canonical[index];
+      return (
+        expected !== undefined &&
+        compareUpdateReapTerminalIdentity(disposition, expected) === 0 &&
+        disposition.sessionId === expected.sessionId &&
+        disposition.handoff === expected.handoff &&
+        disposition.reapRecovery === expected.reapRecovery &&
+        disposition.reasons.length === expected.reasons.length &&
+        disposition.reasons.every((reason, reasonIndex) => reason === expected.reasons[reasonIndex])
+      );
+    })
+  );
 }
 
 function planOutcome(

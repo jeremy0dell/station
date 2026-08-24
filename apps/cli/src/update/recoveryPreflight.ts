@@ -10,11 +10,10 @@ import {
   type UpdateReapObserverEvidence,
   type UpdateReapRecoveryPreflight,
   UpdateReapRecoveryPreflightSchema,
-  type UpdateReapTerminalDisposition,
-  type UpdateReapTerminalDispositionReason,
   updateReapEvidenceIsComplete,
 } from "@station/contracts";
 import { publicSafeErrorFromUnknown } from "@station/runtime";
+import { deriveUpdateRecoveryTerminalDispositions } from "./recoveryTerminalDispositions.js";
 
 /**
  * DRIVEN PORT
@@ -55,7 +54,7 @@ export async function runUpdateRecoveryPreflight(input: {
   const hooks = await Promise.all(
     hookProviderIds.map((provider) => inspectHook(input.ports, provider)),
   );
-  const terminalDispositions = terminalDispositionsFor(host, observer);
+  const terminalDispositions = deriveUpdateRecoveryTerminalDispositions({ host, observer });
   const evidence = {
     observer,
     host,
@@ -151,71 +150,6 @@ function providersForHookInspection(
     }
   }
   return Array.from(providers).sort(compareCodeUnitStrings);
-}
-
-function terminalDispositionsFor(
-  host: UpdateReapHostEvidence,
-  observer: UpdateReapObserverEvidence,
-): UpdateReapTerminalDisposition[] {
-  if (host.status !== "inspected") return [];
-  const sessions = new Map(
-    observer.status === "exact" && observer.recovery.status === "assessed"
-      ? observer.recovery.assessment.sessions.map((session) => [session.sessionId, session])
-      : [],
-  );
-  return host.terminals
-    .map((terminal): UpdateReapTerminalDisposition => {
-      const reasons: UpdateReapTerminalDispositionReason[] = [];
-      const handoff =
-        terminal.handoffSupport === "bridge-releasable"
-          ? "preservable"
-          : terminal.handoffSupport === "non-releasable"
-            ? "non-preservable"
-            : "unknown";
-      if (handoff === "unknown") reasons.push("handoff_support_unknown");
-
-      const session = sessions.get(terminal.sessionId);
-      let reapRecovery: UpdateReapTerminalDisposition["reapRecovery"];
-      if (terminal.kind === "aux") {
-        reapRecovery = "non-resumable";
-        reasons.push("aux_terminal_not_resumable");
-      } else if (session === undefined) {
-        reapRecovery =
-          observer.status === "exact" && observer.recovery.status === "assessed"
-            ? "non-resumable"
-            : "unknown";
-        reasons.push(
-          reapRecovery === "non-resumable"
-            ? "retained_session_missing"
-            : "session_recovery_unknown",
-        );
-      } else if (
-        session.projectId !== terminal.projectId ||
-        session.worktreeId !== terminal.worktreeId ||
-        session.harnessProvider !== terminal.harnessProvider
-      ) {
-        reapRecovery = "unknown";
-        reasons.push("retained_session_identity_mismatch");
-      } else if (session.disposition === "recoverable") {
-        reapRecovery = "recoverable";
-      } else if (session.disposition === "unknown") {
-        reapRecovery = "unknown";
-        reasons.push("session_recovery_unknown");
-      } else {
-        reapRecovery = "non-resumable";
-        reasons.push("session_non_resumable");
-      }
-      return {
-        terminalTargetId: terminal.terminalTargetId,
-        ptyId: terminal.ptyId,
-        ptyInstanceId: terminal.ptyInstanceId,
-        sessionId: terminal.sessionId,
-        handoff,
-        reapRecovery,
-        reasons: Array.from(new Set(reasons)).sort(compareCodeUnitStrings),
-      };
-    })
-    .sort(compareUpdateReapTerminalIdentity);
 }
 
 export function redactedPreflightError(
