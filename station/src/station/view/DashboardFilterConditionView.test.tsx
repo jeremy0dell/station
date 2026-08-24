@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { type BaseRenderable, type BoxRenderable, rgbToHex, TextRenderable } from "@opentui/core";
+import {
+  type BaseRenderable,
+  type BoxRenderable,
+  rgbToHex,
+  TextRenderable,
+} from "@opentui/core";
 import { MouseButtons } from "@opentui/core/testing";
 import { testRender } from "@opentui/react/test-utils";
 import type { DashboardScreenView } from "@station/dashboard-core/state";
@@ -70,7 +75,10 @@ async function renderCondition(
     { width: 50, height: 10 },
   );
   teardowns.push(() => setup.renderer.destroy());
-  await act(async () => setup.renderOnce());
+  await act(async () => {
+    await setup.renderOnce();
+    await setup.flush();
+  });
   return { setup, targets };
 }
 
@@ -87,6 +95,10 @@ describe("DashboardFilterConditionView", () => {
     expect(frame).toContain("Working ›");
     expect(frame).toContain("P Project");
     expect(frame).toContain("Any ›");
+    const panel = setup.renderer.root.findDescendantById(
+      FILTER_CONDITION_PANEL_ID,
+    ) as BoxRenderable;
+    expect(panel.height).toBeLessThan(setup.renderer.height);
     const spans = setup.captureSpans().lines.flatMap((line) => line.spans);
     const fieldColors = ["Status", "Project", "Agent"].map((label) => {
       const span = spans.find((candidate) => candidate.text.includes(label));
@@ -216,7 +228,6 @@ describe("DashboardFilterConditionView", () => {
     );
     await act(async () => {
       await setup.flush();
-      await setup.renderOnce();
     });
 
     const frame = setup.captureCharFrame();
@@ -241,7 +252,6 @@ describe("DashboardFilterConditionView", () => {
     await act(async () => {
       setup.renderer.resize(50, 8);
       await setup.flush();
-      await setup.renderOnce();
     });
     expect(panel.height).toBeLessThanOrEqual(5);
     expect(setup.captureCharFrame()).toContain("▸ e [✓] Project 13");

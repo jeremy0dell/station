@@ -327,7 +327,18 @@ const CASES: ModalCase[] = [
     name: "persistent filter condition fields at minimum size",
     keys: [{ input: "/" }, { input: "i", ctrl: true }],
     size: { width: 40, height: 12 },
-    expect: ["FILTER CONDITIONS", "S Status", "P Project", "A Agent", "F apply"],
+    expect: ["FILTER CONDITIONS", "S Status", "Apply filter (F)", "F apply"],
+  },
+  {
+    name: "persistent filter follows the final field at minimum size",
+    keys: [
+      { input: "/" },
+      { input: "i", ctrl: true },
+      { input: "", downArrow: true },
+      { input: "", downArrow: true },
+    ],
+    size: { width: 40, height: 12 },
+    expect: ["FILTER CONDITIONS", "▸ A Agent", "Apply filter (F)", "F apply"],
   },
   {
     name: "persistent filter status condition values",
@@ -1104,7 +1115,6 @@ describe("modal flow golden frames", () => {
       await Promise.resolve();
     });
     await setup.flush();
-    await setup.renderOnce();
     const values = conditionPanelGeometry(setup.renderer.root);
     expect(values).toMatchObject({ x: fields.x, y: fields.y, width: fields.width });
     expect(values.height).toBeGreaterThan(fields.height);
@@ -1115,7 +1125,6 @@ describe("modal flow golden frames", () => {
       await Promise.resolve();
     });
     await setup.flush();
-    await setup.renderOnce();
     expect(conditionPanelGeometry(setup.renderer.root)).toEqual(fields);
     expect(setup.captureCharFrame()).toMatchSnapshot();
   });

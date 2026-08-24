@@ -381,6 +381,38 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 "
 `;
 
+exports[`modal flow golden frames renders the persistent filter condition fields at minimum size 1`] = `
+"                                        
+FLEET  ● 0 ready  ⠋ 2 working  ! 0      
+─────────────────────────────────────── 
+▏ FILTER /▏               10/10 matches 
+┌────────────────────────────────┐] [▾] 
+│ FILTER CONDITIONS           [×]│      
+│▸ S Status                 Any ›│t     
+│                                │      
+│  Apply filter (F)              │g     
+└────────────────────────────────┘      
+─────────────────────────────────────── 
+ CONDITION  S/P/A edit F apply Esc text 
+"
+`;
+
+exports[`modal flow golden frames renders the persistent filter follows the final field at minimum size 1`] = `
+"                                        
+FLEET  ● 0 ready  ⠋ 2 working  ! 0      
+─────────────────────────────────────── 
+▏ FILTER /▏               10/10 matches 
+┌────────────────────────────────┐] [▾] 
+│ FILTER CONDITIONS           [×]│      
+│▸ A Agent                  Any ›│t     
+│                                │      
+│  Apply filter (F)              │g     
+└────────────────────────────────┘      
+─────────────────────────────────────── 
+ CONDITION  S/P/A edit F apply Esc text 
+"
+`;
+
 exports[`modal flow golden frames renders the persistent filter status condition values 1`] = `
 "                                                                                
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
@@ -505,6 +537,50 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 │                                                                              │
 │                                                                              │
 │ ↑↓ move   ↵ select   1-9/a-z jump   Esc cancel                               │
+└──────────────────────────────────────────────────────────────────────────────┘
+"
+`;
+
+exports[`modal flow golden frames renders the new session project picker reaches beyond the shortcut alphabet 1`] = `
+"
+FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle
+───────────────────────────────────────────────────────────────────────────────
+       SESSION                                 AGENT     STATUS       DIFF · PR
+ ▼ sheet-project-00  5 sessions · 4 agents                        [sh] [qs] [▾]
+ no sessions yet · [ + add session ]
+
+ ▼ sheet-project-01  5 sessions · 4 agents                        [sh] [qs] [▾]
+ no sessions yet · [ + add session ]
+
+ ▼ sheet-project-02  5 sessions · 4 agents                        [sh] [qs] [▾]
+ no sessions yet · [ + add session ]
+
+ ▼ sheet-project-03  5 sessions · 4 agents                        [sh] [qs] [▾]
+ no sessions yet · [ + add session ]
+
+ ▼ sheet-project-04  5 sessions · 4 agents                        [sh] [qs] [▾]
+ no sessions yet · [ + add session ]
+
+ ▼ sheet-project-05  5 sessions · 4 agents                        [sh] [qs] [▾]
+ no sessions yet · [ + add session ]
+
+ ▼ sheet-project-06  5 sessions · 4 agents                        [sh] [qs] [▾]
+ no sessions yet · [ + add session ]
+
+ ▼ sheet-project-07  5 sessions · 4 agents                        [sh] [qs] [▾]
+ no sessions yet · [ + add session ]
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ Choose Project                                                               │
+│  x sheet-project-32 healthy                                                  │
+│  y sheet-project-33 healthy                                                  │
+│  z sheet-project-34 healthy                                                  │
+│    sheet-project-35 healthy                                                  │
+│    sheet-project-36 healthy                                                  │
+│    sheet-project-37 healthy                                                  │
+│    sheet-project-38 healthy                                                  │
+│▸   sheet-project-39 healthy                                                  │
+│ ↑↓ move   ↵ select   1-9/a-z jump   Esc back                                 │
 └──────────────────────────────────────────────────────────────────────────────┘
 "
 `;
@@ -2145,22 +2221,6 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 "
 `;
 
-exports[`modal flow golden frames renders the persistent filter condition fields at minimum size 1`] = `
-"                                        
-FLEET  ● 0 ready  ⠋ 2 working  ! 0      
-─────────────────────────────────────── 
-▏ FILTER /▏               10/10 matches 
-┌────────────────────────────────┐] [▾] 
-│ FILTER CONDITIONS           [×]│      
-│▸ S Status                 Any ›│t     
-│  P Project                Any ›│      
-│  A Agent                  Any ›│g     
-└────────────────────────────────┘      
-─────────────────────────────────────── 
- CONDITION  S/P/A edit F apply Esc text 
-"
-`;
-
 exports[`modal flow golden frames keeps the condition popover anchored through an intrinsic stage transition 1`] = `
 "                                                                                
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
@@ -2242,49 +2302,5 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
  no sessions yet · [ + add session ]                                            
 ─────────────────────────────────────────────────────────────────────────────── 
  CONDITION   S/P/A edit  ↑↓ move  Enter select  F apply filter  Esc text        
-"
-`;
-
-exports[`modal flow golden frames renders the new session project picker reaches beyond the shortcut alphabet 1`] = `
-"
-FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle
-───────────────────────────────────────────────────────────────────────────────
-       SESSION                                 AGENT     STATUS       DIFF · PR
- ▼ sheet-project-00  5 sessions · 4 agents                        [sh] [qs] [▾]
- no sessions yet · [ + add session ]
-
- ▼ sheet-project-01  5 sessions · 4 agents                        [sh] [qs] [▾]
- no sessions yet · [ + add session ]
-
- ▼ sheet-project-02  5 sessions · 4 agents                        [sh] [qs] [▾]
- no sessions yet · [ + add session ]
-
- ▼ sheet-project-03  5 sessions · 4 agents                        [sh] [qs] [▾]
- no sessions yet · [ + add session ]
-
- ▼ sheet-project-04  5 sessions · 4 agents                        [sh] [qs] [▾]
- no sessions yet · [ + add session ]
-
- ▼ sheet-project-05  5 sessions · 4 agents                        [sh] [qs] [▾]
- no sessions yet · [ + add session ]
-
- ▼ sheet-project-06  5 sessions · 4 agents                        [sh] [qs] [▾]
- no sessions yet · [ + add session ]
-
- ▼ sheet-project-07  5 sessions · 4 agents                        [sh] [qs] [▾]
- no sessions yet · [ + add session ]
-
-┌──────────────────────────────────────────────────────────────────────────────┐
-│ Choose Project                                                               │
-│  x sheet-project-32 healthy                                                  │
-│  y sheet-project-33 healthy                                                  │
-│  z sheet-project-34 healthy                                                  │
-│    sheet-project-35 healthy                                                  │
-│    sheet-project-36 healthy                                                  │
-│    sheet-project-37 healthy                                                  │
-│    sheet-project-38 healthy                                                  │
-│▸   sheet-project-39 healthy                                                  │
-│ ↑↓ move   ↵ select   1-9/a-z jump   Esc back                                 │
-└──────────────────────────────────────────────────────────────────────────────┘
 "
 `;

@@ -22,6 +22,7 @@ import {
 } from "./stationMouseContext.js";
 
 export const FILTER_CONDITION_PANEL_ID = "station-filter-condition-panel";
+const FILTER_CONDITION_VIEWPORT_ID = "station-filter-condition-viewport";
 
 export function DashboardFilterConditionView({
   screen,
@@ -34,8 +35,18 @@ export function DashboardFilterConditionView({
 }) {
   const theme = useStationTheme();
   const dispatch = useStationMouse();
-  const panelRef = useAncestorBoundedHeight(boundaryId);
   const model = dashboardFilterConditionPanelModel({ screen });
+  const contentIdentity =
+    model === undefined
+      ? "absent"
+      : `${model.title}\u0000${model.rows.map((row) => row.id).join("\u0000")}\u0000${model.actions
+          .map((action) => action.id)
+          .join("\u0000")}`;
+  const panelRef = useAncestorBoundedHeight(
+    boundaryId,
+    FILTER_CONDITION_VIEWPORT_ID,
+    contentIdentity,
+  );
   if (model === undefined) return null;
   const background = toOpenTuiOpaqueColor(theme.filter.conditionSurface);
   const frame = filterConditionFrame(columns, model.rows.map((row) => row.label));
@@ -57,6 +68,7 @@ export function DashboardFilterConditionView({
         itemIds={model.rows.map((row) => row.id)}
         followedItemId={followedRowId}
         fill={false}
+        viewportId={FILTER_CONDITION_VIEWPORT_ID}
       >
         {model.emptyMessage === undefined ? (
           model.rows.map((row) => (
@@ -70,6 +82,7 @@ export function DashboardFilterConditionView({
         ) : (
           <text
             width="100%"
+            flexShrink={0}
             fg={toOpenTuiColor(theme.text.muted)}
             bg={background}
             selectable={false}
@@ -127,6 +140,7 @@ function ConditionPanelRow({
       <text
         id={semanticItemRenderableId(row.id)}
         width="100%"
+        flexShrink={0}
         fg={toOpenTuiColor(theme.text.primary)}
         bg={rowBackground}
         selectable={false}
@@ -154,6 +168,7 @@ function ConditionPanelRow({
     <text
       id={semanticItemRenderableId(row.id)}
       width="100%"
+      flexShrink={0}
       fg={toOpenTuiColor(theme.text.primary)}
       bg={rowBackground}
       selectable={false}
