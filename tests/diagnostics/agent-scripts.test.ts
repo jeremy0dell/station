@@ -1491,6 +1491,7 @@ describe("tui dev script", () => {
     expect(stationPackage.scripts?.station).toContain("bun run --cwd .. build:ensure");
     expect(stationPackage.scripts?.station).toContain("bun run repair:node-pty");
     expect(nodePtyRepairScript).toContain("bun install --frozen-lockfile");
+    expect(isolatedScript).toContain("STATION_DEV_TOOLCHAIN_PREPARED_ROOT:-");
 
     const frozenInstall = isolatedScript.indexOf("bun install --frozen-lockfile");
     expect(isolatedScript).toContain("unset STATION_OPENCODE_PLUGIN_BODY_PATH");

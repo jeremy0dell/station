@@ -13,8 +13,9 @@ for the CLI, Observer, and default PTY bridge.
 - OpenTUI: `@opentui/core@0.4.1`, `@opentui/react@0.4.1`
 - React: `19.2.7`
 
-The host scripts check dependencies and fail clearly. They do not install Bun,
-Node, Zig, OpenTUI, or native requirements on the host machine.
+The root `station:devbox` command activates the repository Bun and Node versions
+for its child process and performs the frozen root install. Other host scripts
+do not install Bun, Node, Zig, OpenTUI, or native requirements on the host machine.
 
 ## Run In Container
 

@@ -3,6 +3,11 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { assertBunVersion, requiredBunVersion } from "../../scripts/bun-version.mjs";
+import {
+  devboxRequiresInstall,
+  nodeVersionSatisfiesPolicy,
+  parseNodePolicy,
+} from "../../scripts/run-dev-toolchain.mjs";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const internalDependencies = [
@@ -48,6 +53,9 @@ describe("Bun workspace policy", () => {
     expect(rootPackage.scripts["station:link"]).toBe(
       "bun run build:ensure && bun link && bun run build:ensure",
     );
+    expect(rootPackage.scripts["station:devbox"]).toBe(
+      "bun scripts/run-dev-toolchain.mjs scripts/station-devbox.mjs",
+    );
   });
 
   it("parses and enforces only an exact Bun package-manager version", async () => {
@@ -56,6 +64,19 @@ describe("Bun workspace policy", () => {
     expect(() => assertBunVersion("1.3.14", "1.4.0")).toThrow(
       "Station requires Bun 1.4.0; found 1.3.14.",
     );
+  });
+
+  it("bootstraps the source Node policy and installs only for devbox launch commands", () => {
+    const policy = parseNodePolicy(">=24.2 <25", "24");
+    expect(nodeVersionSatisfiesPolicy("v24.2.0", policy)).toBe(true);
+    expect(nodeVersionSatisfiesPolicy("24.19.0", policy)).toBe(true);
+    expect(nodeVersionSatisfiesPolicy("24.1.9", policy)).toBe(false);
+    expect(nodeVersionSatisfiesPolicy("25.0.0", policy)).toBe(false);
+
+    expect(devboxRequiresInstall(["scripts/station-devbox.mjs", "dev"])).toBe(true);
+    expect(devboxRequiresInstall(["scripts/station-devbox.mjs", "tmux", "start"])).toBe(true);
+    expect(devboxRequiresInstall(["scripts/station-devbox.mjs", "status"])).toBe(false);
+    expect(devboxRequiresInstall(["scripts/station-devbox.mjs", "stop"])).toBe(false);
   });
 
   it("declares Station's direct internal graph and required OpenTUI peer explicitly", () => {

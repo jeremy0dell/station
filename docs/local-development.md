@@ -13,9 +13,13 @@ Station devbox with UI hot reload:
 
 ```sh
 cd /path/to/the-worktree
-test -d node_modules || bun install --frozen-lockfile
 bun run station:devbox dev
 ```
+
+This command reads the checkout's `packageManager`, Node engine, and
+`.node-version`, activates those repository runtimes for the child process, and
+runs one frozen root install before building. It does not replace the runtimes
+selected in your parent shell.
 
 The command builds this checkout and gives it a private `.dev-state`, Observer,
 Station Host, socket, provider homes, and hook configuration. Another checkout's

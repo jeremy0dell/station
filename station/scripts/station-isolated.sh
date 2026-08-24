@@ -91,12 +91,15 @@ export STATION_OBSERVER_STATE_DIR="$DS/observer"
 export STATION_HOOK_SPOOL_DIR="$DS/observer/spool/hooks"
 export STATION_INGRESS_BIN="$ROOT/bin/stn-ingress"
 
-(
-  cd "$ROOT"
-  bun install --frozen-lockfile
-  # Bun may normalize workspace package-bin modes during install; admit those final outputs.
-  bun run build:ensure
-)
+if [ "${STATION_DEV_TOOLCHAIN_PREPARED_ROOT:-}" != "$ROOT" ]; then
+  (
+    cd "$ROOT"
+    bun install --frozen-lockfile
+    # Bun may normalize workspace package-bin modes during install; admit those final outputs.
+    bun run build:ensure
+  )
+fi
+unset STATION_DEV_TOOLCHAIN_PREPARED_ROOT
 
 mkdir -p "$DS/observer"
 
