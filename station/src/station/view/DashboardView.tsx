@@ -1,21 +1,19 @@
 import { TextAttributes } from "@opentui/core";
 import {
-  dashboardRowGridInput,
   dashboardRowIds,
   dashboardTableHeaderModel,
   emptyProjectLabel,
   fleetCountsLabel,
   FIRST_RUN_BODY_LABEL,
-  layoutWorktreeRowGrid,
-  selectDashboardSlots,
+  selectDashboardSlotsForTree,
+  selectDashboardTree,
   selectFleetSummary,
-  textSegment,
+  withRowGridSelectionSlot,
   type DashboardRowId,
   type DashboardTreeBranch,
   type DashboardTreeRow,
   type FleetSummary,
   type RowGridLayout,
-  type RowGridRowInput,
 } from "@station/dashboard-core/selectors";
 import { cellWidth, truncateCells } from "@station/dashboard-core/text";
 import type {
@@ -35,7 +33,7 @@ import { Throbber } from "./Throbber.js";
 import { FLEET_STATUS_ORDER, STATION_STATUS_UI } from "../statusUi.js";
 import { toOpenTuiColor, useStationTheme } from "../../theme/index.js";
 import { useStationHoverState, useStationMouse, stationMouseProps } from "./stationMouseContext.js";
-import { useLayoutEffect, useMemo } from "react";
+import { memo, useLayoutEffect, useMemo } from "react";
 import {
   DashboardScrollViewport,
   useDashboardVisibleRows,
@@ -48,6 +46,7 @@ import { DashboardFilterConditionView } from "./DashboardFilterConditionView.js"
 import { DashboardDividerView } from "./DashboardDividerView.js";
 import { GroupMenuView } from "./GroupMenuView.js";
 import { ProjectMenuView } from "./ProjectMenuView.js";
+import { createDashboardRowGridProjector } from "./dashboardRowGridProjection.js";
 
 const DASHBOARD_LAYOUT_BOUNDARY_ID = "station-dashboard-layout-boundary";
 
@@ -56,7 +55,7 @@ export type DashboardViewProps = {
   viewState: DashboardViewState;
   screen: DashboardScreenView;
   layout: DashboardScrollController;
-  columns?: number;
+  columns: number;
 };
 
 export function DashboardView({
@@ -64,13 +63,17 @@ export function DashboardView({
   viewState,
   screen,
   layout,
-  columns = 80,
+  columns,
 }: DashboardViewProps) {
   const theme = useStationTheme();
   const visibleRowIds = useDashboardVisibleRows(layout);
   const dispatch = useStationMouse();
-  const slots = selectDashboardSlots(snapshot, viewState, screen, visibleRowIds);
-  const tree = slots.tree;
+  const tree = useMemo(
+    () => selectDashboardTree(snapshot, viewState, screen),
+    [screen, snapshot, viewState],
+  );
+  const slots = selectDashboardSlotsForTree(tree, visibleRowIds);
+  const rowGridProjector = useMemo(() => createDashboardRowGridProjector(), []);
   const itemIds = useMemo(() => tree.visibleRows.map((row) => row.id), [tree.visibleRows]);
   const contentColumns = Math.max(1, Math.floor(columns) - 1);
   const firstRun = snapshot.projects.length === 0;
@@ -82,7 +85,7 @@ export function DashboardView({
   );
   const { headerLayout, layoutByItem } = firstRun
     ? { headerLayout: undefined, layoutByItem: new Map<string, RowGridLayout>() }
-    : dashboardRowLayouts(tree.visibleRows, tree.rowById, keyByRow, contentColumns);
+    : rowGridProjector.project(tree, contentColumns);
   const tableHeader = dashboardTableHeaderModel({
     layout: headerLayout,
     overflow: slots.sessionOverflow,
@@ -174,6 +177,7 @@ export function DashboardView({
             columns={contentColumns}
             roots={tree.roots}
             layoutByItem={layoutByItem}
+            keyByRow={keyByRow}
           />
         </DashboardScrollViewport>
       )}
@@ -255,76 +259,16 @@ function FleetBar({
   );
 }
 
-const COLUMN_HEADER_ROW_ID = "__column_header__";
-
-function columnHeaderRowInput(): RowGridRowInput {
-  return {
-    id: COLUMN_HEADER_ROW_ID,
-    cells: {
-      identity: { key: "identity", segments: [textSegment(" ".repeat(7))], importance: "required" },
-      title: { key: "title", segments: [textSegment("SESSION")], importance: "required" },
-      agent: { key: "agent", segments: [textSegment("AGENT")], importance: "optional" },
-      activity: { key: "activity", segments: [textSegment("STATUS")], importance: "optional" },
-    },
-    // The trailing middot composes to "DIFF · PR" via the groups' joining space,
-    // and the ladder sheds diff first, so the dot can never be orphaned.
-    metadataGroups: { diff: [textSegment("DIFF ·")], pr: [textSegment("PR")] },
-  };
-}
-
-// Root rows align with the table header; Group children resolve against their frame's content box.
-function dashboardRowLayouts(
-  rows: readonly DashboardTreeRow[],
-  rowById: ReadonlyMap<DashboardRowId, DashboardTreeRow>,
-  keyByRow: ReadonlyMap<string, string>,
-  columns: number,
-): { headerLayout: RowGridLayout | undefined; layoutByItem: Map<string, RowGridLayout> } {
-  const rowInputs = rows.flatMap((row) => {
-    const input = dashboardRowGridInput(row, keyByRow);
-    return input === undefined ? [] : [input];
-  });
-  const fullLayouts = layoutWorktreeRowGrid({
-    columns: Math.max(1, columns),
-    rows: [columnHeaderRowInput(), ...rowInputs],
-  });
-  const framedRowInputs = rowInputs.filter((input) => {
-    const row = rowById.get(input.id as DashboardRowId);
-    const parent = row?.parentId === undefined ? undefined : rowById.get(row.parentId);
-    return parent?.payload.type === "groupHeader";
-  });
-  const framedLayouts =
-    framedRowInputs.length === 0
-      ? []
-      : layoutWorktreeRowGrid({
-          columns: groupFrameContentColumns(columns),
-          rows: [columnHeaderRowInput(), ...framedRowInputs],
-        });
-  const headerLayout = fullLayouts.find((layout) => layout.id === COLUMN_HEADER_ROW_ID);
-  const framedByItem = new Map(framedLayouts.map((layout) => [layout.id, layout]));
-  const layoutByItem = new Map(
-    fullLayouts
-      .filter((layout) => layout.id !== COLUMN_HEADER_ROW_ID)
-      .map((layout) => {
-        const row = rowById.get(layout.id as DashboardRowId);
-        const parent = row?.parentId === undefined ? undefined : rowById.get(row.parentId);
-        const selected =
-          parent?.payload.type === "groupHeader"
-            ? (framedByItem.get(layout.id) ?? layout)
-            : layout;
-        return [layout.id, selected] as const;
-      }),
-  );
-  return { headerLayout, layoutByItem };
-}
-
 function DashboardBody({
   columns,
   roots,
   layoutByItem,
+  keyByRow,
 }: {
   columns: number;
   roots: readonly DashboardTreeBranch[];
   layoutByItem: ReadonlyMap<string, RowGridLayout>;
+  keyByRow: ReadonlyMap<string, string>;
 }) {
   return (
     <box flexDirection="column" width="100%" gap={1}>
@@ -334,6 +278,7 @@ function DashboardBody({
           columns={columns}
           branch={branch}
           layoutByItem={layoutByItem}
+          keyByRow={keyByRow}
         />
       ))}
     </box>
@@ -344,29 +289,53 @@ function DashboardBranchView({
   columns,
   branch,
   layoutByItem,
+  keyByRow,
 }: {
   columns: number;
   branch: DashboardTreeBranch;
   layoutByItem: ReadonlyMap<string, RowGridLayout>;
+  keyByRow: ReadonlyMap<string, string>;
 }) {
   const row = branch.row;
   if (row.payload.type === "projectHeader") {
-    return <ProjectBranchView columns={columns} branch={branch} layoutByItem={layoutByItem} />;
+    return (
+      <ProjectBranchView
+        columns={columns}
+        branch={branch}
+        layoutByItem={layoutByItem}
+        keyByRow={keyByRow}
+      />
+    );
   }
   if (row.payload.type === "groupHeader") {
-    return <GroupBranchView columns={columns} branch={branch} layoutByItem={layoutByItem} />;
+    return (
+      <GroupBranchView
+        columns={columns}
+        branch={branch}
+        layoutByItem={layoutByItem}
+        keyByRow={keyByRow}
+      />
+    );
   }
-  return <DashboardLeaf row={row} layout={layoutByItem.get(row.id)} />;
+  return (
+    <DashboardLeaf
+      row={row}
+      layout={layoutByItem.get(row.id)}
+      keyByRow={keyByRow}
+    />
+  );
 }
 
 function ProjectBranchView({
   columns,
   branch,
   layoutByItem,
+  keyByRow,
 }: {
   columns: number;
   branch: DashboardTreeBranch;
   layoutByItem: ReadonlyMap<string, RowGridLayout>;
+  keyByRow: ReadonlyMap<string, string>;
 }) {
   const row = branch.row;
   if (row.payload.type !== "projectHeader") return null;
@@ -388,6 +357,7 @@ function ProjectBranchView({
           columns={columns}
           branch={child}
           layoutByItem={layoutByItem}
+          keyByRow={keyByRow}
         />
       ))}
     </box>
@@ -398,10 +368,12 @@ function GroupBranchView({
   columns,
   branch,
   layoutByItem,
+  keyByRow,
 }: {
   columns: number;
   branch: DashboardTreeBranch;
   layoutByItem: ReadonlyMap<string, RowGridLayout>;
+  keyByRow: ReadonlyMap<string, string>;
 }) {
   const row = branch.row;
   if (row.payload.type !== "groupHeader") return null;
@@ -438,6 +410,7 @@ function GroupBranchView({
           columns={columns}
           branch={child}
           layoutByItem={layoutByItem}
+          keyByRow={keyByRow}
         />
       ))}
     </GroupFrameView>
@@ -447,9 +420,11 @@ function GroupBranchView({
 function DashboardLeaf({
   row,
   layout,
+  keyByRow,
 }: {
   row: DashboardTreeRow;
   layout: RowGridLayout | undefined;
+  keyByRow: ReadonlyMap<string, string>;
 }) {
   const theme = useStationTheme();
   switch (row.payload.type) {
@@ -468,6 +443,7 @@ function DashboardLeaf({
         <SessionRowLine
           rowId={row.id}
           layout={layout}
+          slot={keyByRow.get(row.payload.row.id)}
           focused={row.focusedCellId === "identity"}
         />
       );
@@ -495,18 +471,24 @@ function DashboardLeaf({
   }
 }
 
-function SessionRowLine({
+const SessionRowLine = memo(function SessionRowLine({
   rowId,
   layout,
+  slot,
   focused,
 }: {
   rowId: DashboardRowId;
   layout: RowGridLayout;
+  slot: string | undefined;
   focused?: boolean;
 }) {
   const theme = useStationTheme();
   const dispatch = useStationMouse();
   const [hover, setHover] = useStationHoverState();
+  const visibleLayout = useMemo(
+    () => withRowGridSelectionSlot(layout, slot),
+    [layout, slot],
+  );
   // Persistent cursor fill sits under the transient hover fill.
   const background = hover
     ? { backgroundColor: toOpenTuiColor(theme.interaction.hover) }
@@ -532,13 +514,13 @@ function SessionRowLine({
           fg={toOpenTuiColor(theme.text.primary)}
           {...stationMouseProps(dispatch, { kind: "dashboardCell", rowId, cellId: "identity" })}
         >
-          <Segments segments={layout.segments} />
+          <Segments segments={visibleLayout.segments} />
         </text>
-        <SegmentLinkTargets segments={layout.segments} />
+        <SegmentLinkTargets segments={visibleLayout.segments} />
       </box>
     </box>
   );
-}
+});
 
 function FirstProjectButton({ columns }: { columns: number }) {
   const theme = useStationTheme();

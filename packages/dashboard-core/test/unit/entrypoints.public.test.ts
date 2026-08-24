@@ -37,6 +37,8 @@ const STATE_VALUES = [
 
 const SELECTORS_VALUES = [
   "selectDashboardSlots",
+  "selectDashboardSlotsForTree",
+  "selectDashboardTree",
   "selectDashboardSessionRows",
   "selectFleetSummary",
   "dashboardRowGridInput",
@@ -44,6 +46,7 @@ const SELECTORS_VALUES = [
   "dashboardTableHeaderModel",
   "createGroupSheetContent",
   "layoutWorktreeRowGrid",
+  "withRowGridSelectionSlot",
 ];
 
 const WIDGET_VALUES = ["createUseTopRowWidgets", "resolveTopRowWidgets"];

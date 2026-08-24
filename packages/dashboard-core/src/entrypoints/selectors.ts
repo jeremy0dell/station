@@ -80,7 +80,11 @@ export type {
   RowGridRowInput,
   RowSegment,
 } from "../components/WorktreeRow/layout.js";
-export { layoutWorktreeRowGrid, textSegment } from "../components/WorktreeRow/layout.js";
+export {
+  layoutWorktreeRowGrid,
+  textSegment,
+  withRowGridSelectionSlot,
+} from "../components/WorktreeRow/layout.js";
 
 export { isReadyToRead } from "../selectors/agentStatus.js";
 
@@ -103,16 +107,20 @@ export type {
   DashboardSessionOverflow,
   DashboardSlots,
 } from "../selectors/dashboardSlots.js";
-export { selectDashboardSlots } from "../selectors/dashboardSlots.js";
+export {
+  selectDashboardSlots,
+  selectDashboardSlotsForTree,
+} from "../selectors/dashboardSlots.js";
 export type {
   DashboardCellId,
   DashboardGroupHeaderPayload,
   DashboardRowId,
   DashboardTreeBranch,
+  DashboardTreeProjection,
   DashboardTreeRow,
   GroupOrderingMode,
 } from "../selectors/dashboardTree.js";
-export { dashboardRowIds } from "../selectors/dashboardTree.js";
+export { dashboardRowIds, selectDashboardTree } from "../selectors/dashboardTree.js";
 export type { FleetSummary } from "../selectors/fleetSummary.js";
 export { selectFleetSummary } from "../selectors/fleetSummary.js";
 export type {

@@ -43,12 +43,12 @@ export type DashboardTableHeaderModel =
 export function dashboardTableHeaderModel({
   layout,
   overflow,
-  columns = 80,
+  columns,
   persistentFilter,
 }: {
   layout: RowGridLayout | undefined;
   overflow: DashboardSessionOverflow;
-  columns?: number;
+  columns: number;
   persistentFilter?: DashboardPersistentFilterProjection;
 }): DashboardTableHeaderModel | undefined {
   if (persistentFilter !== undefined) {

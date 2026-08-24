@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { selectDashboardSlots } from "../../../src/selectors/dashboardSlots.js";
-import { dashboardRowIds } from "../../../src/selectors/dashboardTree.js";
+import {
+  selectDashboardSlots,
+  selectDashboardSlotsForTree,
+} from "../../../src/selectors/dashboardSlots.js";
+import { dashboardRowIds, selectDashboardTree } from "../../../src/selectors/dashboardTree.js";
 import { createInitialTuiState } from "../../../src/state/screen.js";
 import {
   createDashboardSnapshot,
@@ -8,6 +11,22 @@ import {
 } from "../../fixtures/snapshots.js";
 
 describe("dashboard semantic slots", () => {
+  it("derives a new renderer visibility window from an existing semantic tree", () => {
+    const snapshot = createDashboardSnapshot();
+    const state = createInitialTuiState({ initialSnapshot: snapshot });
+    const tree = selectDashboardTree(snapshot, state, state.screen);
+    const slots = selectDashboardSlotsForTree(tree, [
+      dashboardRowIds.session("ses_wt_web_idle"),
+      dashboardRowIds.session("ses_wt_web_unknown"),
+    ]);
+
+    expect(slots.tree).toBe(tree);
+    expect(slots.rowChoices.map((choice) => [choice.key, choice.value.id])).toEqual([
+      ["1", "ses_wt_web_idle"],
+      ["2", "ses_wt_web_unknown"],
+    ]);
+  });
+
   it("assigns continuous keys to renderer-visible session identities", () => {
     const snapshot = createDashboardSnapshot();
     const state = createInitialTuiState({ initialSnapshot: snapshot });

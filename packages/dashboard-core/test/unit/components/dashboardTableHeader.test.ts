@@ -45,6 +45,7 @@ describe("dashboard table header model", () => {
     const model = dashboardTableHeaderModel({
       layout: HEADER_LAYOUT,
       overflow: { ...NO_OVERFLOW, above: 2 },
+      columns: 80,
       persistentFilter: projection(),
     });
 
@@ -54,21 +55,25 @@ describe("dashboard table header model", () => {
   it("gives above overflow precedence over the available column layout", () => {
     const overflow = { ...NO_OVERFLOW, above: 2, total: 6 };
 
-    expect(dashboardTableHeaderModel({ layout: HEADER_LAYOUT, overflow })).toEqual({
+    expect(dashboardTableHeaderModel({ layout: HEADER_LAYOUT, overflow, columns: 80 })).toEqual({
       kind: "aboveOverflow",
       overflow,
     });
   });
 
   it("uses column headers when the viewport is at the top", () => {
-    expect(dashboardTableHeaderModel({ layout: HEADER_LAYOUT, overflow: NO_OVERFLOW })).toEqual({
+    expect(
+      dashboardTableHeaderModel({ layout: HEADER_LAYOUT, overflow: NO_OVERFLOW, columns: 80 }),
+    ).toEqual({
       kind: "columns",
       layout: HEADER_LAYOUT,
     });
   });
 
   it("omits the header when no semantic header content exists", () => {
-    expect(dashboardTableHeaderModel({ layout: undefined, overflow: NO_OVERFLOW })).toBeUndefined();
+    expect(
+      dashboardTableHeaderModel({ layout: undefined, overflow: NO_OVERFLOW, columns: 80 }),
+    ).toBeUndefined();
   });
 });
 

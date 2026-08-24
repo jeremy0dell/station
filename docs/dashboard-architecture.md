@@ -276,7 +276,13 @@ Physical geometry is permitted only after semantic state and has these owners:
 - Group/sheet frame helpers subtract their two vertical border cells only to
   resolve the renderer-owned child content box. Containers, not core state,
   still own the border and descendants.
-- The session row-grid, dividers, footer controls, and similar compact leaves may
+- `packages/dashboard-core/src/components/WorktreeRow/*` owns terminal-cell
+  negotiation for the session row-grid, while Station's
+  `station/src/station/view/dashboardRowGridProjection.ts` invokes and caches
+  that compact leaf projection. Renderer-visible shortcut labels are
+  applied after width negotiation, so scrolling does not remeasure the complete
+  semantic tree; semantic-tree or width changes invalidate the bounded cache.
+  The row-grid, dividers, footer controls, and similar compact leaves may
   deliberately paint one cell high. They are leaf presentations and do not set
   parent composition, focus visibility, or scroll state.
 - `StationOverlay` converts terminal/config percentages to the outer popup box

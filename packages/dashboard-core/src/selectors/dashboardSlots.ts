@@ -46,6 +46,14 @@ export function selectDashboardSlots(
 ): DashboardSlots {
   const selectedScreen = activeScreen ?? { name: "dashboard" };
   const tree = selectDashboardTree(snapshot, state, selectedScreen);
+  return selectDashboardSlotsForTree(tree, visibleRowIds);
+}
+
+/** Derives renderer-local slots from a semantic tree that is already projected. */
+export function selectDashboardSlotsForTree(
+  tree: DashboardTreeProjection,
+  visibleRowIds?: readonly DashboardRowId[],
+): DashboardSlots {
   const rows = visibleTreeRows(tree, visibleRowIds);
   const displayRowChoices = selectionChoices(displaySessionRows(rows));
   const pendingStartWorktreeIds = new Set(

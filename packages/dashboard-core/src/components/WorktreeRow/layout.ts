@@ -15,6 +15,7 @@ export type RowSegment =
       highlighted?: true;
       underline?: true;
       url?: string;
+      role?: "selectionSlot";
     }
   | {
       kind: "throbber";
@@ -267,6 +268,25 @@ export function hardClipSegments(segments: readonly RowSegment[], cells: number)
   return clipped;
 }
 
+/** Replaces the renderer-visible shortcut without renegotiating shared column widths. */
+export function withRowGridSelectionSlot(
+  layout: RowGridLayout,
+  slot: string | undefined,
+): RowGridLayout {
+  if (slot === undefined) return layout;
+  let replaced = false;
+  const segments = layout.segments.map((segment): RowSegment => {
+    if (segment.kind !== "text" || segment.role !== "selectionSlot") return segment;
+    replaced = true;
+    const width = cellWidth(segment.text);
+    const key = clipCells(slot, 1) || " ";
+    const clipped = clipCells(`[${key}] `, width);
+    const padding = " ".repeat(Math.max(0, width - cellWidth(clipped)));
+    return { ...segment, text: `${clipped}${padding}` };
+  });
+  return replaced ? { ...layout, segments } : layout;
+}
+
 export function textSegment(
   text: string,
   options: {
@@ -276,6 +296,7 @@ export function textSegment(
     highlighted?: true | undefined;
     underline?: true | undefined;
     url?: string | undefined;
+    role?: "selectionSlot" | undefined;
   } = {},
 ): RowSegment {
   const segment: Extract<RowSegment, { kind: "text" }> = {
@@ -288,6 +309,7 @@ export function textSegment(
   if (options.highlighted === true) segment.highlighted = true;
   if (options.underline === true) segment.underline = true;
   if (options.url !== undefined) segment.url = options.url;
+  if (options.role !== undefined) segment.role = options.role;
   return segment;
 }
 
@@ -793,6 +815,7 @@ function copyTextSegment(segment: Extract<RowSegment, { kind: "text" }>, text: s
   if (segment.highlighted === true) copied.highlighted = true;
   if (segment.underline === true) copied.underline = true;
   if (segment.url !== undefined) copied.url = segment.url;
+  if (segment.role !== undefined) copied.role = segment.role;
   return copied;
 }
 
