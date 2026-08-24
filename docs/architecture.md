@@ -61,11 +61,12 @@ No single layer owns all truth.
   admission, compaction, and normalization into harness reports.
 - A sealed session-rescue archive becomes temporary cutover authority only after the exact source sessions have stopped and every recovery-critical asset has been captured and hashed; a live-source archive remains evidence, not launch authority.
 - Repository providers are authoritative only for code-host metadata they fetch or cache through their integration boundary.
-- Observer SQLite is durable observer memory for command lifecycle and strict optional success results, events, correlations, explicit Station-session lifecycle, project-local Session Group definitions and exclusive membership, canonical worktree display titles keyed by project and worktree, provider observations, and current metadata cache rows.
+- Observer SQLite is durable observer memory for command lifecycle and strict optional success results, events, correlations, explicit Station-session lifecycle, project-local Session Group definitions and exclusive membership, canonical worktree display titles keyed by project and worktree, provider observations, and current metadata cache rows. Reconcile prunes an absent Group assignment only when provider-read completeness grants authority for that project; provider uncertainty preserves the durable assignment and its Group version.
 - Observer snapshots are the normalized current graph exposed to clients. `rows` is configured
   worktree inventory; `sessions` is canonical session membership; and `sessionGroups` is the
   flat project-local organizational projection, retaining optional parent relationships in
-  deterministic parent-before-child order. `WorktreeRow.title` is the
+  deterministic parent-before-child order. Snapshots remain provider-truthful during degraded
+  reads and do not hydrate preserved but currently unavailable sessions from SQLite. `WorktreeRow.title` is the
   display authority, while `SessionView.title` is its lifecycle projection. Session and activity
   counts derive from `sessions`, while worktree counts derive from `rows`.
 - Session start and resume resolve only from current snapshot `rows`; absence is not repaired from

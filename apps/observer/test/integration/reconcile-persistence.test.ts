@@ -325,7 +325,11 @@ describe("observer reconcile persistence", () => {
     `);
 
     await expect(
-      persistence.repairSessionGroups({ sessions: [], updatedAt: "2026-05-20T12:01:00.000Z" }),
+      persistence.repairSessionGroups({
+        sessions: [],
+        absenceAuthorityProjectIds: ["web"],
+        updatedAt: "2026-05-20T12:01:00.000Z",
+      }),
     ).rejects.toBeDefined();
     expect(
       sqlite.database
@@ -335,6 +339,46 @@ describe("observer reconcile persistence", () => {
       { id: "grp_a", parent_group_id: "missing", version: 1 },
       { id: "grp_b", parent_group_id: "missing", version: 1 },
     ]);
+    sqlite.close();
+  });
+
+  it("repairs assignment project corruption without absence-pruning authority", async () => {
+    const { sqlite, persistence } = createTestObserverCore({
+      config,
+      providers: providersWithOneSession(),
+      clock: { now: () => new Date(now) },
+    });
+    await persistence.createSessionGroup({
+      id: "grp_corrupt_assignment",
+      projectId: "web",
+      name: "Corrupt assignment",
+      initialMembers: [
+        { sessionId: "ses_corrupt_assignment", projectId: "web", expectedGroupId: null },
+      ],
+      createdAt: now,
+    });
+    sqlite.database
+      .prepare("UPDATE session_group_memberships SET project_id = ? WHERE session_id = ?")
+      .run("api", "ses_corrupt_assignment");
+
+    await expect(
+      persistence.repairSessionGroups({
+        sessions: [],
+        absenceAuthorityProjectIds: [],
+        updatedAt: "2026-05-20T12:01:00.000Z",
+      }),
+    ).resolves.toEqual({
+      groups: [
+        expect.objectContaining({ id: "grp_corrupt_assignment", sessionIds: [], version: 2 }),
+      ],
+      repairs: [
+        {
+          reason: "invalid_membership",
+          groupId: "grp_corrupt_assignment",
+          projectId: "web",
+        },
+      ],
+    });
     sqlite.close();
   });
 
@@ -625,6 +669,7 @@ describe("observer reconcile persistence", () => {
     const clock = { now: () => new Date(now) };
     const sqlite = openObserverSqlite({ clock });
     const persistence = createSqliteObserverPersistence({ sqlite, clock, idFactory: ids() });
+    const logInfos: Array<{ message: string; attributes?: Record<string, unknown> }> = [];
     const logErrors: Array<{ message: string; attributes?: Record<string, unknown> }> = [];
     const core = createObserverCore({
       config,
@@ -636,7 +681,9 @@ describe("observer reconcile persistence", () => {
       persistence,
       clock,
       logger: {
-        info: async () => undefined,
+        info: async (message, attributes) => {
+          logInfos.push({ message, ...(attributes === undefined ? {} : { attributes }) });
+        },
         warn: async () => undefined,
         error: async (message, attributes) => {
           logErrors.push({ message, ...(attributes === undefined ? {} : { attributes }) });
@@ -659,6 +706,24 @@ describe("observer reconcile persistence", () => {
       "diagnosticDetails",
     );
     expect(core.getHealth().lastReconcile?.errors[0]).not.toHaveProperty("diagnosticDetails");
+    const sessionGroupRepair = {
+      status: "skipped",
+      absenceAuthorityProjectIds: [],
+      preservedProjectIds: ["web"],
+      blockers: [
+        {
+          scope: "global",
+          providerType: "terminal",
+          providerId: "fake-terminal",
+          code: "TERMINAL_LIST_FAILED",
+        },
+      ],
+    };
+    expect(core.getHealth().lastReconcile?.sessionGroupRepair).toEqual(sessionGroupRepair);
+    expect(logInfos).toContainEqual({
+      message: "Reconcile finished.",
+      attributes: expect.objectContaining({ sessionGroupRepair }),
+    });
     expect(logErrors).toEqual([
       {
         message: "Terminal provider list failed.",

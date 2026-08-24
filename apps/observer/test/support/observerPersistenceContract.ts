@@ -3281,6 +3281,7 @@ export function observerPersistenceContract(
           await expect(
             persistence.repairSessionGroups({
               sessions: [{ id: "ses_keep", projectId: "other" }],
+              absenceAuthorityProjectIds: ["web"],
               updatedAt: now,
             }),
           ).resolves.toEqual({
@@ -3291,13 +3292,85 @@ export function observerPersistenceContract(
             repairs: [{ reason: "invalid_membership", groupId: "group_prune", projectId: "web" }],
           });
           await expect(
-            persistence.repairSessionGroups({ sessions: [], updatedAt: later }),
+            persistence.repairSessionGroups({
+              sessions: [],
+              absenceAuthorityProjectIds: ["web"],
+              updatedAt: later,
+            }),
           ).resolves.toEqual({
             groups: [
               expect.objectContaining({ id: "group_prune", sessionIds: [], version: 2 }),
               expect.objectContaining({ id: "group_untouched", sessionIds: [], version: 1 }),
             ],
             repairs: [],
+          });
+        });
+      });
+
+      it("scopes absent-member pruning while always repairing positive project mismatches", async () => {
+        await withPersistence(createFixture, async ({ persistence }) => {
+          await persistence.createSessionGroup({
+            id: "group_authoritative",
+            projectId: "web",
+            name: "Authoritative",
+            initialMembers: [
+              { sessionId: "ses_web_missing", projectId: "web", expectedGroupId: null },
+            ],
+            createdAt: earlier,
+          });
+          await persistence.createSessionGroup({
+            id: "group_preserved",
+            projectId: "api",
+            name: "Preserved",
+            initialMembers: [
+              { sessionId: "ses_api_missing", projectId: "api", expectedGroupId: null },
+            ],
+            createdAt: earlier,
+          });
+          await persistence.createSessionGroup({
+            id: "group_mismatch",
+            projectId: "api",
+            name: "Mismatch",
+            initialMembers: [{ sessionId: "ses_moved", projectId: "api", expectedGroupId: null }],
+            createdAt: earlier,
+          });
+
+          await expect(
+            persistence.repairSessionGroups({
+              sessions: [{ id: "ses_moved", projectId: "web" }],
+              absenceAuthorityProjectIds: ["web"],
+              updatedAt: now,
+            }),
+          ).resolves.toEqual({
+            groups: [
+              expect.objectContaining({
+                id: "group_mismatch",
+                sessionIds: [],
+                version: 2,
+              }),
+              expect.objectContaining({
+                id: "group_preserved",
+                sessionIds: ["ses_api_missing"],
+                version: 1,
+              }),
+              expect.objectContaining({
+                id: "group_authoritative",
+                sessionIds: [],
+                version: 2,
+              }),
+            ],
+            repairs: [
+              {
+                reason: "invalid_membership",
+                groupId: "group_mismatch",
+                projectId: "api",
+              },
+              {
+                reason: "invalid_membership",
+                groupId: "group_authoritative",
+                projectId: "web",
+              },
+            ],
           });
         });
       });
