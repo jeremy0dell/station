@@ -1053,8 +1053,9 @@ describe("modal flow golden frames", () => {
         setup.renderer.destroy();
       });
       await setup.renderOnce();
+      // Layout adapters reflow from OpenTUI's layout-changed event; capture only
+      // after visual idle instead of forcing a new frame with queued geometry work.
       await setup.flush();
-      await setup.renderOnce();
       // The generated session name is uuid-seeded (stableNameHash over a
       // random token); scrub it so the goldens stay deterministic.
       const capturedFrame = setup
