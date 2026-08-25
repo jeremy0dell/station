@@ -21,6 +21,7 @@ const unusedHandoffClientMethods = {
     adopted: [] as string[],
     failed: [] as Array<{ ptyId: string; reason: string }>,
   }),
+  recoveryInventory: async () => ({ buildIdentity: "a".repeat(64), ptys: [] }),
 };
 
 const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
@@ -91,7 +92,7 @@ function fakeClient(spawns: unknown[]): StationHostClient {
     },
     attach: async () => attachment,
     dispose: () => undefined,
-    health: async () => ({ ok: true, protocolVersion: 1 }),
+    health: async () => ({ ok: true, protocolVersion: 1, buildVersion: "test-build" }),
     stopIfIdle: async () => ({ stopping: true }),
     ...unusedHandoffClientMethods,
     list: async () => [],

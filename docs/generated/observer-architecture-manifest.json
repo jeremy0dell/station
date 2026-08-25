@@ -13591,13 +13591,6 @@
       "purpose": "Drive Station host inspection and opt-in live handoff from the CLI without routing through Observer application code. Mutating handoff defers policy to `ensureStationHostRunning`; this layer only projects the ensure outcome.",
       "dependencies": [
         {
-          "path": "packages/protocol/src/transport.ts",
-          "declaration": "probeUnixSocket",
-          "kind": "function",
-          "role": "ADAPTER",
-          "edgeKind": "runtime"
-        },
-        {
           "path": "packages/station-host/src/protocol.ts",
           "declaration": "classifyHostCompatibility",
           "kind": "function",
@@ -15152,13 +15145,6 @@
       "role": "COMPOSITION ROOT",
       "purpose": "Binds exact Observer inspection, strict Host inventory, and provider-neutral hook health.",
       "dependencies": [
-        {
-          "path": "apps/cli/src/commands/host/index.ts",
-          "declaration": "runHostCommand",
-          "kind": "function",
-          "role": "ADAPTER",
-          "edgeKind": "runtime"
-        },
         {
           "path": "apps/cli/src/observerProcess/inspectExactObserverOwner.ts",
           "declaration": "inspectExactObserverOwnerWithLocalAdapters",
@@ -17276,6 +17262,22 @@
           "declaration": "classifyHostCompatibility",
           "kind": "function",
           "role": "POLICY",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
+      "path": "integrations/terminal/station/src/host/inspectStationHost.ts",
+      "declaration": "inspectStationHost",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Reads one current Host lifetime without starting, replacing, handing off, or retaining a connection. Exact evidence is correlated to the configured socket path across both probes.",
+      "dependencies": [
+        {
+          "path": "packages/protocol/src/transport.ts",
+          "declaration": "probeUnixSocket",
+          "kind": "function",
+          "role": "ADAPTER",
           "edgeKind": "runtime"
         }
       ]

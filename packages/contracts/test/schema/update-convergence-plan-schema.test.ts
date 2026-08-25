@@ -20,6 +20,16 @@ describe("UpdateConvergencePlanningInputSchema", () => {
         targetRuntime: { status: "not-yet-provable" },
       }).success,
     ).toBe(false);
+    expect(
+      UpdateConvergencePlanningInputSchema.safeParse({
+        ...planningInput(),
+        targetRuntime: {
+          status: "known",
+          buildIdentity: "A".repeat(64),
+          observerSelector: "1.0.0",
+        },
+      }).success,
+    ).toBe(false);
 
     const changed = planningInput({
       preflight: preflight({ installed: { version: "0.9.0", revision: "revision-0" } }),
@@ -289,7 +299,7 @@ describe("UpdateConvergencePlanSchema", () => {
         },
       },
     });
-    expect(UpdateConvergencePlanSchema.safeParse(plan).success).toBe(true);
+    expect(UpdateConvergencePlanSchema.safeParse(plan).success).toBe(false);
     expect(
       UpdateConvergencePlanSchema.safeParse({
         ...plan,

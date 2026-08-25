@@ -100,8 +100,8 @@ export type StationHostClient = {
   spawn(params: HostSpawnParamsInput): Promise<HostSpawnResult>;
   /** Read protocol-v8 PTY lifetimes without exporting or parking them. */
   list(): Promise<HostListResult["ptys"]>;
-  /** Read immutable Host build and PTY recovery evidence without changing protocol-v8 `host.list`. */
-  recoveryInventory?(): Promise<HostRecoveryInventoryResult>;
+  /** Read identity-bound recovery evidence without compatibility preflight or changing `host.list`. */
+  recoveryInventory(): Promise<HostRecoveryInventoryResult>;
   focus(ptyId: string): Promise<void>;
   close(ptyId: string): Promise<{ closed: boolean }>;
   /** Attach only with an explicit role and a matching complete identity proof. */
@@ -218,7 +218,6 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
       return connection;
     }
     if (connecting === undefined) {
-      clientIdentity = createClientIdentity(options, expectedBuildVersion);
       connecting = connect()
         .then((opened) => {
           if (disposed) {
@@ -252,6 +251,8 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
     includeClientIdentity = false,
   ): Promise<TResult> {
     const active = await ensureConnection();
+    if (includeClientIdentity)
+      clientIdentity ??= createClientIdentity(options, expectedBuildVersion);
     const id = `h${nextId++}`;
     const response = await new Promise<HostResponse>((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -271,7 +272,14 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
     if (!response.ok) {
       throw response.error;
     }
-    return schema.parse(response.result);
+    try {
+      return schema.parse(response.result);
+    } catch (cause) {
+      throw stationHostErrorFromUnknown(cause, {
+        code: "HOST_REQUEST_FAILED",
+        message: `Station host returned malformed evidence for "${method}".`,
+      });
+    }
   }
 
   function ensureCompatible(): Promise<void> {
@@ -431,7 +439,7 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
     spawn: (params) => request("host.spawn", params, HostSpawnResultSchema),
     list: async () => (await request("host.list", undefined, HostListResultSchema)).ptys,
     recoveryInventory: () =>
-      request("host.recoveryInventory", undefined, HostRecoveryInventoryResultSchema),
+      rawRequest("host.recoveryInventory", undefined, HostRecoveryInventoryResultSchema, true),
     focus: async (ptyId) => {
       await request("host.focus", { ptyId }, HostOkResultSchema);
     },

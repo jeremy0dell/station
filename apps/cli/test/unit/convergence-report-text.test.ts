@@ -155,6 +155,8 @@ function recoveryReport(): PreviewReport {
   };
   value.initial.host = {
     status: "inspected",
+    buildVersion: "1.0.0",
+    buildIdentity: "a".repeat(64),
     protocolVersion: 8,
     relation: "different",
     compatibility: "replace",

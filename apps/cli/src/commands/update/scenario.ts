@@ -52,13 +52,6 @@ async function resolveHostHandoff(input: UpdateScenarioInput): Promise<HostHando
       hint: "Run stn host status and resolve its reported socket error before retrying.",
     });
   }
-  if (status.compatibility.action === "refuse") {
-    throw updateErrorFromUnknown(undefined, {
-      code: "UPDATE_HOST_HANDOFF_REFUSED",
-      message: "The active Station Host protocol cannot hand off to the target build.",
-      hint: "Account for every live terminal before retrying with --no-handoff; the next TUI may refuse the incumbent Host.",
-    });
-  }
   if (status.compatibility.action === "reuse") {
     return { kind: "not-needed" };
   }

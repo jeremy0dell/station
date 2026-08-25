@@ -175,6 +175,13 @@ non-focusable from dashboards. Observer application code knows only the injected
 `ManagedTerminalLifecycle`; Station resolves its attachment to host socket and PTY
 mechanics at its own boundary and selects or reveals the session locally.
 
+The same integration owns `inspectStationHost`, an unversioned, current-only,
+read-only adapter used by Host status and update preflight. It correlates strict
+health and one identity-bound recovery inventory with the configured socket's
+path, inode, and birth time. The adapter returns evidence but no connection,
+signal, handoff, ensure, or socket-repair capability; update composition may
+inject only its read-only client factory seam.
+
 ## Port, Actor, And Adapter Map
 
 This table describes the current seams. The rule column states the adopted
@@ -201,6 +208,7 @@ ownership even where current ownership is still a deviation.
 | Observer incumbent lifecycle | Driven | `ObserverIncumbentLifecycle` | local protocol client adapter | Handoff may read health and request controlled stop without importing transport mechanics into policy or orchestration. |
 | Observer process identity | Driven | `ObserverProcessIdentityEvidenceSource` | bounded local `ps`/`lsof`/`/proc` process-evidence adapter | One shared read-only verifier compares executable provenance, exact argv, OS start token, per-launch token, build selector, and resolved socket. Handoff, stale-evidence repair, and equivalent reap checks consume this verifier; no parallel weaker verifier exists. |
 | Exact Observer inspection | Driven | `ExactObserverInspectionPorts` | CLI status, pidfile/process-evidence, and identity-pinned recovery adapters | The Observer-owned read-only use case captures health, strict pidfile, complete cooperative process generation, executable provenance, recovery assessment, and selected handles, then revalidates health, pidfile, and process evidence around the recovery read. Installed-path replacement is visible only through its cooperative process-evidence port and grants no signal, reap, handoff, or repair authority. |
+| Exact Station Host inspection | Driven | `UpdateRecoveryPreflightPorts.inspectHost` | `inspectStationHost` Station terminal adapter | The configured endpoint is path-bound and revalidated around discovery health, incumbent-build strict health, exactly one identity-bound recovery inventory, and final health. Exact current evidence exposes no client or lifecycle authority; update preflight consumes the driven application seam, while Host status calls the adapter directly. |
 | Observer process evidence | Driven | `ObserverProcessEvidenceSource` | local `lsof`/`ps`/`/proc`/pidfile/signal adapter | Extends exact identity evidence with socket-holder, strict pidfile, and signal capabilities for handoff. `lsof` is primary socket ownership and handoff reads only the requested incumbent PID; repair receives narrower ports without signal authority. |
 | Observer process existence | Driven | `ObserverProcessExistenceEvidenceSource` | bounded local `ps` adapter | Distinguishes positively absent from running and unavailable without sending signal zero; unavailable evidence is never stale-process proof. |
 | Observer pidfile repair | Driven | `ObserverProcessIdentityRepair` | strict local pidfile adapter | Reads a private regular strict identity and atomically compare-removes only that exact value through rename, parse, delete-or-restore mechanics. It cannot unlink sockets or signal processes. |
@@ -353,7 +361,9 @@ Application composition proceeds around that boundary in this order:
    has no timer, claim, cancellation protocol, or signal authority.
 
 Station Host is outside the Observer singleton lifecycle and continues to own
-live PTYs independently.
+live PTYs independently. Its strict inspection is evidence-only: a later
+mutation use case must match its command endpoint to that evidence and acquire
+its own authority rather than treating inspection as a pin or TOCTOU solution.
 
 Checkout-local devbox composition may explicitly request exact-build activation
 for its configured socket. Before its first await, the CLI composition root

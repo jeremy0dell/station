@@ -1,5 +1,9 @@
 import { emptyConfig } from "@station/config";
-import type { ObserverProcessIdentity, ObserverRecoveryAssessment } from "@station/contracts";
+import type {
+  ObserverProcessIdentity,
+  ObserverRecoveryAssessment,
+  StationHostTerminalLifetime,
+} from "@station/contracts";
 import { STATION_SCHEMA_VERSION } from "@station/contracts";
 import { type ExactObserverOwnershipEvidence, ProviderRegistry } from "@station/observer/internal";
 import { FakeHarnessProvider, FakeTerminalProvider, FakeWorktreeProvider } from "@station/testing";
@@ -68,11 +72,7 @@ describe("createUpdateRecoveryPreflightPorts", () => {
         providers: providerRegistry(),
         currentBuildInfo,
         inspectObserverOwner,
-        hostStatus: async () => ({
-          action: "status",
-          socketPath: "/private/runtime/host.sock",
-          probe: "absent",
-        }),
+        inspectHost: async () => ({ status: "absent" }),
       });
 
       await expect(ports.inspectObserver(artifacts)).resolves.toMatchObject(testCase.expected);
@@ -89,15 +89,8 @@ describe("createUpdateRecoveryPreflightPorts", () => {
       providers,
       currentBuildInfo,
       inspectObserverOwner,
-      hostStatus: async () => ({
-        action: "status",
-        socketPath: "/private/runtime/host.sock",
-        probe: "listening",
-        health: { ok: true, protocolVersion: 8, buildVersion: "1.0.0+station.host" },
-        compatibility: { action: "replace", runningBuildVersion: "1.0.0+station.host" },
-        livePtyCount: 1,
-        handoffEligible: true,
-        ptys: [
+      inspectHost: async () =>
+        exactHost("1.0.0+station.host", "b".repeat(64), [
           {
             kind: "agent",
             terminalTargetId: "terminal-a",
@@ -114,8 +107,7 @@ describe("createUpdateRecoveryPreflightPorts", () => {
             rows: 24,
             handoffSupport: { kind: "non-releasable", reason: "no-bridge-transport" },
           },
-        ],
-      }),
+        ]),
     });
 
     const observer = await ports.inspectObserver(artifacts);
@@ -154,11 +146,7 @@ describe("createUpdateRecoveryPreflightPorts", () => {
       providers: providerRegistry(),
       currentBuildInfo,
       inspectObserverOwner: async () => ({ status: "blocked", reason: "process-without-socket" }),
-      hostStatus: async () => ({
-        action: "status",
-        socketPath: "/private/runtime/host.sock",
-        probe: "absent",
-      }),
+      inspectHost: async () => ({ status: "absent" }),
     });
 
     await expect(ports.inspectObserver(artifacts)).resolves.toMatchObject({
@@ -174,11 +162,7 @@ describe("createUpdateRecoveryPreflightPorts", () => {
       providers: providerRegistry(),
       currentBuildInfo,
       inspectObserverOwner: async () => ({ status: "blocked", reason: "identity-drift" }),
-      hostStatus: async () => ({
-        action: "status",
-        socketPath: "/private/runtime/host.sock",
-        probe: "absent",
-      }),
+      inspectHost: async () => ({ status: "absent" }),
     });
 
     await expect(ports.inspectObserver(artifacts)).resolves.toMatchObject({
@@ -190,54 +174,25 @@ describe("createUpdateRecoveryPreflightPorts", () => {
 
   it("keeps unproven and older idle Host build evidence explicit", async () => {
     const targetBuildVersion = "1.1.0+station.target";
-    const cases = [
-      {
-        health: { ok: true as const, protocolVersion: 8, buildVersion: targetBuildVersion },
-        compatibility: { action: "reuse" as const },
-        expected: {
-          status: "inspected",
-          buildVersion: targetBuildVersion,
-          relation: "unknown",
-          compatibility: "reuse",
-          terminals: [],
-        },
-      },
-      {
-        health: { ok: true as const, protocolVersion: 8 },
-        compatibility: { action: "refuse" as const, reason: "legacy-health" as const },
-        expected: {
-          status: "inspected",
-          relation: "unknown",
-          compatibility: "refuse",
-          terminals: [],
-        },
-      },
-    ];
+    const ports = createUpdateRecoveryPreflightPorts({
+      config: testConfig(),
+      providers: providerRegistry(),
+      currentBuildInfo,
+      inspectHost: async () => exactHost(targetBuildVersion, "b".repeat(64)),
+    });
 
-    for (const testCase of cases) {
-      const ports = createUpdateRecoveryPreflightPorts({
-        config: testConfig(),
-        providers: providerRegistry(),
-        currentBuildInfo,
-        hostStatus: async () => ({
-          action: "status",
-          socketPath: "/private/runtime/host.sock",
-          probe: "listening",
-          health: testCase.health,
-          compatibility: testCase.compatibility,
-          livePtyCount: 0,
-          handoffEligible: true,
-          ptys: [],
-        }),
-      });
-
-      await expect(
-        ports.inspectHost({
-          installed: { version: "1.0.0" },
-          target: { version: targetBuildVersion },
-        }),
-      ).resolves.toMatchObject(testCase.expected);
-    }
+    await expect(
+      ports.inspectHost({
+        installed: { version: "1.0.0" },
+        target: { version: targetBuildVersion },
+      }),
+    ).resolves.toMatchObject({
+      status: "inspected",
+      buildVersion: targetBuildVersion,
+      relation: "unknown",
+      compatibility: "reuse",
+      terminals: [],
+    });
   });
 
   it("does not equate same-version Host revisions without exact build evidence", async () => {
@@ -255,12 +210,7 @@ describe("createUpdateRecoveryPreflightPorts", () => {
       },
       {
         installed: { version: "1.1.0", revision: "installed-revision" },
-        runningBuildIdentity: "unidentified-other-build",
-        expectedRelation: "unknown",
-      },
-      {
-        installed: { version: "1.1.0", revision: "installed-revision" },
-        runningBuildIdentity: undefined,
+        runningBuildIdentity: "b".repeat(64),
         expectedRelation: "unknown",
       },
     ] as const;
@@ -270,19 +220,7 @@ describe("createUpdateRecoveryPreflightPorts", () => {
         config: testConfig(),
         providers: providerRegistry(),
         currentBuildInfo,
-        hostStatus: async () => ({
-          action: "status",
-          socketPath: "/private/runtime/host.sock",
-          probe: "listening",
-          health: { ok: true, protocolVersion: 8, buildVersion: target.version },
-          compatibility: { action: "reuse" },
-          livePtyCount: 0,
-          handoffEligible: false,
-          ptys: [],
-          ...(testCase.runningBuildIdentity === undefined
-            ? {}
-            : { buildIdentity: testCase.runningBuildIdentity }),
-        }),
+        inspectHost: async () => exactHost(target.version, testCase.runningBuildIdentity),
       });
 
       await expect(
@@ -304,10 +242,7 @@ describe("createUpdateRecoveryPreflightPorts", () => {
       expectedRelation: "matching-target" | "different" | "unknown";
     }> = [
       { runningIdentity: currentBuildIdentity, expectedRelation: "matching-target" },
-      ...(runtime === "host"
-        ? [{ runningIdentity: undefined, expectedRelation: "unknown" as const }]
-        : []),
-      { runningIdentity: "different-build-identity", expectedRelation: "different" },
+      { runningIdentity: "b".repeat(64), expectedRelation: "different" },
     ];
 
     for (const testCase of cases) {
@@ -321,19 +256,8 @@ describe("createUpdateRecoveryPreflightPorts", () => {
         providers: providerRegistry(),
         currentBuildInfo,
         inspectObserverOwner: async () => exactObserver(observerBuildVersion),
-        hostStatus: async () => ({
-          action: "status",
-          socketPath: "/private/runtime/host.sock",
-          probe: "listening",
-          health: { ok: true, protocolVersion: 8, buildVersion: target.version },
-          compatibility: { action: "reuse" },
-          livePtyCount: 0,
-          handoffEligible: false,
-          ptys: [],
-          ...(testCase.runningIdentity === undefined
-            ? {}
-            : { buildIdentity: testCase.runningIdentity }),
-        }),
+        inspectHost: async () =>
+          exactHost(target.version, testCase.runningIdentity ?? "b".repeat(64)),
       });
 
       const evidence =
@@ -353,17 +277,7 @@ describe("createUpdateRecoveryPreflightPorts", () => {
       config: testConfig(),
       providers: providerRegistry(),
       currentBuildInfo,
-      hostStatus: async () => ({
-        action: "status",
-        socketPath: "/private/runtime/host.sock",
-        probe: "listening",
-        health: { ok: true, protocolVersion: 8, buildVersion: target.version },
-        compatibility: { action: "replace", runningBuildVersion: target.version },
-        buildIdentity: "different-build-identity",
-        livePtyCount: 0,
-        handoffEligible: false,
-        ptys: [],
-      }),
+      inspectHost: async () => exactHost(target.version, "b".repeat(64)),
     });
 
     await expect(
@@ -371,6 +285,26 @@ describe("createUpdateRecoveryPreflightPorts", () => {
     ).resolves.toMatchObject({ relation: "unknown" });
   });
 });
+
+function exactHost(
+  buildVersion: string,
+  buildIdentity: string,
+  terminals: StationHostTerminalLifetime[] = [],
+) {
+  return {
+    status: "exact" as const,
+    evidence: {
+      endpoint: {
+        socketPath: "/private/runtime/host.sock",
+        ino: 11n,
+        birthtimeNs: 22n,
+      },
+      health: { ok: true as const, protocolVersion: 8 as const, buildVersion },
+      buildIdentity,
+      terminals,
+    },
+  };
+}
 
 function exactObserver(
   version: string,

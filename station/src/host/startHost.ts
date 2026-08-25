@@ -7,6 +7,7 @@ import {
 } from "@station/observability";
 import { listenUnixSocket } from "@station/protocol";
 import { stationBuildInfo } from "@station/runtime";
+import { StationBuildIdentitySchema, StationHostInspectedHealthSchema } from "@station/contracts";
 import {
   HOST_PROTOCOL_VERSION,
   HostAdoptRegistryParamsSchema,
@@ -46,11 +47,10 @@ export type StartStationHostOptions = {
   /** Prepared compiled runtimes supply the fixed selector reported at startup. */
   ptyImplementation?: PtyImplementation;
   /**
-   * Test-only opaque build identity override for A/B upgrade lanes. Production
-   * entrypoints leave this unset and use `stationBuildInfo().version`.
+   * Test-only display identity override for A/B lanes; valid only with `buildIdentity`.
    */
   buildVersion?: string;
-  /** Test seam for immutable recovery evidence; defaults to a supplied test build selector. */
+  /** Test-only immutable identity override; valid only with `buildVersion`. */
   buildIdentity?: string;
 };
 
@@ -77,9 +77,12 @@ export async function startStationHost(
     options.ptyImplementation ?? resolvePtyImplementation(process.env.STATION_PTY_IMPL);
   let buildVersion: string;
   let buildIdentity: string;
+  if ((options.buildVersion === undefined) !== (options.buildIdentity === undefined)) {
+    throw new Error("Station Host test build overrides require version and identity together.");
+  }
   if (options.buildVersion !== undefined) {
-    buildVersion = options.buildVersion;
-    buildIdentity = options.buildIdentity ?? options.buildVersion;
+    buildVersion = StationHostInspectedHealthSchema.shape.buildVersion.parse(options.buildVersion);
+    buildIdentity = StationBuildIdentitySchema.parse(options.buildIdentity);
   } else {
     const buildInfo = stationBuildInfo();
     buildVersion = buildInfo.version;
