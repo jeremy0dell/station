@@ -3659,6 +3659,53 @@ describe("worktree.create command", () => {
     fixture.sqlite.close();
   });
 
+  it("publishes a launch-bound create from provider evidence without scanning the graph", async () => {
+    const worktree = new FakeWorktreeProvider({ now });
+    const listWorktrees = vi.spyOn(worktree, "listWorktrees");
+    const fixture = createFixture({ worktree });
+    const events = fixture.eventBus.subscribe({ type: "worktree.added" })[Symbol.asyncIterator]();
+
+    const receipt = await fixture.queue.dispatch({
+      type: "worktree.create",
+      payload: {
+        projectId: "web",
+        branch: "launch-bound-create",
+        launchHarness: "fake-harness",
+      },
+    });
+    await fixture.queue.drain();
+
+    await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
+      status: "succeeded",
+      result: {
+        type: "worktree.create",
+        projectId: "web",
+        worktreeId: "wt_web_launch_bound_create",
+      },
+    });
+    expect(listWorktrees).not.toHaveBeenCalled();
+    expect(fixture.core.getSnapshot()).toMatchObject({
+      counts: { worktrees: 1 },
+      projects: [{ id: "web", counts: { worktrees: 1 } }],
+      rows: [
+        {
+          branch: "launch-bound-create",
+          title: "launch-bound-create",
+          display: { statusLabel: "no agent" },
+        },
+      ],
+    });
+    await expect(events.next()).resolves.toMatchObject({
+      done: false,
+      value: {
+        type: "worktree.added",
+        row: { branch: "launch-bound-create" },
+      },
+    });
+    await events.return?.();
+    fixture.sqlite.close();
+  });
+
   it("preflights launch-bound creates before worktree mutation", async () => {
     const worktree = new FakeWorktreeProvider({ now });
     const fixture = createFixture({ worktree, harness: unavailableHarness() });

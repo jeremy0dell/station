@@ -69,6 +69,21 @@ export function createWorktreeCreateHandler(
     );
     throwIfAborted(context.signal);
 
+    const result = {
+      type: "worktree.create" as const,
+      projectId: project.id,
+      worktreeId: worktree.id,
+    };
+    if (payload.launchHarness !== undefined) {
+      const event = await options.core.commitCreatedWorktreeObservation(worktree);
+      if (event !== undefined) {
+        options.eventBus?.publish(event);
+      }
+      if (options.core.getSnapshot().rows.some((row) => row.id === worktree.id)) {
+        return result;
+      }
+    }
+
     await reconcileAndPublish({
       core: options.core,
       eventBus: options.eventBus,
@@ -76,10 +91,6 @@ export function createWorktreeCreateHandler(
       reason: "command:worktree.create",
       trace: context.trace,
     });
-    return {
-      type: "worktree.create",
-      projectId: project.id,
-      worktreeId: worktree.id,
-    };
+    return result;
   };
 }
