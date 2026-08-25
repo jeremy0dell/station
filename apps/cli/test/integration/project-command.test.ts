@@ -5,12 +5,17 @@ import { promisify } from "node:util";
 import { runCli } from "@station/cli";
 import { addProjectToConfig, removeProjectFromConfig } from "@station/config";
 import type { CommandReceipt, CommandRecord, StationCommand } from "@station/contracts";
+import { StationCommandSchema } from "@station/contracts";
 import { environmentWithoutGitLocals } from "@station/runtime";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createTempState, writeConfigToml } from "../../../../tests/support/temp-projects";
 
 const now = "2026-05-20T12:00:00.000Z";
 const execFileAsync = promisify(execFile);
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe("CLI project commands", () => {
   it("lists configured projects", async () => {
@@ -33,6 +38,7 @@ describe("CLI project commands", () => {
     const configPath = await writeConfigToml(fixture.root, fixture.config);
     const repo = await makeRepo(fixture.root, "web");
     const dispatched: StationCommand[] = [];
+    const parseCommand = vi.spyOn(StationCommandSchema, "safeParse");
 
     const result = await runCli(["--config", configPath, "project", "add", repo], {
       observerDeps: runningObserverDeps({
@@ -48,11 +54,14 @@ describe("CLI project commands", () => {
     });
 
     expect(dispatched).toEqual([projectAddCommand(repo)]);
-    expect(result).toMatchObject({
+    expect(parseCommand).not.toHaveBeenCalled();
+    expect(result).toEqual({
       code: 0,
       output: {
         action: "add",
         status: "succeeded",
+        receipt: receipt("cmd_project_add"),
+        command: commandRecord("cmd_project_add", projectAddCommand(repo), "succeeded"),
         projects: [{ id: "web", label: "web", root: repo }],
       },
     });
@@ -64,6 +73,7 @@ describe("CLI project commands", () => {
     const repo = await makeRepo(fixture.root, "web");
     await addProjectToConfig({ path: repo, configPath, homeDir: fixture.root });
     const dispatched: StationCommand[] = [];
+    const parseCommand = vi.spyOn(StationCommandSchema, "safeParse");
 
     const result = await runCli(["--config", configPath, "project", "remove", "web"], {
       observerDeps: runningObserverDeps({
@@ -83,11 +93,70 @@ describe("CLI project commands", () => {
     });
 
     expect(dispatched).toEqual([projectRemoveCommand("web")]);
-    expect(result).toMatchObject({
+    expect(parseCommand).not.toHaveBeenCalled();
+    expect(result).toEqual({
       code: 0,
       output: {
         action: "remove",
         status: "succeeded",
+        receipt: receipt("cmd_project_remove"),
+        command: commandRecord("cmd_project_remove", projectRemoveCommand("web"), "succeeded"),
+        projects: [],
+      },
+    });
+  });
+
+  it("returns the original project rejection as structured nonzero output", async () => {
+    const fixture = await createTempState();
+    const configPath = await writeConfigToml(fixture.root, fixture.config);
+    const repo = await makeRepo(fixture.root, "web");
+    const rejected = rejectedReceipt("cmd_project_rejected");
+    const parseCommand = vi.spyOn(StationCommandSchema, "safeParse");
+
+    const result = await runCli(["--config", configPath, "project", "add", repo], {
+      observerDeps: runningObserverDeps({
+        socketPath: fixture.socketPath,
+        dispatch: async () => rejected,
+        waitForCommand: async () => {
+          throw new Error("rejected project commands must not wait for completion");
+        },
+      }),
+    });
+
+    expect(parseCommand).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      code: 1,
+      output: {
+        action: "add",
+        status: "rejected",
+        receipt: rejected,
+        projects: [],
+      },
+    });
+  });
+
+  it("returns a failed project record as structured nonzero output", async () => {
+    const fixture = await createTempState();
+    const configPath = await writeConfigToml(fixture.root, fixture.config);
+    const repo = await makeRepo(fixture.root, "web");
+    const command = projectAddCommand(repo);
+    const failed = commandRecord("cmd_project_failed", command, "failed");
+
+    const result = await runCli(["--config", configPath, "project", "add", repo], {
+      observerDeps: runningObserverDeps({
+        socketPath: fixture.socketPath,
+        dispatch: async () => receipt("cmd_project_failed"),
+        waitForCommand: async () => failed,
+      }),
+    });
+
+    expect(result).toEqual({
+      code: 1,
+      output: {
+        action: "add",
+        status: "failed",
+        receipt: receipt("cmd_project_failed"),
+        command: failed,
         projects: [],
       },
     });
@@ -182,6 +251,22 @@ function receipt(commandId: string): CommandReceipt {
   };
 }
 
+function rejectedReceipt(commandId: string): CommandReceipt {
+  return {
+    commandId,
+    traceId: "trc_project",
+    spanId: "spn_project",
+    accepted: false,
+    status: "rejected",
+    error: {
+      tag: "CommandRejectedError",
+      code: "PROJECT_ALREADY_CONFIGURED",
+      message: "The project is already configured.",
+      hint: "Use `stn project list` to inspect configured projects.",
+    },
+  };
+}
+
 function commandRecord(
   id: string,
   command: StationCommand,
@@ -201,6 +286,13 @@ function commandRecord(
   }
   if (status === "succeeded" || status === "failed") {
     record.finishedAt = now;
+  }
+  if (status === "failed") {
+    record.error = {
+      tag: "CommandExecutionError",
+      code: "PROJECT_CONFIG_WRITE_FAILED",
+      message: "The project configuration could not be updated.",
+    };
   }
   return record;
 }
