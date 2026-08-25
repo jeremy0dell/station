@@ -2201,3 +2201,63 @@ BENCH-047 passes every trace, paired, stability, and product guard. An accepted
 result would still require attribution of the exact synchronous TUI work before
 proposing a worker or scheduler change; a rejection redirects the next
 experiment to inherent Bun/Unix-socket dispatch and Observer send timing.
+
+## BENCH-047-P measured native TUI idle-control outcome
+
+BENCH-047 ran from frozen diagnostic commit `5b7da6487`. Its structural smoke
+first proved a runner-boundary mistake without admitting timing: tmux's pane PID
+was the CLI launcher rather than its native `stn __tui` renderer child, so the
+signal terminated the launcher and no completion sentinel appeared. The runner
+was corrected before the authoritative run to require exactly one direct
+renderer child with the compiled executable's exact `__tui` command. The
+repeated structural smoke then passed one complete run, two admissions, exact
+sentinel identity, 23/25 client idle/active events, 5/9 server idle/active
+events, exit-only persistence, and every correctness predicate. Its timing was
+not inspected or admitted into the result.
+
+The authoritative 20-pair run completed in 196 seconds. All twenty product runs
+were safe, all forty independent idle/active admissions passed in 46 attempts,
+no safety predicate was false, both trace scopes occurred exactly once per run,
+every cross-process order was nonnegative, and the maximum response-interval
+reconstruction error was 0.000223ms. Admitted immediate-turn p95 observations
+had 0.157ms p95 and admitted process-launch p95 observations had 4.462ms p95.
+The one-minute load average ranged from 13.39 to 29.07 on ten logical CPUs; the
+registered admission checks nevertheless passed, so no sample was filtered.
+
+The same-runtime contrast strongly matched the narrow occupancy direction. The
+active server-send-to-renderer-callback distribution was 6.605/20.172ms
+median/p95, while idle native delivery was 0.042/0.486ms. All twenty active
+samples exceeded their paired idle sample by at least 2ms; paired differences
+were 6.566/20.115ms median/p95, and idle p95 was 97.59% below active p95. Idle
+therefore passed its 3/5ms median/p95 prediction, the 15-of-20 paired guard, and
+both the 40% guard and 50% predicted p95 improvement.
+
+The experiment still rejects the registered attribution mechanically.
+Idle callback-through-validation was 0.326/0.628ms rather than at most 0.2ms
+p95. Product tails also exceeded every frozen bound: intent-to-interactive p95
+was 575.802ms versus 380ms, attachment p95 was 44.178ms versus 30ms, transport
+residual p95 was 35.227ms versus 35ms, and active response-egress p95 was
+20.242ms versus 15ms. The report therefore records `failure: null`,
+`allSafe: true`, `predictionPassed: false`, and `thresholdsPassed: false`.
+
+No production optimization is retained. The result makes inherent Bun/Unix
+socket delivery unlikely to own the active increment: an idle response reaches
+the same renderer callback almost immediately. It does not identify which
+active-only renderer activity owns the delay. The next registered diagnostic
+must locate exact main-thread work between Observer response send and the active
+socket callback—candidate sources are Observer event handling, client-state
+reduction, terminal/Host callbacks, and native rendering—before any worker or
+scheduler change is proposed. This remains an internal stage in an already-open
+native overlay, not Station overlay startup.
+
+The archived report is
+`tests/performance/quick-session/bench-047-native-tui-idle-control.md`. The raw
+report is
+`.dev-state/performance/quick-session/bench-047-native-tui-idle-control.real.json`
+(912,424 bytes; SHA-256
+`86194b7ee7b94c73e606438d46970ebed022fe579edf1971d2316d6e22b6039a`).
+Validation passed Protocol, Observer, and Station typechecks; 15 Protocol
+transport unit tests; 43 Protocol integration tests; 65 Observer external-launch
+tests; 61 focused Station dashboard, managed-launch, Observer-client, and probe
+tests; Biome; `git diff --check`; the skipped-mode runner compile; and the
+corrected structural native smoke.
