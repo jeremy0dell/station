@@ -1,0 +1,4827 @@
+{
+  "schemaVersion": 1,
+  "benchmark": "station-quick-session-bench-042-observer-launch-phase-attribution",
+  "generatedAt": "2026-08-25T20:49:27.436Z",
+  "machine": {
+    "platform": "darwin",
+    "arch": "arm64",
+    "cpuModel": "Apple M4",
+    "logicalCpuCount": 10
+  },
+  "tools": {
+    "bun": "1.3.14",
+    "worktrunk": "wt v0.72.0",
+    "tmux": "tmux 3.7b",
+    "hostProtocolVersion": 8,
+    "displayBuildVersion": "0.0.0-pre-alpha.5.16",
+    "observerBuildVersion": "0.0.0-pre-alpha.5.16+station.19d9ec36edee578f0502ab4f45599215afe50b2db3f15b70c3b2c4bb6f0d6150"
+  },
+  "binary": {
+    "buildMs": 7349.427833000001,
+    "bytes": 78173410,
+    "buildExcludedFromTiming": true,
+    "prebuiltExactCandidate": false
+  },
+  "repositoryShape": {
+    "worktrees": 49,
+    "repetitions": 20,
+    "lifecycleHooks": false,
+    "ordinaryObserverRestartPerRun": true,
+    "ptyUsedHostPreservedAcrossRuns": true
+  },
+  "thresholds": {
+    "intentToInteractiveP95Ms": 380,
+    "attachmentResolutionP95Ms": 30,
+    "transportResidualP95Ms": 15,
+    "tailIntervalMs": 40,
+    "minimumTailIntervals": 2,
+    "dominantP95Fraction": 0.5,
+    "dominantTailFraction": 0.5,
+    "minimumDominantTailIntervals": 2
+  },
+  "setup": {
+    "repositoryShapeMs": 1556.8547080000008,
+    "hostSeedMs": 1129.1982499999995,
+    "hostSeedSafe": true,
+    "hostStoppedCleanly": true,
+    "hostStderrEmpty": true,
+    "rootRemoved": true
+  },
+  "runs": [
+    {
+      "repetition": 0,
+      "focusStrategy": "automatic",
+      "dismissalInputSent": false,
+      "readyWasReplay": false,
+      "acknowledgementCount": 1,
+      "safe": false,
+      "safetyPredicates": {
+        "dashboardProjectVisible": true,
+        "commandProjectMatches": true,
+        "commandHarnessMatches": true,
+        "worktreeProjectMatches": true,
+        "worktreeBranchMatches": true,
+        "worktreeUsesManagedRoot": true,
+        "worktreeHasRegistrationIdentity": true,
+        "sessionHarnessMatches": true,
+        "sessionTerminalMatches": true,
+        "hostWorktreeMatches": true,
+        "hostHarnessMatches": true,
+        "hostSessionMatches": true,
+        "readyMarkerObserved": true,
+        "inputAcknowledged": true,
+        "inputAcknowledgedExactlyOnce": true,
+        "hostInventoryEmpty": true,
+        "gitInventoryRestored": true,
+        "uiStoppedCleanly": true,
+        "observerStoppedCleanly": true,
+        "managedLaunchPhaseTraceValid": true,
+        "managedLaunchPhaseTraceExitOnly": true,
+        "observerExternalLaunchPhaseTraceValid": false,
+        "observerExternalLaunchPhaseTraceExitOnly": true,
+        "uiStderrMatches": true
+      },
+      "phaseCoherent": true,
+      "commandId": "cmd_29ec5db2-2d70-4576-a1c6-c681af099f70",
+      "traceId": "trc_19e9577a-874e-47a4-9f81-0372724b6865",
+      "branch": "compiled-tui-project-814fa9",
+      "worktreeId": "wt_compiled-tui-project_compiled-tui-project-814fa9_633b45d443",
+      "worktreePath": "/private/var/folders/l4/540r7_b136l9jcf36_p3qyvc0000gn/T/s-4qsapp/tmp/st-qtu-FLn6sy/worktrees/compiled-tui-project-814fa9",
+      "sessionId": "ses_a434de6d-ad78-40b9-ae90-1ff616a896e6",
+      "terminalTargetId": "native:wt_compiled-tui-project_compiled-tui-project-814fa9_633b45d443",
+      "ptyId": "pty-2",
+      "ptyInstanceId": "ptyi_faed5036-6fda-4123-aaf5-bd8b38e054c7",
+      "observerPid": 11884,
+      "sampledReconcileReason": "metadata:change_summary",
+      "uiPid": 11761,
+      "launchToDashboardMs": 4879.774458,
+      "intentToOptimisticMs": 12.074000000000524,
+      "intentToCommandAcceptedMs": 19.73137499999939,
+      "intentToCommandCompletedMs": 102.98045800000182,
+      "intentToHostReadyMs": 285.9385000000002,
+      "intentToCanonicalUiMs": 293.411167000002,
+      "intentToFocusMs": 198.44479200000205,
+      "focusToOverlayDismissedMs": 0,
+      "overlayDismissedToInputSentMs": 0.03054100000008475,
+      "inputSentToHostReadyMs": 87.46316699999807,
+      "inputSentToAckMs": 87.4941669999971,
+      "focusToInputAckMs": 87.52470799999719,
+      "phaseSumMs": 87.52470799999719,
+      "intentToInteractiveMs": 285.96949999999924,
+      "launchToInteractiveMs": 5294.653999999999,
+      "cleanupInventoryCount": 0,
+      "gitCleanupInventoryCount": 49,
+      "uiStoppedCleanly": true,
+      "observerStoppedCleanly": true,
+      "uiStderrEmpty": false,
+      "uiStderr": "Launching STATION TUI…\n__STATION_QUICK_SESSION_MANAGED_LAUNCH_PHASES__:{\"events\":[{\"phase\":\"hostedLaunchStarted\",\"atMs\":3359.596416},{\"phase\":\"commandCompleted\",\"atMs\":3472.625375},{\"phase\":\"worktreeObserved\",\"atMs\":3472.733916},{\"phase\":\"attemptStarted\",\"atMs\":3472.859083},{\"phase\":\"preflightCompleted\",\"atMs\":3473.037416},{\"phase\":\"prepareStarted\",\"atMs\":3473.037791},{\"phase\":\"prepareCompleted\",\"atMs\":3510.910708},{\"phase\":\"attachmentResolveStarted\",\"atMs\":3511.321291},{\"phase\":\"attachmentResolveCompleted\",\"atMs\":3526.740833},{\"phase\":\"terminalPlaced\",\"atMs\":3527.048208},{\"phase\":\"panePublished\",\"atMs\":3527.220416},{\"phase\":\"attemptCompleted\",\"atMs\":3532.333875},{\"phase\":\"hostedLaunchCompleted\",\"atMs\":3532.338208},{\"phase\":\"quickResultReceived\",\"atMs\":3532.4085},{\"phase\":\"overlayCloseRequested\",\"atMs\":3532.409083},{\"phase\":\"canonicalWaitStarted\",\"atMs\":3532.517083},{\"phase\":\"canonicalWaitCompleted\",\"atMs\":3533.501291}]}\n",
+      "uiStderrBeforeExit": "Launching STATION TUI…\n",
+      "managedLaunchPhaseTrace": {
+        "events": [
+          {
+            "phase": "hostedLaunchStarted",
+            "atMs": 3359.596416
+          },
+          {
+            "phase": "commandCompleted",
+            "atMs": 3472.625375
+          },
+          {
+            "phase": "worktreeObserved",
+            "atMs": 3472.733916
+          },
+          {
+            "phase": "attemptStarted",
+            "atMs": 3472.859083
+          },
+          {
+            "phase": "preflightCompleted",
+            "atMs": 3473.037416
+          },
+          {
+            "phase": "prepareStarted",
+            "atMs": 3473.037791
+          },
+          {
+            "phase": "prepareCompleted",
+            "atMs": 3510.910708
+          },
+          {
+            "phase": "attachmentResolveStarted",
+            "atMs": 3511.321291
+          },
+          {
+            "phase": "attachmentResolveCompleted",
+            "atMs": 3526.740833
+          },
+          {
+            "phase": "terminalPlaced",
+            "atMs": 3527.048208
+          },
+          {
+            "phase": "panePublished",
+            "atMs": 3527.220416
+          },
+          {
+            "phase": "attemptCompleted",
+            "atMs": 3532.333875
+          },
+          {
+            "phase": "hostedLaunchCompleted",
+            "atMs": 3532.338208
+          },
+          {
+            "phase": "quickResultReceived",
+            "atMs": 3532.4085
+          },
+          {
+            "phase": "overlayCloseRequested",
+            "atMs": 3532.409083
+          },
+          {
+            "phase": "canonicalWaitStarted",
+            "atMs": 3532.517083
+          },
+          {
+            "phase": "canonicalWaitCompleted",
+            "atMs": 3533.501291
+          }
+        ]
+      },
+      "managedLaunchPhaseDurations": {
+        "commandCompletionToWorktreeObservationMs": 0.10854100000005928,
+        "worktreeObservationToAttemptStartMs": 0.12516699999969205,
+        "managedPreflightMs": 0.1783330000002934,
+        "preflightToPrepareStartMs": 0.00037500000007639755,
+        "prepareExternalLaunchMs": 37.87291699999969,
+        "prepareToAttachmentResolveStartMs": 0.4105830000003152,
+        "attachmentResolutionMs": 15.419541999999637,
+        "attachmentToTerminalPlacementMs": 0.30737500000032014,
+        "terminalPlacementToPanePublicationMs": 0.17220799999995506,
+        "panePublicationToAttemptCompletionMs": 5.113458999999693,
+        "attemptToHostedLaunchCompletionMs": 0.004333000000315224,
+        "hostedLaunchToQuickResultMs": 0.07029199999988123,
+        "quickResultToOverlayCloseMs": 0.0005830000000059954
+      },
+      "commandCompletionToOverlayCloseMs": 59.78370799999993,
+      "managedLaunchPhaseSumMs": 59.78370799999993,
+      "managedLaunchPhaseCoherent": true,
+      "observerExternalLaunchPhaseTrace": {
+        "events": []
+      },
+      "observerExternalLaunchPhaseDurations": null,
+      "observerExternalLaunchInternalMs": null,
+      "observerExternalLaunchPhaseSumMs": null,
+      "observerExternalLaunchPhaseCoherent": false,
+      "clientRpcMinusObserverInternalMs": null,
+      "loadAverage": {
+        "before": [
+          24.19873046875,
+          26.58251953125,
+          22.85107421875
+        ],
+        "after": [
+          23.302734375,
+          26.32861328125,
+          22.80517578125
+        ]
+      },
+      "resourceUsage": {
+        "userCpuMs": 303.495,
+        "systemCpuMs": 261.432,
+        "fsReads": 0,
+        "fsWrites": 0,
+        "voluntaryContextSwitches": 1,
+        "involuntaryContextSwitches": 7782
+      }
+    },
+    {
+      "repetition": 1,
+      "focusStrategy": "automatic",
+      "dismissalInputSent": false,
+      "readyWasReplay": true,
+      "acknowledgementCount": 1,
+      "safe": false,
+      "safetyPredicates": {
+        "dashboardProjectVisible": true,
+        "commandProjectMatches": true,
+        "commandHarnessMatches": true,
+        "worktreeProjectMatches": true,
+        "worktreeBranchMatches": true,
+        "worktreeUsesManagedRoot": true,
+        "worktreeHasRegistrationIdentity": true,
+        "sessionHarnessMatches": true,
+        "sessionTerminalMatches": true,
+        "hostWorktreeMatches": true,
+        "hostHarnessMatches": true,
+        "hostSessionMatches": true,
+        "readyMarkerObserved": true,
+        "inputAcknowledged": true,
+        "inputAcknowledgedExactlyOnce": true,
+        "hostInventoryEmpty": true,
+        "gitInventoryRestored": true,
+        "uiStoppedCleanly": true,
+        "observerStoppedCleanly": true,
+        "managedLaunchPhaseTraceValid": true,
+        "managedLaunchPhaseTraceExitOnly": true,
+        "observerExternalLaunchPhaseTraceValid": false,
+        "observerExternalLaunchPhaseTraceExitOnly": true,
+        "uiStderrMatches": true
+      },
+      "phaseCoherent": true,
+      "commandId": "cmd_a9be2114-1602-4253-832a-b5117f8d83b0",
+      "traceId": "trc_e76c9fd5-2666-4da9-9a3c-42e9443c2251",
+      "branch": "compiled-tui-project-a163bb",
+      "worktreeId": "wt_compiled-tui-project_compiled-tui-project-a163bb_6806088edf",
+      "worktreePath": "/private/var/folders/l4/540r7_b136l9jcf36_p3qyvc0000gn/T/s-4qsapp/tmp/st-qtu-FLn6sy/worktrees/compiled-tui-project-a163bb",
+      "sessionId": "ses_997ef6f2-d018-4f4b-b08d-a1fc187f6286",
+      "terminalTargetId": "native:wt_compiled-tui-project_compiled-tui-project-a163bb_6806088edf",
+      "ptyId": "pty-3",
+      "ptyInstanceId": "ptyi_36f1afba-3472-4262-a53e-e87ff9d1f633",
+      "observerPid": 21328,
+      "sampledReconcileReason": "tui-startup",
+      "uiPid": 20918,
+      "launchToDashboardMs": 2355.5872500000005,
+      "intentToOptimisticMs": 11.429207999997743,
+      "intentToCommandAcceptedMs": 21.566541000000143,
+      "intentToCommandCompletedMs": 139.51724999999715,
+      "intentToHostReadyMs": 183.87395800000013,
+      "intentToCanonicalUiMs": 272.73741599999994,
+      "intentToFocusMs": 224.8833749999976,
+      "focusToOverlayDismissedMs": 0,
+      "overlayDismissedToInputSentMs": 0.003166000002238434,
+      "inputSentToHostReadyMs": -41.01258299999972,
+      "inputSentToAckMs": 34.9106670000001,
+      "focusToInputAckMs": 34.91383300000234,
+      "phaseSumMs": 34.91383300000234,
+      "intentToInteractiveMs": 259.79720799999996,
+      "launchToInteractiveMs": 2725.1507920000004,
+      "cleanupInventoryCount": 0,
+      "gitCleanupInventoryCount": 49,
+      "uiStoppedCleanly": true,
+      "observerStoppedCleanly": true,
+      "uiStderrEmpty": false,
+      "uiStderr": "Launching STATION TUI…\n__STATION_QUICK_SESSION_MANAGED_LAUNCH_PHASES__:{\"events\":[{\"phase\":\"hostedLaunchStarted\",\"atMs\":907.363167},{\"phase\":\"commandCompleted\",\"atMs\":1050.98025},{\"phase\":\"worktreeObserved\",\"atMs\":1051.033625},{\"phase\":\"attemptStarted\",\"atMs\":1051.150083},{\"phase\":\"preflightCompleted\",\"atMs\":1051.315417},{\"phase\":\"prepareStarted\",\"atMs\":1051.315667},{\"phase\":\"prepareCompleted\",\"atMs\":1089.630583},{\"phase\":\"attachmentResolveStarted\",\"atMs\":1089.775333},{\"phase\":\"attachmentResolveCompleted\",\"atMs\":1106.045333},{\"phase\":\"terminalPlaced\",\"atMs\":1106.624417},{\"phase\":\"panePublished\",\"atMs\":1107.114417},{\"phase\":\"attemptCompleted\",\"atMs\":1115.594875},{\"phase\":\"hostedLaunchCompleted\",\"atMs\":1115.599958},{\"phase\":\"quickResultReceived\",\"atMs\":1115.706792},{\"phase\":\"overlayCloseRequested\",\"atMs\":1115.707292},{\"phase\":\"canonicalWaitStarted\",\"atMs\":1115.835208},{\"phase\":\"canonicalWaitCompleted\",\"atMs\":1117.35075}]}\n",
+      "uiStderrBeforeExit": "Launching STATION TUI…\n",
+      "managedLaunchPhaseTrace": {
+        "events": [
+          {
+            "phase": "hostedLaunchStarted",
+            "atMs": 907.363167
+          },
+          {
+            "phase": "commandCompleted",
+            "atMs": 1050.98025
+          },
+          {
+            "phase": "worktreeObserved",
+            "atMs": 1051.033625
+          },
+          {
+            "phase": "attemptStarted",
+            "atMs": 1051.150083
+          },
+          {
+            "phase": "preflightCompleted",
+            "atMs": 1051.315417
+          },
+          {
+            "phase": "prepareStarted",
+            "atMs": 1051.315667
+          },
+          {
+            "phase": "prepareCompleted",
+            "atMs": 1089.630583
+          },
+          {
+            "phase": "attachmentResolveStarted",
+            "atMs": 1089.775333
+          },
+          {
+            "phase": "attachmentResolveCompleted",
+            "atMs": 1106.045333
+          },
+          {
+            "phase": "terminalPlaced",
+            "atMs": 1106.624417
+          },
+          {
+            "phase": "panePublished",
+            "atMs": 1107.114417
+          },
+          {
+            "phase": "attemptCompleted",
+            "atMs": 1115.594875
+          },
+          {
+            "phase": "hostedLaunchCompleted",
+            "atMs": 1115.599958
+          },
+          {
+            "phase": "quickResultReceived",
+            "atMs": 1115.706792
+          },
+          {
+            "phase": "overlayCloseRequested",
+            "atMs": 1115.707292
+          },
+          {
+            "phase": "canonicalWaitStarted",
+            "atMs": 1115.835208
+          },
+          {
+            "phase": "canonicalWaitCompleted",
+            "atMs": 1117.35075
+          }
+        ]
+      },
+      "managedLaunchPhaseDurations": {
+        "commandCompletionToWorktreeObservationMs": 0.05337499999995998,
+        "worktreeObservationToAttemptStartMs": 0.11645799999996598,
+        "managedPreflightMs": 0.16533400000002985,
+        "preflightToPrepareStartMs": 0.0002500000000509317,
+        "prepareExternalLaunchMs": 38.31491599999981,
+        "prepareToAttachmentResolveStartMs": 0.14475000000015825,
+        "attachmentResolutionMs": 16.269999999999982,
+        "attachmentToTerminalPlacementMs": 0.5790839999999662,
+        "terminalPlacementToPanePublicationMs": 0.4900000000000091,
+        "panePublicationToAttemptCompletionMs": 8.480457999999999,
+        "attemptToHostedLaunchCompletionMs": 0.005083000000013271,
+        "hostedLaunchToQuickResultMs": 0.10683399999993526,
+        "quickResultToOverlayCloseMs": 0.0005000000001018634
+      },
+      "commandCompletionToOverlayCloseMs": 64.72704199999998,
+      "managedLaunchPhaseSumMs": 64.72704199999998,
+      "managedLaunchPhaseCoherent": true,
+      "observerExternalLaunchPhaseTrace": {
+        "events": []
+      },
+      "observerExternalLaunchPhaseDurations": null,
+      "observerExternalLaunchInternalMs": null,
+      "observerExternalLaunchPhaseSumMs": null,
+      "observerExternalLaunchPhaseCoherent": false,
+      "clientRpcMinusObserverInternalMs": null,
+      "loadAverage": {
+        "before": [
+          23.302734375,
+          26.32861328125,
+          22.80517578125
+        ],
+        "after": [
+          22.55126953125,
+          26.056640625,
+          22.7490234375
+        ]
+      },
+      "resourceUsage": {
+        "userCpuMs": 213.498,
+        "systemCpuMs": 173.664,
+        "fsReads": 0,
+        "fsWrites": 0,
+        "voluntaryContextSwitches": 1,
+        "involuntaryContextSwitches": 5789
+      }
+    },
+    {
+      "repetition": 2,
+      "focusStrategy": "automatic",
+      "dismissalInputSent": false,
+      "readyWasReplay": true,
+      "acknowledgementCount": 1,
+      "safe": false,
+      "safetyPredicates": {
+        "dashboardProjectVisible": true,
+        "commandProjectMatches": true,
+        "commandHarnessMatches": true,
+        "worktreeProjectMatches": true,
+        "worktreeBranchMatches": true,
+        "worktreeUsesManagedRoot": true,
+        "worktreeHasRegistrationIdentity": true,
+        "sessionHarnessMatches": true,
+        "sessionTerminalMatches": true,
+        "hostWorktreeMatches": true,
+        "hostHarnessMatches": true,
+        "hostSessionMatches": true,
+        "readyMarkerObserved": true,
+        "inputAcknowledged": true,
+        "inputAcknowledgedExactlyOnce": true,
+        "hostInventoryEmpty": true,
+        "gitInventoryRestored": true,
+        "uiStoppedCleanly": true,
+        "observerStoppedCleanly": true,
+        "managedLaunchPhaseTraceValid": true,
+        "managedLaunchPhaseTraceExitOnly": true,
+        "observerExternalLaunchPhaseTraceValid": false,
+        "observerExternalLaunchPhaseTraceExitOnly": true,
+        "uiStderrMatches": true
+      },
+      "phaseCoherent": true,
+      "commandId": "cmd_d49a8acc-45e4-4c46-8748-462107f50e1d",
+      "traceId": "trc_462daf75-993b-4c2a-9a5c-711cd066af35",
+      "branch": "compiled-tui-project-20cbff",
+      "worktreeId": "wt_compiled-tui-project_compiled-tui-project-20cbff_f3798454b3",
+      "worktreePath": "/private/var/folders/l4/540r7_b136l9jcf36_p3qyvc0000gn/T/s-4qsapp/tmp/st-qtu-FLn6sy/worktrees/compiled-tui-project-20cbff",
+      "sessionId": "ses_4bed913f-c31c-408b-b030-7647bf271515",
+      "terminalTargetId": "native:wt_compiled-tui-project_compiled-tui-project-20cbff_f3798454b3",
+      "ptyId": "pty-4",
+      "ptyInstanceId": "ptyi_d51835d8-1e45-4301-943f-61abf7bd08e3",
+      "observerPid": 27769,
+      "sampledReconcileReason": "tui-startup",
+      "uiPid": 27599,
+      "launchToDashboardMs": 1738.8495419999963,
+      "intentToOptimisticMs": 10.090582999997423,
+      "intentToCommandAcceptedMs": 16.147540999998455,
+      "intentToCommandCompletedMs": 120.33954099999391,
+      "intentToHostReadyMs": 175.79908299999806,
+      "intentToCanonicalUiMs": 229.11549999999988,
+      "intentToFocusMs": 198.77100000000064,
+      "focusToOverlayDismissedMs": 0,
+      "overlayDismissedToInputSentMs": 0.0018749999944702722,
+      "inputSentToHostReadyMs": -22.973791999997047,
+      "inputSentToAckMs": 22.350125000004482,
+      "focusToInputAckMs": 22.351999999998952,
+      "phaseSumMs": 22.351999999998952,
+      "intentToInteractiveMs": 221.1229999999996,
+      "launchToInteractiveMs": 2069.477417000002,
+      "cleanupInventoryCount": 0,
+      "gitCleanupInventoryCount": 49,
+      "uiStoppedCleanly": true,
+      "observerStoppedCleanly": true,
+      "uiStderrEmpty": false,
+      "uiStderr": "Launching STATION TUI…\n__STATION_QUICK_SESSION_MANAGED_LAUNCH_PHASES__:{\"events\":[{\"phase\":\"hostedLaunchStarted\",\"atMs\":857.440958},{\"phase\":\"commandCompleted\",\"atMs\":993.914625},{\"phase\":\"worktreeObserved\",\"atMs\":994.004958},{\"phase\":\"attemptStarted\",\"atMs\":994.136083},{\"phase\":\"preflightCompleted\",\"atMs\":994.417208},{\"phase\":\"prepareStarted\",\"atMs\":994.417667},{\"phase\":\"prepareCompleted\",\"atMs\":1022.483208},{\"phase\":\"attachmentResolveStarted\",\"atMs\":1022.624625},{\"phase\":\"attachmentResolveCompleted\",\"atMs\":1025.710167},{\"phase\":\"terminalPlaced\",\"atMs\":1025.971042},{\"phase\":\"panePublished\",\"atMs\":1026.138},{\"phase\":\"attemptCompleted\",\"atMs\":1029.726708},{\"phase\":\"hostedLaunchCompleted\",\"atMs\":1029.730792},{\"phase\":\"quickResultReceived\",\"atMs\":1029.782667},{\"phase\":\"overlayCloseRequested\",\"atMs\":1029.783083},{\"phase\":\"canonicalWaitStarted\",\"atMs\":1029.873667},{\"phase\":\"canonicalWaitCompleted\",\"atMs\":1053.731208}]}\n",
+      "uiStderrBeforeExit": "Launching STATION TUI…\n",
+      "managedLaunchPhaseTrace": {
+        "events": [
+          {
+            "phase": "hostedLaunchStarted",
+            "atMs": 857.440958
+          },
+          {
+            "phase": "commandCompleted",
+            "atMs": 993.914625
+          },
+          {
+            "phase": "worktreeObserved",
+            "atMs": 994.004958
+          },
+          {
+            "phase": "attemptStarted",
+            "atMs": 994.136083
+          },
+          {
+            "phase": "preflightCompleted",
+            "atMs": 994.417208
+          },
+          {
+            "phase": "prepareStarted",
+            "atMs": 994.417667
+          },
+          {
+            "phase": "prepareCompleted",
+            "atMs": 1022.483208
+          },
+          {
+            "phase": "attachmentResolveStarted",
+            "atMs": 1022.624625
+          },
+          {
+            "phase": "attachmentResolveCompleted",
+            "atMs": 1025.710167
+          },
+          {
+            "phase": "terminalPlaced",
+            "atMs": 1025.971042
+          },
+          {
+            "phase": "panePublished",
+            "atMs": 1026.138
+          },
+          {
+            "phase": "attemptCompleted",
+            "atMs": 1029.726708
+          },
+          {
+            "phase": "hostedLaunchCompleted",
+            "atMs": 1029.730792
+          },
+          {
+            "phase": "quickResultReceived",
+            "atMs": 1029.782667
+          },
+          {
+            "phase": "overlayCloseRequested",
+            "atMs": 1029.783083
+          },
+          {
+            "phase": "canonicalWaitStarted",
+            "atMs": 1029.873667
+          },
+          {
+            "phase": "canonicalWaitCompleted",
+            "atMs": 1053.731208
+          }
+        ]
+      },
+      "managedLaunchPhaseDurations": {
+        "commandCompletionToWorktreeObservationMs": 0.0903329999999869,
+        "worktreeObservationToAttemptStartMs": 0.13112499999999727,
+        "managedPreflightMs": 0.28112499999997453,
+        "preflightToPrepareStartMs": 0.0004590000000916916,
+        "prepareExternalLaunchMs": 28.06554099999994,
+        "prepareToAttachmentResolveStartMs": 0.14141700000004676,
+        "attachmentResolutionMs": 3.0855419999999185,
+        "attachmentToTerminalPlacementMs": 0.2608749999999418,
+        "terminalPlacementToPanePublicationMs": 0.16695800000002237,
+        "panePublicationToAttemptCompletionMs": 3.588707999999997,
+        "attemptToHostedLaunchCompletionMs": 0.00408400000014808,
+        "hostedLaunchToQuickResultMs": 0.051874999999881766,
+        "quickResultToOverlayCloseMs": 0.00041600000008656934
+      },
+      "commandCompletionToOverlayCloseMs": 35.86845800000003,
+      "managedLaunchPhaseSumMs": 35.86845800000003,
+      "managedLaunchPhaseCoherent": true,
+      "observerExternalLaunchPhaseTrace": {
+        "events": []
+      },
+      "observerExternalLaunchPhaseDurations": null,
+      "observerExternalLaunchInternalMs": null,
+      "observerExternalLaunchPhaseSumMs": null,
+      "observerExternalLaunchPhaseCoherent": false,
+      "clientRpcMinusObserverInternalMs": null,
+      "loadAverage": {
+        "before": [
+          22.55126953125,
+          26.056640625,
+          22.7490234375
+        ],
+        "after": [
+          22.8212890625,
+          26.00390625,
+          22.76904296875
+        ]
+      },
+      "resourceUsage": {
+        "userCpuMs": 145.664,
+        "systemCpuMs": 133.133,
+        "fsReads": 0,
+        "fsWrites": 0,
+        "voluntaryContextSwitches": 0,
+        "involuntaryContextSwitches": 4442
+      }
+    },
+    {
+      "repetition": 3,
+      "focusStrategy": "automatic",
+      "dismissalInputSent": false,
+      "readyWasReplay": true,
+      "acknowledgementCount": 1,
+      "safe": false,
+      "safetyPredicates": {
+        "dashboardProjectVisible": true,
+        "commandProjectMatches": true,
+        "commandHarnessMatches": true,
+        "worktreeProjectMatches": true,
+        "worktreeBranchMatches": true,
+        "worktreeUsesManagedRoot": true,
+        "worktreeHasRegistrationIdentity": true,
+        "sessionHarnessMatches": true,
+        "sessionTerminalMatches": true,
+        "hostWorktreeMatches": true,
+        "hostHarnessMatches": true,
+        "hostSessionMatches": true,
+        "readyMarkerObserved": true,
+        "inputAcknowledged": true,
+        "inputAcknowledgedExactlyOnce": true,
+        "hostInventoryEmpty": true,
+        "gitInventoryRestored": true,
+        "uiStoppedCleanly": true,
+        "observerStoppedCleanly": true,
+        "managedLaunchPhaseTraceValid": true,
+        "managedLaunchPhaseTraceExitOnly": true,
+        "observerExternalLaunchPhaseTraceValid": false,
+        "observerExternalLaunchPhaseTraceExitOnly": true,
+        "uiStderrMatches": true
+      },
+      "phaseCoherent": true,
+      "commandId": "cmd_eb68d5e4-93bb-4bb9-a06e-8ce9f6928abd",
+      "traceId": "trc_0b6a4165-4e2b-40bc-a1bc-f2af89b86a01",
+      "branch": "compiled-tui-project-a7a02f",
+      "worktreeId": "wt_compiled-tui-project_compiled-tui-project-a7a02f_81b0db36a9",
+      "worktreePath": "/private/var/folders/l4/540r7_b136l9jcf36_p3qyvc0000gn/T/s-4qsapp/tmp/st-qtu-FLn6sy/worktrees/compiled-tui-project-a7a02f",
+      "sessionId": "ses_9d785359-1168-4ae2-bbbb-4efcb2c94908",
+      "terminalTargetId": "native:wt_compiled-tui-project_compiled-tui-project-a7a02f_81b0db36a9",
+      "ptyId": "pty-5",
+      "ptyInstanceId": "ptyi_2e3cdf6e-55e2-4333-ad9d-bf972e23d6eb",
+      "observerPid": 33953,
+      "sampledReconcileReason": "tui-startup",
+      "uiPid": 33813,
+      "launchToDashboardMs": 1689.8453750000044,
+      "intentToOptimisticMs": 9.748791999998502,
+      "intentToCommandAcceptedMs": 18.182291999997688,
+      "intentToCommandCompletedMs": 98.08916699999827,
+      "intentToHostReadyMs": 136.4752920000028,
+      "intentToCanonicalUiMs": 219.80799999999726,
+      "intentToFocusMs": 169.7158750000017,
+      "focusToOverlayDismissedMs": 0,
+      "overlayDismissedToInputSentMs": 0.006999999997788109,
+      "inputSentToHostReadyMs": -33.247582999996666,
+      "inputSentToAckMs": 32.69524999999703,
+      "focusToInputAckMs": 32.70224999999482,
+      "phaseSumMs": 32.70224999999482,
+      "intentToInteractiveMs": 202.4181249999965,
+      "launchToInteractiveMs": 2007.5069159999985,
+      "cleanupInventoryCount": 0,
+      "gitCleanupInventoryCount": 49,
+      "uiStoppedCleanly": true,
+      "observerStoppedCleanly": true,
+      "uiStderrEmpty": false,
+      "uiStderr": "Launching STATION TUI…\n__STATION_QUICK_SESSION_MANAGED_LAUNCH_PHASES__:{\"events\":[{\"phase\":\"hostedLaunchStarted\",\"atMs\":963.947125},{\"phase\":\"commandCompleted\",\"atMs\":1066.872125},{\"phase\":\"worktreeObserved\",\"atMs\":1066.928625},{\"phase\":\"attemptStarted\",\"atMs\":1067.0375},{\"phase\":\"preflightCompleted\",\"atMs\":1067.211292},{\"phase\":\"prepareStarted\",\"atMs\":1067.211667},{\"phase\":\"prepareCompleted\",\"atMs\":1094.907583},{\"phase\":\"attachmentResolveStarted\",\"atMs\":1095.040292},{\"phase\":\"attachmentResolveCompleted\",\"atMs\":1103.899667},{\"phase\":\"terminalPlaced\",\"atMs\":1104.433417},{\"phase\":\"panePublished\",\"atMs\":1104.799375},{\"phase\":\"attemptCompleted\",\"atMs\":1110.554208},{\"phase\":\"hostedLaunchCompleted\",\"atMs\":1110.561167},{\"phase\":\"quickResultReceived\",\"atMs\":1110.691583},{\"phase\":\"overlayCloseRequested\",\"atMs\":1110.692833},{\"phase\":\"canonicalWaitStarted\",\"atMs\":1110.922667},{\"phase\":\"canonicalWaitCompleted\",\"atMs\":1153.056542}]}\n",
+      "uiStderrBeforeExit": "Launching STATION TUI…\n",
+      "managedLaunchPhaseTrace": {
+        "events": [
+          {
+            "phase": "hostedLaunchStarted",
+            "atMs": 963.947125
+          },
+          {
+            "phase": "commandCompleted",
+            "atMs": 1066.872125
+          },
+          {
+            "phase": "worktreeObserved",
+            "atMs": 1066.928625
+          },
+          {
+            "phase": "attemptStarted",
+            "atMs": 1067.0375
+          },
+          {
+            "phase": "preflightCompleted",
+            "atMs": 1067.211292
+          },
+          {
+            "phase": "prepareStarted",
+            "atMs": 1067.211667
+          },
+          {
+            "phase": "prepareCompleted",
+            "atMs": 1094.907583
+          },
+          {
+            "phase": "attachmentResolveStarted",
+            "atMs": 1095.040292
+          },
+          {
+            "phase": "attachmentResolveCompleted",
+            "atMs": 1103.899667
+          },
+          {
+            "phase": "terminalPlaced",
+            "atMs": 1104.433417
+          },
+          {
+            "phase": "panePublished",
+            "atMs": 1104.799375
+          },
+          {
+            "phase": "attemptCompleted",
+            "atMs": 1110.554208
+          },
+          {
+            "phase": "hostedLaunchCompleted",
+            "atMs": 1110.561167
+          },
+          {
+            "phase": "quickResultReceived",
+            "atMs": 1110.691583
+          },
+          {
+            "phase": "overlayCloseRequested",
+            "atMs": 1110.692833
+          },
+          {
+            "phase": "canonicalWaitStarted",
+            "atMs": 1110.922667
+          },
+          {
+            "phase": "canonicalWaitCompleted",
+            "atMs": 1153.056542
+          }
+        ]
+      },
+      "managedLaunchPhaseDurations": {
+        "commandCompletionToWorktreeObservationMs": 0.05649999999991451,
+        "worktreeObservationToAttemptStartMs": 0.10887499999989814,
+        "managedPreflightMs": 0.17379200000004857,
+        "preflightToPrepareStartMs": 0.00037500000007639755,
+        "prepareExternalLaunchMs": 27.695915999999897,
+        "prepareToAttachmentResolveStartMs": 0.1327089999999771,
+        "attachmentResolutionMs": 8.859375,
+        "attachmentToTerminalPlacementMs": 0.5337500000000546,
+        "terminalPlacementToPanePublicationMs": 0.3659580000000915,
+        "panePublicationToAttemptCompletionMs": 5.754832999999962,
+        "attemptToHostedLaunchCompletionMs": 0.006959000000051674,
+        "hostedLaunchToQuickResultMs": 0.13041599999996834,
+        "quickResultToOverlayCloseMs": 0.0012500000000272848
+      },
+      "commandCompletionToOverlayCloseMs": 43.82070799999997,
+      "managedLaunchPhaseSumMs": 43.82070799999997,
+      "managedLaunchPhaseCoherent": true,
+      "observerExternalLaunchPhaseTrace": {
+        "events": []
+      },
+      "observerExternalLaunchPhaseDurations": null,
+      "observerExternalLaunchInternalMs": null,
+      "observerExternalLaunchPhaseSumMs": null,
+      "observerExternalLaunchPhaseCoherent": false,
+      "clientRpcMinusObserverInternalMs": null,
+      "loadAverage": {
+        "before": [
+          22.8212890625,
+          26.00390625,
+          22.76904296875
+        ],
+        "after": [
+          21.31396484375,
+          25.63818359375,
+          22.65869140625
+        ]
+      },
+      "resourceUsage": {
+        "userCpuMs": 164.616,
+        "systemCpuMs": 132.046,
+        "fsReads": 0,
+        "fsWrites": 0,
+        "voluntaryContextSwitches": 1,
+        "involuntaryContextSwitches": 3688
+      }
+    },
+    {
+      "repetition": 4,
+      "focusStrategy": "automatic",
+      "dismissalInputSent": false,
+      "readyWasReplay": true,
+      "acknowledgementCount": 1,
+      "safe": false,
+      "safetyPredicates": {
+        "dashboardProjectVisible": true,
+        "commandProjectMatches": true,
+        "commandHarnessMatches": true,
+        "worktreeProjectMatches": true,
+        "worktreeBranchMatches": true,
+        "worktreeUsesManagedRoot": true,
+        "worktreeHasRegistrationIdentity": true,
+        "sessionHarnessMatches": true,
+        "sessionTerminalMatches": true,
+        "hostWorktreeMatches": true,
+        "hostHarnessMatches": true,
+        "hostSessionMatches": true,
+        "readyMarkerObserved": true,
+        "inputAcknowledged": true,
+        "inputAcknowledgedExactlyOnce": true,
+        "hostInventoryEmpty": true,
+        "gitInventoryRestored": true,
+        "uiStoppedCleanly": true,
+        "observerStoppedCleanly": true,
+        "managedLaunchPhaseTraceValid": true,
+        "managedLaunchPhaseTraceExitOnly": true,
+        "observerExternalLaunchPhaseTraceValid": false,
+        "observerExternalLaunchPhaseTraceExitOnly": true,
+        "uiStderrMatches": true
+      },
+      "phaseCoherent": true,
+      "commandId": "cmd_c3f631e7-3adf-47b7-acca-d315572527f6",
+      "traceId": "trc_d09e3dc6-b9d9-4d39-af31-a71b7d2c7bd4",
+      "branch": "compiled-tui-project-bb1bed",
+      "worktreeId": "wt_compiled-tui-project_compiled-tui-project-bb1bed_ee77564b5f",
+      "worktreePath": "/private/var/folders/l4/540r7_b136l9jcf36_p3qyvc0000gn/T/s-4qsapp/tmp/st-qtu-FLn6sy/worktrees/compiled-tui-project-bb1bed",
+      "sessionId": "ses_2d155b60-6c2e-477e-bb9d-ade54277c910",
+      "terminalTargetId": "native:wt_compiled-tui-project_compiled-tui-project-bb1bed_ee77564b5f",
+      "ptyId": "pty-6",
+      "ptyInstanceId": "ptyi_5d04ce88-08cb-4e21-9f25-19128928f9be",
+      "observerPid": 41097,
+      "sampledReconcileReason": "tui-startup",
+      "uiPid": 39717,
+      "launchToDashboardMs": 3926.1295420000024,
+      "intentToOptimisticMs": 11.525542000003043,
+      "intentToCommandAcceptedMs": 19.28399999999965,
+      "intentToCommandCompletedMs": 107.23304199999984,
+      "intentToHostReadyMs": 151.97312500000407,
+      "intentToCanonicalUiMs": 239.2789580000026,
+      "intentToFocusMs": 203.2702500000014,
+      "focusToOverlayDismissedMs": 0,
+      "overlayDismissedToInputSentMs": 0.012750000001688022,
+      "inputSentToHostReadyMs": -51.30987499999901,
+      "inputSentToAckMs": 27.772250000001804,
+      "focusToInputAckMs": 27.785000000003492,
+      "phaseSumMs": 27.785000000003492,
+      "intentToInteractiveMs": 231.0552500000049,
+      "launchToInteractiveMs": 4265.453417000004,
+      "cleanupInventoryCount": 0,
+      "gitCleanupInventoryCount": 49,
+      "uiStoppedCleanly": true,
+      "observerStoppedCleanly": true,
+      "uiStderrEmpty": false,
+      "uiStderr": "Launching STATION TUI…\n__STATION_QUICK_SESSION_MANAGED_LAUNCH_PHASES__:{\"events\":[{\"phase\":\"hostedLaunchStarted\",\"atMs\":965.763417},{\"phase\":\"commandCompleted\",\"atMs\":1071.989792},{\"phase\":\"worktreeObserved\",\"atMs\":1072.051333},{\"phase\":\"attemptStarted\",\"atMs\":1072.166042},{\"phase\":\"preflightCompleted\",\"atMs\":1072.331083},{\"phase\":\"prepareStarted\",\"atMs\":1072.331333},{\"phase\":\"prepareCompleted\",\"atMs\":1110.525958},{\"phase\":\"attachmentResolveStarted\",\"atMs\":1110.750167},{\"phase\":\"attachmentResolveCompleted\",\"atMs\":1131.691583},{\"phase\":\"terminalPlaced\",\"atMs\":1132.280375},{\"phase\":\"panePublished\",\"atMs\":1132.65175},{\"phase\":\"attemptCompleted\",\"atMs\":1141.356958},{\"phase\":\"hostedLaunchCompleted\",\"atMs\":1141.361875},{\"phase\":\"quickResultReceived\",\"atMs\":1141.444917},{\"phase\":\"overlayCloseRequested\",\"atMs\":1141.445333},{\"phase\":\"canonicalWaitStarted\",\"atMs\":1141.5645},{\"phase\":\"canonicalWaitCompleted\",\"atMs\":1143.315167}]}\n",
+      "uiStderrBeforeExit": "Launching STATION TUI…\n",
+      "managedLaunchPhaseTrace": {
+        "events": [
+          {
+            "phase": "hostedLaunchStarted",
+            "atMs": 965.763417
+          },
+          {
+            "phase": "commandCompleted",
+            "atMs": 1071.989792
+          },
+          {
+            "phase": "worktreeObserved",
+            "atMs": 1072.051333
+          },
+          {
+            "phase": "attemptStarted",
+            "atMs": 1072.166042
+          },
+          {
+            "phase": "preflightCompleted",
+            "atMs": 1072.331083
+          },
+          {
+            "phase": "prepareStarted",
+            "atMs": 1072.331333
+          },
+          {
+            "phase": "prepareCompleted",
+            "atMs": 1110.525958
+          },
+          {
+            "phase": "attachmentResolveStarted",
+            "atMs": 1110.750167
+          },
+          {
+            "phase": "attachmentResolveCompleted",
+            "atMs": 1131.691583
+          },
+          {
+            "phase": "terminalPlaced",
+            "atMs": 1132.280375
+          },
+          {
+            "phase": "panePublished",
+            "atMs": 1132.65175
+          },
+          {
+            "phase": "attemptCompleted",
+            "atMs": 1141.356958
+          },
+          {
+            "phase": "hostedLaunchCompleted",
+            "atMs": 1141.361875
+          },
+          {
+            "phase": "quickResultReceived",
+            "atMs": 1141.444917
+          },
+          {
+            "phase": "overlayCloseRequested",
+            "atMs": 1141.445333
+          },
+          {
+            "phase": "canonicalWaitStarted",
+            "atMs": 1141.5645
+          },
+          {
+            "phase": "canonicalWaitCompleted",
+            "atMs": 1143.315167
+          }
+        ]
+      },
+      "managedLaunchPhaseDurations": {
+        "commandCompletionToWorktreeObservationMs": 0.06154100000003382,
+        "worktreeObservationToAttemptStartMs": 0.11470899999994799,
+        "managedPreflightMs": 0.1650409999999738,
+        "preflightToPrepareStartMs": 0.0002500000000509317,
+        "prepareExternalLaunchMs": 38.19462499999986,
+        "prepareToAttachmentResolveStartMs": 0.22420899999997346,
+        "attachmentResolutionMs": 20.941416000000117,
+        "attachmentToTerminalPlacementMs": 0.5887920000000122,
+        "terminalPlacementToPanePublicationMs": 0.3713749999999436,
+        "panePublicationToAttemptCompletionMs": 8.705208000000084,
+        "attemptToHostedLaunchCompletionMs": 0.004916999999977634,
+        "hostedLaunchToQuickResultMs": 0.08304199999997763,
+        "quickResultToOverlayCloseMs": 0.00041599999985919567
+      },
+      "commandCompletionToOverlayCloseMs": 69.45554099999981,
+      "managedLaunchPhaseSumMs": 69.45554099999981,
+      "managedLaunchPhaseCoherent": true,
+      "observerExternalLaunchPhaseTrace": {
+        "events": []
+      },
+      "observerExternalLaunchPhaseDurations": null,
+      "observerExternalLaunchInternalMs": null,
+      "observerExternalLaunchPhaseSumMs": null,
+      "observerExternalLaunchPhaseCoherent": false,
+      "clientRpcMinusObserverInternalMs": null,
+      "loadAverage": {
+        "before": [
+          21.31396484375,
+          25.63818359375,
+          22.65869140625
+        ],
+        "after": [
+          18.80517578125,
+          24.9580078125,
+          22.4521484375
+        ]
+      },
+      "resourceUsage": {
+        "userCpuMs": 233.508,
+        "systemCpuMs": 252.958,
+        "fsReads": 0,
+        "fsWrites": 0,
+        "voluntaryContextSwitches": 1,
+        "involuntaryContextSwitches": 7243
+      }
+    },
+    {
+      "repetition": 5,
+      "focusStrategy": "automatic",
+      "dismissalInputSent": false,
+      "readyWasReplay": true,
+      "acknowledgementCount": 1,
+      "safe": false,
+      "safetyPredicates": {
+        "dashboardProjectVisible": true,
+        "commandProjectMatches": true,
+        "commandHarnessMatches": true,
+        "worktreeProjectMatches": true,
+        "worktreeBranchMatches": true,
+        "worktreeUsesManagedRoot": true,
+        "worktreeHasRegistrationIdentity": true,
+        "sessionHarnessMatches": true,
+        "sessionTerminalMatches": true,
+        "hostWorktreeMatches": true,
+        "hostHarnessMatches": true,
+        "hostSessionMatches": true,
+        "readyMarkerObserved": true,
+        "inputAcknowledged": true,
+        "inputAcknowledgedExactlyOnce": true,
+        "hostInventoryEmpty": true,
+        "gitInventoryRestored": true,
+        "uiStoppedCleanly": true,
+        "observerStoppedCleanly": true,
+        "managedLaunchPhaseTraceValid": true,
+        "managedLaunchPhaseTraceExitOnly": true,
+        "observerExternalLaunchPhaseTraceValid": false,
+        "observerExternalLaunchPhaseTraceExitOnly": true,
+        "uiStderrMatches": true
+      },
+      "phaseCoherent": true,
+      "commandId": "cmd_ea674d53-0ab1-47d3-9f8c-3318c2312969",
+      "traceId": "trc_eea8c121-b562-455e-925a-468213332d3d",
+      "branch": "compiled-tui-project-2bf4cd",
+      "worktreeId": "wt_compiled-tui-project_compiled-tui-project-2bf4cd_d41e3cc6ba",
+      "worktreePath": "/private/var/folders/l4/540r7_b136l9jcf36_p3qyvc0000gn/T/s-4qsapp/tmp/st-qtu-FLn6sy/worktrees/compiled-tui-project-2bf4cd",
+      "sessionId": "ses_9be05d29-e0ef-42d6-ac41-70736d54d6d3",
+      "terminalTargetId": "native:wt_compiled-tui-project_compiled-tui-project-2bf4cd_d41e3cc6ba",
+      "ptyId": "pty-7",
+      "ptyInstanceId": "ptyi_854276a2-075d-409e-81d0-c7915a87357d",
+      "observerPid": 47856,
+      "sampledReconcileReason": "tui-startup",
+      "uiPid": 47492,
+      "launchToDashboardMs": 2270.3175409999967,
+      "intentToOptimisticMs": 14.665666000000783,
+      "intentToCommandAcceptedMs": 20.999166000001424,
+      "intentToCommandCompletedMs": 103.8212910000002,
+      "intentToHostReadyMs": 174.85729100000026,
+      "intentToCanonicalUiMs": 250.88970800000243,
+      "intentToFocusMs": 217.58208300000115,
+      "focusToOverlayDismissedMs": 0,
+      "overlayDismissedToInputSentMs": 0.0020000000004074536,
+      "inputSentToHostReadyMs": -42.726792000001296,
+      "inputSentToAckMs": 20.22120800000266,
+      "focusToInputAckMs": 20.22320800000307,
+      "phaseSumMs": 20.22320800000307,
+      "intentToInteractiveMs": 237.80529100000422,
+      "launchToInteractiveMs": 2619.5942910000012,
+      "cleanupInventoryCount": 0,
+      "gitCleanupInventoryCount": 49,
+      "uiStoppedCleanly": true,
+      "observerStoppedCleanly": true,
+      "uiStderrEmpty": false,
+      "uiStderr": "Launching STATION TUI…\n__STATION_QUICK_SESSION_MANAGED_LAUNCH_PHASES__:{\"events\":[{\"phase\":\"hostedLaunchStarted\",\"atMs\":1013.110209},{\"phase\":\"commandCompleted\",\"atMs\":1139.11125},{\"phase\":\"worktreeObserved\",\"atMs\":1139.599334},{\"phase\":\"attemptStarted\",\"atMs\":1139.954209},{\"phase\":\"preflightCompleted\",\"atMs\":1140.204125},{\"phase\":\"prepareStarted\",\"atMs\":1140.2045},{\"phase\":\"prepareCompleted\",\"atMs\":1180.571834},{\"phase\":\"attachmentResolveStarted\",\"atMs\":1180.699959},{\"phase\":\"attachmentResolveCompleted\",\"atMs\":1192.367709},{\"phase\":\"terminalPlaced\",\"atMs\":1192.631},{\"phase\":\"panePublished\",\"atMs\":1192.802375},{\"phase\":\"attemptCompleted\",\"atMs\":1200.669042},{\"phase\":\"hostedLaunchCompleted\",\"atMs\":1200.675292},{\"phase\":\"quickResultReceived\",\"atMs\":1200.809459},{\"phase\":\"overlayCloseRequested\",\"atMs\":1200.81025},{\"phase\":\"canonicalWaitStarted\",\"atMs\":1201.083375},{\"phase\":\"canonicalWaitCompleted\",\"atMs\":1226.588209}]}\n",
+      "uiStderrBeforeExit": "Launching STATION TUI…\n",
+      "managedLaunchPhaseTrace": {
+        "events": [
+          {
+            "phase": "hostedLaunchStarted",
+            "atMs": 1013.110209
+          },
+          {
+            "phase": "commandCompleted",
+            "atMs": 1139.11125
+          },
+          {
+            "phase": "worktreeObserved",
+            "atMs": 1139.599334
+          },
+          {
+            "phase": "attemptStarted",
+            "atMs": 1139.954209
+          },
+          {
+            "phase": "preflightCompleted",
+            "atMs": 1140.204125
+          },
+          {
+            "phase": "prepareStarted",
+            "atMs": 1140.2045
+          },
+          {
+            "phase": "prepareCompleted",
+            "atMs": 1180.571834
+          },
+          {
+            "phase": "attachmentResolveStarted",
+            "atMs": 1180.699959
+          },
+          {
+            "phase": "attachmentResolveCompleted",
+            "atMs": 1192.367709
+          },
+          {
+            "phase": "terminalPlaced",
+            "atMs": 1192.631
+          },
+          {
+            "phase": "panePublished",
+            "atMs": 1192.802375
+          },
+          {
+            "phase": "attemptCompleted",
+            "atMs": 1200.669042
+          },
+          {
+            "phase": "hostedLaunchCompleted",
+            "atMs": 1200.675292
+          },
+          {
+            "phase": "quickResultReceived",
+            "atMs": 1200.809459
+          },
+          {
+            "phase": "overlayCloseRequested",
+            "atMs": 1200.81025
+          },
+          {
+            "phase": "canonicalWaitStarted",
+            "atMs": 1201.083375
+          },
+          {
+            "phase": "canonicalWaitCompleted",
+            "atMs": 1226.588209
+          }
+        ]
+      },
+      "managedLaunchPhaseDurations": {
+        "commandCompletionToWorktreeObservationMs": 0.4880840000000717,
+        "worktreeObservationToAttemptStartMs": 0.3548749999999927,
+        "managedPreflightMs": 0.2499159999999847,
+        "preflightToPrepareStartMs": 0.00037500000007639755,
+        "prepareExternalLaunchMs": 40.36733400000003,
+        "prepareToAttachmentResolveStartMs": 0.12812499999995453,
+        "attachmentResolutionMs": 11.66775000000007,
+        "attachmentToTerminalPlacementMs": 0.26329099999998107,
+        "terminalPlacementToPanePublicationMs": 0.17137499999989814,
+        "panePublicationToAttemptCompletionMs": 7.866667000000007,
+        "attemptToHostedLaunchCompletionMs": 0.0062499999999090505,
+        "hostedLaunchToQuickResultMs": 0.13416700000016135,
+        "quickResultToOverlayCloseMs": 0.0007909999999355932
+      },
+      "commandCompletionToOverlayCloseMs": 61.69900000000007,
+      "managedLaunchPhaseSumMs": 61.69900000000007,
+      "managedLaunchPhaseCoherent": true,
+      "observerExternalLaunchPhaseTrace": {
+        "events": []
+      },
+      "observerExternalLaunchPhaseDurations": null,
+      "observerExternalLaunchInternalMs": null,
+      "observerExternalLaunchPhaseSumMs": null,
+      "observerExternalLaunchPhaseCoherent": false,
+      "clientRpcMinusObserverInternalMs": null,
+      "loadAverage": {
+        "before": [
+          18.80517578125,
+          24.9580078125,
+          22.4521484375
+        ],
+        "after": [
+          18.41796875,
+          24.66455078125,
+          22.37646484375
+        ]
+      },
+      "resourceUsage": {
+        "userCpuMs": 149.164,
+        "systemCpuMs": 177.425,
+        "fsReads": 0,
+        "fsWrites": 0,
+        "voluntaryContextSwitches": 3,
+        "involuntaryContextSwitches": 5278
+      }
+    },
+    {
+      "repetition": 6,
+      "focusStrategy": "automatic",
+      "dismissalInputSent": false,
+      "readyWasReplay": true,
+      "acknowledgementCount": 1,
+      "safe": false,
+      "safetyPredicates": {
+        "dashboardProjectVisible": true,
+        "commandProjectMatches": true,
+        "commandHarnessMatches": true,
+        "worktreeProjectMatches": true,
+        "worktreeBranchMatches": true,
+        "worktreeUsesManagedRoot": true,
+        "worktreeHasRegistrationIdentity": true,
+        "sessionHarnessMatches": true,
+        "sessionTerminalMatches": true,
+        "hostWorktreeMatches": true,
+        "hostHarnessMatches": true,
+        "hostSessionMatches": true,
+        "readyMarkerObserved": true,
+        "inputAcknowledged": true,
+        "inputAcknowledgedExactlyOnce": true,
+        "hostInventoryEmpty": true,
+        "gitInventoryRestored": true,
+        "uiStoppedCleanly": true,
+        "observerStoppedCleanly": true,
+        "managedLaunchPhaseTraceValid": true,
+        "managedLaunchPhaseTraceExitOnly": true,
+        "observerExternalLaunchPhaseTraceValid": false,
+        "observerExternalLaunchPhaseTraceExitOnly": true,
+        "uiStderrMatches": true
+      },
+      "phaseCoherent": true,
+      "commandId": "cmd_4b7edb98-3ed1-40a7-8645-32c79bb2b13b",
+      "traceId": "trc_5cac38a2-a68b-4a34-ad76-7024c3520869",
+      "branch": "compiled-tui-project-76ab17",
+      "worktreeId": "wt_compiled-tui-project_compiled-tui-project-76ab17_dca59750b6",
+      "worktreePath": "/private/var/folders/l4/540r7_b136l9jcf36_p3qyvc0000gn/T/s-4qsapp/tmp/st-qtu-FLn6sy/worktrees/compiled-tui-project-76ab17",
+      "sessionId": "ses_c6dbd52e-37dc-4512-9fa6-bc75f2bd54bc",
+      "terminalTargetId": "native:wt_compiled-tui-project_compiled-tui-project-76ab17_dca59750b6",
+      "ptyId": "pty-8",
+      "ptyInstanceId": "ptyi_88bc32c9-0111-4f65-affd-22941c3813ec",
+      "observerPid": 54322,
+      "sampledReconcileReason": "tui-startup",
+      "uiPid": 54075,
+      "launchToDashboardMs": 2157.6568750000006,
+      "intentToOptimisticMs": 15.160041999988607,
+      "intentToCommandAcceptedMs": 22.579832999996142,
+      "intentToCommandCompletedMs": 128.14599999999336,
+      "intentToHostReadyMs": 181.0639999999985,
+      "intentToCanonicalUiMs": 232.22516699999687,
+      "intentToFocusMs": 198.54754200000025,
+      "focusToOverlayDismissedMs": 0,
+      "overlayDismissedToInputSentMs": 0.001624999989871867,
+      "inputSentToHostReadyMs": -17.485166999991634,
+      "inputSentToAckMs": 26.904374999998254,
+      "focusToInputAckMs": 26.905999999988126,
+      "phaseSumMs": 26.905999999988126,
+      "intentToInteractiveMs": 225.45354199998837,
+      "launchToInteractiveMs": 2496.827166999996,
+      "cleanupInventoryCount": 0,
+      "gitCleanupInventoryCount": 49,
+      "uiStoppedCleanly": true,
+      "observerStoppedCleanly": true,
+      "uiStderrEmpty": false,
+      "uiStderr": "Launching STATION TUI…\n__STATION_QUICK_SESSION_MANAGED_LAUNCH_PHASES__:{\"events\":[{\"phase\":\"hostedLaunchStarted\",\"atMs\":1132.284542},{\"phase\":\"commandCompleted\",\"atMs\":1268.672042},{\"phase\":\"worktreeObserved\",\"atMs\":1268.79375},{\"phase\":\"attemptStarted\",\"atMs\":1268.99725},{\"phase\":\"preflightCompleted\",\"atMs\":1269.266},{\"phase\":\"prepareStarted\",\"atMs\":1269.266417},{\"phase\":\"prepareCompleted\",\"atMs\":1296.706375},{\"phase\":\"attachmentResolveStarted\",\"atMs\":1296.833709},{\"phase\":\"attachmentResolveCompleted\",\"atMs\":1309.192},{\"phase\":\"terminalPlaced\",\"atMs\":1309.441125},{\"phase\":\"panePublished\",\"atMs\":1309.610667},{\"phase\":\"attemptCompleted\",\"atMs\":1313.192709},{\"phase\":\"hostedLaunchCompleted\",\"atMs\":1313.196959},{\"phase\":\"quickResultReceived\",\"atMs\":1313.265125},{\"phase\":\"overlayCloseRequested\",\"atMs\":1313.265625},{\"phase\":\"canonicalWaitStarted\",\"atMs\":1313.352417},{\"phase\":\"canonicalWaitCompleted\",\"atMs\":1340.440792}]}\n",
+      "uiStderrBeforeExit": "Launching STATION TUI…\n",
+      "managedLaunchPhaseTrace": {
+        "events": [
+          {
+            "phase": "hostedLaunchStarted",
+            "atMs": 1132.284542
+          },
+          {
+            "phase": "commandCompleted",
+            "atMs": 1268.672042
+          },
+          {
+            "phase": "worktreeObserved",
+            "atMs": 1268.79375
+          },
+          {
+            "phase": "attemptStarted",
+            "atMs": 1268.99725
+          },
+          {
+            "phase": "preflightCompleted",
+            "atMs": 1269.266
+          },
+          {
+            "phase": "prepareStarted",
+            "atMs": 1269.266417
+          },
+          {
+            "phase": "prepareCompleted",
+            "atMs": 1296.706375
+          },
+          {
+            "phase": "attachmentResolveStarted",
+            "atMs": 1296.833709
+          },
+          {
+            "phase": "attachmentResolveCompleted",
+            "atMs": 1309.192
+          },
+          {
+            "phase": "terminalPlaced",
+            "atMs": 1309.441125
+          },
+          {
+            "phase": "panePublished",
+            "atMs": 1309.610667
+          },
+          {
+            "phase": "attemptCompleted",
+            "atMs": 1313.192709
+          },
+          {
+            "phase": "hostedLaunchCompleted",
+            "atMs": 1313.196959
+          },
+          {
+            "phase": "quickResultReceived",
+            "atMs": 1313.265125
+          },
+          {
+            "phase": "overlayCloseRequested",
+            "atMs": 1313.265625
+          },
+          {
+            "phase": "canonicalWaitStarted",
+            "atMs": 1313.352417
+          },
+          {
+            "phase": "canonicalWaitCompleted",
+            "atMs": 1340.440792
+          }
+        ]
+      },
+      "managedLaunchPhaseDurations": {
+        "commandCompletionToWorktreeObservationMs": 0.12170800000012605,
+        "worktreeObservationToAttemptStartMs": 0.20349999999984902,
+        "managedPreflightMs": 0.2687500000001819,
+        "preflightToPrepareStartMs": 0.00041699999997035775,
+        "prepareExternalLaunchMs": 27.439957999999933,
+        "prepareToAttachmentResolveStartMs": 0.12733400000001893,
+        "attachmentResolutionMs": 12.358291000000008,
+        "attachmentToTerminalPlacementMs": 0.2491250000000491,
+        "terminalPlacementToPanePublicationMs": 0.16954199999986486,
+        "panePublicationToAttemptCompletionMs": 3.5820420000000013,
+        "attemptToHostedLaunchCompletionMs": 0.004250000000183718,
+        "hostedLaunchToQuickResultMs": 0.06816599999979189,
+        "quickResultToOverlayCloseMs": 0.0005000000001018634
+      },
+      "commandCompletionToOverlayCloseMs": 44.59358300000008,
+      "managedLaunchPhaseSumMs": 44.59358300000008,
+      "managedLaunchPhaseCoherent": true,
+      "observerExternalLaunchPhaseTrace": {
+        "events": []
+      },
+      "observerExternalLaunchPhaseDurations": null,
+      "observerExternalLaunchInternalMs": null,
+      "observerExternalLaunchPhaseSumMs": null,
+      "observerExternalLaunchPhaseCoherent": false,
+      "clientRpcMinusObserverInternalMs": null,
+      "loadAverage": {
+        "before": [
+          18.41796875,
+          24.66455078125,
+          22.37646484375
+        ],
+        "after": [
+          18.93603515625,
+          24.5751953125,
+          22.37158203125
+        ]
+      },
+      "resourceUsage": {
+        "userCpuMs": 188.009,
+        "systemCpuMs": 173.855,
+        "fsReads": 0,
+        "fsWrites": 0,
+        "voluntaryContextSwitches": 2,
+        "involuntaryContextSwitches": 5080
+      }
+    },
+    {
+      "repetition": 7,
+      "focusStrategy": "automatic",
+      "dismissalInputSent": false,
+      "readyWasReplay": true,
+      "acknowledgementCount": 1,
+      "safe": false,
+      "safetyPredicates": {
+        "dashboardProjectVisible": true,
+        "commandProjectMatches": true,
+        "commandHarnessMatches": true,
+        "worktreeProjectMatches": true,
+        "worktreeBranchMatches": true,
+        "worktreeUsesManagedRoot": true,
+        "worktreeHasRegistrationIdentity": true,
+        "sessionHarnessMatches": true,
+        "sessionTerminalMatches": true,
+        "hostWorktreeMatches": true,
+        "hostHarnessMatches": true,
+        "hostSessionMatches": true,
+        "readyMarkerObserved": true,
+        "inputAcknowledged": true,
+        "inputAcknowledgedExactlyOnce": true,
+        "hostInventoryEmpty": true,
+        "gitInventoryRestored": true,
+        "uiStoppedCleanly": true,
+        "observerStoppedCleanly": true,
+        "managedLaunchPhaseTraceValid": true,
+        "managedLaunchPhaseTraceExitOnly": true,
+        "observerExternalLaunchPhaseTraceValid": false,
+        "observerExternalLaunchPhaseTraceExitOnly": true,
+        "uiStderrMatches": true
+      },
+      "phaseCoherent": true,
+      "commandId": "cmd_4d084b9e-4a3b-4f26-ba95-b6fc0e39b620",
+      "traceId": "trc_b46024bf-02c6-443d-b65c-8a3ac9735eb5",
+      "branch": "compiled-tui-project-de9401",
+      "worktreeId": "wt_compiled-tui-project_compiled-tui-project-de9401_9b70d38667",
+      "worktreePath": "/private/var/folders/l4/540r7_b136l9jcf36_p3qyvc0000gn/T/s-4qsapp/tmp/st-qtu-FLn6sy/worktrees/compiled-tui-project-de9401",
+      "sessionId": "ses_20cdc52a-5ea1-439a-8ce7-a5f911075eab",
+      "terminalTargetId": "native:wt_compiled-tui-project_compiled-tui-project-de9401_9b70d38667",
+      "ptyId": "pty-9",
+      "ptyInstanceId": "ptyi_8af6f4e2-acd5-4dca-a5f8-098398a5b091",
+      "observerPid": 61129,
+      "sampledReconcileReason": "tui-startup",
+      "uiPid": 60727,
+      "launchToDashboardMs": 2359.3505000000005,
+      "intentToOptimisticMs": 12.43879200000083,
+      "intentToCommandAcceptedMs": 25.43154199999117,
+      "intentToCommandCompletedMs": 125.87358299999323,
+      "intentToHostReadyMs": 210.2663329999923,
+      "intentToCanonicalUiMs": 313.66495799999393,
+      "intentToFocusMs": 282.8570829999953,
+      "focusToOverlayDismissedMs": 0,
+      "overlayDismissedToInputSentMs": 0.004249999998137355,
+      "inputSentToHostReadyMs": -72.59500000000116,
+      "inputSentToAckMs": 21.966167000005953,
+      "focusToInputAckMs": 21.97041700000409,
+      "phaseSumMs": 21.97041700000409,
+      "intentToInteractiveMs": 304.8274999999994,
+      "launchToInteractiveMs": 2778.6687079999974,
+      "cleanupInventoryCount": 0,
+      "gitCleanupInventoryCount": 49,
+      "uiStoppedCleanly": true,
+      "observerStoppedCleanly": true,
+      "uiStderrEmpty": false,
+      "uiStderr": "Launching STATION TUI…\n__STATION_QUICK_SESSION_MANAGED_LAUNCH_PHASES__:{\"events\":[{\"phase\":\"hostedLaunchStarted\",\"atMs\":950.993333},{\"phase\":\"commandCompleted\",\"atMs\":1091.772542},{\"phase\":\"worktreeObserved\",\"atMs\":1091.856417},{\"phase\":\"attemptStarted\",\"atMs\":1091.995625},{\"phase\":\"preflightCompleted\",\"atMs\":1092.19825},{\"phase\":\"prepareStarted\",\"atMs\":1092.198583},{\"phase\":\"prepareCompleted\",\"atMs\":1148.552708},{\"phase\":\"attachmentResolveStarted\",\"atMs\":1148.937833},{\"phase\":\"attachmentResolveCompleted\",\"atMs\":1189.445667},{\"phase\":\"terminalPlaced\",\"atMs\":1189.701083},{\"phase\":\"panePublished\",\"atMs\":1189.874833},{\"phase\":\"attemptCompleted\",\"atMs\":1194.267625},{\"phase\":\"hostedLaunchCompleted\",\"atMs\":1194.272167},{\"phase\":\"quickResultReceived\",\"atMs\":1194.346125},{\"phase\":\"overlayCloseRequested\",\"atMs\":1194.346458},{\"phase\":\"canonicalWaitStarted\",\"atMs\":1194.444542},{\"phase\":\"canonicalWaitCompleted\",\"atMs\":1196.099708}]}\n",
+      "uiStderrBeforeExit": "Launching STATION TUI…\n",
+      "managedLaunchPhaseTrace": {
+        "events": [
+          {
+            "phase": "hostedLaunchStarted",
+            "atMs": 950.993333
+          },
+          {
+            "phase": "commandCompleted",
+            "atMs": 1091.772542
+          },
+          {
+            "phase": "worktreeObserved",
+            "atMs": 1091.856417
+          },
+          {
+            "phase": "attemptStarted",
+            "atMs": 1091.995625
+          },
+          {
+            "phase": "preflightCompleted",
+            "atMs": 1092.19825
+          },
+          {
+            "phase": "prepareStarted",
+            "atMs": 1092.198583
+          },
+          {
+            "phase": "prepareCompleted",
+            "atMs": 1148.552708
+          },
+          {
+            "phase": "attachmentResolveStarted",
+            "atMs": 1148.937833
+          },
+          {
+            "phase": "attachmentResolveCompleted",
+            "atMs": 1189.445667
+          },
+          {
+            "phase": "terminalPlaced",
+            "atMs": 1189.701083
+          },
+          {
+            "phase": "panePublished",
+            "atMs": 1189.874833
+          },
+          {
+            "phase": "attemptCompleted",
+            "atMs": 1194.267625
+          },
+          {
+            "phase": "hostedLaunchCompleted",
+            "atMs": 1194.272167
+          },
+          {
+            "phase": "quickResultReceived",
+            "atMs": 1194.346125
+          },
+          {
+            "phase": "overlayCloseRequested",
+            "atMs": 1194.346458
+          },
+          {
+            "phase": "canonicalWaitStarted",
+            "atMs": 1194.444542
+          },
+          {
+            "phase": "canonicalWaitCompleted",
+            "atMs": 1196.099708
+          }
+        ]
+      },
+      "managedLaunchPhaseDurations": {
+        "commandCompletionToWorktreeObservationMs": 0.08387500000003456,
+        "worktreeObservationToAttemptStartMs": 0.1392080000000533,
+        "managedPreflightMs": 0.20262499999989814,
+        "preflightToPrepareStartMs": 0.00033300000018243736,
+        "prepareExternalLaunchMs": 56.35412499999984,
+        "prepareToAttachmentResolveStartMs": 0.38512500000001637,
+        "attachmentResolutionMs": 40.507834,
+        "attachmentToTerminalPlacementMs": 0.25541599999996834,
+        "terminalPlacementToPanePublicationMs": 0.17375000000015461,
+        "panePublicationToAttemptCompletionMs": 4.392791999999872,
+        "attemptToHostedLaunchCompletionMs": 0.00454200000012861,
+        "hostedLaunchToQuickResultMs": 0.07395799999994779,
+        "quickResultToOverlayCloseMs": 0.0003329999999550637
+      },
+      "commandCompletionToOverlayCloseMs": 102.57391600000005,
+      "managedLaunchPhaseSumMs": 102.57391600000005,
+      "managedLaunchPhaseCoherent": true,
+      "observerExternalLaunchPhaseTrace": {
+        "events": []
+      },
+      "observerExternalLaunchPhaseDurations": null,
+      "observerExternalLaunchInternalMs": null,
+      "observerExternalLaunchPhaseSumMs": null,
+      "observerExternalLaunchPhaseCoherent": false,
+      "clientRpcMinusObserverInternalMs": null,
+      "loadAverage": {
+        "before": [
+          18.93603515625,
+          24.5751953125,
+          22.37158203125
+        ],
+        "after": [
+          19.66259765625,
+          24.5537109375,
+          22.3896484375
+        ]
+      },
+      "resourceUsage": {
+        "userCpuMs": 145.174,
+        "systemCpuMs": 179.949,
+        "fsReads": 0,
+        "fsWrites": 0,
+        "voluntaryContextSwitches": 2,
+        "involuntaryContextSwitches": 5360
+      }
+    },
+    {
+      "repetition": 8,
+      "focusStrategy": "automatic",
+      "dismissalInputSent": false,
+      "readyWasReplay": true,
+      "acknowledgementCount": 1,
+      "safe": false,
+      "safetyPredicates": {
+        "dashboardProjectVisible": true,
+        "commandProjectMatches": true,
+        "commandHarnessMatches": true,
+        "worktreeProjectMatches": true,
+        "worktreeBranchMatches": true,
+        "worktreeUsesManagedRoot": true,
+        "worktreeHasRegistrationIdentity": true,
+        "sessionHarnessMatches": true,
+        "sessionTerminalMatches": true,
+        "hostWorktreeMatches": true,
+        "hostHarnessMatches": true,
+        "hostSessionMatches": true,
+        "readyMarkerObserved": true,
+        "inputAcknowledged": true,
+        "inputAcknowledgedExactlyOnce": true,
+        "hostInventoryEmpty": true,
+        "gitInventoryRestored": true,
+        "uiStoppedCleanly": true,
+        "observerStoppedCleanly": true,
+        "managedLaunchPhaseTraceValid": true,
+        "managedLaunchPhaseTraceExitOnly": true,
+        "observerExternalLaunchPhaseTraceValid": false,
+        "observerExternalLaunchPhaseTraceExitOnly": true,
+        "uiStderrMatches": true
+      },
+      "phaseCoherent": true,
+      "commandId": "cmd_e511b179-9b43-413b-bd7d-f79b7d98fe46",
+      "traceId": "trc_8d4e64f5-a96d-469d-abdc-bbd89772be37",
+      "branch": "compiled-tui-project-07b176",
+      "worktreeId": "wt_compiled-tui-project_compiled-tui-project-07b176_2c77727507",
+      "worktreePath": "/private/var/folders/l4/540r7_b136l9jcf36_p3qyvc0000gn/T/s-4qsapp/tmp/st-qtu-FLn6sy/worktrees/compiled-tui-project-07b176",
+      "sessionId": "ses_aea2516e-5c82-48ed-8b36-085b7fafd86d",
+      "terminalTargetId": "native:wt_compiled-tui-project_compiled-tui-project-07b176_2c77727507",
+      "ptyId": "pty-10",
+      "ptyInstanceId": "ptyi_24a5f35b-b792-4aa9-b8d5-e4a3f9e86522",
+      "observerPid": 67786,
+      "sampledReconcileReason": "tui-startup",
+      "uiPid": 67529,
+      "launchToDashboardMs": 2063.6631250000064,
+      "intentToOptimisticMs": 13.29041600000346,
+      "intentToCommandAcceptedMs": 22.193333000002895,
+      "intentToCommandCompletedMs": 103.26687500000116,
+      "intentToHostReadyMs": 152.11812500000815,
+      "intentToCanonicalUiMs": 219.46370800001023,
+      "intentToFocusMs": 180.00629099999787,
+      "focusToOverlayDismissedMs": 0,
+      "overlayDismissedToInputSentMs": 0.003959000008762814,
+      "inputSentToHostReadyMs": -27.892124999998487,
+      "inputSentToAckMs": 26.872833000001265,
+      "focusToInputAckMs": 26.876792000010028,
+      "phaseSumMs": 26.876792000010028,
+      "intentToInteractiveMs": 206.8830830000079,
+      "launchToInteractiveMs": 2384.3905420000083,
+      "cleanupInventoryCount": 0,
+      "gitCleanupInventoryCount": 49,
+      "uiStoppedCleanly": true,
+      "observerStoppedCleanly": true,
+      "uiStderrEmpty": false,
+      "uiStderr": "Launching STATION TUI…\n__STATION_QUICK_SESSION_MANAGED_LAUNCH_PHASES__:{\"events\":[{\"phase\":\"hostedLaunchStarted\",\"atMs\":1010.385667},{\"phase\":\"commandCompleted\",\"atMs\":1122.434625},{\"phase\":\"worktreeObserved\",\"atMs\":1122.503459},{\"phase\":\"attemptStarted\",\"atMs\":1122.624917},{\"phase\":\"preflightCompleted\",\"atMs\":1122.851417},{\"phase\":\"prepareStarted\",\"atMs\":1122.851625},{\"phase\":\"prepareCompleted\",\"atMs\":1159.298334},{\"phase\":\"attachmentResolveStarted\",\"atMs\":1159.445459},{\"phase\":\"attachmentResolveCompleted\",\"atMs\":1165.719875},{\"phase\":\"terminalPlaced\",\"atMs\":1166.302709},{\"phase\":\"panePublished\",\"atMs\":1166.792459},{\"phase\":\"attemptCompleted\",\"atMs\":1172.816917},{\"phase\":\"hostedLaunchCompleted\",\"atMs\":1172.821167},{\"phase\":\"quickResultReceived\",\"atMs\":1172.941375},{\"phase\":\"overlayCloseRequested\",\"atMs\":1172.941834},{\"phase\":\"canonicalWaitStarted\",\"atMs\":1173.06325},{\"phase\":\"canonicalWaitCompleted\",\"atMs\":1195.238292}]}\n",
+      "uiStderrBeforeExit": "Launching STATION TUI…\n",
+      "managedLaunchPhaseTrace": {
+        "events": [
+          {
+            "phase": "hostedLaunchStarted",
+            "atMs": 1010.385667
+          },
+          {
+            "phase": "commandCompleted",
+            "atMs": 1122.434625
+          },
+          {
+            "phase": "worktreeObserved",
+            "atMs": 1122.503459
+          },
+          {
+            "phase": "attemptStarted",
+            "atMs": 1122.624917
+          },
+          {
+            "phase": "preflightCompleted",
+            "atMs": 1122.851417
+          },
+          {
+            "phase": "prepareStarted",
+            "atMs": 1122.851625
+          },
+          {
+            "phase": "prepareCompleted",
+            "atMs": 1159.298334
+          },
+          {
+            "phase": "attachmentResolveStarted",
+            "atMs": 1159.445459
+          },
+          {
+            "phase": "attachmentResolveCompleted",
+            "atMs": 1165.719875
+          },
+          {
+            "phase": "terminalPlaced",
+            "atMs": 1166.302709
+          },
+          {
+            "phase": "panePublished",
+            "atMs": 1166.792459
+          },
+          {
+            "phase": "attemptCompleted",
+            "atMs": 1172.816917
+          },
+          {
+            "phase": "hostedLaunchCompleted",
+            "atMs": 1172.821167
+          },
+          {
+            "phase": "quickResultReceived",
+            "atMs": 1172.941375
+          },
+          {
+            "phase": "overlayCloseRequested",
+            "atMs": 1172.941834
+          },
+          {
+            "phase": "canonicalWaitStarted",
+            "atMs": 1173.06325
+          },
+          {
+            "phase": "canonicalWaitCompleted",
+            "atMs": 1195.238292
+          }
+        ]
+      },
+      "managedLaunchPhaseDurations": {
+        "commandCompletionToWorktreeObservationMs": 0.06883399999992434,
+        "worktreeObservationToAttemptStartMs": 0.12145800000007512,
+        "managedPreflightMs": 0.22649999999998727,
+        "preflightToPrepareStartMs": 0.00020799999992959783,
+        "prepareExternalLaunchMs": 36.446709000000055,
+        "prepareToAttachmentResolveStartMs": 0.14712499999995998,
+        "attachmentResolutionMs": 6.274415999999974,
+        "attachmentToTerminalPlacementMs": 0.582834000000048,
+        "terminalPlacementToPanePublicationMs": 0.48974999999995816,
+        "panePublicationToAttemptCompletionMs": 6.024458000000095,
+        "attemptToHostedLaunchCompletionMs": 0.004249999999956344,
+        "hostedLaunchToQuickResultMs": 0.12020800000004783,
+        "quickResultToOverlayCloseMs": 0.00045899999986431794
+      },
+      "commandCompletionToOverlayCloseMs": 50.507208999999875,
+      "managedLaunchPhaseSumMs": 50.507208999999875,
+      "managedLaunchPhaseCoherent": true,
+      "observerExternalLaunchPhaseTrace": {
+        "events": []
+      },
+      "observerExternalLaunchPhaseDurations": null,
+      "observerExternalLaunchInternalMs": null,
+      "observerExternalLaunchPhaseSumMs": null,
+      "observerExternalLaunchPhaseCoherent": false,
+      "clientRpcMinusObserverInternalMs": null,
+      "loadAverage": {
+        "before": [
+          19.66259765625,
+          24.5537109375,
+          22.3896484375
+        ],
+        "after": [
+          18.48828125,
+          24.22900390625,
+          22.28759765625
+        ]
+      },
+      "resourceUsage": {
+        "userCpuMs": 179.545,
+        "systemCpuMs": 166.357,
+        "fsReads": 0,
+        "fsWrites": 0,
+        "voluntaryContextSwitches": 2,
+        "involuntaryContextSwitches": 4830
+      }
+    },
+    {
+      "repetition": 9,
+      "focusStrategy": "automatic",
+      "dismissalInputSent": false,
+      "readyWasReplay": true,
+      "acknowledgementCount": 1,
+      "safe": false,
+      "safetyPredicates": {
+        "dashboardProjectVisible": true,
+        "commandProjectMatches": true,
+        "commandHarnessMatches": true,
+        "worktreeProjectMatches": true,
+        "worktreeBranchMatches": true,
+        "worktreeUsesManagedRoot": true,
+        "worktreeHasRegistrationIdentity": true,
+        "sessionHarnessMatches": true,
+        "sessionTerminalMatches": true,
+        "hostWorktreeMatches": true,
+        "hostHarnessMatches": true,
+        "hostSessionMatches": true,
+        "readyMarkerObserved": true,
+        "inputAcknowledged": true,
+        "inputAcknowledgedExactlyOnce": true,
+        "hostInventoryEmpty": true,
+        "gitInventoryRestored": true,
+        "uiStoppedCleanly": true,
+        "observerStoppedCleanly": true,
+        "managedLaunchPhaseTraceValid": true,
+        "managedLaunchPhaseTraceExitOnly": true,
+        "observerExternalLaunchPhaseTraceValid": false,
+        "observerExternalLaunchPhaseTraceExitOnly": true,
+        "uiStderrMatches": true
+      },
+      "phaseCoherent": true,
+      "commandId": "cmd_259ad1ef-5d9d-480c-bc83-a92b03b243dd",
+      "traceId": "trc_14dea0d5-d9c7-4086-9120-9b38e8f83430",
+      "branch": "compiled-tui-project-e3140c",
+      "worktreeId": "wt_compiled-tui-project_compiled-tui-project-e3140c_6551d4df5a",
+      "worktreePath": "/private/var/folders/l4/540r7_b136l9jcf36_p3qyvc0000gn/T/s-4qsapp/tmp/st-qtu-FLn6sy/worktrees/compiled-tui-project-e3140c",
+      "sessionId": "ses_32707d29-3f0c-4abc-b42b-a13ce3595d8a",
+      "terminalTargetId": "native:wt_compiled-tui-project_compiled-tui-project-e3140c_6551d4df5a",
+      "ptyId": "pty-11",
+      "ptyInstanceId": "ptyi_33dfe4c1-cd75-4992-8e91-96c1831857de",
+      "observerPid": 74302,
+      "sampledReconcileReason": "tui-startup",
+      "uiPid": 74030,
+      "launchToDashboardMs": 1825.2559159999946,
+      "intentToOptimisticMs": 13.201874999998836,
+      "intentToCommandAcceptedMs": 19.10625000001164,
+      "intentToCommandCompletedMs": 94.2556670000049,
+      "intentToHostReadyMs": 128.89700000001176,
+      "intentToCanonicalUiMs": 180.41037500000675,
+      "intentToFocusMs": 152.67287500000384,
+      "focusToOverlayDismissedMs": 0,
+      "overlayDismissedToInputSentMs": 0.0029590000049211085,
+      "inputSentToHostReadyMs": -23.778833999997005,
+      "inputSentToAckMs": 16.32854099999531,
+      "focusToInputAckMs": 16.331500000000233,
+      "phaseSumMs": 16.331500000000233,
+      "intentToInteractiveMs": 169.00437500000407,
+      "launchToInteractiveMs": 2102.0181659999944,
+      "cleanupInventoryCount": 0,
+      "gitCleanupInventoryCount": 49,
+      "uiStoppedCleanly": true,
+      "observerStoppedCleanly": true,
+      "uiStderrEmpty": false,
+      "uiStderr": "Launching STATION TUI…\n__STATION_QUICK_SESSION_MANAGED_LAUNCH_PHASES__:{\"events\":[{\"phase\":\"hostedLaunchStarted\",\"atMs\":896.066709},{\"phase\":\"commandCompleted\",\"atMs\":996.964334},{\"phase\":\"worktreeObserved\",\"atMs\":997.02725},{\"phase\":\"attemptStarted\",\"atMs\":997.151959},{\"phase\":\"preflightCompleted\",\"atMs\":997.335292},{\"phase\":\"prepareStarted\",\"atMs\":997.3355},{\"phase\":\"prepareCompleted\",\"atMs\":1019.229417},{\"phase\":\"attachmentResolveStarted\",\"atMs\":1019.35475},{\"phase\":\"attachmentResolveCompleted\",\"atMs\":1021.93975},{\"phase\":\"terminalPlaced\",\"atMs\":1022.180959},{\"phase\":\"panePublished\",\"atMs\":1022.341084},{\"phase\":\"attemptCompleted\",\"atMs\":1026.029},{\"phase\":\"hostedLaunchCompleted\",\"atMs\":1026.0325},{\"phase\":\"quickResultReceived\",\"atMs\":1026.085917},{\"phase\":\"overlayCloseRequested\",\"atMs\":1026.086375},{\"phase\":\"canonicalWaitStarted\",\"atMs\":1026.167459},{\"phase\":\"canonicalWaitCompleted\",\"atMs\":1049.763125}]}\n",
+      "uiStderrBeforeExit": "Launching STATION TUI…\n",
+      "managedLaunchPhaseTrace": {
+        "events": [
+          {
+            "phase": "hostedLaunchStarted",
+            "atMs": 896.066709
+          },
+          {
+            "phase": "commandCompleted",
+            "atMs": 996.964334
+          },
+          {
+            "phase": "worktreeObserved",
+            "atMs": 997.02725
+          },
+          {
+            "phase": "attemptStarted",
+            "atMs": 997.151959
+          },
+          {
+            "phase": "preflightCompleted",
+            "atMs": 997.335292
+          },
+          {
+            "phase": "prepareStarted",
+            "atMs": 997.3355
+          },
+          {
+            "phase": "prepareCompleted",
+            "atMs": 1019.229417
+          },
+          {
+            "phase": "attachmentResolveStarted",
+            "atMs": 1019.35475
+          },
+          {
+            "phase": "attachmentResolveCompleted",
+            "atMs": 1021.93975
+          },
+          {
+            "phase": "terminalPlaced",
+            "atMs": 1022.180959
+          },
+          {
+            "phase": "panePublished",
+            "atMs": 1022.341084
+          },
+          {
+            "phase": "attemptCompleted",
+            "atMs": 1026.029
+          },
+          {
+            "phase": "hostedLaunchCompleted",
+            "atMs": 1026.0325
+          },
+          {
+            "phase": "quickResultReceived",
+            "atMs": 1026.085917
+          },
+          {
+            "phase": "overlayCloseRequested",
+            "atMs": 1026.086375
+          },
+          {
+            "phase": "canonicalWaitStarted",
+            "atMs": 1026.167459
+          },
+          {
+            "phase": "canonicalWaitCompleted",
+            "atMs": 1049.763125
+          }
+        ]
+      },
+      "managedLaunchPhaseDurations": {
+        "commandCompletionToWorktreeObservationMs": 0.06291599999997288,
+        "worktreeObservationToAttemptStartMs": 0.12470900000005258,
+        "managedPreflightMs": 0.1833329999999478,
+        "preflightToPrepareStartMs": 0.00020800000004328467,
+        "prepareExternalLaunchMs": 21.893916999999988,
+        "prepareToAttachmentResolveStartMs": 0.12533299999995506,
+        "attachmentResolutionMs": 2.5850000000000364,
+        "attachmentToTerminalPlacementMs": 0.2412090000000262,
+        "terminalPlacementToPanePublicationMs": 0.16012499999999363,
+        "panePublicationToAttemptCompletionMs": 3.687915999999973,
+        "attemptToHostedLaunchCompletionMs": 0.003500000000030923,
+        "hostedLaunchToQuickResultMs": 0.053417000000081316,
+        "quickResultToOverlayCloseMs": 0.00045799999998052954
+      },
+      "commandCompletionToOverlayCloseMs": 29.12204100000008,
+      "managedLaunchPhaseSumMs": 29.12204100000008,
+      "managedLaunchPhaseCoherent": true,
+      "observerExternalLaunchPhaseTrace": {
+        "events": []
+      },
+      "observerExternalLaunchPhaseDurations": null,
+      "observerExternalLaunchInternalMs": null,
+      "observerExternalLaunchPhaseSumMs": null,
+      "observerExternalLaunchPhaseCoherent": false,
+      "clientRpcMinusObserverInternalMs": null,
+      "loadAverage": {
+        "before": [
+          18.48828125,
+          24.22900390625,
+          22.28759765625
+        ],
+        "after": [
+          23.26220703125,
+          25.021484375,
+          22.5888671875
+        ]
+      },
+      "resourceUsage": {
+        "userCpuMs": 118.736,
+        "systemCpuMs": 121.403,
+        "fsReads": 0,
+        "fsWrites": 0,
+        "voluntaryContextSwitches": 2,
+        "involuntaryContextSwitches": 3924
+      }
+    },
+    {
+      "repetition": 10,
+      "focusStrategy": "automatic",
+      "dismissalInputSent": false,
+      "readyWasReplay": true,
+      "acknowledgementCount": 1,
+      "safe": false,
+      "safetyPredicates": {
+        "dashboardProjectVisible": true,
+        "commandProjectMatches": true,
+        "commandHarnessMatches": true,
+        "worktreeProjectMatches": true,
+        "worktreeBranchMatches": true,
+        "worktreeUsesManagedRoot": true,
+        "worktreeHasRegistrationIdentity": true,
+        "sessionHarnessMatches": true,
+        "sessionTerminalMatches": true,
+        "hostWorktreeMatches": true,
+        "hostHarnessMatches": true,
+        "hostSessionMatches": true,
+        "readyMarkerObserved": true,
+        "inputAcknowledged": true,
+        "inputAcknowledgedExactlyOnce": true,
+        "hostInventoryEmpty": true,
+        "gitInventoryRestored": true,
+        "uiStoppedCleanly": true,
+        "observerStoppedCleanly": true,
+        "managedLaunchPhaseTraceValid": true,
+        "managedLaunchPhaseTraceExitOnly": true,
+        "observerExternalLaunchPhaseTraceValid": false,
+        "observerExternalLaunchPhaseTraceExitOnly": true,
+        "uiStderrMatches": true
+      },
+      "phaseCoherent": true,
+      "commandId": "cmd_97728d8a-5833-40e0-816f-c44dc90fe8b3",
+      "traceId": "trc_57bb8a51-1e63-4f35-89c4-b7ba800598c4",
+      "branch": "compiled-tui-project-67f90e",
+      "worktreeId": "wt_compiled-tui-project_compiled-tui-project-67f90e_c3de5cad48",
+      "worktreePath": "/private/var/folders/l4/540r7_b136l9jcf36_p3qyvc0000gn/T/s-4qsapp/tmp/st-qtu-FLn6sy/worktrees/compiled-tui-project-67f90e",
+      "sessionId": "ses_4109923f-ea9a-45a9-a064-5e25dd68223e",
+      "terminalTargetId": "native:wt_compiled-tui-project_compiled-tui-project-67f90e_c3de5cad48",
+      "ptyId": "pty-12",
+      "ptyInstanceId": "ptyi_a8b99cf9-3d15-4ed4-b67e-ccc483c5670d",
+      "observerPid": 81754,
+      "sampledReconcileReason": "tui-startup",
+      "uiPid": 80687,
+      "launchToDashboardMs": 3719.925292,
+      "intentToOptimisticMs": 32.00633299999754,
+      "intentToCommandAcceptedMs": 60.31941699999152,
+      "intentToCommandCompletedMs": 394.1641249999957,
+      "intentToHostReadyMs": 454.9954579999903,
+      "intentToCanonicalUiMs": 556.2952499999956,
+      "intentToFocusMs": 503.49604199999885,
+      "focusToOverlayDismissedMs": 0,
+      "overlayDismissedToInputSentMs": 0.016124999994644895,
+      "inputSentToHostReadyMs": -48.516709000003175,
+      "inputSentToAckMs": 39.16020800000115,
+      "focusToInputAckMs": 39.17633299999579,
+      "phaseSumMs": 39.17633299999579,
+      "intentToInteractiveMs": 542.6723749999946,
+      "launchToInteractiveMs": 4373.027749999994,
+      "cleanupInventoryCount": 0,
+      "gitCleanupInventoryCount": 49,
+      "uiStoppedCleanly": true,
+      "observerStoppedCleanly": true,
+      "uiStderrEmpty": false,
+      "uiStderr": "Launching STATION TUI…\n__STATION_QUICK_SESSION_MANAGED_LAUNCH_PHASES__:{\"events\":[{\"phase\":\"hostedLaunchStarted\",\"atMs\":1274.439209},{\"phase\":\"commandCompleted\",\"atMs\":1651.172},{\"phase\":\"worktreeObserved\",\"atMs\":1651.228834},{\"phase\":\"attemptStarted\",\"atMs\":1651.342292},{\"phase\":\"preflightCompleted\",\"atMs\":1651.500084},{\"phase\":\"prepareStarted\",\"atMs\":1651.500334},{\"phase\":\"prepareCompleted\",\"atMs\":1711.745},{\"phase\":\"attachmentResolveStarted\",\"atMs\":1711.8695},{\"phase\":\"attachmentResolveCompleted\",\"atMs\":1726.485334},{\"phase\":\"terminalPlaced\",\"atMs\":1726.736625},{\"phase\":\"panePublished\",\"atMs\":1726.904875},{\"phase\":\"attemptCompleted\",\"atMs\":1731.874459},{\"phase\":\"hostedLaunchCompleted\",\"atMs\":1731.878792},{\"phase\":\"quickResultReceived\",\"atMs\":1731.938209},{\"phase\":\"overlayCloseRequested\",\"atMs\":1731.938625},{\"phase\":\"canonicalWaitStarted\",\"atMs\":1732.026459},{\"phase\":\"canonicalWaitCompleted\",\"atMs\":1792.447917}]}\n",
+      "uiStderrBeforeExit": "Launching STATION TUI…\n",
+      "managedLaunchPhaseTrace": {
+        "events": [
+          {
+            "phase": "hostedLaunchStarted",
+            "atMs": 1274.439209
+          },
+          {
+            "phase": "commandCompleted",
+            "atMs": 1651.172
+          },
+          {
+            "phase": "worktreeObserved",
+            "atMs": 1651.228834
+          },
+          {
+            "phase": "attemptStarted",
+            "atMs": 1651.342292
+          },
+          {
+            "phase": "preflightCompleted",
+            "atMs": 1651.500084
+          },
+          {
+            "phase": "prepareStarted",
+            "atMs": 1651.500334
+          },
+          {
+            "phase": "prepareCompleted",
+            "atMs": 1711.745
+          },
+          {
+            "phase": "attachmentResolveStarted",
+            "atMs": 1711.8695
+          },
+          {
+            "phase": "attachmentResolveCompleted",
+            "atMs": 1726.485334
+          },
+          {
+            "phase": "terminalPlaced",
+            "atMs": 1726.736625
+          },
+          {
+            "phase": "panePublished",
+            "atMs": 1726.904875
+          },
+          {
+            "phase": "attemptCompleted",
+            "atMs": 1731.874459
+          },
+          {
+            "phase": "hostedLaunchCompleted",
+            "atMs": 1731.878792
+          },
+          {
+            "phase": "quickResultReceived",
+            "atMs": 1731.938209
+          },
+          {
+            "phase": "overlayCloseRequested",
+            "atMs": 1731.938625
+          },
+          {
+            "phase": "canonicalWaitStarted",
+            "atMs": 1732.026459
+          },
+          {
+            "phase": "canonicalWaitCompleted",
+            "atMs": 1792.447917
+          }
+        ]
+      },
+      "managedLaunchPhaseDurations": {
+        "commandCompletionToWorktreeObservationMs": 0.05683399999998073,
+        "worktreeObservationToAttemptStartMs": 0.11345800000003692,
+        "managedPreflightMs": 0.15779199999997218,
+        "preflightToPrepareStartMs": 0.0002500000000509317,
+        "prepareExternalLaunchMs": 60.244665999999825,
+        "prepareToAttachmentResolveStartMs": 0.12450000000012551,
+        "attachmentResolutionMs": 14.61583399999995,
+        "attachmentToTerminalPlacementMs": 0.25129100000003746,
+        "terminalPlacementToPanePublicationMs": 0.1682499999999436,
+        "panePublicationToAttemptCompletionMs": 4.969583999999941,
+        "attemptToHostedLaunchCompletionMs": 0.00433300000008785,
+        "hostedLaunchToQuickResultMs": 0.059416999999939435,
+        "quickResultToOverlayCloseMs": 0.00041600000008656934
+      },
+      "commandCompletionToOverlayCloseMs": 80.76662499999998,
+      "managedLaunchPhaseSumMs": 80.76662499999998,
+      "managedLaunchPhaseCoherent": true,
+      "observerExternalLaunchPhaseTrace": {
+        "events": []
+      },
+      "observerExternalLaunchPhaseDurations": null,
+      "observerExternalLaunchInternalMs": null,
+      "observerExternalLaunchPhaseSumMs": null,
+      "observerExternalLaunchPhaseCoherent": false,
+      "clientRpcMinusObserverInternalMs": null,
+      "loadAverage": {
+        "before": [
+          23.26220703125,
+          25.021484375,
+          22.5888671875
+        ],
+        "after": [
+          22.0712890625,
+          24.70751953125,
+          22.50537109375
+        ]
+      },
+      "resourceUsage": {
+        "userCpuMs": 214.35,
+        "systemCpuMs": 262.153,
+        "fsReads": 0,
+        "fsWrites": 0,
+        "voluntaryContextSwitches": 3,
+        "involuntaryContextSwitches": 7515
+      }
+    },
+    {
+      "repetition": 11,
+      "focusStrategy": "automatic",
+      "dismissalInputSent": false,
+      "readyWasReplay": true,
+      "acknowledgementCount": 1,
+      "safe": false,
+      "safetyPredicates": {
+        "dashboardProjectVisible": true,
+        "commandProjectMatches": true,
+        "commandHarnessMatches": true,
+        "worktreeProjectMatches": true,
+        "worktreeBranchMatches": true,
+        "worktreeUsesManagedRoot": true,
+        "worktreeHasRegistrationIdentity": true,
+        "sessionHarnessMatches": true,
+        "sessionTerminalMatches": true,
+        "hostWorktreeMatches": true,
+        "hostHarnessMatches": true,
+        "hostSessionMatches": true,
+        "readyMarkerObserved": true,
+        "inputAcknowledged": true,
+        "inputAcknowledgedExactlyOnce": true,
+        "hostInventoryEmpty": true,
+        "gitInventoryRestored": true,
+        "uiStoppedCleanly": true,
+        "observerStoppedCleanly": true,
+        "managedLaunchPhaseTraceValid": true,
+        "managedLaunchPhaseTraceExitOnly": true,
+        "observerExternalLaunchPhaseTraceValid": false,
+        "observerExternalLaunchPhaseTraceExitOnly": true,
+        "uiStderrMatches": true
+      },
+      "phaseCoherent": true,
+      "commandId": "cmd_924adb17-8dcf-4f7e-8d4e-64c9355a0395",
+      "traceId": "trc_3ef0d12c-911b-4dd7-b57e-ec5edb63d2de",
+      "branch": "compiled-tui-project-73c32f",
+      "worktreeId": "wt_compiled-tui-project_compiled-tui-project-73c32f_064084f49a",
+      "worktreePath": "/private/var/folders/l4/540r7_b136l9jcf36_p3qyvc0000gn/T/s-4qsapp/tmp/st-qtu-FLn6sy/worktrees/compiled-tui-project-73c32f",
+      "sessionId": "ses_8d379258-0afb-4248-90df-9cec20d1f847",
+      "terminalTargetId": "native:wt_compiled-tui-project_compiled-tui-project-73c32f_064084f49a",
+      "ptyId": "pty-13",
+      "ptyInstanceId": "ptyi_bf3adb00-28f9-4f64-8ea6-b63ebb4a5f0d",
+      "observerPid": 89032,
+      "sampledReconcileReason": "tui-startup",
+      "uiPid": 88628,
+      "launchToDashboardMs": 1936.1477500000037,
+      "intentToOptimisticMs": 9.775166999999783,
+      "intentToCommandAcceptedMs": 16.318874999997206,
+      "intentToCommandCompletedMs": 93.73895799998718,
+      "intentToHostReadyMs": 126.78729199999361,
+      "intentToCanonicalUiMs": 214.97691699999268,
+      "intentToFocusMs": 184.14616699999897,
+      "focusToOverlayDismissedMs": 0,
+      "overlayDismissedToInputSentMs": 0.003790999995544553,
+      "inputSentToHostReadyMs": -57.3626660000009,
+      "inputSentToAckMs": 21.674583999993047,
+      "focusToInputAckMs": 21.67837499998859,
+      "phaseSumMs": 21.67837499998859,
+      "intentToInteractiveMs": 205.82454199998756,
+      "launchToInteractiveMs": 2249.6993749999965,
+      "cleanupInventoryCount": 0,
+      "gitCleanupInventoryCount": 49,
+      "uiStoppedCleanly": true,
+      "observerStoppedCleanly": true,
+      "uiStderrEmpty": false,
+      "uiStderr": "Launching STATION TUI…\n__STATION_QUICK_SESSION_MANAGED_LAUNCH_PHASES__:{\"events\":[{\"phase\":\"hostedLaunchStarted\",\"atMs\":857.126459},{\"phase\":\"commandCompleted\",\"atMs\":956.487},{\"phase\":\"worktreeObserved\",\"atMs\":956.551542},{\"phase\":\"attemptStarted\",\"atMs\":956.663334},{\"phase\":\"preflightCompleted\",\"atMs\":956.84025},{\"phase\":\"prepareStarted\",\"atMs\":956.840459},{\"phase\":\"prepareCompleted\",\"atMs\":982.020792},{\"phase\":\"attachmentResolveStarted\",\"atMs\":982.152292},{\"phase\":\"attachmentResolveCompleted\",\"atMs\":996.93925},{\"phase\":\"terminalPlaced\",\"atMs\":997.195709},{\"phase\":\"panePublished\",\"atMs\":997.359},{\"phase\":\"attemptCompleted\",\"atMs\":1000.875584},{\"phase\":\"hostedLaunchCompleted\",\"atMs\":1000.878667},{\"phase\":\"quickResultReceived\",\"atMs\":1000.933417},{\"phase\":\"overlayCloseRequested\",\"atMs\":1000.933875},{\"phase\":\"canonicalWaitStarted\",\"atMs\":1001.008209},{\"phase\":\"canonicalWaitCompleted\",\"atMs\":1043.192292}]}\n",
+      "uiStderrBeforeExit": "Launching STATION TUI…\n",
+      "managedLaunchPhaseTrace": {
+        "events": [
+          {
+            "phase": "hostedLaunchStarted",
+            "atMs": 857.126459
+          },
+          {
+            "phase": "commandCompleted",
+            "atMs": 956.487
+          },
+          {
+            "phase": "worktreeObserved",
+            "atMs": 956.551542
+          },
+          {
+            "phase": "attemptStarted",
+            "atMs": 956.663334
+          },
+          {
+            "phase": "preflightCompleted",
+            "atMs": 956.84025
+          },
+          {
+            "phase": "prepareStarted",
+            "atMs": 956.840459
+          },
+          {
+            "phase": "prepareCompleted",
+            "atMs": 982.020792
+          },
+          {
+            "phase": "attachmentResolveStarted",
+            "atMs": 982.152292
+          },
+          {
+            "phase": "attachmentResolveCompleted",
+            "atMs": 996.93925
+          },
+          {
+            "phase": "terminalPlaced",
+            "atMs": 997.195709
+          },
+          {
+            "phase": "panePublished",
+            "atMs": 997.359
+          },
+          {
+            "phase": "attemptCompleted",
+            "atMs": 1000.875584
+          },
+          {
+            "phase": "hostedLaunchCompleted",
+            "atMs": 1000.878667
+          },
+          {
+            "phase": "quickResultReceived",
+            "atMs": 1000.933417
+          },
+          {
+            "phase": "overlayCloseRequested",
+            "atMs": 1000.933875
+          },
+          {
+            "phase": "canonicalWaitStarted",
+            "atMs": 1001.008209
+          },
+          {
+            "phase": "canonicalWaitCompleted",
+            "atMs": 1043.192292
+          }
+        ]
+      },
+      "managedLaunchPhaseDurations": {
+        "commandCompletionToWorktreeObservationMs": 0.06454200000007404,
+        "worktreeObservationToAttemptStartMs": 0.11179199999992306,
+        "managedPreflightMs": 0.17691600000000562,
+        "preflightToPrepareStartMs": 0.00020900000004075991,
+        "prepareExternalLaunchMs": 25.18033300000002,
+        "prepareToAttachmentResolveStartMs": 0.13149999999995998,
+        "attachmentResolutionMs": 14.786958000000027,
+        "attachmentToTerminalPlacementMs": 0.2564589999999498,
+        "terminalPlacementToPanePublicationMs": 0.16329100000007202,
+        "panePublicationToAttemptCompletionMs": 3.516583999999966,
+        "attemptToHostedLaunchCompletionMs": 0.0030829999999468782,
+        "hostedLaunchToQuickResultMs": 0.05475000000001273,
+        "quickResultToOverlayCloseMs": 0.00045799999998052954
+      },
+      "commandCompletionToOverlayCloseMs": 44.44687499999998,
+      "managedLaunchPhaseSumMs": 44.44687499999998,
+      "managedLaunchPhaseCoherent": true,
+      "observerExternalLaunchPhaseTrace": {
+        "events": []
+      },
+      "observerExternalLaunchPhaseDurations": null,
+      "observerExternalLaunchInternalMs": null,
+      "observerExternalLaunchPhaseSumMs": null,
+      "observerExternalLaunchPhaseCoherent": false,
+      "clientRpcMinusObserverInternalMs": null,
+      "loadAverage": {
+        "before": [
+          22.0712890625,
+          24.70751953125,
+          22.50537109375
+        ],
+        "after": [
+          21.0244140625,
+          24.4462890625,
+          22.42578125
+        ]
+      },
+      "resourceUsage": {
+        "userCpuMs": 116.787,
+        "systemCpuMs": 134.459,
+        "fsReads": 0,
+        "fsWrites": 0,
+        "voluntaryContextSwitches": 2,
+        "involuntaryContextSwitches": 3668
+      }
+    },
+    {
+      "repetition": 12,
+      "focusStrategy": "automatic",
+      "dismissalInputSent": false,
+      "readyWasReplay": true,
+      "acknowledgementCount": 1,
+      "safe": false,
+      "safetyPredicates": {
+        "dashboardProjectVisible": true,
+        "commandProjectMatches": true,
+        "commandHarnessMatches": true,
+        "worktreeProjectMatches": true,
+        "worktreeBranchMatches": true,
+        "worktreeUsesManagedRoot": true,
+        "worktreeHasRegistrationIdentity": true,
+        "sessionHarnessMatches": true,
+        "sessionTerminalMatches": true,
+        "hostWorktreeMatches": true,
+        "hostHarnessMatches": true,
+        "hostSessionMatches": true,
+        "readyMarkerObserved": true,
+        "inputAcknowledged": true,
+        "inputAcknowledgedExactlyOnce": true,
+        "hostInventoryEmpty": true,
+        "gitInventoryRestored": true,
+        "uiStoppedCleanly": true,
+        "observerStoppedCleanly": true,
+        "managedLaunchPhaseTraceValid": true,
+        "managedLaunchPhaseTraceExitOnly": true,
+        "observerExternalLaunchPhaseTraceValid": false,
+        "observerExternalLaunchPhaseTraceExitOnly": true,
+        "uiStderrMatches": true
+      },
+      "phaseCoherent": true,
+      "commandId": "cmd_effaf407-9a62-44bd-8093-9f1dfff48030",
+      "traceId": "trc_27e4ede8-4566-4bf9-b8fb-904678b0dc29",
+      "branch": "compiled-tui-project-0f572b",
+      "worktreeId": "wt_compiled-tui-project_compiled-tui-project-0f572b_d730d4c621",
+      "worktreePath": "/private/var/folders/l4/540r7_b136l9jcf36_p3qyvc0000gn/T/s-4qsapp/tmp/st-qtu-FLn6sy/worktrees/compiled-tui-project-0f572b",
+      "sessionId": "ses_85a23fd1-bb8a-4ad4-ba0e-cb06ace8b304",
+      "terminalTargetId": "native:wt_compiled-tui-project_compiled-tui-project-0f572b_d730d4c621",
+      "ptyId": "pty-14",
+      "ptyInstanceId": "ptyi_eaff0682-45a6-40ac-90dd-55eaa8bb6ebc",
+      "observerPid": 94842,
+      "sampledReconcileReason": "tui-startup",
+      "uiPid": 94443,
+      "launchToDashboardMs": 4031.1455829999904,
+      "intentToOptimisticMs": 11.590666000003694,
+      "intentToCommandAcceptedMs": 17.953750000000582,
+      "intentToCommandCompletedMs": 90.47162500000559,
+      "intentToHostReadyMs": 132.69433300000674,
+      "intentToCanonicalUiMs": 203.09783300000709,
+      "intentToFocusMs": 178.76083300000755,
+      "focusToOverlayDismissedMs": 0,
+      "overlayDismissedToInputSentMs": 0.003041999996639788,
+      "inputSentToHostReadyMs": -46.069541999997455,
+      "inputSentToAckMs": 16.977415999994264,
+      "focusToInputAckMs": 16.980457999990904,
+      "phaseSumMs": 16.980457999990904,
+      "intentToInteractiveMs": 195.74129099999845,
+      "launchToInteractiveMs": 4336.22645799999,
+      "cleanupInventoryCount": 0,
+      "gitCleanupInventoryCount": 49,
+      "uiStoppedCleanly": true,
+      "observerStoppedCleanly": true,
+      "uiStderrEmpty": false,
+      "uiStderr": "Starting STATION observer…\nLaunching STATION TUI…\n__STATION_QUICK_SESSION_MANAGED_LAUNCH_PHASES__:{\"events\":[{\"phase\":\"hostedLaunchStarted\",\"atMs\":921.786792},{\"phase\":\"commandCompleted\",\"atMs\":1019.867125},{\"phase\":\"worktreeObserved\",\"atMs\":1019.926542},{\"phase\":\"attemptStarted\",\"atMs\":1020.063583},{\"phase\":\"preflightCompleted\",\"atMs\":1020.238208},{\"phase\":\"prepareStarted\",\"atMs\":1020.2385},{\"phase\":\"prepareCompleted\",\"atMs\":1056.439042},{\"phase\":\"attachmentResolveStarted\",\"atMs\":1056.588917},{\"phase\":\"attachmentResolveCompleted\",\"atMs\":1069.597125},{\"phase\":\"terminalPlaced\",\"atMs\":1069.884417},{\"phase\":\"panePublished\",\"atMs\":1070.056375},{\"phase\":\"attemptCompleted\",\"atMs\":1077.300125},{\"phase\":\"hostedLaunchCompleted\",\"atMs\":1077.308083},{\"phase\":\"quickResultReceived\",\"atMs\":1077.438292},{\"phase\":\"overlayCloseRequested\",\"atMs\":1077.438958},{\"phase\":\"canonicalWaitStarted\",\"atMs\":1077.741458},{\"phase\":\"canonicalWaitCompleted\",\"atMs\":1095.551792}]}\n",
+      "uiStderrBeforeExit": "Starting STATION observer…\nLaunching STATION TUI…\n",
+      "managedLaunchPhaseTrace": {
+        "events": [
+          {
+            "phase": "hostedLaunchStarted",
+            "atMs": 921.786792
+          },
+          {
+            "phase": "commandCompleted",
+            "atMs": 1019.867125
+          },
+          {
+            "phase": "worktreeObserved",
+            "atMs": 1019.926542
+          },
+          {
+            "phase": "attemptStarted",
+            "atMs": 1020.063583
+          },
+          {
+            "phase": "preflightCompleted",
+            "atMs": 1020.238208
+          },
+          {
+            "phase": "prepareStarted",
+            "atMs": 1020.2385
+          },
+          {
+            "phase": "prepareCompleted",
+            "atMs": 1056.439042
+          },
+          {
+            "phase": "attachmentResolveStarted",
+            "atMs": 1056.588917
+          },
+          {
+            "phase": "attachmentResolveCompleted",
+            "atMs": 1069.597125
+          },
+          {
+            "phase": "terminalPlaced",
+            "atMs": 1069.884417
+          },
+          {
+            "phase": "panePublished",
+            "atMs": 1070.056375
+          },
+          {
+            "phase": "attemptCompleted",
+            "atMs": 1077.300125
+          },
+          {
+            "phase": "hostedLaunchCompleted",
+            "atMs": 1077.308083
+          },
+          {
+            "phase": "quickResultReceived",
+            "atMs": 1077.438292
+          },
+          {
+            "phase": "overlayCloseRequested",
+            "atMs": 1077.438958
+          },
+          {
+            "phase": "canonicalWaitStarted",
+            "atMs": 1077.741458
+          },
+          {
+            "phase": "canonicalWaitCompleted",
+            "atMs": 1095.551792
+          }
+        ]
+      },
+      "managedLaunchPhaseDurations": {
+        "commandCompletionToWorktreeObservationMs": 0.05941700000005312,
+        "worktreeObservationToAttemptStartMs": 0.13704099999995378,
+        "managedPreflightMs": 0.17462499999999181,
+        "preflightToPrepareStartMs": 0.00029200000005857873,
+        "prepareExternalLaunchMs": 36.20054199999993,
+        "prepareToAttachmentResolveStartMs": 0.14987500000006548,
+        "attachmentResolutionMs": 13.008207999999968,
+        "attachmentToTerminalPlacementMs": 0.28729199999997945,
+        "terminalPlacementToPanePublicationMs": 0.17195799999990413,
+        "panePublicationToAttemptCompletionMs": 7.243750000000091,
+        "attemptToHostedLaunchCompletionMs": 0.007957999999916865,
+        "hostedLaunchToQuickResultMs": 0.1302090000001499,
+        "quickResultToOverlayCloseMs": 0.0006659999999101274
+      },
+      "commandCompletionToOverlayCloseMs": 57.57183299999997,
+      "managedLaunchPhaseSumMs": 57.57183299999997,
+      "managedLaunchPhaseCoherent": true,
+      "observerExternalLaunchPhaseTrace": {
+        "events": []
+      },
+      "observerExternalLaunchPhaseDurations": null,
+      "observerExternalLaunchInternalMs": null,
+      "observerExternalLaunchPhaseSumMs": null,
+      "observerExternalLaunchPhaseCoherent": false,
+      "clientRpcMinusObserverInternalMs": null,
+      "loadAverage": {
+        "before": [
+          21.0244140625,
+          24.4462890625,
+          22.42578125
+        ],
+        "after": [
+          19.86669921875,
+          24.09814453125,
+          22.326171875
+        ]
+      },
+      "resourceUsage": {
+        "userCpuMs": 205.664,
+        "systemCpuMs": 229.439,
+        "fsReads": 0,
+        "fsWrites": 0,
+        "voluntaryContextSwitches": 4,
+        "involuntaryContextSwitches": 6726
+      }
+    },
+    {
+      "repetition": 13,
+      "focusStrategy": "automatic",
+      "dismissalInputSent": false,
+      "readyWasReplay": true,
+      "acknowledgementCount": 1,
+      "safe": false,
+      "safetyPredicates": {
+        "dashboardProjectVisible": true,
+        "commandProjectMatches": true,
+        "commandHarnessMatches": true,
+        "worktreeProjectMatches": true,
+        "worktreeBranchMatches": true,
+        "worktreeUsesManagedRoot": true,
+        "worktreeHasRegistrationIdentity": true,
+        "sessionHarnessMatches": true,
+        "sessionTerminalMatches": true,
+        "hostWorktreeMatches": true,
+        "hostHarnessMatches": true,
+        "hostSessionMatches": true,
+        "readyMarkerObserved": true,
+        "inputAcknowledged": true,
+        "inputAcknowledgedExactlyOnce": true,
+        "hostInventoryEmpty": true,
+        "gitInventoryRestored": true,
+        "uiStoppedCleanly": true,
+        "observerStoppedCleanly": true,
+        "managedLaunchPhaseTraceValid": true,
+        "managedLaunchPhaseTraceExitOnly": true,
+        "observerExternalLaunchPhaseTraceValid": false,
+        "observerExternalLaunchPhaseTraceExitOnly": true,
+        "uiStderrMatches": true
+      },
+      "phaseCoherent": true,
+      "commandId": "cmd_6a1a7500-8806-4573-b14f-1597a3384395",
+      "traceId": "trc_8fc726f0-0e2b-412e-9203-b24523cddc2c",
+      "branch": "compiled-tui-project-d5da9e",
+      "worktreeId": "wt_compiled-tui-project_compiled-tui-project-d5da9e_114dbafc1e",
+      "worktreePath": "/private/var/folders/l4/540r7_b136l9jcf36_p3qyvc0000gn/T/s-4qsapp/tmp/st-qtu-FLn6sy/worktrees/compiled-tui-project-d5da9e",
+      "sessionId": "ses_d808a632-1376-4ba2-95ee-09750096aeea",
+      "terminalTargetId": "native:wt_compiled-tui-project_compiled-tui-project-d5da9e_114dbafc1e",
+      "ptyId": "pty-15",
+      "ptyInstanceId": "ptyi_825dff17-ec3f-46bc-b157-cd705917a196",
+      "observerPid": 2307,
+      "sampledReconcileReason": "metadata:change_summary",
+      "uiPid": 2185,
+      "launchToDashboardMs": 4525.442832999994,
+      "intentToOptimisticMs": 58.75854100001743,
+      "intentToCommandAcceptedMs": 70.16029100000742,
+      "intentToCommandCompletedMs": 220.06566600000951,
+      "intentToHostReadyMs": 311.2129160000186,
+      "intentToCanonicalUiMs": 392.3026660000032,
+      "intentToFocusMs": 353.41245800000615,
+      "focusToOverlayDismissedMs": 0,
+      "overlayDismissedToInputSentMs": 0.010249999992083758,
+      "inputSentToHostReadyMs": -42.20979199997964,
+      "inputSentToAckMs": 27.94691700002295,
+      "focusToInputAckMs": 27.957167000015033,
+      "phaseSumMs": 27.957167000015033,
+      "intentToInteractiveMs": 381.3696250000212,
+      "launchToInteractiveMs": 5044.015750000006,
+      "cleanupInventoryCount": 0,
+      "gitCleanupInventoryCount": 49,
+      "uiStoppedCleanly": true,
+      "observerStoppedCleanly": true,
+      "uiStderrEmpty": false,
+      "uiStderr": "Launching STATION TUI…\n__STATION_QUICK_SESSION_MANAGED_LAUNCH_PHASES__:{\"events\":[{\"phase\":\"hostedLaunchStarted\",\"atMs\":3864.111708},{\"phase\":\"commandCompleted\",\"atMs\":4078.97675},{\"phase\":\"worktreeObserved\",\"atMs\":4079.146417},{\"phase\":\"attemptStarted\",\"atMs\":4079.390292},{\"phase\":\"preflightCompleted\",\"atMs\":4079.805125},{\"phase\":\"prepareStarted\",\"atMs\":4079.805708},{\"phase\":\"prepareCompleted\",\"atMs\":4139.312375},{\"phase\":\"attachmentResolveStarted\",\"atMs\":4146.19825},{\"phase\":\"attachmentResolveCompleted\",\"atMs\":4157.214},{\"phase\":\"terminalPlaced\",\"atMs\":4157.480083},{\"phase\":\"panePublished\",\"atMs\":4157.88675},{\"phase\":\"attemptCompleted\",\"atMs\":4164.943958},{\"phase\":\"hostedLaunchCompleted\",\"atMs\":4164.948417},{\"phase\":\"quickResultReceived\",\"atMs\":4165.009542},{\"phase\":\"overlayCloseRequested\",\"atMs\":4165.009875},{\"phase\":\"canonicalWaitStarted\",\"atMs\":4165.197375},{\"phase\":\"canonicalWaitCompleted\",\"atMs\":4207.879083}]}\n",
+      "uiStderrBeforeExit": "Launching STATION TUI…\n",
+      "managedLaunchPhaseTrace": {
+        "events": [
+          {
+            "phase": "hostedLaunchStarted",
+            "atMs": 3864.111708
+          },
+          {
+            "phase": "commandCompleted",
+            "atMs": 4078.97675
+          },
+          {
+            "phase": "worktreeObserved",
+            "atMs": 4079.146417
+          },
+          {
+            "phase": "attemptStarted",
+            "atMs": 4079.390292
+          },
+          {
+            "phase": "preflightCompleted",
+            "atMs": 4079.805125
+          },
+          {
+            "phase": "prepareStarted",
+            "atMs": 4079.805708
+          },
+          {
+            "phase": "prepareCompleted",
+            "atMs": 4139.312375
+          },
+          {
+            "phase": "attachmentResolveStarted",
+            "atMs": 4146.19825
+          },
+          {
+            "phase": "attachmentResolveCompleted",
+            "atMs": 4157.214
+          },
+          {
+            "phase": "terminalPlaced",
+            "atMs": 4157.480083
+          },
+          {
+            "phase": "panePublished",
+            "atMs": 4157.88675
+          },
+          {
+            "phase": "attemptCompleted",
+            "atMs": 4164.943958
+          },
+          {
+            "phase": "hostedLaunchCompleted",
+            "atMs": 4164.948417
+          },
+          {
+            "phase": "quickResultReceived",
+            "atMs": 4165.009542
+          },
+          {
+            "phase": "overlayCloseRequested",
+            "atMs": 4165.009875
+          },
+          {
+            "phase": "canonicalWaitStarted",
+            "atMs": 4165.197375
+          },
+          {
+            "phase": "canonicalWaitCompleted",
+            "atMs": 4207.879083
+          }
+        ]
+      },
+      "managedLaunchPhaseDurations": {
+        "commandCompletionToWorktreeObservationMs": 0.1696670000001177,
+        "worktreeObservationToAttemptStartMs": 0.24387500000011642,
+        "managedPreflightMs": 0.4148329999998168,
+        "preflightToPrepareStartMs": 0.0005830000000059954,
+        "prepareExternalLaunchMs": 59.50666700000056,
+        "prepareToAttachmentResolveStartMs": 6.885874999999942,
+        "attachmentResolutionMs": 11.01574999999957,
+        "attachmentToTerminalPlacementMs": 0.2660830000004353,
+        "terminalPlacementToPanePublicationMs": 0.40666699999928824,
+        "panePublicationToAttemptCompletionMs": 7.057208000000173,
+        "attemptToHostedLaunchCompletionMs": 0.0044589999997697305,
+        "hostedLaunchToQuickResultMs": 0.06112500000017462,
+        "quickResultToOverlayCloseMs": 0.0003329999999550637
+      },
+      "commandCompletionToOverlayCloseMs": 86.03312499999993,
+      "managedLaunchPhaseSumMs": 86.03312499999993,
+      "managedLaunchPhaseCoherent": true,
+      "observerExternalLaunchPhaseTrace": {
+        "events": []
+      },
+      "observerExternalLaunchPhaseDurations": null,
+      "observerExternalLaunchInternalMs": null,
+      "observerExternalLaunchPhaseSumMs": null,
+      "observerExternalLaunchPhaseCoherent": false,
+      "clientRpcMinusObserverInternalMs": null,
+      "loadAverage": {
+        "before": [
+          19.86669921875,
+          24.09814453125,
+          22.326171875
+        ],
+        "after": [
+          21.3984375,
+          24.34521484375,
+          22.423828125
+        ]
+      },
+      "resourceUsage": {
+        "userCpuMs": 162.45,
+        "systemCpuMs": 218.541,
+        "fsReads": 0,
+        "fsWrites": 0,
+        "voluntaryContextSwitches": 2,
+        "involuntaryContextSwitches": 5714
+      }
+    },
+    {
+      "repetition": 14,
+      "focusStrategy": "automatic",
+      "dismissalInputSent": false,
+      "readyWasReplay": true,
+      "acknowledgementCount": 1,
+      "safe": false,
+      "safetyPredicates": {
+        "dashboardProjectVisible": true,
+        "commandProjectMatches": true,
+        "commandHarnessMatches": true,
+        "worktreeProjectMatches": true,
+        "worktreeBranchMatches": true,
+        "worktreeUsesManagedRoot": true,
+        "worktreeHasRegistrationIdentity": true,
+        "sessionHarnessMatches": true,
+        "sessionTerminalMatches": true,
+        "hostWorktreeMatches": true,
+        "hostHarnessMatches": true,
+        "hostSessionMatches": true,
+        "readyMarkerObserved": true,
+        "inputAcknowledged": true,
+        "inputAcknowledgedExactlyOnce": true,
+        "hostInventoryEmpty": true,
+        "gitInventoryRestored": true,
+        "uiStoppedCleanly": true,
+        "observerStoppedCleanly": true,
+        "managedLaunchPhaseTraceValid": true,
+        "managedLaunchPhaseTraceExitOnly": true,
+        "observerExternalLaunchPhaseTraceValid": false,
+        "observerExternalLaunchPhaseTraceExitOnly": true,
+        "uiStderrMatches": true
+      },
+      "phaseCoherent": true,
+      "commandId": "cmd_b0c9b026-222a-4e3d-965b-3999a88646fe",
+      "traceId": "trc_110cb737-55d7-4744-978a-ff9aaafc05ca",
+      "branch": "compiled-tui-project-45f102",
+      "worktreeId": "wt_compiled-tui-project_compiled-tui-project-45f102_ee432c79af",
+      "worktreePath": "/private/var/folders/l4/540r7_b136l9jcf36_p3qyvc0000gn/T/s-4qsapp/tmp/st-qtu-FLn6sy/worktrees/compiled-tui-project-45f102",
+      "sessionId": "ses_3106b40b-53cc-4ffa-8a86-a955dad8b18d",
+      "terminalTargetId": "native:wt_compiled-tui-project_compiled-tui-project-45f102_ee432c79af",
+      "ptyId": "pty-16",
+      "ptyInstanceId": "ptyi_5a8665d1-0456-4d7c-ac64-3841ae3e4a6a",
+      "observerPid": 11272,
+      "sampledReconcileReason": "tui-startup",
+      "uiPid": 11152,
+      "launchToDashboardMs": 2219.8472089999996,
+      "intentToOptimisticMs": 10.30729200001224,
+      "intentToCommandAcceptedMs": 20.075791999988724,
+      "intentToCommandCompletedMs": 177.5324580000015,
+      "intentToHostReadyMs": 267.77054200001294,
+      "intentToCanonicalUiMs": 532.6428329999908,
+      "intentToFocusMs": 290.8654169999936,
+      "focusToOverlayDismissedMs": 0,
+      "overlayDismissedToInputSentMs": 0.0027080000145360827,
+      "inputSentToHostReadyMs": -23.09758299999521,
+      "inputSentToAckMs": 180.49729199998546,
+      "focusToInputAckMs": 180.5,
+      "phaseSumMs": 180.5,
+      "intentToInteractiveMs": 471.3654169999936,
+      "launchToInteractiveMs": 2800.7517090000038,
+      "cleanupInventoryCount": 0,
+      "gitCleanupInventoryCount": 49,
+      "uiStoppedCleanly": true,
+      "observerStoppedCleanly": true,
+      "uiStderrEmpty": false,
+      "uiStderr": "Launching STATION TUI…\n__STATION_QUICK_SESSION_MANAGED_LAUNCH_PHASES__:{\"events\":[{\"phase\":\"hostedLaunchStarted\",\"atMs\":969.109833},{\"phase\":\"commandCompleted\",\"atMs\":1152.052708},{\"phase\":\"worktreeObserved\",\"atMs\":1152.125125},{\"phase\":\"attemptStarted\",\"atMs\":1152.239},{\"phase\":\"preflightCompleted\",\"atMs\":1152.414583},{\"phase\":\"prepareStarted\",\"atMs\":1152.414833},{\"phase\":\"prepareCompleted\",\"atMs\":1188.192833},{\"phase\":\"attachmentResolveStarted\",\"atMs\":1188.330875},{\"phase\":\"attachmentResolveCompleted\",\"atMs\":1206.436958},{\"phase\":\"terminalPlaced\",\"atMs\":1206.899292},{\"phase\":\"panePublished\",\"atMs\":1207.301625},{\"phase\":\"attemptCompleted\",\"atMs\":1215.017292},{\"phase\":\"hostedLaunchCompleted\",\"atMs\":1215.029},{\"phase\":\"quickResultReceived\",\"atMs\":1215.3305},{\"phase\":\"overlayCloseRequested\",\"atMs\":1215.332125},{\"phase\":\"canonicalWaitStarted\",\"atMs\":1215.553667},{\"phase\":\"canonicalWaitCompleted\",\"atMs\":1256.617458}]}\n",
+      "uiStderrBeforeExit": "Launching STATION TUI…\n",
+      "managedLaunchPhaseTrace": {
+        "events": [
+          {
+            "phase": "hostedLaunchStarted",
+            "atMs": 969.109833
+          },
+          {
+            "phase": "commandCompleted",
+            "atMs": 1152.052708
+          },
+          {
+            "phase": "worktreeObserved",
+            "atMs": 1152.125125
+          },
+          {
+            "phase": "attemptStarted",
+            "atMs": 1152.239
+          },
+          {
+            "phase": "preflightCompleted",
+            "atMs": 1152.414583
+          },
+          {
+            "phase": "prepareStarted",
+            "atMs": 1152.414833
+          },
+          {
+            "phase": "prepareCompleted",
+            "atMs": 1188.192833
+          },
+          {
+            "phase": "attachmentResolveStarted",
+            "atMs": 1188.330875
+          },
+          {
+            "phase": "attachmentResolveCompleted",
+            "atMs": 1206.436958
+          },
+          {
+            "phase": "terminalPlaced",
+            "atMs": 1206.899292
+          },
+          {
+            "phase": "panePublished",
+            "atMs": 1207.301625
+          },
+          {
+            "phase": "attemptCompleted",
+            "atMs": 1215.017292
+          },
+          {
+            "phase": "hostedLaunchCompleted",
+            "atMs": 1215.029
+          },
+          {
+            "phase": "quickResultReceived",
+            "atMs": 1215.3305
+          },
+          {
+            "phase": "overlayCloseRequested",
+            "atMs": 1215.332125
+          },
+          {
+            "phase": "canonicalWaitStarted",
+            "atMs": 1215.553667
+          },
+          {
+            "phase": "canonicalWaitCompleted",
+            "atMs": 1256.617458
+          }
+        ]
+      },
+      "managedLaunchPhaseDurations": {
+        "commandCompletionToWorktreeObservationMs": 0.07241700000008677,
+        "worktreeObservationToAttemptStartMs": 0.11387500000000728,
+        "managedPreflightMs": 0.17558299999996052,
+        "preflightToPrepareStartMs": 0.0002500000000509317,
+        "prepareExternalLaunchMs": 35.77800000000002,
+        "prepareToAttachmentResolveStartMs": 0.1380420000000413,
+        "attachmentResolutionMs": 18.1060829999999,
+        "attachmentToTerminalPlacementMs": 0.4623340000000553,
+        "terminalPlacementToPanePublicationMs": 0.4023329999999987,
+        "panePublicationToAttemptCompletionMs": 7.715666999999939,
+        "attemptToHostedLaunchCompletionMs": 0.01170799999999872,
+        "hostedLaunchToQuickResultMs": 0.30150000000003274,
+        "quickResultToOverlayCloseMs": 0.0016249999998763087
+      },
+      "commandCompletionToOverlayCloseMs": 63.27941699999997,
+      "managedLaunchPhaseSumMs": 63.27941699999997,
+      "managedLaunchPhaseCoherent": true,
+      "observerExternalLaunchPhaseTrace": {
+        "events": []
+      },
+      "observerExternalLaunchPhaseDurations": null,
+      "observerExternalLaunchInternalMs": null,
+      "observerExternalLaunchPhaseSumMs": null,
+      "observerExternalLaunchPhaseCoherent": false,
+      "clientRpcMinusObserverInternalMs": null,
+      "loadAverage": {
+        "before": [
+          21.3984375,
+          24.34521484375,
+          22.423828125
+        ],
+        "after": [
+          20.2412109375,
+          23.93798828125,
+          22.31103515625
+        ]
+      },
+      "resourceUsage": {
+        "userCpuMs": 175.72,
+        "systemCpuMs": 143.945,
+        "fsReads": 0,
+        "fsWrites": 0,
+        "voluntaryContextSwitches": 1,
+        "involuntaryContextSwitches": 4742
+      }
+    },
+    {
+      "repetition": 15,
+      "focusStrategy": "automatic",
+      "dismissalInputSent": false,
+      "readyWasReplay": true,
+      "acknowledgementCount": 1,
+      "safe": false,
+      "safetyPredicates": {
+        "dashboardProjectVisible": true,
+        "commandProjectMatches": true,
+        "commandHarnessMatches": true,
+        "worktreeProjectMatches": true,
+        "worktreeBranchMatches": true,
+        "worktreeUsesManagedRoot": true,
+        "worktreeHasRegistrationIdentity": true,
+        "sessionHarnessMatches": true,
+        "sessionTerminalMatches": true,
+        "hostWorktreeMatches": true,
+        "hostHarnessMatches": true,
+        "hostSessionMatches": true,
+        "readyMarkerObserved": true,
+        "inputAcknowledged": true,
+        "inputAcknowledgedExactlyOnce": true,
+        "hostInventoryEmpty": true,
+        "gitInventoryRestored": true,
+        "uiStoppedCleanly": true,
+        "observerStoppedCleanly": true,
+        "managedLaunchPhaseTraceValid": true,
+        "managedLaunchPhaseTraceExitOnly": true,
+        "observerExternalLaunchPhaseTraceValid": false,
+        "observerExternalLaunchPhaseTraceExitOnly": true,
+        "uiStderrMatches": true
+      },
+      "phaseCoherent": true,
+      "commandId": "cmd_af78e59e-d60b-4076-91c1-c9d795d7c255",
+      "traceId": "trc_0f135693-e73c-456f-8676-8ec8956737df",
+      "branch": "compiled-tui-project-b9c4cf",
+      "worktreeId": "wt_compiled-tui-project_compiled-tui-project-b9c4cf_da4c14cd53",
+      "worktreePath": "/private/var/folders/l4/540r7_b136l9jcf36_p3qyvc0000gn/T/s-4qsapp/tmp/st-qtu-FLn6sy/worktrees/compiled-tui-project-b9c4cf",
+      "sessionId": "ses_0bf253fc-ee71-4e3c-867b-9ea3f8672a52",
+      "terminalTargetId": "native:wt_compiled-tui-project_compiled-tui-project-b9c4cf_da4c14cd53",
+      "ptyId": "pty-17",
+      "ptyInstanceId": "ptyi_1ceaad57-65f9-467a-8b6b-5ed9536ad957",
+      "observerPid": 18410,
+      "sampledReconcileReason": "metadata:change_summary",
+      "uiPid": 18248,
+      "launchToDashboardMs": 8568.079958999995,
+      "intentToOptimisticMs": 239.59162500000093,
+      "intentToCommandAcceptedMs": 287.65795799999614,
+      "intentToCommandCompletedMs": 564.2825000000012,
+      "intentToHostReadyMs": 777.411374999996,
+      "intentToCanonicalUiMs": 1232.4921249999898,
+      "intentToFocusMs": 840.6922499999928,
+      "focusToOverlayDismissedMs": 0,
+      "overlayDismissedToInputSentMs": 0.013375000009546056,
+      "inputSentToHostReadyMs": -63.294250000006286,
+      "inputSentToAckMs": 372.8266669999866,
+      "focusToInputAckMs": 372.8400419999962,
+      "phaseSumMs": 372.8400419999962,
+      "intentToInteractiveMs": 1213.532291999989,
+      "launchToInteractiveMs": 9910.370333999977,
+      "cleanupInventoryCount": 0,
+      "gitCleanupInventoryCount": 49,
+      "uiStoppedCleanly": true,
+      "observerStoppedCleanly": true,
+      "uiStderrEmpty": false,
+      "uiStderr": "Launching STATION TUI…\n__STATION_QUICK_SESSION_MANAGED_LAUNCH_PHASES__:{\"events\":[{\"phase\":\"hostedLaunchStarted\",\"atMs\":7174.278417},{\"phase\":\"commandCompleted\",\"atMs\":7738.015334},{\"phase\":\"worktreeObserved\",\"atMs\":7739.212167},{\"phase\":\"attemptStarted\",\"atMs\":7739.564375},{\"phase\":\"preflightCompleted\",\"atMs\":7739.956834},{\"phase\":\"prepareStarted\",\"atMs\":7739.957417},{\"phase\":\"prepareCompleted\",\"atMs\":7935.205709},{\"phase\":\"attachmentResolveStarted\",\"atMs\":7935.682167},{\"phase\":\"attachmentResolveCompleted\",\"atMs\":7954.045},{\"phase\":\"terminalPlaced\",\"atMs\":7954.678167},{\"phase\":\"panePublished\",\"atMs\":7955.3065},{\"phase\":\"attemptCompleted\",\"atMs\":7965.304084},{\"phase\":\"hostedLaunchCompleted\",\"atMs\":7965.310125},{\"phase\":\"quickResultReceived\",\"atMs\":7965.452209},{\"phase\":\"overlayCloseRequested\",\"atMs\":7965.453125},{\"phase\":\"canonicalWaitStarted\",\"atMs\":7965.656167},{\"phase\":\"canonicalWaitCompleted\",\"atMs\":8354.906}]}\n",
+      "uiStderrBeforeExit": "Launching STATION TUI…\n",
+      "managedLaunchPhaseTrace": {
+        "events": [
+          {
+            "phase": "hostedLaunchStarted",
+            "atMs": 7174.278417
+          },
+          {
+            "phase": "commandCompleted",
+            "atMs": 7738.015334
+          },
+          {
+            "phase": "worktreeObserved",
+            "atMs": 7739.212167
+          },
+          {
+            "phase": "attemptStarted",
+            "atMs": 7739.564375
+          },
+          {
+            "phase": "preflightCompleted",
+            "atMs": 7739.956834
+          },
+          {
+            "phase": "prepareStarted",
+            "atMs": 7739.957417
+          },
+          {
+            "phase": "prepareCompleted",
+            "atMs": 7935.205709
+          },
+          {
+            "phase": "attachmentResolveStarted",
+            "atMs": 7935.682167
+          },
+          {
+            "phase": "attachmentResolveCompleted",
+            "atMs": 7954.045
+          },
+          {
+            "phase": "terminalPlaced",
+            "atMs": 7954.678167
+          },
+          {
+            "phase": "panePublished",
+            "atMs": 7955.3065
+          },
+          {
+            "phase": "attemptCompleted",
+            "atMs": 7965.304084
+          },
+          {
+            "phase": "hostedLaunchCompleted",
+            "atMs": 7965.310125
+          },
+          {
+            "phase": "quickResultReceived",
+            "atMs": 7965.452209
+          },
+          {
+            "phase": "overlayCloseRequested",
+            "atMs": 7965.453125
+          },
+          {
+            "phase": "canonicalWaitStarted",
+            "atMs": 7965.656167
+          },
+          {
+            "phase": "canonicalWaitCompleted",
+            "atMs": 8354.906
+          }
+        ]
+      },
+      "managedLaunchPhaseDurations": {
+        "commandCompletionToWorktreeObservationMs": 1.1968329999999696,
+        "worktreeObservationToAttemptStartMs": 0.3522080000002461,
+        "managedPreflightMs": 0.3924589999996897,
+        "preflightToPrepareStartMs": 0.0005830000000059954,
+        "prepareExternalLaunchMs": 195.24829200000022,
+        "prepareToAttachmentResolveStartMs": 0.4764580000000933,
+        "attachmentResolutionMs": 18.362833000000137,
+        "attachmentToTerminalPlacementMs": 0.6331669999999576,
+        "terminalPlacementToPanePublicationMs": 0.6283329999996567,
+        "panePublicationToAttemptCompletionMs": 9.997584000000643,
+        "attemptToHostedLaunchCompletionMs": 0.006040999999640917,
+        "hostedLaunchToQuickResultMs": 0.14208400000006804,
+        "quickResultToOverlayCloseMs": 0.0009159999999610591
+      },
+      "commandCompletionToOverlayCloseMs": 227.4377910000003,
+      "managedLaunchPhaseSumMs": 227.4377910000003,
+      "managedLaunchPhaseCoherent": true,
+      "observerExternalLaunchPhaseTrace": {
+        "events": []
+      },
+      "observerExternalLaunchPhaseDurations": null,
+      "observerExternalLaunchInternalMs": null,
+      "observerExternalLaunchPhaseSumMs": null,
+      "observerExternalLaunchPhaseCoherent": false,
+      "clientRpcMinusObserverInternalMs": null,
+      "loadAverage": {
+        "before": [
+          20.2412109375,
+          23.93798828125,
+          22.31103515625
+        ],
+        "after": [
+          22.6240234375,
+          24.28369140625,
+          22.46240234375
+        ]
+      },
+      "resourceUsage": {
+        "userCpuMs": 290.66,
+        "systemCpuMs": 396.259,
+        "fsReads": 0,
+        "fsWrites": 0,
+        "voluntaryContextSwitches": 5,
+        "involuntaryContextSwitches": 11550
+      }
+    },
+    {
+      "repetition": 16,
+      "focusStrategy": "automatic",
+      "dismissalInputSent": false,
+      "readyWasReplay": true,
+      "acknowledgementCount": 1,
+      "safe": false,
+      "safetyPredicates": {
+        "dashboardProjectVisible": true,
+        "commandProjectMatches": true,
+        "commandHarnessMatches": true,
+        "worktreeProjectMatches": true,
+        "worktreeBranchMatches": true,
+        "worktreeUsesManagedRoot": true,
+        "worktreeHasRegistrationIdentity": true,
+        "sessionHarnessMatches": true,
+        "sessionTerminalMatches": true,
+        "hostWorktreeMatches": true,
+        "hostHarnessMatches": true,
+        "hostSessionMatches": true,
+        "readyMarkerObserved": true,
+        "inputAcknowledged": true,
+        "inputAcknowledgedExactlyOnce": true,
+        "hostInventoryEmpty": true,
+        "gitInventoryRestored": true,
+        "uiStoppedCleanly": true,
+        "observerStoppedCleanly": true,
+        "managedLaunchPhaseTraceValid": true,
+        "managedLaunchPhaseTraceExitOnly": true,
+        "observerExternalLaunchPhaseTraceValid": false,
+        "observerExternalLaunchPhaseTraceExitOnly": true,
+        "uiStderrMatches": true
+      },
+      "phaseCoherent": true,
+      "commandId": "cmd_b53b2f31-924a-4cdf-8a53-91c5356d9c93",
+      "traceId": "trc_68a1cc83-629a-4651-9213-2c58819f03d1",
+      "branch": "compiled-tui-project-30e7a8",
+      "worktreeId": "wt_compiled-tui-project_compiled-tui-project-30e7a8_73ddf2add6",
+      "worktreePath": "/private/var/folders/l4/540r7_b136l9jcf36_p3qyvc0000gn/T/s-4qsapp/tmp/st-qtu-FLn6sy/worktrees/compiled-tui-project-30e7a8",
+      "sessionId": "ses_5d3f56d4-d3c9-4fcf-bc41-ba0c3b98e35c",
+      "terminalTargetId": "native:wt_compiled-tui-project_compiled-tui-project-30e7a8_73ddf2add6",
+      "ptyId": "pty-18",
+      "ptyInstanceId": "ptyi_d88e1ed1-d7f7-4db9-a201-878ac3beafe0",
+      "observerPid": 46212,
+      "sampledReconcileReason": "tui-startup",
+      "uiPid": 44746,
+      "launchToDashboardMs": 2941.0654170000053,
+      "intentToOptimisticMs": 16.228791999979876,
+      "intentToCommandAcceptedMs": 25.434499999973923,
+      "intentToCommandCompletedMs": 132.82574999998906,
+      "intentToHostReadyMs": 260.18116700000246,
+      "intentToCanonicalUiMs": 1081.3400829999882,
+      "intentToFocusMs": 681.0302499999816,
+      "focusToOverlayDismissedMs": 0,
+      "overlayDismissedToInputSentMs": 0.08383300001150928,
+      "inputSentToHostReadyMs": -420.93291599999066,
+      "inputSentToAckMs": 376.1818750000093,
+      "focusToInputAckMs": 376.2657080000208,
+      "phaseSumMs": 376.2657080000208,
+      "intentToInteractiveMs": 1057.2959580000024,
+      "launchToInteractiveMs": 4106.250208000012,
+      "cleanupInventoryCount": 0,
+      "gitCleanupInventoryCount": 49,
+      "uiStoppedCleanly": true,
+      "observerStoppedCleanly": true,
+      "uiStderrEmpty": false,
+      "uiStderr": "Launching STATION TUI…\n__STATION_QUICK_SESSION_MANAGED_LAUNCH_PHASES__:{\"events\":[{\"phase\":\"hostedLaunchStarted\",\"atMs\":893.879875},{\"phase\":\"commandCompleted\",\"atMs\":1047.715},{\"phase\":\"worktreeObserved\",\"atMs\":1048.059},{\"phase\":\"attemptStarted\",\"atMs\":1048.283958},{\"phase\":\"preflightCompleted\",\"atMs\":1048.674625},{\"phase\":\"prepareStarted\",\"atMs\":1048.675667},{\"phase\":\"prepareCompleted\",\"atMs\":1101.609375},{\"phase\":\"attachmentResolveStarted\",\"atMs\":1101.752125},{\"phase\":\"attachmentResolveCompleted\",\"atMs\":1114.842625},{\"phase\":\"terminalPlaced\",\"atMs\":1115.095},{\"phase\":\"panePublished\",\"atMs\":1115.277042},{\"phase\":\"attemptCompleted\",\"atMs\":1123.20775},{\"phase\":\"hostedLaunchCompleted\",\"atMs\":1123.211875},{\"phase\":\"quickResultReceived\",\"atMs\":1123.273667},{\"phase\":\"overlayCloseRequested\",\"atMs\":1123.274042},{\"phase\":\"canonicalWaitStarted\",\"atMs\":1123.387208},{\"phase\":\"canonicalWaitCompleted\",\"atMs\":1861.751625}]}\n",
+      "uiStderrBeforeExit": "Launching STATION TUI…\n",
+      "managedLaunchPhaseTrace": {
+        "events": [
+          {
+            "phase": "hostedLaunchStarted",
+            "atMs": 893.879875
+          },
+          {
+            "phase": "commandCompleted",
+            "atMs": 1047.715
+          },
+          {
+            "phase": "worktreeObserved",
+            "atMs": 1048.059
+          },
+          {
+            "phase": "attemptStarted",
+            "atMs": 1048.283958
+          },
+          {
+            "phase": "preflightCompleted",
+            "atMs": 1048.674625
+          },
+          {
+            "phase": "prepareStarted",
+            "atMs": 1048.675667
+          },
+          {
+            "phase": "prepareCompleted",
+            "atMs": 1101.609375
+          },
+          {
+            "phase": "attachmentResolveStarted",
+            "atMs": 1101.752125
+          },
+          {
+            "phase": "attachmentResolveCompleted",
+            "atMs": 1114.842625
+          },
+          {
+            "phase": "terminalPlaced",
+            "atMs": 1115.095
+          },
+          {
+            "phase": "panePublished",
+            "atMs": 1115.277042
+          },
+          {
+            "phase": "attemptCompleted",
+            "atMs": 1123.20775
+          },
+          {
+            "phase": "hostedLaunchCompleted",
+            "atMs": 1123.211875
+          },
+          {
+            "phase": "quickResultReceived",
+            "atMs": 1123.273667
+          },
+          {
+            "phase": "overlayCloseRequested",
+            "atMs": 1123.274042
+          },
+          {
+            "phase": "canonicalWaitStarted",
+            "atMs": 1123.387208
+          },
+          {
+            "phase": "canonicalWaitCompleted",
+            "atMs": 1861.751625
+          }
+        ]
+      },
+      "managedLaunchPhaseDurations": {
+        "commandCompletionToWorktreeObservationMs": 0.34400000000005093,
+        "worktreeObservationToAttemptStartMs": 0.2249580000000151,
+        "managedPreflightMs": 0.39066700000012133,
+        "preflightToPrepareStartMs": 0.0010419999998703133,
+        "prepareExternalLaunchMs": 52.933708000000024,
+        "prepareToAttachmentResolveStartMs": 0.14274999999997817,
+        "attachmentResolutionMs": 13.09050000000002,
+        "attachmentToTerminalPlacementMs": 0.2523750000000291,
+        "terminalPlacementToPanePublicationMs": 0.18204199999991033,
+        "panePublicationToAttemptCompletionMs": 7.930708000000095,
+        "attemptToHostedLaunchCompletionMs": 0.004124999999930878,
+        "hostedLaunchToQuickResultMs": 0.06179199999996854,
+        "quickResultToOverlayCloseMs": 0.00037500000007639755
+      },
+      "commandCompletionToOverlayCloseMs": 75.55904200000009,
+      "managedLaunchPhaseSumMs": 75.55904200000009,
+      "managedLaunchPhaseCoherent": true,
+      "observerExternalLaunchPhaseTrace": {
+        "events": []
+      },
+      "observerExternalLaunchPhaseDurations": null,
+      "observerExternalLaunchInternalMs": null,
+      "observerExternalLaunchPhaseSumMs": null,
+      "observerExternalLaunchPhaseCoherent": false,
+      "clientRpcMinusObserverInternalMs": null,
+      "loadAverage": {
+        "before": [
+          22.6240234375,
+          24.28369140625,
+          22.46240234375
+        ],
+        "after": [
+          27.56689453125,
+          25.2451171875,
+          22.83349609375
+        ]
+      },
+      "resourceUsage": {
+        "userCpuMs": 162.877,
+        "systemCpuMs": 197.359,
+        "fsReads": 0,
+        "fsWrites": 0,
+        "voluntaryContextSwitches": 5,
+        "involuntaryContextSwitches": 6027
+      }
+    },
+    {
+      "repetition": 17,
+      "focusStrategy": "automatic",
+      "dismissalInputSent": false,
+      "readyWasReplay": true,
+      "acknowledgementCount": 1,
+      "safe": false,
+      "safetyPredicates": {
+        "dashboardProjectVisible": true,
+        "commandProjectMatches": true,
+        "commandHarnessMatches": true,
+        "worktreeProjectMatches": true,
+        "worktreeBranchMatches": true,
+        "worktreeUsesManagedRoot": true,
+        "worktreeHasRegistrationIdentity": true,
+        "sessionHarnessMatches": true,
+        "sessionTerminalMatches": true,
+        "hostWorktreeMatches": true,
+        "hostHarnessMatches": true,
+        "hostSessionMatches": true,
+        "readyMarkerObserved": true,
+        "inputAcknowledged": true,
+        "inputAcknowledgedExactlyOnce": true,
+        "hostInventoryEmpty": true,
+        "gitInventoryRestored": true,
+        "uiStoppedCleanly": true,
+        "observerStoppedCleanly": true,
+        "managedLaunchPhaseTraceValid": true,
+        "managedLaunchPhaseTraceExitOnly": true,
+        "observerExternalLaunchPhaseTraceValid": false,
+        "observerExternalLaunchPhaseTraceExitOnly": true,
+        "uiStderrMatches": true
+      },
+      "phaseCoherent": true,
+      "commandId": "cmd_b2092077-91af-4559-bea5-2d30fe013bd9",
+      "traceId": "trc_e6129de9-78d9-44fe-93ff-be381fd8bbe9",
+      "branch": "compiled-tui-project-6b9113",
+      "worktreeId": "wt_compiled-tui-project_compiled-tui-project-6b9113_688ca791a5",
+      "worktreePath": "/private/var/folders/l4/540r7_b136l9jcf36_p3qyvc0000gn/T/s-4qsapp/tmp/st-qtu-FLn6sy/worktrees/compiled-tui-project-6b9113",
+      "sessionId": "ses_0acf7150-6299-4b5a-9dce-d07b96042817",
+      "terminalTargetId": "native:wt_compiled-tui-project_compiled-tui-project-6b9113_688ca791a5",
+      "ptyId": "pty-19",
+      "ptyInstanceId": "ptyi_91a5c5de-d642-417b-aeac-4185836cf46d",
+      "observerPid": 61056,
+      "sampledReconcileReason": "tui-startup",
+      "uiPid": 60842,
+      "launchToDashboardMs": 3895.9102080000157,
+      "intentToOptimisticMs": 27.927834000001894,
+      "intentToCommandAcceptedMs": 49.710625000006985,
+      "intentToCommandCompletedMs": 140.14233400000376,
+      "intentToHostReadyMs": 200.85625000001164,
+      "intentToCanonicalUiMs": 244.75883400000748,
+      "intentToFocusMs": 218.22100000001956,
+      "focusToOverlayDismissedMs": 0,
+      "overlayDismissedToInputSentMs": 0.01170899998396635,
+      "inputSentToHostReadyMs": -17.376458999991883,
+      "inputSentToAckMs": 17.855750000016997,
+      "focusToInputAckMs": 17.867459000000963,
+      "phaseSumMs": 17.867459000000963,
+      "intentToInteractiveMs": 236.08845900002052,
+      "launchToInteractiveMs": 4244.281917000015,
+      "cleanupInventoryCount": 0,
+      "gitCleanupInventoryCount": 49,
+      "uiStoppedCleanly": true,
+      "observerStoppedCleanly": true,
+      "uiStderrEmpty": false,
+      "uiStderr": "Launching STATION TUI…\n__STATION_QUICK_SESSION_MANAGED_LAUNCH_PHASES__:{\"events\":[{\"phase\":\"hostedLaunchStarted\",\"atMs\":2421.770958},{\"phase\":\"commandCompleted\",\"atMs\":2567.716041},{\"phase\":\"worktreeObserved\",\"atMs\":2567.769708},{\"phase\":\"attemptStarted\",\"atMs\":2567.8995},{\"phase\":\"preflightCompleted\",\"atMs\":2568.156291},{\"phase\":\"prepareStarted\",\"atMs\":2568.157333},{\"phase\":\"prepareCompleted\",\"atMs\":2593.716208},{\"phase\":\"attachmentResolveStarted\",\"atMs\":2593.846625},{\"phase\":\"attachmentResolveCompleted\",\"atMs\":2608.07425},{\"phase\":\"terminalPlaced\",\"atMs\":2608.344541},{\"phase\":\"panePublished\",\"atMs\":2608.512541},{\"phase\":\"attemptCompleted\",\"atMs\":2612.180625},{\"phase\":\"hostedLaunchCompleted\",\"atMs\":2612.185041},{\"phase\":\"quickResultReceived\",\"atMs\":2612.23225},{\"phase\":\"overlayCloseRequested\",\"atMs\":2612.232708},{\"phase\":\"canonicalWaitStarted\",\"atMs\":2612.312458},{\"phase\":\"canonicalWaitCompleted\",\"atMs\":2613.508458}]}\n",
+      "uiStderrBeforeExit": "Launching STATION TUI…\n",
+      "managedLaunchPhaseTrace": {
+        "events": [
+          {
+            "phase": "hostedLaunchStarted",
+            "atMs": 2421.770958
+          },
+          {
+            "phase": "commandCompleted",
+            "atMs": 2567.716041
+          },
+          {
+            "phase": "worktreeObserved",
+            "atMs": 2567.769708
+          },
+          {
+            "phase": "attemptStarted",
+            "atMs": 2567.8995
+          },
+          {
+            "phase": "preflightCompleted",
+            "atMs": 2568.156291
+          },
+          {
+            "phase": "prepareStarted",
+            "atMs": 2568.157333
+          },
+          {
+            "phase": "prepareCompleted",
+            "atMs": 2593.716208
+          },
+          {
+            "phase": "attachmentResolveStarted",
+            "atMs": 2593.846625
+          },
+          {
+            "phase": "attachmentResolveCompleted",
+            "atMs": 2608.07425
+          },
+          {
+            "phase": "terminalPlaced",
+            "atMs": 2608.344541
+          },
+          {
+            "phase": "panePublished",
+            "atMs": 2608.512541
+          },
+          {
+            "phase": "attemptCompleted",
+            "atMs": 2612.180625
+          },
+          {
+            "phase": "hostedLaunchCompleted",
+            "atMs": 2612.185041
+          },
+          {
+            "phase": "quickResultReceived",
+            "atMs": 2612.23225
+          },
+          {
+            "phase": "overlayCloseRequested",
+            "atMs": 2612.232708
+          },
+          {
+            "phase": "canonicalWaitStarted",
+            "atMs": 2612.312458
+          },
+          {
+            "phase": "canonicalWaitCompleted",
+            "atMs": 2613.508458
+          }
+        ]
+      },
+      "managedLaunchPhaseDurations": {
+        "commandCompletionToWorktreeObservationMs": 0.0536669999996775,
+        "worktreeObservationToAttemptStartMs": 0.12979200000017954,
+        "managedPreflightMs": 0.2567909999997937,
+        "preflightToPrepareStartMs": 0.0010420000003250607,
+        "prepareExternalLaunchMs": 25.558874999999716,
+        "prepareToAttachmentResolveStartMs": 0.13041700000030687,
+        "attachmentResolutionMs": 14.227624999999989,
+        "attachmentToTerminalPlacementMs": 0.27029099999981554,
+        "terminalPlacementToPanePublicationMs": 0.16800000000012005,
+        "panePublicationToAttemptCompletionMs": 3.668083999999908,
+        "attemptToHostedLaunchCompletionMs": 0.004416000000219356,
+        "hostedLaunchToQuickResultMs": 0.04720899999983885,
+        "quickResultToOverlayCloseMs": 0.00045799999998052954
+      },
+      "commandCompletionToOverlayCloseMs": 44.51666699999987,
+      "managedLaunchPhaseSumMs": 44.51666699999987,
+      "managedLaunchPhaseCoherent": true,
+      "observerExternalLaunchPhaseTrace": {
+        "events": []
+      },
+      "observerExternalLaunchPhaseDurations": null,
+      "observerExternalLaunchInternalMs": null,
+      "observerExternalLaunchPhaseSumMs": null,
+      "observerExternalLaunchPhaseCoherent": false,
+      "clientRpcMinusObserverInternalMs": null,
+      "loadAverage": {
+        "before": [
+          27.56689453125,
+          25.2451171875,
+          22.83349609375
+        ],
+        "after": [
+          29.0986328125,
+          25.69091796875,
+          23.03369140625
+        ]
+      },
+      "resourceUsage": {
+        "userCpuMs": 208.257,
+        "systemCpuMs": 216.612,
+        "fsReads": 0,
+        "fsWrites": 0,
+        "voluntaryContextSwitches": 1,
+        "involuntaryContextSwitches": 6379
+      }
+    },
+    {
+      "repetition": 18,
+      "focusStrategy": "automatic",
+      "dismissalInputSent": false,
+      "readyWasReplay": true,
+      "acknowledgementCount": 1,
+      "safe": false,
+      "safetyPredicates": {
+        "dashboardProjectVisible": true,
+        "commandProjectMatches": true,
+        "commandHarnessMatches": true,
+        "worktreeProjectMatches": true,
+        "worktreeBranchMatches": true,
+        "worktreeUsesManagedRoot": true,
+        "worktreeHasRegistrationIdentity": true,
+        "sessionHarnessMatches": true,
+        "sessionTerminalMatches": true,
+        "hostWorktreeMatches": true,
+        "hostHarnessMatches": true,
+        "hostSessionMatches": true,
+        "readyMarkerObserved": true,
+        "inputAcknowledged": true,
+        "inputAcknowledgedExactlyOnce": true,
+        "hostInventoryEmpty": true,
+        "gitInventoryRestored": true,
+        "uiStoppedCleanly": true,
+        "observerStoppedCleanly": true,
+        "managedLaunchPhaseTraceValid": true,
+        "managedLaunchPhaseTraceExitOnly": true,
+        "observerExternalLaunchPhaseTraceValid": false,
+        "observerExternalLaunchPhaseTraceExitOnly": true,
+        "uiStderrMatches": true
+      },
+      "phaseCoherent": true,
+      "commandId": "cmd_253d01f5-b338-4a7d-87b7-becb270f1756",
+      "traceId": "trc_450ecc09-34ae-43ef-9ac3-398ac77bcd22",
+      "branch": "compiled-tui-project-148eb6",
+      "worktreeId": "wt_compiled-tui-project_compiled-tui-project-148eb6_d21830524d",
+      "worktreePath": "/private/var/folders/l4/540r7_b136l9jcf36_p3qyvc0000gn/T/s-4qsapp/tmp/st-qtu-FLn6sy/worktrees/compiled-tui-project-148eb6",
+      "sessionId": "ses_e658bb2d-6264-43a7-b837-ced34ab51b24",
+      "terminalTargetId": "native:wt_compiled-tui-project_compiled-tui-project-148eb6_d21830524d",
+      "ptyId": "pty-20",
+      "ptyInstanceId": "ptyi_a931b0db-fe46-4d68-8fff-7c73b228bcaa",
+      "observerPid": 90485,
+      "sampledReconcileReason": "tui-startup",
+      "uiPid": 86297,
+      "launchToDashboardMs": 5271.257540999999,
+      "intentToOptimisticMs": 19.64274999999907,
+      "intentToCommandAcceptedMs": 30.660499999998137,
+      "intentToCommandCompletedMs": 135.59679099998903,
+      "intentToHostReadyMs": 221.16233299998567,
+      "intentToCanonicalUiMs": 311.5580829999817,
+      "intentToFocusMs": 236.01904099999228,
+      "focusToOverlayDismissedMs": 0,
+      "overlayDismissedToInputSentMs": 0.00474999999278225,
+      "inputSentToHostReadyMs": -14.861457999999402,
+      "inputSentToAckMs": 61.289667000004556,
+      "focusToInputAckMs": 61.29441699999734,
+      "phaseSumMs": 61.29441699999734,
+      "intentToInteractiveMs": 297.3134579999896,
+      "launchToInteractiveMs": 5679.704832999996,
+      "cleanupInventoryCount": 0,
+      "gitCleanupInventoryCount": 49,
+      "uiStoppedCleanly": true,
+      "observerStoppedCleanly": true,
+      "uiStderrEmpty": false,
+      "uiStderr": "Starting STATION observer…\nLaunching STATION TUI…\n__STATION_QUICK_SESSION_MANAGED_LAUNCH_PHASES__:{\"events\":[{\"phase\":\"hostedLaunchStarted\",\"atMs\":1844.549708},{\"phase\":\"commandCompleted\",\"atMs\":1993.902667},{\"phase\":\"worktreeObserved\",\"atMs\":1994.105833},{\"phase\":\"attemptStarted\",\"atMs\":1994.268875},{\"phase\":\"preflightCompleted\",\"atMs\":1994.466333},{\"phase\":\"prepareStarted\",\"atMs\":1994.466792},{\"phase\":\"prepareCompleted\",\"atMs\":2046.650708},{\"phase\":\"attachmentResolveStarted\",\"atMs\":2046.953083},{\"phase\":\"attachmentResolveCompleted\",\"atMs\":2055.518},{\"phase\":\"terminalPlaced\",\"atMs\":2056.112375},{\"phase\":\"panePublished\",\"atMs\":2056.472375},{\"phase\":\"attemptCompleted\",\"atMs\":2062.446583},{\"phase\":\"hostedLaunchCompleted\",\"atMs\":2062.452792},{\"phase\":\"quickResultReceived\",\"atMs\":2062.608833},{\"phase\":\"overlayCloseRequested\",\"atMs\":2062.609833},{\"phase\":\"canonicalWaitStarted\",\"atMs\":2062.739833},{\"phase\":\"canonicalWaitCompleted\",\"atMs\":2123.27075}]}\n",
+      "uiStderrBeforeExit": "Starting STATION observer…\nLaunching STATION TUI…\n",
+      "managedLaunchPhaseTrace": {
+        "events": [
+          {
+            "phase": "hostedLaunchStarted",
+            "atMs": 1844.549708
+          },
+          {
+            "phase": "commandCompleted",
+            "atMs": 1993.902667
+          },
+          {
+            "phase": "worktreeObserved",
+            "atMs": 1994.105833
+          },
+          {
+            "phase": "attemptStarted",
+            "atMs": 1994.268875
+          },
+          {
+            "phase": "preflightCompleted",
+            "atMs": 1994.466333
+          },
+          {
+            "phase": "prepareStarted",
+            "atMs": 1994.466792
+          },
+          {
+            "phase": "prepareCompleted",
+            "atMs": 2046.650708
+          },
+          {
+            "phase": "attachmentResolveStarted",
+            "atMs": 2046.953083
+          },
+          {
+            "phase": "attachmentResolveCompleted",
+            "atMs": 2055.518
+          },
+          {
+            "phase": "terminalPlaced",
+            "atMs": 2056.112375
+          },
+          {
+            "phase": "panePublished",
+            "atMs": 2056.472375
+          },
+          {
+            "phase": "attemptCompleted",
+            "atMs": 2062.446583
+          },
+          {
+            "phase": "hostedLaunchCompleted",
+            "atMs": 2062.452792
+          },
+          {
+            "phase": "quickResultReceived",
+            "atMs": 2062.608833
+          },
+          {
+            "phase": "overlayCloseRequested",
+            "atMs": 2062.609833
+          },
+          {
+            "phase": "canonicalWaitStarted",
+            "atMs": 2062.739833
+          },
+          {
+            "phase": "canonicalWaitCompleted",
+            "atMs": 2123.27075
+          }
+        ]
+      },
+      "managedLaunchPhaseDurations": {
+        "commandCompletionToWorktreeObservationMs": 0.20316600000001017,
+        "worktreeObservationToAttemptStartMs": 0.16304199999990487,
+        "managedPreflightMs": 0.19745800000009694,
+        "preflightToPrepareStartMs": 0.00045899999986431794,
+        "prepareExternalLaunchMs": 52.183915999999954,
+        "prepareToAttachmentResolveStartMs": 0.302375000000211,
+        "attachmentResolutionMs": 8.564916999999923,
+        "attachmentToTerminalPlacementMs": 0.5943750000001273,
+        "terminalPlacementToPanePublicationMs": 0.3599999999996726,
+        "panePublicationToAttemptCompletionMs": 5.97420800000009,
+        "attemptToHostedLaunchCompletionMs": 0.006209000000126252,
+        "hostedLaunchToQuickResultMs": 0.15604099999973187,
+        "quickResultToOverlayCloseMs": 0.0010000000002037268
+      },
+      "commandCompletionToOverlayCloseMs": 68.70716599999992,
+      "managedLaunchPhaseSumMs": 68.70716599999992,
+      "managedLaunchPhaseCoherent": true,
+      "observerExternalLaunchPhaseTrace": {
+        "events": []
+      },
+      "observerExternalLaunchPhaseDurations": null,
+      "observerExternalLaunchInternalMs": null,
+      "observerExternalLaunchPhaseSumMs": null,
+      "observerExternalLaunchPhaseCoherent": false,
+      "clientRpcMinusObserverInternalMs": null,
+      "loadAverage": {
+        "before": [
+          29.0986328125,
+          25.69091796875,
+          23.03369140625
+        ],
+        "after": [
+          27.71533203125,
+          25.51708984375,
+          23.00341796875
+        ]
+      },
+      "resourceUsage": {
+        "userCpuMs": 243.052,
+        "systemCpuMs": 270.753,
+        "fsReads": 0,
+        "fsWrites": 0,
+        "voluntaryContextSwitches": 1,
+        "involuntaryContextSwitches": 8255
+      }
+    },
+    {
+      "repetition": 19,
+      "focusStrategy": "automatic",
+      "dismissalInputSent": false,
+      "readyWasReplay": true,
+      "acknowledgementCount": 1,
+      "safe": false,
+      "safetyPredicates": {
+        "dashboardProjectVisible": true,
+        "commandProjectMatches": true,
+        "commandHarnessMatches": true,
+        "worktreeProjectMatches": true,
+        "worktreeBranchMatches": true,
+        "worktreeUsesManagedRoot": true,
+        "worktreeHasRegistrationIdentity": true,
+        "sessionHarnessMatches": true,
+        "sessionTerminalMatches": true,
+        "hostWorktreeMatches": true,
+        "hostHarnessMatches": true,
+        "hostSessionMatches": true,
+        "readyMarkerObserved": true,
+        "inputAcknowledged": true,
+        "inputAcknowledgedExactlyOnce": true,
+        "hostInventoryEmpty": true,
+        "gitInventoryRestored": true,
+        "uiStoppedCleanly": true,
+        "observerStoppedCleanly": true,
+        "managedLaunchPhaseTraceValid": true,
+        "managedLaunchPhaseTraceExitOnly": true,
+        "observerExternalLaunchPhaseTraceValid": false,
+        "observerExternalLaunchPhaseTraceExitOnly": true,
+        "uiStderrMatches": true
+      },
+      "phaseCoherent": true,
+      "commandId": "cmd_125a2e84-ec31-4c36-a984-8162c6d0b0ca",
+      "traceId": "trc_dbf6a417-0fe3-416c-96c2-c97889de73a8",
+      "branch": "compiled-tui-project-bf7900",
+      "worktreeId": "wt_compiled-tui-project_compiled-tui-project-bf7900_4fd9700f36",
+      "worktreePath": "/private/var/folders/l4/540r7_b136l9jcf36_p3qyvc0000gn/T/s-4qsapp/tmp/st-qtu-FLn6sy/worktrees/compiled-tui-project-bf7900",
+      "sessionId": "ses_5f67f606-ddab-45f7-8178-1ef086706345",
+      "terminalTargetId": "native:wt_compiled-tui-project_compiled-tui-project-bf7900_4fd9700f36",
+      "ptyId": "pty-21",
+      "ptyInstanceId": "ptyi_f3168459-d22e-4bb6-90d2-f235842e25fe",
+      "observerPid": 21077,
+      "sampledReconcileReason": "metadata:change_summary",
+      "uiPid": 20910,
+      "launchToDashboardMs": 7324.009541999985,
+      "intentToOptimisticMs": 31.305333000025712,
+      "intentToCommandAcceptedMs": 45.74633300001733,
+      "intentToCommandCompletedMs": 200.16541600000346,
+      "intentToHostReadyMs": 273.11912500002654,
+      "intentToCanonicalUiMs": 442.576458000025,
+      "intentToFocusMs": 339.8475830000243,
+      "focusToOverlayDismissedMs": 0,
+      "overlayDismissedToInputSentMs": 0.015666999999666587,
+      "inputSentToHostReadyMs": -66.74412499999744,
+      "inputSentToAckMs": 89.67558299997472,
+      "focusToInputAckMs": 89.69124999997439,
+      "phaseSumMs": 89.69124999997439,
+      "intentToInteractiveMs": 429.5388329999987,
+      "launchToInteractiveMs": 7999.839916999976,
+      "cleanupInventoryCount": 0,
+      "gitCleanupInventoryCount": 49,
+      "uiStoppedCleanly": true,
+      "observerStoppedCleanly": true,
+      "uiStderrEmpty": false,
+      "uiStderr": "Launching STATION TUI…\n__STATION_QUICK_SESSION_MANAGED_LAUNCH_PHASES__:{\"events\":[{\"phase\":\"hostedLaunchStarted\",\"atMs\":6227.352416},{\"phase\":\"commandCompleted\",\"atMs\":6434.832916},{\"phase\":\"worktreeObserved\",\"atMs\":6434.963},{\"phase\":\"attemptStarted\",\"atMs\":6435.213791},{\"phase\":\"preflightCompleted\",\"atMs\":6435.548916},{\"phase\":\"prepareStarted\",\"atMs\":6435.549833},{\"phase\":\"prepareCompleted\",\"atMs\":6524.259333},{\"phase\":\"attachmentResolveStarted\",\"atMs\":6524.48575},{\"phase\":\"attachmentResolveCompleted\",\"atMs\":6535.572625},{\"phase\":\"terminalPlaced\",\"atMs\":6535.968958},{\"phase\":\"panePublished\",\"atMs\":6536.16175},{\"phase\":\"attemptCompleted\",\"atMs\":6546.386625},{\"phase\":\"hostedLaunchCompleted\",\"atMs\":6546.3925},{\"phase\":\"quickResultReceived\",\"atMs\":6546.526041},{\"phase\":\"overlayCloseRequested\",\"atMs\":6546.527041},{\"phase\":\"canonicalWaitStarted\",\"atMs\":6546.710291},{\"phase\":\"canonicalWaitCompleted\",\"atMs\":6622.166166}]}\n",
+      "uiStderrBeforeExit": "Launching STATION TUI…\n",
+      "managedLaunchPhaseTrace": {
+        "events": [
+          {
+            "phase": "hostedLaunchStarted",
+            "atMs": 6227.352416
+          },
+          {
+            "phase": "commandCompleted",
+            "atMs": 6434.832916
+          },
+          {
+            "phase": "worktreeObserved",
+            "atMs": 6434.963
+          },
+          {
+            "phase": "attemptStarted",
+            "atMs": 6435.213791
+          },
+          {
+            "phase": "preflightCompleted",
+            "atMs": 6435.548916
+          },
+          {
+            "phase": "prepareStarted",
+            "atMs": 6435.549833
+          },
+          {
+            "phase": "prepareCompleted",
+            "atMs": 6524.259333
+          },
+          {
+            "phase": "attachmentResolveStarted",
+            "atMs": 6524.48575
+          },
+          {
+            "phase": "attachmentResolveCompleted",
+            "atMs": 6535.572625
+          },
+          {
+            "phase": "terminalPlaced",
+            "atMs": 6535.968958
+          },
+          {
+            "phase": "panePublished",
+            "atMs": 6536.16175
+          },
+          {
+            "phase": "attemptCompleted",
+            "atMs": 6546.386625
+          },
+          {
+            "phase": "hostedLaunchCompleted",
+            "atMs": 6546.3925
+          },
+          {
+            "phase": "quickResultReceived",
+            "atMs": 6546.526041
+          },
+          {
+            "phase": "overlayCloseRequested",
+            "atMs": 6546.527041
+          },
+          {
+            "phase": "canonicalWaitStarted",
+            "atMs": 6546.710291
+          },
+          {
+            "phase": "canonicalWaitCompleted",
+            "atMs": 6622.166166
+          }
+        ]
+      },
+      "managedLaunchPhaseDurations": {
+        "commandCompletionToWorktreeObservationMs": 0.1300839999994423,
+        "worktreeObservationToAttemptStartMs": 0.25079100000039034,
+        "managedPreflightMs": 0.3351249999996071,
+        "preflightToPrepareStartMs": 0.0009170000002995948,
+        "prepareExternalLaunchMs": 88.70949999999993,
+        "prepareToAttachmentResolveStartMs": 0.22641699999985576,
+        "attachmentResolutionMs": 11.086874999999964,
+        "attachmentToTerminalPlacementMs": 0.39633300000059535,
+        "terminalPlacementToPanePublicationMs": 0.19279199999982666,
+        "panePublicationToAttemptCompletionMs": 10.224874999999884,
+        "attemptToHostedLaunchCompletionMs": 0.005874999999832653,
+        "hostedLaunchToQuickResultMs": 0.13354100000015023,
+        "quickResultToOverlayCloseMs": 0.0010000000002037268
+      },
+      "commandCompletionToOverlayCloseMs": 111.69412499999999,
+      "managedLaunchPhaseSumMs": 111.69412499999999,
+      "managedLaunchPhaseCoherent": true,
+      "observerExternalLaunchPhaseTrace": {
+        "events": []
+      },
+      "observerExternalLaunchPhaseDurations": null,
+      "observerExternalLaunchInternalMs": null,
+      "observerExternalLaunchPhaseSumMs": null,
+      "observerExternalLaunchPhaseCoherent": false,
+      "clientRpcMinusObserverInternalMs": null,
+      "loadAverage": {
+        "before": [
+          27.71533203125,
+          25.51708984375,
+          23.00341796875
+        ],
+        "after": [
+          33.73876953125,
+          27.03759765625,
+          23.59423828125
+        ]
+      },
+      "resourceUsage": {
+        "userCpuMs": 192.323,
+        "systemCpuMs": 268.699,
+        "fsReads": 0,
+        "fsWrites": 0,
+        "voluntaryContextSwitches": 2,
+        "involuntaryContextSwitches": 7774
+      }
+    }
+  ],
+  "distributions": {
+    "launchToDashboardMs": {
+      "samples": [
+        1689.8453750000044,
+        1738.8495419999963,
+        1825.2559159999946,
+        1936.1477500000037,
+        2063.6631250000064,
+        2157.6568750000006,
+        2219.8472089999996,
+        2270.3175409999967,
+        2355.5872500000005,
+        2359.3505000000005,
+        2941.0654170000053,
+        3719.925292,
+        3895.9102080000157,
+        3926.1295420000024,
+        4031.1455829999904,
+        4525.442832999994,
+        4879.774458,
+        5271.257540999999,
+        7324.009541999985,
+        8568.079958999995
+      ],
+      "median": 2359.3505000000005,
+      "p90": 5271.257540999999,
+      "p95": 7324.009541999985,
+      "max": 8568.079958999995
+    },
+    "intentToOptimisticMs": {
+      "samples": [
+        9.748791999998502,
+        9.775166999999783,
+        10.090582999997423,
+        10.30729200001224,
+        11.429207999997743,
+        11.525542000003043,
+        11.590666000003694,
+        12.074000000000524,
+        12.43879200000083,
+        13.201874999998836,
+        13.29041600000346,
+        14.665666000000783,
+        15.160041999988607,
+        16.228791999979876,
+        19.64274999999907,
+        27.927834000001894,
+        31.305333000025712,
+        32.00633299999754,
+        58.75854100001743,
+        239.59162500000093
+      ],
+      "median": 13.201874999998836,
+      "p90": 32.00633299999754,
+      "p95": 58.75854100001743,
+      "max": 239.59162500000093
+    },
+    "intentToCommandAcceptedMs": {
+      "samples": [
+        16.147540999998455,
+        16.318874999997206,
+        17.953750000000582,
+        18.182291999997688,
+        19.10625000001164,
+        19.28399999999965,
+        19.73137499999939,
+        20.075791999988724,
+        20.999166000001424,
+        21.566541000000143,
+        22.193333000002895,
+        22.579832999996142,
+        25.43154199999117,
+        25.434499999973923,
+        30.660499999998137,
+        45.74633300001733,
+        49.710625000006985,
+        60.31941699999152,
+        70.16029100000742,
+        287.65795799999614
+      ],
+      "median": 21.566541000000143,
+      "p90": 60.31941699999152,
+      "p95": 70.16029100000742,
+      "max": 287.65795799999614
+    },
+    "intentToCommandCompletedMs": {
+      "samples": [
+        90.47162500000559,
+        93.73895799998718,
+        94.2556670000049,
+        98.08916699999827,
+        102.98045800000182,
+        103.26687500000116,
+        103.8212910000002,
+        107.23304199999984,
+        120.33954099999391,
+        125.87358299999323,
+        128.14599999999336,
+        132.82574999998906,
+        135.59679099998903,
+        139.51724999999715,
+        140.14233400000376,
+        177.5324580000015,
+        200.16541600000346,
+        220.06566600000951,
+        394.1641249999957,
+        564.2825000000012
+      ],
+      "median": 125.87358299999323,
+      "p90": 220.06566600000951,
+      "p95": 394.1641249999957,
+      "max": 564.2825000000012
+    },
+    "intentToHostReadyMs": {
+      "samples": [
+        126.78729199999361,
+        128.89700000001176,
+        132.69433300000674,
+        136.4752920000028,
+        151.97312500000407,
+        152.11812500000815,
+        174.85729100000026,
+        175.79908299999806,
+        181.0639999999985,
+        183.87395800000013,
+        200.85625000001164,
+        210.2663329999923,
+        221.16233299998567,
+        260.18116700000246,
+        267.77054200001294,
+        273.11912500002654,
+        285.9385000000002,
+        311.2129160000186,
+        454.9954579999903,
+        777.411374999996
+      ],
+      "median": 183.87395800000013,
+      "p90": 311.2129160000186,
+      "p95": 454.9954579999903,
+      "max": 777.411374999996
+    },
+    "intentToCanonicalUiMs": {
+      "samples": [
+        180.41037500000675,
+        203.09783300000709,
+        214.97691699999268,
+        219.46370800001023,
+        219.80799999999726,
+        229.11549999999988,
+        232.22516699999687,
+        239.2789580000026,
+        244.75883400000748,
+        250.88970800000243,
+        272.73741599999994,
+        293.411167000002,
+        311.5580829999817,
+        313.66495799999393,
+        392.3026660000032,
+        442.576458000025,
+        532.6428329999908,
+        556.2952499999956,
+        1081.3400829999882,
+        1232.4921249999898
+      ],
+      "median": 250.88970800000243,
+      "p90": 556.2952499999956,
+      "p95": 1081.3400829999882,
+      "max": 1232.4921249999898
+    },
+    "intentToFocusMs": {
+      "samples": [
+        152.67287500000384,
+        169.7158750000017,
+        178.76083300000755,
+        180.00629099999787,
+        184.14616699999897,
+        198.44479200000205,
+        198.54754200000025,
+        198.77100000000064,
+        203.2702500000014,
+        217.58208300000115,
+        218.22100000001956,
+        224.8833749999976,
+        236.01904099999228,
+        282.8570829999953,
+        290.8654169999936,
+        339.8475830000243,
+        353.41245800000615,
+        503.49604199999885,
+        681.0302499999816,
+        840.6922499999928
+      ],
+      "median": 217.58208300000115,
+      "p90": 503.49604199999885,
+      "p95": 681.0302499999816,
+      "max": 840.6922499999928
+    },
+    "focusToOverlayDismissedMs": {
+      "samples": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "median": 0,
+      "p90": 0,
+      "p95": 0,
+      "max": 0
+    },
+    "overlayDismissedToInputSentMs": {
+      "samples": [
+        0.001624999989871867,
+        0.0018749999944702722,
+        0.0020000000004074536,
+        0.0027080000145360827,
+        0.0029590000049211085,
+        0.003041999996639788,
+        0.003166000002238434,
+        0.003790999995544553,
+        0.003959000008762814,
+        0.004249999998137355,
+        0.00474999999278225,
+        0.006999999997788109,
+        0.010249999992083758,
+        0.01170899998396635,
+        0.012750000001688022,
+        0.013375000009546056,
+        0.015666999999666587,
+        0.016124999994644895,
+        0.03054100000008475,
+        0.08383300001150928
+      ],
+      "median": 0.004249999998137355,
+      "p90": 0.016124999994644895,
+      "p95": 0.03054100000008475,
+      "max": 0.08383300001150928
+    },
+    "inputSentToHostReadyMs": {
+      "samples": [
+        -420.93291599999066,
+        -72.59500000000116,
+        -66.74412499999744,
+        -63.294250000006286,
+        -57.3626660000009,
+        -51.30987499999901,
+        -48.516709000003175,
+        -46.069541999997455,
+        -42.726792000001296,
+        -42.20979199997964,
+        -41.01258299999972,
+        -33.247582999996666,
+        -27.892124999998487,
+        -23.778833999997005,
+        -23.09758299999521,
+        -22.973791999997047,
+        -17.485166999991634,
+        -17.376458999991883,
+        -14.861457999999402,
+        87.46316699999807
+      ],
+      "median": -42.20979199997964,
+      "p90": -17.376458999991883,
+      "p95": -14.861457999999402,
+      "max": 87.46316699999807
+    },
+    "inputSentToAckMs": {
+      "samples": [
+        16.32854099999531,
+        16.977415999994264,
+        17.855750000016997,
+        20.22120800000266,
+        21.674583999993047,
+        21.966167000005953,
+        22.350125000004482,
+        26.872833000001265,
+        26.904374999998254,
+        27.772250000001804,
+        27.94691700002295,
+        32.69524999999703,
+        34.9106670000001,
+        39.16020800000115,
+        61.289667000004556,
+        87.4941669999971,
+        89.67558299997472,
+        180.49729199998546,
+        372.8266669999866,
+        376.1818750000093
+      ],
+      "median": 27.772250000001804,
+      "p90": 180.49729199998546,
+      "p95": 372.8266669999866,
+      "max": 376.1818750000093
+    },
+    "focusToInputAckMs": {
+      "samples": [
+        16.331500000000233,
+        16.980457999990904,
+        17.867459000000963,
+        20.22320800000307,
+        21.67837499998859,
+        21.97041700000409,
+        22.351999999998952,
+        26.876792000010028,
+        26.905999999988126,
+        27.785000000003492,
+        27.957167000015033,
+        32.70224999999482,
+        34.91383300000234,
+        39.17633299999579,
+        61.29441699999734,
+        87.52470799999719,
+        89.69124999997439,
+        180.5,
+        372.8400419999962,
+        376.2657080000208
+      ],
+      "median": 27.785000000003492,
+      "p90": 180.5,
+      "p95": 372.8400419999962,
+      "max": 376.2657080000208
+    },
+    "intentToInteractiveMs": {
+      "samples": [
+        169.00437500000407,
+        195.74129099999845,
+        202.4181249999965,
+        205.82454199998756,
+        206.8830830000079,
+        221.1229999999996,
+        225.45354199998837,
+        231.0552500000049,
+        236.08845900002052,
+        237.80529100000422,
+        259.79720799999996,
+        285.96949999999924,
+        297.3134579999896,
+        304.8274999999994,
+        381.3696250000212,
+        429.5388329999987,
+        471.3654169999936,
+        542.6723749999946,
+        1057.2959580000024,
+        1213.532291999989
+      ],
+      "median": 237.80529100000422,
+      "p90": 542.6723749999946,
+      "p95": 1057.2959580000024,
+      "max": 1213.532291999989
+    },
+    "launchToInteractiveMs": {
+      "samples": [
+        2007.5069159999985,
+        2069.477417000002,
+        2102.0181659999944,
+        2249.6993749999965,
+        2384.3905420000083,
+        2496.827166999996,
+        2619.5942910000012,
+        2725.1507920000004,
+        2778.6687079999974,
+        2800.7517090000038,
+        4106.250208000012,
+        4244.281917000015,
+        4265.453417000004,
+        4336.22645799999,
+        4373.027749999994,
+        5044.015750000006,
+        5294.653999999999,
+        5679.704832999996,
+        7999.839916999976,
+        9910.370333999977
+      ],
+      "median": 2800.7517090000038,
+      "p90": 5679.704832999996,
+      "p95": 7999.839916999976,
+      "max": 9910.370333999977
+    }
+  },
+  "focusComparison": {
+    "escape": {
+      "runs": 0,
+      "focusToOverlayDismissedMs": {
+        "samples": [],
+        "median": 0,
+        "p90": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "inputSentToAckMs": {
+        "samples": [],
+        "median": 0,
+        "p90": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "focusToInputAckMs": {
+        "samples": [],
+        "median": 0,
+        "p90": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "intentToInteractiveMs": {
+        "samples": [],
+        "median": 0,
+        "p90": 0,
+        "p95": 0,
+        "max": 0
+      }
+    },
+    "toggle": {
+      "runs": 0,
+      "focusToOverlayDismissedMs": {
+        "samples": [],
+        "median": 0,
+        "p90": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "inputSentToAckMs": {
+        "samples": [],
+        "median": 0,
+        "p90": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "focusToInputAckMs": {
+        "samples": [],
+        "median": 0,
+        "p90": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "intentToInteractiveMs": {
+        "samples": [],
+        "median": 0,
+        "p90": 0,
+        "p95": 0,
+        "max": 0
+      }
+    },
+    "focusToInputAckP95ImprovementFraction": 0
+  },
+  "phaseAttribution": {
+    "validRuns": 20,
+    "phaseDistributions": {
+      "commandCompletionToWorktreeObservationMs": {
+        "samples": [
+          0.05337499999995998,
+          0.0536669999996775,
+          0.05649999999991451,
+          0.05683399999998073,
+          0.05941700000005312,
+          0.06154100000003382,
+          0.06291599999997288,
+          0.06454200000007404,
+          0.06883399999992434,
+          0.07241700000008677,
+          0.08387500000003456,
+          0.0903329999999869,
+          0.10854100000005928,
+          0.12170800000012605,
+          0.1300839999994423,
+          0.1696670000001177,
+          0.20316600000001017,
+          0.34400000000005093,
+          0.4880840000000717,
+          1.1968329999999696
+        ],
+        "median": 0.07241700000008677,
+        "p90": 0.34400000000005093,
+        "p95": 0.4880840000000717,
+        "max": 1.1968329999999696
+      },
+      "worktreeObservationToAttemptStartMs": {
+        "samples": [
+          0.10887499999989814,
+          0.11179199999992306,
+          0.11345800000003692,
+          0.11387500000000728,
+          0.11470899999994799,
+          0.11645799999996598,
+          0.12145800000007512,
+          0.12470900000005258,
+          0.12516699999969205,
+          0.12979200000017954,
+          0.13112499999999727,
+          0.13704099999995378,
+          0.1392080000000533,
+          0.16304199999990487,
+          0.20349999999984902,
+          0.2249580000000151,
+          0.24387500000011642,
+          0.25079100000039034,
+          0.3522080000002461,
+          0.3548749999999927
+        ],
+        "median": 0.12979200000017954,
+        "p90": 0.25079100000039034,
+        "p95": 0.3522080000002461,
+        "max": 0.3548749999999927
+      },
+      "managedPreflightMs": {
+        "samples": [
+          0.15779199999997218,
+          0.1650409999999738,
+          0.16533400000002985,
+          0.17379200000004857,
+          0.17462499999999181,
+          0.17558299999996052,
+          0.17691600000000562,
+          0.1783330000002934,
+          0.1833329999999478,
+          0.19745800000009694,
+          0.20262499999989814,
+          0.22649999999998727,
+          0.2499159999999847,
+          0.2567909999997937,
+          0.2687500000001819,
+          0.28112499999997453,
+          0.3351249999996071,
+          0.39066700000012133,
+          0.3924589999996897,
+          0.4148329999998168
+        ],
+        "median": 0.19745800000009694,
+        "p90": 0.39066700000012133,
+        "p95": 0.3924589999996897,
+        "max": 0.4148329999998168
+      },
+      "preflightToPrepareStartMs": {
+        "samples": [
+          0.00020799999992959783,
+          0.00020800000004328467,
+          0.00020900000004075991,
+          0.0002500000000509317,
+          0.0002500000000509317,
+          0.0002500000000509317,
+          0.0002500000000509317,
+          0.00029200000005857873,
+          0.00033300000018243736,
+          0.00037500000007639755,
+          0.00037500000007639755,
+          0.00037500000007639755,
+          0.00041699999997035775,
+          0.00045899999986431794,
+          0.0004590000000916916,
+          0.0005830000000059954,
+          0.0005830000000059954,
+          0.0009170000002995948,
+          0.0010419999998703133,
+          0.0010420000003250607
+        ],
+        "median": 0.00037500000007639755,
+        "p90": 0.0009170000002995948,
+        "p95": 0.0010419999998703133,
+        "max": 0.0010420000003250607
+      },
+      "prepareExternalLaunchMs": {
+        "samples": [
+          21.893916999999988,
+          25.18033300000002,
+          25.558874999999716,
+          27.439957999999933,
+          27.695915999999897,
+          28.06554099999994,
+          35.77800000000002,
+          36.20054199999993,
+          36.446709000000055,
+          37.87291699999969,
+          38.19462499999986,
+          38.31491599999981,
+          40.36733400000003,
+          52.183915999999954,
+          52.933708000000024,
+          56.35412499999984,
+          59.50666700000056,
+          60.244665999999825,
+          88.70949999999993,
+          195.24829200000022
+        ],
+        "median": 37.87291699999969,
+        "p90": 60.244665999999825,
+        "p95": 88.70949999999993,
+        "max": 195.24829200000022
+      },
+      "prepareToAttachmentResolveStartMs": {
+        "samples": [
+          0.12450000000012551,
+          0.12533299999995506,
+          0.12733400000001893,
+          0.12812499999995453,
+          0.13041700000030687,
+          0.13149999999995998,
+          0.1327089999999771,
+          0.1380420000000413,
+          0.14141700000004676,
+          0.14274999999997817,
+          0.14475000000015825,
+          0.14712499999995998,
+          0.14987500000006548,
+          0.22420899999997346,
+          0.22641699999985576,
+          0.302375000000211,
+          0.38512500000001637,
+          0.4105830000003152,
+          0.4764580000000933,
+          6.885874999999942
+        ],
+        "median": 0.14274999999997817,
+        "p90": 0.4105830000003152,
+        "p95": 0.4764580000000933,
+        "max": 6.885874999999942
+      },
+      "attachmentResolutionMs": {
+        "samples": [
+          2.5850000000000364,
+          3.0855419999999185,
+          6.274415999999974,
+          8.564916999999923,
+          8.859375,
+          11.01574999999957,
+          11.086874999999964,
+          11.66775000000007,
+          12.358291000000008,
+          13.008207999999968,
+          13.09050000000002,
+          14.227624999999989,
+          14.61583399999995,
+          14.786958000000027,
+          15.419541999999637,
+          16.269999999999982,
+          18.1060829999999,
+          18.362833000000137,
+          20.941416000000117,
+          40.507834
+        ],
+        "median": 13.008207999999968,
+        "p90": 18.362833000000137,
+        "p95": 20.941416000000117,
+        "max": 40.507834
+      },
+      "attachmentToTerminalPlacementMs": {
+        "samples": [
+          0.2412090000000262,
+          0.2491250000000491,
+          0.25129100000003746,
+          0.2523750000000291,
+          0.25541599999996834,
+          0.2564589999999498,
+          0.2608749999999418,
+          0.26329099999998107,
+          0.2660830000004353,
+          0.27029099999981554,
+          0.28729199999997945,
+          0.30737500000032014,
+          0.39633300000059535,
+          0.4623340000000553,
+          0.5337500000000546,
+          0.5790839999999662,
+          0.582834000000048,
+          0.5887920000000122,
+          0.5943750000001273,
+          0.6331669999999576
+        ],
+        "median": 0.27029099999981554,
+        "p90": 0.5887920000000122,
+        "p95": 0.5943750000001273,
+        "max": 0.6331669999999576
+      },
+      "terminalPlacementToPanePublicationMs": {
+        "samples": [
+          0.16012499999999363,
+          0.16329100000007202,
+          0.16695800000002237,
+          0.16800000000012005,
+          0.1682499999999436,
+          0.16954199999986486,
+          0.17137499999989814,
+          0.17195799999990413,
+          0.17220799999995506,
+          0.17375000000015461,
+          0.18204199999991033,
+          0.19279199999982666,
+          0.3599999999996726,
+          0.3659580000000915,
+          0.3713749999999436,
+          0.4023329999999987,
+          0.40666699999928824,
+          0.48974999999995816,
+          0.4900000000000091,
+          0.6283329999996567
+        ],
+        "median": 0.17375000000015461,
+        "p90": 0.48974999999995816,
+        "p95": 0.4900000000000091,
+        "max": 0.6283329999996567
+      },
+      "panePublicationToAttemptCompletionMs": {
+        "samples": [
+          3.516583999999966,
+          3.5820420000000013,
+          3.588707999999997,
+          3.668083999999908,
+          3.687915999999973,
+          4.392791999999872,
+          4.969583999999941,
+          5.113458999999693,
+          5.754832999999962,
+          5.97420800000009,
+          6.024458000000095,
+          7.057208000000173,
+          7.243750000000091,
+          7.715666999999939,
+          7.866667000000007,
+          7.930708000000095,
+          8.480457999999999,
+          8.705208000000084,
+          9.997584000000643,
+          10.224874999999884
+        ],
+        "median": 5.97420800000009,
+        "p90": 8.705208000000084,
+        "p95": 9.997584000000643,
+        "max": 10.224874999999884
+      },
+      "attemptToHostedLaunchCompletionMs": {
+        "samples": [
+          0.0030829999999468782,
+          0.003500000000030923,
+          0.00408400000014808,
+          0.004124999999930878,
+          0.004249999999956344,
+          0.004250000000183718,
+          0.00433300000008785,
+          0.004333000000315224,
+          0.004416000000219356,
+          0.0044589999997697305,
+          0.00454200000012861,
+          0.004916999999977634,
+          0.005083000000013271,
+          0.005874999999832653,
+          0.006040999999640917,
+          0.006209000000126252,
+          0.0062499999999090505,
+          0.006959000000051674,
+          0.007957999999916865,
+          0.01170799999999872
+        ],
+        "median": 0.0044589999997697305,
+        "p90": 0.006959000000051674,
+        "p95": 0.007957999999916865,
+        "max": 0.01170799999999872
+      },
+      "hostedLaunchToQuickResultMs": {
+        "samples": [
+          0.04720899999983885,
+          0.051874999999881766,
+          0.053417000000081316,
+          0.05475000000001273,
+          0.059416999999939435,
+          0.06112500000017462,
+          0.06179199999996854,
+          0.06816599999979189,
+          0.07029199999988123,
+          0.07395799999994779,
+          0.08304199999997763,
+          0.10683399999993526,
+          0.12020800000004783,
+          0.1302090000001499,
+          0.13041599999996834,
+          0.13354100000015023,
+          0.13416700000016135,
+          0.14208400000006804,
+          0.15604099999973187,
+          0.30150000000003274
+        ],
+        "median": 0.07395799999994779,
+        "p90": 0.14208400000006804,
+        "p95": 0.15604099999973187,
+        "max": 0.30150000000003274
+      },
+      "quickResultToOverlayCloseMs": {
+        "samples": [
+          0.0003329999999550637,
+          0.0003329999999550637,
+          0.00037500000007639755,
+          0.00041599999985919567,
+          0.00041600000008656934,
+          0.00041600000008656934,
+          0.00045799999998052954,
+          0.00045799999998052954,
+          0.00045799999998052954,
+          0.00045899999986431794,
+          0.0005000000001018634,
+          0.0005000000001018634,
+          0.0005830000000059954,
+          0.0006659999999101274,
+          0.0007909999999355932,
+          0.0009159999999610591,
+          0.0010000000002037268,
+          0.0010000000002037268,
+          0.0012500000000272848,
+          0.0016249999998763087
+        ],
+        "median": 0.00045899999986431794,
+        "p90": 0.0010000000002037268,
+        "p95": 0.0012500000000272848,
+        "max": 0.0016249999998763087
+      }
+    },
+    "commandCompletionToOverlayCloseMs": {
+      "samples": [
+        29.12204100000008,
+        35.86845800000003,
+        43.82070799999997,
+        44.44687499999998,
+        44.51666699999987,
+        44.59358300000008,
+        50.507208999999875,
+        57.57183299999997,
+        59.78370799999993,
+        61.69900000000007,
+        63.27941699999997,
+        64.72704199999998,
+        68.70716599999992,
+        69.45554099999981,
+        75.55904200000009,
+        80.76662499999998,
+        86.03312499999993,
+        102.57391600000005,
+        111.69412499999999,
+        227.4377910000003
+      ],
+      "median": 61.69900000000007,
+      "p90": 102.57391600000005,
+      "p95": 111.69412499999999,
+      "max": 227.4377910000003
+    },
+    "dominantPhase": "prepareExternalLaunchMs",
+    "dominantP95Fraction": 0.7942181381518495,
+    "tailIntervals": 6,
+    "dominantTailIntervals": 6,
+    "prepareExternalLaunchP95Fraction": 0.7942181381518495,
+    "prepareExternalLaunchTailFractions": [
+      0.5494001515940935,
+      0.7459104054428403,
+      0.6916715741756516,
+      0.8584689955944919,
+      0.7005608673545644,
+      0.7942181381518495
+    ],
+    "prepareExternalLaunchDominatesEveryTail": true
+  },
+  "observerPhaseAttribution": {
+    "validRuns": 0,
+    "phaseDistributions": {
+      "mutationAdmissionMs": {
+        "samples": [],
+        "median": 0,
+        "p90": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "mutationToTargetInventoryStartMs": {
+        "samples": [],
+        "median": 0,
+        "p90": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "targetInventoryMs": {
+        "samples": [],
+        "median": 0,
+        "p90": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "inventoryToHarnessPreflightMs": {
+        "samples": [],
+        "median": 0,
+        "p90": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "harnessPreflightMs": {
+        "samples": [],
+        "median": 0,
+        "p90": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "preflightToSessionPersistenceMs": {
+        "samples": [],
+        "median": 0,
+        "p90": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "sessionPersistenceMs": {
+        "samples": [],
+        "median": 0,
+        "p90": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "persistenceToWorkspaceOpenMs": {
+        "samples": [],
+        "median": 0,
+        "p90": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "managedWorkspaceOpenMs": {
+        "samples": [],
+        "median": 0,
+        "p90": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "workspaceToLaunchPlanMs": {
+        "samples": [],
+        "median": 0,
+        "p90": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "harnessLaunchPlanMs": {
+        "samples": [],
+        "median": 0,
+        "p90": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "launchPlanToHostProcessMs": {
+        "samples": [],
+        "median": 0,
+        "p90": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "hostProcessLaunchMs": {
+        "samples": [],
+        "median": 0,
+        "p90": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "hostProcessToCanonicalProjectionMs": {
+        "samples": [],
+        "median": 0,
+        "p90": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "canonicalProjectionMs": {
+        "samples": [],
+        "median": 0,
+        "p90": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "projectionToPrepareCompletionMs": {
+        "samples": [],
+        "median": 0,
+        "p90": 0,
+        "p95": 0,
+        "max": 0
+      }
+    },
+    "observerExternalLaunchInternalMs": {
+      "samples": [],
+      "median": 0,
+      "p90": 0,
+      "p95": 0,
+      "max": 0
+    },
+    "transportResidualMs": {
+      "samples": [],
+      "median": 0,
+      "p90": 0,
+      "p95": 0,
+      "max": 0
+    },
+    "dominantPhase": "mutationAdmissionMs",
+    "dominantP95Fraction": 0,
+    "tailIntervals": 0,
+    "dominantTailIntervals": 0,
+    "hostProcessLaunchP95Fraction": 0,
+    "hostProcessLaunchTailFractions": [],
+    "hostProcessLaunchDominatesEveryTail": false
+  },
+  "falseSafetyPredicates": [
+    "observerExternalLaunchPhaseTraceValid",
+    "observerExternalLaunchPhaseTraceValid",
+    "observerExternalLaunchPhaseTraceValid",
+    "observerExternalLaunchPhaseTraceValid",
+    "observerExternalLaunchPhaseTraceValid",
+    "observerExternalLaunchPhaseTraceValid",
+    "observerExternalLaunchPhaseTraceValid",
+    "observerExternalLaunchPhaseTraceValid",
+    "observerExternalLaunchPhaseTraceValid",
+    "observerExternalLaunchPhaseTraceValid",
+    "observerExternalLaunchPhaseTraceValid",
+    "observerExternalLaunchPhaseTraceValid",
+    "observerExternalLaunchPhaseTraceValid",
+    "observerExternalLaunchPhaseTraceValid",
+    "observerExternalLaunchPhaseTraceValid",
+    "observerExternalLaunchPhaseTraceValid",
+    "observerExternalLaunchPhaseTraceValid",
+    "observerExternalLaunchPhaseTraceValid",
+    "observerExternalLaunchPhaseTraceValid",
+    "observerExternalLaunchPhaseTraceValid"
+  ],
+  "safetyAuditPassed": false,
+  "predictionPassed": false,
+  "allSafe": false,
+  "thresholdsPassed": false,
+  "failure": null
+}
