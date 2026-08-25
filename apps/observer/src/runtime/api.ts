@@ -71,6 +71,7 @@ import { type ObserverCore, providerProjectsFromConfig } from "../reconcile/core
 import { inspectObserverRecoveryAssessment } from "../sessionRecoveryAssessment.js";
 import { inspectObserverRecoveryInventory } from "../sessionRecoveryInventory.js";
 import type { StationLogger } from "../stationLogger.js";
+import type { WorktreeCreateCoordinator } from "../worktreeCreateCoordinator.js";
 import {
   createWorktreeMutationCoordinator,
   type WorktreeMutationCoordinator,
@@ -100,6 +101,7 @@ export type CreateObserverApiOptions = {
   persistenceHealth: PersistenceHealthSource;
   commandQueue: CommandQueue;
   worktreeMutations?: WorktreeMutationCoordinator;
+  worktreeCreates?: WorktreeCreateCoordinator;
   eventBus: ObserverEventBus;
   diagnosticEvidenceSource: DiagnosticEvidenceSource;
   clock?: RuntimeClock;
@@ -121,6 +123,7 @@ export type CreateObserverApiOptions = {
   onShutdownStarted?: () => Promise<void> | void;
   onStop?: () => Promise<void> | void;
   hookReconcileDebounceMs?: number;
+  interactiveReconcileDebounceMs?: number;
   duplicateInspection?: () => Promise<ObserverReapPlan> | undefined;
 };
 
@@ -130,7 +133,8 @@ export type CreateObserverApiOptions = {
  * Wires Observer use cases with supplied durable, local-metadata, and diagnostic-
  * evidence roles, ingress workers, provider-health publication, scheduling, exact
  * build publication, recovery-readiness, coherent recovery-inventory, and recovery-assessment
- * queries, read-only singleton diagnostics, and adapter shutdown behind the application API.
+ * queries, latency-classified reconciliation after create quiescence, read-only singleton diagnostics,
+ * and adapter shutdown behind the application API.
  */
 export function createObserverApi(options: CreateObserverApiOptions): ObserverApi {
   const clock = options.clock ?? systemClock;
@@ -180,6 +184,9 @@ export function createObserverApi(options: CreateObserverApiOptions): ObserverAp
   };
   if (options.hookReconcileDebounceMs !== undefined) {
     schedulerOptions.debounceMs = options.hookReconcileDebounceMs;
+  }
+  if (options.interactiveReconcileDebounceMs !== undefined) {
+    schedulerOptions.interactiveDebounceMs = options.interactiveReconcileDebounceMs;
   }
   if (options.logger !== undefined) {
     schedulerOptions.onError = async (error) => {
@@ -412,9 +419,19 @@ async function prepareExternalLaunchSafe(
     }
     throw cause;
   }
-  const { outcome, reconcile } = result;
+  const { outcome, reconcile, events } = result;
+  for (const event of events ?? []) {
+    options.eventBus.publish(event);
+  }
   if (reconcile) {
-    reconcileScheduler.request("agent.prepareExternalLaunch");
+    const createsIdle = options.worktreeCreates?.whenIdle();
+    if (createsIdle === undefined) {
+      reconcileScheduler.requestInteractive("agent.prepareExternalLaunch");
+    } else {
+      void createsIdle.then(() =>
+        reconcileScheduler.requestInteractive("agent.prepareExternalLaunch"),
+      );
+    }
   }
   return outcome;
 }
