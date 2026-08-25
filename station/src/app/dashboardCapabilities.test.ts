@@ -489,6 +489,8 @@ describe("native dashboard capabilities", () => {
     const session = snapshot.sessions.find((candidate) => candidate.projectId === "station");
     if (project === undefined || session === undefined) throw new Error("station fixture missing");
     const branch = "station-quick-group-123456";
+    fixture.setCreateResult({ kind: "success", landed: true });
+    fixture.store.actions.openOverlay(STATION_OVERLAY_ID);
     const completion = fixture.capabilities.managedSessions.quickCreate({
       project,
       title: branch,
@@ -502,6 +504,16 @@ describe("native dashboard capabilities", () => {
 
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(settled).toBe(false);
+    expect(fixture.store.getState().input.activeOverlay).toBeNull();
+    expect(fixture.createRequests).toEqual([
+      {
+        projectId: "station",
+        title: branch,
+        branch,
+        harness: "codex",
+        background: false,
+      },
+    ]);
 
     fixture.source.setSnapshot({
       ...snapshot,
@@ -510,5 +522,65 @@ describe("native dashboard capabilities", () => {
       ),
     });
     expect(await completion).toEqual({ kind: "success" });
+  });
+
+  it("keeps the Quick Session overlay open when a successful launch does not land", async () => {
+    const fixture = harness();
+    const snapshot = manyProjectsSnapshot();
+    const project = snapshot.projects.find((candidate) => candidate.id === "station");
+    const session = snapshot.sessions.find((candidate) => candidate.projectId === "station");
+    if (project === undefined || session === undefined) throw new Error("station fixture missing");
+    const branch = "station-quick-nonlanding-123456";
+    fixture.store.actions.openOverlay(STATION_OVERLAY_ID);
+
+    const completion = fixture.capabilities.managedSessions.quickCreate({
+      project,
+      title: branch,
+      hiddenBranch: branch,
+      harness: "codex",
+    }).completion;
+    fixture.source.setSnapshot({
+      ...snapshot,
+      rows: snapshot.rows.map((row) =>
+        row.id === session.worktreeId ? { ...row, branch } : row,
+      ),
+    });
+
+    expect(await completion).toEqual({ kind: "success" });
+    expect(fixture.store.getState().input.activeOverlay).toBe(STATION_OVERLAY_ID);
+  });
+
+  it("keeps the Quick Session overlay open for notices and launch failures", async () => {
+    const fixture = harness();
+    const project = manyProjectsSnapshot().projects.find(
+      (candidate) => candidate.id === "station",
+    );
+    if (project === undefined) throw new Error("station fixture missing");
+    fixture.store.actions.openOverlay(STATION_OVERLAY_ID);
+    fixture.setCreateResult({
+      kind: "notice",
+      notice: { kind: "info", message: "The launch was retained." },
+    });
+
+    await expect(
+      fixture.capabilities.managedSessions.quickCreate({
+        project,
+        title: "Notice",
+        hiddenBranch: "station-quick-notice-123456",
+        harness: "codex",
+      }).completion,
+    ).resolves.toMatchObject({ kind: "notice" });
+    expect(fixture.store.getState().input.activeOverlay).toBe(STATION_OVERLAY_ID);
+
+    fixture.setCreateResult({ kind: "failure", stage: "launch", error: FAILURE });
+    await expect(
+      fixture.capabilities.managedSessions.quickCreate({
+        project,
+        title: "Failure",
+        hiddenBranch: "station-quick-failure-123456",
+        harness: "codex",
+      }).completion,
+    ).resolves.toMatchObject({ kind: "failure" });
+    expect(fixture.store.getState().input.activeOverlay).toBe(STATION_OVERLAY_ID);
   });
 });
