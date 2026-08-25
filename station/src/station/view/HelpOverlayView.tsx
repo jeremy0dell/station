@@ -38,6 +38,8 @@ function dashboardKeys(ids: readonly TuiDashboardBindingId[]): string {
 const navigation = dashboardHelpGroup(["tui.dashboard.focusUp", "tui.dashboard.focusDown"]);
 const helpAliases = dashboardHelpGroup(["tui.dashboard.help", "tui.dashboard.helpAlias"]);
 const refresh = dashboardHelp("tui.dashboard.refresh");
+const sessionShortcut = dashboardHelp("tui.dashboard.slotActivate");
+const shortcutPrefix = dashboardHelp("tui.dashboard.shortcutPrefix");
 
 const STATION_HELP_CONTENT = [
   { text: "station help", align: "center" as const },
@@ -60,7 +62,10 @@ const STATION_HELP_CONTENT = [
     key: `Tab ${FILTER_CONDITION_KEY_HINT}`,
     description: "build filter conditions · F applies builder",
   },
-  dashboardHelp("tui.dashboard.slotActivate"),
+  {
+    key: `${sessionShortcut.key} · ${shortcutPrefix.key}`,
+    description: "session/command · condition toggle",
+  },
   dashboardHelpGroup([
     "tui.dashboard.newSession",
     "tui.dashboard.addProject",

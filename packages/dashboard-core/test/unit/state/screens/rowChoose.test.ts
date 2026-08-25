@@ -77,7 +77,7 @@ describe("dashboard row chooser", () => {
     });
   });
 
-  it("converges Enter and slot keys on the same SessionId commit", () => {
+  it("converges Enter and logical shortcuts on the same SessionId commit", () => {
     const snapshot = createDashboardSnapshot();
     const state = {
       ...createInitialTuiState({
@@ -121,7 +121,7 @@ describe("dashboard row chooser", () => {
     expect(moved.dashboardFocus).toEqual(state.dashboardFocus);
   });
 
-  it("skips Group headers while preserving grouped session slots", () => {
+  it("skips Group headers while preserving grouped session shortcuts", () => {
     const snapshot = createGroupedDashboardSnapshot();
     const state = {
       ...createInitialTuiState({

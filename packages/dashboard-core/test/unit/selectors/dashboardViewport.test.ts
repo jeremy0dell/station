@@ -42,21 +42,37 @@ describe("dashboard viewport selector", () => {
     expect(viewport.rowById.has(hiddenId)).toBe(true);
   });
 
-  it("uses canonical sessions in the clipped window for continuous slots", () => {
+  it("keeps logical shortcuts stable across viewport clipping", () => {
     const snapshot = createDashboardSnapshot();
-    const viewport = selectDashboardViewport(
-      snapshot,
-      createInitialTuiState({ initialSnapshot: snapshot, scrollOffset: 4, terminalRows: 10 }),
-    );
+    const state = createInitialTuiState({
+      initialSnapshot: snapshot,
+      scrollOffset: 4,
+      terminalRows: 10,
+    });
+    const viewport = selectDashboardViewport(snapshot, state);
+    const removeViewport = selectDashboardViewport(snapshot, {
+      ...state,
+      screen: { name: "removeWorktree", step: "chooseSlot" },
+    });
 
-    expect(viewport.rowChoices.map((choice) => [choice.key, choice.value.id])).toEqual([
-      ["1", "ses_wt_web_idle"],
-      ["2", "ses_wt_web_unknown"],
-      ["3", "ses_wt_web_stuck"],
+    expect(viewport.rows.map((row) => row.id)).toEqual([
+      "session:ses_wt_web_idle",
+      "session:ses_wt_web_unknown",
+      "session:ses_wt_web_stuck",
     ]);
+    expect(viewport.rowChoices.map((choice) => [choice.key, choice.value.id])).toEqual([
+      ["1", "ses_wt_web_working"],
+      ["2", "ses_wt_web_attention"],
+      ["3", "ses_wt_web_exited"],
+      ["4", "ses_wt_web_idle"],
+      ["5", "ses_wt_web_unknown"],
+      ["6", "ses_wt_web_stuck"],
+      ["7", "ses_wt_api_working"],
+    ]);
+    expect(removeViewport.rowChoices).toEqual(viewport.rowChoices);
   });
 
-  it("assigns continuous visible-session slots across Group boundaries", () => {
+  it("assigns continuous logical shortcuts across Group boundaries", () => {
     const snapshot = createGroupedDashboardSnapshot();
     const expanded = selectDashboardViewport(
       snapshot,
@@ -84,7 +100,7 @@ describe("dashboard viewport selector", () => {
     expect(collapsed.rowChoices.map((choice) => choice.value.id)).not.toContain("ses_wt_web_idle");
   });
 
-  it("lets inert Group frame rows consume ordinary viewport height without consuming slots", () => {
+  it("lets inert Group frame rows consume viewport height without consuming shortcuts", () => {
     const snapshot = createGroupedDashboardSnapshot();
     const viewport = selectDashboardViewport(
       snapshot,
@@ -97,9 +113,9 @@ describe("dashboard viewport selector", () => {
       "group:group_build",
     ]);
     expect(viewport.rows[1]?.cells).toEqual([]);
-    expect(viewport.displayRowChoices.map((choice) => [choice.key, choice.value.id])).toEqual([
-      ["1", "ses_wt_web_idle"],
-    ]);
+    expect(
+      viewport.displayRowChoices.find((choice) => choice.value.id === "ses_wt_web_idle"),
+    ).toEqual(expect.objectContaining({ key: "2" }));
   });
 
   it("keeps pending-start sessions displayable but not actionable", () => {
@@ -175,7 +191,7 @@ describe("dashboard viewport selector", () => {
     });
   });
 
-  it("continues counting optimistic rows for overflow without assigning slots", () => {
+  it("continues counting optimistic rows for overflow without assigning shortcuts", () => {
     const snapshot = createDashboardSnapshot();
     const state = createInitialTuiState({
       initialSnapshot: snapshot,

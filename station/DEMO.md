@@ -174,7 +174,7 @@ shell can't receive them) until `Ctrl-O` closes it.
 **Dashboard navigation & actions:**
 
 - **Scroll** — `↑`/`↓` or wheel.
-- **Slot activation** — `1-9`/`a-z` (or click a row) launches/focuses that worktree's primary agent in a pane.
+- **Command and shortcut activation** — `1-9`/`a-z` immediately launches/focuses the first 35 lowercase session codes, leaving uppercase keys for commands. Backtick opens a labeled command bar: enter one uppercase command such as `X`, or a lowercase extended session code, and press `Enter`; `Backspace` edits and `Esc` closes. Session codes use `1-9/a-z` without zero in the order `… y, z, 11, 12, … 1z, 21, …` through `zzz` (44,135 shortcuts). After a choose-session command opens, its existing chooser accepts the same stable extended codes.
 - **`[+sh]` shell affordance** — click on a row opens a shell in that worktree's checkout; on a project header opens a shell at the project root.
 - **Clickable PR / checks links** — underlined segments open the GitHub URL in your browser.
 - **Persistent filter** — `/` opens a soft live preview over visible dashboard text; `Tab` opens `FILTER CONDITIONS`, and `S/P/A` chooses Status/Project/Agent. Slots or arrows + `Space` toggle values; header `[←]`/Left or bottom `Done (Enter)` retains that field so the next one can be added. Header `[×]`/`Esc` closes the builder, while bottom `Apply filter (F)` applies free text and all staged fields once. Free text/fields are ANDed and values within a field are ORed. Applying hard-projects matching context and sessions; `/ edit` reopens it, and `Esc clear` restores the unfiltered collapse state. Footer and condition-panel controls are clickable, and click-away discards only the active field's unretained toggles.
@@ -193,7 +193,7 @@ All of these are bottom **sheets** layered over the dashboard (titled, backdrop-
 slot-selectable lines, toast feedback, inline validation errors).
 
 - **New Session** — `N`. Four steps: **Review** → edit **N**ame, pick **P**roject, pick **A**gent (harness). `Enter` on Review creates a worktree and launches its agent into a pane. Pickers show provider health (healthy/degraded/unavailable).
-- **Rename Session** — `R`, choose a row by slot, edit the branch name, `Enter` to commit.
+- **Rename Session** — `R`, choose a row by session shortcut, edit the branch name, `Enter` to commit.
 - **Remove Session** — `X`, choose a row, then `Y` to confirm / `N`/`Esc` to cancel the worktree deletion.
 - **Add Project** — `A`. Five sub-modes: **Start** (location), **Choose** (folder picker with up/down nav + search), **Review** (git-root detection), **Success**, **Failed** (error detail).
 - **Editable text input** — shared cursor/backspace/delete/arrow editor used by name/rename/folder-search fields.
@@ -273,7 +273,8 @@ Best shown with `STATION_SCENARIO=disconnected`, or by stopping the observer mid
 | `Enter`/`Space` | welcome CTA / context-menu select |
 | `Esc` `↑` `↓` | context-menu close / move |
 | `↑`/`↓`, wheel | scroll project list (dashboard) |
-| `1-9`/`a-z` | start or focus visible row (slot) |
+| `1-9`/`a-z` | start or focus a one-key session shortcut |
+| backtick + uppercase command or lowercase code + `Enter` | run a registered command or session shortcut (`X`, `11`, … `zzz`) |
 | `N` `A` `R` `X` `C` | new / add-project / rename / remove / fold |
 | `/`, `Z` | edit filter / refresh snapshot |
 | `Tab`, `S/P/A` | open conditions / choose Status, Project, Agent |
@@ -301,7 +302,7 @@ Best shown with `STATION_SCENARIO=disconnected`, or by stopping the observer mid
 
 **Station Button:** collapsed base · hover-expand counts · attention frame + focus-flagged-pane · animated expand/collapse.
 
-**Dashboard overlay:** Ctrl-O toggle · input swallow · adaptive popup sizing · header + connection status + widgets · collapsible project headers · worktree rows (branch/status/diff/PR/checks/agent/session) · throbber · status labels · empty/first-run states · scroll indicators · footer · dividers · scroll · slot activation · `[+sh]` shell affordance (row + project) · clickable PR/checks links · persistent filter · collapse/fold · refresh · help overlay · close/backdrop · view-state persistence · backdrop click absorb.
+**Dashboard overlay:** Ctrl-O toggle · input swallow · adaptive popup sizing · header + connection status + widgets · collapsible project headers · worktree rows (branch/status/diff/PR/checks/agent/session) · throbber · status labels · empty/first-run states · scroll indicators · footer · dividers · scroll · shortcut activation · `[+sh]` shell affordance (row + project) · clickable PR/checks links · persistent filter · collapse/fold · refresh · help overlay · close/backdrop · view-state persistence · backdrop click absorb.
 
 **Session lifecycle:** New Session wizard (review/name/project/agent) · Rename · Remove (+confirm) · Add Project (start/choose/review/success/failed + folder search) · editable text input · provider-health in pickers · toast notifications (success/warning/error, auto-expiry, click-dismiss).
 

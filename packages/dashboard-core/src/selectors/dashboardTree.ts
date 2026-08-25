@@ -77,7 +77,7 @@ export type DashboardProjectHeaderPayload = {
 
 /**
  * Canonical snapshots enforce exclusive direct membership; the dashboard flattens parent links,
- * and only the viewport assigns keys to visible sessions.
+ * and the viewport assigns global logical shortcuts to projected sessions.
  */
 export type DashboardGroupHeaderPayload = {
   readonly type: "groupHeader";

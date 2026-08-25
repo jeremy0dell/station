@@ -46,6 +46,17 @@ export function responsiveSheetFooterText(width: number, variants: ResponsiveShe
   return responsiveSheetText(textWidth, variants);
 }
 
+/** Shows chooser instructions until the backtick shortcut collector is armed. */
+export function sessionShortcutChooserHelp(shortcutCodeInput: string | undefined): string {
+  if (shortcutCodeInput === undefined) {
+    return "↑↓/Enter choose · 1-9/a-z · ` extended";
+  }
+  if (shortcutCodeInput.length === 0) {
+    return "Target ▌ · lowercase 1-zzz · Esc close";
+  }
+  return `Target ${shortcutCodeInput}▌ · Enter choose · ⌫ edit · Esc`;
+}
+
 /** Text inside a sheet is never eligible for terminal drag selection. */
 export function SheetText({ children, ...props }: Omit<TextProps, "selectable">) {
   return (

@@ -45,6 +45,13 @@ function editingFooterText(model: DashboardFooterModel): string {
   return model.segments.map((segment) => segment.text).join("");
 }
 
+function shortcutFooterText(model: DashboardFooterModel): string {
+  if (model.kind !== "shortcutInput") {
+    throw new Error("Expected a shortcut-input footer.");
+  }
+  return model.segments.map((segment) => segment.text).join("");
+}
+
 describe("dashboard footer model", () => {
   it("shows only the quit hint while the snapshot is unavailable", () => {
     expect(footer({ hasSnapshot: false })).toEqual({
@@ -64,6 +71,31 @@ describe("dashboard footer model", () => {
     expect(footer({ firstRun: true })).toEqual({
       kind: "dashboard",
       text: "↵ add first project  A add project  Q/esc:close",
+    });
+  });
+
+  it("replaces ordinary help with a contextual dashboard command bar", () => {
+    expect(
+      shortcutFooterText(footer({ screen: { name: "dashboard", shortcutCodeInput: "" } })),
+    ).toBe(" COMMAND   ▌  Type 1-zzz for a session or an uppercase command  Esc close");
+    expect(
+      shortcutFooterText(footer({ screen: { name: "dashboard", shortcutCodeInput: "11" } })),
+    ).toBe(" SESSION   11▌  open session 11  Enter run  Backspace edit  Esc close");
+    expect(
+      shortcutFooterText(footer({ screen: { name: "dashboard", shortcutCodeInput: "X" } })),
+    ).toBe(" COMMAND   X▌  delete session  Enter run  Backspace edit  Esc close");
+    expect(
+      shortcutFooterText(
+        footer({ columns: 32, screen: { name: "dashboard", shortcutCodeInput: "zzz" } }),
+      ),
+    ).toBe(" SESSION   zzz▌  ↵ run · Esc");
+    expect(
+      footer({
+        screen: { name: "removeWorktree", step: "chooseSlot", shortcutCodeInput: "11" },
+      }),
+    ).toEqual({
+      kind: "dashboard",
+      text: "↵ activate  N new  M move to group  A add  ⇥ next-needs-me  / filter  X delete  ? help  Q/esc:close",
     });
   });
 

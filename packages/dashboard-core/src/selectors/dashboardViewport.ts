@@ -6,12 +6,13 @@ import type {
 } from "../state/types.js";
 import type { DashboardPersistentFilterProjection } from "./dashboardPersistentFilter.js";
 import type { DashboardSessionRow } from "./dashboardSessionRows.js";
+import { dashboardShortcutChoices } from "./dashboardShortcuts.js";
 import {
   type DashboardRowId,
   type DashboardTreeRow,
   selectDashboardTree,
 } from "./dashboardTree.js";
-import { type KeyedChoice, keyChoices } from "./selectors.js";
+import type { KeyedChoice } from "./selectors.js";
 
 export type DashboardViewport = {
   readonly bodyRows: number;
@@ -22,8 +23,8 @@ export type DashboardViewport = {
   readonly rows: readonly DashboardTreeRow[];
   /** Exact full-projection lookup, including descendants hidden only by collapse. */
   readonly rowById: ReadonlyMap<DashboardRowId, DashboardTreeRow>;
-  readonly rowChoices: readonly KeyedChoice<DashboardSessionRow>[];
-  readonly displayRowChoices: readonly KeyedChoice<DashboardSessionRow>[];
+  readonly rowChoices: readonly KeyedChoice<DashboardSessionRow, string>[];
+  readonly displayRowChoices: readonly KeyedChoice<DashboardSessionRow, string>[];
   readonly sessionOverflow: DashboardSessionOverflow;
   readonly persistentFilter?: DashboardPersistentFilterProjection;
 };
@@ -54,9 +55,10 @@ export function selectDashboardViewport(
   const rows = tree.visibleRows.slice(clampedScrollOffset, clampedScrollOffset + bodyRows);
   const hiddenAbove = clampedScrollOffset;
   const hiddenBelow = Math.max(0, tree.visibleRows.length - clampedScrollOffset - bodyRows);
-  const displayRowChoices = keyChoices(displaySessionRows(rows));
+  const shortcutRows = tree.visibleRows;
+  const displayRowChoices = dashboardShortcutChoices(displaySessionRows(shortcutRows));
   const pendingStartWorktreeIds = new Set(
-    rows.flatMap(({ payload }) =>
+    shortcutRows.flatMap(({ payload }) =>
       payload.type === "session" && payload.pendingStart !== undefined
         ? [payload.row.worktree.id]
         : [],

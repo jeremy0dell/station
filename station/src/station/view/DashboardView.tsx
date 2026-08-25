@@ -53,12 +53,14 @@ export function DashboardView({ snapshot, viewState, screen, columns = 80 }: Das
   const keyByRow = new Map(
     viewport.displayRowChoices.map((choice) => [choice.value.id, choice.key]),
   );
+  const shortcutWidth = Math.max(1, ...viewport.displayRowChoices.map((choice) => choice.key.length));
   const { headerLayout, layoutByItem } = firstRun
     ? { headerLayout: undefined, layoutByItem: new Map<string, RowGridLayout>() }
     : dashboardRowLayouts(
         [...viewport.rowById.values()],
         keyByRow,
         rowGridColumns,
+        shortcutWidth,
       );
   const tableHeader = dashboardTableHeaderModel({
     layout: headerLayout,
@@ -182,9 +184,10 @@ function dashboardRowLayouts(
   rows: readonly DashboardTreeRow[],
   keyByRow: ReadonlyMap<string, string>,
   columns: number,
+  shortcutWidth: number,
 ): { headerLayout: RowGridLayout | undefined; layoutByItem: Map<string, RowGridLayout> } {
   const rowInputs = rows.flatMap((row) => {
-    const input = dashboardRowGridInput(row, keyByRow);
+    const input = dashboardRowGridInput(row, keyByRow, shortcutWidth);
     return input === undefined ? [] : [input];
   });
   const layouts = layoutWorktreeRowGrid({

@@ -1,7 +1,7 @@
 import type { ProjectId, SessionGroupId } from "@station/contracts";
 import { createNewSessionFlow, createNewSessionNameToken } from "../../flows/newSession.js";
+import { dashboardShortcutValue } from "../../selectors/dashboardShortcuts.js";
 import { selectDashboardViewport } from "../../selectors/dashboardViewport.js";
-import { choiceValueByKey } from "../../selectors/selectors.js";
 import { safeErrorToToast } from "../../services/errors/errors.js";
 import { activateFocusedDashboardCell } from "../dashboardCells.js";
 import {
@@ -13,6 +13,8 @@ import { scrollDashboard } from "../dashboardScroll.js";
 import { matchDashboardBinding, type TuiDashboardAction } from "../keymap.js";
 import type { TuiKey } from "../keys.js";
 import { activateDashboardRow } from "../rowActivation.js";
+import { armShortcutCodeInput, handleShortcutCodeInputKey } from "../shortcutInput.js";
+import { dashboardShortcutInvocation } from "../shortcutInvocation.js";
 import { addTuiToast } from "../toasts.js";
 import type { TuiRuntimeContext, TuiTransition } from "../transition.js";
 import type { DashboardState } from "../types.js";
@@ -32,6 +34,16 @@ export function handleDashboardKey(
   key: TuiKey,
   context: TuiRuntimeContext,
 ): TuiTransition {
+  if (state.screen.name !== "dashboard") {
+    return { state };
+  }
+  if (state.screen.shortcutCodeInput !== undefined) {
+    const result = handleShortcutCodeInputKey(state, key, { armOnBacktick: false });
+    return result.kind === "submit"
+      ? invokeDashboardShortcut(result.state, result.code, context)
+      : { state: result.kind === "handled" ? result.state : state };
+  }
+
   const mouseScrollDelta = mouseScrollDeltaForKey(key);
   if (mouseScrollDelta !== 0) {
     return {
@@ -45,6 +57,24 @@ export function handleDashboardKey(
   }
 
   return handleDashboardAction(state, binding.action, context, key);
+}
+
+function invokeDashboardShortcut(
+  state: DashboardState,
+  input: string,
+  context: TuiRuntimeContext,
+): TuiTransition {
+  const invocation = dashboardShortcutInvocation(input);
+  switch (invocation.kind) {
+    case "session":
+      return activateDashboardShortcut(state, invocation.code);
+    case "command":
+      return handleDashboardAction(state, invocation.command.action, context, {
+        input: invocation.command.key,
+      });
+    case "invalid":
+      return { state };
+  }
 }
 
 function handleDashboardAction(
@@ -123,6 +153,8 @@ function handleDashboardAction(
         state,
         reconcileReason: "tui-refresh",
       };
+    case "tui.shortcut.arm":
+      return { state: armShortcutCodeInput(state) };
     case "tui.remove.open":
       return {
         state: {
@@ -184,13 +216,17 @@ function exitDashboardRenderer(state: DashboardState): TuiTransition {
 }
 
 function activateDashboardSlot(state: DashboardState, key: TuiKey): TuiTransition {
+  return activateDashboardShortcut(state, key.input);
+}
+
+function activateDashboardShortcut(state: DashboardState, code: string): TuiTransition {
   if (state.snapshot === undefined) {
     return { state };
   }
 
-  const row = choiceValueByKey(
+  const row = dashboardShortcutValue(
     selectDashboardViewport(state.snapshot, state).rowChoices,
-    key.input,
+    code,
   );
   if (row === undefined) {
     return { state };

@@ -8,6 +8,7 @@ import {
   QUIT_HINT_FILTER_CLOSE,
   type TuiDashboardBindingId,
 } from "../../state/keymap.js";
+import { dashboardShortcutInvocation } from "../../state/shortcutInvocation.js";
 import type { DashboardScreenView, DashboardViewState } from "../../state/types.js";
 import { cellWidth, truncateCells } from "../WorktreeRow/layout.js";
 import {
@@ -43,6 +44,11 @@ export type DashboardFooterDashboardModel = {
   text: string;
 };
 
+export type DashboardFooterShortcutInputModel = {
+  kind: "shortcutInput";
+  segments: readonly DashboardFilterFooterSegment[];
+};
+
 export type DashboardFooterPersistentFilterAppliedModel = {
   kind: "persistentFilterApplied";
   segments: readonly DashboardFilterFooterSegment[];
@@ -61,6 +67,7 @@ export type DashboardFooterPersistentFilterConditionModel = {
 export type DashboardFooterModel =
   | DashboardFooterLoadingModel
   | DashboardFooterDashboardModel
+  | DashboardFooterShortcutInputModel
   | DashboardFooterPersistentFilterAppliedModel
   | DashboardFooterPersistentFilterEditingModel
   | DashboardFooterPersistentFilterConditionModel;
@@ -122,6 +129,10 @@ export function dashboardFooterModel(options: DashboardFooterModelOptions): Dash
     return persistentFilterConditionFooter(columns, screen.conditionEditor.stage);
   }
 
+  if (screen?.name === "dashboard" && screen.shortcutCodeInput !== undefined) {
+    return shortcutInputFooter(columns, screen.shortcutCodeInput);
+  }
+
   if (persistentFilter !== undefined) {
     const appliedQuitHint = quitHint === QUIT_HINT_CLOSE ? QUIT_HINT_FILTER_CLOSE : quitHint;
     const model: DashboardFooterPersistentFilterAppliedModel = {
@@ -136,6 +147,75 @@ export function dashboardFooterModel(options: DashboardFooterModelOptions): Dash
     text: dashboardFooter(columns, quitHint, firstRun),
   };
   return model;
+}
+
+function shortcutInputFooter(columns: number, input: string): DashboardFooterShortcutInputModel {
+  const descriptions = dashboardShortcutDescriptions(input);
+  const candidates = descriptions.map((description) =>
+    shortcutFooterSegments(description.badge, input, description.text),
+  );
+  return {
+    kind: "shortcutInput",
+    segments: fitFooterSegmentCandidates(columns, candidates),
+  };
+}
+
+function dashboardShortcutDescriptions(input: string): readonly { badge: string; text: string }[] {
+  if (input.length === 0) {
+    return [
+      {
+        badge: " COMMAND ",
+        text: "Type 1-zzz for a session or an uppercase command  Esc close",
+      },
+      { badge: " COMMAND ", text: "1-zzz session · uppercase command · Esc close" },
+      { badge: " COMMAND ", text: "1-zzz · uppercase · Esc" },
+    ];
+  }
+
+  const invocation = dashboardShortcutInvocation(input);
+  if (invocation.kind === "session") {
+    return shortcutActionDescriptions(" SESSION ", `open session ${invocation.code}`, "run");
+  }
+  if (invocation.kind === "command") {
+    return shortcutActionDescriptions(" COMMAND ", invocation.command.label, "run");
+  }
+  return [
+    {
+      badge: " NO MATCH ",
+      text: "Use lowercase 1-zzz or one uppercase command  Backspace edit  Esc close",
+    },
+    { badge: " NO MATCH ", text: "1-zzz or uppercase  ⌫ edit  Esc close" },
+    { badge: " NO MATCH ", text: "⌫ edit · Esc" },
+  ];
+}
+
+function shortcutActionDescriptions(
+  badge: string,
+  action: string,
+  enterLabel: string,
+): readonly { badge: string; text: string }[] {
+  return [
+    {
+      badge,
+      text: `${action}  Enter ${enterLabel}  Backspace edit  Esc close`,
+    },
+    { badge, text: `${action}  ↵ ${enterLabel}  ⌫ edit  Esc close` },
+    { badge, text: `↵ ${enterLabel} · Esc` },
+  ];
+}
+
+function shortcutFooterSegments(
+  badge: string,
+  input: string,
+  description: string,
+): DashboardFilterFooterSegment[] {
+  return [
+    footerSegment(badge, "badge"),
+    footerSegment("  ", "spacer"),
+    footerSegment(`${input}▌`, "key"),
+    footerSegment("  ", "spacer"),
+    footerSegment(description, "description"),
+  ];
 }
 
 function dashboardFooter(columns: number, quitHint: string, firstRun: boolean): string {

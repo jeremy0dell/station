@@ -14,6 +14,7 @@ import {
   createDashboardSnapshot,
   createExternalAgentSnapshot,
   createGroupedDashboardSnapshot,
+  createManySlotDashboardSnapshot,
   createZeroWorktreeSnapshot,
 } from "../../fixtures/snapshots.js";
 
@@ -86,6 +87,16 @@ describe("TUI screen transitions", () => {
     expect(transition.state.screen).toEqual({ name: "removeWorktree", step: "chooseSlot" });
   });
 
+  it("invokes uppercase commands from the backtick command bar without changing case", () => {
+    const state = createInitialTuiState({ initialSnapshot: createDashboardSnapshot() });
+    const armed = handleTuiKey(state, { input: "`" }).state;
+    const typed = handleTuiKey(armed, { input: "X" }).state;
+    const invoked = handleTuiKey(typed, { input: "\r", return: true });
+
+    expect(typed.screen).toEqual({ name: "dashboard", shortcutCodeInput: "X" });
+    expect(invoked.state.screen).toEqual({ name: "removeWorktree", step: "chooseSlot" });
+  });
+
   it("opens rename slot selection from the dashboard and keeps refresh on Z", () => {
     const state = createInitialTuiState({ initialSnapshot: createDashboardSnapshot() });
     const rename = handleTuiKey(state, { input: "R" });
@@ -93,6 +104,84 @@ describe("TUI screen transitions", () => {
 
     expect(rename.state.screen).toEqual({ name: "renameSession", step: "chooseSlot" });
     expect(refresh.reconcileReason).toBe("tui-refresh");
+  });
+
+  it("invokes one-key and backtick-prefixed codes through the same dashboard registry", () => {
+    const snapshot = createManySlotDashboardSnapshot();
+    const state = createInitialTuiState({ initialSnapshot: snapshot, terminalRows: 10 });
+    const choices = selectDashboardViewport(snapshot, state).rowChoices;
+    const z = choices.find((choice) => choice.key === "z");
+    const eleven = choices.find((choice) => choice.key === "11");
+    if (z === undefined || eleven === undefined) throw new Error("extended shortcuts missing");
+
+    const direct = handleTuiKey(state, { input: "z" });
+    expect(direct.operations).toEqual([
+      expect.objectContaining({ type: "activateSession", sessionId: z.value.id }),
+    ]);
+
+    const armedZ = handleTuiKey(state, { input: "`" }).state;
+    const typedZ = handleTuiKey(armedZ, { input: "z" }).state;
+    const prefixedZ = handleTuiKey(typedZ, { input: "\r", return: true });
+    expect(prefixedZ.operations).toEqual(direct.operations);
+
+    const armed = handleTuiKey(state, { input: "`" }).state;
+    expect(armed.screen).toEqual({ name: "dashboard", shortcutCodeInput: "" });
+    const typed = handleTuiKey(armed, { input: "11" }).state;
+    expect(typed.screen).toEqual({ name: "dashboard", shortcutCodeInput: "11" });
+    const invoked = handleTuiKey(typed, { input: "\r", return: true });
+    expect(invoked.state.screen).toEqual({ name: "dashboard" });
+    expect(invoked.operations).toEqual([
+      expect.objectContaining({ type: "activateSession", sessionId: eleven.value.id }),
+    ]);
+  });
+
+  it("edits and cancels backtick-prefixed shortcut input without a timeout", () => {
+    const state = createInitialTuiState({ initialSnapshot: createDashboardSnapshot() });
+    const armed = handleTuiKey(state, { input: "`" }).state;
+    const typed = handleTuiKey(armed, { input: "zzzz" }).state;
+    const edited = handleTuiKey(typed, { input: "", backspace: true }).state;
+
+    expect(typed.screen).toEqual({ name: "dashboard", shortcutCodeInput: "zzz" });
+    expect(edited.screen).toEqual({ name: "dashboard", shortcutCodeInput: "zz" });
+    expect(handleTuiKey(edited, { input: "", escape: true }).state.screen).toEqual({
+      name: "dashboard",
+    });
+    expect(handleTuiKey(edited, { input: "`" }).state.screen).toEqual({ name: "dashboard" });
+  });
+
+  it("targets Remove with the same direct and extended global shortcuts", () => {
+    const snapshot = createManySlotDashboardSnapshot();
+    const dashboard = createInitialTuiState({ initialSnapshot: snapshot, terminalRows: 10 });
+    const choices = selectDashboardViewport(snapshot, dashboard).rowChoices;
+    const z = choices.find((choice) => choice.key === "z");
+    const eleven = choices.find((choice) => choice.key === "11");
+    if (z === undefined || eleven === undefined) throw new Error("remove shortcuts missing");
+
+    const removeDirect = handleTuiKey(dashboard, { input: "X" }).state;
+    expect(handleTuiKey(removeDirect, { input: "z" }).state.screen).toMatchObject({
+      name: "removeWorktree",
+      step: "confirm",
+      rowId: z.value.id,
+    });
+
+    const removeExtended = handleTuiKey(dashboard, { input: "X" }).state;
+    const armed = handleTuiKey(removeExtended, { input: "`" }).state;
+    expect(armed.screen).toEqual({
+      name: "removeWorktree",
+      step: "chooseSlot",
+      shortcutCodeInput: "",
+    });
+    expect(handleTuiKey(armed, { input: "", escape: true }).state.screen).toEqual({
+      name: "removeWorktree",
+      step: "chooseSlot",
+    });
+    const typed = handleTuiKey(armed, { input: "11" }).state;
+    const submitted = handleTuiKey(typed, { input: "\r", return: true }).state;
+    expect(submitted.screen).toMatchObject({
+      name: "removeWorktree",
+      step: "confirm",
+      rowId: eleven.value.id,
+    });
   });
 
   it("moves a cursor with arrows and commits the focused row on enter in remove-choose", () => {
@@ -424,7 +513,7 @@ describe("TUI screen transitions", () => {
     expect(transition.operations).toBeUndefined();
   });
 
-  it("opens remove confirmation for the selected visible row slot", () => {
+  it("opens remove confirmation for the selected lowercase session shortcut", () => {
     const opened = handleTuiKey(
       createInitialTuiState({ initialSnapshot: createDashboardSnapshot() }),
       { input: "X" },
@@ -611,7 +700,7 @@ describe("TUI screen transitions", () => {
     });
   });
 
-  it("remaps remove slot choices to the visible viewport after scrolling", () => {
+  it("keeps remove shortcut choices stable after scrolling", () => {
     const scrolled = handleTuiKey(
       handleTuiKey(
         handleTuiKey(
@@ -631,11 +720,11 @@ describe("TUI screen transitions", () => {
     expect(transition.state.screen).toMatchObject({
       name: "removeWorktree",
       step: "confirm",
-      rowId: "ses_wt_web_attention",
+      rowId: "ses_wt_web_working",
     });
   });
 
-  it("remaps rename slot choices to the visible viewport after scrolling", () => {
+  it("keeps rename shortcut choices stable after scrolling", () => {
     const scrolled = handleTuiKey(
       handleTuiKey(
         handleTuiKey(
@@ -655,9 +744,9 @@ describe("TUI screen transitions", () => {
     expect(transition.state.screen).toMatchObject({
       name: "renameSession",
       step: "editName",
-      rowId: "ses_wt_web_attention",
-      sessionId: "ses_wt_web_attention",
-      currentTitle: "checkout-copy",
+      rowId: "ses_wt_web_working",
+      sessionId: "ses_wt_web_working",
+      currentTitle: "cache-refactor",
       draftTitle: { value: "", cursor: 0 },
     });
   });
