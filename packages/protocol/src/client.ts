@@ -25,7 +25,13 @@ import {
   protocolSafeError,
   protocolSocketClosedError,
 } from "./messages.js";
-import { markPrepareExternalLaunchClientProtocolPhase } from "./prepareExternalLaunchPhaseDiagnostic.js";
+import {
+  markIdleResponseDeliveryClientProtocolPhase,
+  markPrepareExternalLaunchClientProtocolPhase,
+} from "./prepareExternalLaunchPhaseDiagnostic.js";
+
+export { IDLE_RESPONSE_DELIVERY_REQUEST_ID_PREFIX } from "./prepareExternalLaunchPhaseDiagnostic.js";
+
 import { unwrapBoundaryResult } from "./runtime.js";
 import { connectUnixSocket, type NdjsonConnection } from "./transport.js";
 
@@ -62,6 +68,8 @@ export type CreateObserverClientOptions = {
   socketPath: string;
   timeoutMs?: number;
   requestId?: () => string;
+  /** Arms exit-only response-delivery timing for this client's single idle health probe. */
+  idleHealthResponseDeliveryDiagnostic?: boolean;
   /** Exact Observer build selector required before each non-health operation. */
   expectedBuildVersion?: string;
   /** Exact process identity required before an ownership-changing operation. */
@@ -256,8 +264,12 @@ async function requestProtocolMethod<TMethod extends ProtocolMethod>(
   params?: unknown,
 ): Promise<ProtocolResult<TMethod>> {
   const diagnosePrepareExternalLaunch = method === "agent.prepareExternalLaunch";
+  const diagnoseIdleHealth =
+    method === "observer.health" && options.idleHealthResponseDeliveryDiagnostic === true;
   if (diagnosePrepareExternalLaunch) {
     markPrepareExternalLaunchClientProtocolPhase("protocolEntered");
+  } else if (diagnoseIdleHealth) {
+    markIdleResponseDeliveryClientProtocolPhase("protocolEntered");
   }
   const expectedObserver =
     method === "observer.health" ? undefined : resolveExpectedObserver(options);
@@ -269,14 +281,20 @@ async function requestProtocolMethod<TMethod extends ProtocolMethod>(
     async ({ signal }) => {
       if (diagnosePrepareExternalLaunch) {
         markPrepareExternalLaunchClientProtocolPhase("boundaryTaskEntered");
+      } else if (diagnoseIdleHealth) {
+        markIdleResponseDeliveryClientProtocolPhase("boundaryTaskEntered");
       }
       const request = async (usePreviousLifecycleSchema: boolean) => {
         if (diagnosePrepareExternalLaunch) {
           markPrepareExternalLaunchClientProtocolPhase("socketConnectStarted");
+        } else if (diagnoseIdleHealth) {
+          markIdleResponseDeliveryClientProtocolPhase("socketConnectStarted");
         }
         return openRequestConnection(options, signal, async (connection) => {
           if (diagnosePrepareExternalLaunch) {
             markPrepareExternalLaunchClientProtocolPhase("socketConnected");
+          } else if (diagnoseIdleHealth) {
+            markIdleResponseDeliveryClientProtocolPhase("socketConnected");
           }
           const iterator = connection.messages()[Symbol.asyncIterator]();
           if (expectedObserver !== undefined) {
@@ -297,6 +315,8 @@ async function requestProtocolMethod<TMethod extends ProtocolMethod>(
           }
           if (diagnosePrepareExternalLaunch) {
             markPrepareExternalLaunchClientProtocolPhase("prepareRequestStarted");
+          } else if (diagnoseIdleHealth) {
+            markIdleResponseDeliveryClientProtocolPhase("requestStarted");
           }
           const response = await readResponseForRequest(
             connection,
@@ -306,9 +326,12 @@ async function requestProtocolMethod<TMethod extends ProtocolMethod>(
             params,
             acceptPreviousLifecycleSchema,
             usePreviousLifecycleSchema,
+            diagnoseIdleHealth,
           );
           if (diagnosePrepareExternalLaunch) {
             markPrepareExternalLaunchClientProtocolPhase("prepareResponseCompleted");
+          } else if (diagnoseIdleHealth) {
+            markIdleResponseDeliveryClientProtocolPhase("responseValidated");
           }
           return response;
         });
@@ -318,6 +341,8 @@ async function requestProtocolMethod<TMethod extends ProtocolMethod>(
         const response = await request(false);
         if (diagnosePrepareExternalLaunch) {
           markPrepareExternalLaunchClientProtocolPhase("boundaryTaskCompleted");
+        } else if (diagnoseIdleHealth) {
+          markIdleResponseDeliveryClientProtocolPhase("boundaryTaskCompleted");
         }
         return response;
       } catch (error) {
@@ -337,6 +362,8 @@ async function requestProtocolMethod<TMethod extends ProtocolMethod>(
   const response = unwrapBoundaryResult(result);
   if (diagnosePrepareExternalLaunch) {
     markPrepareExternalLaunchClientProtocolPhase("protocolCompleted");
+  } else if (diagnoseIdleHealth) {
+    markIdleResponseDeliveryClientProtocolPhase("protocolCompleted");
   }
   return response;
 }
@@ -384,14 +411,20 @@ async function readResponseForRequest<TMethod extends ProtocolMethod>(
   params?: unknown,
   acceptPreviousLifecycleSchema = false,
   usePreviousLifecycleSchema = false,
+  idleHealthResponseDeliveryDiagnostic = false,
 ): Promise<ProtocolResult<TMethod>> {
   const diagnosePrepareExternalLaunch = method === "agent.prepareExternalLaunch";
+  const diagnoseIdleHealth = method === "observer.health" && idleHealthResponseDeliveryDiagnostic;
   if (diagnosePrepareExternalLaunch) {
     connection.armPrepareExternalLaunchResponseDeliveryDiagnostic();
+  } else if (diagnoseIdleHealth) {
+    connection.armIdleResponseDeliveryDiagnostic();
   }
   const request = protocolRequest(id, method, params);
   if (diagnosePrepareExternalLaunch) {
     markPrepareExternalLaunchClientProtocolPhase("prepareRequestConstructed");
+  } else if (diagnoseIdleHealth) {
+    markIdleResponseDeliveryClientProtocolPhase("requestConstructed");
   }
   connection.send(
     usePreviousLifecycleSchema
@@ -400,6 +433,8 @@ async function readResponseForRequest<TMethod extends ProtocolMethod>(
   );
   if (diagnosePrepareExternalLaunch) {
     markPrepareExternalLaunchClientProtocolPhase("prepareRequestSent");
+  } else if (diagnoseIdleHealth) {
+    markIdleResponseDeliveryClientProtocolPhase("requestSent");
   }
 
   for (;;) {
@@ -409,6 +444,8 @@ async function readResponseForRequest<TMethod extends ProtocolMethod>(
     }
     if (diagnosePrepareExternalLaunch) {
       markPrepareExternalLaunchClientProtocolPhase("prepareResponseFrameReceived");
+    } else if (diagnoseIdleHealth) {
+      markIdleResponseDeliveryClientProtocolPhase("responseFrameReceived");
     }
     if (acceptPreviousLifecycleSchema && !usePreviousLifecycleSchema) {
       const previousError = PreviousLifecycleErrorResponseSchema.safeParse(next.value);
@@ -422,6 +459,8 @@ async function readResponseForRequest<TMethod extends ProtocolMethod>(
     const response = parseProtocolResponseMessage(next.value, acceptPreviousLifecycleSchema);
     if (diagnosePrepareExternalLaunch) {
       markPrepareExternalLaunchClientProtocolPhase("prepareResponseEnvelopeParsed");
+    } else if (diagnoseIdleHealth) {
+      markIdleResponseDeliveryClientProtocolPhase("responseEnvelopeParsed");
     }
     if (response.id !== id) {
       continue;

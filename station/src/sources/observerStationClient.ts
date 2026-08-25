@@ -4,6 +4,7 @@ import {
   type ObserverService,
 } from "@station/client";
 import { isStationAttentionEvent, type StationAttentionEvent } from "./attentionEvents.js";
+import { installObserverTransportDeliveryProbeFromEnvironment } from "./observerTransportDeliveryProbe.js";
 import type { StationClient } from "./types.js";
 
 export type CreateObserverStationClientOptions = {
@@ -24,15 +25,23 @@ export type CreateObserverStationClientOptions = {
 export function createObserverStationClient(
   options: CreateObserverStationClientOptions,
 ): StationClient {
+  const socketPath = options.service === undefined ? requireSocketPath(options.socketPath) : undefined;
   const service =
     options.service ??
     createObserverService({
-      socketPath: requireSocketPath(options.socketPath),
+      socketPath,
       ...(options.expectedBuildVersion === undefined
         ? {}
         : { expectedBuildVersion: options.expectedBuildVersion }),
       clientLabel: "Station",
     });
+  const transportDeliveryProbe =
+    socketPath === undefined
+      ? { dispose: () => undefined }
+      : installObserverTransportDeliveryProbeFromEnvironment({
+          socketPath,
+          expectedBuildVersion: options.expectedBuildVersion,
+        });
   const runtime = createStationClientRuntime({
     service,
     clientLabel: "Station",
@@ -56,7 +65,10 @@ export function createObserverStationClient(
     start: () => {
       runtime.start();
     },
-    stop: () => runtime.stop(),
+    stop: async () => {
+      transportDeliveryProbe.dispose();
+      await runtime.stop();
+    },
   };
 }
 
