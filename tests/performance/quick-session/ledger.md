@@ -70,6 +70,7 @@ the winning design, and the remaining product-level frontier.
 | BENCH-037-U | The compiled CLI launcher, native dashboard input/state transition, Observer command transport, and native managed-launch composition should add no more than 60ms p95 beyond the retained real Worktrunk plus warmed-Host path, while ordinary auto-start remains visible as a separate cost. | Ran five current compiled CLI launches against one exact 49-worktree repository. Before each run, preserved a current PTY-used empty Host, stopped Observer, launched bare `stn` through a real PTY, opened the project view when first-run UI required it, activated Quick Session, then timed optimistic UI, command/trace, Host readiness, canonical UI, queued-pane focus, and input acknowledgement. | BENCH-017-A's same-window real-terminal warm single was 66/70ms median/p95; BENCH-036-X's post-ready PTY interaction was 12.5/40.6ms and compiled Observer startup was 814/1853ms. Keep only if CLI launch→dashboard median/p95 are ≤1500/2500ms, intent→optimistic p95 ≤50ms, intent→interactive median/p95 ≤100/200ms, intent→canonical UI p95 ≤350ms, full launch→interactive p95 ≤2700ms, and all five exact gates pass. Prediction: intent→interactive p95 ≤125ms and launch→dashboard p95 ≤2200ms. | Rejected. CLI launch→dashboard was 1900/2091ms, so median failed while p95 and the 2200ms prediction passed. Intent→optimistic was 9.6/10.3ms, command completion 82.6/93.1ms, Host ready 127.5/255.4ms, and canonical UI 168.0/282.9ms. Intent→focused input acknowledgement was 715/819ms and full launch→interactive 2701/2903ms, failing both registered outcome bounds. | All five current identities, 49-worktree starts, unique command/trace/worktree/session/PTTY identities, configured scripted harness and Station terminal binding, ready/input markers, canonical convergence, actual focus/input, cleanup to 49, process stops, Host stderr, and root removals passed. The literal empty-UI-stderr rule failed only on the expected `Launching STATION TUI…` progress line in every run. | Reject mechanically. Keep the diagnostic; do not hide the focus delay or reinterpret intentional progress as empty stderr. | Does the ~540–570ms canonical-to-input gap come from raw Escape disambiguation, and does the existing unambiguous Ctrl-O overlay toggle remove it? |
 | BENCH-038-F | BENCH-037-U sends raw Escape to dismiss the dashboard after the created pane is queued; terminal input must delay lone Escape to distinguish it from a sequence, while Ctrl-O is an unambiguous existing overlay toggle and should focus the same pane immediately. | Alternated five Escape and five Ctrl-O focus gestures across otherwise identical compiled CLI/native Quick Session runs, adding timestamps for focus gesture→overlay dismissal and dismissal→input acknowledgement. No Quick Session, Observer, Host, or focus semantics changed. | BENCH-037-U intent→canonical UI median/p95 was 168/283ms but intent→interactive was 715/819ms, leaving 536ms at the p95 focus/input boundary. Attribute and advance only if Ctrl-O focus→ack p95 is ≤100ms and improves ≥75% over same-window Escape, Ctrl-O intent→interactive median/p95 are ≤250/350ms, all phase sums are coherent, and all ten exact gates pass. Prediction: Ctrl-O focus→ack p95 ≤50ms and intent→interactive p95 ≤300ms. | Rejected. Escape→Ctrl-O focus-to-ack median/p95 was 542/600→33/165ms and intent-to-interactive was 794/846→213/634ms. Ctrl-O overlay dismissal itself was 21/24ms, but one 148ms post-write acknowledgement outlier made focus-to-ack p95 miss 100ms, same-window p95 improvement reach only 72.6%, and intent p95 miss 350ms. | All ten phase sums were coherent and every run reached exact ready/input, canonical UI, cleanup, and process-stop milestones. The aggregate exact-safety assertion failed: one run emitted an additional expected Observer-start progress line, and the report did not retain named boundary predicates needed to explain why the other nine rows also recorded `safe=false`. | Reject mechanically; retain the Escape attribution but do not advance an automatic dashboard dismissal from this result. | Which collapsed boundary predicate made all rows unsafe, and does a named safety audit confirm the semantic path independently of the timing reject? |
 | BENCH-039-S | BENCH-038-F collapsed every product-boundary invariant into one `safe` boolean, preventing the retained artifact from distinguishing a semantic mismatch from a faulty benchmark expectation. | Added named booleans for every existing BENCH-038 boundary predicate and ran one Ctrl-O product-boundary repetition; made no production or timing-path change. | BENCH-038-F reached every awaited milestone and exact cleanup but recorded ten unsafe rows. Accept the audit only if every semantic, identity, input, inventory, and process predicate is named, exactly one false predicate explains each unsafe result, and the root is removed. Prediction: the false predicate is a benchmark expectation rather than session identity, input, or cleanup. | Accepted. Exactly one predicate was false: the test expected canonical terminal provider `station`, while the provider-neutral Station Host ID is `native`. The run reached canonical UI in 314ms, focus-to-ack in 97ms, and intent-to-interactive in 410ms; these are diagnostic context, not a latency claim. | All other 18 named predicates passed, including exact command, worktree/registration, scripted harness, Host worktree/session, ready/input, zero Host inventory, 49-worktree cleanup, clean stops, exact progress stderr, phase coherence, and root removal. | Keep named safety evidence and correct the benchmark expectation to `STATION_HOST_PROVIDER_ID`; BENCH-038 remains rejected. | Does automatic dashboard dismissal after canonical Quick Session success eliminate the second gesture while preserving failure and deliberate-create behavior? |
+| EXP-016 | Native Quick Session already publishes a managed pane as the dashboard overlay's return target, so making only that shortcut a foreground landing and dismissing only its proven successful landing should remove the second gesture without weakening failure visibility. | Temporarily carried an explicit foreground request through native managed launch, closed the overlay only for `success` with `landed: true`, and left deliberate Create, Fork, notices, failures, and non-landing success unchanged. | BENCH-038-F Ctrl-O intent-to-interactive was 213/634ms median/p95 over five alternating control runs; BENCH-039-S was 410ms once after fixing the terminal-provider expectation. Keep only with ten safe control and ten safe candidate runs, candidate intent-to-interactive median/p95 at most 200/350ms, candidate p95 at least 25% below the fresh control, automatic overlay-dismissal-to-input-ack p95 at most 100ms, no dismissal input byte in candidate runs, and every exact identity, canonical, input, inventory, stop, stderr, phase, and root predicate true. Prediction: automatic candidate intent-to-interactive p95 is at most 300ms and at least 40% below fresh Ctrl-O control. | Rejected. Fresh Ctrl-O control was 220/2348ms median/p95; automatic dismissal was 196/358ms, improving median 11% and p95 84.8%. The candidate passed the 200ms median and relative rules but missed the 350ms absolute p95 by 7.8ms, missed the 100ms overlay-dismissal-to-input-ack p95 at 154ms, and missed its 300ms prediction by 58ms. | All ten control and ten candidate runs passed every named identity, canonical, input, inventory, stop, stderr, phase, and root predicate. Candidate runs sent no dismissal byte. Focused tests proved successful landing, non-landing success, notice, launch failure, deliberate Create, Fork, canonical continuation, and foreground/background propagation; Station typecheck passed. | Revert completely under the preregistered rule; retain the runner and raw control/candidate evidence only on the continuation archive. | Can native managed launch expose bounded child-input readiness so automatic dismissal occurs only when the pane can immediately acknowledge input? |
 
 ## EXP-008 preregistered change plan
 
@@ -1426,3 +1427,80 @@ canonical UI in 314ms, Ctrl-O focus-to-ack in 97ms, and intent-to-interactive in
 410ms; those one-run values carry no latency decision. The benchmark now uses
 `STATION_HOST_PROVIDER_ID`. This correctness fix does not alter BENCH-038-F's
 mechanical timing rejection.
+
+## EXP-016 preregistered change plan
+
+Governing sources are `docs/architecture.md`, `docs/tui.md`,
+`tests/README.md`, the original
+`/Users/jeremyodell/Documents/station-session-start-performance-experiment.md`
+protocol, and BENCH-037-U through BENCH-039-S above. The native workspace owns
+overlay and pane focus; dashboard-core continues to own provider-neutral Quick
+Session orchestration. The invariant is that the native dashboard may dismiss
+itself only after the requested Quick Session has actually opened, revealed, or
+focused its managed pane. A notice, worktree failure, launch failure, duplicate
+non-landing result, deliberate New Session, or Fork must leave the dashboard
+visible and actionable. Closing the overlay must land on the exact pane already
+recorded as its return target, while Group Quick Session correlation and
+membership settlement continue after the surface is hidden.
+
+The blind prediction and mechanical decision rules are fixed in the EXP-016
+table row before either the control binary or candidate implementation is
+built. Ten current-code Ctrl-O runs and ten candidate automatic-dismissal runs
+will use the same 49-worktree shape, compiled CLI boundary, PTY-used current
+Host, ordinary Observer restart, raw Quick Session pointer intent, exact Host
+ready/input markers, and cleanup. Control input sends Ctrl-O after canonical
+convergence. Candidate input sends no dismissal key and waits for the overlay
+to disappear as a consequence of successful Quick Session execution. Raw
+artifacts must retain the named BENCH-039 predicates plus the selected arm,
+binary/build identity, all stage timestamps, whether any dismissal byte was
+sent, machine load, resource deltas, and cleanup evidence.
+
+Expected retained files if the candidate wins are:
+
+- native composition: `station/src/app/dashboardCapabilities.ts`;
+- native managed-launch boundary: `station/src/input/runtime/managedLaunch.ts`;
+- source-adjacent coverage: `station/src/app/dashboardCapabilities.test.ts` and
+  `station/src/input/runtime/managedLaunch.test.ts`;
+- behavior documentation: `docs/tui.md`;
+- experiment record and summary:
+  `tests/performance/quick-session/ledger.md` and
+  `tests/performance/quick-session/report.md`.
+
+The one-off product runner
+`tests/performance/quick-session/compiledQuickSessionTui.real.test.ts` and its
+generated control/candidate JSON under `.dev-state/performance/quick-session/`
+are measurement evidence, not review-branch product files; after a decision
+they will be removed from this branch and preserved only on the evidence archive
+or a new continuation archive. No package script, contract, protocol, Observer,
+provider, connector, configuration, architecture manifest, or dashboard-core
+surface is expected to change.
+
+JSDoc impact is explicit: add documentation for the native
+`ManagedHostedSessionRequest` foreground/background choice and update the
+`createManagedLaunch` boundary documentation to state that callers select
+whether a successful placement lands in the pane. No backend or connector
+JSDoc changes are expected. If the candidate loses any timing or correctness
+gate, restore both production modules, both source-adjacent test files,
+`docs/tui.md`, and the report exactly, retain only this rejected ledger outcome,
+and archive the raw comparison.
+
+Outcome: rejected mechanically and reverted. The ten-run fresh Ctrl-O control
+passed every named safety predicate at 220/2348ms median/p95
+intent-to-interactive. The ten-run automatic candidate also passed every named
+safety predicate and sent no dismissal input byte, at 196/358ms. That is an 11%
+median improvement and an 84.8% p95 improvement, but the candidate missed the
+fixed 350ms absolute p95 by 7.8ms and its 300ms prediction by 58ms. More
+importantly, overlay-dismissal-to-input-ack p95 was 154ms against the fixed
+100ms rule. The outlier decomposed into bounded automatic dismissal followed by
+the still-unready Host child; input-write-to-ack p95 itself was 54ms.
+
+All twenty runs preserved exact command/trace, Project, branch/path/
+registration, scripted harness, provider-neutral native terminal, canonical
+session, immutable Host PTY, ready/input, inventory, process-stop, accepted
+progress-stderr, phase-coherence, and root-removal evidence. Focused source tests
+also passed for landed success, non-landing success, notice, launch failure,
+deliberate Create, Fork, canonical continuation, and exact foreground/background
+propagation, and Station typecheck passed. Those correctness results cannot
+override either failed timing rule. The production, source-adjacent test, JSDoc,
+and `docs/tui.md` candidate edits were restored; the one-off runner and raw JSON
+are retained only on the continuation evidence archive.
