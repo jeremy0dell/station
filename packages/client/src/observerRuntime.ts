@@ -8,6 +8,10 @@ import {
 } from "./connectionState.js";
 import { isPermanentObserverError, type ToSafeErrorOptions, toSafeError } from "./errors.js";
 import { createObserverService } from "./observerService.js";
+import {
+  beginClientRuntimeEventRendererOccupancy,
+  markClientRuntimeEventRendererOccupancy,
+} from "./rendererOccupancyDiagnostic.js";
 import { applyStationEvent } from "./snapshotReducer.js";
 import type {
   ObserverService,
@@ -242,14 +246,25 @@ export function createStationClientRuntime(
   // the in-flight initial resync covers them.
   function applyEvent(event: StationEvent): void {
     reportedSubscriptionError = false;
+    const occupancyActivityId = beginClientRuntimeEventRendererOccupancy(event.type);
     if (state.snapshot === undefined) {
+      markClientRuntimeEventRendererOccupancy(occupancyActivityId, event.type, "reducerCompleted");
+      markClientRuntimeEventRendererOccupancy(
+        occupancyActivityId,
+        event.type,
+        "listenersCompleted",
+      );
       hooks.onEvent?.(event, undefined);
+      markClientRuntimeEventRendererOccupancy(occupancyActivityId, event.type, "hooksCompleted");
       return;
     }
     const application = applyStationEvent(state.snapshot, event);
+    markClientRuntimeEventRendererOccupancy(occupancyActivityId, event.type, "reducerCompleted");
     mutationCounter += 1;
     swapState({ ...state, snapshot: application.snapshot });
+    markClientRuntimeEventRendererOccupancy(occupancyActivityId, event.type, "listenersCompleted");
     hooks.onEvent?.(event, application);
+    markClientRuntimeEventRendererOccupancy(occupancyActivityId, event.type, "hooksCompleted");
     if (application.needsSnapshotRefresh) {
       void requestRefresh("managed");
     }

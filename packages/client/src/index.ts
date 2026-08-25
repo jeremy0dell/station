@@ -10,6 +10,7 @@ export {
 } from "./observerCommandExecution.js";
 export { createStationClientRuntime } from "./observerRuntime.js";
 export { createObserverService } from "./observerService.js";
+export * from "./rendererOccupancyDiagnostic.js";
 export { applyStationEvent } from "./snapshotReducer.js";
 export type {
   AgentPrepareExternalLaunchParams,

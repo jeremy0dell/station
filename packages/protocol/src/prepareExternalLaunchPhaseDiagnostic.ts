@@ -2,6 +2,8 @@ import { writeFileSync } from "node:fs";
 import { z } from "zod";
 
 export const IDLE_RESPONSE_DELIVERY_REQUEST_ID_PREFIX = "req_bench_047_idle_";
+export const RENDERER_OCCUPANCY_DIAGNOSTIC_ENV =
+  "STATION_QUICK_SESSION_RENDERER_OCCUPANCY_DIAGNOSTIC";
 
 export const prepareExternalLaunchClientProtocolDiagnosticPhases = [
   "protocolEntered",
@@ -91,6 +93,37 @@ type DiagnosticEvent<TPhase extends string> = {
   epochMs: number;
 };
 type DiagnosticTimestamp = Pick<DiagnosticEvent<string>, "atMs" | "epochMs">;
+export type RendererOccupancyDiagnosticEvent =
+  | (DiagnosticTimestamp & {
+      source: "competingSocket";
+      phase: "entered" | "completed";
+      activityId: number;
+    })
+  | (DiagnosticTimestamp & {
+      source: "clientRuntimeEvent";
+      phase: "entered" | "reducerCompleted" | "listenersCompleted" | "hooksCompleted";
+      activityId: number;
+      eventType: string;
+    })
+  | (DiagnosticTimestamp & {
+      source: "dashboardSource";
+      phase: "entered" | "sourceRead" | "projectionCompleted" | "notificationCompleted";
+      activityId: number;
+    })
+  | (DiagnosticTimestamp & {
+      source: "rootReact";
+      phase: "entered";
+      activityId: number;
+    })
+  | (DiagnosticTimestamp & {
+      source: "rootReact";
+      phase: "completed";
+      activityId: number;
+      renderPhase: "mount" | "update" | "nested-update";
+      actualDurationMs: number;
+      baseDurationMs: number;
+      commitAtMs: number;
+    });
 export type ExpectedObserverHealthServerProtocolDiagnostic = {
   requestParsed: DiagnosticTimestamp;
   responseSent?: DiagnosticTimestamp;
@@ -105,16 +138,28 @@ const serverPathResult = pathSchema.safeParse(
 );
 const clientPath = clientPathResult.success ? clientPathResult.data : undefined;
 const serverPath = serverPathResult.success ? serverPathResult.data : undefined;
+const rendererOccupancyEnabled =
+  clientPath !== undefined &&
+  z.literal("1").safeParse(process.env[RENDERER_OCCUPANCY_DIAGNOSTIC_ENV]).success;
 const clientEvents: DiagnosticEvent<ClientPhase>[] = [];
 const serverEvents: DiagnosticEvent<ServerPhase>[] = [];
 const idleClientEvents: DiagnosticEvent<IdleResponseDeliveryClientPhase>[] = [];
 const idleServerEvents: DiagnosticEvent<IdleResponseDeliveryServerPhase>[] = [];
+const rendererOccupancyEvents: RendererOccupancyDiagnosticEvent[] = [];
+let rendererOccupancyWindowOpen = false;
+let nextRendererOccupancyActivityId = 0;
 
 process.once("exit", () => {
   if (clientPath !== undefined && (clientEvents.length > 0 || idleClientEvents.length > 0)) {
+    const orderedRendererOccupancyEvents = rendererOccupancyEvents
+      .slice()
+      .sort((left, right) => left.atMs - right.atMs || left.activityId - right.activityId);
     const report = {
       events: clientEvents,
       ...(idleClientEvents.length === 0 ? {} : { idleEvents: idleClientEvents }),
+      ...(orderedRendererOccupancyEvents.length === 0
+        ? {}
+        : { rendererOccupancyEvents: orderedRendererOccupancyEvents }),
     };
     writeFileSync(clientPath, `${JSON.stringify(report)}\n`, "utf8");
   }
@@ -148,12 +193,131 @@ export function markResponseDeliveryClientProtocolPhase(
 ): void {
   if (scope === "active") {
     markPrepareExternalLaunchClientProtocolPhase(phase);
+    // No competing work may enter the measured window after its response callback begins.
+    if (phase === "responseSocketDataCallbackEntered") {
+      rendererOccupancyWindowOpen = false;
+    }
     return;
   }
   if (clientPath !== undefined) {
     const atMs = performance.now();
     idleClientEvents.push({ phase, atMs, epochMs: performance.timeOrigin + atMs });
   }
+}
+
+/** Opens observation for active-response renderer work without scheduling or delaying it. */
+export function armRendererOccupancyDiagnosticWindow(): void {
+  if (rendererOccupancyEnabled) {
+    rendererOccupancyWindowOpen = true;
+  }
+}
+
+/** Reports whether the temporary renderer trace is enabled, not whether a request is active. */
+export function rendererOccupancyDiagnosticEnabled(): boolean {
+  return rendererOccupancyEnabled;
+}
+
+/** Begins a synchronous competing socket callback only while the active response is armed. */
+export function beginCompetingSocketRendererOccupancy(): number | undefined {
+  if (!rendererOccupancyWindowOpen) return undefined;
+  const activityId = ++nextRendererOccupancyActivityId;
+  rendererOccupancyEvents.push({
+    source: "competingSocket",
+    phase: "entered",
+    activityId,
+    ...diagnosticTimestamp(),
+  });
+  return activityId;
+}
+
+export function completeCompetingSocketRendererOccupancy(activityId: number | undefined): void {
+  if (activityId === undefined) return;
+  rendererOccupancyEvents.push({
+    source: "competingSocket",
+    phase: "completed",
+    activityId,
+    ...diagnosticTimestamp(),
+  });
+}
+
+export function beginClientRuntimeEventRendererOccupancy(eventType: string): number | undefined {
+  if (!rendererOccupancyWindowOpen) return undefined;
+  const activityId = ++nextRendererOccupancyActivityId;
+  rendererOccupancyEvents.push({
+    source: "clientRuntimeEvent",
+    phase: "entered",
+    activityId,
+    eventType,
+    ...diagnosticTimestamp(),
+  });
+  return activityId;
+}
+
+export function markClientRuntimeEventRendererOccupancy(
+  activityId: number | undefined,
+  eventType: string,
+  phase: "reducerCompleted" | "listenersCompleted" | "hooksCompleted",
+): void {
+  if (activityId === undefined) return;
+  rendererOccupancyEvents.push({
+    source: "clientRuntimeEvent",
+    phase,
+    activityId,
+    eventType,
+    ...diagnosticTimestamp(),
+  });
+}
+
+export function beginDashboardSourceRendererOccupancy(): number | undefined {
+  if (!rendererOccupancyWindowOpen) return undefined;
+  const activityId = ++nextRendererOccupancyActivityId;
+  rendererOccupancyEvents.push({
+    source: "dashboardSource",
+    phase: "entered",
+    activityId,
+    ...diagnosticTimestamp(),
+  });
+  return activityId;
+}
+
+export function markDashboardSourceRendererOccupancy(
+  activityId: number | undefined,
+  phase: "sourceRead" | "projectionCompleted" | "notificationCompleted",
+): void {
+  if (activityId === undefined) return;
+  rendererOccupancyEvents.push({
+    source: "dashboardSource",
+    phase,
+    activityId,
+    ...diagnosticTimestamp(),
+  });
+}
+
+export function recordRootReactRendererOccupancy(input: {
+  renderPhase: "mount" | "update" | "nested-update";
+  actualDurationMs: number;
+  baseDurationMs: number;
+  startAtMs: number;
+  commitAtMs: number;
+}): void {
+  if (!rendererOccupancyWindowOpen) return;
+  const activityId = ++nextRendererOccupancyActivityId;
+  rendererOccupancyEvents.push({
+    source: "rootReact",
+    phase: "entered",
+    activityId,
+    ...diagnosticTimestamp(input.startAtMs),
+  });
+  rendererOccupancyEvents.push({
+    source: "rootReact",
+    phase: "completed",
+    activityId,
+    renderPhase: input.renderPhase,
+    actualDurationMs: input.actualDurationMs,
+    baseDurationMs: input.baseDurationMs,
+    commitAtMs: input.commitAtMs,
+    ...diagnosticTimestamp(),
+  });
 }
 
 export function markIdleResponseDeliveryClientProtocolPhase(
@@ -209,7 +373,6 @@ export function commitExpectedObserverHealthServerProtocolDiagnostic(
   }
 }
 
-function diagnosticTimestamp(): DiagnosticTimestamp {
-  const atMs = performance.now();
+function diagnosticTimestamp(atMs = performance.now()): DiagnosticTimestamp {
   return { atMs, epochMs: performance.timeOrigin + atMs };
 }
