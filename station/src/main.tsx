@@ -2,12 +2,16 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createCliRenderer, type CliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";
+import {
+  recordRootReactRendererOccupancy,
+  rendererOccupancyDiagnosticEnabled,
+} from "@station/client";
 import type { UiShutdownReason } from "@station/contracts";
 import { createStationHostClient } from "@station/host";
 import { componentLogPath, createJsonlLogger, toSafeError } from "@station/observability";
 import { stationBuildInfo } from "@station/runtime";
 import { ensureStationHostRunning } from "@station/terminal";
-import { Profiler } from "react";
+import { Profiler, type ProfilerOnRenderCallback } from "react";
 import { loadStationConfig } from "./config/stationConfig.js";
 import { loadStationTuiConfig } from "./config/tuiConfig.js";
 import { createOpenTuiSelectionCopyHandler } from "./copy/openTuiSelection.js";
@@ -436,6 +440,22 @@ async function startStationMain(
   const onRenderProfile = readRenderProfileEnabled(env.STATION_PROFILE)
     ? createRenderProfiler(devRenderProfilePath())
     : undefined;
+  const recordRendererOccupancy = rendererOccupancyDiagnosticEnabled();
+  const onRender: ProfilerOnRenderCallback | undefined =
+    onRenderProfile === undefined && !recordRendererOccupancy
+      ? undefined
+      : (id, phase, actualDuration, baseDuration, startTime, commitTime) => {
+          onRenderProfile?.(id, phase, actualDuration, baseDuration, startTime, commitTime);
+          if (recordRendererOccupancy) {
+            recordRootReactRendererOccupancy({
+              renderPhase: phase,
+              actualDurationMs: actualDuration,
+              baseDurationMs: baseDuration,
+              startAtMs: startTime,
+              commitAtMs: commitTime,
+            });
+          }
+        };
   station.start();
   const stationApp = (
     <StationThemeProvider theme={nativeStationTheme}>
@@ -443,8 +463,8 @@ async function startStationMain(
     </StationThemeProvider>
   );
   root.render(
-    onRenderProfile ? (
-      <Profiler id="station" onRender={onRenderProfile}>
+    onRender ? (
+      <Profiler id="station" onRender={onRender}>
         {stationApp}
       </Profiler>
     ) : (
