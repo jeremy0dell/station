@@ -9,8 +9,19 @@ export const prepareExternalLaunchClientProtocolDiagnosticPhases = [
   "expectedObserverHealthStarted",
   "expectedObserverHealthCompleted",
   "prepareRequestStarted",
+  "responseDeliveryDiagnosticArmed",
   "prepareRequestConstructed",
   "prepareRequestSent",
+  "responseIteratorWaitStarted",
+  "responseSocketDataCallbackEntered",
+  "responseFrameExtracted",
+  "responseJsonParsed",
+  "responseQueued",
+  "responseWaiterResolutionStarted",
+  "responseWaiterResolutionCompleted",
+  "responseIteratorWaitResumed",
+  "responseDequeued",
+  "responseYieldStarted",
   "prepareResponseFrameReceived",
   "prepareResponseEnvelopeParsed",
   "prepareResponseCompleted",
@@ -73,6 +84,10 @@ export function markPrepareExternalLaunchClientProtocolPhase(phase: ClientPhase)
     const atMs = performance.now();
     clientEvents.push({ phase, atMs, epochMs: performance.timeOrigin + atMs });
   }
+}
+
+export function prepareExternalLaunchClientProtocolDiagnosticEnabled(): boolean {
+  return clientPath !== undefined;
 }
 
 export function markPrepareExternalLaunchServerProtocolPhase(phase: ServerPhase): void {
