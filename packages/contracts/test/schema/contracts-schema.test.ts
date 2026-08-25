@@ -2109,6 +2109,30 @@ describe("contract schemas", () => {
       },
       "Session Group repair blocker with an unknown field",
     );
+    const globalSessionGroupRepair = {
+      status: "skipped",
+      absenceAuthorityProjectIds: [],
+      preservedProjectIds: ["web", "api"],
+      blockers: [
+        {
+          scope: "global",
+          providerType: "harness",
+          providerId: "codex",
+          code: "HARNESS_DISCOVER_FAILED",
+        },
+      ],
+    } as const;
+    expect(SessionGroupRepairSummarySchema.parse(globalSessionGroupRepair)).toEqual(
+      globalSessionGroupRepair,
+    );
+    expectFails(
+      SessionGroupRepairSummarySchema,
+      {
+        ...globalSessionGroupRepair,
+        blockers: [{ ...globalSessionGroupRepair.blockers[0], extra: true }],
+      },
+      "global Session Group repair blocker with an unknown field",
+    );
 
     expectParses(
       ObserverHealthSchema,

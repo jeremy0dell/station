@@ -46,6 +46,7 @@ function configFor(...projectIds: string[]): StationConfig {
 
 function providersFor(
   sessions: Array<{ projectId: string; worktreeId: string; sessionId: string }>,
+  options: { terminalTargets?: boolean } = {},
 ): ProviderRegistry {
   return new ProviderRegistry({
     worktree: new FakeWorktreeProvider({
@@ -56,16 +57,19 @@ function providersFor(
     }),
     terminal: new FakeTerminalProvider({
       now,
-      targets: sessions.map(({ projectId, worktreeId, sessionId }) =>
-        createFakeTerminalTarget({
-          id: `term_${sessionId}`,
-          projectId,
-          worktreeId,
-          sessionId,
-          harnessRunId: `run_${sessionId}`,
-          now,
-        }),
-      ),
+      targets:
+        options.terminalTargets === false
+          ? []
+          : sessions.map(({ projectId, worktreeId, sessionId }) =>
+              createFakeTerminalTarget({
+                id: `term_${sessionId}`,
+                projectId,
+                worktreeId,
+                sessionId,
+                harnessRunId: `run_${sessionId}`,
+                now,
+              }),
+            ),
     }),
     harnesses: [
       new FakeHarnessProvider({
@@ -186,6 +190,124 @@ describe("reconcile Session Group repair authority", () => {
       expect.objectContaining({ id: "grp_web", sessionIds: ["ses_web_main"], version: 1 }),
     ]);
     recovered.sqlite.close();
+  });
+
+  it("preserves an absent member when terminal failure is the sole authority blocker", async () => {
+    const config = configFor("web");
+    const providers = providersFor([
+      { projectId: "web", worktreeId: "wt_web_main", sessionId: "ses_web_main" },
+    ]);
+    const harness = providers.harnesses.get("fake-harness");
+    if (harness === undefined) throw new Error("Expected fake harness provider.");
+    const harnessRead = vi.spyOn(harness, "discoverRuns").mockResolvedValue([]);
+    const terminalRead = vi
+      .spyOn(providers.terminal, "listTargets")
+      .mockRejectedValue(providerTimeout("fake-terminal"));
+    const { sqlite, persistence, core } = createTestObserverCore({
+      config,
+      providers,
+      clock: { now: () => new Date(now) },
+    });
+    await persistence.createSessionGroup({
+      id: "grp_web",
+      projectId: "web",
+      name: "Web",
+      initialMembers: [{ sessionId: "ses_web_main", projectId: "web", expectedGroupId: null }],
+      createdAt: now,
+    });
+
+    const degraded = await core.reconcile("terminal-only-failure");
+    expect(degraded.sessions).toEqual([]);
+    expect(degraded.sessionGroups).toEqual([
+      expect.objectContaining({ id: "grp_web", sessionIds: [], version: 1 }),
+    ]);
+    await expect(persistence.listSessionGroups()).resolves.toEqual([
+      expect.objectContaining({ id: "grp_web", sessionIds: ["ses_web_main"], version: 1 }),
+    ]);
+    expect(core.getHealth().lastReconcile?.sessionGroupRepair).toEqual({
+      status: "skipped",
+      absenceAuthorityProjectIds: [],
+      preservedProjectIds: ["web"],
+      blockers: [
+        {
+          scope: "global",
+          providerType: "terminal",
+          providerId: "fake-terminal",
+          code: "PROVIDER_TIMEOUT",
+        },
+      ],
+    });
+
+    harnessRead.mockRestore();
+    terminalRead.mockRestore();
+    const recovered = await core.reconcile("healthy-after-terminal-recovery");
+    expect(recovered.sessionGroups).toEqual([
+      expect.objectContaining({ id: "grp_web", sessionIds: ["ses_web_main"], version: 1 }),
+    ]);
+    sqlite.close();
+  });
+
+  it("preserves harness-only membership through failed harness discovery and recovery", async () => {
+    const config = configFor("web");
+    const providers = providersFor(
+      [{ projectId: "web", worktreeId: "wt_web_main", sessionId: "ses_web_main" }],
+      { terminalTargets: false },
+    );
+    const { sqlite, persistence, core } = createTestObserverCore({
+      config,
+      providers,
+      clock: { now: () => new Date(now) },
+    });
+    await persistence.createSessionGroup({
+      id: "grp_web",
+      projectId: "web",
+      name: "Web",
+      initialMembers: [{ sessionId: "ses_web_main", projectId: "web", expectedGroupId: null }],
+      createdAt: now,
+    });
+
+    const healthy = await core.reconcile("healthy-before-harness-failure");
+    expect(healthy.sessionGroups).toEqual([
+      expect.objectContaining({ id: "grp_web", sessionIds: ["ses_web_main"], version: 1 }),
+    ]);
+
+    const harness = providers.harnesses.get("fake-harness");
+    if (harness === undefined) throw new Error("Expected fake harness provider.");
+    const harnessRead = vi.spyOn(harness, "discoverRuns").mockRejectedValue({
+      tag: "HarnessProviderError",
+      code: "HARNESS_DISCOVER_FAILED",
+      message: "The fake harness could not discover runs.",
+      provider: "fake-harness",
+    } satisfies SafeError);
+
+    const degraded = await core.reconcile("harness-discovery-failure");
+    expect(degraded.sessions).toEqual([]);
+    expect(degraded.sessionGroups).toEqual([
+      expect.objectContaining({ id: "grp_web", sessionIds: [], version: 1 }),
+    ]);
+    await expect(persistence.listSessionGroups()).resolves.toEqual([
+      expect.objectContaining({ id: "grp_web", sessionIds: ["ses_web_main"], version: 1 }),
+    ]);
+    expect(core.getHealth().lastReconcile?.sessionGroupRepair).toEqual({
+      status: "skipped",
+      absenceAuthorityProjectIds: [],
+      preservedProjectIds: ["web"],
+      blockers: [
+        {
+          scope: "global",
+          providerType: "harness",
+          providerId: "fake-harness",
+          code: "HARNESS_DISCOVER_FAILED",
+        },
+      ],
+    });
+
+    harnessRead.mockRestore();
+    const recovered = await core.reconcile("healthy-after-harness-recovery");
+    expect(recovered.sessionGroups).toEqual([
+      expect.objectContaining({ id: "grp_web", sessionIds: ["ses_web_main"], version: 1 }),
+    ]);
+    sqlite.close();
   });
 
   it("prunes a confirmed deletion while preserving membership in a failed project", async () => {
