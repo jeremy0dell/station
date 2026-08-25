@@ -1,0 +1,1054 @@
+{
+  "schemaVersion": 1,
+  "benchmark": "station-quick-session-observer-worktrunk",
+  "generatedAt": "2026-08-25T06:25:40.156Z",
+  "machine": {
+    "platform": "darwin",
+    "arch": "arm64",
+    "cpuModel": "Apple M4",
+    "logicalCpuCount": 10
+  },
+  "tools": {
+    "worktrunk": "wt v0.72.0",
+    "git": "git version 2.50.1 (Apple Git-155)"
+  },
+  "repositoryShape": {
+    "projects": 2,
+    "worktreesPerProject": [49, 49],
+    "lifecycleHooks": false
+  },
+  "performanceBudgetsMs": {
+    "warmSingleP95": 500,
+    "burst5P95": 1500,
+    "burst20P95": 2500,
+    "worktreeObservationP95": 100
+  },
+  "scenarios": [
+    {
+      "name": "burst-5",
+      "sessionsPerRun": 5,
+      "projectsPerRun": 1,
+      "finalInteractiveMs": {
+        "samples": [147.42612499999996, 156.31270799999947, 157.23362499999985],
+        "median": 156.31270799999947,
+        "p90": 157.23362499999985,
+        "p95": 157.23362499999985,
+        "max": 157.23362499999985
+      },
+      "allInteractiveMs": {
+        "samples": [
+          89.32425000000057, 92.92199999999957, 93.43995799999993, 94.23341699999946,
+          94.77354100000048, 95.6660839999995, 96.73916699999972, 98.15437500000007,
+          98.62229099999968, 98.62887500000033, 101.9755409999998, 107.73312500000065,
+          147.42612499999996, 156.31270799999947, 157.23362499999985
+        ],
+        "median": 98.15437500000007,
+        "p90": 156.31270799999947,
+        "p95": 157.23362499999985,
+        "max": 157.23362499999985
+      },
+      "throughputPerSecond": {
+        "samples": [31.79981381209016, 31.98716255366785, 33.91529147225433],
+        "median": 31.98716255366785,
+        "p90": 33.91529147225433,
+        "p95": 33.91529147225433,
+        "max": 33.91529147225433
+      },
+      "stageContributionMs": {
+        "queueAndPreflight": {
+          "samples": [
+            1.2130829999996422, 1.2495419999995647, 1.294832999999926, 1.328708000000006,
+            1.3460839999997916, 1.3672090000000026, 1.4190840000001117, 1.4912090000007083,
+            3.1677920000001905, 3.254041999999572, 3.3499590000001263, 4.353500000000167,
+            87.60433300000022, 88.75358299999971, 94.38116700000046
+          ],
+          "median": 1.4912090000007083,
+          "p90": 88.75358299999971,
+          "p95": 94.38116700000046,
+          "max": 94.38116700000046
+        },
+        "repositoryMutation": {
+          "samples": [
+            58.14066699999967, 61.68425000000025, 63.22962499999994, 85.65716599999996,
+            86.29891599999974, 90.10737499999959, 90.26449999999932, 90.51866700000028,
+            91.9482909999997, 92.28287499999988, 92.54166600000008, 93.24749999999949,
+            95.96666600000026, 97.58029199999964, 104.68387499999972
+          ],
+          "median": 90.51866700000028,
+          "p90": 97.58029199999964,
+          "p95": 104.68387499999972,
+          "max": 104.68387499999972
+        },
+        "worktreeObservation": {
+          "samples": [
+            0.19266699999934644, 0.229750000000422, 0.34379099999932805, 0.37341600000036124,
+            0.47595799999999144, 0.5483750000003056, 0.5858749999997599, 0.6862090000004173,
+            0.8754580000004353, 0.9563749999997526, 1.0328330000002097, 1.1826670000000377,
+            1.338875000000371, 1.7092919999995502, 2.237833000000137
+          ],
+          "median": 0.6862090000004173,
+          "p90": 1.7092919999995502,
+          "p95": 2.237833000000137,
+          "max": 2.237833000000137
+        },
+        "launchPreparationAndSpawn": {
+          "samples": [
+            0.4249580000005153, 0.4372080000002825, 0.44804199999998673, 0.4630829999996422,
+            0.5237499999993815, 0.5378749999999854, 0.5897910000003321, 0.6002500000004147,
+            0.6091669999996157, 0.6098750000001019, 0.6814580000000205, 0.7297499999995125,
+            0.7342920000000959, 0.7918749999998909, 2.757166999999754
+          ],
+          "median": 0.6002500000004147,
+          "p90": 0.7918749999998909,
+          "p95": 2.757166999999754,
+          "max": 2.757166999999754
+        },
+        "harnessReadiness": {
+          "samples": [
+            0.00408400000014808, 0.004249999999956344, 0.004332999999860476, 0.004874999999628926,
+            0.006083999999646039, 0.006666999999652035, 0.006833999999798834, 0.007375000000138243,
+            0.007458000000042375, 0.007958000000144239, 0.008250000000771252, 0.009165999999822816,
+            0.009750000000167347, 0.013041999999586551, 0.04475000000002183
+          ],
+          "median": 0.007375000000138243,
+          "p90": 0.013041999999586551,
+          "p95": 0.04475000000002183,
+          "max": 0.04475000000002183
+        },
+        "canonicalProjection": {
+          "samples": [
+            0.0018749999999272404, 0.0020830000003115856, 0.0020830000003115856,
+            0.002124999999978172, 0.0021660000002157176, 0.002292000000124972,
+            0.0026250000000800355, 0.0026659999994080863, 0.002666999999746622,
+            0.002959000000373635, 0.0030830000005153124, 0.003583000000617176, 0.005083000000013271,
+            0.005124999999679858, 0.014750000000276486
+          ],
+          "median": 0.0026659999994080863,
+          "p90": 0.005124999999679858,
+          "p95": 0.014750000000276486,
+          "max": 0.014750000000276486
+        },
+        "optimisticAndFocus": {
+          "samples": [
+            0.0010000000002037268, 0.0010830000001078588, 0.0011249999997744453,
+            0.0011669999994410318, 0.0012079999996785773, 0.001208000000588072,
+            0.001374999999825377, 0.001457999999729509, 0.0014590000000680448,
+            0.0015000000003055902, 0.0015419999999721767, 0.0027079999999841675,
+            0.0027089999994132086, 0.0037919999995210674, 0.012040999999953783
+          ],
+          "median": 0.001457999999729509,
+          "p90": 0.0037919999995210674,
+          "p95": 0.012040999999953783,
+          "max": 0.012040999999953783
+        }
+      },
+      "scanCounts": [2, 2, 2],
+      "maxConcurrentCreates": [4, 4, 4],
+      "maxConcurrentCreatesPerProject": [4, 4, 4],
+      "resourceUsage": [
+        {
+          "userCpuMs": 67.33,
+          "systemCpuMs": 17.323,
+          "fsReads": 0,
+          "fsWrites": 0,
+          "voluntaryContextSwitches": 0,
+          "involuntaryContextSwitches": 959
+        },
+        {
+          "userCpuMs": 59.209,
+          "systemCpuMs": 17.343,
+          "fsReads": 0,
+          "fsWrites": 0,
+          "voluntaryContextSwitches": 0,
+          "involuntaryContextSwitches": 1036
+        },
+        {
+          "userCpuMs": 66.279,
+          "systemCpuMs": 18.062,
+          "fsReads": 0,
+          "fsWrites": 0,
+          "voluntaryContextSwitches": 0,
+          "involuntaryContextSwitches": 1028
+        }
+      ],
+      "loadAverage": [
+        {
+          "before": [14.431640625, 16.07373046875, 19.6552734375],
+          "after": [14.431640625, 16.07373046875, 19.6552734375]
+        },
+        {
+          "before": [14.431640625, 16.07373046875, 19.6552734375],
+          "after": [14.431640625, 16.07373046875, 19.6552734375]
+        },
+        {
+          "before": [14.431640625, 16.07373046875, 19.6552734375],
+          "after": [14.431640625, 16.07373046875, 19.6552734375]
+        }
+      ],
+      "cleanupInventoryCounts": [[49], [49], [49]],
+      "scanProfiles": [
+        [
+          {
+            "projectId": "real-project-0",
+            "durationMs": 327.0359580000004,
+            "worktrees": 49,
+            "activeCreatesAtStart": 0
+          },
+          {
+            "projectId": "real-project-0",
+            "durationMs": 249.97149999999965,
+            "worktrees": 54,
+            "activeCreatesAtStart": 0
+          }
+        ],
+        [
+          {
+            "projectId": "real-project-0",
+            "durationMs": 230.79716700000063,
+            "worktrees": 49,
+            "activeCreatesAtStart": 0
+          },
+          {
+            "projectId": "real-project-0",
+            "durationMs": 235.0760419999997,
+            "worktrees": 54,
+            "activeCreatesAtStart": 0
+          }
+        ],
+        [
+          {
+            "projectId": "real-project-0",
+            "durationMs": 233.6575410000005,
+            "worktrees": 49,
+            "activeCreatesAtStart": 0
+          },
+          {
+            "projectId": "real-project-0",
+            "durationMs": 227.75945899999988,
+            "worktrees": 54,
+            "activeCreatesAtStart": 0
+          }
+        ]
+      ],
+      "externalCommandProfiles": [
+        [
+          {
+            "kind": "git-bare-probe",
+            "durationMs": 11.389374999999745,
+            "succeeded": true
+          },
+          {
+            "kind": "git-worktree-add",
+            "durationMs": 56.64833300000009,
+            "succeeded": true
+          },
+          {
+            "kind": "git-worktree-add",
+            "durationMs": 56.71804200000042,
+            "succeeded": true
+          },
+          {
+            "kind": "git-worktree-add",
+            "durationMs": 57.484375,
+            "succeeded": true
+          },
+          {
+            "kind": "git-worktree-add",
+            "durationMs": 61.151582999999846,
+            "succeeded": true
+          },
+          {
+            "kind": "git-create-verify",
+            "durationMs": 14.847207999999227,
+            "succeeded": true
+          },
+          {
+            "kind": "git-create-verify",
+            "durationMs": 13.872166000000107,
+            "succeeded": true
+          },
+          {
+            "kind": "git-create-verify",
+            "durationMs": 16.556499999999687,
+            "succeeded": true
+          },
+          {
+            "kind": "git-create-verify",
+            "durationMs": 19.166790999999648,
+            "succeeded": true
+          },
+          {
+            "kind": "git-bare-probe",
+            "durationMs": 10.750165999999808,
+            "succeeded": true
+          },
+          {
+            "kind": "git-worktree-add",
+            "durationMs": 35.262291999999434,
+            "succeeded": true
+          },
+          {
+            "kind": "git-create-verify",
+            "durationMs": 11.529249999999593,
+            "succeeded": true
+          },
+          {
+            "kind": "git-bare-probe",
+            "durationMs": 12.772874999999658,
+            "succeeded": true
+          },
+          {
+            "kind": "worktrunk-list",
+            "durationMs": 232.97320800000034,
+            "succeeded": true
+          }
+        ],
+        [
+          {
+            "kind": "git-bare-probe",
+            "durationMs": 10.848625000000538,
+            "succeeded": true
+          },
+          {
+            "kind": "git-worktree-add",
+            "durationMs": 59.682457999999315,
+            "succeeded": true
+          },
+          {
+            "kind": "git-worktree-add",
+            "durationMs": 59.07404100000076,
+            "succeeded": true
+          },
+          {
+            "kind": "git-worktree-add",
+            "durationMs": 62.122167000000445,
+            "succeeded": true
+          },
+          {
+            "kind": "git-worktree-add",
+            "durationMs": 63.99029100000007,
+            "succeeded": true
+          },
+          {
+            "kind": "git-create-verify",
+            "durationMs": 14.020207999999911,
+            "succeeded": true
+          },
+          {
+            "kind": "git-create-verify",
+            "durationMs": 14.409125000000131,
+            "succeeded": true
+          },
+          {
+            "kind": "git-create-verify",
+            "durationMs": 13.06787499999973,
+            "succeeded": true
+          },
+          {
+            "kind": "git-create-verify",
+            "durationMs": 16.63787500000035,
+            "succeeded": true
+          },
+          {
+            "kind": "git-bare-probe",
+            "durationMs": 10.53070899999966,
+            "succeeded": true
+          },
+          {
+            "kind": "git-worktree-add",
+            "durationMs": 35.57312499999989,
+            "succeeded": true
+          },
+          {
+            "kind": "git-create-verify",
+            "durationMs": 9.496290999999474,
+            "succeeded": true
+          },
+          {
+            "kind": "git-bare-probe",
+            "durationMs": 10.109292000000096,
+            "succeeded": true
+          },
+          {
+            "kind": "worktrunk-list",
+            "durationMs": 220.14124999999967,
+            "succeeded": true
+          }
+        ],
+        [
+          {
+            "kind": "git-bare-probe",
+            "durationMs": 10.425374999999804,
+            "succeeded": true
+          },
+          {
+            "kind": "git-worktree-add",
+            "durationMs": 64.71312500000022,
+            "succeeded": true
+          },
+          {
+            "kind": "git-worktree-add",
+            "durationMs": 68.50929199999973,
+            "succeeded": true
+          },
+          {
+            "kind": "git-worktree-add",
+            "durationMs": 69.05191599999944,
+            "succeeded": true
+          },
+          {
+            "kind": "git-worktree-add",
+            "durationMs": 74.8374160000003,
+            "succeeded": true
+          },
+          {
+            "kind": "git-create-verify",
+            "durationMs": 13.052459000000454,
+            "succeeded": true
+          },
+          {
+            "kind": "git-create-verify",
+            "durationMs": 15.53479200000038,
+            "succeeded": true
+          },
+          {
+            "kind": "git-create-verify",
+            "durationMs": 14.632916999999907,
+            "succeeded": true
+          },
+          {
+            "kind": "git-create-verify",
+            "durationMs": 14.646042000000307,
+            "succeeded": true
+          },
+          {
+            "kind": "git-bare-probe",
+            "durationMs": 12.06524999999965,
+            "succeeded": true
+          },
+          {
+            "kind": "git-worktree-add",
+            "durationMs": 37.760167000000365,
+            "succeeded": true
+          },
+          {
+            "kind": "git-create-verify",
+            "durationMs": 9.890124999999898,
+            "succeeded": true
+          },
+          {
+            "kind": "git-bare-probe",
+            "durationMs": 9.758125000000291,
+            "succeeded": true
+          },
+          {
+            "kind": "worktrunk-list",
+            "durationMs": 214.36804200000006,
+            "succeeded": true
+          }
+        ]
+      ],
+      "externalCommandSummary": {
+        "durationMs": {
+          "git-bare-probe": {
+            "samples": [
+              9.758125000000291, 10.109292000000096, 10.425374999999804, 10.53070899999966,
+              10.750165999999808, 10.848625000000538, 11.389374999999745, 12.06524999999965,
+              12.772874999999658
+            ],
+            "median": 10.750165999999808,
+            "p90": 12.772874999999658,
+            "p95": 12.772874999999658,
+            "max": 12.772874999999658
+          },
+          "git-create-verify": {
+            "samples": [
+              9.496290999999474, 9.890124999999898, 11.529249999999593, 13.052459000000454,
+              13.06787499999973, 13.872166000000107, 14.020207999999911, 14.409125000000131,
+              14.632916999999907, 14.646042000000307, 14.847207999999227, 15.53479200000038,
+              16.556499999999687, 16.63787500000035, 19.166790999999648
+            ],
+            "median": 14.409125000000131,
+            "p90": 16.63787500000035,
+            "p95": 19.166790999999648,
+            "max": 19.166790999999648
+          },
+          "git-worktree-add": {
+            "samples": [
+              35.262291999999434, 35.57312499999989, 37.760167000000365, 56.64833300000009,
+              56.71804200000042, 57.484375, 59.07404100000076, 59.682457999999315,
+              61.151582999999846, 62.122167000000445, 63.99029100000007, 64.71312500000022,
+              68.50929199999973, 69.05191599999944, 74.8374160000003
+            ],
+            "median": 59.682457999999315,
+            "p90": 69.05191599999944,
+            "p95": 74.8374160000003,
+            "max": 74.8374160000003
+          },
+          "worktrunk-list": {
+            "samples": [214.36804200000006, 220.14124999999967, 232.97320800000034],
+            "median": 220.14124999999967,
+            "p90": 232.97320800000034,
+            "p95": 232.97320800000034,
+            "max": 232.97320800000034
+          },
+          "worktrunk-switch": {
+            "samples": [],
+            "median": 0,
+            "p90": 0,
+            "p95": 0,
+            "max": 0
+          },
+          "other": {
+            "samples": [],
+            "median": 0,
+            "p90": 0,
+            "p95": 0,
+            "max": 0
+          }
+        },
+        "totalMs": {
+          "git-bare-probe": 98.64979199999925,
+          "git-create-verify": 211.3596239999988,
+          "git-worktree-add": 862.5786230000003,
+          "worktrunk-list": 667.4825000000001,
+          "worktrunk-switch": 0,
+          "other": 0
+        }
+      },
+      "schedulerProfiles": [[], [], []],
+      "verificationCounts": [
+        {
+          "rows": 54,
+          "sessions": 5
+        },
+        {
+          "rows": 54,
+          "sessions": 5
+        },
+        {
+          "rows": 54,
+          "sessions": 5
+        }
+      ],
+      "rawRuns": [
+        [
+          {
+            "branch": "real-burst-5-0-2",
+            "projectId": "real-project-0",
+            "timestampsMs": {
+              "intentAccepted": 0,
+              "commandQueued": 1.694208000000799,
+              "mutationStarted": 4.948250000000371,
+              "mutationCompleted": 90.60541600000033,
+              "usableWorktreeObserved": 91.9442910000007,
+              "launchRequested": 91.94483300000047,
+              "processSpawned": 94.70200000000023,
+              "harnessReady": 94.74675000000025,
+              "canonicalSessionVisible": 94.76150000000052,
+              "optimisticRemoved": 94.76191600000038,
+              "focusedAndAcceptingInput": 94.77354100000048
+            },
+            "totalMs": 94.77354100000048,
+            "stageMs": {
+              "queueAndPreflight": 3.254041999999572,
+              "repositoryMutation": 85.65716599999996,
+              "worktreeObservation": 1.338875000000371,
+              "launchPreparationAndSpawn": 2.757166999999754,
+              "harnessReadiness": 0.04475000000002183,
+              "canonicalProjection": 0.014750000000276486,
+              "optimisticAndFocus": 0.012040999999953783
+            },
+            "commandId": "cmd_real_3",
+            "traceId": "trc_fa2587e7-87cd-4fad-9f67-e630078a3b5f",
+            "sessionId": "ses_3503aa82-762e-426e-bf65-b32d5ac0cac0",
+            "worktreeId": "wt_real-project-0_real-burst-5-0-2_050e9e6817",
+            "worktreePath": "/var/folders/l4/540r7_b136l9jcf36_p3qyvc0000gn/T/s-cmG7Pz/station-observer-worktrunk-4q9Gy0/worktrees-0/real-burst-5-0-2",
+            "directWorktreeVisibleAtCommandCompletion": true,
+            "directProjectionVisibleAtHarnessReady": true
+          },
+          {
+            "branch": "real-burst-5-0-0",
+            "projectId": "real-project-0",
+            "timestampsMs": {
+              "intentAccepted": 0,
+              "commandQueued": 0.4742919999998776,
+              "mutationStarted": 4.827792000000045,
+              "mutationCompleted": 94.93516699999964,
+              "usableWorktreeObserved": 96.11783399999968,
+              "launchRequested": 96.11812499999996,
+              "processSpawned": 96.72800000000007,
+              "harnessReady": 96.7353750000002,
+              "canonicalSessionVisible": 96.73804199999995,
+              "optimisticRemoved": 96.73833399999967,
+              "focusedAndAcceptingInput": 96.73916699999972
+            },
+            "totalMs": 96.73916699999972,
+            "stageMs": {
+              "queueAndPreflight": 4.353500000000167,
+              "repositoryMutation": 90.10737499999959,
+              "worktreeObservation": 1.1826670000000377,
+              "launchPreparationAndSpawn": 0.6098750000001019,
+              "harnessReadiness": 0.007375000000138243,
+              "canonicalProjection": 0.002666999999746622,
+              "optimisticAndFocus": 0.0011249999997744453
+            },
+            "commandId": "cmd_real_1",
+            "traceId": "trc_785aed21-6f73-4697-8306-e8f57ea724bd",
+            "sessionId": "ses_20a4d5c3-97cd-45e1-99ea-2fdc36fa0920",
+            "worktreeId": "wt_real-project-0_real-burst-5-0-0_cadec913d7",
+            "worktreePath": "/var/folders/l4/540r7_b136l9jcf36_p3qyvc0000gn/T/s-cmG7Pz/station-observer-worktrunk-4q9Gy0/worktrees-0/real-burst-5-0-0",
+            "directWorktreeVisibleAtCommandCompletion": true,
+            "directProjectionVisibleAtHarnessReady": true
+          },
+          {
+            "branch": "real-burst-5-0-1",
+            "projectId": "real-project-0",
+            "timestampsMs": {
+              "intentAccepted": 0,
+              "commandQueued": 1.5950000000002547,
+              "mutationStarted": 4.944959000000381,
+              "mutationCompleted": 97.48662500000046,
+              "usableWorktreeObserved": 97.6792919999998,
+              "launchRequested": 97.67966700000034,
+              "processSpawned": 98.14274999999998,
+              "harnessReady": 98.14958399999978,
+              "canonicalSessionVisible": 98.1531670000004,
+              "optimisticRemoved": 98.15350000000035,
+              "focusedAndAcceptingInput": 98.15437500000007
+            },
+            "totalMs": 98.15437500000007,
+            "stageMs": {
+              "queueAndPreflight": 3.3499590000001263,
+              "repositoryMutation": 92.54166600000008,
+              "worktreeObservation": 0.19266699999934644,
+              "launchPreparationAndSpawn": 0.4630829999996422,
+              "harnessReadiness": 0.006833999999798834,
+              "canonicalProjection": 0.003583000000617176,
+              "optimisticAndFocus": 0.0012079999996785773
+            },
+            "commandId": "cmd_real_2",
+            "traceId": "trc_0e665102-1570-4f00-9ce8-95c23a381287",
+            "sessionId": "ses_e66b86f1-ed5a-4281-aa91-8557383ee302",
+            "worktreeId": "wt_real-project-0_real-burst-5-0-1_20bbdf1cda",
+            "worktreePath": "/var/folders/l4/540r7_b136l9jcf36_p3qyvc0000gn/T/s-cmG7Pz/station-observer-worktrunk-4q9Gy0/worktrees-0/real-burst-5-0-1",
+            "directWorktreeVisibleAtCommandCompletion": true,
+            "directProjectionVisibleAtHarnessReady": true
+          },
+          {
+            "branch": "real-burst-5-0-3",
+            "projectId": "real-project-0",
+            "timestampsMs": {
+              "intentAccepted": 0,
+              "commandQueued": 1.7873749999998836,
+              "mutationStarted": 4.955167000000074,
+              "mutationCompleted": 97.23804199999995,
+              "usableWorktreeObserved": 98.1944169999997,
+              "launchRequested": 98.19466699999975,
+              "processSpawned": 98.61962500000027,
+              "harnessReady": 98.62570899999992,
+              "canonicalSessionVisible": 98.62787500000013,
+              "optimisticRemoved": 98.62812500000018,
+              "focusedAndAcceptingInput": 98.62887500000033
+            },
+            "totalMs": 98.62887500000033,
+            "stageMs": {
+              "queueAndPreflight": 3.1677920000001905,
+              "repositoryMutation": 92.28287499999988,
+              "worktreeObservation": 0.9563749999997526,
+              "launchPreparationAndSpawn": 0.4249580000005153,
+              "harnessReadiness": 0.006083999999646039,
+              "canonicalProjection": 0.0021660000002157176,
+              "optimisticAndFocus": 0.0010000000002037268
+            },
+            "commandId": "cmd_real_4",
+            "traceId": "trc_fcd125fb-288f-42d9-904b-c5d86bf4c14c",
+            "sessionId": "ses_2992cedb-6437-4059-b5c2-79bb09998535",
+            "worktreeId": "wt_real-project-0_real-burst-5-0-3_837238b870",
+            "worktreePath": "/var/folders/l4/540r7_b136l9jcf36_p3qyvc0000gn/T/s-cmG7Pz/station-observer-worktrunk-4q9Gy0/worktrees-0/real-burst-5-0-3",
+            "directWorktreeVisibleAtCommandCompletion": true,
+            "directProjectionVisibleAtHarnessReady": true
+          },
+          {
+            "branch": "real-burst-5-0-4",
+            "projectId": "real-project-0",
+            "timestampsMs": {
+              "intentAccepted": 0,
+              "commandQueued": 1.875250000000051,
+              "mutationStarted": 90.62883299999976,
+              "mutationCompleted": 153.8584579999997,
+              "usableWorktreeObserved": 155.56774999999925,
+              "launchRequested": 155.56812499999978,
+              "processSpawned": 156.2978749999993,
+              "harnessReady": 156.30612500000007,
+              "canonicalSessionVisible": 156.31124999999975,
+              "optimisticRemoved": 156.31162499999937,
+              "focusedAndAcceptingInput": 156.31270799999947
+            },
+            "totalMs": 156.31270799999947,
+            "stageMs": {
+              "queueAndPreflight": 88.75358299999971,
+              "repositoryMutation": 63.22962499999994,
+              "worktreeObservation": 1.7092919999995502,
+              "launchPreparationAndSpawn": 0.7297499999995125,
+              "harnessReadiness": 0.008250000000771252,
+              "canonicalProjection": 0.005124999999679858,
+              "optimisticAndFocus": 0.001457999999729509
+            },
+            "commandId": "cmd_real_5",
+            "traceId": "trc_f32a4bbe-4943-4659-8c26-1437ee76ba11",
+            "sessionId": "ses_07035fd7-cf51-4378-a1fe-78378d99558f",
+            "worktreeId": "wt_real-project-0_real-burst-5-0-4_467d96d523",
+            "worktreePath": "/var/folders/l4/540r7_b136l9jcf36_p3qyvc0000gn/T/s-cmG7Pz/station-observer-worktrunk-4q9Gy0/worktrees-0/real-burst-5-0-4",
+            "directWorktreeVisibleAtCommandCompletion": true,
+            "directProjectionVisibleAtHarnessReady": true
+          }
+        ],
+        [
+          {
+            "branch": "real-burst-5-1-1",
+            "projectId": "real-project-0",
+            "timestampsMs": {
+              "intentAccepted": 0,
+              "commandQueued": 0.1716660000001866,
+              "mutationStarted": 1.5907500000002983,
+              "mutationCompleted": 87.88966600000003,
+              "usableWorktreeObserved": 88.57587500000045,
+              "launchRequested": 88.57633299999998,
+              "processSpawned": 89.31062500000007,
+              "harnessReady": 89.3197909999999,
+              "canonicalSessionVisible": 89.32275000000027,
+              "optimisticRemoved": 89.32308300000022,
+              "focusedAndAcceptingInput": 89.32425000000057
+            },
+            "totalMs": 89.32425000000057,
+            "stageMs": {
+              "queueAndPreflight": 1.4190840000001117,
+              "repositoryMutation": 86.29891599999974,
+              "worktreeObservation": 0.6862090000004173,
+              "launchPreparationAndSpawn": 0.7342920000000959,
+              "harnessReadiness": 0.009165999999822816,
+              "canonicalProjection": 0.002959000000373635,
+              "optimisticAndFocus": 0.0015000000003055902
+            },
+            "commandId": "cmd_real_2",
+            "traceId": "trc_2f5beb4d-c59b-4b2e-84c5-1f1c37317a72",
+            "sessionId": "ses_926d9fbc-7c73-4700-9151-89a2deb9003c",
+            "worktreeId": "wt_real-project-0_real-burst-5-1-1_a917599dbc",
+            "worktreePath": "/var/folders/l4/540r7_b136l9jcf36_p3qyvc0000gn/T/s-cmG7Pz/station-observer-worktrunk-4q9Gy0/worktrees-0/real-burst-5-1-1",
+            "directWorktreeVisibleAtCommandCompletion": true,
+            "directProjectionVisibleAtHarnessReady": true
+          },
+          {
+            "branch": "real-burst-5-1-0",
+            "projectId": "real-project-0",
+            "timestampsMs": {
+              "intentAccepted": 0,
+              "commandQueued": 0.07570799999939481,
+              "mutationStarted": 1.5669170000001031,
+              "mutationCompleted": 91.83141699999942,
+              "usableWorktreeObserved": 92.30737499999941,
+              "launchRequested": 92.30779199999961,
+              "processSpawned": 92.90804200000002,
+              "harnessReady": 92.91779200000019,
+              "canonicalSessionVisible": 92.9204579999996,
+              "optimisticRemoved": 92.9208749999998,
+              "focusedAndAcceptingInput": 92.92199999999957
+            },
+            "totalMs": 92.92199999999957,
+            "stageMs": {
+              "queueAndPreflight": 1.4912090000007083,
+              "repositoryMutation": 90.26449999999932,
+              "worktreeObservation": 0.47595799999999144,
+              "launchPreparationAndSpawn": 0.6002500000004147,
+              "harnessReadiness": 0.009750000000167347,
+              "canonicalProjection": 0.0026659999994080863,
+              "optimisticAndFocus": 0.0015419999999721767
+            },
+            "commandId": "cmd_real_1",
+            "traceId": "trc_d9bb3892-1f38-41f2-8392-1943c2143ab8",
+            "sessionId": "ses_94c249e0-8506-4ec2-a2ac-c27cd684a264",
+            "worktreeId": "wt_real-project-0_real-burst-5-1-0_f672205aa2",
+            "worktreePath": "/var/folders/l4/540r7_b136l9jcf36_p3qyvc0000gn/T/s-cmG7Pz/station-observer-worktrunk-4q9Gy0/worktrees-0/real-burst-5-1-0",
+            "directWorktreeVisibleAtCommandCompletion": true,
+            "directProjectionVisibleAtHarnessReady": true
+          },
+          {
+            "branch": "real-burst-5-1-3",
+            "projectId": "real-project-0",
+            "timestampsMs": {
+              "intentAccepted": 0,
+              "commandQueued": 0.26999999999952706,
+              "mutationStarted": 1.598707999999533,
+              "mutationCompleted": 92.11737499999981,
+              "usableWorktreeObserved": 92.99283300000025,
+              "launchRequested": 92.99312499999996,
+              "processSpawned": 93.43033300000025,
+              "harnessReady": 93.4369999999999,
+              "canonicalSessionVisible": 93.43887499999983,
+              "optimisticRemoved": 93.43916699999954,
+              "focusedAndAcceptingInput": 93.43995799999993
+            },
+            "totalMs": 93.43995799999993,
+            "stageMs": {
+              "queueAndPreflight": 1.328708000000006,
+              "repositoryMutation": 90.51866700000028,
+              "worktreeObservation": 0.8754580000004353,
+              "launchPreparationAndSpawn": 0.4372080000002825,
+              "harnessReadiness": 0.006666999999652035,
+              "canonicalProjection": 0.0018749999999272404,
+              "optimisticAndFocus": 0.0010830000001078588
+            },
+            "commandId": "cmd_real_4",
+            "traceId": "trc_1aea47d6-6b3e-4786-9c3c-7c6544686249",
+            "sessionId": "ses_07f29060-2641-4c1a-aa8f-6da1ec50787b",
+            "worktreeId": "wt_real-project-0_real-burst-5-1-3_d8049ca2a3",
+            "worktreePath": "/var/folders/l4/540r7_b136l9jcf36_p3qyvc0000gn/T/s-cmG7Pz/station-observer-worktrunk-4q9Gy0/worktrees-0/real-burst-5-1-3",
+            "directWorktreeVisibleAtCommandCompletion": true,
+            "directProjectionVisibleAtHarnessReady": true
+          },
+          {
+            "branch": "real-burst-5-1-2",
+            "projectId": "real-project-0",
+            "timestampsMs": {
+              "intentAccepted": 0,
+              "commandQueued": 0.22583299999951123,
+              "mutationStarted": 1.5930419999995138,
+              "mutationCompleted": 93.54133299999921,
+              "usableWorktreeObserved": 93.77108299999963,
+              "launchRequested": 93.77137499999935,
+              "processSpawned": 94.21941699999934,
+              "harnessReady": 94.22687499999938,
+              "canonicalSessionVisible": 94.2319579999994,
+              "optimisticRemoved": 94.23225000000002,
+              "focusedAndAcceptingInput": 94.23341699999946
+            },
+            "totalMs": 94.23341699999946,
+            "stageMs": {
+              "queueAndPreflight": 1.3672090000000026,
+              "repositoryMutation": 91.9482909999997,
+              "worktreeObservation": 0.229750000000422,
+              "launchPreparationAndSpawn": 0.44804199999998673,
+              "harnessReadiness": 0.007458000000042375,
+              "canonicalProjection": 0.005083000000013271,
+              "optimisticAndFocus": 0.0014590000000680448
+            },
+            "commandId": "cmd_real_3",
+            "traceId": "trc_17a25184-1e25-4d6e-8bce-1b00a77f7afc",
+            "sessionId": "ses_3a9fbb4c-bac6-43d5-a9f3-7593f00a699c",
+            "worktreeId": "wt_real-project-0_real-burst-5-1-2_78667fa6b5",
+            "worktreePath": "/var/folders/l4/540r7_b136l9jcf36_p3qyvc0000gn/T/s-cmG7Pz/station-observer-worktrunk-4q9Gy0/worktrees-0/real-burst-5-1-2",
+            "directWorktreeVisibleAtCommandCompletion": true,
+            "directProjectionVisibleAtHarnessReady": true
+          },
+          {
+            "branch": "real-burst-5-1-4",
+            "projectId": "real-project-0",
+            "timestampsMs": {
+              "intentAccepted": 0,
+              "commandQueued": 0.3204999999998108,
+              "mutationStarted": 87.92483300000004,
+              "mutationCompleted": 146.0654999999997,
+              "usableWorktreeObserved": 146.613875,
+              "launchRequested": 146.61433300000044,
+              "processSpawned": 147.40620800000033,
+              "harnessReady": 147.41924999999992,
+              "canonicalSessionVisible": 147.42233300000044,
+              "optimisticRemoved": 147.42270800000006,
+              "focusedAndAcceptingInput": 147.42612499999996
+            },
+            "totalMs": 147.42612499999996,
+            "stageMs": {
+              "queueAndPreflight": 87.60433300000022,
+              "repositoryMutation": 58.14066699999967,
+              "worktreeObservation": 0.5483750000003056,
+              "launchPreparationAndSpawn": 0.7918749999998909,
+              "harnessReadiness": 0.013041999999586551,
+              "canonicalProjection": 0.0030830000005153124,
+              "optimisticAndFocus": 0.0037919999995210674
+            },
+            "commandId": "cmd_real_5",
+            "traceId": "trc_aaf5ff05-6e40-4700-9c89-0c19761ac8a6",
+            "sessionId": "ses_e501ecc4-a203-4325-8ada-f2202524d2f5",
+            "worktreeId": "wt_real-project-0_real-burst-5-1-4_d15d6f1a60",
+            "worktreePath": "/var/folders/l4/540r7_b136l9jcf36_p3qyvc0000gn/T/s-cmG7Pz/station-observer-worktrunk-4q9Gy0/worktrees-0/real-burst-5-1-4",
+            "directWorktreeVisibleAtCommandCompletion": true,
+            "directProjectionVisibleAtHarnessReady": true
+          }
+        ],
+        [
+          {
+            "branch": "real-burst-5-2-0",
+            "projectId": "real-project-0",
+            "timestampsMs": {
+              "intentAccepted": 0,
+              "commandQueued": 0.07675000000017462,
+              "mutationStarted": 1.4228339999999662,
+              "mutationCompleted": 94.67033399999946,
+              "usableWorktreeObserved": 95.04374999999982,
+              "launchRequested": 95.04416700000002,
+              "processSpawned": 95.65333399999963,
+              "harnessReady": 95.66129199999978,
+              "canonicalSessionVisible": 95.66337500000009,
+              "optimisticRemoved": 95.6636669999998,
+              "focusedAndAcceptingInput": 95.6660839999995
+            },
+            "totalMs": 95.6660839999995,
+            "stageMs": {
+              "queueAndPreflight": 1.3460839999997916,
+              "repositoryMutation": 93.24749999999949,
+              "worktreeObservation": 0.37341600000036124,
+              "launchPreparationAndSpawn": 0.6091669999996157,
+              "harnessReadiness": 0.007958000000144239,
+              "canonicalProjection": 0.0020830000003115856,
+              "optimisticAndFocus": 0.0027089999994132086
+            },
+            "commandId": "cmd_real_1",
+            "traceId": "trc_c864a272-611b-4735-b477-09e8ae1e24ca",
+            "sessionId": "ses_8ed68645-e4b5-4a79-a3c1-33d97ca19650",
+            "worktreeId": "wt_real-project-0_real-burst-5-2-0_dcf4815fec",
+            "worktreePath": "/var/folders/l4/540r7_b136l9jcf36_p3qyvc0000gn/T/s-cmG7Pz/station-observer-worktrunk-4q9Gy0/worktrees-0/real-burst-5-2-0",
+            "directWorktreeVisibleAtCommandCompletion": true,
+            "directProjectionVisibleAtHarnessReady": true
+          },
+          {
+            "branch": "real-burst-5-2-2",
+            "projectId": "real-project-0",
+            "timestampsMs": {
+              "intentAccepted": 0,
+              "commandQueued": 0.2200830000001588,
+              "mutationStarted": 1.4696249999997235,
+              "mutationCompleted": 97.43629099999998,
+              "usableWorktreeObserved": 98.02216599999974,
+              "launchRequested": 98.0226249999996,
+              "processSpawned": 98.61241599999994,
+              "harnessReady": 98.61729099999957,
+              "canonicalSessionVisible": 98.6195829999997,
+              "optimisticRemoved": 98.61991599999965,
+              "focusedAndAcceptingInput": 98.62229099999968
+            },
+            "totalMs": 98.62229099999968,
+            "stageMs": {
+              "queueAndPreflight": 1.2495419999995647,
+              "repositoryMutation": 95.96666600000026,
+              "worktreeObservation": 0.5858749999997599,
+              "launchPreparationAndSpawn": 0.5897910000003321,
+              "harnessReadiness": 0.004874999999628926,
+              "canonicalProjection": 0.002292000000124972,
+              "optimisticAndFocus": 0.0027079999999841675
+            },
+            "commandId": "cmd_real_3",
+            "traceId": "trc_0d0b5b8c-f076-45cf-87e9-094a03918fd4",
+            "sessionId": "ses_d1ca9690-ba00-43f1-88fd-49f5131938af",
+            "worktreeId": "wt_real-project-0_real-burst-5-2-2_48ab55d674",
+            "worktreePath": "/var/folders/l4/540r7_b136l9jcf36_p3qyvc0000gn/T/s-cmG7Pz/station-observer-worktrunk-4q9Gy0/worktrees-0/real-burst-5-2-2",
+            "directWorktreeVisibleAtCommandCompletion": true,
+            "directProjectionVisibleAtHarnessReady": true
+          },
+          {
+            "branch": "real-burst-5-2-1",
+            "projectId": "real-project-0",
+            "timestampsMs": {
+              "intentAccepted": 0,
+              "commandQueued": 0.1720000000004802,
+              "mutationStarted": 1.4668330000004062,
+              "mutationCompleted": 99.04712500000005,
+              "usableWorktreeObserved": 101.28495800000019,
+              "launchRequested": 101.28575000000001,
+              "processSpawned": 101.96720800000003,
+              "harnessReady": 101.97154099999989,
+              "canonicalSessionVisible": 101.97416599999997,
+              "optimisticRemoved": 101.97445799999969,
+              "focusedAndAcceptingInput": 101.9755409999998
+            },
+            "totalMs": 101.9755409999998,
+            "stageMs": {
+              "queueAndPreflight": 1.294832999999926,
+              "repositoryMutation": 97.58029199999964,
+              "worktreeObservation": 2.237833000000137,
+              "launchPreparationAndSpawn": 0.6814580000000205,
+              "harnessReadiness": 0.004332999999860476,
+              "canonicalProjection": 0.0026250000000800355,
+              "optimisticAndFocus": 0.001374999999825377
+            },
+            "commandId": "cmd_real_2",
+            "traceId": "trc_775b6ba7-12c2-45a3-85a4-ee7604fbfafa",
+            "sessionId": "ses_e47545a4-42a2-4218-b8d1-cbb29ae9418e",
+            "worktreeId": "wt_real-project-0_real-burst-5-2-1_54e32ae765",
+            "worktreePath": "/var/folders/l4/540r7_b136l9jcf36_p3qyvc0000gn/T/s-cmG7Pz/station-observer-worktrunk-4q9Gy0/worktrees-0/real-burst-5-2-1",
+            "directWorktreeVisibleAtCommandCompletion": true,
+            "directProjectionVisibleAtHarnessReady": true
+          },
+          {
+            "branch": "real-burst-5-2-3",
+            "projectId": "real-project-0",
+            "timestampsMs": {
+              "intentAccepted": 0,
+              "commandQueued": 0.2574170000007143,
+              "mutationStarted": 1.4705000000003565,
+              "mutationCompleted": 106.15437500000007,
+              "usableWorktreeObserved": 107.18720800000028,
+              "launchRequested": 107.18766700000015,
+              "processSpawned": 107.72554200000013,
+              "harnessReady": 107.72979200000009,
+              "canonicalSessionVisible": 107.73191700000007,
+              "optimisticRemoved": 107.73220800000036,
+              "focusedAndAcceptingInput": 107.73312500000065
+            },
+            "totalMs": 107.73312500000065,
+            "stageMs": {
+              "queueAndPreflight": 1.2130829999996422,
+              "repositoryMutation": 104.68387499999972,
+              "worktreeObservation": 1.0328330000002097,
+              "launchPreparationAndSpawn": 0.5378749999999854,
+              "harnessReadiness": 0.004249999999956344,
+              "canonicalProjection": 0.002124999999978172,
+              "optimisticAndFocus": 0.001208000000588072
+            },
+            "commandId": "cmd_real_4",
+            "traceId": "trc_c081c323-b83e-4a01-9097-d2eed6ff4c8a",
+            "sessionId": "ses_07f1e032-2955-414b-8325-51ef5597191d",
+            "worktreeId": "wt_real-project-0_real-burst-5-2-3_2d32ccf2f4",
+            "worktreePath": "/var/folders/l4/540r7_b136l9jcf36_p3qyvc0000gn/T/s-cmG7Pz/station-observer-worktrunk-4q9Gy0/worktrees-0/real-burst-5-2-3",
+            "directWorktreeVisibleAtCommandCompletion": true,
+            "directProjectionVisibleAtHarnessReady": true
+          },
+          {
+            "branch": "real-burst-5-2-4",
+            "projectId": "real-project-0",
+            "timestampsMs": {
+              "intentAccepted": 0,
+              "commandQueued": 0.2929579999999987,
+              "mutationStarted": 94.67412500000046,
+              "mutationCompleted": 156.3583750000007,
+              "usableWorktreeObserved": 156.70216600000003,
+              "launchRequested": 156.70254100000056,
+              "processSpawned": 157.22629099999995,
+              "harnessReady": 157.2303750000001,
+              "canonicalSessionVisible": 157.2324580000004,
+              "optimisticRemoved": 157.23275000000012,
+              "focusedAndAcceptingInput": 157.23362499999985
+            },
+            "totalMs": 157.23362499999985,
+            "stageMs": {
+              "queueAndPreflight": 94.38116700000046,
+              "repositoryMutation": 61.68425000000025,
+              "worktreeObservation": 0.34379099999932805,
+              "launchPreparationAndSpawn": 0.5237499999993815,
+              "harnessReadiness": 0.00408400000014808,
+              "canonicalProjection": 0.0020830000003115856,
+              "optimisticAndFocus": 0.0011669999994410318
+            },
+            "commandId": "cmd_real_5",
+            "traceId": "trc_47a584db-7523-4a80-89df-3477533fb889",
+            "sessionId": "ses_08adf676-fd75-47da-9141-52084849f1f9",
+            "worktreeId": "wt_real-project-0_real-burst-5-2-4_065b6bdfce",
+            "worktreePath": "/var/folders/l4/540r7_b136l9jcf36_p3qyvc0000gn/T/s-cmG7Pz/station-observer-worktrunk-4q9Gy0/worktrees-0/real-burst-5-2-4",
+            "directWorktreeVisibleAtCommandCompletion": true,
+            "directProjectionVisibleAtHarnessReady": true
+          }
+        ]
+      ]
+    }
+  ]
+}

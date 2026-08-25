@@ -1,0 +1,4701 @@
+{
+  "schemaVersion": 1,
+  "benchmark": "station-quick-session-startup-read-paired-comparison",
+  "generatedAt": "2026-08-25T07:20:47.355Z",
+  "machine": {
+    "platform": "darwin",
+    "arch": "arm64",
+    "cpuModel": "Apple M4",
+    "logicalCpuCount": 10
+  },
+  "tools": {
+    "worktrunk": "wt v0.72.0",
+    "git": "git version 2.50.1 (Apple Git-155)"
+  },
+  "repositoryShape": {
+    "initialWorktrees": 49,
+    "lifecycleHooks": false,
+    "maxConcurrentCreates": 4,
+    "repetitions": 5
+  },
+  "keepThresholds": {
+    "coldMedianImprovementFraction": 0.5,
+    "coldP95ImprovementFraction": 0.5,
+    "structuralReadP95Ms": 75,
+    "maximumWarmOrBurstRegressionFraction": 0.2
+  },
+  "structuralReadMs": {
+    "samples": [
+      15.657250000000204, 15.958624999999302, 16.08733299999949, 16.108500000000276,
+      16.1717499999977, 16.197791999999026, 16.360999999997148, 16.613874999999098,
+      16.623625000000175, 16.86341700000048, 16.896042000000307, 17.08729200000016,
+      17.14445799999521, 17.22358399999939, 17.232458999999835, 17.277875000003405,
+      17.3706250000032, 17.683333000000857, 18.53216699999939, 18.569250000000466,
+      18.82220799999959, 46.69591700000092, 55.66300000000001, 72.09862499999872, 140.04483299999993
+    ],
+    "median": 17.14445799999521,
+    "p90": 55.66300000000001,
+    "p95": 72.09862499999872,
+    "max": 140.04483299999993
+  },
+  "allSafe": true,
+  "thresholdsPassed": false,
+  "scenarios": [
+    {
+      "name": "warm-single",
+      "burstSize": 1,
+      "includesStartup": false,
+      "pairs": [
+        {
+          "repetition": 0,
+          "order": ["enriched", "structural"],
+          "enriched": {
+            "strategy": "enriched",
+            "blockingMs": 113.88379200000008,
+            "startupReadMs": 809.5940419999997,
+            "mutationMs": 113.88379200000008,
+            "throughputPerSecond": 8.780880777134636,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 1,
+            "inventoryCount": 50,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [24.3330078125, 19.4443359375, 19.22607421875],
+              "after": [27.58935546875, 20.2001953125, 19.494140625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 8.789,
+              "systemCpuMs": 4.842,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 117
+            },
+            "startupCommand": {
+              "code": 0,
+              "ms": 807.569708,
+              "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+            },
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 19.524249999999938,
+                "addMs": 71.7152500000002,
+                "verifyMs": 22.362500000000182,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "structural": {
+            "strategy": "structural",
+            "blockingMs": 125.44358299999976,
+            "startupReadMs": 55.66300000000001,
+            "mutationMs": 125.44358299999976,
+            "throughputPerSecond": 7.971711075886614,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 1,
+            "inventoryCount": 50,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [27.58935546875, 20.2001953125, 19.494140625],
+              "after": [27.58935546875, 20.2001953125, 19.494140625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 3.798,
+              "systemCpuMs": 4.073,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 74
+            },
+            "startupCommand": {
+              "code": 0,
+              "ms": 55.414790999999695,
+              "stderr": ""
+            },
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 28.220250000000306,
+                "addMs": 78.80774999999994,
+                "verifyMs": 18.3207910000001,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 1,
+          "order": ["structural", "enriched"],
+          "enriched": {
+            "strategy": "enriched",
+            "blockingMs": 49.45512499999859,
+            "startupReadMs": 239.94174999999996,
+            "mutationMs": 49.45512499999859,
+            "throughputPerSecond": 20.220351278053155,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 1,
+            "inventoryCount": 50,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [25.6201171875, 19.91455078125, 19.3974609375],
+              "after": [25.6201171875, 19.91455078125, 19.3974609375]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.798,
+              "systemCpuMs": 2.638,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 39
+            },
+            "startupCommand": {
+              "code": 0,
+              "ms": 239.69787499999984,
+              "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+            },
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 9.0642080000016,
+                "addMs": 30.999708000001192,
+                "verifyMs": 9.347457999998369,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "structural": {
+            "strategy": "structural",
+            "blockingMs": 49.38487499999974,
+            "startupReadMs": 16.108500000000276,
+            "mutationMs": 49.38487499999974,
+            "throughputPerSecond": 20.24911473401533,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 1,
+            "inventoryCount": 50,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [25.6201171875, 19.91455078125, 19.3974609375],
+              "after": [25.6201171875, 19.91455078125, 19.3974609375]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.451,
+              "systemCpuMs": 2.297,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 39
+            },
+            "startupCommand": {
+              "code": 0,
+              "ms": 16.045333000000028,
+              "stderr": ""
+            },
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 9.822041999999783,
+                "addMs": 29.814041999999972,
+                "verifyMs": 9.70037500000035,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 2,
+          "order": ["enriched", "structural"],
+          "enriched": {
+            "strategy": "enriched",
+            "blockingMs": 53.63187499999913,
+            "startupReadMs": 260.88958400000047,
+            "mutationMs": 53.63187499999913,
+            "throughputPerSecond": 18.645628182867302,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 1,
+            "inventoryCount": 50,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [22.7314453125, 19.4873046875, 19.251953125],
+              "after": [22.7314453125, 19.4873046875, 19.251953125]
+            },
+            "resourceUsage": {
+              "userCpuMs": 2.291,
+              "systemCpuMs": 2.859,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 56
+            },
+            "startupCommand": {
+              "code": 0,
+              "ms": 260.67604199999914,
+              "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+            },
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 9.97412500000064,
+                "addMs": 33.09454200000255,
+                "verifyMs": 10.511833000000479,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "structural": {
+            "strategy": "structural",
+            "blockingMs": 50.57099999999991,
+            "startupReadMs": 17.22358399999939,
+            "mutationMs": 50.57099999999991,
+            "throughputPerSecond": 19.774178877222155,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 1,
+            "inventoryCount": 50,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [22.7314453125, 19.4873046875, 19.251953125],
+              "after": [22.7314453125, 19.4873046875, 19.251953125]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.608,
+              "systemCpuMs": 2.427,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 40
+            },
+            "startupCommand": {
+              "code": 0,
+              "ms": 17.15820900000108,
+              "stderr": ""
+            },
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 9.17054100000314,
+                "addMs": 32.07549999999901,
+                "verifyMs": 9.27612500000032,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 3,
+          "order": ["structural", "enriched"],
+          "enriched": {
+            "strategy": "enriched",
+            "blockingMs": 50.60708400000294,
+            "startupReadMs": 262.50662499999817,
+            "mutationMs": 50.60708400000294,
+            "throughputPerSecond": 19.76007943867981,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 1,
+            "inventoryCount": 50,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [19.9248046875, 18.9931640625, 19.07861328125],
+              "after": [19.9248046875, 18.9931640625, 19.07861328125]
+            },
+            "resourceUsage": {
+              "userCpuMs": 2.18,
+              "systemCpuMs": 2.703,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 41
+            },
+            "startupCommand": {
+              "code": 0,
+              "ms": 262.2734580000033,
+              "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+            },
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 8.955167000000074,
+                "addMs": 31.51129199999923,
+                "verifyMs": 10.089292000000569,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "structural": {
+            "strategy": "structural",
+            "blockingMs": 52.38087499999892,
+            "startupReadMs": 16.197791999999026,
+            "mutationMs": 52.38087499999892,
+            "throughputPerSecond": 19.090937293430486,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 1,
+            "inventoryCount": 50,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [19.9248046875, 18.9931640625, 19.07861328125],
+              "after": [19.9248046875, 18.9931640625, 19.07861328125]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.567,
+              "systemCpuMs": 2.437,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 43
+            },
+            "startupCommand": {
+              "code": 0,
+              "ms": 16.14458300000115,
+              "stderr": ""
+            },
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 10.321041000002879,
+                "addMs": 32.62383300000147,
+                "verifyMs": 9.382666999998037,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 4,
+          "order": ["enriched", "structural"],
+          "enriched": {
+            "strategy": "enriched",
+            "blockingMs": 55.383458000003884,
+            "startupReadMs": 400.25729200000205,
+            "mutationMs": 55.383458000003884,
+            "throughputPerSecond": 18.055932874395996,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 1,
+            "inventoryCount": 50,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [21.3720703125, 19.30859375, 19.189453125],
+              "after": [20.30078125, 19.12060546875, 19.12353515625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 2.014,
+              "systemCpuMs": 3.692,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 68
+            },
+            "startupCommand": {
+              "code": 0,
+              "ms": 400.09729199999856,
+              "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+            },
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 10.638167000004614,
+                "addMs": 33.818584000000556,
+                "verifyMs": 10.87550000000192,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "structural": {
+            "strategy": "structural",
+            "blockingMs": 54.15266700000211,
+            "startupReadMs": 17.14445799999521,
+            "mutationMs": 54.15266700000211,
+            "throughputPerSecond": 18.466311179095964,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 1,
+            "inventoryCount": 50,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [20.30078125, 19.12060546875, 19.12353515625],
+              "after": [20.30078125, 19.12060546875, 19.12353515625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.449,
+              "systemCpuMs": 2.511,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 34
+            },
+            "startupCommand": {
+              "code": 0,
+              "ms": 17.090750000003027,
+              "stderr": ""
+            },
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 10.557375000003958,
+                "addMs": 32.48099999999977,
+                "verifyMs": 11.06291699999565,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        }
+      ],
+      "enriched": {
+        "blockingMs": {
+          "samples": [
+            49.45512499999859, 50.60708400000294, 53.63187499999913, 55.383458000003884,
+            113.88379200000008
+          ],
+          "median": 53.63187499999913,
+          "p90": 113.88379200000008,
+          "p95": 113.88379200000008,
+          "max": 113.88379200000008
+        },
+        "startupReadMs": {
+          "samples": [
+            239.94174999999996, 260.88958400000047, 262.50662499999817, 400.25729200000205,
+            809.5940419999997
+          ],
+          "median": 262.50662499999817,
+          "p90": 809.5940419999997,
+          "p95": 809.5940419999997,
+          "max": 809.5940419999997
+        },
+        "mutationMs": {
+          "samples": [
+            49.45512499999859, 50.60708400000294, 53.63187499999913, 55.383458000003884,
+            113.88379200000008
+          ],
+          "median": 53.63187499999913,
+          "p90": 113.88379200000008,
+          "p95": 113.88379200000008,
+          "max": 113.88379200000008
+        },
+        "throughputPerSecond": {
+          "samples": [
+            8.780880777134636, 18.055932874395996, 18.645628182867302, 19.76007943867981,
+            20.220351278053155
+          ],
+          "median": 18.645628182867302,
+          "p90": 20.220351278053155,
+          "p95": 20.220351278053155,
+          "max": 20.220351278053155
+        },
+        "allSafe": true
+      },
+      "structural": {
+        "blockingMs": {
+          "samples": [
+            49.38487499999974, 50.57099999999991, 52.38087499999892, 54.15266700000211,
+            125.44358299999976
+          ],
+          "median": 52.38087499999892,
+          "p90": 125.44358299999976,
+          "p95": 125.44358299999976,
+          "max": 125.44358299999976
+        },
+        "startupReadMs": {
+          "samples": [
+            16.108500000000276, 16.197791999999026, 17.14445799999521, 17.22358399999939,
+            55.66300000000001
+          ],
+          "median": 17.14445799999521,
+          "p90": 55.66300000000001,
+          "p95": 55.66300000000001,
+          "max": 55.66300000000001
+        },
+        "mutationMs": {
+          "samples": [
+            49.38487499999974, 50.57099999999991, 52.38087499999892, 54.15266700000211,
+            125.44358299999976
+          ],
+          "median": 52.38087499999892,
+          "p90": 125.44358299999976,
+          "p95": 125.44358299999976,
+          "max": 125.44358299999976
+        },
+        "throughputPerSecond": {
+          "samples": [
+            7.971711075886614, 18.466311179095964, 19.090937293430486, 19.774178877222155,
+            20.24911473401533
+          ],
+          "median": 19.090937293430486,
+          "p90": 20.24911473401533,
+          "p95": 20.24911473401533,
+          "max": 20.24911473401533
+        },
+        "allSafe": true
+      },
+      "medianImprovementFraction": 0.023325680856770795,
+      "p95ImprovementFraction": -0.10150514657959114,
+      "p95RegressionFraction": 0.10150514657959114,
+      "allSafe": true
+    },
+    {
+      "name": "cold-single",
+      "burstSize": 1,
+      "includesStartup": true,
+      "pairs": [
+        {
+          "repetition": 0,
+          "order": ["structural", "enriched"],
+          "enriched": {
+            "strategy": "enriched",
+            "blockingMs": 265.70112500000005,
+            "startupReadMs": 211.7221669999999,
+            "mutationMs": 53.97895800000015,
+            "throughputPerSecond": 18.525737380851208,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 1,
+            "inventoryCount": 50,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [27.58935546875, 20.2001953125, 19.494140625],
+              "after": [27.58935546875, 20.2001953125, 19.494140625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 2.508,
+              "systemCpuMs": 2.946,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 75
+            },
+            "startupCommand": {
+              "code": 0,
+              "ms": 211.4149169999996,
+              "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+            },
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 10.574417000000267,
+                "addMs": 32.299582999999984,
+                "verifyMs": 11.027000000000044,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "structural": {
+            "strategy": "structural",
+            "blockingMs": 70.76570800000036,
+            "startupReadMs": 17.08729200000016,
+            "mutationMs": 53.6784160000002,
+            "throughputPerSecond": 18.629461793358363,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 1,
+            "inventoryCount": 50,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [27.58935546875, 20.2001953125, 19.494140625],
+              "after": [27.58935546875, 20.2001953125, 19.494140625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 2.772,
+              "systemCpuMs": 2.939,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 63
+            },
+            "startupCommand": {
+              "code": 0,
+              "ms": 16.917875000000095,
+              "stderr": ""
+            },
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 9.869583000000148,
+                "addMs": 33.51533300000028,
+                "verifyMs": 10.189041999999972,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 1,
+          "order": ["enriched", "structural"],
+          "enriched": {
+            "strategy": "enriched",
+            "blockingMs": 254.6375420000004,
+            "startupReadMs": 203.15137499999946,
+            "mutationMs": 51.48616700000093,
+            "throughputPerSecond": 19.42269270112848,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 1,
+            "inventoryCount": 50,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [25.6201171875, 19.91455078125, 19.3974609375],
+              "after": [25.6201171875, 19.91455078125, 19.3974609375]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.905,
+              "systemCpuMs": 2.772,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 36
+            },
+            "startupCommand": {
+              "code": 0,
+              "ms": 202.96879199999967,
+              "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+            },
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 9.943041999998968,
+                "addMs": 31.381666999999652,
+                "verifyMs": 10.11737499999981,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "structural": {
+            "strategy": "structural",
+            "blockingMs": 68.11033299999872,
+            "startupReadMs": 16.613874999999098,
+            "mutationMs": 51.49645799999962,
+            "throughputPerSecond": 19.41881128989507,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 1,
+            "inventoryCount": 50,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [25.6201171875, 19.91455078125, 19.3974609375],
+              "after": [25.6201171875, 19.91455078125, 19.3974609375]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.525,
+              "systemCpuMs": 2.512,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 46
+            },
+            "startupCommand": {
+              "code": 0,
+              "ms": 16.554667000000336,
+              "stderr": ""
+            },
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 9.393040999999357,
+                "addMs": 31.579249999998865,
+                "verifyMs": 10.48187499999949,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 2,
+          "order": ["structural", "enriched"],
+          "enriched": {
+            "strategy": "enriched",
+            "blockingMs": 258.96316699999807,
+            "startupReadMs": 205.2117079999989,
+            "mutationMs": 53.75145899999916,
+            "throughputPerSecond": 18.604146168386155,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 1,
+            "inventoryCount": 50,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [22.7314453125, 19.4873046875, 19.251953125],
+              "after": [22.7314453125, 19.4873046875, 19.251953125]
+            },
+            "resourceUsage": {
+              "userCpuMs": 2.522,
+              "systemCpuMs": 2.89,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 58
+            },
+            "startupCommand": {
+              "code": 0,
+              "ms": 205.01274999999805,
+              "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+            },
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 9.685082999996666,
+                "addMs": 33.22904099999869,
+                "verifyMs": 10.787208000001556,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "structural": {
+            "strategy": "structural",
+            "blockingMs": 66.8603329999969,
+            "startupReadMs": 16.08733299999949,
+            "mutationMs": 50.77299999999741,
+            "throughputPerSecond": 19.695507454750576,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 1,
+            "inventoryCount": 50,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [22.7314453125, 19.4873046875, 19.251953125],
+              "after": [22.7314453125, 19.4873046875, 19.251953125]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.545,
+              "systemCpuMs": 2.261,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 40
+            },
+            "startupCommand": {
+              "code": 0,
+              "ms": 16.019374999999854,
+              "stderr": ""
+            },
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 9.364666000001307,
+                "addMs": 32.04475000000093,
+                "verifyMs": 9.31183400000009,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 3,
+          "order": ["enriched", "structural"],
+          "enriched": {
+            "strategy": "enriched",
+            "blockingMs": 262.96229200000016,
+            "startupReadMs": 211.24987500000134,
+            "mutationMs": 51.71241699999882,
+            "throughputPerSecond": 19.337715349874728,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 1,
+            "inventoryCount": 50,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [19.9248046875, 18.9931640625, 19.07861328125],
+              "after": [19.9248046875, 18.9931640625, 19.07861328125]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.792,
+              "systemCpuMs": 2.74,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 48
+            },
+            "startupCommand": {
+              "code": 0,
+              "ms": 211.07862500000192,
+              "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+            },
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 9.668125000000146,
+                "addMs": 32.39570900000035,
+                "verifyMs": 9.599249999999302,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "structural": {
+            "strategy": "structural",
+            "blockingMs": 67.63383299999987,
+            "startupReadMs": 16.623625000000175,
+            "mutationMs": 51.01020799999969,
+            "throughputPerSecond": 19.60391927827477,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 1,
+            "inventoryCount": 50,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [19.9248046875, 18.9931640625, 19.07861328125],
+              "after": [19.9248046875, 18.9931640625, 19.07861328125]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.594,
+              "systemCpuMs": 2.524,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 42
+            },
+            "startupCommand": {
+              "code": 0,
+              "ms": 16.56787500000064,
+              "stderr": ""
+            },
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 9.135374999998021,
+                "addMs": 32.030915999999706,
+                "verifyMs": 9.792709000001196,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 4,
+          "order": ["structural", "enriched"],
+          "enriched": {
+            "strategy": "enriched",
+            "blockingMs": 286.83587499999703,
+            "startupReadMs": 226.08287500000006,
+            "mutationMs": 60.75299999999697,
+            "throughputPerSecond": 16.460092505720702,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 1,
+            "inventoryCount": 50,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [20.30078125, 19.12060546875, 19.12353515625],
+              "after": [20.30078125, 19.12060546875, 19.12353515625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 2.39,
+              "systemCpuMs": 3.309,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 59
+            },
+            "startupCommand": {
+              "code": 0,
+              "ms": 225.74183300000004,
+              "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+            },
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 11.88270900000498,
+                "addMs": 39.726082999994105,
+                "verifyMs": 9.079833000003418,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "structural": {
+            "strategy": "structural",
+            "blockingMs": 81.29775000000518,
+            "startupReadMs": 17.3706250000032,
+            "mutationMs": 63.92712500000198,
+            "throughputPerSecond": 15.642812030104105,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 1,
+            "inventoryCount": 50,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [20.30078125, 19.12060546875, 19.12353515625],
+              "after": [20.30078125, 19.12060546875, 19.12353515625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.534,
+              "systemCpuMs": 2.543,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 32
+            },
+            "startupCommand": {
+              "code": 0,
+              "ms": 17.31787500000064,
+              "stderr": ""
+            },
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 10.475417000001471,
+                "addMs": 42.29412500000035,
+                "verifyMs": 11.10791700000118,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        }
+      ],
+      "enriched": {
+        "blockingMs": {
+          "samples": [
+            254.6375420000004, 258.96316699999807, 262.96229200000016, 265.70112500000005,
+            286.83587499999703
+          ],
+          "median": 262.96229200000016,
+          "p90": 286.83587499999703,
+          "p95": 286.83587499999703,
+          "max": 286.83587499999703
+        },
+        "startupReadMs": {
+          "samples": [
+            203.15137499999946, 205.2117079999989, 211.24987500000134, 211.7221669999999,
+            226.08287500000006
+          ],
+          "median": 211.24987500000134,
+          "p90": 226.08287500000006,
+          "p95": 226.08287500000006,
+          "max": 226.08287500000006
+        },
+        "mutationMs": {
+          "samples": [
+            51.48616700000093, 51.71241699999882, 53.75145899999916, 53.97895800000015,
+            60.75299999999697
+          ],
+          "median": 53.75145899999916,
+          "p90": 60.75299999999697,
+          "p95": 60.75299999999697,
+          "max": 60.75299999999697
+        },
+        "throughputPerSecond": {
+          "samples": [
+            16.460092505720702, 18.525737380851208, 18.604146168386155, 19.337715349874728,
+            19.42269270112848
+          ],
+          "median": 18.604146168386155,
+          "p90": 19.42269270112848,
+          "p95": 19.42269270112848,
+          "max": 19.42269270112848
+        },
+        "allSafe": true
+      },
+      "structural": {
+        "blockingMs": {
+          "samples": [
+            66.8603329999969, 67.63383299999987, 68.11033299999872, 70.76570800000036,
+            81.29775000000518
+          ],
+          "median": 68.11033299999872,
+          "p90": 81.29775000000518,
+          "p95": 81.29775000000518,
+          "max": 81.29775000000518
+        },
+        "startupReadMs": {
+          "samples": [
+            16.08733299999949, 16.613874999999098, 16.623625000000175, 17.08729200000016,
+            17.3706250000032
+          ],
+          "median": 16.623625000000175,
+          "p90": 17.3706250000032,
+          "p95": 17.3706250000032,
+          "max": 17.3706250000032
+        },
+        "mutationMs": {
+          "samples": [
+            50.77299999999741, 51.01020799999969, 51.49645799999962, 53.6784160000002,
+            63.92712500000198
+          ],
+          "median": 51.49645799999962,
+          "p90": 63.92712500000198,
+          "p95": 63.92712500000198,
+          "max": 63.92712500000198
+        },
+        "throughputPerSecond": {
+          "samples": [
+            15.642812030104105, 18.629461793358363, 19.41881128989507, 19.60391927827477,
+            19.695507454750576
+          ],
+          "median": 19.41881128989507,
+          "p90": 19.695507454750576,
+          "p95": 19.695507454750576,
+          "max": 19.695507454750576
+        },
+        "allSafe": true
+      },
+      "medianImprovementFraction": 0.7409882136257062,
+      "p95ImprovementFraction": 0.7165704952352769,
+      "p95RegressionFraction": -0.7165704952352769,
+      "allSafe": true
+    },
+    {
+      "name": "burst-3",
+      "burstSize": 3,
+      "includesStartup": false,
+      "pairs": [
+        {
+          "repetition": 0,
+          "order": ["enriched", "structural"],
+          "enriched": {
+            "strategy": "enriched",
+            "blockingMs": 64.24137500000052,
+            "startupReadMs": 195.18762499999957,
+            "mutationMs": 64.24137500000052,
+            "throughputPerSecond": 46.69887591914052,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 3,
+            "inventoryCount": 52,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [27.58935546875, 20.2001953125, 19.494140625],
+              "after": [27.58935546875, 20.2001953125, 19.494140625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 3.937,
+              "systemCpuMs": 5.689,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 70
+            },
+            "startupCommand": {
+              "code": 0,
+              "ms": 194.98491700000022,
+              "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+            },
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 12.312458999999762,
+                "addMs": 39.50054100000034,
+                "verifyMs": 12.38000000000011,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.551250000000437,
+                "addMs": 41.613124999999854,
+                "verifyMs": 10.69866600000023,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.63116699999955,
+                "addMs": 42.27337499999976,
+                "verifyMs": 9.476458999999522,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "structural": {
+            "strategy": "structural",
+            "blockingMs": 66.44979199999943,
+            "startupReadMs": 16.86341700000048,
+            "mutationMs": 66.44979199999943,
+            "throughputPerSecond": 45.146868179813495,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 3,
+            "inventoryCount": 52,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [27.58935546875, 20.2001953125, 19.494140625],
+              "after": [27.58935546875, 20.2001953125, 19.494140625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 3.156,
+              "systemCpuMs": 5.03,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 72
+            },
+            "startupCommand": {
+              "code": 0,
+              "ms": 16.806375000000116,
+              "stderr": ""
+            },
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 11.767958000000363,
+                "addMs": 44.881084000000556,
+                "verifyMs": 9.721958000000086,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.46758299999965,
+                "addMs": 41.38612499999999,
+                "verifyMs": 9.51379199999974,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.940040999999837,
+                "addMs": 39.1098750000001,
+                "verifyMs": 10.777000000000044,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 1,
+          "order": ["structural", "enriched"],
+          "enriched": {
+            "strategy": "enriched",
+            "blockingMs": 85.98208299999897,
+            "startupReadMs": 247.9561250000006,
+            "mutationMs": 85.98208299999897,
+            "throughputPerSecond": 34.8909900217239,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 3,
+            "inventoryCount": 52,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [25.6201171875, 19.91455078125, 19.3974609375],
+              "after": [25.6201171875, 19.91455078125, 19.3974609375]
+            },
+            "resourceUsage": {
+              "userCpuMs": 4.714,
+              "systemCpuMs": 8.991,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 136
+            },
+            "startupCommand": {
+              "code": 0,
+              "ms": 247.75666700000147,
+              "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+            },
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 13.507042000001093,
+                "addMs": 54.99137499999961,
+                "verifyMs": 14.599166999998488,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 15.060583000000406,
+                "addMs": 57.41058299999895,
+                "verifyMs": 11.555209000000104,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.158666000001176,
+                "addMs": 57.35008299999936,
+                "verifyMs": 13.710125000001426,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "structural": {
+            "strategy": "structural",
+            "blockingMs": 82.51200000000063,
+            "startupReadMs": 18.82220799999959,
+            "mutationMs": 82.51200000000063,
+            "throughputPerSecond": 36.358347876672205,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 3,
+            "inventoryCount": 52,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [25.6201171875, 19.91455078125, 19.3974609375],
+              "after": [25.6201171875, 19.91455078125, 19.3974609375]
+            },
+            "resourceUsage": {
+              "userCpuMs": 3.849,
+              "systemCpuMs": 8.058,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 96
+            },
+            "startupCommand": {
+              "code": 0,
+              "ms": 18.76629200000025,
+              "stderr": ""
+            },
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 13.597999999999956,
+                "addMs": 55.808790999999474,
+                "verifyMs": 13.073500000000422,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.086041999998997,
+                "addMs": 57.56929200000013,
+                "verifyMs": 12.000083000000814,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.580583999999362,
+                "addMs": 52.886875000000146,
+                "verifyMs": 13.209666999999172,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 2,
+          "order": ["enriched", "structural"],
+          "enriched": {
+            "strategy": "enriched",
+            "blockingMs": 86.35133300000234,
+            "startupReadMs": 202.39679199999955,
+            "mutationMs": 86.35133300000234,
+            "throughputPerSecond": 34.74179142086803,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 3,
+            "inventoryCount": 52,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [22.7314453125, 19.4873046875, 19.251953125],
+              "after": [22.7314453125, 19.4873046875, 19.251953125]
+            },
+            "resourceUsage": {
+              "userCpuMs": 4.212,
+              "systemCpuMs": 7.007,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 85
+            },
+            "startupCommand": {
+              "code": 0,
+              "ms": 202.21299999999974,
+              "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+            },
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 11.444875000001048,
+                "addMs": 59.11508299999696,
+                "verifyMs": 15.73504099999991,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.19920799999818,
+                "addMs": 54.07554199999868,
+                "verifyMs": 16.245875000000524,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.644791999999143,
+                "addMs": 53.61704199999804,
+                "verifyMs": 17.633374999997613,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "structural": {
+            "strategy": "structural",
+            "blockingMs": 72.53199999999924,
+            "startupReadMs": 16.896042000000307,
+            "mutationMs": 72.53199999999924,
+            "throughputPerSecond": 41.36105443114806,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 3,
+            "inventoryCount": 52,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [22.7314453125, 19.4873046875, 19.251953125],
+              "after": [22.7314453125, 19.4873046875, 19.251953125]
+            },
+            "resourceUsage": {
+              "userCpuMs": 2.661,
+              "systemCpuMs": 5.409,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 73
+            },
+            "startupCommand": {
+              "code": 0,
+              "ms": 16.83650000000125,
+              "stderr": ""
+            },
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 11.961083999998664,
+                "addMs": 39.9979170000006,
+                "verifyMs": 10.724958999999217,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.363374999997177,
+                "addMs": 39.74045800000022,
+                "verifyMs": 10.850790999997116,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.477499999997235,
+                "addMs": 44.28979100000288,
+                "verifyMs": 16.65008399999715,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 3,
+          "order": ["structural", "enriched"],
+          "enriched": {
+            "strategy": "enriched",
+            "blockingMs": 63.702165999999124,
+            "startupReadMs": 192.99679200000173,
+            "mutationMs": 63.702165999999124,
+            "throughputPerSecond": 47.09416003217286,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 3,
+            "inventoryCount": 52,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [19.9248046875, 18.9931640625, 19.07861328125],
+              "after": [19.9248046875, 18.9931640625, 19.07861328125]
+            },
+            "resourceUsage": {
+              "userCpuMs": 2.538,
+              "systemCpuMs": 5.03,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 59
+            },
+            "startupCommand": {
+              "code": 0,
+              "ms": 192.82900000000154,
+              "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+            },
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 10.923999999999069,
+                "addMs": 40.36704199999804,
+                "verifyMs": 9.408542000001034,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.519541000001482,
+                "addMs": 37.94554100000096,
+                "verifyMs": 10.458875000000262,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.603374999998778,
+                "addMs": 43.006625000001804,
+                "verifyMs": 9.009125000000495,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "structural": {
+            "strategy": "structural",
+            "blockingMs": 61.32533300000068,
+            "startupReadMs": 15.958624999999302,
+            "mutationMs": 61.32533300000068,
+            "throughputPerSecond": 48.9194245386318,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 3,
+            "inventoryCount": 52,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [19.9248046875, 18.9931640625, 19.07861328125],
+              "after": [19.9248046875, 18.9931640625, 19.07861328125]
+            },
+            "resourceUsage": {
+              "userCpuMs": 2.722,
+              "systemCpuMs": 6.266,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 81
+            },
+            "startupCommand": {
+              "code": 0,
+              "ms": 15.90454200000022,
+              "stderr": ""
+            },
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 11.943834000001516,
+                "addMs": 39.16862499999843,
+                "verifyMs": 9.761584000003495,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.302459000002273,
+                "addMs": 39.259249999999156,
+                "verifyMs": 10.722083000000566,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.7197079999969,
+                "addMs": 38.272666000000754,
+                "verifyMs": 9.254915999998047,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 4,
+          "order": ["enriched", "structural"],
+          "enriched": {
+            "strategy": "enriched",
+            "blockingMs": 68.16454199999862,
+            "startupReadMs": 209.80108300000575,
+            "mutationMs": 68.16454199999862,
+            "throughputPerSecond": 44.01115172166873,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 3,
+            "inventoryCount": 52,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [20.30078125, 19.12060546875, 19.12353515625],
+              "after": [20.30078125, 19.12060546875, 19.12353515625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 3.431,
+              "systemCpuMs": 5.924,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 112
+            },
+            "startupCommand": {
+              "code": 0,
+              "ms": 209.60862500000076,
+              "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+            },
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 12.939958000002662,
+                "addMs": 43.33258400000341,
+                "verifyMs": 11.839916999997513,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.715957999993407,
+                "addMs": 41.017957999996725,
+                "verifyMs": 10.301790999998047,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.953667000001587,
+                "addMs": 39.32379200000287,
+                "verifyMs": 11.105582999996841,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "structural": {
+            "strategy": "structural",
+            "blockingMs": 68.47504199999821,
+            "startupReadMs": 18.569250000000466,
+            "mutationMs": 68.47504199999821,
+            "throughputPerSecond": 43.81158320428746,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 3,
+            "inventoryCount": 52,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [20.30078125, 19.12060546875, 19.12353515625],
+              "after": [20.30078125, 19.12060546875, 19.12353515625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 2.72,
+              "systemCpuMs": 5.87,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 75
+            },
+            "startupCommand": {
+              "code": 0,
+              "ms": 18.51895799999329,
+              "stderr": ""
+            },
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 11.709084000001894,
+                "addMs": 45.47699999999895,
+                "verifyMs": 11.241792000000714,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.673625000003085,
+                "addMs": 38.554416999999376,
+                "verifyMs": 10.93933300000208,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.313041000001249,
+                "addMs": 40.77470799999719,
+                "verifyMs": 10.562874999995984,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        }
+      ],
+      "enriched": {
+        "blockingMs": {
+          "samples": [
+            63.702165999999124, 64.24137500000052, 68.16454199999862, 85.98208299999897,
+            86.35133300000234
+          ],
+          "median": 68.16454199999862,
+          "p90": 86.35133300000234,
+          "p95": 86.35133300000234,
+          "max": 86.35133300000234
+        },
+        "startupReadMs": {
+          "samples": [
+            192.99679200000173, 195.18762499999957, 202.39679199999955, 209.80108300000575,
+            247.9561250000006
+          ],
+          "median": 202.39679199999955,
+          "p90": 247.9561250000006,
+          "p95": 247.9561250000006,
+          "max": 247.9561250000006
+        },
+        "mutationMs": {
+          "samples": [
+            63.702165999999124, 64.24137500000052, 68.16454199999862, 85.98208299999897,
+            86.35133300000234
+          ],
+          "median": 68.16454199999862,
+          "p90": 86.35133300000234,
+          "p95": 86.35133300000234,
+          "max": 86.35133300000234
+        },
+        "throughputPerSecond": {
+          "samples": [
+            34.74179142086803, 34.8909900217239, 44.01115172166873, 46.69887591914052,
+            47.09416003217286
+          ],
+          "median": 44.01115172166873,
+          "p90": 47.09416003217286,
+          "p95": 47.09416003217286,
+          "max": 47.09416003217286
+        },
+        "allSafe": true
+      },
+      "structural": {
+        "blockingMs": {
+          "samples": [
+            61.32533300000068, 66.44979199999943, 68.47504199999821, 72.53199999999924,
+            82.51200000000063
+          ],
+          "median": 68.47504199999821,
+          "p90": 82.51200000000063,
+          "p95": 82.51200000000063,
+          "max": 82.51200000000063
+        },
+        "startupReadMs": {
+          "samples": [
+            15.958624999999302, 16.86341700000048, 16.896042000000307, 18.569250000000466,
+            18.82220799999959
+          ],
+          "median": 16.896042000000307,
+          "p90": 18.82220799999959,
+          "p95": 18.82220799999959,
+          "max": 18.82220799999959
+        },
+        "mutationMs": {
+          "samples": [
+            61.32533300000068, 66.44979199999943, 68.47504199999821, 72.53199999999924,
+            82.51200000000063
+          ],
+          "median": 68.47504199999821,
+          "p90": 82.51200000000063,
+          "p95": 82.51200000000063,
+          "max": 82.51200000000063
+        },
+        "throughputPerSecond": {
+          "samples": [
+            36.358347876672205, 41.36105443114806, 43.81158320428746, 45.146868179813495,
+            48.9194245386318
+          ],
+          "median": 43.81158320428746,
+          "p90": 48.9194245386318,
+          "p95": 48.9194245386318,
+          "max": 48.9194245386318
+        },
+        "allSafe": true
+      },
+      "medianImprovementFraction": -0.004555154203186736,
+      "p95ImprovementFraction": 0.04446176876043838,
+      "p95RegressionFraction": -0.04446176876043838,
+      "allSafe": true
+    },
+    {
+      "name": "burst-5",
+      "burstSize": 5,
+      "includesStartup": false,
+      "pairs": [
+        {
+          "repetition": 0,
+          "order": ["structural", "enriched"],
+          "enriched": {
+            "strategy": "enriched",
+            "blockingMs": 134.782416,
+            "startupReadMs": 207.948042,
+            "mutationMs": 134.782416,
+            "throughputPerSecond": 37.0968272300446,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 4,
+            "inventoryCount": 54,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [27.58935546875, 20.2001953125, 19.494140625],
+              "after": [27.58935546875, 20.2001953125, 19.494140625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 7.128,
+              "systemCpuMs": 11.01,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 155
+            },
+            "startupCommand": {
+              "code": 0,
+              "ms": 207.7290840000005,
+              "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+            },
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 13.415917000000263,
+                "addMs": 56.330541999999696,
+                "verifyMs": 14.184041000000434,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.69800000000032,
+                "addMs": 53.00633299999936,
+                "verifyMs": 15.624457999999322,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.59362500000043,
+                "addMs": 54.720792000000074,
+                "verifyMs": 13.471624999999221,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.037208000000646,
+                "addMs": 58.82275000000027,
+                "verifyMs": 12.215917000000445,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.824125000000095,
+                "addMs": 32.15891699999975,
+                "verifyMs": 9.643833000000086,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "structural": {
+            "strategy": "structural",
+            "blockingMs": 142.40933300000052,
+            "startupReadMs": 17.232458999999835,
+            "mutationMs": 142.40933300000052,
+            "throughputPerSecond": 35.110058411691185,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 4,
+            "inventoryCount": 54,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [27.58935546875, 20.2001953125, 19.494140625],
+              "after": [27.58935546875, 20.2001953125, 19.494140625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 8.361,
+              "systemCpuMs": 12.202,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 212
+            },
+            "startupCommand": {
+              "code": 0,
+              "ms": 17.176792000000205,
+              "stderr": ""
+            },
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 14.644749999999476,
+                "addMs": 64.74595800000043,
+                "verifyMs": 12.52429200000006,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.398957999999766,
+                "addMs": 68.01387500000055,
+                "verifyMs": 14.1815830000005,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.08679200000006,
+                "addMs": 60.185999999999694,
+                "verifyMs": 13.277124999999614,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.18737500000043,
+                "addMs": 67.52895900000021,
+                "verifyMs": 13.275125000000116,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.426375000000007,
+                "addMs": 32.14033300000028,
+                "verifyMs": 9.41033299999981,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 1,
+          "order": ["enriched", "structural"],
+          "enriched": {
+            "strategy": "enriched",
+            "blockingMs": 310.0771249999998,
+            "startupReadMs": 754.3199999999997,
+            "mutationMs": 310.0771249999998,
+            "throughputPerSecond": 16.125020509010472,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 4,
+            "inventoryCount": 54,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [25.6201171875, 19.91455078125, 19.3974609375],
+              "after": [25.6201171875, 19.91455078125, 19.3974609375]
+            },
+            "resourceUsage": {
+              "userCpuMs": 9.298,
+              "systemCpuMs": 14.651,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 317
+            },
+            "startupCommand": {
+              "code": 0,
+              "ms": 753.935125,
+              "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+            },
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 35.424958999999944,
+                "addMs": 116.54858400000012,
+                "verifyMs": 32.51762500000041,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 44.4411659999987,
+                "addMs": 99.87958299999991,
+                "verifyMs": 29.523165999999037,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 20.837040999998862,
+                "addMs": 135.23483400000077,
+                "verifyMs": 26.613292,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 48.44341700000041,
+                "addMs": 87.15083400000003,
+                "verifyMs": 29.719834000001356,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 20.349834000000556,
+                "addMs": 86.72699999999895,
+                "verifyMs": 33.041541999999026,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "structural": {
+            "strategy": "structural",
+            "blockingMs": 168.69783300000017,
+            "startupReadMs": 46.69591700000092,
+            "mutationMs": 168.69783300000017,
+            "throughputPerSecond": 29.638792099955396,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 4,
+            "inventoryCount": 54,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [24.44921875, 19.76611328125, 19.34814453125],
+              "after": [24.44921875, 19.76611328125, 19.34814453125]
+            },
+            "resourceUsage": {
+              "userCpuMs": 7.448,
+              "systemCpuMs": 13.757,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 240
+            },
+            "startupCommand": {
+              "code": 0,
+              "ms": 46.629249999999956,
+              "stderr": ""
+            },
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 15.274083000000246,
+                "addMs": 68.07466600000043,
+                "verifyMs": 19.8470410000009,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 19.754124999999476,
+                "addMs": 66.66758300000038,
+                "verifyMs": 16.464916999999332,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 18.562832999999955,
+                "addMs": 77.19891600000119,
+                "verifyMs": 17.281750000000102,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 22.962666000001263,
+                "addMs": 73.17520799999875,
+                "verifyMs": 15.654875000000175,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.688833000000159,
+                "addMs": 40.00470800000039,
+                "verifyMs": 11.705583999999362,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 2,
+          "order": ["structural", "enriched"],
+          "enriched": {
+            "strategy": "enriched",
+            "blockingMs": 126.60349999999744,
+            "startupReadMs": 236.09337500000038,
+            "mutationMs": 126.60349999999744,
+            "throughputPerSecond": 39.49337893502235,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 4,
+            "inventoryCount": 54,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [22.7314453125, 19.4873046875, 19.251953125],
+              "after": [22.7314453125, 19.4873046875, 19.251953125]
+            },
+            "resourceUsage": {
+              "userCpuMs": 5.567,
+              "systemCpuMs": 10.622,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 210
+            },
+            "startupCommand": {
+              "code": 0,
+              "ms": 235.9273749999993,
+              "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+            },
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 12.502208000001701,
+                "addMs": 51.34049999999843,
+                "verifyMs": 10.852374999998574,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.38445800000045,
+                "addMs": 53.202957999998034,
+                "verifyMs": 11.05462500000067,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.6818749999984,
+                "addMs": 49.270958000000974,
+                "verifyMs": 12.606999999999971,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.270625000001019,
+                "addMs": 49.72120899999936,
+                "verifyMs": 11.265417000002344,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.569959000000381,
+                "addMs": 31.897666000000754,
+                "verifyMs": 10.368624999999156,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "structural": {
+            "strategy": "structural",
+            "blockingMs": 468.7675420000014,
+            "startupReadMs": 140.04483299999993,
+            "mutationMs": 468.7675420000014,
+            "throughputPerSecond": 10.66626750364893,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 4,
+            "inventoryCount": 54,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [22.7314453125, 19.4873046875, 19.251953125],
+              "after": [22.7314453125, 19.4873046875, 19.251953125]
+            },
+            "resourceUsage": {
+              "userCpuMs": 7.334,
+              "systemCpuMs": 15.326,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 303
+            },
+            "startupCommand": {
+              "code": 0,
+              "ms": 139.92433300000266,
+              "stderr": ""
+            },
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 101.94979199999943,
+                "addMs": 130.57574999999997,
+                "verifyMs": 50.59929100000227,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 51.85466699999961,
+                "addMs": 117.72745799999757,
+                "verifyMs": 38.58045800000036,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 55.59712500000023,
+                "addMs": 117.22208300000057,
+                "verifyMs": 55.63166699999783,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 30.828833999999915,
+                "addMs": 122.03179199999795,
+                "verifyMs": 45.96150000000125,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 43.790375000000495,
+                "addMs": 150.1359999999986,
+                "verifyMs": 24.34954199999993,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 3,
+          "order": ["enriched", "structural"],
+          "enriched": {
+            "strategy": "enriched",
+            "blockingMs": 118.70991700000013,
+            "startupReadMs": 191.0635000000002,
+            "mutationMs": 118.70991700000013,
+            "throughputPerSecond": 42.1194802115816,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 4,
+            "inventoryCount": 54,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [19.9248046875, 18.9931640625, 19.07861328125],
+              "after": [19.9248046875, 18.9931640625, 19.07861328125]
+            },
+            "resourceUsage": {
+              "userCpuMs": 3.681,
+              "systemCpuMs": 7.951,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 106
+            },
+            "startupCommand": {
+              "code": 0,
+              "ms": 190.88375000000087,
+              "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+            },
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 12.149541999999201,
+                "addMs": 45.27283299999908,
+                "verifyMs": 9.403416000001016,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.964334000000235,
+                "addMs": 47.736957999997685,
+                "verifyMs": 9.138957999999548,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.549541000000318,
+                "addMs": 47.401083999997354,
+                "verifyMs": 9.620624999999563,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.48387499999808,
+                "addMs": 43.04599999999846,
+                "verifyMs": 11.269791999999143,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.037749999999505,
+                "addMs": 32.567542000000685,
+                "verifyMs": 10.198707999999897,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "structural": {
+            "strategy": "structural",
+            "blockingMs": 118.28954199999862,
+            "startupReadMs": 17.277875000003405,
+            "mutationMs": 118.28954199999862,
+            "throughputPerSecond": 42.26916357491737,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 4,
+            "inventoryCount": 54,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [19.9248046875, 18.9931640625, 19.07861328125],
+              "after": [19.9248046875, 18.9931640625, 19.07861328125]
+            },
+            "resourceUsage": {
+              "userCpuMs": 3.319,
+              "systemCpuMs": 7.544,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 102
+            },
+            "startupCommand": {
+              "code": 0,
+              "ms": 17.228707999998733,
+              "stderr": ""
+            },
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 11.101833000000624,
+                "addMs": 49.965917000001355,
+                "verifyMs": 9.316084000001865,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.230290999999852,
+                "addMs": 43.47075000000041,
+                "verifyMs": 11.37908299999981,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.265583999997034,
+                "addMs": 52.564957999999024,
+                "verifyMs": 9.447207999997772,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.356416999999055,
+                "addMs": 45.508207999999286,
+                "verifyMs": 9.774416000000201,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 8.412041999999929,
+                "addMs": 32.146333000000595,
+                "verifyMs": 10.525042000001122,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 4,
+          "order": ["structural", "enriched"],
+          "enriched": {
+            "strategy": "enriched",
+            "blockingMs": 172.24695800000336,
+            "startupReadMs": 263.3317919999972,
+            "mutationMs": 172.24695800000336,
+            "throughputPerSecond": 29.028088844389938,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 4,
+            "inventoryCount": 54,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [20.30078125, 19.12060546875, 19.12353515625],
+              "after": [20.30078125, 19.12060546875, 19.12353515625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 7.922,
+              "systemCpuMs": 13.286,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 241
+            },
+            "startupCommand": {
+              "code": 0,
+              "ms": 262.9801660000012,
+              "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+            },
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 17.016042000002926,
+                "addMs": 84.83295899999939,
+                "verifyMs": 15.909249999996973,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 15.132875000002969,
+                "addMs": 89.09466699999757,
+                "verifyMs": 17.988334000001487,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 16.462665999999444,
+                "addMs": 82.12270899999567,
+                "verifyMs": 15.860625000001164,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 16.71904099999665,
+                "addMs": 87.45249999999942,
+                "verifyMs": 15.708082999997714,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.348791999997047,
+                "addMs": 33.88658299999952,
+                "verifyMs": 10.974708000001556,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "structural": {
+            "strategy": "structural",
+            "blockingMs": 853.3141249999971,
+            "startupReadMs": 72.09862499999872,
+            "mutationMs": 853.3141249999971,
+            "throughputPerSecond": 5.85950689612693,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 4,
+            "inventoryCount": 54,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [20.30078125, 19.12060546875, 19.12353515625],
+              "after": [20.30078125, 19.12060546875, 19.12353515625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 6.658,
+              "systemCpuMs": 14.473,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 229
+            },
+            "startupCommand": {
+              "code": 0,
+              "ms": 72.03712499999529,
+              "stderr": ""
+            },
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 182.06533399999898,
+                "addMs": 376.68729200000234,
+                "verifyMs": 39.694125000001804,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 134.73083400000178,
+                "addMs": 330.30504199999996,
+                "verifyMs": 86.49812499999825,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 110.66245899999922,
+                "addMs": 358.76750000000175,
+                "verifyMs": 35.24254099999962,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 123.31291700000293,
+                "addMs": 322.32308300000295,
+                "verifyMs": 25.990124999996624,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 35.020041999996465,
+                "addMs": 204.60366699999577,
+                "verifyMs": 23.557874999998603,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        }
+      ],
+      "enriched": {
+        "blockingMs": {
+          "samples": [
+            118.70991700000013, 126.60349999999744, 134.782416, 172.24695800000336,
+            310.0771249999998
+          ],
+          "median": 134.782416,
+          "p90": 310.0771249999998,
+          "p95": 310.0771249999998,
+          "max": 310.0771249999998
+        },
+        "startupReadMs": {
+          "samples": [
+            191.0635000000002, 207.948042, 236.09337500000038, 263.3317919999972, 754.3199999999997
+          ],
+          "median": 236.09337500000038,
+          "p90": 754.3199999999997,
+          "p95": 754.3199999999997,
+          "max": 754.3199999999997
+        },
+        "mutationMs": {
+          "samples": [
+            118.70991700000013, 126.60349999999744, 134.782416, 172.24695800000336,
+            310.0771249999998
+          ],
+          "median": 134.782416,
+          "p90": 310.0771249999998,
+          "p95": 310.0771249999998,
+          "max": 310.0771249999998
+        },
+        "throughputPerSecond": {
+          "samples": [
+            16.125020509010472, 29.028088844389938, 37.0968272300446, 39.49337893502235,
+            42.1194802115816
+          ],
+          "median": 37.0968272300446,
+          "p90": 42.1194802115816,
+          "p95": 42.1194802115816,
+          "max": 42.1194802115816
+        },
+        "allSafe": true
+      },
+      "structural": {
+        "blockingMs": {
+          "samples": [
+            118.28954199999862, 142.40933300000052, 168.69783300000017, 468.7675420000014,
+            853.3141249999971
+          ],
+          "median": 168.69783300000017,
+          "p90": 853.3141249999971,
+          "p95": 853.3141249999971,
+          "max": 853.3141249999971
+        },
+        "startupReadMs": {
+          "samples": [
+            17.232458999999835, 17.277875000003405, 46.69591700000092, 72.09862499999872,
+            140.04483299999993
+          ],
+          "median": 46.69591700000092,
+          "p90": 140.04483299999993,
+          "p95": 140.04483299999993,
+          "max": 140.04483299999993
+        },
+        "mutationMs": {
+          "samples": [
+            118.28954199999862, 142.40933300000052, 168.69783300000017, 468.7675420000014,
+            853.3141249999971
+          ],
+          "median": 168.69783300000017,
+          "p90": 853.3141249999971,
+          "p95": 853.3141249999971,
+          "max": 853.3141249999971
+        },
+        "throughputPerSecond": {
+          "samples": [
+            5.85950689612693, 10.66626750364893, 29.638792099955396, 35.110058411691185,
+            42.26916357491737
+          ],
+          "median": 29.638792099955396,
+          "p90": 42.26916357491737,
+          "p95": 42.26916357491737,
+          "max": 42.26916357491737
+        },
+        "allSafe": true
+      },
+      "medianImprovementFraction": -0.2516308729767847,
+      "p95ImprovementFraction": -1.7519415532506557,
+      "p95RegressionFraction": 1.7519415532506557,
+      "allSafe": true
+    },
+    {
+      "name": "burst-20",
+      "burstSize": 20,
+      "includesStartup": false,
+      "pairs": [
+        {
+          "repetition": 0,
+          "order": ["enriched", "structural"],
+          "enriched": {
+            "strategy": "enriched",
+            "blockingMs": 468.1035840000004,
+            "startupReadMs": 210.96520799999962,
+            "mutationMs": 468.1035840000004,
+            "throughputPerSecond": 42.72558613864401,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 4,
+            "inventoryCount": 69,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [27.58935546875, 20.2001953125, 19.494140625],
+              "after": [27.58935546875, 20.2001953125, 19.494140625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 26.114,
+              "systemCpuMs": 46.715,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 714
+            },
+            "startupCommand": {
+              "code": 0,
+              "ms": 210.76070899999922,
+              "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+            },
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 13.027625000000626,
+                "addMs": 67.68654200000037,
+                "verifyMs": 13.445666999999958,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.34704099999999,
+                "addMs": 63.69849999999951,
+                "verifyMs": 13.848042000000532,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.489207999999962,
+                "addMs": 65.8349589999998,
+                "verifyMs": 13.473957999999584,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.602833000000828,
+                "addMs": 68.4897090000004,
+                "verifyMs": 11.99200000000019,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.563540999999532,
+                "addMs": 62.22574999999961,
+                "verifyMs": 13.204499999999825,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.942332999999962,
+                "addMs": 59.01920799999971,
+                "verifyMs": 17.20695799999976,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.19670799999949,
+                "addMs": 61.17020799999955,
+                "verifyMs": 13.04425000000083,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.44379200000003,
+                "addMs": 62.75025000000005,
+                "verifyMs": 12.529042000000118,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.153124999999818,
+                "addMs": 62.20616599999994,
+                "verifyMs": 13.856542000000445,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 16.29070899999988,
+                "addMs": 66.27287499999966,
+                "verifyMs": 14.160750000000007,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.012042000000292,
+                "addMs": 64.09029199999986,
+                "verifyMs": 13.116833999999471,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.629875000000538,
+                "addMs": 65.632791,
+                "verifyMs": 12.228833000000122,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.207749999999578,
+                "addMs": 74.89999999999964,
+                "verifyMs": 12.20258399999966,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.643417000000227,
+                "addMs": 65.29254200000014,
+                "verifyMs": 13.241541999999754,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.70037499999944,
+                "addMs": 73.87733300000036,
+                "verifyMs": 15.627582999999504,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.207290999999714,
+                "addMs": 75.27500000000055,
+                "verifyMs": 13.828792000000249,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.78637499999968,
+                "addMs": 58.58995899999991,
+                "verifyMs": 13.735874999999396,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.437874999999622,
+                "addMs": 60.06804100000045,
+                "verifyMs": 13.622458000000734,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.076082999999926,
+                "addMs": 61.957416000000194,
+                "verifyMs": 9.902957999999671,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.30829199999971,
+                "addMs": 64.5507090000001,
+                "verifyMs": 9.473041999999623,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "structural": {
+            "strategy": "structural",
+            "blockingMs": 335.19695800000045,
+            "startupReadMs": 15.657250000000204,
+            "mutationMs": 335.19695800000045,
+            "throughputPerSecond": 59.66641260509284,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 4,
+            "inventoryCount": 69,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [27.58935546875, 20.2001953125, 19.494140625],
+              "after": [27.58935546875, 20.2001953125, 19.494140625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 14.301,
+              "systemCpuMs": 29.059,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 493
+            },
+            "startupCommand": {
+              "code": 0,
+              "ms": 15.606541999999536,
+              "stderr": ""
+            },
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 11.459125000000313,
+                "addMs": 49.08079199999975,
+                "verifyMs": 9.507666999999856,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.83600000000024,
+                "addMs": 58.46045800000047,
+                "verifyMs": 10.538790999999947,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.957667000000583,
+                "addMs": 43.38820899999973,
+                "verifyMs": 11.191749999999956,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.480125000000044,
+                "addMs": 43.69733300000007,
+                "verifyMs": 9.364708000000064,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.981166999999914,
+                "addMs": 40.79283299999952,
+                "verifyMs": 10.837540999999874,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.093082999999751,
+                "addMs": 41.65454099999988,
+                "verifyMs": 10.042124999999942,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.448333000000275,
+                "addMs": 38.611667000000125,
+                "verifyMs": 9.945874999999432,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 8.573083000000224,
+                "addMs": 36.908542000000125,
+                "verifyMs": 10.980833999999959,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.117290999999568,
+                "addMs": 46.4892090000003,
+                "verifyMs": 11.685583000000406,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.015917000000627,
+                "addMs": 47.877541999999266,
+                "verifyMs": 10.140208999999231,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.317250000000058,
+                "addMs": 45.877958000000035,
+                "verifyMs": 10.127833000000464,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.296875,
+                "addMs": 42.144916000000194,
+                "verifyMs": 9.631457999999839,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 8.997041999999965,
+                "addMs": 47.20899999999983,
+                "verifyMs": 11.257375000000138,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.47937499999989,
+                "addMs": 46.882707999999184,
+                "verifyMs": 11.177416999999878,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 8.565416000000369,
+                "addMs": 45.76420800000051,
+                "verifyMs": 11.489540999999917,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.100165999999263,
+                "addMs": 45.35770799999955,
+                "verifyMs": 9.616541999999754,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.995125000000371,
+                "addMs": 49.71937499999967,
+                "verifyMs": 9.575332999999773,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.875375000000531,
+                "addMs": 47.82999999999993,
+                "verifyMs": 10.95233300000018,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.867167000000336,
+                "addMs": 48.127292000000125,
+                "verifyMs": 10.043124999999236,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 8.874791999999616,
+                "addMs": 52.787874999999985,
+                "verifyMs": 9.34716600000047,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 1,
+          "order": ["structural", "enriched"],
+          "enriched": {
+            "strategy": "enriched",
+            "blockingMs": 463.74866699999984,
+            "startupReadMs": 248.98791700000038,
+            "mutationMs": 463.74866699999984,
+            "throughputPerSecond": 43.126808599538265,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 4,
+            "inventoryCount": 69,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [24.44921875, 19.76611328125, 19.34814453125],
+              "after": [24.44921875, 19.76611328125, 19.34814453125]
+            },
+            "resourceUsage": {
+              "userCpuMs": 24.324,
+              "systemCpuMs": 44.067,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 638
+            },
+            "startupCommand": {
+              "code": 0,
+              "ms": 248.7642079999987,
+              "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+            },
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 13.126917000001413,
+                "addMs": 71.88979199999994,
+                "verifyMs": 12.545792000000802,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.712208000000828,
+                "addMs": 71.6493330000012,
+                "verifyMs": 13.194959000000381,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.914167000000816,
+                "addMs": 66.17450000000099,
+                "verifyMs": 13.762166000000434,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.869958999999653,
+                "addMs": 68.20375000000058,
+                "verifyMs": 14.66387500000019,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.304582999999184,
+                "addMs": 63.9822920000006,
+                "verifyMs": 14.387832999998864,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.690083999999842,
+                "addMs": 58.82616699999926,
+                "verifyMs": 12.57904199999939,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.676916999998866,
+                "addMs": 61.20137500000055,
+                "verifyMs": 12.527332999999999,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.906166999999186,
+                "addMs": 60.75145800000064,
+                "verifyMs": 12.2220410000009,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.33416699999907,
+                "addMs": 63.11420900000121,
+                "verifyMs": 11.274666999999681,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 15.255750000000262,
+                "addMs": 56.7963749999999,
+                "verifyMs": 12.441624999999476,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.07733300000109,
+                "addMs": 60.40412500000093,
+                "verifyMs": 11.235958999999639,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.534625000000233,
+                "addMs": 59.94837499999994,
+                "verifyMs": 11.050750000000335,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 16.135874999999942,
+                "addMs": 57.9624160000003,
+                "verifyMs": 9.540417000000161,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.48345899999913,
+                "addMs": 56.05970800000068,
+                "verifyMs": 10.880290999999488,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.866499999998268,
+                "addMs": 64.51966600000014,
+                "verifyMs": 11.723500000000058,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.426917000000685,
+                "addMs": 55.55366700000013,
+                "verifyMs": 11.437874999999622,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.541042000000743,
+                "addMs": 76.93954099999974,
+                "verifyMs": 15.410540999999284,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.102999999999156,
+                "addMs": 66.86187500000051,
+                "verifyMs": 22.78874999999971,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.005583999998635,
+                "addMs": 70.45054199999868,
+                "verifyMs": 18.91241600000103,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.158917000000656,
+                "addMs": 73.12575000000106,
+                "verifyMs": 18.561875000001237,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "structural": {
+            "strategy": "structural",
+            "blockingMs": 480.4134580000009,
+            "startupReadMs": 18.53216699999939,
+            "mutationMs": 480.4134580000009,
+            "throughputPerSecond": 41.63080710365937,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 4,
+            "inventoryCount": 69,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [24.44921875, 19.76611328125, 19.34814453125],
+              "after": [24.44921875, 19.76611328125, 19.34814453125]
+            },
+            "resourceUsage": {
+              "userCpuMs": 23.213,
+              "systemCpuMs": 49.739,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 814
+            },
+            "startupCommand": {
+              "code": 0,
+              "ms": 18.472124999998414,
+              "stderr": ""
+            },
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 17.213458000000173,
+                "addMs": 61.52904099999978,
+                "verifyMs": 18.275250000000597,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.6957910000001,
+                "addMs": 67.90266599999995,
+                "verifyMs": 20.32825000000048,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 16.353375000000597,
+                "addMs": 74.95937500000036,
+                "verifyMs": 16.32695800000147,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.806624999999258,
+                "addMs": 72.5797079999993,
+                "verifyMs": 17.662208000001556,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.336167000001296,
+                "addMs": 57.44966699999895,
+                "verifyMs": 17.500624999998763,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 15.109749999999622,
+                "addMs": 65.00137499999983,
+                "verifyMs": 16.800459000000046,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.936999999999898,
+                "addMs": 56.87420899999961,
+                "verifyMs": 14.360958999999639,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 15.646082999999635,
+                "addMs": 60.19750000000022,
+                "verifyMs": 14.048666999999114,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 15.607874999999694,
+                "addMs": 48.77845800000068,
+                "verifyMs": 18.299458999999842,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 16.188666000000012,
+                "addMs": 53.27808300000106,
+                "verifyMs": 15.356541999999536,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.574415999999474,
+                "addMs": 61.684957999999824,
+                "verifyMs": 13.387832999998864,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.202750000000378,
+                "addMs": 60.90395900000112,
+                "verifyMs": 13.897166999999172,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 15.357791000000361,
+                "addMs": 78.5978750000013,
+                "verifyMs": 15.625708999999915,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.28924999999981,
+                "addMs": 71.65333400000054,
+                "verifyMs": 13.848417000001064,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 15.541791999999987,
+                "addMs": 67.57350000000042,
+                "verifyMs": 16.724041999999827,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.148165999999037,
+                "addMs": 71.11808299999939,
+                "verifyMs": 14.618333999998868,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.3075000000008,
+                "addMs": 69.62366699999984,
+                "verifyMs": 13.253042000000278,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.889083000000028,
+                "addMs": 72.24058400000104,
+                "verifyMs": 11.712625000000116,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.955041000001074,
+                "addMs": 66.55333299999984,
+                "verifyMs": 12.770333999998911,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 15.293250000000626,
+                "addMs": 66.2445000000007,
+                "verifyMs": 11.100624999999127,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 2,
+          "order": ["enriched", "structural"],
+          "enriched": {
+            "strategy": "enriched",
+            "blockingMs": 438.804500000002,
+            "startupReadMs": 193.85549999999785,
+            "mutationMs": 438.804500000002,
+            "throughputPerSecond": 45.57838399560604,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 4,
+            "inventoryCount": 69,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [21.3115234375, 19.24658203125, 19.16796875],
+              "after": [21.3115234375, 19.24658203125, 19.16796875]
+            },
+            "resourceUsage": {
+              "userCpuMs": 19.791,
+              "systemCpuMs": 40.148,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 584
+            },
+            "startupCommand": {
+              "code": 0,
+              "ms": 193.69795800000065,
+              "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+            },
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 11.915166999999201,
+                "addMs": 51.55933299999742,
+                "verifyMs": 10.655249999999796,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.370084000001953,
+                "addMs": 51.386875000000146,
+                "verifyMs": 10.46745799999917,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.436041000000841,
+                "addMs": 47.85737499999959,
+                "verifyMs": 12.19604199999958,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.983625000000757,
+                "addMs": 47.56274999999732,
+                "verifyMs": 11.619375000002037,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.226791000000958,
+                "addMs": 64.2144589999989,
+                "verifyMs": 12.374332999999751,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.345417000000452,
+                "addMs": 60.72766599999886,
+                "verifyMs": 13.49120799999946,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.794042000001355,
+                "addMs": 60.72475000000122,
+                "verifyMs": 11.31300000000192,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.689792000001034,
+                "addMs": 60.688874999999825,
+                "verifyMs": 12.792833999999857,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.607915999997203,
+                "addMs": 57.55975000000035,
+                "verifyMs": 12.274708000000828,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.160582999997132,
+                "addMs": 53.215957999997045,
+                "verifyMs": 13.481457999998383,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.800624999999854,
+                "addMs": 61.22295799999847,
+                "verifyMs": 10.542124999999942,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.565833999997267,
+                "addMs": 54.83429099999921,
+                "verifyMs": 10.45416699999987,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.742333000001963,
+                "addMs": 61.56566700000258,
+                "verifyMs": 17.27679200000057,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.758499999999913,
+                "addMs": 56.561915999998746,
+                "verifyMs": 12.827166999999463,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.583666000002268,
+                "addMs": 61.567416999998386,
+                "verifyMs": 13.680583000001207,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.642582999997103,
+                "addMs": 61.20295900000201,
+                "verifyMs": 17.79933300000266,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 19.202667000001384,
+                "addMs": 86.59116699999868,
+                "verifyMs": 12.109541999998328,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 19.584500000000844,
+                "addMs": 76.3896249999998,
+                "verifyMs": 12.774124999999913,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 19.399208000002545,
+                "addMs": 72.00074999999924,
+                "verifyMs": 13.49920800000109,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 20.514250000000175,
+                "addMs": 71.82529100000102,
+                "verifyMs": 11.114708000000974,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "structural": {
+            "strategy": "structural",
+            "blockingMs": 463.3756250000006,
+            "startupReadMs": 17.683333000000857,
+            "mutationMs": 463.3756250000006,
+            "throughputPerSecond": 43.161527972042066,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 4,
+            "inventoryCount": 69,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [21.3115234375, 19.24658203125, 19.16796875],
+              "after": [21.3115234375, 19.24658203125, 19.16796875]
+            },
+            "resourceUsage": {
+              "userCpuMs": 20.108,
+              "systemCpuMs": 44.774,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 652
+            },
+            "startupCommand": {
+              "code": 0,
+              "ms": 17.634916999999405,
+              "stderr": ""
+            },
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 11.394499999998516,
+                "addMs": 66.19574999999895,
+                "verifyMs": 14.078624999998283,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.025332999997772,
+                "addMs": 62.94050000000061,
+                "verifyMs": 13.611791999999696,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.533041999999114,
+                "addMs": 65.9007079999974,
+                "verifyMs": 13.790208999998868,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.539832999998907,
+                "addMs": 59.3705000000009,
+                "verifyMs": 13.45191700000214,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.391374999999243,
+                "addMs": 63.784499999997934,
+                "verifyMs": 12.688833000000159,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.36383399999977,
+                "addMs": 68.19154200000048,
+                "verifyMs": 10.89770800000042,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 15.61645800000042,
+                "addMs": 63.999667000000045,
+                "verifyMs": 12.72950000000128,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.048374999998487,
+                "addMs": 64.36124999999811,
+                "verifyMs": 12.641167000001587,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.362375000000611,
+                "addMs": 59.321625000000495,
+                "verifyMs": 13.97595899999942,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.709999999999127,
+                "addMs": 57.33587500000067,
+                "verifyMs": 11.46612499999901,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.439208000003418,
+                "addMs": 60.65987500000119,
+                "verifyMs": 10.985291999997571,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.962458000001789,
+                "addMs": 58.42937499999971,
+                "verifyMs": 10.891916999997193,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.551875000001019,
+                "addMs": 57.70379199999661,
+                "verifyMs": 11.216875000001892,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.508624999998574,
+                "addMs": 62.21862500000134,
+                "verifyMs": 11.346459000000323,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.23583299999882,
+                "addMs": 69.62112500000148,
+                "verifyMs": 10.881625000001804,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.302292000000307,
+                "addMs": 57.12700000000041,
+                "verifyMs": 12.082208000003448,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.080582999999024,
+                "addMs": 55.03966600000058,
+                "verifyMs": 16.289082999999664,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.83808300000237,
+                "addMs": 55.73295800000051,
+                "verifyMs": 19.084499999997206,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.225291999999172,
+                "addMs": 60.35095899999942,
+                "verifyMs": 14.743000000002212,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.779707999998209,
+                "addMs": 77.35216699999728,
+                "verifyMs": 18.021333000000595,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 3,
+          "order": ["structural", "enriched"],
+          "enriched": {
+            "strategy": "enriched",
+            "blockingMs": 594.9193330000053,
+            "startupReadMs": 620.1260419999962,
+            "mutationMs": 594.9193330000053,
+            "throughputPerSecond": 33.618003131862956,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 4,
+            "inventoryCount": 69,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [21.3720703125, 19.30859375, 19.189453125],
+              "after": [21.3720703125, 19.30859375, 19.189453125]
+            },
+            "resourceUsage": {
+              "userCpuMs": 21.209,
+              "systemCpuMs": 45.923,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 853
+            },
+            "startupCommand": {
+              "code": 0,
+              "ms": 619.758167,
+              "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+            },
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 24.623915999996825,
+                "addMs": 129.48183399999834,
+                "verifyMs": 19.13429200000246,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 28.345249999998487,
+                "addMs": 118.80774999999994,
+                "verifyMs": 18.240834000003815,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 29.78112500000134,
+                "addMs": 115.85766700000386,
+                "verifyMs": 20.435083999997005,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 30.266584000004514,
+                "addMs": 117.88683399999718,
+                "verifyMs": 19.38429200000246,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 21.30816600000253,
+                "addMs": 105.98345800000243,
+                "verifyMs": 16.607042000003275,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 19.01516700000502,
+                "addMs": 107.57887499999924,
+                "verifyMs": 15.44629200000054,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 24.508083999993687,
+                "addMs": 107.81725000000006,
+                "verifyMs": 15.385125000000698,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 18.79862499999581,
+                "addMs": 107.83158299999923,
+                "verifyMs": 13.230374999999185,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 15.612750000000233,
+                "addMs": 92.67633399999613,
+                "verifyMs": 11.707249999999476,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 15.156791000001249,
+                "addMs": 86.6786659999998,
+                "verifyMs": 11.320375000002969,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 15.199124999999185,
+                "addMs": 88.66324999999779,
+                "verifyMs": 12.74854200000118,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.350834000004397,
+                "addMs": 83.15591600000334,
+                "verifyMs": 11.982791999995243,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.917415999996592,
+                "addMs": 63.60533299999952,
+                "verifyMs": 13.807249999998021,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.72899999999936,
+                "addMs": 62.417458000003535,
+                "verifyMs": 13.447457999995095,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.732374999999593,
+                "addMs": 62.26112500000454,
+                "verifyMs": 12.707709000002069,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.122208000000683,
+                "addMs": 61.74116700000013,
+                "verifyMs": 12.545042000005196,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.383625000002212,
+                "addMs": 53.22445799999696,
+                "verifyMs": 10.933415999999852,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.476666000002297,
+                "addMs": 56.92033300000185,
+                "verifyMs": 10.28074999999808,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.867125000004307,
+                "addMs": 52.32512499999575,
+                "verifyMs": 9.805584000001545,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.519957999997132,
+                "addMs": 52.32437499999651,
+                "verifyMs": 10.402916999999434,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "structural": {
+            "strategy": "structural",
+            "blockingMs": 381.0187920000026,
+            "startupReadMs": 16.1717499999977,
+            "mutationMs": 381.0187920000026,
+            "throughputPerSecond": 52.49084932272806,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 4,
+            "inventoryCount": 69,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [19.9248046875, 18.9931640625, 19.07861328125],
+              "after": [19.9248046875, 18.9931640625, 19.07861328125]
+            },
+            "resourceUsage": {
+              "userCpuMs": 22.677,
+              "systemCpuMs": 37.173,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 563
+            },
+            "startupCommand": {
+              "code": 0,
+              "ms": 16.124125000002095,
+              "stderr": ""
+            },
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 12.119333999999071,
+                "addMs": 42.543666000001394,
+                "verifyMs": 11.2937090000014,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.094540999998571,
+                "addMs": 43.640416999998706,
+                "verifyMs": 10.1159579999985,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.461957999999868,
+                "addMs": 48.717916999998124,
+                "verifyMs": 9.418708000001061,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.606082999998762,
+                "addMs": 44.69929100000081,
+                "verifyMs": 10.58599999999933,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.859166999998706,
+                "addMs": 43.45525000000271,
+                "verifyMs": 11.33637500000259,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 8.821416999999201,
+                "addMs": 43.4419999999991,
+                "verifyMs": 11.122959000000264,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.509916999999405,
+                "addMs": 41.01058399999965,
+                "verifyMs": 11.662749999999505,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.018000000000029,
+                "addMs": 39.7143329999999,
+                "verifyMs": 11.430583000001207,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.019583999997849,
+                "addMs": 58.240083000000595,
+                "verifyMs": 10.41779200000019,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.148790999999619,
+                "addMs": 62.03625000000102,
+                "verifyMs": 10.499250000000757,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.354917000000569,
+                "addMs": 63.89429099999688,
+                "verifyMs": 13.239166999999725,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.267457999998442,
+                "addMs": 54.41429199999766,
+                "verifyMs": 11.009000000001834,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.251416999999492,
+                "addMs": 55.83729099999982,
+                "verifyMs": 11.709541000000172,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.66216699999859,
+                "addMs": 56.455000000001746,
+                "verifyMs": 12.99616700000115,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.021749999999884,
+                "addMs": 56.32054100000096,
+                "verifyMs": 13.367457999996986,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.490375000001222,
+                "addMs": 58.13208300000042,
+                "verifyMs": 14.613665999997465,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 17.192792000001646,
+                "addMs": 59.42170800000167,
+                "verifyMs": 13.343166999999085,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.606500000001688,
+                "addMs": 55.62833299999693,
+                "verifyMs": 14.635375000001659,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 15.560541000002559,
+                "addMs": 55.698208999998315,
+                "verifyMs": 12.815874999996595,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.299666999999317,
+                "addMs": 53.480459000002156,
+                "verifyMs": 11.274374999997235,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 4,
+          "order": ["enriched", "structural"],
+          "enriched": {
+            "strategy": "enriched",
+            "blockingMs": 371.333375000002,
+            "startupReadMs": 209.78654200000165,
+            "mutationMs": 371.333375000002,
+            "throughputPerSecond": 53.85995804982489,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 4,
+            "inventoryCount": 69,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [20.30078125, 19.12060546875, 19.12353515625],
+              "after": [20.30078125, 19.12060546875, 19.12353515625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 16.842,
+              "systemCpuMs": 34.252,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 681
+            },
+            "startupCommand": {
+              "code": 0,
+              "ms": 209.62770900000032,
+              "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+            },
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 11.2177920000031,
+                "addMs": 47.93770900000527,
+                "verifyMs": 11.516374999999243,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.946041999995941,
+                "addMs": 51.46354099999735,
+                "verifyMs": 10.344083000003593,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.908374999999069,
+                "addMs": 52.69787499999802,
+                "verifyMs": 10.21375000000262,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.370625000003201,
+                "addMs": 47.21854199999507,
+                "verifyMs": 9.760083000001032,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.298875000000407,
+                "addMs": 47.28970799999661,
+                "verifyMs": 12.788417000003392,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.367582999999286,
+                "addMs": 45.55195800000365,
+                "verifyMs": 12.391333999999915,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.04912499999773,
+                "addMs": 45.20075000000361,
+                "verifyMs": 11.010166000000027,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.32841599999665,
+                "addMs": 44.05179200000566,
+                "verifyMs": 11.777583000002778,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.822500000002037,
+                "addMs": 51.304000000003725,
+                "verifyMs": 10.900457999996434,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.600416000001132,
+                "addMs": 50.64154099999723,
+                "verifyMs": 10.989792000000307,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.207374999998137,
+                "addMs": 53.026458000000275,
+                "verifyMs": 9.880499999999302,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.195374999995693,
+                "addMs": 55.45016700000269,
+                "verifyMs": 10.9154170000038,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.305666000000201,
+                "addMs": 49.784292000003916,
+                "verifyMs": 11.344792000003508,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.081333000001905,
+                "addMs": 52.578999999997905,
+                "verifyMs": 9.517917000004672,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.45362500000192,
+                "addMs": 67.5437080000047,
+                "verifyMs": 10.646624999993946,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.749416999999085,
+                "addMs": 51.657124999997905,
+                "verifyMs": 9.72637499999837,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.562249999995402,
+                "addMs": 52.58366699999897,
+                "verifyMs": 10.745333999999275,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.406749999994645,
+                "addMs": 51.92954200000531,
+                "verifyMs": 10.64129099999991,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.384875000003376,
+                "addMs": 52.713082999995095,
+                "verifyMs": 9.924749999998312,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.926249999996799,
+                "addMs": 47.82962499999849,
+                "verifyMs": 9.780875000004016,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "structural": {
+            "strategy": "structural",
+            "blockingMs": 460.403624999999,
+            "startupReadMs": 16.360999999997148,
+            "mutationMs": 460.403624999999,
+            "throughputPerSecond": 43.44014450364079,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 4,
+            "inventoryCount": 69,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [18.9150390625, 18.8525390625, 19.02880859375],
+              "after": [18.9150390625, 18.8525390625, 19.02880859375]
+            },
+            "resourceUsage": {
+              "userCpuMs": 20.052,
+              "systemCpuMs": 46.994,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 723
+            },
+            "startupCommand": {
+              "code": 0,
+              "ms": 16.280832999997074,
+              "stderr": ""
+            },
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 13.015291000003344,
+                "addMs": 60.67408300000534,
+                "verifyMs": 13.94041599999764,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.708750000005239,
+                "addMs": 55.55308299999888,
+                "verifyMs": 14.985374999996566,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.88008400000399,
+                "addMs": 59.899875000002794,
+                "verifyMs": 13.804208000001381,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.099332999998296,
+                "addMs": 59.72295799999847,
+                "verifyMs": 13.56025000000227,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.971917000002577,
+                "addMs": 79.22583300000406,
+                "verifyMs": 14.61591700000281,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.651125000003958,
+                "addMs": 67.1614999999947,
+                "verifyMs": 14.889250000000175,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.891750000002503,
+                "addMs": 72.25187500000175,
+                "verifyMs": 11.823833000002196,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.995624999995925,
+                "addMs": 70.01995799999713,
+                "verifyMs": 12.159417000002577,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.62000000000262,
+                "addMs": 57.09362499999406,
+                "verifyMs": 12.491125000000466,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.845041000000492,
+                "addMs": 64.02387499999895,
+                "verifyMs": 14.255208000002312,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.799582999999984,
+                "addMs": 65.1546659999949,
+                "verifyMs": 15.384375000001455,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.562291999995068,
+                "addMs": 62.20874999999796,
+                "verifyMs": 14.381459000003815,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.423541999996814,
+                "addMs": 61.440167000000656,
+                "verifyMs": 13.453083000000333,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.078249999998661,
+                "addMs": 64.4253749999989,
+                "verifyMs": 14.36383300000307,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.210583000000042,
+                "addMs": 60.25308299999597,
+                "verifyMs": 12.017959000004339,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.778082999997423,
+                "addMs": 62.41891599999508,
+                "verifyMs": 13.941124999997555,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.29841600000509,
+                "addMs": 66.49462499999936,
+                "verifyMs": 16.167499999995925,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.486292000001413,
+                "addMs": 66.81070799999725,
+                "verifyMs": 13.256042000000889,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.840000000003783,
+                "addMs": 68.79991600000358,
+                "verifyMs": 10.157916000003752,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.89166600000317,
+                "addMs": 62.72883400000137,
+                "verifyMs": 10.882459000000381,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        }
+      ],
+      "enriched": {
+        "blockingMs": {
+          "samples": [
+            371.333375000002, 438.804500000002, 463.74866699999984, 468.1035840000004,
+            594.9193330000053
+          ],
+          "median": 463.74866699999984,
+          "p90": 594.9193330000053,
+          "p95": 594.9193330000053,
+          "max": 594.9193330000053
+        },
+        "startupReadMs": {
+          "samples": [
+            193.85549999999785, 209.78654200000165, 210.96520799999962, 248.98791700000038,
+            620.1260419999962
+          ],
+          "median": 210.96520799999962,
+          "p90": 620.1260419999962,
+          "p95": 620.1260419999962,
+          "max": 620.1260419999962
+        },
+        "mutationMs": {
+          "samples": [
+            371.333375000002, 438.804500000002, 463.74866699999984, 468.1035840000004,
+            594.9193330000053
+          ],
+          "median": 463.74866699999984,
+          "p90": 594.9193330000053,
+          "p95": 594.9193330000053,
+          "max": 594.9193330000053
+        },
+        "throughputPerSecond": {
+          "samples": [
+            33.618003131862956, 42.72558613864401, 43.126808599538265, 45.57838399560604,
+            53.85995804982489
+          ],
+          "median": 43.126808599538265,
+          "p90": 53.85995804982489,
+          "p95": 53.85995804982489,
+          "max": 53.85995804982489
+        },
+        "allSafe": true
+      },
+      "structural": {
+        "blockingMs": {
+          "samples": [
+            335.19695800000045, 381.0187920000026, 460.403624999999, 463.3756250000006,
+            480.4134580000009
+          ],
+          "median": 460.403624999999,
+          "p90": 480.4134580000009,
+          "p95": 480.4134580000009,
+          "max": 480.4134580000009
+        },
+        "startupReadMs": {
+          "samples": [
+            15.657250000000204, 16.1717499999977, 16.360999999997148, 17.683333000000857,
+            18.53216699999939
+          ],
+          "median": 16.360999999997148,
+          "p90": 18.53216699999939,
+          "p95": 18.53216699999939,
+          "max": 18.53216699999939
+        },
+        "mutationMs": {
+          "samples": [
+            335.19695800000045, 381.0187920000026, 460.403624999999, 463.3756250000006,
+            480.4134580000009
+          ],
+          "median": 460.403624999999,
+          "p90": 480.4134580000009,
+          "p95": 480.4134580000009,
+          "max": 480.4134580000009
+        },
+        "throughputPerSecond": {
+          "samples": [
+            41.63080710365937, 43.161527972042066, 43.44014450364079, 52.49084932272806,
+            59.66641260509284
+          ],
+          "median": 43.44014450364079,
+          "p90": 59.66641260509284,
+          "p95": 59.66641260509284,
+          "max": 59.66641260509284
+        },
+        "allSafe": true
+      },
+      "medianImprovementFraction": 0.007213049304572625,
+      "p95ImprovementFraction": 0.1924729432183428,
+      "p95RegressionFraction": -0.1924729432183428,
+      "allSafe": true
+    }
+  ],
+  "repetitions": [
+    {
+      "repetition": 0,
+      "temporaryRootRemoved": true
+    },
+    {
+      "repetition": 1,
+      "temporaryRootRemoved": true
+    },
+    {
+      "repetition": 2,
+      "temporaryRootRemoved": true
+    },
+    {
+      "repetition": 3,
+      "temporaryRootRemoved": true
+    },
+    {
+      "repetition": 4,
+      "temporaryRootRemoved": true
+    }
+  ]
+}

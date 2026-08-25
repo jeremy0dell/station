@@ -1,0 +1,5094 @@
+{
+  "schemaVersion": 1,
+  "benchmark": "station-quick-session-startup-read-deferred-paired-comparison",
+  "generatedAt": "2026-08-25T08:32:20.448Z",
+  "machine": {
+    "platform": "darwin",
+    "arch": "arm64",
+    "cpuModel": "Apple M4",
+    "logicalCpuCount": 10
+  },
+  "tools": {
+    "worktrunk": "wt v0.72.0",
+    "git": "git version 2.50.1 (Apple Git-155)"
+  },
+  "repositoryShape": {
+    "initialWorktrees": 49,
+    "lifecycleHooks": false,
+    "maxConcurrentCreates": 4,
+    "repetitions": 5
+  },
+  "comparisonMode": "deferred",
+  "keepThresholds": {
+    "coldMedianImprovementFraction": 0.6,
+    "coldP95ImprovementFraction": 0.6,
+    "structuralReadP95Ms": 75,
+    "deferredReadP95Ms": 700,
+    "maximumWarmOrBurstRegressionFraction": 0.2
+  },
+  "structuralReadMs": {
+    "samples": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    "median": 0,
+    "p90": 0,
+    "p95": 0,
+    "max": 0
+  },
+  "deferredReadMs": {
+    "samples": [
+      193.18666700000176, 197.00012499999866, 202.5596250000017, 207.06470799999806,
+      210.16091700000106, 210.36062500000116, 213.83491700000013, 219.41387499999837,
+      221.52916600000026, 222.734375, 224.26537499999904, 236.57466600000043, 237.87075000000186,
+      242.63108400000056, 246.03620899999805, 250.0269580000022, 257.65820799999983,
+      261.1735839999965, 263.90620800000033, 272.39800000000105, 281.87766700000066,
+      496.6434589999999, 607.2684579999986, 610.6789169999975, 726.2560420000004
+    ],
+    "median": 237.87075000000186,
+    "p90": 607.2684579999986,
+    "p95": 610.6789169999975,
+    "max": 726.2560420000004
+  },
+  "allSafe": true,
+  "thresholdsPassed": false,
+  "scenarios": [
+    {
+      "name": "warm-single",
+      "burstSize": 1,
+      "includesStartup": false,
+      "pairs": [
+        {
+          "repetition": 0,
+          "order": ["enriched", "deferred"],
+          "enriched": {
+            "strategy": "enriched",
+            "blockingMs": 81.51458400000001,
+            "startupReadMs": 285.2635,
+            "structuralReadMs": 0,
+            "enrichmentReadMs": 285.2621670000003,
+            "deferredReadMs": 0,
+            "mutationMs": 81.51458400000001,
+            "throughputPerSecond": 12.267743401597926,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 1,
+            "inventoryCount": 50,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [22.8369140625, 20.78173828125, 20.2421875],
+              "after": [22.8369140625, 20.78173828125, 20.2421875]
+            },
+            "resourceUsage": {
+              "userCpuMs": 8.739,
+              "systemCpuMs": 3.981,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 94
+            },
+            "startupCommands": [
+              {
+                "kind": "enriched",
+                "code": 0,
+                "ms": 282.69058300000006,
+                "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+              }
+            ],
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 20.656082999999853,
+                "addMs": 47.96116600000005,
+                "verifyMs": 12.609875000000102,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "deferred": {
+            "strategy": "deferred",
+            "blockingMs": 231.74662499999977,
+            "startupReadMs": 0.0009160000004158064,
+            "structuralReadMs": 0,
+            "enrichmentReadMs": 726.2560420000004,
+            "deferredReadMs": 726.2560420000004,
+            "mutationMs": 231.74662499999977,
+            "throughputPerSecond": 4.315057446899178,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 1,
+            "inventoryCount": 50,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [22.8369140625, 20.78173828125, 20.2421875],
+              "after": [22.8369140625, 20.78173828125, 20.2421875]
+            },
+            "resourceUsage": {
+              "userCpuMs": 4.252,
+              "systemCpuMs": 3.837,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 93
+            },
+            "startupCommands": [
+              {
+                "kind": "enriched",
+                "code": 0,
+                "ms": 725.7104580000005,
+                "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+              }
+            ],
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 35.97308299999986,
+                "addMs": 130.10416699999996,
+                "verifyMs": 65.57904099999996,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 1,
+          "order": ["deferred", "enriched"],
+          "enriched": {
+            "strategy": "enriched",
+            "blockingMs": 50.62749999999869,
+            "startupReadMs": 209.7770840000012,
+            "structuralReadMs": 0,
+            "enrichmentReadMs": 209.77662500000224,
+            "deferredReadMs": 0,
+            "mutationMs": 50.62749999999869,
+            "throughputPerSecond": 19.75211100686437,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 1,
+            "inventoryCount": 50,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [22.94921875, 20.9267578125, 20.3056640625],
+              "after": [22.94921875, 20.9267578125, 20.3056640625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 2.114,
+              "systemCpuMs": 2.437,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 44
+            },
+            "startupCommands": [
+              {
+                "kind": "enriched",
+                "code": 0,
+                "ms": 209.5737079999999,
+                "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+              }
+            ],
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 9.963666999999987,
+                "addMs": 30.837333999999828,
+                "verifyMs": 9.777999999998428,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "deferred": {
+            "strategy": "deferred",
+            "blockingMs": 53.975125000000844,
+            "startupReadMs": 0.0005409999976109248,
+            "structuralReadMs": 0,
+            "enrichmentReadMs": 281.87766700000066,
+            "deferredReadMs": 281.87766700000066,
+            "mutationMs": 53.975125000000844,
+            "throughputPerSecond": 18.527052971160035,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 1,
+            "inventoryCount": 50,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [22.94921875, 20.9267578125, 20.3056640625],
+              "after": [22.94921875, 20.9267578125, 20.3056640625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 2.219,
+              "systemCpuMs": 2.847,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 54
+            },
+            "startupCommands": [
+              {
+                "kind": "enriched",
+                "code": 0,
+                "ms": 281.59941700000127,
+                "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+              }
+            ],
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 10.448500000002241,
+                "addMs": 33.92962500000067,
+                "verifyMs": 9.54279200000019,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 2,
+          "order": ["enriched", "deferred"],
+          "enriched": {
+            "strategy": "enriched",
+            "blockingMs": 56.65004100000078,
+            "startupReadMs": 263.7434170000015,
+            "structuralReadMs": 0,
+            "enrichmentReadMs": 263.7427089999983,
+            "deferredReadMs": 0,
+            "mutationMs": 56.65004100000078,
+            "throughputPerSecond": 17.65223788628831,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 1,
+            "inventoryCount": 50,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [23.7734375, 21.17431640625, 20.40087890625],
+              "after": [23.7734375, 21.17431640625, 20.40087890625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 2.141,
+              "systemCpuMs": 2.532,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 50
+            },
+            "startupCommands": [
+              {
+                "kind": "enriched",
+                "code": 0,
+                "ms": 263.52620800000295,
+                "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+              }
+            ],
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 10.20575000000099,
+                "addMs": 35.93012499999895,
+                "verifyMs": 10.45441700000083,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "deferred": {
+            "strategy": "deferred",
+            "blockingMs": 51.78750000000218,
+            "startupReadMs": 0.0001249999986612238,
+            "structuralReadMs": 0,
+            "enrichmentReadMs": 197.00012499999866,
+            "deferredReadMs": 197.00012499999866,
+            "mutationMs": 51.78750000000218,
+            "throughputPerSecond": 19.3096789765862,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 1,
+            "inventoryCount": 50,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [23.7734375, 21.17431640625, 20.40087890625],
+              "after": [23.7734375, 21.17431640625, 20.40087890625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.912,
+              "systemCpuMs": 2.453,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 35
+            },
+            "startupCommands": [
+              {
+                "kind": "enriched",
+                "code": 0,
+                "ms": 196.7377919999999,
+                "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+              }
+            ],
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 10.737958999998227,
+                "addMs": 31.148207999998704,
+                "verifyMs": 9.846291999998357,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 3,
+          "order": ["deferred", "enriched"],
+          "enriched": {
+            "strategy": "enriched",
+            "blockingMs": 52.299291000002995,
+            "startupReadMs": 230.06874999999854,
+            "structuralReadMs": 0,
+            "enrichmentReadMs": 230.0679170000003,
+            "deferredReadMs": 0,
+            "mutationMs": 52.299291000002995,
+            "throughputPerSecond": 19.1207180992175,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 1,
+            "inventoryCount": 50,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [21.0595703125, 20.67529296875, 20.232421875],
+              "after": [21.0595703125, 20.67529296875, 20.232421875]
+            },
+            "resourceUsage": {
+              "userCpuMs": 3.436,
+              "systemCpuMs": 2.647,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 45
+            },
+            "startupCommands": [
+              {
+                "kind": "enriched",
+                "code": 0,
+                "ms": 229.8381659999941,
+                "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+              }
+            ],
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 10.009000000005472,
+                "addMs": 32.22620800000004,
+                "verifyMs": 10.012833000000683,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "deferred": {
+            "strategy": "deferred",
+            "blockingMs": 51.38300000000163,
+            "startupReadMs": 0.0003329999963170849,
+            "structuralReadMs": 0,
+            "enrichmentReadMs": 263.90620800000033,
+            "deferredReadMs": 263.90620800000033,
+            "mutationMs": 51.38300000000163,
+            "throughputPerSecond": 19.461689663896003,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 1,
+            "inventoryCount": 50,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [21.0595703125, 20.67529296875, 20.232421875],
+              "after": [21.0595703125, 20.67529296875, 20.232421875]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.734,
+              "systemCpuMs": 2.356,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 34
+            },
+            "startupCommands": [
+              {
+                "kind": "enriched",
+                "code": 0,
+                "ms": 263.6868749999994,
+                "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+              }
+            ],
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 9.901624999998603,
+                "addMs": 30.52254100000573,
+                "verifyMs": 10.905666000006022,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 4,
+          "order": ["enriched", "deferred"],
+          "enriched": {
+            "strategy": "enriched",
+            "blockingMs": 48.940042000001995,
+            "startupReadMs": 243.6481249999997,
+            "structuralReadMs": 0,
+            "enrichmentReadMs": 243.64783300000272,
+            "deferredReadMs": 0,
+            "mutationMs": 48.940042000001995,
+            "throughputPerSecond": 20.43316595437248,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 1,
+            "inventoryCount": 50,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [20.12451171875, 20.5009765625, 20.17626953125],
+              "after": [20.12451171875, 20.5009765625, 20.17626953125]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.7,
+              "systemCpuMs": 2.191,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 57
+            },
+            "startupCommands": [
+              {
+                "kind": "enriched",
+                "code": 0,
+                "ms": 243.43624999999884,
+                "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+              }
+            ],
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 8.733041999999841,
+                "addMs": 30.991500000003725,
+                "verifyMs": 9.164041999996698,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "deferred": {
+            "strategy": "deferred",
+            "blockingMs": 52.39366699999664,
+            "startupReadMs": 0.000375000003259629,
+            "structuralReadMs": 0,
+            "enrichmentReadMs": 202.5596250000017,
+            "deferredReadMs": 202.5596250000017,
+            "mutationMs": 52.39366699999664,
+            "throughputPerSecond": 19.086276209681298,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 1,
+            "inventoryCount": 50,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [20.12451171875, 20.5009765625, 20.17626953125],
+              "after": [20.12451171875, 20.5009765625, 20.17626953125]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.826,
+              "systemCpuMs": 2.115,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 34
+            },
+            "startupCommands": [
+              {
+                "kind": "enriched",
+                "code": 0,
+                "ms": 202.34949999999662,
+                "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+              }
+            ],
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 9.697625000000698,
+                "addMs": 31.940458000004583,
+                "verifyMs": 10.701625000001513,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        }
+      ],
+      "enriched": {
+        "blockingMs": {
+          "samples": [
+            48.940042000001995, 50.62749999999869, 52.299291000002995, 56.65004100000078,
+            81.51458400000001
+          ],
+          "median": 52.299291000002995,
+          "p90": 81.51458400000001,
+          "p95": 81.51458400000001,
+          "max": 81.51458400000001
+        },
+        "startupReadMs": {
+          "samples": [
+            209.7770840000012, 230.06874999999854, 243.6481249999997, 263.7434170000015, 285.2635
+          ],
+          "median": 243.6481249999997,
+          "p90": 285.2635,
+          "p95": 285.2635,
+          "max": 285.2635
+        },
+        "deferredReadMs": {
+          "samples": [0, 0, 0, 0, 0],
+          "median": 0,
+          "p90": 0,
+          "p95": 0,
+          "max": 0
+        },
+        "mutationMs": {
+          "samples": [
+            48.940042000001995, 50.62749999999869, 52.299291000002995, 56.65004100000078,
+            81.51458400000001
+          ],
+          "median": 52.299291000002995,
+          "p90": 81.51458400000001,
+          "p95": 81.51458400000001,
+          "max": 81.51458400000001
+        },
+        "throughputPerSecond": {
+          "samples": [
+            12.267743401597926, 17.65223788628831, 19.1207180992175, 19.75211100686437,
+            20.43316595437248
+          ],
+          "median": 19.1207180992175,
+          "p90": 20.43316595437248,
+          "p95": 20.43316595437248,
+          "max": 20.43316595437248
+        },
+        "allSafe": true
+      },
+      "deferred": {
+        "blockingMs": {
+          "samples": [
+            51.38300000000163, 51.78750000000218, 52.39366699999664, 53.975125000000844,
+            231.74662499999977
+          ],
+          "median": 52.39366699999664,
+          "p90": 231.74662499999977,
+          "p95": 231.74662499999977,
+          "max": 231.74662499999977
+        },
+        "startupReadMs": {
+          "samples": [
+            0.0001249999986612238, 0.0003329999963170849, 0.000375000003259629,
+            0.0005409999976109248, 0.0009160000004158064
+          ],
+          "median": 0.000375000003259629,
+          "p90": 0.0009160000004158064,
+          "p95": 0.0009160000004158064,
+          "max": 0.0009160000004158064
+        },
+        "deferredReadMs": {
+          "samples": [
+            197.00012499999866, 202.5596250000017, 263.90620800000033, 281.87766700000066,
+            726.2560420000004
+          ],
+          "median": 263.90620800000033,
+          "p90": 726.2560420000004,
+          "p95": 726.2560420000004,
+          "max": 726.2560420000004
+        },
+        "mutationMs": {
+          "samples": [
+            51.38300000000163, 51.78750000000218, 52.39366699999664, 53.975125000000844,
+            231.74662499999977
+          ],
+          "median": 52.39366699999664,
+          "p90": 231.74662499999977,
+          "p95": 231.74662499999977,
+          "max": 231.74662499999977
+        },
+        "throughputPerSecond": {
+          "samples": [
+            4.315057446899178, 18.527052971160035, 19.086276209681298, 19.3096789765862,
+            19.461689663896003
+          ],
+          "median": 19.086276209681298,
+          "p90": 19.461689663896003,
+          "p95": 19.461689663896003,
+          "max": 19.461689663896003
+        },
+        "allSafe": true
+      },
+      "medianImprovementFraction": -0.0018045368912102317,
+      "p95ImprovementFraction": -1.843008129686336,
+      "p95RegressionFraction": 1.843008129686336,
+      "allSafe": true
+    },
+    {
+      "name": "cold-single",
+      "burstSize": 1,
+      "includesStartup": true,
+      "pairs": [
+        {
+          "repetition": 0,
+          "order": ["deferred", "enriched"],
+          "enriched": {
+            "strategy": "enriched",
+            "blockingMs": 763.163125,
+            "startupReadMs": 605.1533749999999,
+            "structuralReadMs": 0,
+            "enrichmentReadMs": 605.152333,
+            "deferredReadMs": 0,
+            "mutationMs": 158.00975000000017,
+            "throughputPerSecond": 6.32872338574043,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 1,
+            "inventoryCount": 50,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [23.73046875, 21.0009765625, 20.32275390625],
+              "after": [23.73046875, 21.0009765625, 20.32275390625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 4.611,
+              "systemCpuMs": 4.072,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 99
+            },
+            "startupCommands": [
+              {
+                "kind": "enriched",
+                "code": 0,
+                "ms": 604.6681249999992,
+                "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+              }
+            ],
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 24.966957999999977,
+                "addMs": 107.10433399999965,
+                "verifyMs": 25.83812500000022,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "deferred": {
+            "strategy": "deferred",
+            "blockingMs": 195.26208300000053,
+            "startupReadMs": 0.0009170000002995948,
+            "structuralReadMs": 0,
+            "enrichmentReadMs": 496.6434589999999,
+            "deferredReadMs": 496.6434589999999,
+            "mutationMs": 195.26116600000023,
+            "throughputPerSecond": 5.121346043790391,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 1,
+            "inventoryCount": 50,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [22.8369140625, 20.78173828125, 20.2421875],
+              "after": [23.73046875, 21.0009765625, 20.32275390625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 3.544,
+              "systemCpuMs": 4.278,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 83
+            },
+            "startupCommands": [
+              {
+                "kind": "enriched",
+                "code": 0,
+                "ms": 496.113292,
+                "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+              }
+            ],
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 50.61237500000061,
+                "addMs": 115.9814580000002,
+                "verifyMs": 28.325958000000355,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 1,
+          "order": ["enriched", "deferred"],
+          "enriched": {
+            "strategy": "enriched",
+            "blockingMs": 262.46379199999865,
+            "startupReadMs": 209.91441699999996,
+            "structuralReadMs": 0,
+            "enrichmentReadMs": 209.91416700000264,
+            "deferredReadMs": 0,
+            "mutationMs": 52.54937499999869,
+            "throughputPerSecond": 19.029722047122824,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 1,
+            "inventoryCount": 50,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [22.94921875, 20.9267578125, 20.3056640625],
+              "after": [22.94921875, 20.9267578125, 20.3056640625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 2.444,
+              "systemCpuMs": 2.576,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 47
+            },
+            "startupCommands": [
+              {
+                "kind": "enriched",
+                "code": 0,
+                "ms": 209.6975420000017,
+                "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+              }
+            ],
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 9.42279100000087,
+                "addMs": 32.6081669999985,
+                "verifyMs": 10.469332999997278,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "deferred": {
+            "strategy": "deferred",
+            "blockingMs": 50.65004200000112,
+            "startupReadMs": 0.0010000000002037268,
+            "structuralReadMs": 0,
+            "enrichmentReadMs": 221.52916600000026,
+            "deferredReadMs": 221.52916600000026,
+            "mutationMs": 50.64904200000092,
+            "throughputPerSecond": 19.74371005872099,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 1,
+            "inventoryCount": 50,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [22.94921875, 20.9267578125, 20.3056640625],
+              "after": [22.94921875, 20.9267578125, 20.3056640625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 2.072,
+              "systemCpuMs": 2.258,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 42
+            },
+            "startupCommands": [
+              {
+                "kind": "enriched",
+                "code": 0,
+                "ms": 221.32266600000003,
+                "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+              }
+            ],
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 9.387082999997801,
+                "addMs": 31.26204200000211,
+                "verifyMs": 9.944041999999172,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 2,
+          "order": ["deferred", "enriched"],
+          "enriched": {
+            "strategy": "enriched",
+            "blockingMs": 243.62712499999907,
+            "startupReadMs": 192.3845829999991,
+            "structuralReadMs": 0,
+            "enrichmentReadMs": 192.38420800000313,
+            "deferredReadMs": 0,
+            "mutationMs": 51.24254199999996,
+            "throughputPerSecond": 19.515034987920792,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 1,
+            "inventoryCount": 50,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [23.7734375, 21.17431640625, 20.40087890625],
+              "after": [23.7734375, 21.17431640625, 20.40087890625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 2.189,
+              "systemCpuMs": 2.382,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 55
+            },
+            "startupCommands": [
+              {
+                "kind": "enriched",
+                "code": 0,
+                "ms": 192.16912500000035,
+                "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+              }
+            ],
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 9.87933399999747,
+                "addMs": 31.463125000002037,
+                "verifyMs": 9.84649999999965,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "deferred": {
+            "strategy": "deferred",
+            "blockingMs": 50.91320799999812,
+            "startupReadMs": 0.0005830000009154901,
+            "structuralReadMs": 0,
+            "enrichmentReadMs": 224.26537499999904,
+            "deferredReadMs": 224.26537499999904,
+            "mutationMs": 50.912624999997206,
+            "throughputPerSecond": 19.641493637384734,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 1,
+            "inventoryCount": 50,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [23.7734375, 21.17431640625, 20.40087890625],
+              "after": [23.7734375, 21.17431640625, 20.40087890625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.826,
+              "systemCpuMs": 2.338,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 33
+            },
+            "startupCommands": [
+              {
+                "kind": "enriched",
+                "code": 0,
+                "ms": 224.00633399999788,
+                "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+              }
+            ],
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 9.476166000000376,
+                "addMs": 31.585000000002765,
+                "verifyMs": 9.796957999998995,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 3,
+          "order": ["enriched", "deferred"],
+          "enriched": {
+            "strategy": "enriched",
+            "blockingMs": 266.7873749999999,
+            "startupReadMs": 216.5659999999989,
+            "structuralReadMs": 0,
+            "enrichmentReadMs": 216.5656250000029,
+            "deferredReadMs": 0,
+            "mutationMs": 50.22137500000099,
+            "throughputPerSecond": 19.911840326952024,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 1,
+            "inventoryCount": 50,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [21.0595703125, 20.67529296875, 20.232421875],
+              "after": [21.0595703125, 20.67529296875, 20.232421875]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.745,
+              "systemCpuMs": 2.188,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 39
+            },
+            "startupCommands": [
+              {
+                "kind": "enriched",
+                "code": 0,
+                "ms": 216.35224999999627,
+                "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+              }
+            ],
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 9.059124999999767,
+                "addMs": 31.14241700000275,
+                "verifyMs": 9.965833000002021,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "deferred": {
+            "strategy": "deferred",
+            "blockingMs": 49.77420799999527,
+            "startupReadMs": 0.0004999999946448952,
+            "structuralReadMs": 0,
+            "enrichmentReadMs": 207.06470799999806,
+            "deferredReadMs": 207.06470799999806,
+            "mutationMs": 49.773708000000624,
+            "throughputPerSecond": 20.090928327059487,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 1,
+            "inventoryCount": 50,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [21.0595703125, 20.67529296875, 20.232421875],
+              "after": [21.0595703125, 20.67529296875, 20.232421875]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.707,
+              "systemCpuMs": 2.031,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 31
+            },
+            "startupCommands": [
+              {
+                "kind": "enriched",
+                "code": 0,
+                "ms": 206.8394580000022,
+                "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+              }
+            ],
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 8.564665999998397,
+                "addMs": 32.069541999997455,
+                "verifyMs": 9.085875000004307,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 4,
+          "order": ["deferred", "enriched"],
+          "enriched": {
+            "strategy": "enriched",
+            "blockingMs": 686.1509170000063,
+            "startupReadMs": 236.10845900000277,
+            "structuralReadMs": 0,
+            "enrichmentReadMs": 236.10791599999357,
+            "deferredReadMs": 0,
+            "mutationMs": 450.04245800000353,
+            "throughputPerSecond": 2.222012572867052,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 1,
+            "inventoryCount": 50,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [20.12451171875, 20.5009765625, 20.17626953125],
+              "after": [20.12451171875, 20.5009765625, 20.17626953125]
+            },
+            "resourceUsage": {
+              "userCpuMs": 3.838,
+              "systemCpuMs": 3.627,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 58
+            },
+            "startupCommands": [
+              {
+                "kind": "enriched",
+                "code": 0,
+                "ms": 235.74375000000146,
+                "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+              }
+            ],
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 14.003582999997889,
+                "addMs": 407.22662500000297,
+                "verifyMs": 28.744542000000365,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "deferred": {
+            "strategy": "deferred",
+            "blockingMs": 50.94750000000204,
+            "startupReadMs": 0.0001249999986612238,
+            "structuralReadMs": 0,
+            "enrichmentReadMs": 193.18666700000176,
+            "deferredReadMs": 193.18666700000176,
+            "mutationMs": 50.947375000003376,
+            "throughputPerSecond": 19.6280966389325,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 1,
+            "inventoryCount": 50,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [20.12451171875, 20.5009765625, 20.17626953125],
+              "after": [20.12451171875, 20.5009765625, 20.17626953125]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.711,
+              "systemCpuMs": 2.329,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 37
+            },
+            "startupCommands": [
+              {
+                "kind": "enriched",
+                "code": 0,
+                "ms": 192.97666699999536,
+                "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+              }
+            ],
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 9.655708999998751,
+                "addMs": 31.196875000001455,
+                "verifyMs": 10.042417000004207,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        }
+      ],
+      "enriched": {
+        "blockingMs": {
+          "samples": [
+            243.62712499999907, 262.46379199999865, 266.7873749999999, 686.1509170000063, 763.163125
+          ],
+          "median": 266.7873749999999,
+          "p90": 763.163125,
+          "p95": 763.163125,
+          "max": 763.163125
+        },
+        "startupReadMs": {
+          "samples": [
+            192.3845829999991, 209.91441699999996, 216.5659999999989, 236.10845900000277,
+            605.1533749999999
+          ],
+          "median": 216.5659999999989,
+          "p90": 605.1533749999999,
+          "p95": 605.1533749999999,
+          "max": 605.1533749999999
+        },
+        "deferredReadMs": {
+          "samples": [0, 0, 0, 0, 0],
+          "median": 0,
+          "p90": 0,
+          "p95": 0,
+          "max": 0
+        },
+        "mutationMs": {
+          "samples": [
+            50.22137500000099, 51.24254199999996, 52.54937499999869, 158.00975000000017,
+            450.04245800000353
+          ],
+          "median": 52.54937499999869,
+          "p90": 450.04245800000353,
+          "p95": 450.04245800000353,
+          "max": 450.04245800000353
+        },
+        "throughputPerSecond": {
+          "samples": [
+            2.222012572867052, 6.32872338574043, 19.029722047122824, 19.515034987920792,
+            19.911840326952024
+          ],
+          "median": 19.029722047122824,
+          "p90": 19.911840326952024,
+          "p95": 19.911840326952024,
+          "max": 19.911840326952024
+        },
+        "allSafe": true
+      },
+      "deferred": {
+        "blockingMs": {
+          "samples": [
+            49.77420799999527, 50.65004200000112, 50.91320799999812, 50.94750000000204,
+            195.26208300000053
+          ],
+          "median": 50.91320799999812,
+          "p90": 195.26208300000053,
+          "p95": 195.26208300000053,
+          "max": 195.26208300000053
+        },
+        "startupReadMs": {
+          "samples": [
+            0.0001249999986612238, 0.0004999999946448952, 0.0005830000009154901,
+            0.0009170000002995948, 0.0010000000002037268
+          ],
+          "median": 0.0005830000009154901,
+          "p90": 0.0010000000002037268,
+          "p95": 0.0010000000002037268,
+          "max": 0.0010000000002037268
+        },
+        "deferredReadMs": {
+          "samples": [
+            193.18666700000176, 207.06470799999806, 221.52916600000026, 224.26537499999904,
+            496.6434589999999
+          ],
+          "median": 221.52916600000026,
+          "p90": 496.6434589999999,
+          "p95": 496.6434589999999,
+          "max": 496.6434589999999
+        },
+        "mutationMs": {
+          "samples": [
+            49.773708000000624, 50.64904200000092, 50.912624999997206, 50.947375000003376,
+            195.26116600000023
+          ],
+          "median": 50.912624999997206,
+          "p90": 195.26116600000023,
+          "p95": 195.26116600000023,
+          "max": 195.26116600000023
+        },
+        "throughputPerSecond": {
+          "samples": [
+            5.121346043790391, 19.6280966389325, 19.641493637384734, 19.74371005872099,
+            20.090928327059487
+          ],
+          "median": 19.641493637384734,
+          "p90": 20.090928327059487,
+          "p95": 20.090928327059487,
+          "max": 20.090928327059487
+        },
+        "allSafe": true
+      },
+      "medianImprovementFraction": 0.8091618540794963,
+      "p95ImprovementFraction": 0.7441410930330256,
+      "p95RegressionFraction": -0.7441410930330256,
+      "allSafe": true
+    },
+    {
+      "name": "burst-3",
+      "burstSize": 3,
+      "includesStartup": false,
+      "pairs": [
+        {
+          "repetition": 0,
+          "order": ["enriched", "deferred"],
+          "enriched": {
+            "strategy": "enriched",
+            "blockingMs": 81.84462499999972,
+            "startupReadMs": 303.7150419999998,
+            "structuralReadMs": 0,
+            "enrichmentReadMs": 303.7133329999997,
+            "deferredReadMs": 0,
+            "mutationMs": 81.84462499999972,
+            "throughputPerSecond": 36.654820032470184,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 3,
+            "inventoryCount": 52,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [23.73046875, 21.0009765625, 20.32275390625],
+              "after": [23.73046875, 21.0009765625, 20.32275390625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 6.565,
+              "systemCpuMs": 7.182,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 160
+            },
+            "startupCommands": [
+              {
+                "kind": "enriched",
+                "code": 0,
+                "ms": 303.25537499999973,
+                "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+              }
+            ],
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 16.113500000000386,
+                "addMs": 50.99595800000043,
+                "verifyMs": 11.53204199999982,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.78691600000002,
+                "addMs": 49.291167000000314,
+                "verifyMs": 13.191375000000335,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 19.833708999999544,
+                "addMs": 49.28162500000053,
+                "verifyMs": 11.03820799999994,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "deferred": {
+            "strategy": "deferred",
+            "blockingMs": 92.16474999999991,
+            "startupReadMs": 0.0010830000001078588,
+            "structuralReadMs": 0,
+            "enrichmentReadMs": 257.65820799999983,
+            "deferredReadMs": 257.65820799999983,
+            "mutationMs": 92.16474999999991,
+            "throughputPerSecond": 32.55040565943057,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 3,
+            "inventoryCount": 52,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [23.73046875, 21.0009765625, 20.32275390625],
+              "after": [23.73046875, 21.0009765625, 20.32275390625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 5.316,
+              "systemCpuMs": 6.867,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 186
+            },
+            "startupCommands": [
+              {
+                "kind": "enriched",
+                "code": 0,
+                "ms": 257.28320799999983,
+                "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+              }
+            ],
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 17.34966600000007,
+                "addMs": 60.753458999999566,
+                "verifyMs": 13.979583000000275,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.932999999999993,
+                "addMs": 56.22412500000064,
+                "verifyMs": 15.061082999999599,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.938125000000582,
+                "addMs": 58.968290999999226,
+                "verifyMs": 15.838874999999462,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 1,
+          "order": ["deferred", "enriched"],
+          "enriched": {
+            "strategy": "enriched",
+            "blockingMs": 78.88925000000017,
+            "startupReadMs": 204.7011249999996,
+            "structuralReadMs": 0,
+            "enrichmentReadMs": 204.70074999999997,
+            "deferredReadMs": 0,
+            "mutationMs": 78.88925000000017,
+            "throughputPerSecond": 38.027994942276585,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 3,
+            "inventoryCount": 52,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [22.94921875, 20.9267578125, 20.3056640625],
+              "after": [22.94921875, 20.9267578125, 20.3056640625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 3.889,
+              "systemCpuMs": 5.535,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 89
+            },
+            "startupCommands": [
+              {
+                "kind": "enriched",
+                "code": 0,
+                "ms": 204.50700000000143,
+                "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+              }
+            ],
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 11.859375,
+                "addMs": 51.54279099999985,
+                "verifyMs": 13.731999999999971,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.604542000000947,
+                "addMs": 53.40258399999948,
+                "verifyMs": 14.40820800000074,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.345750000000407,
+                "addMs": 49.35349999999744,
+                "verifyMs": 13.187458000000333,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "deferred": {
+            "strategy": "deferred",
+            "blockingMs": 73.40379199999734,
+            "startupReadMs": 0.0002500000009604264,
+            "structuralReadMs": 0,
+            "enrichmentReadMs": 219.41387499999837,
+            "deferredReadMs": 219.41387499999837,
+            "mutationMs": 73.40379199999734,
+            "throughputPerSecond": 40.86982318297818,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 3,
+            "inventoryCount": 52,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [22.94921875, 20.9267578125, 20.3056640625],
+              "after": [22.94921875, 20.9267578125, 20.3056640625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 4.543,
+              "systemCpuMs": 6.23,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 88
+            },
+            "startupCommands": [
+              {
+                "kind": "enriched",
+                "code": 0,
+                "ms": 219.19987499999843,
+                "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+              }
+            ],
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 13.786291999997047,
+                "addMs": 46.93829099999857,
+                "verifyMs": 11.27941600000122,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.246957999999722,
+                "addMs": 45.91791599999851,
+                "verifyMs": 12.437291999998706,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.097916999999143,
+                "addMs": 46.657250000000204,
+                "verifyMs": 11.279624999999214,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 2,
+          "order": ["enriched", "deferred"],
+          "enriched": {
+            "strategy": "enriched",
+            "blockingMs": 64.4777090000025,
+            "startupReadMs": 200.43112499999916,
+            "structuralReadMs": 0,
+            "enrichmentReadMs": 200.43074999999953,
+            "deferredReadMs": 0,
+            "mutationMs": 64.4777090000025,
+            "throughputPerSecond": 46.5277077384974,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 3,
+            "inventoryCount": 52,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [23.7734375, 21.17431640625, 20.40087890625],
+              "after": [23.7734375, 21.17431640625, 20.40087890625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 2.733,
+              "systemCpuMs": 4.155,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 57
+            },
+            "startupCommands": [
+              {
+                "kind": "enriched",
+                "code": 0,
+                "ms": 200.22962499999994,
+                "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+              }
+            ],
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 10.815999999998894,
+                "addMs": 43.659583000000566,
+                "verifyMs": 9.958166999997047,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.784999999999854,
+                "addMs": 43.68433300000106,
+                "verifyMs": 9.494500000000698,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.777124999996886,
+                "addMs": 39.548125000001164,
+                "verifyMs": 10.104041999999026,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "deferred": {
+            "strategy": "deferred",
+            "blockingMs": 604.6555840000001,
+            "startupReadMs": 0.000291000003926456,
+            "structuralReadMs": 0,
+            "enrichmentReadMs": 610.6789169999975,
+            "deferredReadMs": 610.6789169999975,
+            "mutationMs": 604.6555840000001,
+            "throughputPerSecond": 4.961502183034499,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 3,
+            "inventoryCount": 52,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [23.7734375, 21.17431640625, 20.40087890625],
+              "after": [23.7734375, 21.17431640625, 20.40087890625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 5.9,
+              "systemCpuMs": 8.761,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 121
+            },
+            "startupCommands": [
+              {
+                "kind": "enriched",
+                "code": 0,
+                "ms": 610.4540830000042,
+                "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+              }
+            ],
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 148.51262500000303,
+                "addMs": 392.2828750000044,
+                "verifyMs": 62.2312080000047,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 115.82366600000387,
+                "addMs": 389.325417,
+                "verifyMs": 62.38266699999804,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 139.5083749999976,
+                "addMs": 392.541541999999,
+                "verifyMs": 36.112999999997555,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 3,
+          "order": ["deferred", "enriched"],
+          "enriched": {
+            "strategy": "enriched",
+            "blockingMs": 616.9232080000002,
+            "startupReadMs": 228.90499999999884,
+            "structuralReadMs": 0,
+            "enrichmentReadMs": 228.90433399999893,
+            "deferredReadMs": 0,
+            "mutationMs": 616.9232080000002,
+            "throughputPerSecond": 4.862841859565768,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 3,
+            "inventoryCount": 52,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [21.0595703125, 20.67529296875, 20.232421875],
+              "after": [21.0595703125, 20.67529296875, 20.232421875]
+            },
+            "resourceUsage": {
+              "userCpuMs": 4.401,
+              "systemCpuMs": 7.181,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 118
+            },
+            "startupCommands": [
+              {
+                "kind": "enriched",
+                "code": 0,
+                "ms": 228.70245799999975,
+                "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+              }
+            ],
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 51.179582999997365,
+                "addMs": 252.19616700000188,
+                "verifyMs": 74.38858400000026,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 88.29487499999959,
+                "addMs": 335.09266700000444,
+                "verifyMs": 190.6788749999978,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 94.9957080000022,
+                "addMs": 301.43125000000146,
+                "verifyMs": 84.37887499999488,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "deferred": {
+            "strategy": "deferred",
+            "blockingMs": 69.8784999999989,
+            "startupReadMs": 0.0003749999959836714,
+            "structuralReadMs": 0,
+            "enrichmentReadMs": 210.36062500000116,
+            "deferredReadMs": 210.36062500000116,
+            "mutationMs": 69.8784999999989,
+            "throughputPerSecond": 42.93165995263274,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 3,
+            "inventoryCount": 52,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [21.0595703125, 20.67529296875, 20.232421875],
+              "after": [21.0595703125, 20.67529296875, 20.232421875]
+            },
+            "resourceUsage": {
+              "userCpuMs": 4.381,
+              "systemCpuMs": 4.686,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 79
+            },
+            "startupCommands": [
+              {
+                "kind": "enriched",
+                "code": 0,
+                "ms": 209.92733399999997,
+                "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+              }
+            ],
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 11.77245799999946,
+                "addMs": 45.101332999998704,
+                "verifyMs": 10.368084000001545,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.336957999999868,
+                "addMs": 47.789833000002545,
+                "verifyMs": 9.519584000001487,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.485208999998576,
+                "addMs": 49.52012499999546,
+                "verifyMs": 8.87391700000444,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 4,
+          "order": ["enriched", "deferred"],
+          "enriched": {
+            "strategy": "enriched",
+            "blockingMs": 207.73020800000086,
+            "startupReadMs": 513.4236250000031,
+            "structuralReadMs": 0,
+            "enrichmentReadMs": 513.4226669999989,
+            "deferredReadMs": 0,
+            "mutationMs": 207.73020800000086,
+            "throughputPerSecond": 14.441809060336508,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 3,
+            "inventoryCount": 52,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [20.12451171875, 20.5009765625, 20.17626953125],
+              "after": [20.12451171875, 20.5009765625, 20.17626953125]
+            },
+            "resourceUsage": {
+              "userCpuMs": 4.832,
+              "systemCpuMs": 7.13,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 127
+            },
+            "startupCommands": [
+              {
+                "kind": "enriched",
+                "code": 0,
+                "ms": 513.0556660000002,
+                "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+              }
+            ],
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 28.23470900000393,
+                "addMs": 132.0118749999965,
+                "verifyMs": 29.73795799999789,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 35.54641599999741,
+                "addMs": 131.1354169999977,
+                "verifyMs": 21.97462500000256,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 22.742749999997613,
+                "addMs": 154.91725000000588,
+                "verifyMs": 20.38445800000045,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "deferred": {
+            "strategy": "deferred",
+            "blockingMs": 135.43945800000074,
+            "startupReadMs": 0.0005000000019208528,
+            "structuralReadMs": 0,
+            "enrichmentReadMs": 236.57466600000043,
+            "deferredReadMs": 236.57466600000043,
+            "mutationMs": 135.43945800000074,
+            "throughputPerSecond": 22.150118173095347,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 3,
+            "inventoryCount": 52,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [20.12451171875, 20.5009765625, 20.17626953125],
+              "after": [19.2333984375, 20.3095703125, 20.1103515625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 4.729,
+              "systemCpuMs": 7.951,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 139
+            },
+            "startupCommands": [
+              {
+                "kind": "enriched",
+                "code": 0,
+                "ms": 236.34545800000342,
+                "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+              }
+            ],
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 19.809042000000773,
+                "addMs": 91.98116700000537,
+                "verifyMs": 19.3434999999954,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 23.991957999998704,
+                "addMs": 90.43170899999677,
+                "verifyMs": 19.853833000001032,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 19.307291999997688,
+                "addMs": 97.31737499999872,
+                "verifyMs": 16.507291000001715,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        }
+      ],
+      "enriched": {
+        "blockingMs": {
+          "samples": [
+            64.4777090000025, 78.88925000000017, 81.84462499999972, 207.73020800000086,
+            616.9232080000002
+          ],
+          "median": 81.84462499999972,
+          "p90": 616.9232080000002,
+          "p95": 616.9232080000002,
+          "max": 616.9232080000002
+        },
+        "startupReadMs": {
+          "samples": [
+            200.43112499999916, 204.7011249999996, 228.90499999999884, 303.7150419999998,
+            513.4236250000031
+          ],
+          "median": 228.90499999999884,
+          "p90": 513.4236250000031,
+          "p95": 513.4236250000031,
+          "max": 513.4236250000031
+        },
+        "deferredReadMs": {
+          "samples": [0, 0, 0, 0, 0],
+          "median": 0,
+          "p90": 0,
+          "p95": 0,
+          "max": 0
+        },
+        "mutationMs": {
+          "samples": [
+            64.4777090000025, 78.88925000000017, 81.84462499999972, 207.73020800000086,
+            616.9232080000002
+          ],
+          "median": 81.84462499999972,
+          "p90": 616.9232080000002,
+          "p95": 616.9232080000002,
+          "max": 616.9232080000002
+        },
+        "throughputPerSecond": {
+          "samples": [
+            4.862841859565768, 14.441809060336508, 36.654820032470184, 38.027994942276585,
+            46.5277077384974
+          ],
+          "median": 36.654820032470184,
+          "p90": 46.5277077384974,
+          "p95": 46.5277077384974,
+          "max": 46.5277077384974
+        },
+        "allSafe": true
+      },
+      "deferred": {
+        "blockingMs": {
+          "samples": [
+            69.8784999999989, 73.40379199999734, 92.16474999999991, 135.43945800000074,
+            604.6555840000001
+          ],
+          "median": 92.16474999999991,
+          "p90": 604.6555840000001,
+          "p95": 604.6555840000001,
+          "max": 604.6555840000001
+        },
+        "startupReadMs": {
+          "samples": [
+            0.0002500000009604264, 0.000291000003926456, 0.0003749999959836714,
+            0.0005000000019208528, 0.0010830000001078588
+          ],
+          "median": 0.0003749999959836714,
+          "p90": 0.0010830000001078588,
+          "p95": 0.0010830000001078588,
+          "max": 0.0010830000001078588
+        },
+        "deferredReadMs": {
+          "samples": [
+            210.36062500000116, 219.41387499999837, 236.57466600000043, 257.65820799999983,
+            610.6789169999975
+          ],
+          "median": 236.57466600000043,
+          "p90": 610.6789169999975,
+          "p95": 610.6789169999975,
+          "max": 610.6789169999975
+        },
+        "mutationMs": {
+          "samples": [
+            69.8784999999989, 73.40379199999734, 92.16474999999991, 135.43945800000074,
+            604.6555840000001
+          ],
+          "median": 92.16474999999991,
+          "p90": 604.6555840000001,
+          "p95": 604.6555840000001,
+          "max": 604.6555840000001
+        },
+        "throughputPerSecond": {
+          "samples": [
+            4.961502183034499, 22.150118173095347, 32.55040565943057, 40.86982318297818,
+            42.93165995263274
+          ],
+          "median": 32.55040565943057,
+          "p90": 42.93165995263274,
+          "p95": 42.93165995263274,
+          "max": 42.93165995263274
+        },
+        "allSafe": true
+      },
+      "medianImprovementFraction": -0.12609410819586778,
+      "p95ImprovementFraction": 0.01988517183487133,
+      "p95RegressionFraction": -0.01988517183487133,
+      "allSafe": true
+    },
+    {
+      "name": "burst-5",
+      "burstSize": 5,
+      "includesStartup": false,
+      "pairs": [
+        {
+          "repetition": 0,
+          "order": ["deferred", "enriched"],
+          "enriched": {
+            "strategy": "enriched",
+            "blockingMs": 319.57416700000067,
+            "startupReadMs": 479.0140420000007,
+            "structuralReadMs": 0,
+            "enrichmentReadMs": 479.01266600000054,
+            "deferredReadMs": 0,
+            "mutationMs": 319.57416700000067,
+            "throughputPerSecond": 15.645820333155994,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 4,
+            "inventoryCount": 54,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [23.73046875, 21.0009765625, 20.32275390625],
+              "after": [23.73046875, 21.0009765625, 20.32275390625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 10.001,
+              "systemCpuMs": 10.936,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 206
+            },
+            "startupCommands": [
+              {
+                "kind": "enriched",
+                "code": 0,
+                "ms": 478.53641700000117,
+                "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+              }
+            ],
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 26.299582999999984,
+                "addMs": 134.54591699999946,
+                "verifyMs": 22.972667,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 27.224040999999488,
+                "addMs": 129.6055410000008,
+                "verifyMs": 23.5023340000007,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 31.994125000001077,
+                "addMs": 146.50025000000096,
+                "verifyMs": 27.234542000000147,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 27.14362500000061,
+                "addMs": 156.0071250000001,
+                "verifyMs": 27.308375000000524,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 23.57929200000035,
+                "addMs": 83.6225830000003,
+                "verifyMs": 28.43449999999939,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "deferred": {
+            "strategy": "deferred",
+            "blockingMs": 161.41729099999975,
+            "startupReadMs": 0.0005840000003445311,
+            "structuralReadMs": 0,
+            "enrichmentReadMs": 222.734375,
+            "deferredReadMs": 222.734375,
+            "mutationMs": 161.41729099999975,
+            "throughputPerSecond": 30.975615865093463,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 4,
+            "inventoryCount": 54,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [23.73046875, 21.0009765625, 20.32275390625],
+              "after": [23.73046875, 21.0009765625, 20.32275390625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 7.612,
+              "systemCpuMs": 9.286,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 197
+            },
+            "startupCommands": [
+              {
+                "kind": "enriched",
+                "code": 0,
+                "ms": 222.44966699999986,
+                "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+              }
+            ],
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 14.771209000000454,
+                "addMs": 68.95499999999993,
+                "verifyMs": 15.22345899999982,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.758041999999477,
+                "addMs": 71.15483400000085,
+                "verifyMs": 14.409875000000284,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 18.162333000000217,
+                "addMs": 66.26433300000008,
+                "verifyMs": 14.525290999999925,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 16.183541000000332,
+                "addMs": 74.97120799999993,
+                "verifyMs": 14.414208999999573,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.817124999999578,
+                "addMs": 37.49229099999957,
+                "verifyMs": 12.037583000000268,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 1,
+          "order": ["enriched", "deferred"],
+          "enriched": {
+            "strategy": "enriched",
+            "blockingMs": 138.6961250000022,
+            "startupReadMs": 222.47241699999722,
+            "structuralReadMs": 0,
+            "enrichmentReadMs": 222.47187499999927,
+            "deferredReadMs": 0,
+            "mutationMs": 138.6961250000022,
+            "throughputPerSecond": 36.05003384196869,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 4,
+            "inventoryCount": 54,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [22.94921875, 20.9267578125, 20.3056640625],
+              "after": [22.94921875, 20.9267578125, 20.3056640625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 8.196,
+              "systemCpuMs": 9.623,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 171
+            },
+            "startupCommands": [
+              {
+                "kind": "enriched",
+                "code": 0,
+                "ms": 222.27524999999878,
+                "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+              }
+            ],
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 15.360957999997481,
+                "addMs": 51.53412499999831,
+                "verifyMs": 13.177875000001222,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.012125000001106,
+                "addMs": 52.27100000000064,
+                "verifyMs": 12.767250000000786,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.253333000000566,
+                "addMs": 57.42124999999942,
+                "verifyMs": 11.749165999997786,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.413666999997076,
+                "addMs": 57.75683299999946,
+                "verifyMs": 12.143166999998357,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.927666999999929,
+                "addMs": 37.32795900000201,
+                "verifyMs": 10.74841699999888,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "deferred": {
+            "strategy": "deferred",
+            "blockingMs": 135.18216600000233,
+            "startupReadMs": 0.000499999998282874,
+            "structuralReadMs": 0,
+            "enrichmentReadMs": 607.2684579999986,
+            "deferredReadMs": 607.2684579999986,
+            "mutationMs": 135.18216600000233,
+            "throughputPerSecond": 36.987127429219576,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 4,
+            "inventoryCount": 54,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [22.94921875, 20.9267578125, 20.3056640625],
+              "after": [22.94921875, 20.9267578125, 20.3056640625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 6.986,
+              "systemCpuMs": 9.716,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 153
+            },
+            "startupCommands": [
+              {
+                "kind": "enriched",
+                "code": 0,
+                "ms": 606.8377090000031,
+                "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+              }
+            ],
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 17.57787499999904,
+                "addMs": 58.747583000000304,
+                "verifyMs": 10.835041999998793,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.717208000001847,
+                "addMs": 62.87474999999904,
+                "verifyMs": 10.527666999998473,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 16.485916000001453,
+                "addMs": 53.772791999999754,
+                "verifyMs": 11.205625000002328,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.519416999999521,
+                "addMs": 61.78508299999885,
+                "verifyMs": 12.37420800000109,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.85083400000076,
+                "addMs": 31.952499999999418,
+                "verifyMs": 9.724374999997963,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 2,
+          "order": ["deferred", "enriched"],
+          "enriched": {
+            "strategy": "enriched",
+            "blockingMs": 116.81212499999674,
+            "startupReadMs": 200.22379100000398,
+            "structuralReadMs": 0,
+            "enrichmentReadMs": 200.22325000000274,
+            "deferredReadMs": 0,
+            "mutationMs": 116.81212499999674,
+            "throughputPerSecond": 42.80377572105755,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 4,
+            "inventoryCount": 54,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [22.10986328125, 20.87255859375, 20.298828125],
+              "after": [22.10986328125, 20.87255859375, 20.298828125]
+            },
+            "resourceUsage": {
+              "userCpuMs": 4.795,
+              "systemCpuMs": 7.166,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 163
+            },
+            "startupCommands": [
+              {
+                "kind": "enriched",
+                "code": 0,
+                "ms": 200.00587499999529,
+                "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+              }
+            ],
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 10.94062500000291,
+                "addMs": 46.33816699999443,
+                "verifyMs": 11.323333000000275,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.882500000006985,
+                "addMs": 50.15916699999798,
+                "verifyMs": 9.794957999998587,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.932583000001614,
+                "addMs": 46.47570799999812,
+                "verifyMs": 10.59454199999891,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.839375000003201,
+                "addMs": 43.281624999995984,
+                "verifyMs": 11.066542000000481,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 8.80174999999872,
+                "addMs": 31.756209000006493,
+                "verifyMs": 9.575917000001937,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "deferred": {
+            "strategy": "deferred",
+            "blockingMs": 223.4598330000008,
+            "startupReadMs": 0.0005839999939780682,
+            "structuralReadMs": 0,
+            "enrichmentReadMs": 237.87075000000186,
+            "deferredReadMs": 237.87075000000186,
+            "mutationMs": 223.4598330000008,
+            "throughputPerSecond": 22.375385915552805,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 4,
+            "inventoryCount": 54,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [23.7734375, 21.17431640625, 20.40087890625],
+              "after": [23.7734375, 21.17431640625, 20.40087890625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 6.151,
+              "systemCpuMs": 8.887,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 153
+            },
+            "startupCommands": [
+              {
+                "kind": "enriched",
+                "code": 0,
+                "ms": 237.43954200000007,
+                "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+              }
+            ],
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 19.646542000002228,
+                "addMs": 113.66779200000019,
+                "verifyMs": 19.321875000001455,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 27.802916999993613,
+                "addMs": 107.95412499999657,
+                "verifyMs": 20.69133299999521,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 18.77062499999738,
+                "addMs": 99.34016699999484,
+                "verifyMs": 22.578667000001587,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 21.347625000002154,
+                "addMs": 107.15754100000049,
+                "verifyMs": 23.326124999999593,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 16.744582999999693,
+                "addMs": 47.89824999999837,
+                "verifyMs": 13.238832999995793,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 3,
+          "order": ["enriched", "deferred"],
+          "enriched": {
+            "strategy": "enriched",
+            "blockingMs": 217.94433299999946,
+            "startupReadMs": 363.3824590000004,
+            "structuralReadMs": 0,
+            "enrichmentReadMs": 363.38166700000147,
+            "deferredReadMs": 0,
+            "mutationMs": 217.94433299999946,
+            "throughputPerSecond": 22.941638037452492,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 4,
+            "inventoryCount": 54,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [21.0595703125, 20.67529296875, 20.232421875],
+              "after": [21.615234375, 20.796875, 20.27783203125]
+            },
+            "resourceUsage": {
+              "userCpuMs": 6.385,
+              "systemCpuMs": 9.377,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 213
+            },
+            "startupCommands": [
+              {
+                "kind": "enriched",
+                "code": 0,
+                "ms": 362.93912499999715,
+                "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+              }
+            ],
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 26.48858299999847,
+                "addMs": 109.09095900000102,
+                "verifyMs": 18.472208000006503,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 19.487583000001905,
+                "addMs": 110.1942080000008,
+                "verifyMs": 18.584415999997873,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 17.388291000002937,
+                "addMs": 109.26537500000268,
+                "verifyMs": 14.5190419999999,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 24.807832999998936,
+                "addMs": 106.68912500000442,
+                "verifyMs": 15.104333000002953,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.42608299999847,
+                "addMs": 50.741000000001804,
+                "verifyMs": 10.756541999995534,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "deferred": {
+            "strategy": "deferred",
+            "blockingMs": 130.9548749999958,
+            "startupReadMs": 0.0003330000035930425,
+            "structuralReadMs": 0,
+            "enrichmentReadMs": 210.16091700000106,
+            "deferredReadMs": 210.16091700000106,
+            "mutationMs": 130.9548749999958,
+            "throughputPerSecond": 38.18109100558616,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 4,
+            "inventoryCount": 54,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [21.615234375, 20.796875, 20.27783203125],
+              "after": [21.615234375, 20.796875, 20.27783203125]
+            },
+            "resourceUsage": {
+              "userCpuMs": 4.392,
+              "systemCpuMs": 8.333,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 126
+            },
+            "startupCommands": [
+              {
+                "kind": "enriched",
+                "code": 0,
+                "ms": 209.90895799999998,
+                "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+              }
+            ],
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 12.243290999998862,
+                "addMs": 54.799041999998735,
+                "verifyMs": 10.877874999998312,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.25704200000473,
+                "addMs": 59.88220800000272,
+                "verifyMs": 10.110625000001164,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.458582999999635,
+                "addMs": 58.362166000006255,
+                "verifyMs": 11.034041999999317,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.254333000004408,
+                "addMs": 51.48141700000269,
+                "verifyMs": 12.95354199999565,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.685582999998587,
+                "addMs": 32.302332999999635,
+                "verifyMs": 9.95320800000627,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 4,
+          "order": ["deferred", "enriched"],
+          "enriched": {
+            "strategy": "enriched",
+            "blockingMs": 129.27762500000244,
+            "startupReadMs": 229.94391699999687,
+            "structuralReadMs": 0,
+            "enrichmentReadMs": 229.94320799999696,
+            "deferredReadMs": 0,
+            "mutationMs": 129.27762500000244,
+            "throughputPerSecond": 38.67645309851496,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 4,
+            "inventoryCount": 54,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [19.2333984375, 20.3095703125, 20.1103515625],
+              "after": [19.2333984375, 20.3095703125, 20.1103515625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 4.463,
+              "systemCpuMs": 8.002,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 104
+            },
+            "startupCommands": [
+              {
+                "kind": "enriched",
+                "code": 0,
+                "ms": 229.75195800000074,
+                "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+              }
+            ],
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 12.246875000004366,
+                "addMs": 50.218041000000085,
+                "verifyMs": 12.027333000005456,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.139499999997497,
+                "addMs": 51.53054200000042,
+                "verifyMs": 10.670708000005106,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.120957999999519,
+                "addMs": 53.81762499999604,
+                "verifyMs": 10.491332999998122,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.281582999996317,
+                "addMs": 51.78199999999924,
+                "verifyMs": 11.818209000004572,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.661416999995708,
+                "addMs": 34.381750000000466,
+                "verifyMs": 10.286999999996624,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "deferred": {
+            "strategy": "deferred",
+            "blockingMs": 143.1953330000033,
+            "startupReadMs": 0.0003749999959836714,
+            "structuralReadMs": 0,
+            "enrichmentReadMs": 213.83491700000013,
+            "deferredReadMs": 213.83491700000013,
+            "mutationMs": 143.1953330000033,
+            "throughputPerSecond": 34.917339100708574,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 4,
+            "inventoryCount": 54,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [19.2333984375, 20.3095703125, 20.1103515625],
+              "after": [19.2333984375, 20.3095703125, 20.1103515625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 4.745,
+              "systemCpuMs": 9.283,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 133
+            },
+            "startupCommands": [
+              {
+                "kind": "enriched",
+                "code": 0,
+                "ms": 213.5817079999979,
+                "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+              }
+            ],
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 13.061416000004101,
+                "addMs": 65.4887499999968,
+                "verifyMs": 12.147125000003143,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 15.881583000002138,
+                "addMs": 60.943624999999884,
+                "verifyMs": 11.695417000002635,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.542124999999942,
+                "addMs": 60.08362500000658,
+                "verifyMs": 12.35662500000035,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.016791000001831,
+                "addMs": 61.80912499999977,
+                "verifyMs": 12.594417000000249,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.549374999995052,
+                "addMs": 33.25083299999824,
+                "verifyMs": 10.147292000001471,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        }
+      ],
+      "enriched": {
+        "blockingMs": {
+          "samples": [
+            116.81212499999674, 129.27762500000244, 138.6961250000022, 217.94433299999946,
+            319.57416700000067
+          ],
+          "median": 138.6961250000022,
+          "p90": 319.57416700000067,
+          "p95": 319.57416700000067,
+          "max": 319.57416700000067
+        },
+        "startupReadMs": {
+          "samples": [
+            200.22379100000398, 222.47241699999722, 229.94391699999687, 363.3824590000004,
+            479.0140420000007
+          ],
+          "median": 229.94391699999687,
+          "p90": 479.0140420000007,
+          "p95": 479.0140420000007,
+          "max": 479.0140420000007
+        },
+        "deferredReadMs": {
+          "samples": [0, 0, 0, 0, 0],
+          "median": 0,
+          "p90": 0,
+          "p95": 0,
+          "max": 0
+        },
+        "mutationMs": {
+          "samples": [
+            116.81212499999674, 129.27762500000244, 138.6961250000022, 217.94433299999946,
+            319.57416700000067
+          ],
+          "median": 138.6961250000022,
+          "p90": 319.57416700000067,
+          "p95": 319.57416700000067,
+          "max": 319.57416700000067
+        },
+        "throughputPerSecond": {
+          "samples": [
+            15.645820333155994, 22.941638037452492, 36.05003384196869, 38.67645309851496,
+            42.80377572105755
+          ],
+          "median": 36.05003384196869,
+          "p90": 42.80377572105755,
+          "p95": 42.80377572105755,
+          "max": 42.80377572105755
+        },
+        "allSafe": true
+      },
+      "deferred": {
+        "blockingMs": {
+          "samples": [
+            130.9548749999958, 135.18216600000233, 143.1953330000033, 161.41729099999975,
+            223.4598330000008
+          ],
+          "median": 143.1953330000033,
+          "p90": 223.4598330000008,
+          "p95": 223.4598330000008,
+          "max": 223.4598330000008
+        },
+        "startupReadMs": {
+          "samples": [
+            0.0003330000035930425, 0.0003749999959836714, 0.000499999998282874,
+            0.0005839999939780682, 0.0005840000003445311
+          ],
+          "median": 0.000499999998282874,
+          "p90": 0.0005840000003445311,
+          "p95": 0.0005840000003445311,
+          "max": 0.0005840000003445311
+        },
+        "deferredReadMs": {
+          "samples": [
+            210.16091700000106, 213.83491700000013, 222.734375, 237.87075000000186,
+            607.2684579999986
+          ],
+          "median": 222.734375,
+          "p90": 607.2684579999986,
+          "p95": 607.2684579999986,
+          "max": 607.2684579999986
+        },
+        "mutationMs": {
+          "samples": [
+            130.9548749999958, 135.18216600000233, 143.1953330000033, 161.41729099999975,
+            223.4598330000008
+          ],
+          "median": 143.1953330000033,
+          "p90": 223.4598330000008,
+          "p95": 223.4598330000008,
+          "max": 223.4598330000008
+        },
+        "throughputPerSecond": {
+          "samples": [
+            22.375385915552805, 30.975615865093463, 34.917339100708574, 36.987127429219576,
+            38.18109100558616
+          ],
+          "median": 34.917339100708574,
+          "p90": 38.18109100558616,
+          "p95": 38.18109100558616,
+          "max": 38.18109100558616
+        },
+        "allSafe": true
+      },
+      "medianImprovementFraction": -0.03243932013241912,
+      "p95ImprovementFraction": 0.3007575202409889,
+      "p95RegressionFraction": -0.3007575202409889,
+      "allSafe": true
+    },
+    {
+      "name": "burst-20",
+      "burstSize": 20,
+      "includesStartup": false,
+      "pairs": [
+        {
+          "repetition": 0,
+          "order": ["enriched", "deferred"],
+          "enriched": {
+            "strategy": "enriched",
+            "blockingMs": 537.7518330000003,
+            "startupReadMs": 234.66129200000069,
+            "structuralReadMs": 0,
+            "enrichmentReadMs": 234.66054099999928,
+            "deferredReadMs": 0,
+            "mutationMs": 537.7518330000003,
+            "throughputPerSecond": 37.19187694521534,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 4,
+            "inventoryCount": 69,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [22.55078125, 20.80126953125, 20.25634765625],
+              "after": [22.55078125, 20.80126953125, 20.25634765625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 30.729,
+              "systemCpuMs": 40.468,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 806
+            },
+            "startupCommands": [
+              {
+                "kind": "enriched",
+                "code": 0,
+                "ms": 234.37845799999923,
+                "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+              }
+            ],
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 15.013999999999214,
+                "addMs": 68.28441600000042,
+                "verifyMs": 16.58441700000003,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 15.421166999998604,
+                "addMs": 70.54550000000017,
+                "verifyMs": 15.528958000000785,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 15.744125000001077,
+                "addMs": 68.17358400000012,
+                "verifyMs": 15.066917000000103,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 16.991416999999274,
+                "addMs": 69.72299999999996,
+                "verifyMs": 13.567708000000493,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 17.887500000000728,
+                "addMs": 68.22883299999921,
+                "verifyMs": 13.389916999998604,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 18.086833000001207,
+                "addMs": 70.42258299999958,
+                "verifyMs": 18.31866699999955,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.252167000000554,
+                "addMs": 76.7973750000001,
+                "verifyMs": 20.89220800000112,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 16.13354099999924,
+                "addMs": 67.62779199999932,
+                "verifyMs": 15.326750000000175,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 16.13762499999939,
+                "addMs": 86.95729199999914,
+                "verifyMs": 13.870708000000377,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.642833000001701,
+                "addMs": 80.25029100000029,
+                "verifyMs": 14.297249999999622,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.122665999999299,
+                "addMs": 73.9404169999998,
+                "verifyMs": 13.842791999999463,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 15.77049999999872,
+                "addMs": 74.02529100000174,
+                "verifyMs": 14.447458000000552,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 15.510499999998501,
+                "addMs": 76.21729199999936,
+                "verifyMs": 16.400416000000405,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.38287499999933,
+                "addMs": 71.10133300000052,
+                "verifyMs": 18.79320799999914,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 17.006917000000612,
+                "addMs": 76.27741699999933,
+                "verifyMs": 13.135041999999885,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.570999999999913,
+                "addMs": 74.91570800000045,
+                "verifyMs": 13.810959000000366,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.916417000000365,
+                "addMs": 85.23929099999987,
+                "verifyMs": 15.947165999999925,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 15.404582999999548,
+                "addMs": 79.05849999999919,
+                "verifyMs": 13.184250000000247,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.61358299999847,
+                "addMs": 82.65487500000017,
+                "verifyMs": 13.4135839999999,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.321583000000828,
+                "addMs": 89.39516700000058,
+                "verifyMs": 11.01354100000026,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "deferred": {
+            "strategy": "deferred",
+            "blockingMs": 550.8759160000009,
+            "startupReadMs": 0.00033400000029359944,
+            "structuralReadMs": 0,
+            "enrichmentReadMs": 272.39800000000105,
+            "deferredReadMs": 272.39800000000105,
+            "mutationMs": 550.8759160000009,
+            "throughputPerSecond": 36.30581664419682,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 4,
+            "inventoryCount": 69,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [22.55078125, 20.80126953125, 20.25634765625],
+              "after": [21.46533203125, 20.60498046875, 20.18994140625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 20.536,
+              "systemCpuMs": 31.135,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 663
+            },
+            "startupCommands": [
+              {
+                "kind": "enriched",
+                "code": 0,
+                "ms": 271.97429100000045,
+                "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+              }
+            ],
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 20.312208000001192,
+                "addMs": 111.55125000000044,
+                "verifyMs": 21.698374999999942,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 28.28558399999929,
+                "addMs": 104.80845899999986,
+                "verifyMs": 17.771332999998776,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 24.636082999999417,
+                "addMs": 102.66562499999964,
+                "verifyMs": 17.07445899999948,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 19.50787499999933,
+                "addMs": 108.56124999999884,
+                "verifyMs": 17.055333000000246,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 15.404999999998836,
+                "addMs": 95.72962499999994,
+                "verifyMs": 12.491959000000861,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 19.030000000000655,
+                "addMs": 98.0052080000005,
+                "verifyMs": 12.582916999999725,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 21.67895900000076,
+                "addMs": 94.57879200000025,
+                "verifyMs": 12.465290999998615,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 17.15504200000032,
+                "addMs": 95.09754199999952,
+                "verifyMs": 11.963375000001179,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.296291000000565,
+                "addMs": 53.57770800000071,
+                "verifyMs": 15.772041000000172,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 15.055041000001438,
+                "addMs": 60.749291000000085,
+                "verifyMs": 12.11974999999984,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.081082999999126,
+                "addMs": 57.322666999998546,
+                "verifyMs": 17.131749999998647,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.979332999999315,
+                "addMs": 61.19970900000044,
+                "verifyMs": 12.27545900000041,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.619166999998924,
+                "addMs": 65.00970799999959,
+                "verifyMs": 14.488333000001148,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.524207999998907,
+                "addMs": 70.00579100000141,
+                "verifyMs": 12.758790999998382,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.520583999999872,
+                "addMs": 66.49354200000016,
+                "verifyMs": 15.526541999999608,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.194250000000466,
+                "addMs": 64.57295800000065,
+                "verifyMs": 13.628917000000001,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.665375000000495,
+                "addMs": 55.57208300000093,
+                "verifyMs": 14.998000000001412,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.405541000000085,
+                "addMs": 65.4512080000004,
+                "verifyMs": 11.28570800000125,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.344124999999622,
+                "addMs": 65.46654200000012,
+                "verifyMs": 11.452499999999418,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.080250000000888,
+                "addMs": 66.29025000000001,
+                "verifyMs": 11.455582999999024,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 1,
+          "order": ["deferred", "enriched"],
+          "enriched": {
+            "strategy": "enriched",
+            "blockingMs": 428.9757920000011,
+            "startupReadMs": 195.06762499999968,
+            "structuralReadMs": 0,
+            "enrichmentReadMs": 195.06695799999943,
+            "deferredReadMs": 0,
+            "mutationMs": 428.9757920000011,
+            "throughputPerSecond": 46.62267748665862,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 4,
+            "inventoryCount": 69,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [23.75390625, 21.126953125, 20.3798828125],
+              "after": [23.75390625, 21.126953125, 20.3798828125]
+            },
+            "resourceUsage": {
+              "userCpuMs": 23.99,
+              "systemCpuMs": 34.785,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 520
+            },
+            "startupCommands": [
+              {
+                "kind": "enriched",
+                "code": 0,
+                "ms": 194.81374999999753,
+                "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+              }
+            ],
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 13.245249999999942,
+                "addMs": 50.04279200000019,
+                "verifyMs": 15.646666999997251,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.167666999997891,
+                "addMs": 48.07204199999978,
+                "verifyMs": 13.107166000001598,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.0559170000015,
+                "addMs": 49.62262499999997,
+                "verifyMs": 13.341749999999593,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.938083000000915,
+                "addMs": 45.37366600000314,
+                "verifyMs": 16.52020800000173,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 16.593790999999328,
+                "addMs": 72.60279100000116,
+                "verifyMs": 13.494291000002704,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.439041999998153,
+                "addMs": 78.00283300000228,
+                "verifyMs": 12.434416000000056,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 16.520207999998092,
+                "addMs": 69.294332999998,
+                "verifyMs": 14.109833999998955,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.921125000000757,
+                "addMs": 78.76633299999958,
+                "verifyMs": 13.21258300000045,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.389291999999841,
+                "addMs": 54.117291999999,
+                "verifyMs": 12.536665999999968,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.340416999999434,
+                "addMs": 54.1551670000008,
+                "verifyMs": 13.044499999999971,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.370292000003246,
+                "addMs": 51.448458999999275,
+                "verifyMs": 11.561208999999508,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.026416000000609,
+                "addMs": 54.81537500000195,
+                "verifyMs": 13.42475000000195,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.690124999997352,
+                "addMs": 53.86558399999922,
+                "verifyMs": 13.350207999999839,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.516083999998955,
+                "addMs": 56.548666999999114,
+                "verifyMs": 10.680542000001878,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.529833000000508,
+                "addMs": 51.2635420000006,
+                "verifyMs": 12.55804100000023,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.82829099999799,
+                "addMs": 54.41508299999987,
+                "verifyMs": 12.926374999999098,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.72070800000074,
+                "addMs": 63.7778330000001,
+                "verifyMs": 15.474624999998923,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.369958999999653,
+                "addMs": 67.9405829999996,
+                "verifyMs": 13.010792000000947,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.179540999997698,
+                "addMs": 61.39820899999904,
+                "verifyMs": 12.929416999999376,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.217749999999796,
+                "addMs": 64.89850000000297,
+                "verifyMs": 10.388208000000304,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "deferred": {
+            "strategy": "deferred",
+            "blockingMs": 758.9632500000007,
+            "startupReadMs": 0.0006250000005820766,
+            "structuralReadMs": 0,
+            "enrichmentReadMs": 250.0269580000022,
+            "deferredReadMs": 250.0269580000022,
+            "mutationMs": 758.9632500000007,
+            "throughputPerSecond": 26.351737057097274,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 4,
+            "inventoryCount": 69,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [23.75390625, 21.126953125, 20.3798828125],
+              "after": [23.75390625, 21.126953125, 20.3798828125]
+            },
+            "resourceUsage": {
+              "userCpuMs": 20.12,
+              "systemCpuMs": 33.162,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 588
+            },
+            "startupCommands": [
+              {
+                "kind": "enriched",
+                "code": 0,
+                "ms": 249.632834,
+                "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+              }
+            ],
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 25.686416000000463,
+                "addMs": 120.953125,
+                "verifyMs": 20.67016700000022,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 17.05841700000019,
+                "addMs": 125.3647920000003,
+                "verifyMs": 24.210000000002765,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 25.358083000002807,
+                "addMs": 117.28308300000208,
+                "verifyMs": 17.82075000000259,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 20.06158299999879,
+                "addMs": 117.05341600000247,
+                "verifyMs": 16.17216699999699,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 27.880084000000352,
+                "addMs": 135.58899999999994,
+                "verifyMs": 26.827582999998413,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 41.745083000001614,
+                "addMs": 123.21800000000076,
+                "verifyMs": 26.30079200000182,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 41.88204200000109,
+                "addMs": 130.74995800000033,
+                "verifyMs": 18.204499999999825,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 31.021874999998545,
+                "addMs": 131.36325000000215,
+                "verifyMs": 31.361042000000452,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 22.127791999999317,
+                "addMs": 130.99866699999984,
+                "verifyMs": 19.010666999998648,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 23.607958000000508,
+                "addMs": 138.62999999999738,
+                "verifyMs": 16.97849999999744,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 26.170791000000463,
+                "addMs": 120.88058400000227,
+                "verifyMs": 18.926374999999098,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 24.227582999999868,
+                "addMs": 133.85375000000204,
+                "verifyMs": 17.44012499999735,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 19.98254199999792,
+                "addMs": 107.59008299999914,
+                "verifyMs": 11.805792000002839,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 16.10349999999744,
+                "addMs": 107.50483299999905,
+                "verifyMs": 12.016250000000582,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 21.21704200000022,
+                "addMs": 99.9494999999988,
+                "verifyMs": 10.311582999998791,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 18.89416699999856,
+                "addMs": 101.61291600000186,
+                "verifyMs": 11.081375000001572,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.659999999999854,
+                "addMs": 63.552708000002895,
+                "verifyMs": 13.220124999999825,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.465666999996756,
+                "addMs": 64.18383299999914,
+                "verifyMs": 13.21245899999849,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.16020799999751,
+                "addMs": 60.68808299999728,
+                "verifyMs": 12.423917000000074,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.638041999998677,
+                "addMs": 67.72695799999929,
+                "verifyMs": 9.372457999998005,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 2,
+          "order": ["enriched", "deferred"],
+          "enriched": {
+            "strategy": "enriched",
+            "blockingMs": 414.88041599999997,
+            "startupReadMs": 196.6040839999987,
+            "structuralReadMs": 0,
+            "enrichmentReadMs": 196.6036660000027,
+            "deferredReadMs": 0,
+            "mutationMs": 414.88041599999997,
+            "throughputPerSecond": 48.2066620372845,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 4,
+            "inventoryCount": 69,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [22.10986328125, 20.87255859375, 20.298828125],
+              "after": [22.10986328125, 20.87255859375, 20.298828125]
+            },
+            "resourceUsage": {
+              "userCpuMs": 19.593,
+              "systemCpuMs": 32.69,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 500
+            },
+            "startupCommands": [
+              {
+                "kind": "enriched",
+                "code": 0,
+                "ms": 196.3999580000018,
+                "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+              }
+            ],
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 12.554458999999042,
+                "addMs": 49.14262500000041,
+                "verifyMs": 17.50429200000508,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.437540999999328,
+                "addMs": 51.04120800000237,
+                "verifyMs": 15.120750000001863,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.389291999999841,
+                "addMs": 53.25004199999967,
+                "verifyMs": 13.075708000003942,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.657708000006096,
+                "addMs": 51.241125000000466,
+                "verifyMs": 15.903916999996,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.826999999997497,
+                "addMs": 57.75562499999796,
+                "verifyMs": 11.029083000001265,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.901874999995925,
+                "addMs": 54.80412500000239,
+                "verifyMs": 11.775207999999111,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.942042000002402,
+                "addMs": 50.25608300000022,
+                "verifyMs": 11.39258300000074,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.319958000000042,
+                "addMs": 53.49070799999754,
+                "verifyMs": 13.020250000001397,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.009500000000116,
+                "addMs": 54.21991700000217,
+                "verifyMs": 11.560459000000264,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.716458999995666,
+                "addMs": 53.82379199999559,
+                "verifyMs": 14.707750000001397,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.83366599999863,
+                "addMs": 49.33599999999569,
+                "verifyMs": 12.917832999999519,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.225749999997788,
+                "addMs": 54.28225000000384,
+                "verifyMs": 11.553916999997455,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 18.352874999996857,
+                "addMs": 77.77641700000095,
+                "verifyMs": 12.314666999998735,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 16.38712499999383,
+                "addMs": 71.65862499999639,
+                "verifyMs": 12.31670799999847,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 18.021207999998296,
+                "addMs": 69.20020899999508,
+                "verifyMs": 11.693249999996624,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 18.337541999993846,
+                "addMs": 69.11729200000264,
+                "verifyMs": 11.505124999996042,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.562125000004016,
+                "addMs": 56.54229099999793,
+                "verifyMs": 11.372875000000931,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.90008300000045,
+                "addMs": 57.48633300000074,
+                "verifyMs": 10.94329199999629,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.493707999994513,
+                "addMs": 56.23583399999916,
+                "verifyMs": 12.107334000000264,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.457916999999725,
+                "addMs": 52.15233299999818,
+                "verifyMs": 12.750333000003593,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "deferred": {
+            "strategy": "deferred",
+            "blockingMs": 485.3689999999988,
+            "startupReadMs": 0.0002499999973224476,
+            "structuralReadMs": 0,
+            "enrichmentReadMs": 246.03620899999805,
+            "deferredReadMs": 246.03620899999805,
+            "mutationMs": 485.3689999999988,
+            "throughputPerSecond": 41.2057630380186,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 4,
+            "inventoryCount": 69,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [22.10986328125, 20.87255859375, 20.298828125],
+              "after": [22.10986328125, 20.87255859375, 20.298828125]
+            },
+            "resourceUsage": {
+              "userCpuMs": 30.463,
+              "systemCpuMs": 38.476,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 630
+            },
+            "startupCommands": [
+              {
+                "kind": "enriched",
+                "code": 0,
+                "ms": 245.7165840000016,
+                "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+              }
+            ],
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 14.69308400000591,
+                "addMs": 62.41687500000262,
+                "verifyMs": 13.694125000001804,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.291791000003286,
+                "addMs": 72.90754200000083,
+                "verifyMs": 12.161999999996624,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 15.272792000003392,
+                "addMs": 65.30533299999661,
+                "verifyMs": 13.846625000005588,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.150000000001455,
+                "addMs": 65.21808400000009,
+                "verifyMs": 12.14012499999808,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.691209000004164,
+                "addMs": 60.53008299999783,
+                "verifyMs": 13.348083000004408,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.292124999999942,
+                "addMs": 68.37779199999932,
+                "verifyMs": 13.216499999994994,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.15608400000201,
+                "addMs": 62.612874999998894,
+                "verifyMs": 13.302124999994703,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.875334000003932,
+                "addMs": 66.20083400000294,
+                "verifyMs": 12.918040999997174,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.344749999996566,
+                "addMs": 59.73587499999849,
+                "verifyMs": 14.13224999999511,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.561792000000423,
+                "addMs": 65.05895800000144,
+                "verifyMs": 15.221707999997307,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.387125000001106,
+                "addMs": 75.7534999999989,
+                "verifyMs": 17.592208000001847,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.201249999998254,
+                "addMs": 56.63591699999961,
+                "verifyMs": 16.565834000000905,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.236375000000407,
+                "addMs": 58.87779199999932,
+                "verifyMs": 16.64116600000125,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 15.002292000004672,
+                "addMs": 80.20999999999913,
+                "verifyMs": 21.270292000001064,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.133291999998619,
+                "addMs": 63.82170899999619,
+                "verifyMs": 18.272916999994777,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.763332999995328,
+                "addMs": 63.32954199999949,
+                "verifyMs": 16.241374999997788,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.269208999998227,
+                "addMs": 51.74250000000029,
+                "verifyMs": 17.565499999996973,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 15.887834000001021,
+                "addMs": 50.88550000000396,
+                "verifyMs": 17.40887500000099,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 18.831083999997645,
+                "addMs": 64.84987499999988,
+                "verifyMs": 12.938332999998238,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.18866700000217,
+                "addMs": 60.770582999997714,
+                "verifyMs": 13.236916999994719,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 3,
+          "order": ["deferred", "enriched"],
+          "enriched": {
+            "strategy": "enriched",
+            "blockingMs": 1584.0126670000027,
+            "startupReadMs": 203.58174999999756,
+            "structuralReadMs": 0,
+            "enrichmentReadMs": 203.58104200000525,
+            "deferredReadMs": 0,
+            "mutationMs": 1584.0126670000027,
+            "throughputPerSecond": 12.626161656824658,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 4,
+            "inventoryCount": 69,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [21.615234375, 20.796875, 20.27783203125],
+              "after": [21.615234375, 20.796875, 20.27783203125]
+            },
+            "resourceUsage": {
+              "userCpuMs": 23.027,
+              "systemCpuMs": 39.582,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 600
+            },
+            "startupCommands": [
+              {
+                "kind": "enriched",
+                "code": 0,
+                "ms": 203.38395899999887,
+                "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+              }
+            ],
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 12.788209000005736,
+                "addMs": 81.111625000005,
+                "verifyMs": 17.45837500000198,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.378792000003159,
+                "addMs": 85.4539999999979,
+                "verifyMs": 16.788166999998793,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.33008300000074,
+                "addMs": 83.10191699999996,
+                "verifyMs": 15.312667000005604,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 16.674166999997396,
+                "addMs": 85.65479200000118,
+                "verifyMs": 16.712665999999444,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 18.1875,
+                "addMs": 128.1331250000003,
+                "verifyMs": 104.10216600000422,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 18.61833299999853,
+                "addMs": 153.21620899999834,
+                "verifyMs": 66.07712500000343,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 17.55437499999971,
+                "addMs": 140.5872920000038,
+                "verifyMs": 63.34108399999968,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 19.693958000003477,
+                "addMs": 130.29012499999953,
+                "verifyMs": 159.55354100000113,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 79.74087500000314,
+                "addMs": 445.15324999999575,
+                "verifyMs": 34.872332999999344,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 57.2847080000065,
+                "addMs": 279.1832910000012,
+                "verifyMs": 49.73016600000119,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 127.56966700000339,
+                "addMs": 394.3982079999987,
+                "verifyMs": 117.08750000000146,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 99.73916599999939,
+                "addMs": 341.8580409999995,
+                "verifyMs": 102.79191699999501,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 36.10854099999415,
+                "addMs": 299.88291700000264,
+                "verifyMs": 131.71887499999866,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 111.03383400000166,
+                "addMs": 218.30650000000605,
+                "verifyMs": 30.016083999995317,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 61.54762499999924,
+                "addMs": 226.5511669999978,
+                "verifyMs": 28.1909169999999,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 39.53462500000023,
+                "addMs": 266.50045800000225,
+                "verifyMs": 30.910374999999476,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 29.038417000003392,
+                "addMs": 155.11666600000171,
+                "verifyMs": 36.6721250000046,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 45.434792000000016,
+                "addMs": 131.5345840000009,
+                "verifyMs": 30.035209000001487,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 28.224834000000556,
+                "addMs": 151.09295899999415,
+                "verifyMs": 52.69516700000531,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 41.91399999999703,
+                "addMs": 158.5378750000018,
+                "verifyMs": 45.51104099999793,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "deferred": {
+            "strategy": "deferred",
+            "blockingMs": 462.60054200000013,
+            "startupReadMs": 0.0003329999963170849,
+            "structuralReadMs": 0,
+            "enrichmentReadMs": 261.1735839999965,
+            "deferredReadMs": 261.1735839999965,
+            "mutationMs": 462.60054200000013,
+            "throughputPerSecond": 43.233844719533415,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 4,
+            "inventoryCount": 69,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [21.615234375, 20.796875, 20.27783203125],
+              "after": [21.615234375, 20.796875, 20.27783203125]
+            },
+            "resourceUsage": {
+              "userCpuMs": 17.984,
+              "systemCpuMs": 34.175,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 508
+            },
+            "startupCommands": [
+              {
+                "kind": "enriched",
+                "code": 0,
+                "ms": 260.87837500000023,
+                "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+              }
+            ],
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 13.501250000001164,
+                "addMs": 54.220792000000074,
+                "verifyMs": 10.764999999999418,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.393541999997979,
+                "addMs": 56.62724999999773,
+                "verifyMs": 11.125374999995984,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.65258399999584,
+                "addMs": 53.29399999999441,
+                "verifyMs": 13.377458999995724,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.765041999999085,
+                "addMs": 58.43329200000153,
+                "verifyMs": 11.211999999999534,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.907708999999159,
+                "addMs": 70.19604200000322,
+                "verifyMs": 13.408457999998063,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.569709000003058,
+                "addMs": 65.95704100000148,
+                "verifyMs": 12.557542000002286,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.774250000002212,
+                "addMs": 61.64420799999789,
+                "verifyMs": 14.151999999994587,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.673792000001413,
+                "addMs": 67.38795799999934,
+                "verifyMs": 13.172333000002254,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.433375000000524,
+                "addMs": 61.23745799999597,
+                "verifyMs": 15.205625000002328,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.696250000000873,
+                "addMs": 56.47074999999313,
+                "verifyMs": 13.867834000004223,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.167374999997264,
+                "addMs": 60.20754099999613,
+                "verifyMs": 13.113625000005413,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.169457999996666,
+                "addMs": 60.55541700000322,
+                "verifyMs": 12.474583000002895,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.898458000003302,
+                "addMs": 67.76479200000176,
+                "verifyMs": 13.804458999999042,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.510957999998936,
+                "addMs": 74.08154099999956,
+                "verifyMs": 14.270707999996375,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.74120799999946,
+                "addMs": 74.64191600000049,
+                "verifyMs": 12.591082999999344,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.120208000000275,
+                "addMs": 68.56725000000006,
+                "verifyMs": 12.663000000000466,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.378749999996217,
+                "addMs": 63.92750000000524,
+                "verifyMs": 15.134291000002122,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.728500000004715,
+                "addMs": 84.21125000000029,
+                "verifyMs": 9.924333000002662,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.26866699999664,
+                "addMs": 68.18895799999882,
+                "verifyMs": 9.968790999999328,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.887125000001106,
+                "addMs": 69.09200000000419,
+                "verifyMs": 9.769459000002826,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 4,
+          "order": ["enriched", "deferred"],
+          "enriched": {
+            "strategy": "enriched",
+            "blockingMs": 1426.1467080000002,
+            "startupReadMs": 201.15741700000217,
+            "structuralReadMs": 0,
+            "enrichmentReadMs": 201.15695799999958,
+            "deferredReadMs": 0,
+            "mutationMs": 1426.1467080000002,
+            "throughputPerSecond": 14.023802661962879,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 4,
+            "inventoryCount": 69,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [19.2333984375, 20.3095703125, 20.1103515625],
+              "after": [19.2333984375, 20.3095703125, 20.1103515625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 35.746,
+              "systemCpuMs": 37.667,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 607
+            },
+            "startupCommands": [
+              {
+                "kind": "enriched",
+                "code": 0,
+                "ms": 200.91483300000255,
+                "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+              }
+            ],
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 11.42033299999457,
+                "addMs": 57.56466600000567,
+                "verifyMs": 17.736250000001746,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.849666999994952,
+                "addMs": 60.999791000002006,
+                "verifyMs": 19.711750000002212,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.308375000000524,
+                "addMs": 58.59504100000049,
+                "verifyMs": 18.54858399999648,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.282583000000159,
+                "addMs": 55.567457999997714,
+                "verifyMs": 16.967625000004773,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 19.56658299999981,
+                "addMs": 88.30000000000291,
+                "verifyMs": 87.57524999999441,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 21.30804100000387,
+                "addMs": 82.39162499999657,
+                "verifyMs": 104.14462500000081,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 19.7341249999954,
+                "addMs": 82.94095799999923,
+                "verifyMs": 72.58645899999829,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 18.580584000003,
+                "addMs": 83.65575000000536,
+                "verifyMs": 115.67941699999938,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 65.14083300000493,
+                "addMs": 421.62024999999994,
+                "verifyMs": 134.40108299999702,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 75.88366700000188,
+                "addMs": 231.99870800000645,
+                "verifyMs": 51.606707999999344,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 77.01087499999994,
+                "addMs": 330.0813330000019,
+                "verifyMs": 107.66129199999705,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 70.30891600000177,
+                "addMs": 404.2873749999999,
+                "verifyMs": 56.32941700000083,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 157.65925000000425,
+                "addMs": 223.9971250000017,
+                "verifyMs": 35.341332999996666,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 70.49108400000114,
+                "addMs": 189.823166999995,
+                "verifyMs": 41.19145900000149,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 51.41370900000038,
+                "addMs": 214.47279200000048,
+                "verifyMs": 24.280707999998413,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 75.43895799999882,
+                "addMs": 180.34333300000435,
+                "verifyMs": 43.50916600000346,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 40.86429200000566,
+                "addMs": 111.89687499999854,
+                "verifyMs": 33.22783299999719,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 23.581792000004498,
+                "addMs": 129.17941699999938,
+                "verifyMs": 32.19916599999851,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 40.21695799999725,
+                "addMs": 137.66016699999454,
+                "verifyMs": 47.585332999995444,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 34.89745799999946,
+                "addMs": 160.61554199999955,
+                "verifyMs": 43.35933400000067,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "deferred": {
+            "strategy": "deferred",
+            "blockingMs": 366.42262499999924,
+            "startupReadMs": 0.00045899999531684443,
+            "structuralReadMs": 0,
+            "enrichmentReadMs": 242.63108400000056,
+            "deferredReadMs": 242.63108400000056,
+            "mutationMs": 366.42262499999924,
+            "throughputPerSecond": 54.581782443155745,
+            "safe": true,
+            "parseSucceeded": true,
+            "exactStartupInventory": true,
+            "exactCreatedInventory": true,
+            "peakActiveCreates": 4,
+            "inventoryCount": 69,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [19.2333984375, 20.3095703125, 20.1103515625],
+              "after": [18.25341796875, 20.08837890625, 20.033203125]
+            },
+            "resourceUsage": {
+              "userCpuMs": 12.48,
+              "systemCpuMs": 25.551,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 522
+            },
+            "startupCommands": [
+              {
+                "kind": "enriched",
+                "code": 0,
+                "ms": 242.2745419999992,
+                "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+              }
+            ],
+            "createCommands": [
+              {
+                "safe": true,
+                "bareProbeMs": 11.89862500000163,
+                "addMs": 45.26091699999961,
+                "verifyMs": 12.908416999998735,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.991000000001804,
+                "addMs": 47.339459000002535,
+                "verifyMs": 10.436874999999418,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.539292000001296,
+                "addMs": 49.71691699999792,
+                "verifyMs": 11.148332999997365,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.729916000003868,
+                "addMs": 47.049999999995634,
+                "verifyMs": 10.763959000003524,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.400916999999026,
+                "addMs": 50.550999999999476,
+                "verifyMs": 10.88787500000035,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.958749999997963,
+                "addMs": 49.915084000000206,
+                "verifyMs": 12.026041000004625,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.688458000004175,
+                "addMs": 48.471792000003916,
+                "verifyMs": 12.405958000003011,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.220124999999825,
+                "addMs": 47.358124999998836,
+                "verifyMs": 12.117958000002545,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.55058299999655,
+                "addMs": 51.37979100000666,
+                "verifyMs": 10.676292000003741,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.844582999998238,
+                "addMs": 49.269124999998894,
+                "verifyMs": 11.571041000002879,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.97058300000208,
+                "addMs": 51.37316699999792,
+                "verifyMs": 10.35624999999709,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.705165999999736,
+                "addMs": 53.83733399999619,
+                "verifyMs": 10.64433299999655,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.435040999997,
+                "addMs": 53.99058299999888,
+                "verifyMs": 10.01745800000208,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.942457999997714,
+                "addMs": 51.85766700000386,
+                "verifyMs": 10.357250000000931,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.186500000003434,
+                "addMs": 51.620708000002196,
+                "verifyMs": 12.097207999999227,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.926625000000058,
+                "addMs": 54.78404199999932,
+                "verifyMs": 11.42558299999655,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.659625000000233,
+                "addMs": 48.46187500000087,
+                "verifyMs": 10.822916999997688,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.72987500000454,
+                "addMs": 48.455582999995386,
+                "verifyMs": 11.641499999997905,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.050332999999227,
+                "addMs": 49.99975000000268,
+                "verifyMs": 10.703582999994978,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.529833000000508,
+                "addMs": 53.01791599999706,
+                "verifyMs": 9.449291999997513,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        }
+      ],
+      "enriched": {
+        "blockingMs": {
+          "samples": [
+            414.88041599999997, 428.9757920000011, 537.7518330000003, 1426.1467080000002,
+            1584.0126670000027
+          ],
+          "median": 537.7518330000003,
+          "p90": 1584.0126670000027,
+          "p95": 1584.0126670000027,
+          "max": 1584.0126670000027
+        },
+        "startupReadMs": {
+          "samples": [
+            195.06762499999968, 196.6040839999987, 201.15741700000217, 203.58174999999756,
+            234.66129200000069
+          ],
+          "median": 201.15741700000217,
+          "p90": 234.66129200000069,
+          "p95": 234.66129200000069,
+          "max": 234.66129200000069
+        },
+        "deferredReadMs": {
+          "samples": [0, 0, 0, 0, 0],
+          "median": 0,
+          "p90": 0,
+          "p95": 0,
+          "max": 0
+        },
+        "mutationMs": {
+          "samples": [
+            414.88041599999997, 428.9757920000011, 537.7518330000003, 1426.1467080000002,
+            1584.0126670000027
+          ],
+          "median": 537.7518330000003,
+          "p90": 1584.0126670000027,
+          "p95": 1584.0126670000027,
+          "max": 1584.0126670000027
+        },
+        "throughputPerSecond": {
+          "samples": [
+            12.626161656824658, 14.023802661962879, 37.19187694521534, 46.62267748665862,
+            48.2066620372845
+          ],
+          "median": 37.19187694521534,
+          "p90": 48.2066620372845,
+          "p95": 48.2066620372845,
+          "max": 48.2066620372845
+        },
+        "allSafe": true
+      },
+      "deferred": {
+        "blockingMs": {
+          "samples": [
+            366.42262499999924, 462.60054200000013, 485.3689999999988, 550.8759160000009,
+            758.9632500000007
+          ],
+          "median": 485.3689999999988,
+          "p90": 758.9632500000007,
+          "p95": 758.9632500000007,
+          "max": 758.9632500000007
+        },
+        "startupReadMs": {
+          "samples": [
+            0.0002499999973224476, 0.0003329999963170849, 0.00033400000029359944,
+            0.00045899999531684443, 0.0006250000005820766
+          ],
+          "median": 0.00033400000029359944,
+          "p90": 0.0006250000005820766,
+          "p95": 0.0006250000005820766,
+          "max": 0.0006250000005820766
+        },
+        "deferredReadMs": {
+          "samples": [
+            242.63108400000056, 246.03620899999805, 250.0269580000022, 261.1735839999965,
+            272.39800000000105
+          ],
+          "median": 250.0269580000022,
+          "p90": 272.39800000000105,
+          "p95": 272.39800000000105,
+          "max": 272.39800000000105
+        },
+        "mutationMs": {
+          "samples": [
+            366.42262499999924, 462.60054200000013, 485.3689999999988, 550.8759160000009,
+            758.9632500000007
+          ],
+          "median": 485.3689999999988,
+          "p90": 758.9632500000007,
+          "p95": 758.9632500000007,
+          "max": 758.9632500000007
+        },
+        "throughputPerSecond": {
+          "samples": [
+            26.351737057097274, 36.30581664419682, 41.2057630380186, 43.233844719533415,
+            54.581782443155745
+          ],
+          "median": 41.2057630380186,
+          "p90": 54.581782443155745,
+          "p95": 54.581782443155745,
+          "max": 54.581782443155745
+        },
+        "allSafe": true
+      },
+      "medianImprovementFraction": 0.09741079394889103,
+      "p95ImprovementFraction": 0.5208603656955482,
+      "p95RegressionFraction": -0.5208603656955482,
+      "allSafe": true
+    }
+  ],
+  "repetitions": [
+    {
+      "repetition": 0,
+      "temporaryRootRemoved": true
+    },
+    {
+      "repetition": 1,
+      "temporaryRootRemoved": true
+    },
+    {
+      "repetition": 2,
+      "temporaryRootRemoved": true
+    },
+    {
+      "repetition": 3,
+      "temporaryRootRemoved": true
+    },
+    {
+      "repetition": 4,
+      "temporaryRootRemoved": true
+    }
+  ]
+}

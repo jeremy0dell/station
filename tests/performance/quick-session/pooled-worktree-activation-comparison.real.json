@@ -1,0 +1,3931 @@
+{
+  "schemaVersion": 1,
+  "benchmark": "station-quick-session-pooled-worktree-activation-comparison",
+  "generatedAt": "2026-08-25T07:32:01.272Z",
+  "machine": {
+    "platform": "darwin",
+    "arch": "arm64",
+    "cpuModel": "Apple M4",
+    "logicalCpuCount": 10
+  },
+  "tools": {
+    "git": "git version 2.50.1 (Apple Git-155)"
+  },
+  "repositoryShape": {
+    "ordinaryWorktrees": 49,
+    "poolSize": 20,
+    "initialWorktrees": 69,
+    "maxConcurrent": 4,
+    "repetitions": 5
+  },
+  "keepThresholds": {
+    "singleMedianImprovementFraction": 0.25,
+    "singleP95ImprovementFraction": 0.25,
+    "burst5MedianImprovementFraction": 0.3,
+    "burst5P95ImprovementFraction": 0.3,
+    "burst20MedianImprovementFraction": 0.3,
+    "burst20P95ImprovementFraction": 0.3
+  },
+  "poolFill": {
+    "wallMs": {
+      "samples": [
+        154.91512499999953, 157.7120830000058, 176.4471250000006, 180.85558300000048,
+        272.25683300000037
+      ],
+      "median": 176.4471250000006,
+      "p90": 272.25683300000037,
+      "p95": 272.25683300000037,
+      "max": 272.25683300000037
+    },
+    "commandMs": {
+      "samples": [
+        24.92879200000243, 26.089332999999897, 26.491125000000466, 26.793417000000773,
+        27.16791600000579, 27.513208000003942, 27.817125000001397, 27.940999999998894,
+        28.05487500000163, 28.07920799999556, 28.348292000002402, 28.483124999998836,
+        28.71337499999936, 28.967375000000175, 29.05645899999945, 29.254958999998053,
+        29.270457999999053, 29.280791000001045, 29.378915999997844, 29.575666000000638,
+        29.841416999999637, 29.847874999999476, 29.953291999998328, 30.129375000004075,
+        30.1820000000007, 30.271584000001894, 30.45404100000087, 30.56304100000125,
+        30.630333999997674, 30.678541000001132, 30.71549999999843, 30.72675000000163,
+        30.827417000000423, 30.92108300000109, 31.00037499999962, 31.090416999999434,
+        31.092958999994153, 31.120249999999942, 31.296542000000045, 31.64379199999894,
+        31.687792000000627, 31.7287499999984, 32.25679200000013, 32.39091699999881,
+        32.43462500000169, 32.51304199999868, 32.93554199999926, 32.980750000000626,
+        33.02191599999969, 33.11029200000121, 33.191915999999765, 33.20745800000077,
+        33.22808400000031, 33.29395800000202, 33.368209000000206, 33.47333300000173,
+        33.4809580000001, 33.72320799999943, 33.901958000002196, 34.304666, 34.56279100000029,
+        34.75833299999795, 35.23362500000076, 35.262375000002066, 35.34812500000044,
+        35.404082999999446, 35.55112499999814, 35.69983300000058, 35.97345800000039,
+        36.13929199999984, 36.70575000000099, 36.945583999997325, 37.0111250000009,
+        37.84337500000038, 37.90429099999892, 38.30199999999968, 38.3130000000001,
+        38.359582999999475, 39.33562499999971, 39.71416599999793, 44.32695800000056,
+        44.577541999999994, 46.53783399999975, 46.84583399999974, 47.60120800000004,
+        47.6441249999998, 49.30383299999994, 49.62175000000025, 51.21820800000023,
+        51.30329100000017, 51.8432499999999, 51.876624999999876, 52.58037499999955,
+        53.27733400000034, 55.32341699999961, 57.42387500000041, 64.46112499999981,
+        69.04683300000033, 69.56566700000076, 71.54745900000034
+      ],
+      "median": 33.11029200000121,
+      "p90": 51.30329100000017,
+      "p95": 55.32341699999961,
+      "max": 71.54745900000034
+    },
+    "allSafe": true
+  },
+  "allSafe": true,
+  "thresholdsPassed": true,
+  "scenarios": [
+    {
+      "burstSize": 1,
+      "pairs": [
+        {
+          "repetition": 0,
+          "order": ["nativeCreate", "pooledActivation"],
+          "nativeCreate": {
+            "strategy": "nativeCreate",
+            "wallMs": 59.5995410000005,
+            "throughputPerSecond": 16.77865270808028,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 1,
+            "inventoryCount": 70,
+            "cleanupInventoryCount": 69,
+            "loadAverage": {
+              "before": [27.697265625, 22.0439453125, 20.59228515625],
+              "after": [27.697265625, 22.0439453125, 20.59228515625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.739,
+              "systemCpuMs": 1.977,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 51
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 11.172416999999768,
+                "mutationMs": 37.793916000000536,
+                "verifyMs": 10.452957999999853,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "pooledActivation": {
+            "strategy": "pooledActivation",
+            "wallMs": 33.47112500000003,
+            "throughputPerSecond": 29.87649802628382,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 1,
+            "inventoryCount": 69,
+            "cleanupInventoryCount": 69,
+            "loadAverage": {
+              "before": [27.697265625, 22.0439453125, 20.59228515625],
+              "after": [27.697265625, 22.0439453125, 20.59228515625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.695,
+              "systemCpuMs": 2.374,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 56
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 10.717040999999881,
+                "mutationMs": 12.6284169999999,
+                "verifyMs": 9.982833000000028,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 1,
+          "order": ["pooledActivation", "nativeCreate"],
+          "nativeCreate": {
+            "strategy": "nativeCreate",
+            "wallMs": 53.95900000000074,
+            "throughputPerSecond": 18.53258955873879,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 1,
+            "inventoryCount": 70,
+            "cleanupInventoryCount": 69,
+            "loadAverage": {
+              "before": [26.11962890625, 21.810546875, 20.51806640625],
+              "after": [26.11962890625, 21.810546875, 20.51806640625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.289,
+              "systemCpuMs": 1.911,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 36
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 9.360834000000978,
+                "mutationMs": 35.31837500000074,
+                "verifyMs": 9.239125000000058,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "pooledActivation": {
+            "strategy": "pooledActivation",
+            "wallMs": 33.35566600000129,
+            "throughputPerSecond": 29.97991405717881,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 1,
+            "inventoryCount": 69,
+            "cleanupInventoryCount": 69,
+            "loadAverage": {
+              "before": [26.11962890625, 21.810546875, 20.51806640625],
+              "after": [26.11962890625, 21.810546875, 20.51806640625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.438,
+              "systemCpuMs": 2.064,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 25
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 10.56433300000026,
+                "mutationMs": 12.22925000000032,
+                "verifyMs": 10.520916999999827,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 2,
+          "order": ["nativeCreate", "pooledActivation"],
+          "nativeCreate": {
+            "strategy": "nativeCreate",
+            "wallMs": 55.72095799999806,
+            "throughputPerSecond": 17.946568686059468,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 1,
+            "inventoryCount": 70,
+            "cleanupInventoryCount": 69,
+            "loadAverage": {
+              "before": [24.28173828125, 21.55419921875, 20.44140625],
+              "after": [24.28173828125, 21.55419921875, 20.44140625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.247,
+              "systemCpuMs": 1.982,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 27
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 10.13183299999946,
+                "mutationMs": 35.077041999997164,
+                "verifyMs": 10.47583400000076,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "pooledActivation": {
+            "strategy": "pooledActivation",
+            "wallMs": 30.816624999999476,
+            "throughputPerSecond": 32.45001683344678,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 1,
+            "inventoryCount": 69,
+            "cleanupInventoryCount": 69,
+            "loadAverage": {
+              "before": [24.28173828125, 21.55419921875, 20.44140625],
+              "after": [24.28173828125, 21.55419921875, 20.44140625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.201,
+              "systemCpuMs": 1.781,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 27
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 9.545125000000553,
+                "mutationMs": 12.139791000001424,
+                "verifyMs": 9.098625000002357,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 3,
+          "order": ["pooledActivation", "nativeCreate"],
+          "nativeCreate": {
+            "strategy": "nativeCreate",
+            "wallMs": 59.03770900000018,
+            "throughputPerSecond": 16.93832665491808,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 1,
+            "inventoryCount": 70,
+            "cleanupInventoryCount": 69,
+            "loadAverage": {
+              "before": [22.59814453125, 21.2744140625, 20.35400390625],
+              "after": [22.59814453125, 21.2744140625, 20.35400390625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.407,
+              "systemCpuMs": 2.215,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 35
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 9.784583000000566,
+                "mutationMs": 38.89325000000099,
+                "verifyMs": 10.318250000000262,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "pooledActivation": {
+            "strategy": "pooledActivation",
+            "wallMs": 30.794667000001937,
+            "throughputPerSecond": 32.473155173262214,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 1,
+            "inventoryCount": 69,
+            "cleanupInventoryCount": 69,
+            "loadAverage": {
+              "before": [22.59814453125, 21.2744140625, 20.35400390625],
+              "after": [22.59814453125, 21.2744140625, 20.35400390625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.166,
+              "systemCpuMs": 2.07,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 34
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 9.207749999997759,
+                "mutationMs": 11.62370799999917,
+                "verifyMs": 9.928791999998793,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 4,
+          "order": ["nativeCreate", "pooledActivation"],
+          "nativeCreate": {
+            "strategy": "nativeCreate",
+            "wallMs": 55.89245900000242,
+            "throughputPerSecond": 17.89150124885285,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 1,
+            "inventoryCount": 70,
+            "cleanupInventoryCount": 69,
+            "loadAverage": {
+              "before": [24.0712890625, 21.6015625, 20.474609375],
+              "after": [24.0712890625, 21.6015625, 20.474609375]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.214,
+              "systemCpuMs": 1.94,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 31
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 9.58075000000099,
+                "mutationMs": 35.4889170000024,
+                "verifyMs": 10.785917000001064,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "pooledActivation": {
+            "strategy": "pooledActivation",
+            "wallMs": 36.33829100000003,
+            "throughputPerSecond": 27.51918080021978,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 1,
+            "inventoryCount": 69,
+            "cleanupInventoryCount": 69,
+            "loadAverage": {
+              "before": [24.0712890625, 21.6015625, 20.474609375],
+              "after": [24.0712890625, 21.6015625, 20.474609375]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.428,
+              "systemCpuMs": 2.211,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 48
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 11.142625000000407,
+                "mutationMs": 13.669957999998587,
+                "verifyMs": 11.486291999994137,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        }
+      ],
+      "nativeCreate": {
+        "wallMs": {
+          "samples": [
+            53.95900000000074, 55.72095799999806, 55.89245900000242, 59.03770900000018,
+            59.5995410000005
+          ],
+          "median": 55.89245900000242,
+          "p90": 59.5995410000005,
+          "p95": 59.5995410000005,
+          "max": 59.5995410000005
+        },
+        "commandMs": {
+          "samples": [
+            53.91833400000178, 55.68470899999738, 55.855584000004455, 58.99608300000182,
+            59.41929100000016
+          ],
+          "median": 55.855584000004455,
+          "p90": 59.41929100000016,
+          "p95": 59.41929100000016,
+          "max": 59.41929100000016
+        },
+        "throughputPerSecond": {
+          "samples": [
+            16.77865270808028, 16.93832665491808, 17.89150124885285, 17.946568686059468,
+            18.53258955873879
+          ],
+          "median": 17.89150124885285,
+          "p90": 18.53258955873879,
+          "p95": 18.53258955873879,
+          "max": 18.53258955873879
+        },
+        "allSafe": true
+      },
+      "pooledActivation": {
+        "wallMs": {
+          "samples": [
+            30.794667000001937, 30.816624999999476, 33.35566600000129, 33.47112500000003,
+            36.33829100000003
+          ],
+          "median": 33.35566600000129,
+          "p90": 36.33829100000003,
+          "p95": 36.33829100000003,
+          "max": 36.33829100000003
+        },
+        "commandMs": {
+          "samples": [
+            30.76024999999572, 30.783541000004334, 33.31450000000041, 33.32829099999981,
+            36.29887499999313
+          ],
+          "median": 33.31450000000041,
+          "p90": 36.29887499999313,
+          "p95": 36.29887499999313,
+          "max": 36.29887499999313
+        },
+        "throughputPerSecond": {
+          "samples": [
+            27.51918080021978, 29.87649802628382, 29.97991405717881, 32.45001683344678,
+            32.473155173262214
+          ],
+          "median": 29.97991405717881,
+          "p90": 32.473155173262214,
+          "p95": 32.473155173262214,
+          "max": 32.473155173262214
+        },
+        "allSafe": true
+      },
+      "medianImprovementFraction": 0.4032170601046583,
+      "p95ImprovementFraction": 0.39029243530584035,
+      "allSafe": true
+    },
+    {
+      "burstSize": 3,
+      "pairs": [
+        {
+          "repetition": 0,
+          "order": ["pooledActivation", "nativeCreate"],
+          "nativeCreate": {
+            "strategy": "nativeCreate",
+            "wallMs": 81.66883400000006,
+            "throughputPerSecond": 36.73371900962854,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 3,
+            "inventoryCount": 72,
+            "cleanupInventoryCount": 69,
+            "loadAverage": {
+              "before": [27.697265625, 22.0439453125, 20.59228515625],
+              "after": [27.697265625, 22.0439453125, 20.59228515625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 8.686,
+              "systemCpuMs": 6.752,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 169
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 12.672958999999537,
+                "mutationMs": 53.73512499999924,
+                "verifyMs": 15.011457999999948,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.492459000000053,
+                "mutationMs": 52.73370800000066,
+                "verifyMs": 17.534624999999323,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.622083000000202,
+                "mutationMs": 53.16529199999968,
+                "verifyMs": 16.629167000000052,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "pooledActivation": {
+            "strategy": "pooledActivation",
+            "wallMs": 40.28049999999985,
+            "throughputPerSecond": 74.47772495376203,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 3,
+            "inventoryCount": 69,
+            "cleanupInventoryCount": 69,
+            "loadAverage": {
+              "before": [27.697265625, 22.0439453125, 20.59228515625],
+              "after": [27.697265625, 22.0439453125, 20.59228515625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 4.388,
+              "systemCpuMs": 6.889,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 134
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 12.078332999999475,
+                "mutationMs": 16.161708999999973,
+                "verifyMs": 11.44866699999966,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.60370899999998,
+                "mutationMs": 13.929708000000574,
+                "verifyMs": 12.835292000000663,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.897625000000517,
+                "mutationMs": 15.040124999999534,
+                "verifyMs": 11.003166999999848,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 1,
+          "order": ["nativeCreate", "pooledActivation"],
+          "nativeCreate": {
+            "strategy": "nativeCreate",
+            "wallMs": 79.14266700000007,
+            "throughputPerSecond": 37.906228254855215,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 3,
+            "inventoryCount": 72,
+            "cleanupInventoryCount": 69,
+            "loadAverage": {
+              "before": [26.11962890625, 21.810546875, 20.51806640625],
+              "after": [26.11962890625, 21.810546875, 20.51806640625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 2.572,
+              "systemCpuMs": 5.818,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 89
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 9.977249999999913,
+                "mutationMs": 52.83833400000003,
+                "verifyMs": 11.530667000000903,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.634125000000495,
+                "mutationMs": 54.31304199999977,
+                "verifyMs": 12.6282910000009,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.215790999998717,
+                "mutationMs": 52.21420799999942,
+                "verifyMs": 10.94958300000144,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "pooledActivation": {
+            "strategy": "pooledActivation",
+            "wallMs": 40.960000000000946,
+            "throughputPerSecond": 73.24218749999831,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 3,
+            "inventoryCount": 69,
+            "cleanupInventoryCount": 69,
+            "loadAverage": {
+              "before": [24.82861328125, 21.6142578125, 20.4560546875],
+              "after": [24.82861328125, 21.6142578125, 20.4560546875]
+            },
+            "resourceUsage": {
+              "userCpuMs": 3.498,
+              "systemCpuMs": 6.765,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 105
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 11.046875,
+                "mutationMs": 13.758125000000291,
+                "verifyMs": 12.596457999999984,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.247583000000304,
+                "mutationMs": 15.84270899999865,
+                "verifyMs": 12.198207999999795,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.505999999999403,
+                "mutationMs": 15.622957999999926,
+                "verifyMs": 11.078958000000057,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 2,
+          "order": ["pooledActivation", "nativeCreate"],
+          "nativeCreate": {
+            "strategy": "nativeCreate",
+            "wallMs": 75.960916,
+            "throughputPerSecond": 39.49399451686443,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 3,
+            "inventoryCount": 72,
+            "cleanupInventoryCount": 69,
+            "loadAverage": {
+              "before": [24.28173828125, 21.55419921875, 20.44140625],
+              "after": [24.28173828125, 21.55419921875, 20.44140625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 2.476,
+              "systemCpuMs": 5.756,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 67
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 12.222874999999476,
+                "mutationMs": 46.73554199999853,
+                "verifyMs": 10.950749999999971,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.25487499999872,
+                "mutationMs": 52.0958329999994,
+                "verifyMs": 12.975792000001093,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.45508400000108,
+                "mutationMs": 46.04816699999719,
+                "verifyMs": 12.514999999999418,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "pooledActivation": {
+            "strategy": "pooledActivation",
+            "wallMs": 39.72912500000166,
+            "throughputPerSecond": 75.51135344661819,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 3,
+            "inventoryCount": 69,
+            "cleanupInventoryCount": 69,
+            "loadAverage": {
+              "before": [24.28173828125, 21.55419921875, 20.44140625],
+              "after": [24.28173828125, 21.55419921875, 20.44140625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 7.853,
+              "systemCpuMs": 5.439,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 70
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 10.788167000002431,
+                "mutationMs": 15.004958000001352,
+                "verifyMs": 10.157249999996566,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.15570800000205,
+                "mutationMs": 12.200749999999971,
+                "verifyMs": 10.423417000001791,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.227249999999913,
+                "mutationMs": 17.999292000000423,
+                "verifyMs": 10.305041999999958,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 3,
+          "order": ["nativeCreate", "pooledActivation"],
+          "nativeCreate": {
+            "strategy": "nativeCreate",
+            "wallMs": 72.07124999999724,
+            "throughputPerSecond": 41.62547479057342,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 3,
+            "inventoryCount": 72,
+            "cleanupInventoryCount": 69,
+            "loadAverage": {
+              "before": [22.59814453125, 21.2744140625, 20.35400390625],
+              "after": [22.59814453125, 21.2744140625, 20.35400390625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 2.184,
+              "systemCpuMs": 4.648,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 59
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 11.811916999999085,
+                "mutationMs": 49.946334000000206,
+                "verifyMs": 10.286665999999968,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.988540999998804,
+                "mutationMs": 45.68924999999945,
+                "verifyMs": 10.706875000003492,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.09991699999955,
+                "mutationMs": 46.347750000000815,
+                "verifyMs": 9.501000000000204,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "pooledActivation": {
+            "strategy": "pooledActivation",
+            "wallMs": 358.036458999999,
+            "throughputPerSecond": 8.379034940684653,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 3,
+            "inventoryCount": 69,
+            "cleanupInventoryCount": 69,
+            "loadAverage": {
+              "before": [22.59814453125, 21.2744140625, 20.35400390625],
+              "after": [22.59814453125, 21.2744140625, 20.35400390625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 4.047,
+              "systemCpuMs": 9.627,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 180
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 72.58799999999974,
+                "mutationMs": 170.8008329999975,
+                "verifyMs": 74.52916600000026,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 87.90350000000035,
+                "mutationMs": 164.41216700000223,
+                "verifyMs": 93.7632080000003,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 98.50779200000034,
+                "mutationMs": 190.81395899999916,
+                "verifyMs": 34.62462500000038,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 4,
+          "order": ["pooledActivation", "nativeCreate"],
+          "nativeCreate": {
+            "strategy": "nativeCreate",
+            "wallMs": 69.4352080000026,
+            "throughputPerSecond": 43.205746571679995,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 3,
+            "inventoryCount": 72,
+            "cleanupInventoryCount": 69,
+            "loadAverage": {
+              "before": [24.0712890625, 21.6015625, 20.474609375],
+              "after": [24.0712890625, 21.6015625, 20.474609375]
+            },
+            "resourceUsage": {
+              "userCpuMs": 2.095,
+              "systemCpuMs": 4.381,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 54
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 11.609834000002593,
+                "mutationMs": 48.31895800000348,
+                "verifyMs": 9.486666999997396,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.987041000000318,
+                "mutationMs": 45.061625000002095,
+                "verifyMs": 10.565792000001238,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.103084000002127,
+                "mutationMs": 45.704084000004514,
+                "verifyMs": 9.38262499999837,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "pooledActivation": {
+            "strategy": "pooledActivation",
+            "wallMs": 35.225541999992856,
+            "throughputPerSecond": 85.1654745298343,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 3,
+            "inventoryCount": 69,
+            "cleanupInventoryCount": 69,
+            "loadAverage": {
+              "before": [24.0712890625, 21.6015625, 20.474609375],
+              "after": [24.0712890625, 21.6015625, 20.474609375]
+            },
+            "resourceUsage": {
+              "userCpuMs": 2.391,
+              "systemCpuMs": 4.772,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 33
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 10.788042000000132,
+                "mutationMs": 14.60899999999674,
+                "verifyMs": 9.767291999996814,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.755499999999302,
+                "mutationMs": 12.74883299999783,
+                "verifyMs": 11.086332999999286,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.669958999998926,
+                "mutationMs": 13.012625000003027,
+                "verifyMs": 10.422834000004514,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        }
+      ],
+      "nativeCreate": {
+        "wallMs": {
+          "samples": [
+            69.4352080000026, 72.07124999999724, 75.960916, 79.14266700000007, 81.66883400000006
+          ],
+          "median": 75.960916,
+          "p90": 81.66883400000006,
+          "p95": 81.66883400000006,
+          "max": 81.66883400000006
+        },
+        "commandMs": {
+          "samples": [
+            65.18979300000501, 65.61445800000365, 65.94866700000057, 66.38466600000174,
+            69.01825099999769, 69.41545900000347, 69.90916699999798, 72.04491699999926,
+            73.37958199999957, 74.34625100000085, 75.32649999999921, 78.57545800000116,
+            80.41654199999994, 80.76079200000004, 81.41954199999873
+          ],
+          "median": 72.04491699999926,
+          "p90": 80.76079200000004,
+          "p95": 81.41954199999873,
+          "max": 81.41954199999873
+        },
+        "throughputPerSecond": {
+          "samples": [
+            36.73371900962854, 37.906228254855215, 39.49399451686443, 41.62547479057342,
+            43.205746571679995
+          ],
+          "median": 39.49399451686443,
+          "p90": 43.205746571679995,
+          "p95": 43.205746571679995,
+          "max": 43.205746571679995
+        },
+        "allSafe": true
+      },
+      "pooledActivation": {
+        "wallMs": {
+          "samples": [
+            35.225541999992856, 39.72912500000166, 40.28049999999985, 40.960000000000946,
+            358.036458999999
+          ],
+          "median": 40.28049999999985,
+          "p90": 358.036458999999,
+          "p95": 358.036458999999,
+          "max": 358.036458999999
+        },
+        "commandMs": {
+          "samples": [
+            33.77987500000381, 34.105418000006466, 34.59066599999642, 35.16433399999369,
+            35.95037500000035, 37.401458000000275, 38.531584000000294, 38.9409169999999,
+            39.207915999999386, 39.28849999999875, 39.36870900000122, 39.68870899999911,
+            317.9179989999975, 323.9463759999999, 346.0788750000029
+          ],
+          "median": 38.9409169999999,
+          "p90": 323.9463759999999,
+          "p95": 346.0788750000029,
+          "max": 346.0788750000029
+        },
+        "throughputPerSecond": {
+          "samples": [
+            8.379034940684653, 73.24218749999831, 74.47772495376203, 75.51135344661819,
+            85.1654745298343
+          ],
+          "median": 74.47772495376203,
+          "p90": 85.1654745298343,
+          "p95": 85.1654745298343,
+          "max": 85.1654745298343
+        },
+        "allSafe": true
+      },
+      "medianImprovementFraction": 0.46972071795448267,
+      "p95ImprovementFraction": -3.384003560036118,
+      "allSafe": true
+    },
+    {
+      "burstSize": 5,
+      "pairs": [
+        {
+          "repetition": 0,
+          "order": ["nativeCreate", "pooledActivation"],
+          "nativeCreate": {
+            "strategy": "nativeCreate",
+            "wallMs": 171.0940840000003,
+            "throughputPerSecond": 29.223687243329767,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 4,
+            "inventoryCount": 74,
+            "cleanupInventoryCount": 69,
+            "loadAverage": {
+              "before": [27.697265625, 22.0439453125, 20.59228515625],
+              "after": [27.697265625, 22.0439453125, 20.59228515625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 9.007,
+              "systemCpuMs": 14.352,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 291
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 16.10845900000004,
+                "mutationMs": 72.99645800000053,
+                "verifyMs": 13.083749999999782,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.207374999999956,
+                "mutationMs": 81.00787500000024,
+                "verifyMs": 14.499832999999853,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.544917000000169,
+                "mutationMs": 76.65308399999958,
+                "verifyMs": 16.73504200000025,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 17.924082999999882,
+                "mutationMs": 76.68125000000055,
+                "verifyMs": 15.361167000000023,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.609666000000288,
+                "mutationMs": 42.11450000000059,
+                "verifyMs": 13.03429099999994,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "pooledActivation": {
+            "strategy": "pooledActivation",
+            "wallMs": 86.53966700000001,
+            "throughputPerSecond": 57.7769729573838,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 4,
+            "inventoryCount": 69,
+            "cleanupInventoryCount": 69,
+            "loadAverage": {
+              "before": [27.697265625, 22.0439453125, 20.59228515625],
+              "after": [27.697265625, 22.0439453125, 20.59228515625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 6.433,
+              "systemCpuMs": 11.922,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 165
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 14.481707999999344,
+                "mutationMs": 17.752707999999984,
+                "verifyMs": 16.008209000000534,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.936874999999418,
+                "mutationMs": 22.288125000000036,
+                "verifyMs": 13.97741700000006,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.91924999999992,
+                "mutationMs": 17.889000000000124,
+                "verifyMs": 14.965667000000394,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 15.359958000000006,
+                "mutationMs": 18.44512500000019,
+                "verifyMs": 16.34241699999984,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.789166999999907,
+                "mutationMs": 14.999292000000423,
+                "verifyMs": 11.41004200000043,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 1,
+          "order": ["pooledActivation", "nativeCreate"],
+          "nativeCreate": {
+            "strategy": "nativeCreate",
+            "wallMs": 155.22583399999894,
+            "throughputPerSecond": 32.211133103011925,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 4,
+            "inventoryCount": 74,
+            "cleanupInventoryCount": 69,
+            "loadAverage": {
+              "before": [24.82861328125, 21.6142578125, 20.4560546875],
+              "after": [24.82861328125, 21.6142578125, 20.4560546875]
+            },
+            "resourceUsage": {
+              "userCpuMs": 5.55,
+              "systemCpuMs": 11.024,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 184
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 15.39758299999994,
+                "mutationMs": 73.75950000000012,
+                "verifyMs": 12.017040999999153,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.800124999999753,
+                "mutationMs": 69.60637499999939,
+                "verifyMs": 13.71533400000044,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.753708000000188,
+                "mutationMs": 82.59300000000076,
+                "verifyMs": 11.483208999999988,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.782250000000204,
+                "mutationMs": 70.16779200000019,
+                "verifyMs": 13.715167000000292,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.300583000000188,
+                "mutationMs": 36.76691600000049,
+                "verifyMs": 9.319833000001381,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "pooledActivation": {
+            "strategy": "pooledActivation",
+            "wallMs": 73.84262499999932,
+            "throughputPerSecond": 67.71156902940606,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 4,
+            "inventoryCount": 69,
+            "cleanupInventoryCount": 69,
+            "loadAverage": {
+              "before": [24.82861328125, 21.6142578125, 20.4560546875],
+              "after": [24.82861328125, 21.6142578125, 20.4560546875]
+            },
+            "resourceUsage": {
+              "userCpuMs": 4.893,
+              "systemCpuMs": 10.264,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 143
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 14.933250000000044,
+                "mutationMs": 17.013333000000785,
+                "verifyMs": 11.249625000000378,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.067250000000058,
+                "mutationMs": 23.001124999998865,
+                "verifyMs": 12.623791999998502,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.559624999999869,
+                "mutationMs": 22.151416999999128,
+                "verifyMs": 10.872707999998966,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.264166999999361,
+                "mutationMs": 16.635540999999648,
+                "verifyMs": 11.532334000001356,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.887791999999536,
+                "mutationMs": 11.837250000000495,
+                "verifyMs": 8.827916999998706,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 2,
+          "order": ["nativeCreate", "pooledActivation"],
+          "nativeCreate": {
+            "strategy": "nativeCreate",
+            "wallMs": 726.9484580000026,
+            "throughputPerSecond": 6.8780667253303145,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 4,
+            "inventoryCount": 74,
+            "cleanupInventoryCount": 69,
+            "loadAverage": {
+              "before": [24.28173828125, 21.55419921875, 20.44140625],
+              "after": [24.28173828125, 21.55419921875, 20.44140625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 6.918,
+              "systemCpuMs": 14.253,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 205
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 86.51024999999936,
+                "mutationMs": 292.1168340000004,
+                "verifyMs": 93.63237500000105,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 147.4253749999989,
+                "mutationMs": 247.08387500000026,
+                "verifyMs": 76.6696669999983,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 61.521333000000595,
+                "mutationMs": 264.1075000000019,
+                "verifyMs": 92.39341699999932,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 61.93037499999991,
+                "mutationMs": 323.3846250000024,
+                "verifyMs": 46.38824999999997,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 49.55766600000061,
+                "mutationMs": 160.84191600000122,
+                "verifyMs": 44.19800000000032,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "pooledActivation": {
+            "strategy": "pooledActivation",
+            "wallMs": 99.99354200000016,
+            "throughputPerSecond": 50.00322920854221,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 4,
+            "inventoryCount": 69,
+            "cleanupInventoryCount": 69,
+            "loadAverage": {
+              "before": [24.28173828125, 21.55419921875, 20.44140625],
+              "after": [24.28173828125, 21.55419921875, 20.44140625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 6.007,
+              "systemCpuMs": 11.723,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 177
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 20.146249999997963,
+                "mutationMs": 26.67854200000147,
+                "verifyMs": 15.204957999998442,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 16.953583000002254,
+                "mutationMs": 23.542459000000235,
+                "verifyMs": 17.93958399999974,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 20.151207999999315,
+                "mutationMs": 21.071125000002212,
+                "verifyMs": 15.880915999998251,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.872875000000931,
+                "mutationMs": 18.247874999997293,
+                "verifyMs": 15.927374999999302,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.742874999999913,
+                "mutationMs": 17.907999999999447,
+                "verifyMs": 13.681416999999783,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 3,
+          "order": ["pooledActivation", "nativeCreate"],
+          "nativeCreate": {
+            "strategy": "nativeCreate",
+            "wallMs": 146.85249999999724,
+            "throughputPerSecond": 34.047769019935615,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 4,
+            "inventoryCount": 74,
+            "cleanupInventoryCount": 69,
+            "loadAverage": {
+              "before": [22.59814453125, 21.2744140625, 20.35400390625],
+              "after": [22.59814453125, 21.2744140625, 20.35400390625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 3.546,
+              "systemCpuMs": 8.306,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 172
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 13.915082999999868,
+                "mutationMs": 60.94487499999741,
+                "verifyMs": 15.2934580000001,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.580458999997063,
+                "mutationMs": 65.44570799999929,
+                "verifyMs": 12.468709000000672,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.311916000002384,
+                "mutationMs": 62.4886660000011,
+                "verifyMs": 12.253124999999272,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.512291999999434,
+                "mutationMs": 62.731915999997,
+                "verifyMs": 14.19525000000067,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.433333000000857,
+                "mutationMs": 37.209750000001804,
+                "verifyMs": 10.89654199999859,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "pooledActivation": {
+            "strategy": "pooledActivation",
+            "wallMs": 158.3921670000018,
+            "throughputPerSecond": 31.567217588480514,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 4,
+            "inventoryCount": 69,
+            "cleanupInventoryCount": 69,
+            "loadAverage": {
+              "before": [22.59814453125, 21.2744140625, 20.35400390625],
+              "after": [22.59814453125, 21.2744140625, 20.35400390625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 6.177,
+              "systemCpuMs": 12.259,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 218
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 18.77062500000102,
+                "mutationMs": 33.15520800000013,
+                "verifyMs": 25.017917000001034,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 28.58283300000039,
+                "mutationMs": 27.663667000000714,
+                "verifyMs": 19.41412499999933,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 22.482083000002604,
+                "mutationMs": 30.9834170000031,
+                "verifyMs": 16.270667000000685,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 29.859166000002006,
+                "mutationMs": 25.569958000000042,
+                "verifyMs": 20.77195799999754,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 27.436499999999796,
+                "mutationMs": 34.17604100000244,
+                "verifyMs": 24.09612500000003,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 4,
+          "order": ["nativeCreate", "pooledActivation"],
+          "nativeCreate": {
+            "strategy": "nativeCreate",
+            "wallMs": 568.3833749999976,
+            "throughputPerSecond": 8.796879395003455,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 4,
+            "inventoryCount": 74,
+            "cleanupInventoryCount": 69,
+            "loadAverage": {
+              "before": [26.3876953125, 22.12255859375, 20.6650390625],
+              "after": [26.3876953125, 22.12255859375, 20.6650390625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 6.091,
+              "systemCpuMs": 13.209,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 214
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 110.30354200000147,
+                "mutationMs": 230.21374999999534,
+                "verifyMs": 45.142958000004,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 120.43391700000211,
+                "mutationMs": 244.9740840000013,
+                "verifyMs": 23.557291999997688,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 65.8961249999993,
+                "mutationMs": 224.30554200000188,
+                "verifyMs": 38.85804199999984,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 53.60920800000167,
+                "mutationMs": 239.88316699999996,
+                "verifyMs": 31.463541000004625,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 25.96679199999926,
+                "mutationMs": 127.25395900000149,
+                "verifyMs": 29.413042000000132,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "pooledActivation": {
+            "strategy": "pooledActivation",
+            "wallMs": 87.66370800000004,
+            "throughputPerSecond": 57.03614544801136,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 4,
+            "inventoryCount": 69,
+            "cleanupInventoryCount": 69,
+            "loadAverage": {
+              "before": [26.3876953125, 22.12255859375, 20.6650390625],
+              "after": [26.3876953125, 22.12255859375, 20.6650390625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 6.194,
+              "systemCpuMs": 11.425,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 220
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 13.239250000005995,
+                "mutationMs": 27.56670899999881,
+                "verifyMs": 15.446542000005138,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.3915829999969,
+                "mutationMs": 18.860916999998153,
+                "verifyMs": 18.50166700000409,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 15.244542000000365,
+                "mutationMs": 20.322165999998106,
+                "verifyMs": 17.977916999996523,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 16.79179099999601,
+                "mutationMs": 24.940792000001238,
+                "verifyMs": 13.65458299999591,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.728917000000365,
+                "mutationMs": 12.824667000000773,
+                "verifyMs": 9.923707999994804,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        }
+      ],
+      "nativeCreate": {
+        "wallMs": {
+          "samples": [
+            146.85249999999724, 155.22583399999894, 171.0940840000003, 568.3833749999976,
+            726.9484580000026
+          ],
+          "median": 171.0940840000003,
+          "p90": 726.9484580000026,
+          "p95": 726.9484580000026,
+          "max": 726.9484580000026
+        },
+        "commandMs": {
+          "samples": [
+            57.38733200000206, 57.53962500000125, 68.75845700000082, 88.05370700000276,
+            88.4394579999971, 89.49487599999702, 90.15341599999738, 97.12183399999958,
+            98.66520900000069, 101.17412399999921, 102.18866700000035, 107.933043,
+            108.71508300000005, 108.82991700000093, 109.96650000000045, 182.63379300000088,
+            254.59758200000215, 324.95591600000625, 329.059709000001, 385.6602500000008,
+            388.9652930000011, 418.0222500000018, 431.7032500000023, 471.17891699999745,
+            472.2594590000008
+          ],
+          "median": 108.71508300000005,
+          "p90": 431.7032500000023,
+          "p95": 471.17891699999745,
+          "max": 472.2594590000008
+        },
+        "throughputPerSecond": {
+          "samples": [
+            6.8780667253303145, 8.796879395003455, 29.223687243329767, 32.211133103011925,
+            34.047769019935615
+          ],
+          "median": 29.223687243329767,
+          "p90": 34.047769019935615,
+          "p95": 34.047769019935615,
+          "max": 34.047769019935615
+        },
+        "allSafe": true
+      },
+      "pooledActivation": {
+        "wallMs": {
+          "samples": [
+            73.84262499999932, 86.53966700000001, 87.66370800000004, 99.99354200000016,
+            158.3921670000018
+          ],
+          "median": 87.66370800000004,
+          "p90": 158.3921670000018,
+          "p95": 158.3921670000018,
+          "max": 158.3921670000018
+        },
+        "commandMs": {
+          "samples": [
+            30.552958999998737, 34.47729199999594, 38.19850100000076, 42.432042000000365,
+            43.19620800000121, 44.33229199999914, 47.58374999999796, 47.77391700000044,
+            48.24262499999986, 48.692166999997426, 49.048124999997526, 50.147500000000036,
+            51.202416999999514, 51.75416699999914, 53.544624999994994, 55.38716599999316,
+            56.25250100000994, 57.10324899999978, 58.43562600000223, 62.029749999997875,
+            69.73616700000639, 75.66062500000044, 76.20108199999959, 76.94375000000218,
+            85.70866600000227
+          ],
+          "median": 51.202416999999514,
+          "p90": 76.20108199999959,
+          "p95": 76.94375000000218,
+          "max": 85.70866600000227
+        },
+        "throughputPerSecond": {
+          "samples": [
+            31.567217588480514, 50.00322920854221, 57.03614544801136, 57.7769729573838,
+            67.71156902940606
+          ],
+          "median": 57.03614544801136,
+          "p90": 67.71156902940606,
+          "p95": 67.71156902940606,
+          "max": 67.71156902940606
+        },
+        "allSafe": true
+      },
+      "medianImprovementFraction": 0.48762864296348263,
+      "p95ImprovementFraction": 0.782113621320865,
+      "allSafe": true
+    },
+    {
+      "burstSize": 20,
+      "pairs": [
+        {
+          "repetition": 0,
+          "order": ["pooledActivation", "nativeCreate"],
+          "nativeCreate": {
+            "strategy": "nativeCreate",
+            "wallMs": 597.405166999999,
+            "throughputPerSecond": 33.478116870723404,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 4,
+            "inventoryCount": 89,
+            "cleanupInventoryCount": 69,
+            "loadAverage": {
+              "before": [27.697265625, 22.0439453125, 20.59228515625],
+              "after": [26.11962890625, 21.810546875, 20.51806640625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 24.05,
+              "systemCpuMs": 47.21,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 927
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 24.592000000000553,
+                "mutationMs": 128.41758300000038,
+                "verifyMs": 17.589249999999083,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 32.442542000000685,
+                "mutationMs": 110.3484159999989,
+                "verifyMs": 17.938000000000102,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 25.56220900000153,
+                "mutationMs": 121.23016699999971,
+                "verifyMs": 13.943250000000262,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 28.90179200000057,
+                "mutationMs": 120.76304199999868,
+                "verifyMs": 13.875874999999724,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.789708000000246,
+                "mutationMs": 70.48795900000005,
+                "verifyMs": 12.630583999998635,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.936749999998938,
+                "mutationMs": 70.15304199999991,
+                "verifyMs": 12.173541000000114,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.042999999999665,
+                "mutationMs": 64.49054200000137,
+                "verifyMs": 14.21220799999901,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.70904100000007,
+                "mutationMs": 65.6244999999999,
+                "verifyMs": 15.445875000001251,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 15.551292000000103,
+                "mutationMs": 76.38108400000056,
+                "verifyMs": 12.483625000000757,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 16.79870800000026,
+                "mutationMs": 73.39912499999991,
+                "verifyMs": 14.017125000000306,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.151083000000654,
+                "mutationMs": 73.0242500000004,
+                "verifyMs": 11.677541999999448,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.978415999999925,
+                "mutationMs": 73.5857079999987,
+                "verifyMs": 12.739541999999346,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.504833999999391,
+                "mutationMs": 77.72529199999917,
+                "verifyMs": 12.70391600000039,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.552041999999346,
+                "mutationMs": 78.91045800000029,
+                "verifyMs": 12.971417000000656,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.488041000000521,
+                "mutationMs": 81.4862919999996,
+                "verifyMs": 13.80579200000102,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.789958999999726,
+                "mutationMs": 77.10866600000008,
+                "verifyMs": 12.25145799999882,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.734417000001486,
+                "mutationMs": 91.74404200000026,
+                "verifyMs": 14.366707999999562,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.235332999998718,
+                "mutationMs": 85.14070899999933,
+                "verifyMs": 15.274375000000873,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.706582999999227,
+                "mutationMs": 90.87445800000023,
+                "verifyMs": 18.20433299999968,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.870999999999185,
+                "mutationMs": 92.52216600000065,
+                "verifyMs": 15.571082999998907,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "pooledActivation": {
+            "strategy": "pooledActivation",
+            "wallMs": 217.04754199999934,
+            "throughputPerSecond": 92.14571063882428,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 4,
+            "inventoryCount": 69,
+            "cleanupInventoryCount": 69,
+            "loadAverage": {
+              "before": [27.697265625, 22.0439453125, 20.59228515625],
+              "after": [27.697265625, 22.0439453125, 20.59228515625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 19.338,
+              "systemCpuMs": 38.703,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 545
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 11.804124999999658,
+                "mutationMs": 15.238875000000007,
+                "verifyMs": 12.225166999999601,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.928125000000364,
+                "mutationMs": 15.499542000000474,
+                "verifyMs": 13.079040999999961,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.689209000000119,
+                "mutationMs": 15.028916999999637,
+                "verifyMs": 11.611291000000165,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.420042000000649,
+                "mutationMs": 16.53545799999938,
+                "verifyMs": 12.2597080000005,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.181125000000065,
+                "mutationMs": 21.806790999999976,
+                "verifyMs": 10.611499999999978,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.948875000000044,
+                "mutationMs": 19.94941700000072,
+                "verifyMs": 10.984209000000192,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.778792000000067,
+                "mutationMs": 16.72004199999992,
+                "verifyMs": 10.601834000000053,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 15.023209000000861,
+                "mutationMs": 15.399999999999636,
+                "verifyMs": 14.875,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.342459000000417,
+                "mutationMs": 13.601542000000336,
+                "verifyMs": 11.526708000000326,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.95154199999979,
+                "mutationMs": 13.088458999999602,
+                "verifyMs": 11.560875000000124,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.748583999999937,
+                "mutationMs": 14.629957999999533,
+                "verifyMs": 10.098084000000199,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.351209000000381,
+                "mutationMs": 16.592125000000124,
+                "verifyMs": 13.56029099999978,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.913542000000234,
+                "mutationMs": 16.784999999999854,
+                "verifyMs": 12.753707999999278,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.276166999999987,
+                "mutationMs": 16.73937500000011,
+                "verifyMs": 12.755583000000115,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.515833999999813,
+                "mutationMs": 15.15020800000002,
+                "verifyMs": 12.905625000000327,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.248708000000079,
+                "mutationMs": 14.820334000000003,
+                "verifyMs": 12.823832999999468,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.746957999999722,
+                "mutationMs": 12.679000000000087,
+                "verifyMs": 17.40858399999979,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.979583999999704,
+                "mutationMs": 20.180333999999675,
+                "verifyMs": 21.52641600000061,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.086957999999868,
+                "mutationMs": 14.56854199999998,
+                "verifyMs": 18.91370899999947,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.718834000000243,
+                "mutationMs": 18.08379199999945,
+                "verifyMs": 17.53858300000047,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 1,
+          "order": ["nativeCreate", "pooledActivation"],
+          "nativeCreate": {
+            "strategy": "nativeCreate",
+            "wallMs": 363.69195899999977,
+            "throughputPerSecond": 54.991592486651626,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 4,
+            "inventoryCount": 89,
+            "cleanupInventoryCount": 69,
+            "loadAverage": {
+              "before": [24.82861328125, 21.6142578125, 20.4560546875],
+              "after": [24.82861328125, 21.6142578125, 20.4560546875]
+            },
+            "resourceUsage": {
+              "userCpuMs": 12.359,
+              "systemCpuMs": 28.362,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 435
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 10.716666999998779,
+                "mutationMs": 50.95458299999882,
+                "verifyMs": 9.93658300000061,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.517250000000786,
+                "mutationMs": 54.454750000000786,
+                "verifyMs": 9.768041999999696,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.453832999999577,
+                "mutationMs": 52.89079099999981,
+                "verifyMs": 10.109875000000102,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.997290999999677,
+                "mutationMs": 48.35100000000057,
+                "verifyMs": 11.923209000000497,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.548041000000012,
+                "mutationMs": 49.70229199999994,
+                "verifyMs": 10.60137500000019,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.052499999999782,
+                "mutationMs": 47.56379100000049,
+                "verifyMs": 12.683917000000292,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 8.651958000000377,
+                "mutationMs": 46.8442500000001,
+                "verifyMs": 10.550374999998894,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 8.668749999998909,
+                "mutationMs": 45.72233299999971,
+                "verifyMs": 10.44591600000058,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.992500000000291,
+                "mutationMs": 54.204374999999345,
+                "verifyMs": 10.028416999999536,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.902000000000044,
+                "mutationMs": 54.6625839999997,
+                "verifyMs": 9.581874999999854,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.846167000001515,
+                "mutationMs": 57.11020800000006,
+                "verifyMs": 10.957833000000392,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.81933300000128,
+                "mutationMs": 51.75858299999891,
+                "verifyMs": 10.418874999999389,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.164582999999766,
+                "mutationMs": 51.0698339999999,
+                "verifyMs": 10.430791999999201,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.006875000000946,
+                "mutationMs": 50.89537500000006,
+                "verifyMs": 10.523041999998895,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.508125000000291,
+                "mutationMs": 53.86883300000045,
+                "verifyMs": 9.134167000000161,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 8.877916999999798,
+                "mutationMs": 48.65033399999993,
+                "verifyMs": 9.56566600000042,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.384249999999156,
+                "mutationMs": 57.038957999999184,
+                "verifyMs": 9.631749999998647,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.047124999999141,
+                "mutationMs": 57.274625000000015,
+                "verifyMs": 10.161791000000449,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.560208000000785,
+                "mutationMs": 58.81187499999942,
+                "verifyMs": 8.763500000000931,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 8.98541699999987,
+                "mutationMs": 54.594458999999915,
+                "verifyMs": 10.841999999998734,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "pooledActivation": {
+            "strategy": "pooledActivation",
+            "wallMs": 169.45208300000013,
+            "throughputPerSecond": 118.02746620706918,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 4,
+            "inventoryCount": 69,
+            "cleanupInventoryCount": 69,
+            "loadAverage": {
+              "before": [24.82861328125, 21.6142578125, 20.4560546875],
+              "after": [24.82861328125, 21.6142578125, 20.4560546875]
+            },
+            "resourceUsage": {
+              "userCpuMs": 14.066,
+              "systemCpuMs": 30.536,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 504
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 11.957666999998764,
+                "mutationMs": 12.536082999999053,
+                "verifyMs": 10.38720900000044,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.315500000000611,
+                "mutationMs": 14.87683399999878,
+                "verifyMs": 9.703249999998661,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.482916000000841,
+                "mutationMs": 17.527750000001106,
+                "verifyMs": 9.154209000000264,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.955458000000363,
+                "mutationMs": 18.684042000000773,
+                "verifyMs": 8.68250000000262,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.076625000001513,
+                "mutationMs": 11.38433299999815,
+                "verifyMs": 10.837625000000116,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 8.99291699999958,
+                "mutationMs": 11.529332999998587,
+                "verifyMs": 12.61579200000051,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 8.729749999998603,
+                "mutationMs": 12.491792000000714,
+                "verifyMs": 10.453292000001966,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 8.644000000000233,
+                "mutationMs": 12.268041999999696,
+                "verifyMs": 11.131666000001132,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 8.950082999999722,
+                "mutationMs": 11.441375000002154,
+                "verifyMs": 10.03374999999869,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.440083000001323,
+                "mutationMs": 12.363333000001148,
+                "verifyMs": 11.045791000000463,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 8.988874999999098,
+                "mutationMs": 12.79962499999965,
+                "verifyMs": 10.497583000000304,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.062709000001632,
+                "mutationMs": 11.507249999998749,
+                "verifyMs": 10.299250000000029,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.285292000000481,
+                "mutationMs": 12.5568749999984,
+                "verifyMs": 9.99949999999808,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.23124999999709,
+                "mutationMs": 12.79266700000153,
+                "verifyMs": 10.4943749999984,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 8.970541999999114,
+                "mutationMs": 17.590250000001106,
+                "verifyMs": 9.983249999997497,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.633208000002924,
+                "mutationMs": 11.297500000000582,
+                "verifyMs": 10.795541999999841,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.17683400000169,
+                "mutationMs": 11.715041999999812,
+                "verifyMs": 9.41229100000055,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.285500000001775,
+                "mutationMs": 12.996040999998513,
+                "verifyMs": 9.504334000001109,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.066834000001109,
+                "mutationMs": 11.823374999999942,
+                "verifyMs": 9.64325000000099,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.899000000001251,
+                "mutationMs": 11.777792000000773,
+                "verifyMs": 8.985167000002548,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 2,
+          "order": ["pooledActivation", "nativeCreate"],
+          "nativeCreate": {
+            "strategy": "nativeCreate",
+            "wallMs": 449.45233299999745,
+            "throughputPerSecond": 44.498600922826036,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 4,
+            "inventoryCount": 89,
+            "cleanupInventoryCount": 69,
+            "loadAverage": {
+              "before": [22.7373046875, 21.279296875, 20.3505859375],
+              "after": [22.7373046875, 21.279296875, 20.3505859375]
+            },
+            "resourceUsage": {
+              "userCpuMs": 22.585,
+              "systemCpuMs": 43.599,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 619
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 14.270874999998341,
+                "mutationMs": 65.43624999999884,
+                "verifyMs": 19.01983299999847,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.550250000000233,
+                "mutationMs": 78.20616700000028,
+                "verifyMs": 21.129084000000148,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.364291000001685,
+                "mutationMs": 77.32374999999956,
+                "verifyMs": 15.615874999999505,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.98975000000064,
+                "mutationMs": 73.10595900000044,
+                "verifyMs": 20.527916999999434,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.40662500000326,
+                "mutationMs": 59.523292000001675,
+                "verifyMs": 16.395542000002024,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.817457999997714,
+                "mutationMs": 70.93558299999859,
+                "verifyMs": 13.087209000001167,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.454624999998487,
+                "mutationMs": 66.56450000000041,
+                "verifyMs": 13.670416999997542,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.714167000001908,
+                "mutationMs": 72.09845900000073,
+                "verifyMs": 13.777541999999812,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.793083000000479,
+                "mutationMs": 51.5679999999993,
+                "verifyMs": 14.124415999998746,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.992541999999958,
+                "mutationMs": 50.21229200000016,
+                "verifyMs": 15.980665999999474,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.486541999998735,
+                "mutationMs": 53.15520800000013,
+                "verifyMs": 11.653333000002021,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.542749999996886,
+                "mutationMs": 56.151083000000654,
+                "verifyMs": 10.912457999998878,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.040334000001167,
+                "mutationMs": 52.411959000000934,
+                "verifyMs": 18.563292000002548,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.381124999999884,
+                "mutationMs": 60.788250000001426,
+                "verifyMs": 10.687291000002006,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.880541000002268,
+                "mutationMs": 60.84558299999844,
+                "verifyMs": 12.273540999998659,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.794624999998632,
+                "mutationMs": 54.93820799999958,
+                "verifyMs": 12.555458999999246,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.08062499999869,
+                "mutationMs": 48.558750000000146,
+                "verifyMs": 14.361957999997685,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.431541000001744,
+                "mutationMs": 58.268041999999696,
+                "verifyMs": 9.76145799999722,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.465500000002066,
+                "mutationMs": 54.301415999998426,
+                "verifyMs": 10.190333000002283,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.690624999999272,
+                "mutationMs": 54.56000000000131,
+                "verifyMs": 10.030125000001135,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "pooledActivation": {
+            "strategy": "pooledActivation",
+            "wallMs": 200.71679199999926,
+            "throughputPerSecond": 99.64288388985449,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 4,
+            "inventoryCount": 69,
+            "cleanupInventoryCount": 69,
+            "loadAverage": {
+              "before": [24.28173828125, 21.55419921875, 20.44140625],
+              "after": [24.28173828125, 21.55419921875, 20.44140625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 13.127,
+              "systemCpuMs": 34.933,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 549
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 14.483624999997119,
+                "mutationMs": 18.91895800000202,
+                "verifyMs": 12.415249999998196,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.778708999998344,
+                "mutationMs": 19.965250000001106,
+                "verifyMs": 14.307542000002286,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.313374999997905,
+                "mutationMs": 16.221833999999944,
+                "verifyMs": 14.272166999999172,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.7509579999969,
+                "mutationMs": 15.687208999999712,
+                "verifyMs": 13.483667000000423,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.47020799999882,
+                "mutationMs": 16.566209000000526,
+                "verifyMs": 12.500875000001543,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.888041999998677,
+                "mutationMs": 16.17529099999956,
+                "verifyMs": 12.341167000002315,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.186582999998791,
+                "mutationMs": 14.95508400000108,
+                "verifyMs": 12.519791999999143,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.709459000001516,
+                "mutationMs": 16.275041000000783,
+                "verifyMs": 12.046582999999373,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.541417000000365,
+                "mutationMs": 13.31275000000096,
+                "verifyMs": 10.646874999998545,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.42254099999991,
+                "mutationMs": 15.44462499999645,
+                "verifyMs": 11.612374999996973,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.444166999997833,
+                "mutationMs": 13.078583000002254,
+                "verifyMs": 12.479458999998315,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.851041000001715,
+                "mutationMs": 16.552166999998008,
+                "verifyMs": 11.104166000000987,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.958458000000974,
+                "mutationMs": 14.915832999999111,
+                "verifyMs": 11.941292000003159,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.993749999997817,
+                "mutationMs": 14.451709000000847,
+                "verifyMs": 12.602999999999156,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.719583999998576,
+                "mutationMs": 13.622875000000931,
+                "verifyMs": 11.09570800000074,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.043416000000434,
+                "mutationMs": 13.09125000000131,
+                "verifyMs": 11.4809580000001,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.702665999997407,
+                "mutationMs": 15.057374999996682,
+                "verifyMs": 9.94383299999754,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.802374999999302,
+                "mutationMs": 13.442500000001019,
+                "verifyMs": 10.722999999998137,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.701124999999593,
+                "mutationMs": 14.421667000002344,
+                "verifyMs": 9.395790999999008,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.359582999997656,
+                "mutationMs": 17.238667000001442,
+                "verifyMs": 10.236499999999069,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 3,
+          "order": ["nativeCreate", "pooledActivation"],
+          "nativeCreate": {
+            "strategy": "nativeCreate",
+            "wallMs": 448.4239170000001,
+            "throughputPerSecond": 44.60065407260603,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 4,
+            "inventoryCount": 89,
+            "cleanupInventoryCount": 69,
+            "loadAverage": {
+              "before": [22.59814453125, 21.2744140625, 20.35400390625],
+              "after": [22.59814453125, 21.2744140625, 20.35400390625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 19.622,
+              "systemCpuMs": 43.475,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 647
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 14.038459000003058,
+                "mutationMs": 62.34554200000275,
+                "verifyMs": 10.363499999999476,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.428250000004482,
+                "mutationMs": 64.39650000000256,
+                "verifyMs": 10.23008299999492,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.436249999998836,
+                "mutationMs": 68.90795799999614,
+                "verifyMs": 11.959167000000889,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.512332999998762,
+                "mutationMs": 60.88762499999575,
+                "verifyMs": 10.288666000000376,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.588415999998688,
+                "mutationMs": 55.159459000002244,
+                "verifyMs": 12.735791999999492,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.701249999998254,
+                "mutationMs": 52.61908399999811,
+                "verifyMs": 12.327957999994396,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.505499999999302,
+                "mutationMs": 54.18449999999575,
+                "verifyMs": 11.03154099999665,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.91649999999936,
+                "mutationMs": 61.67220800000359,
+                "verifyMs": 10.757833000003302,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.027874999999767,
+                "mutationMs": 61.800665999995545,
+                "verifyMs": 12.602249999996275,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.190875000000233,
+                "mutationMs": 67.65612500000134,
+                "verifyMs": 13.245832999993581,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.167415999996592,
+                "mutationMs": 68.41545900000347,
+                "verifyMs": 11.797082999997656,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.489332999997714,
+                "mutationMs": 71.17479200000525,
+                "verifyMs": 13.362750000000233,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.256625000001804,
+                "mutationMs": 63.3245409999945,
+                "verifyMs": 11.211583000003884,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.294500000003609,
+                "mutationMs": 58.1785830000008,
+                "verifyMs": 13.493875000000116,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.104417000002286,
+                "mutationMs": 62.632125000003725,
+                "verifyMs": 12.865375000001222,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.834875000000466,
+                "mutationMs": 61.45824999999604,
+                "verifyMs": 12.224041000001307,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.352208999996947,
+                "mutationMs": 58.07558300000528,
+                "verifyMs": 14.861000000004424,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.552582999996957,
+                "mutationMs": 58.57241700000304,
+                "verifyMs": 12.722000000001572,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.849874999999884,
+                "mutationMs": 54.291708999997354,
+                "verifyMs": 13.09754100000282,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.401749999997264,
+                "mutationMs": 59.07729099999415,
+                "verifyMs": 15.462459000002127,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "pooledActivation": {
+            "strategy": "pooledActivation",
+            "wallMs": 412.8544580000016,
+            "throughputPerSecond": 48.44322160619596,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 4,
+            "inventoryCount": 69,
+            "cleanupInventoryCount": 69,
+            "loadAverage": {
+              "before": [24.0712890625, 21.6015625, 20.474609375],
+              "after": [24.0712890625, 21.6015625, 20.474609375]
+            },
+            "resourceUsage": {
+              "userCpuMs": 22.904,
+              "systemCpuMs": 43.095,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 846
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 38.58754100000078,
+                "mutationMs": 28.9129580000008,
+                "verifyMs": 29.903958999995666,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 25.439209000003757,
+                "mutationMs": 30.030624999999418,
+                "verifyMs": 21.138458000001265,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 33.33283400000073,
+                "mutationMs": 43.104584000000614,
+                "verifyMs": 24.625249999997322,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 33.92483299999731,
+                "mutationMs": 40.6831250000032,
+                "verifyMs": 25.19745900000271,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 24.458166999997047,
+                "mutationMs": 35.85004199999821,
+                "verifyMs": 21.10820799999783,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 24.938499999996566,
+                "mutationMs": 27.544291999998677,
+                "verifyMs": 23.3529170000038,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 20.77116599999863,
+                "mutationMs": 29.003457999999227,
+                "verifyMs": 20.549541000000318,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 22.28937500000029,
+                "mutationMs": 27.56550000000425,
+                "verifyMs": 28.547708999998576,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 17.05462499999703,
+                "mutationMs": 36.129124999999476,
+                "verifyMs": 22.55683300000237,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 18.84549999999581,
+                "mutationMs": 37.11091700000543,
+                "verifyMs": 18.528959000002942,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 27.44179200000508,
+                "mutationMs": 31.585832999997365,
+                "verifyMs": 19.401666000005207,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 26.985625000001164,
+                "mutationMs": 27.70179199999984,
+                "verifyMs": 24.233209000005445,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.987040999993042,
+                "mutationMs": 24.152375000005122,
+                "verifyMs": 24.971832999995968,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 22.99537500000588,
+                "mutationMs": 31.73795799999789,
+                "verifyMs": 16.31204200000502,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 25.520165999994788,
+                "mutationMs": 25.06170800000109,
+                "verifyMs": 19.000958000004175,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 22.002832999998645,
+                "mutationMs": 28.359582999997656,
+                "verifyMs": 22.64195800000016,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 18.080000000001746,
+                "mutationMs": 24.048374999998487,
+                "verifyMs": 19.331208000003244,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 20.712958999996772,
+                "mutationMs": 26.431916999994428,
+                "verifyMs": 14.50908299999719,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 21.59937500000524,
+                "mutationMs": 19.55762500000128,
+                "verifyMs": 21.328458999996656,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 18.55045799999789,
+                "mutationMs": 26.14129200000025,
+                "verifyMs": 19.366540999995777,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 4,
+          "order": ["pooledActivation", "nativeCreate"],
+          "nativeCreate": {
+            "strategy": "nativeCreate",
+            "wallMs": 483.0867920000019,
+            "throughputPerSecond": 41.40042810361067,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 4,
+            "inventoryCount": 89,
+            "cleanupInventoryCount": 69,
+            "loadAverage": {
+              "before": [26.3876953125, 22.12255859375, 20.6650390625],
+              "after": [26.3876953125, 22.12255859375, 20.6650390625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 20.237,
+              "systemCpuMs": 42.65,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 585
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 11.210417000002053,
+                "mutationMs": 55.1542910000062,
+                "verifyMs": 12.28895800000464,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.190499999996973,
+                "mutationMs": 59.21508400000312,
+                "verifyMs": 13.264333999999508,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.97412500000064,
+                "mutationMs": 61.90795799999614,
+                "verifyMs": 12.27429100000154,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.456208000003244,
+                "mutationMs": 56.51262499999575,
+                "verifyMs": 11.741834000000381,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.649291999994603,
+                "mutationMs": 76.63608399999794,
+                "verifyMs": 17.843958000004932,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.563750000001164,
+                "mutationMs": 76.76216700000077,
+                "verifyMs": 12.711749999994936,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.623833999998169,
+                "mutationMs": 68.89237499999581,
+                "verifyMs": 17.020874999994703,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.864916999998968,
+                "mutationMs": 70.1082499999975,
+                "verifyMs": 15.962625000000116,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 15.607582999997248,
+                "mutationMs": 82.29633299999841,
+                "verifyMs": 12.772541999998793,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 18.080916999999317,
+                "mutationMs": 75.81562500000291,
+                "verifyMs": 12.976917000007234,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 15.7713750000039,
+                "mutationMs": 77.86745799999335,
+                "verifyMs": 13.056124999995518,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 16.278291999995417,
+                "mutationMs": 75.812582999999,
+                "verifyMs": 12.877499999995052,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.441666999999143,
+                "mutationMs": 67.38499999999476,
+                "verifyMs": 12.491625000002387,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.559250000005704,
+                "mutationMs": 71.30920799999876,
+                "verifyMs": 11.677792000002228,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.069374999999127,
+                "mutationMs": 69.84325000000536,
+                "verifyMs": 11.802000000003318,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.691832999997132,
+                "mutationMs": 67.71591699999408,
+                "verifyMs": 10.60399999999936,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.097792000000481,
+                "mutationMs": 65.16341600000305,
+                "verifyMs": 18.188916999999492,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.461332999999286,
+                "mutationMs": 64.8405419999981,
+                "verifyMs": 15.623082999998587,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.547083000004932,
+                "mutationMs": 71.16600000000471,
+                "verifyMs": 14.65258399999584,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.802875000001222,
+                "mutationMs": 66.91533300000447,
+                "verifyMs": 18.609707999996317,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "pooledActivation": {
+            "strategy": "pooledActivation",
+            "wallMs": 251.63529199999903,
+            "throughputPerSecond": 79.48010726571724,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 4,
+            "inventoryCount": 69,
+            "cleanupInventoryCount": 69,
+            "loadAverage": {
+              "before": [26.3876953125, 22.12255859375, 20.6650390625],
+              "after": [26.3876953125, 22.12255859375, 20.6650390625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 16.4,
+              "systemCpuMs": 43.929,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 670
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 15.52929199999926,
+                "mutationMs": 21.68083299999853,
+                "verifyMs": 14.459125000001222,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 16.274375000000873,
+                "mutationMs": 21.096832999995968,
+                "verifyMs": 15.508165999999619,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.404042000001937,
+                "mutationMs": 18.475708000005397,
+                "verifyMs": 17.750999999996566,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 15.086250000000291,
+                "mutationMs": 18.60741599999892,
+                "verifyMs": 13.967875000002095,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 16.517040999999153,
+                "mutationMs": 18.977416999994603,
+                "verifyMs": 13.410250000000815,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.016791000001831,
+                "mutationMs": 21.27341599999636,
+                "verifyMs": 13.375958999997238,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 15.463166000001365,
+                "mutationMs": 20.027333000005456,
+                "verifyMs": 13.757917000002635,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 15.336457999997947,
+                "mutationMs": 18.350375000001804,
+                "verifyMs": 13.627333000004,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 17.615459000000556,
+                "mutationMs": 17.93841600000451,
+                "verifyMs": 13.883417000004556,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 15.183875000002445,
+                "mutationMs": 20.10687499999767,
+                "verifyMs": 14.432457999995677,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.358541999994486,
+                "mutationMs": 19.201084000000264,
+                "verifyMs": 17.337959000004048,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.376165999994555,
+                "mutationMs": 22.767291999996814,
+                "verifyMs": 16.055540999994264,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.396124999999302,
+                "mutationMs": 18.396333999997296,
+                "verifyMs": 13.453041000000667,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.200082999996084,
+                "mutationMs": 15.876042000003508,
+                "verifyMs": 15.234958999993978,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.086457999997947,
+                "mutationMs": 16.064083000004757,
+                "verifyMs": 15.689874999996391,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.18487499999901,
+                "mutationMs": 18.89299999999639,
+                "verifyMs": 13.466083999999682,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 15.66924999999901,
+                "mutationMs": 25.572791999999026,
+                "verifyMs": 16.253750000003492,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 17.576417000003858,
+                "mutationMs": 17.061084000000847,
+                "verifyMs": 15.537084000003233,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 15.316042000005837,
+                "mutationMs": 17.378292000001238,
+                "verifyMs": 16.399084000004223,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 17.61645800000406,
+                "mutationMs": 18.29395900000236,
+                "verifyMs": 14.881291000005149,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        }
+      ],
+      "nativeCreate": {
+        "wallMs": {
+          "samples": [
+            363.69195899999977, 448.4239170000001, 449.45233299999745, 483.0867920000019,
+            597.405166999999
+          ],
+          "median": 449.45233299999745,
+          "p90": 597.405166999999,
+          "p95": 597.405166999999,
+          "max": 597.405166999999
+        },
+        "commandMs": {
+          "samples": [
+            64.8369989999992, 66.04658299999937, 67.09391700000015, 69.30020800000057,
+            69.85170800000014, 70.27150000000074, 70.4252919999999, 71.60783299999821,
+            71.66520899999887, 71.99679099999958, 72.5111250000009, 73.45449899999949,
+            74.1464589999996, 74.22529199999917, 74.42187599999852, 74.74004200000127,
+            75.00133299999652, 75.64829199999076, 75.7215409999917, 75.95724900000278,
+            76.29508300000089, 76.4835409999996, 77.05495799999699, 77.13558300000113,
+            77.48549899999853, 77.91420800000196, 78.18549999999959, 78.65366600001289,
+            79.28075000000172, 79.46104099999866, 79.60629099999642, 80.28829199999745,
+            80.48366700000042, 80.71066699999938, 81.23912500000006, 81.68862399999489,
+            82.85666600000332, 82.96695800000452, 82.99966499999937, 83.01558500000465,
+            83.84700000000157, 84.34654100000625, 84.6699179999996, 85.15637399999832,
+            85.28879200000665, 86.60191700000723, 86.74750100000529, 87.05483300000196,
+            87.43079099999159, 87.51716599999781, 87.79274900000019, 87.94149999999354,
+            88.32545900000696, 89.01174999999057, 91.74575000000004, 92.09283299999515,
+            92.31829199999629, 92.37995799999771, 92.68954199999644, 92.92495799999597,
+            93.30337499999587, 93.5462500000067, 93.7146250000078, 94.0268750000032,
+            94.45012500000303, 94.77941600000122, 95.26333299999897, 95.84024999999747,
+            96.327916000002, 96.53708399998868, 96.90825099999893, 96.93579199999658,
+            97.59016800000245, 98.36566700000549, 98.72695799999565, 98.8528750000005,
+            99.30366599999797, 101.15008299999863, 102.03766699999687, 102.93404199999895,
+            103.43391700000029, 104.21495800000048, 104.30391600000075, 104.41600100000142,
+            104.96837499998946, 105.62362600000051, 106.69495799999277, 106.87345900000946,
+            108.12933399999747, 108.78012500000114, 110.67645799999445, 111.88550100000066,
+            114.65041699999892, 119.84516700000131, 120.96424899999874, 123.78537399999914,
+            160.7289579999997, 160.7356260000015, 163.54070899999897, 170.598833
+          ],
+          "median": 87.51716599999781,
+          "p90": 108.78012500000114,
+          "p95": 120.96424899999874,
+          "max": 170.598833
+        },
+        "throughputPerSecond": {
+          "samples": [
+            33.478116870723404, 41.40042810361067, 44.498600922826036, 44.60065407260603,
+            54.991592486651626
+          ],
+          "median": 44.498600922826036,
+          "p90": 54.991592486651626,
+          "p95": 54.991592486651626,
+          "max": 54.991592486651626
+        },
+        "allSafe": true
+      },
+      "pooledActivation": {
+        "wallMs": {
+          "samples": [
+            169.45208300000013, 200.71679199999926, 217.04754199999934, 251.63529199999903,
+            412.8544580000016
+          ],
+          "median": 217.04754199999934,
+          "p90": 412.8544580000016,
+          "p95": 412.8544580000016,
+          "max": 412.8544580000016
+        },
+        "commandMs": {
+          "samples": [
+            30.425208000000566, 30.53345900000204, 30.661959000004572, 30.86920900000041,
+            31.29858299999978, 31.674834000001283, 31.726250000003347, 32.04370800000106,
+            32.28608299999905, 32.30416700000205, 32.7858750000014, 32.84166699999696,
+            32.849207000002934, 33.13804199999868, 33.51829199999702, 34.518583000000945,
+            34.880958999998256, 34.89558399999805, 34.96787499999846, 35.43816700000025,
+            35.47662599999967, 35.615624000001844, 35.70387399999163, 36.0022089999984,
+            36.47070900000108, 36.50104199999987, 36.54404199999772, 37.04845899999782,
+            37.16487500000221, 37.47954099999333, 37.600875999999516, 37.83474999999817,
+            38.322000000003754, 38.50737400000071, 38.57166700000016, 38.815583000003244,
+            39.268166999999266, 39.32941699999992, 39.77112500000021, 39.89287499999955,
+            40.10066800000004, 40.21520800000053, 40.5067080000008, 40.66145899999901,
+            41.503625000000284, 41.8345419999996, 42.03108300000167, 42.45224999999937,
+            42.80737599999702, 42.921833999997034, 43.31108399999357, 43.40450000000055,
+            43.53729200000089, 44.56920899999932, 44.840415999999095, 45.2982090000005,
+            45.543958999995084, 45.59941600000002, 45.817832999997336, 45.88250100000096,
+            46.051501000001736, 46.245499999997264, 47.31416600000375, 47.66154100000131,
+            48.34120900000016, 48.66616599999543, 48.90470799999457, 49.0934180000113,
+            49.248416000009456, 49.43729200000962, 49.72320799999579, 49.8975849999988,
+            50.17458500000794, 50.6307500000039, 50.79170800001157, 51.66924999999901,
+            51.68633399999999, 52.87937399999646, 53.19899899998563, 57.49579200000153,
+            61.45958300000348, 61.65395899998839, 62.485459000003175, 63.11124899999413,
+            64.05829099999391, 69.58283200000005, 70.32416499999817, 71.04537500000879,
+            73.00437399999646, 74.48537600000418, 75.74058299999888, 75.83570899999904,
+            76.60829200000444, 78.40258400000312, 78.42929100000765, 78.92062600000645,
+            81.41641699999309, 97.40445799999725, 99.80541700000322, 101.06266799999867
+          ],
+          "median": 42.921833999997034,
+          "p90": 74.48537600000418,
+          "p95": 78.42929100000765,
+          "max": 101.06266799999867
+        },
+        "throughputPerSecond": {
+          "samples": [
+            48.44322160619596, 79.48010726571724, 92.14571063882428, 99.64288388985449,
+            118.02746620706918
+          ],
+          "median": 92.14571063882428,
+          "p90": 118.02746620706918,
+          "p95": 118.02746620706918,
+          "max": 118.02746620706918
+        },
+        "allSafe": true
+      },
+      "medianImprovementFraction": 0.5170844023630854,
+      "p95ImprovementFraction": 0.3089205102238389,
+      "allSafe": true
+    }
+  ],
+  "repetitions": [
+    {
+      "repetition": 0,
+      "temporaryRootRemoved": true,
+      "poolFill": {
+        "wallMs": 272.25683300000037,
+        "commandMs": [
+          51.876624999999876, 49.62175000000025, 46.84583399999974, 44.32695800000056,
+          71.54745900000034, 69.04683300000033, 69.56566700000076, 64.46112499999981,
+          53.27733400000034, 55.32341699999961, 49.30383299999994, 46.53783399999975,
+          51.21820800000023, 51.30329100000017, 44.577541999999994, 47.6441249999998,
+          57.42387500000041, 51.8432499999999, 52.58037499999955, 47.60120800000004
+        ],
+        "safe": true,
+        "loadAverage": {
+          "before": [28.01953125, 22.01123046875, 20.572265625],
+          "after": [27.697265625, 22.0439453125, 20.59228515625]
+        },
+        "resourceUsage": {
+          "userCpuMs": 32.484,
+          "systemCpuMs": 69.166,
+          "fsReads": 0,
+          "fsWrites": 0,
+          "voluntaryContextSwitches": 0,
+          "involuntaryContextSwitches": 1044
+        }
+      }
+    },
+    {
+      "repetition": 1,
+      "temporaryRootRemoved": true,
+      "poolFill": {
+        "wallMs": 176.4471250000006,
+        "commandMs": [
+          35.34812500000044, 36.13929199999984, 38.359582999999475, 32.25679200000013,
+          37.84337500000038, 33.02191599999969, 38.3130000000001, 33.72320799999943,
+          30.71549999999843, 30.72675000000163, 30.45404100000087, 32.39091699999881,
+          31.687792000000627, 33.22808400000031, 31.00037499999962, 33.20745800000077,
+          35.404082999999446, 33.368209000000206, 32.980750000000626, 35.69983300000058
+        ],
+        "safe": true,
+        "loadAverage": {
+          "before": [26.11962890625, 21.810546875, 20.51806640625],
+          "after": [26.11962890625, 21.810546875, 20.51806640625]
+        },
+        "resourceUsage": {
+          "userCpuMs": 30.097,
+          "systemCpuMs": 68.787,
+          "fsReads": 0,
+          "fsWrites": 0,
+          "voluntaryContextSwitches": 0,
+          "involuntaryContextSwitches": 1141
+        }
+      }
+    },
+    {
+      "repetition": 2,
+      "temporaryRootRemoved": true,
+      "poolFill": {
+        "wallMs": 180.85558300000048,
+        "commandMs": [
+          38.30199999999968, 37.0111250000009, 39.71416599999793, 33.11029200000121,
+          28.967375000000175, 31.296542000000045, 27.940999999998894, 34.56279100000029,
+          34.75833299999795, 29.953291999998328, 30.827417000000423, 36.945583999997325,
+          39.33562499999971, 37.90429099999892, 33.901958000002196, 36.70575000000099,
+          32.93554199999926, 33.4809580000001, 33.191915999999765, 31.7287499999984
+        ],
+        "safe": true,
+        "loadAverage": {
+          "before": [24.28173828125, 21.55419921875, 20.44140625],
+          "after": [24.28173828125, 21.55419921875, 20.44140625]
+        },
+        "resourceUsage": {
+          "userCpuMs": 20.752,
+          "systemCpuMs": 52.088,
+          "fsReads": 0,
+          "fsWrites": 0,
+          "voluntaryContextSwitches": 0,
+          "involuntaryContextSwitches": 897
+        }
+      }
+    },
+    {
+      "repetition": 3,
+      "temporaryRootRemoved": true,
+      "poolFill": {
+        "wallMs": 154.91512499999953,
+        "commandMs": [
+          29.378915999997844, 29.575666000000638, 30.271584000001894, 29.280791000001045,
+          32.51304199999868, 34.304666, 35.97345800000039, 29.270457999999053, 31.64379199999894,
+          26.793417000000773, 26.089332999999897, 24.92879200000243, 30.92108300000109,
+          30.1820000000007, 29.841416999999637, 29.847874999999476, 35.262375000002066,
+          30.630333999997674, 30.678541000001132, 29.05645899999945
+        ],
+        "safe": true,
+        "loadAverage": {
+          "before": [22.7373046875, 21.279296875, 20.3505859375],
+          "after": [22.59814453125, 21.2744140625, 20.35400390625]
+        },
+        "resourceUsage": {
+          "userCpuMs": 19.737,
+          "systemCpuMs": 55.826,
+          "fsReads": 0,
+          "fsWrites": 0,
+          "voluntaryContextSwitches": 0,
+          "involuntaryContextSwitches": 868
+        }
+      }
+    },
+    {
+      "repetition": 4,
+      "temporaryRootRemoved": true,
+      "poolFill": {
+        "wallMs": 157.7120830000058,
+        "commandMs": [
+          31.092958999994153, 35.55112499999814, 31.090416999999434, 35.23362500000076,
+          29.254958999998053, 26.491125000000466, 30.129375000004075, 27.16791600000579,
+          28.71337499999936, 28.05487500000163, 33.29395800000202, 27.817125000001397,
+          33.47333300000173, 30.56304100000125, 31.120249999999942, 28.348292000002402,
+          28.483124999998836, 28.07920799999556, 32.43462500000169, 27.513208000003942
+        ],
+        "safe": true,
+        "loadAverage": {
+          "before": [24.0712890625, 21.6015625, 20.474609375],
+          "after": [24.0712890625, 21.6015625, 20.474609375]
+        },
+        "resourceUsage": {
+          "userCpuMs": 20.069,
+          "systemCpuMs": 59.863,
+          "fsReads": 0,
+          "fsWrites": 0,
+          "voluntaryContextSwitches": 0,
+          "involuntaryContextSwitches": 924
+        }
+      }
+    }
+  ]
+}

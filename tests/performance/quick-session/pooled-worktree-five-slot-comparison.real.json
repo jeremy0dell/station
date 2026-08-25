@@ -1,0 +1,4727 @@
+{
+  "schemaVersion": 1,
+  "benchmark": "station-quick-session-pooled-worktree-five-slot-comparison",
+  "generatedAt": "2026-08-25T09:36:11.543Z",
+  "machine": {
+    "platform": "darwin",
+    "arch": "arm64",
+    "cpuModel": "Apple M4",
+    "logicalCpuCount": 10
+  },
+  "tools": {
+    "git": "git version 2.50.1 (Apple Git-155)"
+  },
+  "repositoryShape": {
+    "ordinaryWorktrees": 49,
+    "poolSize": 5,
+    "initialWorktrees": 54,
+    "maxConcurrent": 4,
+    "repetitions": 5
+  },
+  "keepThresholds": {
+    "poolFillP95Ms": 150,
+    "singleMedianImprovementFraction": 0.25,
+    "singleP95ImprovementFraction": 0.25,
+    "burst5MedianImprovementFraction": 0.3,
+    "burst5P95ImprovementFraction": 0.3,
+    "burst20FirstFiveMedianImprovementFraction": 0.3,
+    "burst20FirstFiveP95ImprovementFraction": 0.3,
+    "burst20MaximumFinalRegressionFraction": 0.2
+  },
+  "poolFill": {
+    "wallMs": {
+      "samples": [
+        53.50550000000294, 58.14191700000083, 58.426082999999835, 121.25287499999831,
+        125.73420800000167
+      ],
+      "median": 58.426082999999835,
+      "p90": 125.73420800000167,
+      "p95": 125.73420800000167,
+      "max": 125.73420800000167
+    },
+    "commandMs": {
+      "samples": [
+        22.412833999999748, 22.597499999999854, 23.044041999999536, 30.347583999999188,
+        31.05658400000175, 31.992000000002008, 33.30095900000015, 34.12929199999962,
+        34.431916999999885, 35.11308399999962, 35.4535420000002, 36.608374999999796,
+        39.54175000000032, 41.469125000000076, 42.9345830000002, 59.228041999995185,
+        59.72541600000113, 60.08383299999696, 60.70233300000109, 61.1392909999995,
+        62.50895799999853, 66.9855000000025, 71.64929200000188, 72.55550000000221, 74.37562499999694
+      ],
+      "median": 39.54175000000032,
+      "p90": 71.64929200000188,
+      "p95": 72.55550000000221,
+      "max": 74.37562499999694
+    },
+    "allSafe": true
+  },
+  "allSafe": true,
+  "thresholdsPassed": false,
+  "scenarios": [
+    {
+      "burstSize": 1,
+      "pairs": [
+        {
+          "repetition": 0,
+          "order": ["nativeCreate", "pooledActivation"],
+          "nativeCreate": {
+            "strategy": "nativeCreate",
+            "wallMs": 51.75837499999989,
+            "throughputPerSecond": 19.320544742759065,
+            "safe": true,
+            "exactInventory": true,
+            "exactMechanismCounts": true,
+            "peakActive": 1,
+            "inventoryCount": 55,
+            "pooledActivationCount": 0,
+            "nativeFallbackCount": 0,
+            "firstFiveInteractiveMs": 51.75120799999968,
+            "cleanupInventoryCount": 54,
+            "loadAverage": {
+              "before": [31.013671875, 25.4287109375, 23.8818359375],
+              "after": [31.013671875, 25.4287109375, 23.8818359375]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.851,
+              "systemCpuMs": 1.612,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 34
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 10.13799999999992,
+                "mutationMs": 32.48637499999995,
+                "verifyMs": 8.973833000000013,
+                "mechanism": "native-create",
+                "interactiveAtMs": 51.75120799999968,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "pooledActivation": {
+            "strategy": "pooledActivation",
+            "wallMs": 29.874874999999975,
+            "throughputPerSecond": 33.47294340143686,
+            "safe": true,
+            "exactInventory": true,
+            "exactMechanismCounts": true,
+            "peakActive": 1,
+            "inventoryCount": 54,
+            "pooledActivationCount": 1,
+            "nativeFallbackCount": 0,
+            "firstFiveInteractiveMs": 29.870792000000165,
+            "cleanupInventoryCount": 54,
+            "loadAverage": {
+              "before": [31.013671875, 25.4287109375, 23.8818359375],
+              "after": [31.013671875, 25.4287109375, 23.8818359375]
+            },
+            "resourceUsage": {
+              "userCpuMs": 2.002,
+              "systemCpuMs": 1.262,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 30
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 8.887041999999838,
+                "mutationMs": 12.236958999999842,
+                "verifyMs": 8.615415999999641,
+                "mechanism": "pooled-activation",
+                "interactiveAtMs": 29.870792000000165,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 1,
+          "order": ["pooledActivation", "nativeCreate"],
+          "nativeCreate": {
+            "strategy": "nativeCreate",
+            "wallMs": 57.542958,
+            "throughputPerSecond": 17.37832107970536,
+            "safe": true,
+            "exactInventory": true,
+            "exactMechanismCounts": true,
+            "peakActive": 1,
+            "inventoryCount": 55,
+            "pooledActivationCount": 0,
+            "nativeFallbackCount": 0,
+            "firstFiveInteractiveMs": 57.53783300000032,
+            "cleanupInventoryCount": 54,
+            "loadAverage": {
+              "before": [32.7373046875, 25.98876953125, 24.0986328125],
+              "after": [32.7373046875, 25.98876953125, 24.0986328125]
+            },
+            "resourceUsage": {
+              "userCpuMs": 2.52,
+              "systemCpuMs": 2.041,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 42
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 10.026291000000128,
+                "mutationMs": 34.32833400000163,
+                "verifyMs": 13.139499999999316,
+                "mechanism": "native-create",
+                "interactiveAtMs": 57.53783300000032,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "pooledActivation": {
+            "strategy": "pooledActivation",
+            "wallMs": 46.82458399999996,
+            "throughputPerSecond": 21.356302919850837,
+            "safe": true,
+            "exactInventory": true,
+            "exactMechanismCounts": true,
+            "peakActive": 1,
+            "inventoryCount": 54,
+            "pooledActivationCount": 1,
+            "nativeFallbackCount": 0,
+            "firstFiveInteractiveMs": 46.81775000000016,
+            "cleanupInventoryCount": 54,
+            "loadAverage": {
+              "before": [32.7373046875, 25.98876953125, 24.0986328125],
+              "after": [32.7373046875, 25.98876953125, 24.0986328125]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.886,
+              "systemCpuMs": 2.671,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 35
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 16.054207999999562,
+                "mutationMs": 17.978375000000597,
+                "verifyMs": 12.710124999999607,
+                "mechanism": "pooled-activation",
+                "interactiveAtMs": 46.81775000000016,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 2,
+          "order": ["nativeCreate", "pooledActivation"],
+          "nativeCreate": {
+            "strategy": "nativeCreate",
+            "wallMs": 129.75716599999942,
+            "throughputPerSecond": 7.706703458674525,
+            "safe": true,
+            "exactInventory": true,
+            "exactMechanismCounts": true,
+            "peakActive": 1,
+            "inventoryCount": 55,
+            "pooledActivationCount": 0,
+            "nativeFallbackCount": 0,
+            "firstFiveInteractiveMs": 129.75158300000112,
+            "cleanupInventoryCount": 54,
+            "loadAverage": {
+              "before": [32.24267578125, 26.07763671875, 24.150390625],
+              "after": [32.24267578125, 26.07763671875, 24.150390625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 3.452,
+              "systemCpuMs": 2.898,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 56
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 20.979749999998603,
+                "mutationMs": 81.5983750000014,
+                "verifyMs": 27.11516699999993,
+                "mechanism": "native-create",
+                "interactiveAtMs": 129.75158300000112,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "pooledActivation": {
+            "strategy": "pooledActivation",
+            "wallMs": 34.045334000002185,
+            "throughputPerSecond": 29.372600662397257,
+            "safe": true,
+            "exactInventory": true,
+            "exactMechanismCounts": true,
+            "peakActive": 1,
+            "inventoryCount": 54,
+            "pooledActivationCount": 1,
+            "nativeFallbackCount": 0,
+            "firstFiveInteractiveMs": 34.041166999999405,
+            "cleanupInventoryCount": 54,
+            "loadAverage": {
+              "before": [32.24267578125, 26.07763671875, 24.150390625],
+              "after": [32.24267578125, 26.07763671875, 24.150390625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.409,
+              "systemCpuMs": 1.659,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 31
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 9.935041000000638,
+                "mutationMs": 14.613541000002442,
+                "verifyMs": 9.45508300000074,
+                "mechanism": "pooled-activation",
+                "interactiveAtMs": 34.041166999999405,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 3,
+          "order": ["pooledActivation", "nativeCreate"],
+          "nativeCreate": {
+            "strategy": "nativeCreate",
+            "wallMs": 219.88924999999654,
+            "throughputPerSecond": 4.547743921087619,
+            "safe": true,
+            "exactInventory": true,
+            "exactMechanismCounts": true,
+            "peakActive": 1,
+            "inventoryCount": 55,
+            "pooledActivationCount": 0,
+            "nativeFallbackCount": 0,
+            "firstFiveInteractiveMs": 219.8839999999982,
+            "cleanupInventoryCount": 54,
+            "loadAverage": {
+              "before": [31.82421875, 26.16357421875, 24.20166015625],
+              "after": [31.82421875, 26.16357421875, 24.20166015625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.84,
+              "systemCpuMs": 2.468,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 37
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 38.98074999999881,
+                "mutationMs": 148.18737500000134,
+                "verifyMs": 32.67579200000182,
+                "mechanism": "native-create",
+                "interactiveAtMs": 219.8839999999982,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "pooledActivation": {
+            "strategy": "pooledActivation",
+            "wallMs": 117.58674999999857,
+            "throughputPerSecond": 8.504359547313044,
+            "safe": true,
+            "exactInventory": true,
+            "exactMechanismCounts": true,
+            "peakActive": 1,
+            "inventoryCount": 54,
+            "pooledActivationCount": 1,
+            "nativeFallbackCount": 0,
+            "firstFiveInteractiveMs": 117.580667000002,
+            "cleanupInventoryCount": 54,
+            "loadAverage": {
+              "before": [29.98095703125, 25.7109375, 24.0322265625],
+              "after": [29.98095703125, 25.7109375, 24.0322265625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.685,
+              "systemCpuMs": 2.207,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 39
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 12.006708000000799,
+                "mutationMs": 18.68537500000093,
+                "verifyMs": 86.84779100000014,
+                "mechanism": "pooled-activation",
+                "interactiveAtMs": 117.580667000002,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 4,
+          "order": ["nativeCreate", "pooledActivation"],
+          "nativeCreate": {
+            "strategy": "nativeCreate",
+            "wallMs": 124.22191700000258,
+            "throughputPerSecond": 8.050109225089315,
+            "safe": true,
+            "exactInventory": true,
+            "exactMechanismCounts": true,
+            "peakActive": 1,
+            "inventoryCount": 55,
+            "pooledActivationCount": 0,
+            "nativeFallbackCount": 0,
+            "firstFiveInteractiveMs": 124.21654200000194,
+            "cleanupInventoryCount": 54,
+            "loadAverage": {
+              "before": [29.916015625, 25.86181640625, 24.1064453125],
+              "after": [29.916015625, 25.86181640625, 24.1064453125]
+            },
+            "resourceUsage": {
+              "userCpuMs": 2.095,
+              "systemCpuMs": 2.947,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 54
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 28.556165999994846,
+                "mutationMs": 76.90062500000204,
+                "verifyMs": 18.714124999998603,
+                "mechanism": "native-create",
+                "interactiveAtMs": 124.21654200000194,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "pooledActivation": {
+            "strategy": "pooledActivation",
+            "wallMs": 36.2265419999967,
+            "throughputPerSecond": 27.604069966161582,
+            "safe": true,
+            "exactInventory": true,
+            "exactMechanismCounts": true,
+            "peakActive": 1,
+            "inventoryCount": 54,
+            "pooledActivationCount": 1,
+            "nativeFallbackCount": 0,
+            "firstFiveInteractiveMs": 36.22066699999414,
+            "cleanupInventoryCount": 54,
+            "loadAverage": {
+              "before": [29.916015625, 25.86181640625, 24.1064453125],
+              "after": [29.916015625, 25.86181640625, 24.1064453125]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.796,
+              "systemCpuMs": 2.251,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 38
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 12.660208000001148,
+                "mutationMs": 12.91258299999754,
+                "verifyMs": 10.598958000002312,
+                "mechanism": "pooled-activation",
+                "interactiveAtMs": 36.22066699999414,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        }
+      ],
+      "nativeCreate": {
+        "wallMs": {
+          "samples": [
+            51.75837499999989, 57.542958, 124.22191700000258, 129.75716599999942, 219.88924999999654
+          ],
+          "median": 124.22191700000258,
+          "p90": 219.88924999999654,
+          "p95": 219.88924999999654,
+          "max": 219.88924999999654
+        },
+        "firstFiveInteractiveMs": {
+          "samples": [
+            51.75120799999968, 57.53783300000032, 124.21654200000194, 129.75158300000112,
+            219.8839999999982
+          ],
+          "median": 124.21654200000194,
+          "p90": 219.8839999999982,
+          "p95": 219.8839999999982,
+          "max": 219.8839999999982
+        },
+        "commandMs": {
+          "samples": [
+            51.598207999999886, 57.49412500000108, 124.17091599999549, 129.69329199999993,
+            219.84391700000197
+          ],
+          "median": 124.17091599999549,
+          "p90": 219.84391700000197,
+          "p95": 219.84391700000197,
+          "max": 219.84391700000197
+        },
+        "throughputPerSecond": {
+          "samples": [
+            4.547743921087619, 7.706703458674525, 8.050109225089315, 17.37832107970536,
+            19.320544742759065
+          ],
+          "median": 8.050109225089315,
+          "p90": 19.320544742759065,
+          "p95": 19.320544742759065,
+          "max": 19.320544742759065
+        },
+        "allSafe": true
+      },
+      "pooledActivation": {
+        "wallMs": {
+          "samples": [
+            29.874874999999975, 34.045334000002185, 36.2265419999967, 46.82458399999996,
+            117.58674999999857
+          ],
+          "median": 36.2265419999967,
+          "p90": 117.58674999999857,
+          "p95": 117.58674999999857,
+          "max": 117.58674999999857
+        },
+        "firstFiveInteractiveMs": {
+          "samples": [
+            29.870792000000165, 34.041166999999405, 36.22066699999414, 46.81775000000016,
+            117.580667000002
+          ],
+          "median": 36.22066699999414,
+          "p90": 117.580667000002,
+          "p95": 117.580667000002,
+          "max": 117.580667000002
+        },
+        "commandMs": {
+          "samples": [
+            29.73941699999932, 34.00366500000382, 36.171749000001, 46.742707999999766,
+            117.53987400000187
+          ],
+          "median": 36.171749000001,
+          "p90": 117.53987400000187,
+          "p95": 117.53987400000187,
+          "max": 117.53987400000187
+        },
+        "throughputPerSecond": {
+          "samples": [
+            8.504359547313044, 21.356302919850837, 27.604069966161582, 29.372600662397257,
+            33.47294340143686
+          ],
+          "median": 27.604069966161582,
+          "p90": 33.47294340143686,
+          "p95": 33.47294340143686,
+          "max": 33.47294340143686
+        },
+        "allSafe": true
+      },
+      "medianImprovementFraction": 0.7083723800527411,
+      "p95ImprovementFraction": 0.4652455724870569,
+      "firstFiveMedianImprovementFraction": 0.7084070574111331,
+      "firstFiveP95ImprovementFraction": 0.46526046915645086,
+      "allSafe": true
+    },
+    {
+      "burstSize": 3,
+      "pairs": [
+        {
+          "repetition": 0,
+          "order": ["pooledActivation", "nativeCreate"],
+          "nativeCreate": {
+            "strategy": "nativeCreate",
+            "wallMs": 64.83920800000033,
+            "throughputPerSecond": 46.26830111805167,
+            "safe": true,
+            "exactInventory": true,
+            "exactMechanismCounts": true,
+            "peakActive": 3,
+            "inventoryCount": 57,
+            "pooledActivationCount": 0,
+            "nativeFallbackCount": 0,
+            "firstFiveInteractiveMs": 64.82633299999998,
+            "cleanupInventoryCount": 54,
+            "loadAverage": {
+              "before": [31.013671875, 25.4287109375, 23.8818359375],
+              "after": [31.013671875, 25.4287109375, 23.8818359375]
+            },
+            "resourceUsage": {
+              "userCpuMs": 3.09,
+              "systemCpuMs": 3.399,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 55
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 10.579416999999921,
+                "mutationMs": 39.31849999999986,
+                "verifyMs": 10.129333000000315,
+                "mechanism": "native-create",
+                "interactiveAtMs": 60.06758300000001,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.53566600000022,
+                "mutationMs": 41.01983400000017,
+                "verifyMs": 9.04950000000008,
+                "mechanism": "native-create",
+                "interactiveAtMs": 60.1550000000002,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.042374999999993,
+                "mutationMs": 44.64166599999999,
+                "verifyMs": 9.216667000000143,
+                "mechanism": "native-create",
+                "interactiveAtMs": 64.82633299999998,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "pooledActivation": {
+            "strategy": "pooledActivation",
+            "wallMs": 36.53862500000014,
+            "throughputPerSecond": 82.10489584651827,
+            "safe": true,
+            "exactInventory": true,
+            "exactMechanismCounts": true,
+            "peakActive": 3,
+            "inventoryCount": 54,
+            "pooledActivationCount": 3,
+            "nativeFallbackCount": 0,
+            "firstFiveInteractiveMs": 36.53666700000031,
+            "cleanupInventoryCount": 54,
+            "loadAverage": {
+              "before": [31.013671875, 25.4287109375, 23.8818359375],
+              "after": [31.013671875, 25.4287109375, 23.8818359375]
+            },
+            "resourceUsage": {
+              "userCpuMs": 2.927,
+              "systemCpuMs": 4.396,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 56
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 10.640207999999802,
+                "mutationMs": 14.666625000000295,
+                "verifyMs": 10.094832999999653,
+                "mechanism": "pooled-activation",
+                "interactiveAtMs": 35.45112500000005,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.686874999999873,
+                "mutationMs": 12.597833000000264,
+                "verifyMs": 10.674542000000201,
+                "mechanism": "pooled-activation",
+                "interactiveAtMs": 35.46054200000026,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.530917000000045,
+                "mutationMs": 14.887791000000107,
+                "verifyMs": 10.222999999999956,
+                "mechanism": "pooled-activation",
+                "interactiveAtMs": 36.53666700000031,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 1,
+          "order": ["nativeCreate", "pooledActivation"],
+          "nativeCreate": {
+            "strategy": "nativeCreate",
+            "wallMs": 89.33370899999863,
+            "throughputPerSecond": 33.58194833262823,
+            "safe": true,
+            "exactInventory": true,
+            "exactMechanismCounts": true,
+            "peakActive": 3,
+            "inventoryCount": 57,
+            "pooledActivationCount": 0,
+            "nativeFallbackCount": 0,
+            "firstFiveInteractiveMs": 89.32795899999837,
+            "cleanupInventoryCount": 54,
+            "loadAverage": {
+              "before": [32.7373046875, 25.98876953125, 24.0986328125],
+              "after": [32.7373046875, 25.98876953125, 24.0986328125]
+            },
+            "resourceUsage": {
+              "userCpuMs": 4.71,
+              "systemCpuMs": 6.307,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 93
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 12.201208000000406,
+                "mutationMs": 59.66058399999929,
+                "verifyMs": 16.59741600000052,
+                "mechanism": "native-create",
+                "interactiveAtMs": 88.49541700000009,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.553625000000466,
+                "mutationMs": 57.63262500000019,
+                "verifyMs": 18.406083000001672,
+                "mechanism": "native-create",
+                "interactiveAtMs": 89.32795899999837,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.125207999999475,
+                "mutationMs": 55.419708000001265,
+                "verifyMs": 16.481959000000643,
+                "mechanism": "native-create",
+                "interactiveAtMs": 86.43495899999834,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "pooledActivation": {
+            "strategy": "pooledActivation",
+            "wallMs": 38.14087500000096,
+            "throughputPerSecond": 78.65577284212604,
+            "safe": true,
+            "exactInventory": true,
+            "exactMechanismCounts": true,
+            "peakActive": 3,
+            "inventoryCount": 54,
+            "pooledActivationCount": 3,
+            "nativeFallbackCount": 0,
+            "firstFiveInteractiveMs": 38.138208000000304,
+            "cleanupInventoryCount": 54,
+            "loadAverage": {
+              "before": [32.7373046875, 25.98876953125, 24.0986328125],
+              "after": [32.7373046875, 25.98876953125, 24.0986328125]
+            },
+            "resourceUsage": {
+              "userCpuMs": 2.58,
+              "systemCpuMs": 4.033,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 49
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 10.970624999999927,
+                "mutationMs": 16.925083999998606,
+                "verifyMs": 10.223790999998528,
+                "mechanism": "pooled-activation",
+                "interactiveAtMs": 38.138208000000304,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.883292000000438,
+                "mutationMs": 13.615125000000262,
+                "verifyMs": 11.311166000001322,
+                "mechanism": "pooled-activation",
+                "interactiveAtMs": 35.416708000000654,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.516124999998283,
+                "mutationMs": 13.630708999999115,
+                "verifyMs": 9.543874999999389,
+                "mechanism": "pooled-activation",
+                "interactiveAtMs": 34.70366699999977,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 2,
+          "order": ["pooledActivation", "nativeCreate"],
+          "nativeCreate": {
+            "strategy": "nativeCreate",
+            "wallMs": 68.04020899999887,
+            "throughputPerSecond": 44.09157532129347,
+            "safe": true,
+            "exactInventory": true,
+            "exactMechanismCounts": true,
+            "peakActive": 3,
+            "inventoryCount": 57,
+            "pooledActivationCount": 0,
+            "nativeFallbackCount": 0,
+            "firstFiveInteractiveMs": 68.03779199999917,
+            "cleanupInventoryCount": 54,
+            "loadAverage": {
+              "before": [32.24267578125, 26.07763671875, 24.150390625],
+              "after": [32.24267578125, 26.07763671875, 24.150390625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 2.296,
+              "systemCpuMs": 4.021,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 54
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 11.932666000000609,
+                "mutationMs": 41.66729099999793,
+                "verifyMs": 10.468874999998661,
+                "mechanism": "native-create",
+                "interactiveAtMs": 64.09700000000157,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.329834000000119,
+                "mutationMs": 46.901708000001236,
+                "verifyMs": 10.243500000000495,
+                "mechanism": "native-create",
+                "interactiveAtMs": 68.03779199999917,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.471999999997934,
+                "mutationMs": 47.360208000001876,
+                "verifyMs": 9.167999999997846,
+                "mechanism": "native-create",
+                "interactiveAtMs": 68.03391700000066,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "pooledActivation": {
+            "strategy": "pooledActivation",
+            "wallMs": 40.42479199999798,
+            "throughputPerSecond": 74.21188462763519,
+            "safe": true,
+            "exactInventory": true,
+            "exactMechanismCounts": true,
+            "peakActive": 3,
+            "inventoryCount": 54,
+            "pooledActivationCount": 3,
+            "nativeFallbackCount": 0,
+            "firstFiveInteractiveMs": 40.42204199999833,
+            "cleanupInventoryCount": 54,
+            "loadAverage": {
+              "before": [32.24267578125, 26.07763671875, 24.150390625],
+              "after": [32.24267578125, 26.07763671875, 24.150390625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 2.208,
+              "systemCpuMs": 3.788,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 52
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 12.186417000000802,
+                "mutationMs": 13.728415999998106,
+                "verifyMs": 10.998250000000553,
+                "mechanism": "pooled-activation",
+                "interactiveAtMs": 36.94170899999881,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.259917000003043,
+                "mutationMs": 15.037415999999212,
+                "verifyMs": 10.316875000000437,
+                "mechanism": "pooled-activation",
+                "interactiveAtMs": 37.19729200000074,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.376458000002458,
+                "mutationMs": 18.669583000002604,
+                "verifyMs": 10.427125000001979,
+                "mechanism": "pooled-activation",
+                "interactiveAtMs": 40.42204199999833,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 3,
+          "order": ["nativeCreate", "pooledActivation"],
+          "nativeCreate": {
+            "strategy": "nativeCreate",
+            "wallMs": 184.93274999999994,
+            "throughputPerSecond": 16.22211317357256,
+            "safe": true,
+            "exactInventory": true,
+            "exactMechanismCounts": true,
+            "peakActive": 3,
+            "inventoryCount": 57,
+            "pooledActivationCount": 0,
+            "nativeFallbackCount": 0,
+            "firstFiveInteractiveMs": 184.9267089999994,
+            "cleanupInventoryCount": 54,
+            "loadAverage": {
+              "before": [31.82421875, 26.16357421875, 24.20166015625],
+              "after": [31.82421875, 26.16357421875, 24.20166015625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 3.744,
+              "systemCpuMs": 5.475,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 1,
+              "involuntaryContextSwitches": 103
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 19.894541999998182,
+                "mutationMs": 129.5271670000002,
+                "verifyMs": 22.948833999998897,
+                "mechanism": "native-create",
+                "interactiveAtMs": 172.416792,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 19.39429200000086,
+                "mutationMs": 135.23545800000284,
+                "verifyMs": 26.094750000000204,
+                "mechanism": "native-create",
+                "interactiveAtMs": 184.9267089999994,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 24.756124999999884,
+                "mutationMs": 121.56579200000124,
+                "verifyMs": 21.185291000001598,
+                "mechanism": "native-create",
+                "interactiveAtMs": 174.39600000000064,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "pooledActivation": {
+            "strategy": "pooledActivation",
+            "wallMs": 55.747292000000016,
+            "throughputPerSecond": 53.814273166847265,
+            "safe": true,
+            "exactInventory": true,
+            "exactMechanismCounts": true,
+            "peakActive": 3,
+            "inventoryCount": 54,
+            "pooledActivationCount": 3,
+            "nativeFallbackCount": 0,
+            "firstFiveInteractiveMs": 55.742207999999664,
+            "cleanupInventoryCount": 54,
+            "loadAverage": {
+              "before": [31.82421875, 26.16357421875, 24.20166015625],
+              "after": [31.82421875, 26.16357421875, 24.20166015625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 3.628,
+              "systemCpuMs": 6.338,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 98
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 17.915416999996523,
+                "mutationMs": 17.8715830000001,
+                "verifyMs": 15.963165999997727,
+                "mechanism": "pooled-activation",
+                "interactiveAtMs": 51.786457999998674,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 15.076042000000598,
+                "mutationMs": 24.8469159999986,
+                "verifyMs": 14.964791999998852,
+                "mechanism": "pooled-activation",
+                "interactiveAtMs": 55.742207999999664,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 15.23949999999968,
+                "mutationMs": 22.65650000000096,
+                "verifyMs": 15.194541000000754,
+                "mechanism": "pooled-activation",
+                "interactiveAtMs": 54.846999999997934,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 4,
+          "order": ["pooledActivation", "nativeCreate"],
+          "nativeCreate": {
+            "strategy": "nativeCreate",
+            "wallMs": 65.67004199999792,
+            "throughputPerSecond": 45.6829310387847,
+            "safe": true,
+            "exactInventory": true,
+            "exactMechanismCounts": true,
+            "peakActive": 3,
+            "inventoryCount": 57,
+            "pooledActivationCount": 0,
+            "nativeFallbackCount": 0,
+            "firstFiveInteractiveMs": 65.66779200000019,
+            "cleanupInventoryCount": 54,
+            "loadAverage": {
+              "before": [29.916015625, 25.86181640625, 24.1064453125],
+              "after": [29.916015625, 25.86181640625, 24.1064453125]
+            },
+            "resourceUsage": {
+              "userCpuMs": 2.028,
+              "systemCpuMs": 4.052,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 44
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 12.251834000002418,
+                "mutationMs": 42.993666999995185,
+                "verifyMs": 10.409208000004583,
+                "mechanism": "native-create",
+                "interactiveAtMs": 65.66779200000019,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.131708000000799,
+                "mutationMs": 42.026582999998936,
+                "verifyMs": 10.960832999997365,
+                "mechanism": "native-create",
+                "interactiveAtMs": 65.66529199999786,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.375499999994645,
+                "mutationMs": 44.67883299999812,
+                "verifyMs": 9.668666999998095,
+                "mechanism": "native-create",
+                "interactiveAtMs": 65.65095799999835,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "pooledActivation": {
+            "strategy": "pooledActivation",
+            "wallMs": 45.38454199999978,
+            "throughputPerSecond": 66.10180179850695,
+            "safe": true,
+            "exactInventory": true,
+            "exactMechanismCounts": true,
+            "peakActive": 3,
+            "inventoryCount": 54,
+            "pooledActivationCount": 3,
+            "nativeFallbackCount": 0,
+            "firstFiveInteractiveMs": 45.381249999998545,
+            "cleanupInventoryCount": 54,
+            "loadAverage": {
+              "before": [29.916015625, 25.86181640625, 24.1064453125],
+              "after": [29.916015625, 25.86181640625, 24.1064453125]
+            },
+            "resourceUsage": {
+              "userCpuMs": 5.326,
+              "systemCpuMs": 5.755,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 105
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 12.34904199999437,
+                "mutationMs": 16.838999999999942,
+                "verifyMs": 13.805249999997613,
+                "mechanism": "pooled-activation",
+                "interactiveAtMs": 43.03279199999815,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.3033329999962,
+                "mutationMs": 18.907541000000492,
+                "verifyMs": 12.674125000005006,
+                "mechanism": "pooled-activation",
+                "interactiveAtMs": 45.381249999998545,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.694667000003392,
+                "mutationMs": 16.100916000003053,
+                "verifyMs": 13.537875000001804,
+                "mechanism": "pooled-activation",
+                "interactiveAtMs": 44.54845799999748,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        }
+      ],
+      "nativeCreate": {
+        "wallMs": {
+          "samples": [
+            64.83920800000033, 65.67004199999792, 68.04020899999887, 89.33370899999863,
+            184.93274999999994
+          ],
+          "median": 68.04020899999887,
+          "p90": 184.93274999999994,
+          "p95": 184.93274999999994,
+          "max": 184.93274999999994
+        },
+        "firstFiveInteractiveMs": {
+          "samples": [
+            64.82633299999998, 65.66779200000019, 68.03779199999917, 89.32795899999837,
+            184.9267089999994
+          ],
+          "median": 68.03779199999917,
+          "p90": 184.9267089999994,
+          "p95": 184.9267089999994,
+          "max": 184.9267089999994
+        },
+        "commandMs": {
+          "samples": [
+            59.60500000000047, 60.027250000000095, 63.90070800000012, 64.0688319999972,
+            64.72299999999086, 65.1191239999971, 65.65470900000219, 67.00020799999766,
+            67.47504200000185, 85.02687500000138, 88.45920800000022, 88.59233300000233,
+            167.50720800000272, 172.37054299999727, 180.7245000000039
+          ],
+          "median": 67.00020799999766,
+          "p90": 172.37054299999727,
+          "p95": 180.7245000000039,
+          "max": 180.7245000000039
+        },
+        "throughputPerSecond": {
+          "samples": [
+            16.22211317357256, 33.58194833262823, 44.09157532129347, 45.6829310387847,
+            46.26830111805167
+          ],
+          "median": 44.09157532129347,
+          "p90": 46.26830111805167,
+          "p95": 46.26830111805167,
+          "max": 46.26830111805167
+        },
+        "allSafe": true
+      },
+      "pooledActivation": {
+        "wallMs": {
+          "samples": [
+            36.53862500000014, 38.14087500000096, 40.42479199999798, 45.38454199999978,
+            55.747292000000016
+          ],
+          "median": 40.42479199999798,
+          "p90": 55.747292000000016,
+          "p95": 55.747292000000016,
+          "max": 55.747292000000016
+        },
+        "firstFiveInteractiveMs": {
+          "samples": [
+            36.53666700000031, 38.138208000000304, 40.42204199999833, 45.381249999998545,
+            55.742207999999664
+          ],
+          "median": 40.42204199999833,
+          "p90": 55.742207999999664,
+          "p95": 55.742207999999664,
+          "max": 55.742207999999664
+        },
+        "commandMs": {
+          "samples": [
+            33.69070899999679, 34.80958300000202, 34.95925000000034, 35.40166599999975,
+            35.64170800000011, 36.61420800000269, 36.91308299999946, 38.11949999999706,
+            39.47316600000704, 42.993291999991925, 43.33345800000825, 44.8849990000017,
+            51.75016599999435, 53.090541000001394, 54.88774999999805
+          ],
+          "median": 38.11949999999706,
+          "p90": 53.090541000001394,
+          "p95": 54.88774999999805,
+          "max": 54.88774999999805
+        },
+        "throughputPerSecond": {
+          "samples": [
+            53.814273166847265, 66.10180179850695, 74.21188462763519, 78.65577284212604,
+            82.10489584651827
+          ],
+          "median": 74.21188462763519,
+          "p90": 82.10489584651827,
+          "p95": 82.10489584651827,
+          "max": 82.10489584651827
+        },
+        "allSafe": true
+      },
+      "medianImprovementFraction": 0.40586907956148915,
+      "p95ImprovementFraction": 0.6985537066852678,
+      "firstFiveMedianImprovementFraction": 0.4058883921453709,
+      "firstFiveP95ImprovementFraction": 0.698571351313023,
+      "allSafe": true
+    },
+    {
+      "burstSize": 5,
+      "pairs": [
+        {
+          "repetition": 0,
+          "order": ["nativeCreate", "pooledActivation"],
+          "nativeCreate": {
+            "strategy": "nativeCreate",
+            "wallMs": 127.85504200000014,
+            "throughputPerSecond": 39.10678782616954,
+            "safe": true,
+            "exactInventory": true,
+            "exactMechanismCounts": true,
+            "peakActive": 4,
+            "inventoryCount": 59,
+            "pooledActivationCount": 0,
+            "nativeFallbackCount": 0,
+            "firstFiveInteractiveMs": 127.85020900000018,
+            "cleanupInventoryCount": 54,
+            "loadAverage": {
+              "before": [31.013671875, 25.4287109375, 23.8818359375],
+              "after": [31.013671875, 25.4287109375, 23.8818359375]
+            },
+            "resourceUsage": {
+              "userCpuMs": 5.941,
+              "systemCpuMs": 7.405,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 122
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 11.380125000000135,
+                "mutationMs": 60.35329199999978,
+                "verifyMs": 11.00525000000016,
+                "mechanism": "native-create",
+                "interactiveAtMs": 82.77574999999979,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.796917000000121,
+                "mutationMs": 55.64133299999958,
+                "verifyMs": 10.601791999999932,
+                "mechanism": "native-create",
+                "interactiveAtMs": 78.6306669999999,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.421374999999898,
+                "mutationMs": 56.344458999999915,
+                "verifyMs": 10.757708000000093,
+                "mechanism": "native-create",
+                "interactiveAtMs": 80.46454199999971,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.588874999999916,
+                "mutationMs": 51.88854200000014,
+                "verifyMs": 11.05966699999999,
+                "mechanism": "native-create",
+                "interactiveAtMs": 75.88491699999986,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.47570799999994,
+                "mutationMs": 32.38108299999976,
+                "verifyMs": 10.054250000000138,
+                "mechanism": "native-create",
+                "interactiveAtMs": 127.85020900000018,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "pooledActivation": {
+            "strategy": "pooledActivation",
+            "wallMs": 72.61020800000006,
+            "throughputPerSecond": 68.86084116437178,
+            "safe": true,
+            "exactInventory": true,
+            "exactMechanismCounts": true,
+            "peakActive": 4,
+            "inventoryCount": 54,
+            "pooledActivationCount": 5,
+            "nativeFallbackCount": 0,
+            "firstFiveInteractiveMs": 72.60300000000007,
+            "cleanupInventoryCount": 54,
+            "loadAverage": {
+              "before": [31.013671875, 25.4287109375, 23.8818359375],
+              "after": [31.013671875, 25.4287109375, 23.8818359375]
+            },
+            "resourceUsage": {
+              "userCpuMs": 5.176,
+              "systemCpuMs": 7.88,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 113
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 14.039999999999964,
+                "mutationMs": 19.436333999999988,
+                "verifyMs": 10.700457999999344,
+                "mechanism": "pooled-activation",
+                "interactiveAtMs": 44.20866599999954,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.230375000000095,
+                "mutationMs": 15.438624999999774,
+                "verifyMs": 11.317957999999635,
+                "mechanism": "pooled-activation",
+                "interactiveAtMs": 41.8207910000001,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.7846669999999,
+                "mutationMs": 13.748499999999694,
+                "verifyMs": 10.944707999999991,
+                "mechanism": "pooled-activation",
+                "interactiveAtMs": 40.86054100000001,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 15.114959000000454,
+                "mutationMs": 14.511916000000383,
+                "verifyMs": 10.932416999999987,
+                "mechanism": "pooled-activation",
+                "interactiveAtMs": 42.47008300000016,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.116875000000618,
+                "mutationMs": 11.818250000000262,
+                "verifyMs": 9.769374999999854,
+                "mechanism": "pooled-activation",
+                "interactiveAtMs": 72.60300000000007,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 1,
+          "order": ["pooledActivation", "nativeCreate"],
+          "nativeCreate": {
+            "strategy": "nativeCreate",
+            "wallMs": 389.1926249999997,
+            "throughputPerSecond": 12.847108806339802,
+            "safe": true,
+            "exactInventory": true,
+            "exactMechanismCounts": true,
+            "peakActive": 4,
+            "inventoryCount": 59,
+            "pooledActivationCount": 0,
+            "nativeFallbackCount": 0,
+            "firstFiveInteractiveMs": 389.186208000001,
+            "cleanupInventoryCount": 54,
+            "loadAverage": {
+              "before": [32.7373046875, 25.98876953125, 24.0986328125],
+              "after": [32.7373046875, 25.98876953125, 24.0986328125]
+            },
+            "resourceUsage": {
+              "userCpuMs": 6.168,
+              "systemCpuMs": 7.371,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 149
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 39.64508299999943,
+                "mutationMs": 157.66254200000003,
+                "verifyMs": 25.12779099999898,
+                "mechanism": "native-create",
+                "interactiveAtMs": 222.47199999999975,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 21.091708000001745,
+                "mutationMs": 174.40849999999955,
+                "verifyMs": 18.761000000000422,
+                "mechanism": "native-create",
+                "interactiveAtMs": 214.81645799999933,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 57.71904100000029,
+                "mutationMs": 166.2940839999992,
+                "verifyMs": 37.67304200000035,
+                "mechanism": "native-create",
+                "interactiveAtMs": 263.0850410000003,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 46.24733300000116,
+                "mutationMs": 164.62624999999935,
+                "verifyMs": 24.41333300000042,
+                "mechanism": "native-create",
+                "interactiveAtMs": 241.77745800000048,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 19.297083999999813,
+                "mutationMs": 131.3765829999993,
+                "verifyMs": 23.64916699999958,
+                "mechanism": "native-create",
+                "interactiveAtMs": 389.186208000001,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "pooledActivation": {
+            "strategy": "pooledActivation",
+            "wallMs": 68.41458299999977,
+            "throughputPerSecond": 73.08383360313718,
+            "safe": true,
+            "exactInventory": true,
+            "exactMechanismCounts": true,
+            "peakActive": 4,
+            "inventoryCount": 54,
+            "pooledActivationCount": 5,
+            "nativeFallbackCount": 0,
+            "firstFiveInteractiveMs": 68.40995800000019,
+            "cleanupInventoryCount": 54,
+            "loadAverage": {
+              "before": [32.7373046875, 25.98876953125, 24.0986328125],
+              "after": [32.7373046875, 25.98876953125, 24.0986328125]
+            },
+            "resourceUsage": {
+              "userCpuMs": 4.143,
+              "systemCpuMs": 7.104,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 96
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 11.838375000001179,
+                "mutationMs": 20.069124999999985,
+                "verifyMs": 10.112583000000086,
+                "mechanism": "pooled-activation",
+                "interactiveAtMs": 42.047458000000915,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.302499999999782,
+                "mutationMs": 13.500374999999622,
+                "verifyMs": 10.756792000000132,
+                "mechanism": "pooled-activation",
+                "interactiveAtMs": 38.07958300000064,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.913709000000381,
+                "mutationMs": 13.82983299999978,
+                "verifyMs": 10.515375000000859,
+                "mechanism": "pooled-activation",
+                "interactiveAtMs": 37.14379200000076,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.859000000000378,
+                "mutationMs": 15.440624999999272,
+                "verifyMs": 10.869040999999925,
+                "mechanism": "pooled-activation",
+                "interactiveAtMs": 39.65495800000099,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.149208000000726,
+                "mutationMs": 12.389917000000423,
+                "verifyMs": 9.694249999998647,
+                "mechanism": "pooled-activation",
+                "interactiveAtMs": 68.40995800000019,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 2,
+          "order": ["nativeCreate", "pooledActivation"],
+          "nativeCreate": {
+            "strategy": "nativeCreate",
+            "wallMs": 135.85229199999958,
+            "throughputPerSecond": 36.80467901123093,
+            "safe": true,
+            "exactInventory": true,
+            "exactMechanismCounts": true,
+            "peakActive": 4,
+            "inventoryCount": 59,
+            "pooledActivationCount": 0,
+            "nativeFallbackCount": 0,
+            "firstFiveInteractiveMs": 135.84804200000144,
+            "cleanupInventoryCount": 54,
+            "loadAverage": {
+              "before": [32.24267578125, 26.07763671875, 24.150390625],
+              "after": [32.24267578125, 26.07763671875, 24.150390625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 5.431,
+              "systemCpuMs": 7.973,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 125
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 12.06458399999974,
+                "mutationMs": 56.8269160000018,
+                "verifyMs": 14.670625000002474,
+                "mechanism": "native-create",
+                "interactiveAtMs": 83.5926670000008,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.77625000000262,
+                "mutationMs": 55.5555409999979,
+                "verifyMs": 13.484167000002344,
+                "mechanism": "native-create",
+                "interactiveAtMs": 80.41095800000039,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.496999999999389,
+                "mutationMs": 60.36916700000074,
+                "verifyMs": 12.247875000000931,
+                "mechanism": "native-create",
+                "interactiveAtMs": 85.12766700000066,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.118999999998778,
+                "mutationMs": 58.301665999999386,
+                "verifyMs": 13.298957999999402,
+                "mechanism": "native-create",
+                "interactiveAtMs": 85.10391700000037,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.202084000000468,
+                "mutationMs": 35.11604200000147,
+                "verifyMs": 9.07787499999904,
+                "mechanism": "native-create",
+                "interactiveAtMs": 135.84804200000144,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "pooledActivation": {
+            "strategy": "pooledActivation",
+            "wallMs": 67.69795900000099,
+            "throughputPerSecond": 73.85747035593683,
+            "safe": true,
+            "exactInventory": true,
+            "exactMechanismCounts": true,
+            "peakActive": 4,
+            "inventoryCount": 54,
+            "pooledActivationCount": 5,
+            "nativeFallbackCount": 0,
+            "firstFiveInteractiveMs": 67.69258400000035,
+            "cleanupInventoryCount": 54,
+            "loadAverage": {
+              "before": [32.24267578125, 26.07763671875, 24.150390625],
+              "after": [32.24267578125, 26.07763671875, 24.150390625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 3.156,
+              "systemCpuMs": 6.23,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 82
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 11.130750000000262,
+                "mutationMs": 15.465499999998428,
+                "verifyMs": 11.106292000000394,
+                "mechanism": "pooled-activation",
+                "interactiveAtMs": 37.72579200000109,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.983375000003434,
+                "mutationMs": 16.282208000000537,
+                "verifyMs": 10.85175000000163,
+                "mechanism": "pooled-activation",
+                "interactiveAtMs": 39.62199999999939,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.836249999996653,
+                "mutationMs": 20.2086249999993,
+                "verifyMs": 10.426000000003114,
+                "mechanism": "pooled-activation",
+                "interactiveAtMs": 42.32741700000042,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.868249999999534,
+                "mutationMs": 15.169792000000598,
+                "verifyMs": 9.847292000002199,
+                "mechanism": "pooled-activation",
+                "interactiveAtMs": 37.08466699999917,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.05620799999815,
+                "mutationMs": 11.803250000000844,
+                "verifyMs": 9.712374999999156,
+                "mechanism": "pooled-activation",
+                "interactiveAtMs": 67.69258400000035,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 3,
+          "order": ["pooledActivation", "nativeCreate"],
+          "nativeCreate": {
+            "strategy": "nativeCreate",
+            "wallMs": 169.52512500000012,
+            "throughputPerSecond": 29.49415315281435,
+            "safe": true,
+            "exactInventory": true,
+            "exactMechanismCounts": true,
+            "peakActive": 4,
+            "inventoryCount": 59,
+            "pooledActivationCount": 0,
+            "nativeFallbackCount": 0,
+            "firstFiveInteractiveMs": 169.52008299999943,
+            "cleanupInventoryCount": 54,
+            "loadAverage": {
+              "before": [31.82421875, 26.16357421875, 24.20166015625],
+              "after": [31.82421875, 26.16357421875, 24.20166015625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 5.543,
+              "systemCpuMs": 9.544,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 114
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 15.356166000001394,
+                "mutationMs": 73.41162500000064,
+                "verifyMs": 18.9273749999993,
+                "mechanism": "native-create",
+                "interactiveAtMs": 107.73020800000086,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.290834000003088,
+                "mutationMs": 67.85191599999962,
+                "verifyMs": 19.921708000001672,
+                "mechanism": "native-create",
+                "interactiveAtMs": 100.61204200000066,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.63933299999917,
+                "mutationMs": 80.61845799999719,
+                "verifyMs": 21.921707999998034,
+                "mechanism": "native-create",
+                "interactiveAtMs": 116.0791250000002,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.104374999998981,
+                "mutationMs": 72.37958399999843,
+                "verifyMs": 16.755457999999635,
+                "mechanism": "native-create",
+                "interactiveAtMs": 103.82133299999987,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 15.987165999998979,
+                "mutationMs": 41.94562500000029,
+                "verifyMs": 10.934541999999055,
+                "mechanism": "native-create",
+                "interactiveAtMs": 169.52008299999943,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "pooledActivation": {
+            "strategy": "pooledActivation",
+            "wallMs": 70.81570900000224,
+            "throughputPerSecond": 70.60580301469328,
+            "safe": true,
+            "exactInventory": true,
+            "exactMechanismCounts": true,
+            "peakActive": 4,
+            "inventoryCount": 54,
+            "pooledActivationCount": 5,
+            "nativeFallbackCount": 0,
+            "firstFiveInteractiveMs": 70.81079200000022,
+            "cleanupInventoryCount": 54,
+            "loadAverage": {
+              "before": [31.82421875, 26.16357421875, 24.20166015625],
+              "after": [31.82421875, 26.16357421875, 24.20166015625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 14.174,
+              "systemCpuMs": 8.682,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 193
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 13.478332999999111,
+                "mutationMs": 14.677583999997296,
+                "verifyMs": 11.493125000000873,
+                "mechanism": "pooled-activation",
+                "interactiveAtMs": 39.693209000000934,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.355459000002156,
+                "mutationMs": 16.88483300000007,
+                "verifyMs": 10.822958999997354,
+                "mechanism": "pooled-activation",
+                "interactiveAtMs": 40.63970900000277,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.166790999999648,
+                "mutationMs": 21.313500000000204,
+                "verifyMs": 11.848332999998092,
+                "mechanism": "pooled-activation",
+                "interactiveAtMs": 45.26220900000044,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.148750000000291,
+                "mutationMs": 20.04712500000096,
+                "verifyMs": 10.647292000001471,
+                "mechanism": "pooled-activation",
+                "interactiveAtMs": 45.25800000000163,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.374916999997367,
+                "mutationMs": 12.10399999999936,
+                "verifyMs": 9.593125000003056,
+                "mechanism": "pooled-activation",
+                "interactiveAtMs": 70.81079200000022,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 4,
+          "order": ["nativeCreate", "pooledActivation"],
+          "nativeCreate": {
+            "strategy": "nativeCreate",
+            "wallMs": 128.95129199999792,
+            "throughputPerSecond": 38.77433038825296,
+            "safe": true,
+            "exactInventory": true,
+            "exactMechanismCounts": true,
+            "peakActive": 4,
+            "inventoryCount": 59,
+            "pooledActivationCount": 0,
+            "nativeFallbackCount": 0,
+            "firstFiveInteractiveMs": 128.9470829999991,
+            "cleanupInventoryCount": 54,
+            "loadAverage": {
+              "before": [29.916015625, 25.86181640625, 24.1064453125],
+              "after": [29.916015625, 25.86181640625, 24.1064453125]
+            },
+            "resourceUsage": {
+              "userCpuMs": 4.012,
+              "systemCpuMs": 6.907,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 97
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 11.687000000005355,
+                "mutationMs": 54.91570900000079,
+                "verifyMs": 13.857334000000264,
+                "mechanism": "native-create",
+                "interactiveAtMs": 80.48416700000234,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.344165999995312,
+                "mutationMs": 55.909499999994296,
+                "verifyMs": 11.35399999999936,
+                "mechanism": "native-create",
+                "interactiveAtMs": 80.09895800000231,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.535875000001397,
+                "mutationMs": 51.29183300000295,
+                "verifyMs": 12.073540999997931,
+                "mechanism": "native-create",
+                "interactiveAtMs": 75.79008299999987,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.588583000004292,
+                "mutationMs": 56.41420800000196,
+                "verifyMs": 11.009250000002794,
+                "mechanism": "native-create",
+                "interactiveAtMs": 80.61937500000204,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.095083000000159,
+                "mutationMs": 32.861207999994804,
+                "verifyMs": 10.165167000006477,
+                "mechanism": "native-create",
+                "interactiveAtMs": 128.9470829999991,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "pooledActivation": {
+            "strategy": "pooledActivation",
+            "wallMs": 73.49025000000256,
+            "throughputPerSecond": 68.03623609934414,
+            "safe": true,
+            "exactInventory": true,
+            "exactMechanismCounts": true,
+            "peakActive": 4,
+            "inventoryCount": 54,
+            "pooledActivationCount": 5,
+            "nativeFallbackCount": 0,
+            "firstFiveInteractiveMs": 73.48629200000141,
+            "cleanupInventoryCount": 54,
+            "loadAverage": {
+              "before": [27.92041015625, 25.51513671875, 23.994140625],
+              "after": [27.92041015625, 25.51513671875, 23.994140625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 3.968,
+              "systemCpuMs": 7.606,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 129
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 13.444250000000466,
+                "mutationMs": 19.7978329999969,
+                "verifyMs": 11.750082999998995,
+                "mechanism": "pooled-activation",
+                "interactiveAtMs": 45.017791999998735,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.826374999996915,
+                "mutationMs": 16.128124999995634,
+                "verifyMs": 12.238249999994878,
+                "mechanism": "pooled-activation",
+                "interactiveAtMs": 42.644459000002826,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.446041999995941,
+                "mutationMs": 22.087165999997524,
+                "verifyMs": 11.602666999999201,
+                "mechanism": "pooled-activation",
+                "interactiveAtMs": 49.0045420000024,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.255458999999973,
+                "mutationMs": 17.220165999999153,
+                "verifyMs": 11.911791999998968,
+                "mechanism": "pooled-activation",
+                "interactiveAtMs": 43.96150000000489,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.799082999998063,
+                "mutationMs": 12.141915999993216,
+                "verifyMs": 8.865124999996624,
+                "mechanism": "pooled-activation",
+                "interactiveAtMs": 73.48629200000141,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        }
+      ],
+      "nativeCreate": {
+        "wallMs": {
+          "samples": [
+            127.85504200000014, 128.95129199999792, 135.85229199999958, 169.52512500000012,
+            389.1926249999997
+          ],
+          "median": 135.85229199999958,
+          "p90": 389.1926249999997,
+          "p95": 389.1926249999997,
+          "max": 389.1926249999997
+        },
+        "firstFiveInteractiveMs": {
+          "samples": [
+            127.85020900000018, 128.9470829999991, 135.84804200000144, 169.52008299999943,
+            389.186208000001
+          ],
+          "median": 135.84804200000144,
+          "p90": 389.186208000001,
+          "p95": 389.186208000001,
+          "max": 389.186208000001
+        },
+        "commandMs": {
+          "samples": [
+            51.91104099999984, 53.12145800000144, 55.39600100000098, 68.86733299999833,
+            74.53708400000005, 74.90124900000228, 78.04004199999963, 79.01204100000905,
+            79.5235419999999, 79.60766599998897, 79.81595800000287, 80.46004300000641,
+            82.73866700000008, 83.56212500000402, 83.71962399999757, 84.11404200000106,
+            100.06445800000438, 102.23941699999705, 107.69516600000134, 115.1794989999944,
+            174.3228339999987, 214.26120800000172, 222.43541599999844, 235.28691600000093,
+            261.68616699999984
+          ],
+          "median": 82.73866700000008,
+          "p90": 222.43541599999844,
+          "p95": 235.28691600000093,
+          "max": 261.68616699999984
+        },
+        "throughputPerSecond": {
+          "samples": [
+            12.847108806339802, 29.49415315281435, 36.80467901123093, 38.77433038825296,
+            39.10678782616954
+          ],
+          "median": 36.80467901123093,
+          "p90": 39.10678782616954,
+          "p95": 39.10678782616954,
+          "max": 39.10678782616954
+        },
+        "allSafe": true
+      },
+      "pooledActivation": {
+        "wallMs": {
+          "samples": [
+            67.69795900000099, 68.41458299999977, 70.81570900000224, 72.61020800000006,
+            73.49025000000256
+          ],
+          "median": 70.81570900000224,
+          "p90": 73.49025000000256,
+          "p95": 73.49025000000256,
+          "max": 73.49025000000256
+        },
+        "firstFiveInteractiveMs": {
+          "samples": [
+            67.69258400000035, 68.40995800000019, 70.81079200000022, 72.60300000000007,
+            73.48629200000141
+          ],
+          "median": 70.81079200000022,
+          "p90": 73.48629200000141,
+          "p95": 73.48629200000141,
+          "max": 73.48629200000141
+        },
+        "commandMs": {
+          "samples": [
+            30.57183299999815, 30.806123999987904, 31.072041999999783, 31.233374999999796,
+            31.704500000000735, 35.88533400000233, 36.25891700000102, 37.559666999999536,
+            37.702541999999085, 38.168665999999575, 39.1173330000056, 39.477874999999585,
+            39.64904199999728, 40.06325099999958, 40.55929200000082, 40.986957999999504,
+            41.47087499999907, 42.02008300000125, 42.19274999998743, 42.387416999998095,
+            43.84316700000272, 44.176791999999296, 44.328623999997944, 44.99216599999636,
+            48.135874999992666
+          ],
+          "median": 39.64904199999728,
+          "p90": 44.328623999997944,
+          "p95": 44.99216599999636,
+          "max": 48.135874999992666
+        },
+        "throughputPerSecond": {
+          "samples": [
+            68.03623609934414, 68.86084116437178, 70.60580301469328, 73.08383360313718,
+            73.85747035593683
+          ],
+          "median": 70.60580301469328,
+          "p90": 73.85747035593683,
+          "p95": 73.85747035593683,
+          "max": 73.85747035593683
+        },
+        "allSafe": true
+      },
+      "medianImprovementFraction": 0.47873011226043605,
+      "p95ImprovementFraction": 0.8111725524089707,
+      "firstFiveMedianImprovementFraction": 0.47874999920867856,
+      "firstFiveP95ImprovementFraction": 0.8111796089135789,
+      "allSafe": true
+    },
+    {
+      "burstSize": 20,
+      "pairs": [
+        {
+          "repetition": 0,
+          "order": ["pooledActivation", "nativeCreate"],
+          "nativeCreate": {
+            "strategy": "nativeCreate",
+            "wallMs": 493.6479580000005,
+            "throughputPerSecond": 40.514702179726186,
+            "safe": true,
+            "exactInventory": true,
+            "exactMechanismCounts": true,
+            "peakActive": 4,
+            "inventoryCount": 74,
+            "pooledActivationCount": 0,
+            "nativeFallbackCount": 0,
+            "firstFiveInteractiveMs": 189.48458300000038,
+            "cleanupInventoryCount": 54,
+            "loadAverage": {
+              "before": [32.45361328125, 25.81982421875, 24.02880859375],
+              "after": [32.45361328125, 25.81982421875, 24.02880859375]
+            },
+            "resourceUsage": {
+              "userCpuMs": 20.569,
+              "systemCpuMs": 34.899,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 534
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 11.306708000000071,
+                "mutationMs": 64.16225000000031,
+                "verifyMs": 13.845417000000452,
+                "mechanism": "native-create",
+                "interactiveAtMs": 89.35262500000044,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.036417000000256,
+                "mutationMs": 63.682041999999456,
+                "verifyMs": 14.994708999999602,
+                "mechanism": "native-create",
+                "interactiveAtMs": 91.22608300000047,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.225083000000268,
+                "mutationMs": 62.4878749999998,
+                "verifyMs": 17.6875,
+                "mechanism": "native-create",
+                "interactiveAtMs": 92.2592910000003,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.847499999999854,
+                "mutationMs": 63.938874999999825,
+                "verifyMs": 16.562041999999565,
+                "mechanism": "native-create",
+                "interactiveAtMs": 93.7049160000006,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 15.659082999999555,
+                "mutationMs": 76.55324999999993,
+                "verifyMs": 13.54700000000048,
+                "mechanism": "native-create",
+                "interactiveAtMs": 195.16841600000043,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.930499999999483,
+                "mutationMs": 70.02774999999929,
+                "verifyMs": 13.250750000000153,
+                "mechanism": "native-create",
+                "interactiveAtMs": 189.48458300000038,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.965250000000196,
+                "mutationMs": 70.9707499999995,
+                "verifyMs": 13.163915999999517,
+                "mechanism": "native-create",
+                "interactiveAtMs": 191.38195799999994,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.400125000000116,
+                "mutationMs": 68.93674999999985,
+                "verifyMs": 13.37683300000026,
+                "mechanism": "native-create",
+                "interactiveAtMs": 190.43933300000026,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 15.690417000000707,
+                "mutationMs": 73.24245799999971,
+                "verifyMs": 11.198250000000371,
+                "mechanism": "native-create",
+                "interactiveAtMs": 289.66116599999987,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.889249999999265,
+                "mutationMs": 70.47108300000036,
+                "verifyMs": 12.205834000000323,
+                "mechanism": "native-create",
+                "interactiveAtMs": 286.03020800000013,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.969874999999774,
+                "mutationMs": 68.77170899999965,
+                "verifyMs": 11.639083000000028,
+                "mechanism": "native-create",
+                "interactiveAtMs": 284.7925830000004,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.898000000000138,
+                "mutationMs": 67.19016700000066,
+                "verifyMs": 12.457459000000199,
+                "mechanism": "native-create",
+                "interactiveAtMs": 287.74895800000013,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.094458999999915,
+                "mutationMs": 75.70566700000018,
+                "verifyMs": 13.475832999999511,
+                "mechanism": "native-create",
+                "interactiveAtMs": 386.1163750000005,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.93329200000062,
+                "mutationMs": 78.38162499999999,
+                "verifyMs": 13.169624999999542,
+                "mechanism": "native-create",
+                "interactiveAtMs": 389.5379579999999,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.69958300000053,
+                "mutationMs": 76.31129200000032,
+                "verifyMs": 15.968958000000384,
+                "mechanism": "native-create",
+                "interactiveAtMs": 391.75787500000024,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.992166999999426,
+                "mutationMs": 73.71545799999967,
+                "verifyMs": 13.888291999999637,
+                "mechanism": "native-create",
+                "interactiveAtMs": 388.29008299999987,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.708707999999206,
+                "mutationMs": 71.9935830000004,
+                "verifyMs": 13.792957999999999,
+                "mechanism": "native-create",
+                "interactiveAtMs": 485.65599999999995,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.9350000000004,
+                "mutationMs": 76.59299999999985,
+                "verifyMs": 13.170374999999694,
+                "mechanism": "native-create",
+                "interactiveAtMs": 491.0217910000001,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.500833999999486,
+                "mutationMs": 77.25333299999966,
+                "verifyMs": 14.334625000000415,
+                "mechanism": "native-create",
+                "interactiveAtMs": 493.64295800000036,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.978374999999687,
+                "mutationMs": 73.40887500000008,
+                "verifyMs": 13.863916000000245,
+                "mechanism": "native-create",
+                "interactiveAtMs": 491.0356660000007,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "pooledActivation": {
+            "strategy": "pooledActivation",
+            "wallMs": 1190.7199999999993,
+            "throughputPerSecond": 16.7965600644988,
+            "safe": true,
+            "exactInventory": true,
+            "exactMechanismCounts": true,
+            "peakActive": 4,
+            "inventoryCount": 69,
+            "pooledActivationCount": 5,
+            "nativeFallbackCount": 15,
+            "firstFiveInteractiveMs": 586.6174999999994,
+            "cleanupInventoryCount": 54,
+            "loadAverage": {
+              "before": [32.45361328125, 25.81982421875, 24.02880859375],
+              "after": [32.45361328125, 25.81982421875, 24.02880859375]
+            },
+            "resourceUsage": {
+              "userCpuMs": 36.265,
+              "systemCpuMs": 37.767,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 729
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 71.54891600000064,
+                "mutationMs": 68.56937500000004,
+                "verifyMs": 62.61912499999926,
+                "mechanism": "pooled-activation",
+                "interactiveAtMs": 202.7789159999993,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 51.562834000000294,
+                "mutationMs": 123.23883300000034,
+                "verifyMs": 41.13054099999954,
+                "mechanism": "pooled-activation",
+                "interactiveAtMs": 229.98379099999966,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 35.87937500000044,
+                "mutationMs": 122.9032500000003,
+                "verifyMs": 114.42441599999984,
+                "mechanism": "pooled-activation",
+                "interactiveAtMs": 315.91949999999997,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 49.794834000000264,
+                "mutationMs": 100.8976249999996,
+                "verifyMs": 42.90295799999967,
+                "mechanism": "pooled-activation",
+                "interactiveAtMs": 247.69837499999994,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 72.98308400000042,
+                "mutationMs": 172.656833,
+                "verifyMs": 138.1639580000001,
+                "mechanism": "pooled-activation",
+                "interactiveAtMs": 586.6174999999994,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 95.00362499999937,
+                "mutationMs": 303.9781670000002,
+                "verifyMs": 21.322917000000416,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 650.3432079999993,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 142.97325,
+                "mutationMs": 246.45874999999978,
+                "verifyMs": 43.282624999999825,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 680.4589999999998,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 200.9437079999998,
+                "mutationMs": 171.49933299999975,
+                "verifyMs": 34.87816700000076,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 723.2814579999995,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 30.357208000000355,
+                "mutationMs": 114.07166700000016,
+                "verifyMs": 23.943750000000364,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 755.0323749999998,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 44.4262090000002,
+                "mutationMs": 81.89083300000038,
+                "verifyMs": 22.08037499999955,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 798.7849159999996,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 31.99487500000032,
+                "mutationMs": 76.0483749999994,
+                "verifyMs": 22.681125000000065,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 811.2243330000001,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 24.96587499999987,
+                "mutationMs": 85.15762499999983,
+                "verifyMs": 21.072791000000507,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 854.5245409999998,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 25.84349999999995,
+                "mutationMs": 88.09620799999993,
+                "verifyMs": 23.08954199999971,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 892.0997499999994,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 26.94866699999966,
+                "mutationMs": 105.22283300000072,
+                "verifyMs": 27.363667000000532,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 958.3524159999997,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 26.52062500000011,
+                "mutationMs": 106.80200000000059,
+                "verifyMs": 25.467916999999943,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 970.0559999999996,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 27.071834000000308,
+                "mutationMs": 99.72329199999967,
+                "verifyMs": 34.235999999999876,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 1015.5943749999997,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 24.29670900000019,
+                "mutationMs": 96.51895799999966,
+                "verifyMs": 21.05408400000033,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 1034.01825,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 25.423875000000407,
+                "mutationMs": 128.51150000000052,
+                "verifyMs": 28.57549999999992,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 1140.9112079999995,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 26.42475000000013,
+                "mutationMs": 128.35108299999956,
+                "verifyMs": 22.427625000000262,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 1147.3004999999994,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 26.448292000000038,
+                "mutationMs": 119.16195799999969,
+                "verifyMs": 29.461708999999246,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 1190.7103749999997,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 1,
+          "order": ["nativeCreate", "pooledActivation"],
+          "nativeCreate": {
+            "strategy": "nativeCreate",
+            "wallMs": 511.18512499999997,
+            "throughputPerSecond": 39.124769133295885,
+            "safe": true,
+            "exactInventory": true,
+            "exactMechanismCounts": true,
+            "peakActive": 4,
+            "inventoryCount": 74,
+            "pooledActivationCount": 0,
+            "nativeFallbackCount": 0,
+            "firstFiveInteractiveMs": 228.35241700000006,
+            "cleanupInventoryCount": 54,
+            "loadAverage": {
+              "before": [32.7373046875, 25.98876953125, 24.0986328125],
+              "after": [32.7373046875, 25.98876953125, 24.0986328125]
+            },
+            "resourceUsage": {
+              "userCpuMs": 24.118,
+              "systemCpuMs": 35.358,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 601
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 19.31787499999882,
+                "mutationMs": 101.21404199999961,
+                "verifyMs": 14.984875000000102,
+                "mechanism": "native-create",
+                "interactiveAtMs": 135.5553749999999,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.974958999999217,
+                "mutationMs": 108.18874999999935,
+                "verifyMs": 15.105125000000044,
+                "mechanism": "native-create",
+                "interactiveAtMs": 139.46229200000016,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.948749999999563,
+                "mutationMs": 101.31595899999957,
+                "verifyMs": 12.700667000000976,
+                "mechanism": "native-create",
+                "interactiveAtMs": 131.25908400000117,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 17.22333299999991,
+                "mutationMs": 96.62454199999956,
+                "verifyMs": 12.328625000000102,
+                "mechanism": "native-create",
+                "interactiveAtMs": 129.64337500000147,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.974749999999403,
+                "mutationMs": 68.81983300000138,
+                "verifyMs": 17.867749999999432,
+                "mechanism": "native-create",
+                "interactiveAtMs": 228.35241700000006,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.667375000000902,
+                "mutationMs": 75.69141599999966,
+                "verifyMs": 13.030832999998893,
+                "mechanism": "native-create",
+                "interactiveAtMs": 231.68645900000047,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.813707999999679,
+                "mutationMs": 79.9280830000007,
+                "verifyMs": 13.956041999999798,
+                "mechanism": "native-create",
+                "interactiveAtMs": 244.29470899999978,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.280749999999898,
+                "mutationMs": 75.67591700000048,
+                "verifyMs": 17.45337499999914,
+                "mechanism": "native-create",
+                "interactiveAtMs": 246.91250000000036,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.72387499999968,
+                "mutationMs": 73.5335840000007,
+                "verifyMs": 20.16874999999891,
+                "mechanism": "native-create",
+                "interactiveAtMs": 336.8262500000001,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 17.616625000000568,
+                "mutationMs": 93.42345900000146,
+                "verifyMs": 15.14520900000025,
+                "mechanism": "native-create",
+                "interactiveAtMs": 357.91766700000153,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.344041000000288,
+                "mutationMs": 88.04358299999876,
+                "verifyMs": 13.545750000001135,
+                "mechanism": "native-create",
+                "interactiveAtMs": 360.26370900000074,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.464916999999332,
+                "mutationMs": 84.24187500000153,
+                "verifyMs": 15.510499999998501,
+                "mechanism": "native-create",
+                "interactiveAtMs": 361.1599590000005,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.57695799999965,
+                "mutationMs": 46.45191700000032,
+                "verifyMs": 18.993000000000393,
+                "mechanism": "native-create",
+                "interactiveAtMs": 416.8924999999999,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.889667000001282,
+                "mutationMs": 51.7632909999993,
+                "verifyMs": 11.646375000000262,
+                "mechanism": "native-create",
+                "interactiveAtMs": 435.234292000001,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.534499999999753,
+                "mutationMs": 48.76933300000019,
+                "verifyMs": 12.432749999999942,
+                "mechanism": "native-create",
+                "interactiveAtMs": 434.03604200000154,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.13758400000006,
+                "mutationMs": 51.636500000000524,
+                "verifyMs": 11.773124999999709,
+                "mechanism": "native-create",
+                "interactiveAtMs": 434.7252500000013,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.23620899999878,
+                "mutationMs": 49.64129200000025,
+                "verifyMs": 15.950000000000728,
+                "mechanism": "native-create",
+                "interactiveAtMs": 494.7798750000002,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.820999999999913,
+                "mutationMs": 53.74104199999965,
+                "verifyMs": 10.221958000000086,
+                "mechanism": "native-create",
+                "interactiveAtMs": 509.8563750000012,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.595875000000888,
+                "mutationMs": 54.09020899999996,
+                "verifyMs": 9.195458000000144,
+                "mechanism": "native-create",
+                "interactiveAtMs": 510.62295900000026,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.333291000000827,
+                "mutationMs": 56.08229100000062,
+                "verifyMs": 8.524708000000828,
+                "mechanism": "native-create",
+                "interactiveAtMs": 511.18258400000013,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "pooledActivation": {
+            "strategy": "pooledActivation",
+            "wallMs": 422.17504200000076,
+            "throughputPerSecond": 47.373714716181546,
+            "safe": true,
+            "exactInventory": true,
+            "exactMechanismCounts": true,
+            "peakActive": 4,
+            "inventoryCount": 69,
+            "pooledActivationCount": 5,
+            "nativeFallbackCount": 15,
+            "firstFiveInteractiveMs": 107.35979200000111,
+            "cleanupInventoryCount": 54,
+            "loadAverage": {
+              "before": [30.43603515625, 25.62353515625, 23.98046875],
+              "after": [30.43603515625, 25.62353515625, 23.98046875]
+            },
+            "resourceUsage": {
+              "userCpuMs": 21.999,
+              "systemCpuMs": 35.127,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 501
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 12.488666999999623,
+                "mutationMs": 13.372416000000158,
+                "verifyMs": 11.16741699999875,
+                "mechanism": "pooled-activation",
+                "interactiveAtMs": 37.06554200000028,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.504457999999431,
+                "mutationMs": 16.492833000000246,
+                "verifyMs": 13.095707999998922,
+                "mechanism": "pooled-activation",
+                "interactiveAtMs": 42.61987500000032,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.948333000000275,
+                "mutationMs": 16.566249999999854,
+                "verifyMs": 11.479207999998835,
+                "mechanism": "pooled-activation",
+                "interactiveAtMs": 40.059291999999914,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.67358299999978,
+                "mutationMs": 13.701125000001412,
+                "verifyMs": 13.083708000000115,
+                "mechanism": "pooled-activation",
+                "interactiveAtMs": 40.98804200000086,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 21.194166999999652,
+                "mutationMs": 24.21887500000048,
+                "verifyMs": 24.837541000000783,
+                "mechanism": "pooled-activation",
+                "interactiveAtMs": 107.35979200000111,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 15.302459000000454,
+                "mutationMs": 69.79733299999862,
+                "verifyMs": 14.641457999998238,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 139.84841700000106,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 15.434542000000874,
+                "mutationMs": 79.78345900000022,
+                "verifyMs": 13.642625000000407,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 149.8889589999999,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.867707999999766,
+                "mutationMs": 71.37883300000067,
+                "verifyMs": 13.9275000000016,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 142.83037500000137,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 18.86591700000099,
+                "mutationMs": 43.6278340000008,
+                "verifyMs": 19.384000000000015,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 189.28283400000146,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.02325000000019,
+                "mutationMs": 44.90929099999994,
+                "verifyMs": 12.044332999999824,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 210.86829200000102,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.04412500000035,
+                "mutationMs": 46.0561660000003,
+                "verifyMs": 9.730332999999519,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 211.68512499999997,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.798041000000012,
+                "mutationMs": 44.3231250000008,
+                "verifyMs": 13.13445899999897,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 221.1828340000011,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.747957999999926,
+                "mutationMs": 40.43166700000074,
+                "verifyMs": 22.811040999999022,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 264.3111250000002,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.262249999999767,
+                "mutationMs": 46.57666699999936,
+                "verifyMs": 15.67595799999981,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 285.40600000000086,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.86883399999897,
+                "mutationMs": 45.01124999999956,
+                "verifyMs": 16.51825000000099,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 284.1142920000002,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.532750000000306,
+                "mutationMs": 42.75891600000068,
+                "verifyMs": 18.692166999999245,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 294.25837500000125,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.22504200000003,
+                "mutationMs": 70.78187499999876,
+                "verifyMs": 20.104208000000654,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 368.4840000000004,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 18.469250000000102,
+                "mutationMs": 97.87787500000013,
+                "verifyMs": 17.557042000000365,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 418.0553340000006,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 15.68762500000048,
+                "mutationMs": 95.21720800000003,
+                "verifyMs": 17.826167000001078,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 414.1742920000015,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 16.059042000000773,
+                "mutationMs": 88.82075000000077,
+                "verifyMs": 22.984291999999186,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 422.1692090000015,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 2,
+          "order": ["pooledActivation", "nativeCreate"],
+          "nativeCreate": {
+            "strategy": "nativeCreate",
+            "wallMs": 482.1995840000018,
+            "throughputPerSecond": 41.47660152274193,
+            "safe": true,
+            "exactInventory": true,
+            "exactMechanismCounts": true,
+            "peakActive": 4,
+            "inventoryCount": 74,
+            "pooledActivationCount": 0,
+            "nativeFallbackCount": 0,
+            "firstFiveInteractiveMs": 161.1420840000028,
+            "cleanupInventoryCount": 54,
+            "loadAverage": {
+              "before": [29.98095703125, 25.7109375, 24.0322265625],
+              "after": [29.98095703125, 25.7109375, 24.0322265625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 17.056,
+              "systemCpuMs": 31.219,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 419
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 11.771667000000889,
+                "mutationMs": 53.42566699999952,
+                "verifyMs": 11.67541600000186,
+                "mechanism": "native-create",
+                "interactiveAtMs": 76.88875000000189,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.018499999998312,
+                "mutationMs": 55.70616700000028,
+                "verifyMs": 10.454083000000537,
+                "mechanism": "native-create",
+                "interactiveAtMs": 78.80162500000006,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.253582999997889,
+                "mutationMs": 51.1092499999977,
+                "verifyMs": 12.052292000000307,
+                "mechanism": "native-create",
+                "interactiveAtMs": 74.44208400000207,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.740999999998166,
+                "mutationMs": 50.831874999999854,
+                "verifyMs": 11.333875000000262,
+                "mechanism": "native-create",
+                "interactiveAtMs": 75.3761250000025,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.97716699999728,
+                "mutationMs": 63.78570799999943,
+                "verifyMs": 14.409500000001572,
+                "mechanism": "native-create",
+                "interactiveAtMs": 163.6492500000022,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.897832999999082,
+                "mutationMs": 60.95162500000151,
+                "verifyMs": 15.73004199999923,
+                "mechanism": "native-create",
+                "interactiveAtMs": 162.9788750000007,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.093583000001672,
+                "mutationMs": 56.61991699999999,
+                "verifyMs": 15.510957999998936,
+                "mechanism": "native-create",
+                "interactiveAtMs": 161.1420840000028,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.746791000001394,
+                "mutationMs": 54.97637500000201,
+                "verifyMs": 17.67450000000099,
+                "mechanism": "native-create",
+                "interactiveAtMs": 162.226584,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.703542000002926,
+                "mutationMs": 59.98262500000055,
+                "verifyMs": 10.820290999999997,
+                "mechanism": "native-create",
+                "interactiveAtMs": 244.6708749999998,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.14929199999824,
+                "mutationMs": 71.03441699999894,
+                "verifyMs": 10.703083999997034,
+                "mechanism": "native-create",
+                "interactiveAtMs": 258.14183400000184,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.730709000003117,
+                "mutationMs": 57.57762500000172,
+                "verifyMs": 10.848791000000347,
+                "mechanism": "native-create",
+                "interactiveAtMs": 244.1626670000005,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.208333000002312,
+                "mutationMs": 61.00616699999955,
+                "verifyMs": 9.323584000001574,
+                "mechanism": "native-create",
+                "interactiveAtMs": 245.20362500000192,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.457791999997426,
+                "mutationMs": 50.19608299999891,
+                "verifyMs": 22.558750000000146,
+                "mechanism": "native-create",
+                "interactiveAtMs": 328.40812500000175,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.774583000002167,
+                "mutationMs": 51.93745800000033,
+                "verifyMs": 16.013291999999637,
+                "mechanism": "native-create",
+                "interactiveAtMs": 322.4315420000021,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.966541999998299,
+                "mutationMs": 56.750208000001294,
+                "verifyMs": 21.672749999997905,
+                "mechanism": "native-create",
+                "interactiveAtMs": 333.61512500000026,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.397791999999754,
+                "mutationMs": 69.90045800000007,
+                "verifyMs": 23.74633299999914,
+                "mechanism": "native-create",
+                "interactiveAtMs": 364.2260840000017,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 27.891208999997616,
+                "mutationMs": 118.16491700000188,
+                "verifyMs": 11.398125000003347,
+                "mechanism": "native-create",
+                "interactiveAtMs": 479.9310839999998,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 25.859709000000294,
+                "mutationMs": 109.22779099999752,
+                "verifyMs": 10.954290999998193,
+                "mechanism": "native-create",
+                "interactiveAtMs": 474.49608400000216,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 38.96616699999868,
+                "mutationMs": 95.21120900000096,
+                "verifyMs": 12.134707999997772,
+                "mechanism": "native-create",
+                "interactiveAtMs": 479.95550000000003,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 30.453750000000582,
+                "mutationMs": 74.80716699999903,
+                "verifyMs": 12.66833300000144,
+                "mechanism": "native-create",
+                "interactiveAtMs": 482.19550000000163,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "pooledActivation": {
+            "strategy": "pooledActivation",
+            "wallMs": 1398.4003329999978,
+            "throughputPerSecond": 14.302056090829058,
+            "safe": true,
+            "exactInventory": true,
+            "exactMechanismCounts": true,
+            "peakActive": 4,
+            "inventoryCount": 69,
+            "pooledActivationCount": 5,
+            "nativeFallbackCount": 15,
+            "firstFiveInteractiveMs": 77.76141699999789,
+            "cleanupInventoryCount": 54,
+            "loadAverage": {
+              "before": [32.24267578125, 26.07763671875, 24.150390625],
+              "after": [32.24267578125, 26.07763671875, 24.150390625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 21.622,
+              "systemCpuMs": 35.347,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 537
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 11.531458000001294,
+                "mutationMs": 15.46483299999818,
+                "verifyMs": 12.004875000002357,
+                "mechanism": "pooled-activation",
+                "interactiveAtMs": 39.02916699999696,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.830125000000407,
+                "mutationMs": 15.266167000001587,
+                "verifyMs": 10.718166000002384,
+                "mechanism": "pooled-activation",
+                "interactiveAtMs": 38.3292079999992,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.144208000001527,
+                "mutationMs": 15.228791999998066,
+                "verifyMs": 11.585792000001675,
+                "mechanism": "pooled-activation",
+                "interactiveAtMs": 39.813374999997905,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.183957999997801,
+                "mutationMs": 18.905166000000463,
+                "verifyMs": 10.61620799999946,
+                "mechanism": "pooled-activation",
+                "interactiveAtMs": 43.023457999999664,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.947250000001077,
+                "mutationMs": 14.378959000001487,
+                "verifyMs": 14.071625000000495,
+                "mechanism": "pooled-activation",
+                "interactiveAtMs": 77.76141699999789,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.82587500000227,
+                "mutationMs": 61.99345800000083,
+                "verifyMs": 20.421958000002633,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 132.30283299999792,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.01787499999773,
+                "mutationMs": 62.54129099999773,
+                "verifyMs": 20.525915999998688,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 134.9329579999976,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.659333999999944,
+                "mutationMs": 68.91258400000152,
+                "verifyMs": 19.388208000000304,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 143.11899999999878,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 17.11345799999981,
+                "mutationMs": 65.11937500000204,
+                "verifyMs": 19.550875000000815,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 179.5892079999976,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 16.380457999999635,
+                "mutationMs": 163.3668749999997,
+                "verifyMs": 98.97583300000042,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 411.06804199999897,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 16.154374999998254,
+                "mutationMs": 89.20958299999984,
+                "verifyMs": 139.38237500000105,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 379.7116669999996,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.639999999999418,
+                "mutationMs": 148.97375000000102,
+                "verifyMs": 60.91962500000227,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 366.70224999999846,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 18.096207999999024,
+                "mutationMs": 186.2327499999992,
+                "verifyMs": 141.30679099999907,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 525.2757499999971,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 131.27154200000223,
+                "mutationMs": 546.8290830000005,
+                "verifyMs": 45.54108300000007,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 1090.3855000000003,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 71.48070899999948,
+                "mutationMs": 492.76683299999786,
+                "verifyMs": 108.4204159999972,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 1052.4331249999996,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 127.00404200000048,
+                "mutationMs": 476.49116700000013,
+                "verifyMs": 47.95091700000194,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 1062.5639579999988,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 180.2768329999999,
+                "mutationMs": 334.23999999999796,
+                "verifyMs": 34.23429199999737,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 1074.064875,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 50.48958300000231,
+                "mutationMs": 244.05762499999764,
+                "verifyMs": 34.349042000001646,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 1381.3720829999984,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 34.36520799999926,
+                "mutationMs": 266.9979999999996,
+                "verifyMs": 28.813624999998865,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 1392.783374999999,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 31.916708000000654,
+                "mutationMs": 252.1560419999987,
+                "verifyMs": 40.214584000001196,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 1398.394042,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 3,
+          "order": ["nativeCreate", "pooledActivation"],
+          "nativeCreate": {
+            "strategy": "nativeCreate",
+            "wallMs": 427.9719580000019,
+            "throughputPerSecond": 46.732033784325445,
+            "safe": true,
+            "exactInventory": true,
+            "exactMechanismCounts": true,
+            "peakActive": 4,
+            "inventoryCount": 74,
+            "pooledActivationCount": 0,
+            "nativeFallbackCount": 0,
+            "firstFiveInteractiveMs": 177.80783300000257,
+            "cleanupInventoryCount": 54,
+            "loadAverage": {
+              "before": [31.82421875, 26.16357421875, 24.20166015625],
+              "after": [31.82421875, 26.16357421875, 24.20166015625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 23.751,
+              "systemCpuMs": 34.819,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 475
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 14.102624999999534,
+                "mutationMs": 62.17891700000109,
+                "verifyMs": 14.886750000001484,
+                "mechanism": "native-create",
+                "interactiveAtMs": 91.21075000000201,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 15.340790999998717,
+                "mutationMs": 67.21958300000188,
+                "verifyMs": 16.81224999999904,
+                "mechanism": "native-create",
+                "interactiveAtMs": 100.18562500000189,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.843834000002971,
+                "mutationMs": 62.909208999997645,
+                "verifyMs": 13.889917000000423,
+                "mechanism": "native-create",
+                "interactiveAtMs": 92.09975000000122,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.934582999998383,
+                "mutationMs": 69.98145899999872,
+                "verifyMs": 14.6462500000016,
+                "mechanism": "native-create",
+                "interactiveAtMs": 101.49812500000189,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.925666999999521,
+                "mutationMs": 58.25174999999945,
+                "verifyMs": 14.381833999999799,
+                "mechanism": "native-create",
+                "interactiveAtMs": 177.80783300000257,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 15.979417000002286,
+                "mutationMs": 65.12208299999838,
+                "verifyMs": 12.799209000000701,
+                "mechanism": "native-create",
+                "interactiveAtMs": 186.04525000000285,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 17.062416999997367,
+                "mutationMs": 64.88375000000087,
+                "verifyMs": 11.52416599999924,
+                "mechanism": "native-create",
+                "interactiveAtMs": 193.69754100000137,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.73016600000119,
+                "mutationMs": 61.952416000000085,
+                "verifyMs": 11.100041999998211,
+                "mechanism": "native-create",
+                "interactiveAtMs": 188.31524999999965,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.715875000001688,
+                "mutationMs": 57.04641599999741,
+                "verifyMs": 12.257332999997743,
+                "mechanism": "native-create",
+                "interactiveAtMs": 256.8634579999998,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.009500000000116,
+                "mutationMs": 52.09300000000076,
+                "verifyMs": 12.977374999998574,
+                "mechanism": "native-create",
+                "interactiveAtMs": 262.16370800000004,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.930749999999534,
+                "mutationMs": 54.63933299999917,
+                "verifyMs": 13.409959000000526,
+                "mechanism": "native-create",
+                "interactiveAtMs": 268.325291000001,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.254540999998426,
+                "mutationMs": 54.67933300000004,
+                "verifyMs": 11.907834000001458,
+                "mechanism": "native-create",
+                "interactiveAtMs": 271.5772500000021,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.648084000000381,
+                "mutationMs": 51.629290999997465,
+                "verifyMs": 13.359457999998995,
+                "mechanism": "native-create",
+                "interactiveAtMs": 332.5435830000024,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.468791999999667,
+                "mutationMs": 47.546957999998995,
+                "verifyMs": 13.910041999999521,
+                "mechanism": "native-create",
+                "interactiveAtMs": 336.11541600000055,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.088125000002037,
+                "mutationMs": 53.41391699999804,
+                "verifyMs": 11.734874999998283,
+                "mechanism": "native-create",
+                "interactiveAtMs": 346.5998330000002,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.130166999999346,
+                "mutationMs": 52.9151660000025,
+                "verifyMs": 11.71049999999741,
+                "mechanism": "native-create",
+                "interactiveAtMs": 347.3603750000002,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.150582999998733,
+                "mutationMs": 57.987042000000656,
+                "verifyMs": 13.931124999999156,
+                "mechanism": "native-create",
+                "interactiveAtMs": 416.64845799999966,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.640457999998034,
+                "mutationMs": 56.06933299999946,
+                "verifyMs": 12.536583000000974,
+                "mechanism": "native-create",
+                "interactiveAtMs": 414.3993330000012,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.383624999998574,
+                "mutationMs": 58.46833399999741,
+                "verifyMs": 10.47808399999849,
+                "mechanism": "native-create",
+                "interactiveAtMs": 427.9639160000006,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.441124999997555,
+                "mutationMs": 60.18883300000016,
+                "verifyMs": 9.964250000000902,
+                "mechanism": "native-create",
+                "interactiveAtMs": 427.96966600000087,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "pooledActivation": {
+            "strategy": "pooledActivation",
+            "wallMs": 342.447874999998,
+            "throughputPerSecond": 58.40304893116979,
+            "safe": true,
+            "exactInventory": true,
+            "exactMechanismCounts": true,
+            "peakActive": 4,
+            "inventoryCount": 69,
+            "pooledActivationCount": 5,
+            "nativeFallbackCount": 15,
+            "firstFiveInteractiveMs": 96.76379099999758,
+            "cleanupInventoryCount": 54,
+            "loadAverage": {
+              "before": [31.82421875, 26.16357421875, 24.20166015625],
+              "after": [29.916015625, 25.86181640625, 24.1064453125]
+            },
+            "resourceUsage": {
+              "userCpuMs": 20.365,
+              "systemCpuMs": 35.001,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 556
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 17.105707999995502,
+                "mutationMs": 18.306832999995095,
+                "verifyMs": 13.493290999998862,
+                "mechanism": "pooled-activation",
+                "interactiveAtMs": 48.93266600000061,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.779374999998254,
+                "mutationMs": 22.13029099999403,
+                "verifyMs": 14.6314579999962,
+                "mechanism": "pooled-activation",
+                "interactiveAtMs": 52.311791000000085,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.11250000000291,
+                "mutationMs": 18.806250000001455,
+                "verifyMs": 14.589583000000857,
+                "mechanism": "pooled-activation",
+                "interactiveAtMs": 47.965291000000434,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.276042000004963,
+                "mutationMs": 18.274957999994513,
+                "verifyMs": 12.35216699999728,
+                "mechanism": "pooled-activation",
+                "interactiveAtMs": 46.89895799999795,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.983625000000757,
+                "mutationMs": 18.16241699999955,
+                "verifyMs": 17.669832999999926,
+                "mechanism": "pooled-activation",
+                "interactiveAtMs": 96.76379099999758,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.812291999995068,
+                "mutationMs": 48.56220800000301,
+                "verifyMs": 12.704415999993216,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 121.08633299999929,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 15.40979199999856,
+                "mutationMs": 50.483416999995825,
+                "verifyMs": 10.450166000002355,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 125.35545799999818,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.529249999999593,
+                "mutationMs": 51.19983299999876,
+                "verifyMs": 13.775500000003376,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 131.8622499999983,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 15.01758300000074,
+                "mutationMs": 38.19525000000431,
+                "verifyMs": 13.94854199999827,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 163.971375000001,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.684667000001355,
+                "mutationMs": 48.62366699999984,
+                "verifyMs": 11.123375000002852,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 192.5541249999951,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.061541999995825,
+                "mutationMs": 50.28624999999738,
+                "verifyMs": 10.516708000002836,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 200.26787499999773,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.705957999998645,
+                "mutationMs": 50.10124999999971,
+                "verifyMs": 11.635207999999693,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 205.33758300000045,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.42316700000083,
+                "mutationMs": 44.3088329999955,
+                "verifyMs": 17.7687919999953,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 238.51425000000017,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.581749999997555,
+                "mutationMs": 46.29370799999742,
+                "verifyMs": 11.918791999996756,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 261.3837080000012,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.720874999999069,
+                "mutationMs": 45.48983399999997,
+                "verifyMs": 12.06054099999892,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 270.580750000001,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.342791999995825,
+                "mutationMs": 45.65866699999606,
+                "verifyMs": 10.66033299999981,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 273.0264160000006,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.966584000001603,
+                "mutationMs": 40.43416600000637,
+                "verifyMs": 18.399250000002212,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 311.3544580000016,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.055916999997862,
+                "mutationMs": 44.75200000000041,
+                "verifyMs": 9.940041999994719,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 327.1609160000007,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.758417000004556,
+                "mutationMs": 47.1270829999994,
+                "verifyMs": 9.754416999996465,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 339.2595829999991,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.198416000006546,
+                "mutationMs": 50.13870799999859,
+                "verifyMs": 9.058832999995502,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 342.4439579999962,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 4,
+          "order": ["pooledActivation", "nativeCreate"],
+          "nativeCreate": {
+            "strategy": "nativeCreate",
+            "wallMs": 337.0373749999999,
+            "throughputPerSecond": 59.3405998370359,
+            "safe": true,
+            "exactInventory": true,
+            "exactMechanismCounts": true,
+            "peakActive": 4,
+            "inventoryCount": 74,
+            "pooledActivationCount": 0,
+            "nativeFallbackCount": 0,
+            "firstFiveInteractiveMs": 134.37670899999648,
+            "cleanupInventoryCount": 54,
+            "loadAverage": {
+              "before": [27.92041015625, 25.51513671875, 23.994140625],
+              "after": [27.92041015625, 25.51513671875, 23.994140625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 10.721,
+              "systemCpuMs": 22.141,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 334
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 10.512833000000683,
+                "mutationMs": 45.61470900000131,
+                "verifyMs": 11.501208000001498,
+                "mechanism": "native-create",
+                "interactiveAtMs": 67.64574999999604,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.620042000002286,
+                "mutationMs": 44.575792000003275,
+                "verifyMs": 12.36466699999437,
+                "mechanism": "native-create",
+                "interactiveAtMs": 67.98470899999666,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.636292000002868,
+                "mutationMs": 45.97533299999486,
+                "verifyMs": 10.93262500000128,
+                "mechanism": "native-create",
+                "interactiveAtMs": 68.30574999999953,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.401625000005879,
+                "mutationMs": 45.22112499999639,
+                "verifyMs": 10.224499999996624,
+                "mechanism": "native-create",
+                "interactiveAtMs": 67.17770899999596,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.039583000005223,
+                "mutationMs": 46.353833999994094,
+                "verifyMs": 9.780083999998169,
+                "mechanism": "native-create",
+                "interactiveAtMs": 134.37670899999648,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.53475000000617,
+                "mutationMs": 52.51779200000601,
+                "verifyMs": 10.519666000000143,
+                "mechanism": "native-create",
+                "interactiveAtMs": 140.24374999999418,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.604958000003535,
+                "mutationMs": 53.12029099999927,
+                "verifyMs": 10.005250000001979,
+                "mechanism": "native-create",
+                "interactiveAtMs": 140.7230419999978,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.612709000000905,
+                "mutationMs": 47.76283400000102,
+                "verifyMs": 9.096666999997979,
+                "mechanism": "native-create",
+                "interactiveAtMs": 134.78395900000032,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.464416999995592,
+                "mutationMs": 50.097750000000815,
+                "verifyMs": 9.370209000000614,
+                "mechanism": "native-create",
+                "interactiveAtMs": 203.32320899999468,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.16962500000227,
+                "mutationMs": 44.34224999999424,
+                "verifyMs": 9.764916000000085,
+                "mechanism": "native-create",
+                "interactiveAtMs": 199.08633399999962,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.715541999998095,
+                "mutationMs": 43.188083000000915,
+                "verifyMs": 9.299874999996973,
+                "mechanism": "native-create",
+                "interactiveAtMs": 202.4646670000002,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 8.827791999996407,
+                "mutationMs": 43.17595900000015,
+                "verifyMs": 10.170167000003858,
+                "mechanism": "native-create",
+                "interactiveAtMs": 202.91079199999513,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 8.662499999998545,
+                "mutationMs": 43.96366699999635,
+                "verifyMs": 10.496916999996756,
+                "mechanism": "native-create",
+                "interactiveAtMs": 262.2407089999979,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.149459000000206,
+                "mutationMs": 51.23695800000132,
+                "verifyMs": 12.130167000002984,
+                "mechanism": "native-create",
+                "interactiveAtMs": 274.995041999995,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 8.30000000000291,
+                "mutationMs": 46.95933399999922,
+                "verifyMs": 11.807374999996682,
+                "mechanism": "native-create",
+                "interactiveAtMs": 269.9942089999968,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.066790999997465,
+                "mutationMs": 46.440458999997645,
+                "verifyMs": 10.513542000000598,
+                "mechanism": "native-create",
+                "interactiveAtMs": 269.36912499999744,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.899833000003127,
+                "mutationMs": 42.43891699999949,
+                "verifyMs": 10.712375000002794,
+                "mechanism": "native-create",
+                "interactiveAtMs": 326.32041699999536,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.711792000001878,
+                "mutationMs": 47.825791999996,
+                "verifyMs": 9.629750000000058,
+                "mechanism": "native-create",
+                "interactiveAtMs": 336.56954199999745,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.516665999995894,
+                "mutationMs": 46.15595899999607,
+                "verifyMs": 9.896374999996624,
+                "mechanism": "native-create",
+                "interactiveAtMs": 335.58474999999453,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 8.92987500000163,
+                "mutationMs": 44.566875000004075,
+                "verifyMs": 8.52412500000355,
+                "mechanism": "native-create",
+                "interactiveAtMs": 337.034083999999,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          },
+          "pooledActivation": {
+            "strategy": "pooledActivation",
+            "wallMs": 370.4627909999981,
+            "throughputPerSecond": 53.986528433836966,
+            "safe": true,
+            "exactInventory": true,
+            "exactMechanismCounts": true,
+            "peakActive": 4,
+            "inventoryCount": 69,
+            "pooledActivationCount": 5,
+            "nativeFallbackCount": 15,
+            "firstFiveInteractiveMs": 86.77204099999653,
+            "cleanupInventoryCount": 54,
+            "loadAverage": {
+              "before": [27.92041015625, 25.51513671875, 23.994140625],
+              "after": [27.92041015625, 25.51513671875, 23.994140625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 19.278,
+              "systemCpuMs": 34.801,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 528
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 12.977666999999201,
+                "mutationMs": 16.730541999997513,
+                "verifyMs": 13.122957999999926,
+                "mechanism": "pooled-activation",
+                "interactiveAtMs": 42.879290999997465,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.321416999999201,
+                "mutationMs": 18.491957999998704,
+                "verifyMs": 12.282624999999825,
+                "mechanism": "pooled-activation",
+                "interactiveAtMs": 45.56500000000233,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.238125000003492,
+                "mutationMs": 20.72820900000079,
+                "verifyMs": 12.303500000001804,
+                "mechanism": "pooled-activation",
+                "interactiveAtMs": 47.06133299999783,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.693749999998545,
+                "mutationMs": 20.703165999999328,
+                "verifyMs": 11.334625000003143,
+                "mechanism": "pooled-activation",
+                "interactiveAtMs": 48.07904099999723,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.64854199999536,
+                "mutationMs": 15.314375000001746,
+                "verifyMs": 13.881416999996873,
+                "mechanism": "pooled-activation",
+                "interactiveAtMs": 86.77204099999653,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.897209000002476,
+                "mutationMs": 51.250958000004175,
+                "verifyMs": 14.33112500000425,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 124.078207999999,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.856542000001355,
+                "mutationMs": 54.99041700000089,
+                "verifyMs": 11.113707999997132,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 126.05470799999603,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.149124999996275,
+                "mutationMs": 51.38945799999783,
+                "verifyMs": 11.46074999999837,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 122.10974999999598,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.296249999999418,
+                "mutationMs": 42.20787500000006,
+                "verifyMs": 13.034290999996301,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 156.35854100000142,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 15.482999999992899,
+                "mutationMs": 63.596082999996725,
+                "verifyMs": 13.608584000001429,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 214.84512499999983,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.533624999996391,
+                "mutationMs": 56.51137500000186,
+                "verifyMs": 14.443833000004815,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 207.59983300000022,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.507459000000381,
+                "mutationMs": 55.65620900000067,
+                "verifyMs": 12.352249999996275,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 206.60904099999607,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.387042000002111,
+                "mutationMs": 51.9142090000023,
+                "verifyMs": 11.010207999999693,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 230.70149999999558,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.887084000001778,
+                "mutationMs": 55.60304200000246,
+                "verifyMs": 14.605917000000773,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 290.7446659999987,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.245415999997931,
+                "mutationMs": 54.1973749999961,
+                "verifyMs": 12.723416999993788,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 285.81925000000047,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.968124999999418,
+                "mutationMs": 55.6952919999967,
+                "verifyMs": 15.516416000005847,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 299.0668749999968,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.911291999997047,
+                "mutationMs": 58.276958000002196,
+                "verifyMs": 12.418166999996174,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 312.340833000002,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.408290999999736,
+                "mutationMs": 49.02150000000256,
+                "verifyMs": 12.032832999997481,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 359.32316600000195,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.473791999997047,
+                "mutationMs": 55.35887499999808,
+                "verifyMs": 10.849792000000889,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 370.4603330000027,
+                "code": 0,
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.053541999994195,
+                "mutationMs": 50.20566599999438,
+                "verifyMs": 10.084958999999799,
+                "mechanism": "native-fallback",
+                "interactiveAtMs": 370.4467910000021,
+                "code": 0,
+                "stderr": ""
+              }
+            ]
+          }
+        }
+      ],
+      "nativeCreate": {
+        "wallMs": {
+          "samples": [
+            337.0373749999999, 427.9719580000019, 482.1995840000018, 493.6479580000005,
+            511.18512499999997
+          ],
+          "median": 482.1995840000018,
+          "p90": 511.18512499999997,
+          "p95": 511.18512499999997,
+          "max": 511.18512499999997
+        },
+        "firstFiveInteractiveMs": {
+          "samples": [
+            134.37670899999648, 161.1420840000028, 177.80783300000257, 189.48458300000038,
+            228.35241700000006
+          ],
+          "median": 177.80783300000257,
+          "p90": 228.35241700000006,
+          "p95": 228.35241700000006,
+          "max": 228.35241700000006
+        },
+        "commandMs": {
+          "samples": [
+            62.020875000009255, 62.17391800000041, 62.203499999995984, 63.12308399999165,
+            64.05112500000541, 64.27679099999659, 65.56899999998859, 65.8472499999989,
+            66.02079199999571, 66.4722099999999, 67.06670899999881, 67.16733399999794,
+            67.17350099999749, 67.54424999999901, 67.56050099999993, 67.62875000000349,
+            68.93237599999702, 72.51658400000451, 72.57220800001232, 72.73049900000478,
+            73.4151249999959, 73.5472090000003, 73.73658299999988, 73.90674999999828,
+            73.92579199999818, 75.63683299999684, 75.75583299999926, 75.78399999999965,
+            75.88154200000099, 75.94029000000228, 76.07987499999945, 76.87275000000227,
+            77.29933300000084, 77.72533300000214, 77.82750099999976, 77.84170799999993,
+            78.17874999999913, 78.23691699999836, 78.24637399999847, 79.01962399999684,
+            79.98004199999923, 80.02187500000036, 80.59420799999862, 81.15712500000518,
+            81.33004299999448, 81.53808400000344, 83.39766600000439, 83.50645800000348,
+            84.06874999999854, 84.21262499999648, 84.2244580000006, 86.55925099999877,
+            86.78262399999949, 87.57949999999983, 88.3894999999975, 89.17237499999828,
+            89.31437500000084, 90.64296000000104, 90.71316799999931, 91.16829200000211,
+            91.40045800000007, 92.34841699999924, 92.545626000001, 93.38066699999945,
+            93.47033299999748, 93.90070900000137, 95.56616699999995, 95.88679299999421,
+            96.71370800000022, 98.20899999999892, 98.5622919999987, 98.59591699999874,
+            98.66233300000022, 99.09991599999921, 99.25116600000001, 99.37262399999963,
+            99.4952489999996, 100.1311250000008, 100.38962399999946, 101.2759589999996,
+            102.69837499999994, 103.48454200000015, 103.97983300000124, 104.08879199999956,
+            105.75933299999997, 106.04458299999897, 107.41004199999952, 108.42620899999929,
+            108.69783300000017, 114.21729199999936, 115.93337400000019, 117.92925000000105,
+            126.17649999999958, 126.18529300000228, 128.9653760000001, 135.51679199999853,
+            138.2688339999986, 146.041790999996, 146.3120839999974, 157.45425100000284
+          ],
+          "median": 84.21262499999648,
+          "p90": 114.21729199999936,
+          "p95": 128.9653760000001,
+          "max": 157.45425100000284
+        },
+        "throughputPerSecond": {
+          "samples": [
+            39.124769133295885, 40.514702179726186, 41.47660152274193, 46.732033784325445,
+            59.3405998370359
+          ],
+          "median": 41.47660152274193,
+          "p90": 59.3405998370359,
+          "p95": 59.3405998370359,
+          "max": 59.3405998370359
+        },
+        "allSafe": true
+      },
+      "pooledActivation": {
+        "wallMs": {
+          "samples": [
+            342.447874999998, 370.4627909999981, 422.17504200000076, 1190.7199999999993,
+            1398.4003329999978
+          ],
+          "median": 422.17504200000076,
+          "p90": 1398.4003329999978,
+          "p95": 1398.4003329999978,
+          "max": 1398.4003329999978
+        },
+        "firstFiveInteractiveMs": {
+          "samples": [
+            77.76141699999789, 86.77204099999653, 96.76379099999758, 107.35979200000111,
+            586.6174999999994
+          ],
+          "median": 96.76379099999758,
+          "p90": 586.6174999999994,
+          "p95": 586.6174999999994,
+          "max": 586.6174999999994
+        },
+        "commandMs": {
+          "samples": [
+            37.02849999999853, 37.81445800000438, 38.95879200000127, 38.993790999998964,
+            39.00116600000183, 39.39783400000306, 39.45841600000131, 41.705331999997725,
+            42.0929989999986, 42.83116699999664, 43.84433399999398, 44.903166999996756,
+            45.09599999999773, 46.269834000006085, 46.50833300000522, 46.731541000001016,
+            48.90583199998946, 49.81587500000023, 51.541123999988486, 65.74795899999299,
+            67.16137500000332, 67.66179199999169, 68.63991700000042, 68.79424999999173,
+            68.83062400000017, 69.39595700000064, 69.53841599999578, 70.25058300000092,
+            70.27124999999796, 70.97687399999995, 71.25562499999978, 71.34416699998837,
+            71.43170900000405, 72.39833399999952, 72.80000000001019, 72.98383300000023,
+            73.0789159999913, 73.44241599999805, 73.46262399999978, 73.99933299999248,
+            74.3114590000041, 74.50079199999163, 74.51487499999894, 74.86449999999604,
+            74.99066599999969, 76.34337499999674, 78.16620799998782, 78.4792920000109,
+            78.96066699999938, 79.50458300000173, 79.68245899999602, 80.51591799999733,
+            81.60641699999542, 81.87775100000181, 83.48883300000307, 84.09604300000501,
+            84.17983300000196, 92.68766699999105, 93.24129100000573, 95.08508199999415,
+            99.74124999999731, 99.96012600000176, 100.17404100000203, 101.78370800000266,
+            104.11112499999945, 108.8606260000015, 127.86408400000073, 128.7310000000016,
+            130.72437499999978, 131.1962910000002, 133.9041670000006, 137.0292499999996,
+            141.86975100000018, 148.39741700000013, 158.79054200000064, 159.5351670000009,
+            161.03112599999986, 168.37262500000088, 175.07195899999897, 177.20345799999996,
+            182.51087500000085, 193.59541699999954, 202.73741599999994, 215.93220800000017,
+            223.5333750000027, 244.74633299999914, 273.2070410000006, 278.72316599999976,
+            324.28733400000056, 328.8962500000016, 330.1768329999977, 345.6357489999973,
+            383.8038750000005, 407.3212080000003, 420.304709, 432.7146249999996, 548.7511249999952,
+            651.4461260000026, 672.6679579999945, 723.6417080000028
+          ],
+          "median": 79.50458300000173,
+          "p90": 328.8962500000016,
+          "p95": 420.304709,
+          "max": 723.6417080000028
+        },
+        "throughputPerSecond": {
+          "samples": [
+            14.302056090829058, 16.7965600644988, 47.373714716181546, 53.986528433836966,
+            58.40304893116979
+          ],
+          "median": 47.373714716181546,
+          "p90": 58.40304893116979,
+          "p95": 58.40304893116979,
+          "max": 58.40304893116979
+        },
+        "allSafe": true
+      },
+      "medianImprovementFraction": 0.12448070050595647,
+      "p95ImprovementFraction": -1.7356045092274504,
+      "firstFiveMedianImprovementFraction": 0.45579567914763247,
+      "firstFiveP95ImprovementFraction": -1.5689130323503395,
+      "allSafe": true
+    }
+  ],
+  "repetitions": [
+    {
+      "repetition": 0,
+      "temporaryRootRemoved": true,
+      "poolFill": {
+        "wallMs": 58.426082999999835,
+        "commandMs": [
+          41.469125000000076, 35.4535420000002, 36.608374999999796, 35.11308399999962,
+          22.412833999999748
+        ],
+        "safe": true,
+        "loadAverage": {
+          "before": [31.013671875, 25.4287109375, 23.8818359375],
+          "after": [31.013671875, 25.4287109375, 23.8818359375]
+        },
+        "resourceUsage": {
+          "userCpuMs": 8.037,
+          "systemCpuMs": 9.488,
+          "fsReads": 0,
+          "fsWrites": 0,
+          "voluntaryContextSwitches": 0,
+          "involuntaryContextSwitches": 225
+        }
+      }
+    },
+    {
+      "repetition": 1,
+      "temporaryRootRemoved": true,
+      "poolFill": {
+        "wallMs": 58.14191700000083,
+        "commandMs": [
+          42.9345830000002, 34.431916999999885, 39.54175000000032, 34.12929199999962,
+          23.044041999999536
+        ],
+        "safe": true,
+        "loadAverage": {
+          "before": [32.7373046875, 25.98876953125, 24.0986328125],
+          "after": [32.7373046875, 25.98876953125, 24.0986328125]
+        },
+        "resourceUsage": {
+          "userCpuMs": 5.693,
+          "systemCpuMs": 9.456,
+          "fsReads": 0,
+          "fsWrites": 0,
+          "voluntaryContextSwitches": 0,
+          "involuntaryContextSwitches": 182
+        }
+      }
+    },
+    {
+      "repetition": 2,
+      "temporaryRootRemoved": true,
+      "poolFill": {
+        "wallMs": 125.73420800000167,
+        "commandMs": [
+          74.37562499999694, 71.64929200000188, 59.72541600000113, 72.55550000000221,
+          62.50895799999853
+        ],
+        "safe": true,
+        "loadAverage": {
+          "before": [32.24267578125, 26.07763671875, 24.150390625],
+          "after": [32.24267578125, 26.07763671875, 24.150390625]
+        },
+        "resourceUsage": {
+          "userCpuMs": 5.974,
+          "systemCpuMs": 8.911,
+          "fsReads": 0,
+          "fsWrites": 0,
+          "voluntaryContextSwitches": 0,
+          "involuntaryContextSwitches": 197
+        }
+      }
+    },
+    {
+      "repetition": 3,
+      "temporaryRootRemoved": true,
+      "poolFill": {
+        "wallMs": 53.50550000000294,
+        "commandMs": [
+          31.992000000002008, 30.347583999999188, 31.05658400000175, 33.30095900000015,
+          22.597499999999854
+        ],
+        "safe": true,
+        "loadAverage": {
+          "before": [29.98095703125, 25.7109375, 24.0322265625],
+          "after": [29.98095703125, 25.7109375, 24.0322265625]
+        },
+        "resourceUsage": {
+          "userCpuMs": 5.538,
+          "systemCpuMs": 8.78,
+          "fsReads": 0,
+          "fsWrites": 0,
+          "voluntaryContextSwitches": 0,
+          "involuntaryContextSwitches": 154
+        }
+      }
+    },
+    {
+      "repetition": 4,
+      "temporaryRootRemoved": true,
+      "poolFill": {
+        "wallMs": 121.25287499999831,
+        "commandMs": [
+          60.08383299999696, 66.9855000000025, 60.70233300000109, 59.228041999995185,
+          61.1392909999995
+        ],
+        "safe": true,
+        "loadAverage": {
+          "before": [29.916015625, 25.86181640625, 24.1064453125],
+          "after": [29.916015625, 25.86181640625, 24.1064453125]
+        },
+        "resourceUsage": {
+          "userCpuMs": 6.731,
+          "systemCpuMs": 8.685,
+          "fsReads": 0,
+          "fsWrites": 0,
+          "voluntaryContextSwitches": 0,
+          "involuntaryContextSwitches": 185
+        }
+      }
+    }
+  ]
+}

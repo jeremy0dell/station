@@ -1,0 +1,4242 @@
+{
+  "schemaVersion": 1,
+  "benchmark": "station-quick-session-native-git-list-comparison",
+  "generatedAt": "2026-08-25T06:36:55.247Z",
+  "machine": {
+    "platform": "darwin",
+    "arch": "arm64",
+    "cpuModel": "Apple M4",
+    "logicalCpuCount": 10
+  },
+  "tools": {
+    "worktrunk": "wt v0.72.0",
+    "git": "git version 2.50.1 (Apple Git-155)"
+  },
+  "repositoryShape": {
+    "initialWorktrees": 49,
+    "ordinaryLinkedWorktrees": 45,
+    "detachedWorktrees": 1,
+    "lockedWorktrees": 1,
+    "prunableWorktrees": 1,
+    "repetitions": 5
+  },
+  "keepThresholds": {
+    "medianImprovementFraction": 0.8,
+    "p95ImprovementFraction": 0.8
+  },
+  "worktrunk": {
+    "wallMs": {
+      "samples": [
+        271.480333, 294.56483299999945, 254.61370799999986, 343.55320800000027, 336.34329199999956
+      ],
+      "median": 294.56483299999945,
+      "p90": 343.55320800000027,
+      "p95": 343.55320800000027,
+      "max": 343.55320800000027
+    },
+    "allSafe": true
+  },
+  "nativeGit": {
+    "wallMs": {
+      "samples": [
+        22.99354100000005, 18.622667000000547, 16.464332999999897, 18.407333999999537,
+        23.782624999999825
+      ],
+      "median": 18.622667000000547,
+      "p90": 23.782624999999825,
+      "p95": 23.782624999999825,
+      "max": 23.782624999999825
+    },
+    "allSafe": true
+  },
+  "medianImprovementFraction": 0.9367790553599432,
+  "p95ImprovementFraction": 0.9307745512305046,
+  "allSafe": true,
+  "pairs": [
+    {
+      "repetition": 0,
+      "order": ["worktrunk", "nativeGit"],
+      "temporaryRootRemoved": true,
+      "worktrunk": {
+        "implementation": "worktrunk",
+        "wallMs": 271.480333,
+        "safe": true,
+        "parseSucceeded": true,
+        "exactInventory": true,
+        "inventoryCount": 49,
+        "loadAverage": {
+          "before": [18.83642578125, 19.28564453125, 19.84521484375],
+          "after": [18.83642578125, 19.28564453125, 19.84521484375]
+        },
+        "resourceUsage": {
+          "userCpuMs": 4.013,
+          "systemCpuMs": 1.041,
+          "fsReads": 0,
+          "fsWrites": 0,
+          "voluntaryContextSwitches": 0,
+          "involuntaryContextSwitches": 47
+        },
+        "inventory": [
+          {
+            "path": "$TMP_ROOT/repo",
+            "branch": "main",
+            "primary": true,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/detached",
+            "branch": null,
+            "primary": false,
+            "detached": true,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/locked",
+            "branch": "locked",
+            "primary": false,
+            "detached": false,
+            "locked": true,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/prunable",
+            "branch": "prunable",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": true
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-0",
+            "branch": "shape-0",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-1",
+            "branch": "shape-1",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-10",
+            "branch": "shape-10",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-11",
+            "branch": "shape-11",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-12",
+            "branch": "shape-12",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-13",
+            "branch": "shape-13",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-14",
+            "branch": "shape-14",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-15",
+            "branch": "shape-15",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-16",
+            "branch": "shape-16",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-17",
+            "branch": "shape-17",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-18",
+            "branch": "shape-18",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-19",
+            "branch": "shape-19",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-2",
+            "branch": "shape-2",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-20",
+            "branch": "shape-20",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-21",
+            "branch": "shape-21",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-22",
+            "branch": "shape-22",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-23",
+            "branch": "shape-23",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-24",
+            "branch": "shape-24",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-25",
+            "branch": "shape-25",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-26",
+            "branch": "shape-26",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-27",
+            "branch": "shape-27",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-28",
+            "branch": "shape-28",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-29",
+            "branch": "shape-29",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-3",
+            "branch": "shape-3",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-30",
+            "branch": "shape-30",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-31",
+            "branch": "shape-31",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-32",
+            "branch": "shape-32",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-33",
+            "branch": "shape-33",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-34",
+            "branch": "shape-34",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-35",
+            "branch": "shape-35",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-36",
+            "branch": "shape-36",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-37",
+            "branch": "shape-37",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-38",
+            "branch": "shape-38",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-39",
+            "branch": "shape-39",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-4",
+            "branch": "shape-4",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-40",
+            "branch": "shape-40",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-41",
+            "branch": "shape-41",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-42",
+            "branch": "shape-42",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-43",
+            "branch": "shape-43",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-44",
+            "branch": "shape-44",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-5",
+            "branch": "shape-5",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-6",
+            "branch": "shape-6",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-7",
+            "branch": "shape-7",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-8",
+            "branch": "shape-8",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-9",
+            "branch": "shape-9",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          }
+        ],
+        "code": 0,
+        "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+      },
+      "nativeGit": {
+        "implementation": "nativeGit",
+        "wallMs": 22.99354100000005,
+        "safe": true,
+        "parseSucceeded": true,
+        "exactInventory": true,
+        "inventoryCount": 49,
+        "loadAverage": {
+          "before": [18.83642578125, 19.28564453125, 19.84521484375],
+          "after": [18.83642578125, 19.28564453125, 19.84521484375]
+        },
+        "resourceUsage": {
+          "userCpuMs": 0.859,
+          "systemCpuMs": 0.527,
+          "fsReads": 0,
+          "fsWrites": 0,
+          "voluntaryContextSwitches": 0,
+          "involuntaryContextSwitches": 18
+        },
+        "inventory": [
+          {
+            "path": "$TMP_ROOT/repo",
+            "branch": "main",
+            "primary": true,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/detached",
+            "branch": null,
+            "primary": false,
+            "detached": true,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/locked",
+            "branch": "locked",
+            "primary": false,
+            "detached": false,
+            "locked": true,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/prunable",
+            "branch": "prunable",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": true
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-0",
+            "branch": "shape-0",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-1",
+            "branch": "shape-1",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-10",
+            "branch": "shape-10",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-11",
+            "branch": "shape-11",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-12",
+            "branch": "shape-12",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-13",
+            "branch": "shape-13",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-14",
+            "branch": "shape-14",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-15",
+            "branch": "shape-15",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-16",
+            "branch": "shape-16",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-17",
+            "branch": "shape-17",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-18",
+            "branch": "shape-18",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-19",
+            "branch": "shape-19",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-2",
+            "branch": "shape-2",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-20",
+            "branch": "shape-20",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-21",
+            "branch": "shape-21",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-22",
+            "branch": "shape-22",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-23",
+            "branch": "shape-23",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-24",
+            "branch": "shape-24",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-25",
+            "branch": "shape-25",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-26",
+            "branch": "shape-26",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-27",
+            "branch": "shape-27",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-28",
+            "branch": "shape-28",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-29",
+            "branch": "shape-29",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-3",
+            "branch": "shape-3",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-30",
+            "branch": "shape-30",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-31",
+            "branch": "shape-31",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-32",
+            "branch": "shape-32",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-33",
+            "branch": "shape-33",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-34",
+            "branch": "shape-34",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-35",
+            "branch": "shape-35",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-36",
+            "branch": "shape-36",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-37",
+            "branch": "shape-37",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-38",
+            "branch": "shape-38",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-39",
+            "branch": "shape-39",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-4",
+            "branch": "shape-4",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-40",
+            "branch": "shape-40",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-41",
+            "branch": "shape-41",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-42",
+            "branch": "shape-42",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-43",
+            "branch": "shape-43",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-44",
+            "branch": "shape-44",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-5",
+            "branch": "shape-5",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-6",
+            "branch": "shape-6",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-7",
+            "branch": "shape-7",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-8",
+            "branch": "shape-8",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-9",
+            "branch": "shape-9",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          }
+        ],
+        "code": 0,
+        "stderr": ""
+      }
+    },
+    {
+      "repetition": 1,
+      "order": ["nativeGit", "worktrunk"],
+      "temporaryRootRemoved": true,
+      "worktrunk": {
+        "implementation": "worktrunk",
+        "wallMs": 294.56483299999945,
+        "safe": true,
+        "parseSucceeded": true,
+        "exactInventory": true,
+        "inventoryCount": 49,
+        "loadAverage": {
+          "before": [18.83642578125, 19.28564453125, 19.84521484375],
+          "after": [18.83642578125, 19.28564453125, 19.84521484375]
+        },
+        "resourceUsage": {
+          "userCpuMs": 1.32,
+          "systemCpuMs": 0.862,
+          "fsReads": 0,
+          "fsWrites": 0,
+          "voluntaryContextSwitches": 0,
+          "involuntaryContextSwitches": 17
+        },
+        "inventory": [
+          {
+            "path": "$TMP_ROOT/repo",
+            "branch": "main",
+            "primary": true,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/detached",
+            "branch": null,
+            "primary": false,
+            "detached": true,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/locked",
+            "branch": "locked",
+            "primary": false,
+            "detached": false,
+            "locked": true,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/prunable",
+            "branch": "prunable",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": true
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-0",
+            "branch": "shape-0",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-1",
+            "branch": "shape-1",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-10",
+            "branch": "shape-10",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-11",
+            "branch": "shape-11",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-12",
+            "branch": "shape-12",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-13",
+            "branch": "shape-13",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-14",
+            "branch": "shape-14",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-15",
+            "branch": "shape-15",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-16",
+            "branch": "shape-16",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-17",
+            "branch": "shape-17",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-18",
+            "branch": "shape-18",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-19",
+            "branch": "shape-19",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-2",
+            "branch": "shape-2",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-20",
+            "branch": "shape-20",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-21",
+            "branch": "shape-21",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-22",
+            "branch": "shape-22",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-23",
+            "branch": "shape-23",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-24",
+            "branch": "shape-24",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-25",
+            "branch": "shape-25",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-26",
+            "branch": "shape-26",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-27",
+            "branch": "shape-27",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-28",
+            "branch": "shape-28",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-29",
+            "branch": "shape-29",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-3",
+            "branch": "shape-3",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-30",
+            "branch": "shape-30",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-31",
+            "branch": "shape-31",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-32",
+            "branch": "shape-32",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-33",
+            "branch": "shape-33",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-34",
+            "branch": "shape-34",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-35",
+            "branch": "shape-35",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-36",
+            "branch": "shape-36",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-37",
+            "branch": "shape-37",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-38",
+            "branch": "shape-38",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-39",
+            "branch": "shape-39",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-4",
+            "branch": "shape-4",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-40",
+            "branch": "shape-40",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-41",
+            "branch": "shape-41",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-42",
+            "branch": "shape-42",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-43",
+            "branch": "shape-43",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-44",
+            "branch": "shape-44",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-5",
+            "branch": "shape-5",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-6",
+            "branch": "shape-6",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-7",
+            "branch": "shape-7",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-8",
+            "branch": "shape-8",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-9",
+            "branch": "shape-9",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          }
+        ],
+        "code": 0,
+        "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+      },
+      "nativeGit": {
+        "implementation": "nativeGit",
+        "wallMs": 18.622667000000547,
+        "safe": true,
+        "parseSucceeded": true,
+        "exactInventory": true,
+        "inventoryCount": 49,
+        "loadAverage": {
+          "before": [18.83642578125, 19.28564453125, 19.84521484375],
+          "after": [18.83642578125, 19.28564453125, 19.84521484375]
+        },
+        "resourceUsage": {
+          "userCpuMs": 0.429,
+          "systemCpuMs": 0.471,
+          "fsReads": 0,
+          "fsWrites": 0,
+          "voluntaryContextSwitches": 0,
+          "involuntaryContextSwitches": 8
+        },
+        "inventory": [
+          {
+            "path": "$TMP_ROOT/repo",
+            "branch": "main",
+            "primary": true,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/detached",
+            "branch": null,
+            "primary": false,
+            "detached": true,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/locked",
+            "branch": "locked",
+            "primary": false,
+            "detached": false,
+            "locked": true,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/prunable",
+            "branch": "prunable",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": true
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-0",
+            "branch": "shape-0",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-1",
+            "branch": "shape-1",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-10",
+            "branch": "shape-10",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-11",
+            "branch": "shape-11",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-12",
+            "branch": "shape-12",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-13",
+            "branch": "shape-13",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-14",
+            "branch": "shape-14",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-15",
+            "branch": "shape-15",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-16",
+            "branch": "shape-16",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-17",
+            "branch": "shape-17",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-18",
+            "branch": "shape-18",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-19",
+            "branch": "shape-19",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-2",
+            "branch": "shape-2",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-20",
+            "branch": "shape-20",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-21",
+            "branch": "shape-21",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-22",
+            "branch": "shape-22",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-23",
+            "branch": "shape-23",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-24",
+            "branch": "shape-24",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-25",
+            "branch": "shape-25",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-26",
+            "branch": "shape-26",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-27",
+            "branch": "shape-27",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-28",
+            "branch": "shape-28",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-29",
+            "branch": "shape-29",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-3",
+            "branch": "shape-3",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-30",
+            "branch": "shape-30",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-31",
+            "branch": "shape-31",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-32",
+            "branch": "shape-32",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-33",
+            "branch": "shape-33",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-34",
+            "branch": "shape-34",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-35",
+            "branch": "shape-35",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-36",
+            "branch": "shape-36",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-37",
+            "branch": "shape-37",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-38",
+            "branch": "shape-38",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-39",
+            "branch": "shape-39",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-4",
+            "branch": "shape-4",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-40",
+            "branch": "shape-40",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-41",
+            "branch": "shape-41",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-42",
+            "branch": "shape-42",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-43",
+            "branch": "shape-43",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-44",
+            "branch": "shape-44",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-5",
+            "branch": "shape-5",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-6",
+            "branch": "shape-6",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-7",
+            "branch": "shape-7",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-8",
+            "branch": "shape-8",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-9",
+            "branch": "shape-9",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          }
+        ],
+        "code": 0,
+        "stderr": ""
+      }
+    },
+    {
+      "repetition": 2,
+      "order": ["worktrunk", "nativeGit"],
+      "temporaryRootRemoved": true,
+      "worktrunk": {
+        "implementation": "worktrunk",
+        "wallMs": 254.61370799999986,
+        "safe": true,
+        "parseSucceeded": true,
+        "exactInventory": true,
+        "inventoryCount": 49,
+        "loadAverage": {
+          "before": [18.83642578125, 19.28564453125, 19.84521484375],
+          "after": [18.83642578125, 19.28564453125, 19.84521484375]
+        },
+        "resourceUsage": {
+          "userCpuMs": 1.147,
+          "systemCpuMs": 0.814,
+          "fsReads": 0,
+          "fsWrites": 0,
+          "voluntaryContextSwitches": 0,
+          "involuntaryContextSwitches": 29
+        },
+        "inventory": [
+          {
+            "path": "$TMP_ROOT/repo",
+            "branch": "main",
+            "primary": true,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/detached",
+            "branch": null,
+            "primary": false,
+            "detached": true,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/locked",
+            "branch": "locked",
+            "primary": false,
+            "detached": false,
+            "locked": true,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/prunable",
+            "branch": "prunable",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": true
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-0",
+            "branch": "shape-0",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-1",
+            "branch": "shape-1",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-10",
+            "branch": "shape-10",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-11",
+            "branch": "shape-11",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-12",
+            "branch": "shape-12",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-13",
+            "branch": "shape-13",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-14",
+            "branch": "shape-14",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-15",
+            "branch": "shape-15",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-16",
+            "branch": "shape-16",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-17",
+            "branch": "shape-17",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-18",
+            "branch": "shape-18",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-19",
+            "branch": "shape-19",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-2",
+            "branch": "shape-2",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-20",
+            "branch": "shape-20",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-21",
+            "branch": "shape-21",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-22",
+            "branch": "shape-22",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-23",
+            "branch": "shape-23",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-24",
+            "branch": "shape-24",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-25",
+            "branch": "shape-25",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-26",
+            "branch": "shape-26",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-27",
+            "branch": "shape-27",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-28",
+            "branch": "shape-28",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-29",
+            "branch": "shape-29",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-3",
+            "branch": "shape-3",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-30",
+            "branch": "shape-30",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-31",
+            "branch": "shape-31",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-32",
+            "branch": "shape-32",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-33",
+            "branch": "shape-33",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-34",
+            "branch": "shape-34",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-35",
+            "branch": "shape-35",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-36",
+            "branch": "shape-36",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-37",
+            "branch": "shape-37",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-38",
+            "branch": "shape-38",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-39",
+            "branch": "shape-39",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-4",
+            "branch": "shape-4",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-40",
+            "branch": "shape-40",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-41",
+            "branch": "shape-41",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-42",
+            "branch": "shape-42",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-43",
+            "branch": "shape-43",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-44",
+            "branch": "shape-44",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-5",
+            "branch": "shape-5",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-6",
+            "branch": "shape-6",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-7",
+            "branch": "shape-7",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-8",
+            "branch": "shape-8",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-9",
+            "branch": "shape-9",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          }
+        ],
+        "code": 0,
+        "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+      },
+      "nativeGit": {
+        "implementation": "nativeGit",
+        "wallMs": 16.464332999999897,
+        "safe": true,
+        "parseSucceeded": true,
+        "exactInventory": true,
+        "inventoryCount": 49,
+        "loadAverage": {
+          "before": [18.83642578125, 19.28564453125, 19.84521484375],
+          "after": [18.83642578125, 19.28564453125, 19.84521484375]
+        },
+        "resourceUsage": {
+          "userCpuMs": 0.859,
+          "systemCpuMs": 0.464,
+          "fsReads": 0,
+          "fsWrites": 0,
+          "voluntaryContextSwitches": 0,
+          "involuntaryContextSwitches": 5
+        },
+        "inventory": [
+          {
+            "path": "$TMP_ROOT/repo",
+            "branch": "main",
+            "primary": true,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/detached",
+            "branch": null,
+            "primary": false,
+            "detached": true,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/locked",
+            "branch": "locked",
+            "primary": false,
+            "detached": false,
+            "locked": true,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/prunable",
+            "branch": "prunable",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": true
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-0",
+            "branch": "shape-0",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-1",
+            "branch": "shape-1",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-10",
+            "branch": "shape-10",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-11",
+            "branch": "shape-11",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-12",
+            "branch": "shape-12",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-13",
+            "branch": "shape-13",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-14",
+            "branch": "shape-14",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-15",
+            "branch": "shape-15",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-16",
+            "branch": "shape-16",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-17",
+            "branch": "shape-17",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-18",
+            "branch": "shape-18",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-19",
+            "branch": "shape-19",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-2",
+            "branch": "shape-2",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-20",
+            "branch": "shape-20",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-21",
+            "branch": "shape-21",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-22",
+            "branch": "shape-22",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-23",
+            "branch": "shape-23",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-24",
+            "branch": "shape-24",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-25",
+            "branch": "shape-25",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-26",
+            "branch": "shape-26",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-27",
+            "branch": "shape-27",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-28",
+            "branch": "shape-28",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-29",
+            "branch": "shape-29",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-3",
+            "branch": "shape-3",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-30",
+            "branch": "shape-30",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-31",
+            "branch": "shape-31",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-32",
+            "branch": "shape-32",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-33",
+            "branch": "shape-33",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-34",
+            "branch": "shape-34",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-35",
+            "branch": "shape-35",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-36",
+            "branch": "shape-36",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-37",
+            "branch": "shape-37",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-38",
+            "branch": "shape-38",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-39",
+            "branch": "shape-39",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-4",
+            "branch": "shape-4",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-40",
+            "branch": "shape-40",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-41",
+            "branch": "shape-41",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-42",
+            "branch": "shape-42",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-43",
+            "branch": "shape-43",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-44",
+            "branch": "shape-44",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-5",
+            "branch": "shape-5",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-6",
+            "branch": "shape-6",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-7",
+            "branch": "shape-7",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-8",
+            "branch": "shape-8",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-9",
+            "branch": "shape-9",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          }
+        ],
+        "code": 0,
+        "stderr": ""
+      }
+    },
+    {
+      "repetition": 3,
+      "order": ["nativeGit", "worktrunk"],
+      "temporaryRootRemoved": true,
+      "worktrunk": {
+        "implementation": "worktrunk",
+        "wallMs": 343.55320800000027,
+        "safe": true,
+        "parseSucceeded": true,
+        "exactInventory": true,
+        "inventoryCount": 49,
+        "loadAverage": {
+          "before": [17.72802734375, 19.04833984375, 19.7578125],
+          "after": [17.72802734375, 19.04833984375, 19.7578125]
+        },
+        "resourceUsage": {
+          "userCpuMs": 0.976,
+          "systemCpuMs": 0.981,
+          "fsReads": 0,
+          "fsWrites": 0,
+          "voluntaryContextSwitches": 0,
+          "involuntaryContextSwitches": 25
+        },
+        "inventory": [
+          {
+            "path": "$TMP_ROOT/repo",
+            "branch": "main",
+            "primary": true,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/detached",
+            "branch": null,
+            "primary": false,
+            "detached": true,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/locked",
+            "branch": "locked",
+            "primary": false,
+            "detached": false,
+            "locked": true,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/prunable",
+            "branch": "prunable",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": true
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-0",
+            "branch": "shape-0",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-1",
+            "branch": "shape-1",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-10",
+            "branch": "shape-10",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-11",
+            "branch": "shape-11",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-12",
+            "branch": "shape-12",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-13",
+            "branch": "shape-13",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-14",
+            "branch": "shape-14",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-15",
+            "branch": "shape-15",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-16",
+            "branch": "shape-16",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-17",
+            "branch": "shape-17",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-18",
+            "branch": "shape-18",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-19",
+            "branch": "shape-19",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-2",
+            "branch": "shape-2",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-20",
+            "branch": "shape-20",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-21",
+            "branch": "shape-21",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-22",
+            "branch": "shape-22",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-23",
+            "branch": "shape-23",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-24",
+            "branch": "shape-24",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-25",
+            "branch": "shape-25",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-26",
+            "branch": "shape-26",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-27",
+            "branch": "shape-27",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-28",
+            "branch": "shape-28",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-29",
+            "branch": "shape-29",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-3",
+            "branch": "shape-3",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-30",
+            "branch": "shape-30",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-31",
+            "branch": "shape-31",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-32",
+            "branch": "shape-32",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-33",
+            "branch": "shape-33",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-34",
+            "branch": "shape-34",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-35",
+            "branch": "shape-35",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-36",
+            "branch": "shape-36",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-37",
+            "branch": "shape-37",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-38",
+            "branch": "shape-38",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-39",
+            "branch": "shape-39",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-4",
+            "branch": "shape-4",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-40",
+            "branch": "shape-40",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-41",
+            "branch": "shape-41",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-42",
+            "branch": "shape-42",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-43",
+            "branch": "shape-43",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-44",
+            "branch": "shape-44",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-5",
+            "branch": "shape-5",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-6",
+            "branch": "shape-6",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-7",
+            "branch": "shape-7",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-8",
+            "branch": "shape-8",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-9",
+            "branch": "shape-9",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          }
+        ],
+        "code": 0,
+        "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+      },
+      "nativeGit": {
+        "implementation": "nativeGit",
+        "wallMs": 18.407333999999537,
+        "safe": true,
+        "parseSucceeded": true,
+        "exactInventory": true,
+        "inventoryCount": 49,
+        "loadAverage": {
+          "before": [17.72802734375, 19.04833984375, 19.7578125],
+          "after": [17.72802734375, 19.04833984375, 19.7578125]
+        },
+        "resourceUsage": {
+          "userCpuMs": 0.424,
+          "systemCpuMs": 0.503,
+          "fsReads": 0,
+          "fsWrites": 0,
+          "voluntaryContextSwitches": 0,
+          "involuntaryContextSwitches": 13
+        },
+        "inventory": [
+          {
+            "path": "$TMP_ROOT/repo",
+            "branch": "main",
+            "primary": true,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/detached",
+            "branch": null,
+            "primary": false,
+            "detached": true,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/locked",
+            "branch": "locked",
+            "primary": false,
+            "detached": false,
+            "locked": true,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/prunable",
+            "branch": "prunable",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": true
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-0",
+            "branch": "shape-0",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-1",
+            "branch": "shape-1",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-10",
+            "branch": "shape-10",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-11",
+            "branch": "shape-11",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-12",
+            "branch": "shape-12",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-13",
+            "branch": "shape-13",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-14",
+            "branch": "shape-14",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-15",
+            "branch": "shape-15",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-16",
+            "branch": "shape-16",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-17",
+            "branch": "shape-17",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-18",
+            "branch": "shape-18",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-19",
+            "branch": "shape-19",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-2",
+            "branch": "shape-2",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-20",
+            "branch": "shape-20",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-21",
+            "branch": "shape-21",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-22",
+            "branch": "shape-22",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-23",
+            "branch": "shape-23",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-24",
+            "branch": "shape-24",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-25",
+            "branch": "shape-25",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-26",
+            "branch": "shape-26",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-27",
+            "branch": "shape-27",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-28",
+            "branch": "shape-28",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-29",
+            "branch": "shape-29",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-3",
+            "branch": "shape-3",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-30",
+            "branch": "shape-30",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-31",
+            "branch": "shape-31",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-32",
+            "branch": "shape-32",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-33",
+            "branch": "shape-33",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-34",
+            "branch": "shape-34",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-35",
+            "branch": "shape-35",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-36",
+            "branch": "shape-36",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-37",
+            "branch": "shape-37",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-38",
+            "branch": "shape-38",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-39",
+            "branch": "shape-39",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-4",
+            "branch": "shape-4",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-40",
+            "branch": "shape-40",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-41",
+            "branch": "shape-41",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-42",
+            "branch": "shape-42",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-43",
+            "branch": "shape-43",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-44",
+            "branch": "shape-44",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-5",
+            "branch": "shape-5",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-6",
+            "branch": "shape-6",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-7",
+            "branch": "shape-7",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-8",
+            "branch": "shape-8",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-9",
+            "branch": "shape-9",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          }
+        ],
+        "code": 0,
+        "stderr": ""
+      }
+    },
+    {
+      "repetition": 4,
+      "order": ["worktrunk", "nativeGit"],
+      "temporaryRootRemoved": true,
+      "worktrunk": {
+        "implementation": "worktrunk",
+        "wallMs": 336.34329199999956,
+        "safe": true,
+        "parseSucceeded": true,
+        "exactInventory": true,
+        "inventoryCount": 49,
+        "loadAverage": {
+          "before": [17.72802734375, 19.04833984375, 19.7578125],
+          "after": [17.72802734375, 19.04833984375, 19.7578125]
+        },
+        "resourceUsage": {
+          "userCpuMs": 1.275,
+          "systemCpuMs": 1.042,
+          "fsReads": 0,
+          "fsWrites": 0,
+          "voluntaryContextSwitches": 0,
+          "involuntaryContextSwitches": 47
+        },
+        "inventory": [
+          {
+            "path": "$TMP_ROOT/repo",
+            "branch": "main",
+            "primary": true,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/detached",
+            "branch": null,
+            "primary": false,
+            "detached": true,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/locked",
+            "branch": "locked",
+            "primary": false,
+            "detached": false,
+            "locked": true,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/prunable",
+            "branch": "prunable",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": true
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-0",
+            "branch": "shape-0",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-1",
+            "branch": "shape-1",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-10",
+            "branch": "shape-10",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-11",
+            "branch": "shape-11",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-12",
+            "branch": "shape-12",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-13",
+            "branch": "shape-13",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-14",
+            "branch": "shape-14",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-15",
+            "branch": "shape-15",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-16",
+            "branch": "shape-16",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-17",
+            "branch": "shape-17",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-18",
+            "branch": "shape-18",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-19",
+            "branch": "shape-19",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-2",
+            "branch": "shape-2",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-20",
+            "branch": "shape-20",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-21",
+            "branch": "shape-21",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-22",
+            "branch": "shape-22",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-23",
+            "branch": "shape-23",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-24",
+            "branch": "shape-24",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-25",
+            "branch": "shape-25",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-26",
+            "branch": "shape-26",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-27",
+            "branch": "shape-27",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-28",
+            "branch": "shape-28",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-29",
+            "branch": "shape-29",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-3",
+            "branch": "shape-3",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-30",
+            "branch": "shape-30",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-31",
+            "branch": "shape-31",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-32",
+            "branch": "shape-32",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-33",
+            "branch": "shape-33",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-34",
+            "branch": "shape-34",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-35",
+            "branch": "shape-35",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-36",
+            "branch": "shape-36",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-37",
+            "branch": "shape-37",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-38",
+            "branch": "shape-38",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-39",
+            "branch": "shape-39",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-4",
+            "branch": "shape-4",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-40",
+            "branch": "shape-40",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-41",
+            "branch": "shape-41",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-42",
+            "branch": "shape-42",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-43",
+            "branch": "shape-43",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-44",
+            "branch": "shape-44",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-5",
+            "branch": "shape-5",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-6",
+            "branch": "shape-6",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-7",
+            "branch": "shape-7",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-8",
+            "branch": "shape-8",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-9",
+            "branch": "shape-9",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          }
+        ],
+        "code": 0,
+        "stderr": "▲ JSON output is schema 1; a future release switches the default to schema 2\n↳ To keep this format set [list] json-schema = 1; to adopt the new schema, run wt config update"
+      },
+      "nativeGit": {
+        "implementation": "nativeGit",
+        "wallMs": 23.782624999999825,
+        "safe": true,
+        "parseSucceeded": true,
+        "exactInventory": true,
+        "inventoryCount": 49,
+        "loadAverage": {
+          "before": [17.72802734375, 19.04833984375, 19.7578125],
+          "after": [17.72802734375, 19.04833984375, 19.7578125]
+        },
+        "resourceUsage": {
+          "userCpuMs": 7.625,
+          "systemCpuMs": 2.455,
+          "fsReads": 0,
+          "fsWrites": 0,
+          "voluntaryContextSwitches": 0,
+          "involuntaryContextSwitches": 89
+        },
+        "inventory": [
+          {
+            "path": "$TMP_ROOT/repo",
+            "branch": "main",
+            "primary": true,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/detached",
+            "branch": null,
+            "primary": false,
+            "detached": true,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/locked",
+            "branch": "locked",
+            "primary": false,
+            "detached": false,
+            "locked": true,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/prunable",
+            "branch": "prunable",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": true
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-0",
+            "branch": "shape-0",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-1",
+            "branch": "shape-1",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-10",
+            "branch": "shape-10",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-11",
+            "branch": "shape-11",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-12",
+            "branch": "shape-12",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-13",
+            "branch": "shape-13",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-14",
+            "branch": "shape-14",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-15",
+            "branch": "shape-15",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-16",
+            "branch": "shape-16",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-17",
+            "branch": "shape-17",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-18",
+            "branch": "shape-18",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-19",
+            "branch": "shape-19",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-2",
+            "branch": "shape-2",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-20",
+            "branch": "shape-20",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-21",
+            "branch": "shape-21",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-22",
+            "branch": "shape-22",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-23",
+            "branch": "shape-23",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-24",
+            "branch": "shape-24",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-25",
+            "branch": "shape-25",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-26",
+            "branch": "shape-26",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-27",
+            "branch": "shape-27",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-28",
+            "branch": "shape-28",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-29",
+            "branch": "shape-29",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-3",
+            "branch": "shape-3",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-30",
+            "branch": "shape-30",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-31",
+            "branch": "shape-31",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-32",
+            "branch": "shape-32",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-33",
+            "branch": "shape-33",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-34",
+            "branch": "shape-34",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-35",
+            "branch": "shape-35",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-36",
+            "branch": "shape-36",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-37",
+            "branch": "shape-37",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-38",
+            "branch": "shape-38",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-39",
+            "branch": "shape-39",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-4",
+            "branch": "shape-4",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-40",
+            "branch": "shape-40",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-41",
+            "branch": "shape-41",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-42",
+            "branch": "shape-42",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-43",
+            "branch": "shape-43",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-44",
+            "branch": "shape-44",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-5",
+            "branch": "shape-5",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-6",
+            "branch": "shape-6",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-7",
+            "branch": "shape-7",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-8",
+            "branch": "shape-8",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          },
+          {
+            "path": "$TMP_ROOT/shape/shape-9",
+            "branch": "shape-9",
+            "primary": false,
+            "detached": false,
+            "locked": false,
+            "prunable": false
+          }
+        ],
+        "code": 0,
+        "stderr": ""
+      }
+    }
+  ]
+}

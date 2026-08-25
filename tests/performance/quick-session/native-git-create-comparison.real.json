@@ -1,0 +1,3301 @@
+{
+  "schemaVersion": 1,
+  "benchmark": "station-quick-session-native-git-create-comparison",
+  "generatedAt": "2026-08-25T05:29:05.069Z",
+  "machine": {
+    "platform": "darwin",
+    "arch": "arm64",
+    "cpuModel": "Apple M4",
+    "logicalCpuCount": 10
+  },
+  "tools": {
+    "worktrunk": "wt v0.72.0",
+    "git": "git version 2.50.1 (Apple Git-155)"
+  },
+  "repositoryShape": {
+    "initialWorktrees": 49,
+    "lifecycleHooks": false,
+    "maxConcurrent": 4,
+    "repetitions": 5
+  },
+  "keepThresholds": {
+    "burst5MedianImprovementFraction": 0.4,
+    "burst5P95ImprovementFraction": 0.4,
+    "burst20MedianImprovementFraction": 0.4,
+    "burst20P95ImprovementFraction": 0.4
+  },
+  "scenarios": [
+    {
+      "burstSize": 3,
+      "worktrunk": {
+        "wallMs": {
+          "samples": [
+            200.72329100000024, 192.4026670000003, 188.6192090000004, 192.6782920000005,
+            202.51058299999931
+          ],
+          "median": 192.6782920000005,
+          "p90": 202.51058299999931,
+          "p95": 202.51058299999931,
+          "max": 202.51058299999931
+        },
+        "commandMs": {
+          "samples": [
+            200.15158399999973, 198.811917, 197.37495800000033, 187.97949999999946,
+            191.4298749999998, 189.4713329999995, 187.640625, 186.73783399999957, 186.6211659999999,
+            192.5204590000012, 191.66541599999982, 190.92583299999933, 195.99779200000012,
+            196.47691699999996, 200.25254200000018
+          ],
+          "median": 191.66541599999982,
+          "p90": 200.15158399999973,
+          "p95": 200.25254200000018,
+          "max": 200.25254200000018
+        },
+        "throughputPerSecond": {
+          "samples": [
+            14.94594864927756, 15.592299456015311, 15.905060867899163, 15.569994776578111,
+            14.814040607448204
+          ],
+          "median": 15.569994776578111,
+          "p90": 15.905060867899163,
+          "p95": 15.905060867899163,
+          "max": 15.905060867899163
+        },
+        "allSafe": true
+      },
+      "nativeGit": {
+        "wallMs": {
+          "samples": [
+            43.33441700000003, 43.13075000000026, 43.191499999999905, 47.55212500000016,
+            47.23499999999876
+          ],
+          "median": 43.33441700000003,
+          "p90": 47.55212500000016,
+          "p95": 47.55212500000016,
+          "max": 47.55212500000016
+        },
+        "commandMs": {
+          "samples": [
+            43.26158299999997, 38.83129199999985, 39.60312500000009, 40.35095799999999,
+            42.450958999999784, 38.11962500000027, 39.473541999999725, 38.80241699999988,
+            42.087249999999585, 47.53241700000035, 42.0557919999992, 45.39800000000105,
+            47.2237499999992, 42.93791700000111, 42.393959000000905
+          ],
+          "median": 42.087249999999585,
+          "p90": 47.2237499999992,
+          "p95": 47.53241700000035,
+          "max": 47.53241700000035
+        },
+        "throughputPerSecond": {
+          "samples": [
+            69.22903797228882, 69.55594326553519, 69.45811097090878, 63.08866323008677,
+            63.512226103526594
+          ],
+          "median": 69.22903797228882,
+          "p90": 69.55594326553519,
+          "p95": 69.55594326553519,
+          "max": 69.55594326553519
+        },
+        "allSafe": true
+      },
+      "medianImprovementFraction": 0.7750944512213139,
+      "p95ImprovementFraction": 0.7651869630931816,
+      "allSafe": true,
+      "pairs": [
+        {
+          "repetition": 0,
+          "order": ["worktrunk", "nativeGit"],
+          "worktrunk": {
+            "implementation": "worktrunk",
+            "wallMs": 200.72329100000024,
+            "safe": true,
+            "exactRegistration": true,
+            "inventoryCount": 52,
+            "cleanupInventoryCount": 49,
+            "peakActive": 3,
+            "loadAverage": {
+              "before": [22.20947265625, 19.76953125, 20.36865234375],
+              "after": [22.20947265625, 19.76953125, 20.36865234375]
+            },
+            "resourceUsage": {
+              "userCpuMs": 2.461,
+              "systemCpuMs": 3.637,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 77
+            },
+            "commands": [
+              {
+                "branch": "probe-worktrunk-0-0",
+                "path": "$TMP_REPO/created/probe-worktrunk-0-0",
+                "code": 0,
+                "ms": 200.15158399999973,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-0-0 from main and worktree @ $TMP_REPO/created/probe-worktrunk-0-0"
+              },
+              {
+                "branch": "probe-worktrunk-0-1",
+                "path": "$TMP_REPO/created/probe-worktrunk-0-1",
+                "code": 0,
+                "ms": 198.811917,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-0-1 from main and worktree @ $TMP_REPO/created/probe-worktrunk-0-1"
+              },
+              {
+                "branch": "probe-worktrunk-0-2",
+                "path": "$TMP_REPO/created/probe-worktrunk-0-2",
+                "code": 0,
+                "ms": 197.37495800000033,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-0-2 from main and worktree @ $TMP_REPO/created/probe-worktrunk-0-2"
+              }
+            ]
+          },
+          "nativeGit": {
+            "implementation": "nativeGit",
+            "wallMs": 43.33441700000003,
+            "safe": true,
+            "exactRegistration": true,
+            "inventoryCount": 52,
+            "cleanupInventoryCount": 49,
+            "peakActive": 3,
+            "loadAverage": {
+              "before": [22.20947265625, 19.76953125, 20.36865234375],
+              "after": [22.20947265625, 19.76953125, 20.36865234375]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.153,
+              "systemCpuMs": 1.731,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 19
+            },
+            "commands": [
+              {
+                "branch": "probe-nativeGit-0-0",
+                "path": "$TMP_REPO/created/probe-nativeGit-0-0",
+                "code": 0,
+                "ms": 43.26158299999997,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-0-1",
+                "path": "$TMP_REPO/created/probe-nativeGit-0-1",
+                "code": 0,
+                "ms": 38.83129199999985,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-0-2",
+                "path": "$TMP_REPO/created/probe-nativeGit-0-2",
+                "code": 0,
+                "ms": 39.60312500000009,
+                "outputValid": true,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 1,
+          "order": ["nativeGit", "worktrunk"],
+          "worktrunk": {
+            "implementation": "worktrunk",
+            "wallMs": 192.4026670000003,
+            "safe": true,
+            "exactRegistration": true,
+            "inventoryCount": 52,
+            "cleanupInventoryCount": 49,
+            "peakActive": 3,
+            "loadAverage": {
+              "before": [22.20947265625, 19.76953125, 20.36865234375],
+              "after": [22.20947265625, 19.76953125, 20.36865234375]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.116,
+              "systemCpuMs": 2.466,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 28
+            },
+            "commands": [
+              {
+                "branch": "probe-worktrunk-1-0",
+                "path": "$TMP_REPO/created/probe-worktrunk-1-0",
+                "code": 0,
+                "ms": 187.97949999999946,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-1-0 from main and worktree @ $TMP_REPO/created/probe-worktrunk-1-0"
+              },
+              {
+                "branch": "probe-worktrunk-1-1",
+                "path": "$TMP_REPO/created/probe-worktrunk-1-1",
+                "code": 0,
+                "ms": 191.4298749999998,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-1-1 from main and worktree @ $TMP_REPO/created/probe-worktrunk-1-1"
+              },
+              {
+                "branch": "probe-worktrunk-1-2",
+                "path": "$TMP_REPO/created/probe-worktrunk-1-2",
+                "code": 0,
+                "ms": 189.4713329999995,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-1-2 from main and worktree @ $TMP_REPO/created/probe-worktrunk-1-2"
+              }
+            ]
+          },
+          "nativeGit": {
+            "implementation": "nativeGit",
+            "wallMs": 43.13075000000026,
+            "safe": true,
+            "exactRegistration": true,
+            "inventoryCount": 52,
+            "cleanupInventoryCount": 49,
+            "peakActive": 3,
+            "loadAverage": {
+              "before": [22.20947265625, 19.76953125, 20.36865234375],
+              "after": [22.20947265625, 19.76953125, 20.36865234375]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.501,
+              "systemCpuMs": 1.722,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 44
+            },
+            "commands": [
+              {
+                "branch": "probe-nativeGit-1-0",
+                "path": "$TMP_REPO/created/probe-nativeGit-1-0",
+                "code": 0,
+                "ms": 40.35095799999999,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-1-1",
+                "path": "$TMP_REPO/created/probe-nativeGit-1-1",
+                "code": 0,
+                "ms": 42.450958999999784,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-1-2",
+                "path": "$TMP_REPO/created/probe-nativeGit-1-2",
+                "code": 0,
+                "ms": 38.11962500000027,
+                "outputValid": true,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 2,
+          "order": ["worktrunk", "nativeGit"],
+          "worktrunk": {
+            "implementation": "worktrunk",
+            "wallMs": 188.6192090000004,
+            "safe": true,
+            "exactRegistration": true,
+            "inventoryCount": 52,
+            "cleanupInventoryCount": 49,
+            "peakActive": 3,
+            "loadAverage": {
+              "before": [22.20947265625, 19.76953125, 20.36865234375],
+              "after": [22.20947265625, 19.76953125, 20.36865234375]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.599,
+              "systemCpuMs": 2.658,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 78
+            },
+            "commands": [
+              {
+                "branch": "probe-worktrunk-2-0",
+                "path": "$TMP_REPO/created/probe-worktrunk-2-0",
+                "code": 0,
+                "ms": 187.640625,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-2-0 from main and worktree @ $TMP_REPO/created/probe-worktrunk-2-0"
+              },
+              {
+                "branch": "probe-worktrunk-2-1",
+                "path": "$TMP_REPO/created/probe-worktrunk-2-1",
+                "code": 0,
+                "ms": 186.73783399999957,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-2-1 from main and worktree @ $TMP_REPO/created/probe-worktrunk-2-1"
+              },
+              {
+                "branch": "probe-worktrunk-2-2",
+                "path": "$TMP_REPO/created/probe-worktrunk-2-2",
+                "code": 0,
+                "ms": 186.6211659999999,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-2-2 from main and worktree @ $TMP_REPO/created/probe-worktrunk-2-2"
+              }
+            ]
+          },
+          "nativeGit": {
+            "implementation": "nativeGit",
+            "wallMs": 43.191499999999905,
+            "safe": true,
+            "exactRegistration": true,
+            "inventoryCount": 52,
+            "cleanupInventoryCount": 49,
+            "peakActive": 3,
+            "loadAverage": {
+              "before": [22.20947265625, 19.76953125, 20.36865234375],
+              "after": [22.20947265625, 19.76953125, 20.36865234375]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.086,
+              "systemCpuMs": 1.716,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 19
+            },
+            "commands": [
+              {
+                "branch": "probe-nativeGit-2-0",
+                "path": "$TMP_REPO/created/probe-nativeGit-2-0",
+                "code": 0,
+                "ms": 39.473541999999725,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-2-1",
+                "path": "$TMP_REPO/created/probe-nativeGit-2-1",
+                "code": 0,
+                "ms": 38.80241699999988,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-2-2",
+                "path": "$TMP_REPO/created/probe-nativeGit-2-2",
+                "code": 0,
+                "ms": 42.087249999999585,
+                "outputValid": true,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 3,
+          "order": ["nativeGit", "worktrunk"],
+          "worktrunk": {
+            "implementation": "worktrunk",
+            "wallMs": 192.6782920000005,
+            "safe": true,
+            "exactRegistration": true,
+            "inventoryCount": 52,
+            "cleanupInventoryCount": 49,
+            "peakActive": 3,
+            "loadAverage": {
+              "before": [20.6708984375, 19.49072265625, 20.2666015625],
+              "after": [20.6708984375, 19.49072265625, 20.2666015625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.557,
+              "systemCpuMs": 2.672,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 24
+            },
+            "commands": [
+              {
+                "branch": "probe-worktrunk-3-0",
+                "path": "$TMP_REPO/created/probe-worktrunk-3-0",
+                "code": 0,
+                "ms": 192.5204590000012,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-3-0 from main and worktree @ $TMP_REPO/created/probe-worktrunk-3-0"
+              },
+              {
+                "branch": "probe-worktrunk-3-1",
+                "path": "$TMP_REPO/created/probe-worktrunk-3-1",
+                "code": 0,
+                "ms": 191.66541599999982,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-3-1 from main and worktree @ $TMP_REPO/created/probe-worktrunk-3-1"
+              },
+              {
+                "branch": "probe-worktrunk-3-2",
+                "path": "$TMP_REPO/created/probe-worktrunk-3-2",
+                "code": 0,
+                "ms": 190.92583299999933,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-3-2 from main and worktree @ $TMP_REPO/created/probe-worktrunk-3-2"
+              }
+            ]
+          },
+          "nativeGit": {
+            "implementation": "nativeGit",
+            "wallMs": 47.55212500000016,
+            "safe": true,
+            "exactRegistration": true,
+            "inventoryCount": 52,
+            "cleanupInventoryCount": 49,
+            "peakActive": 3,
+            "loadAverage": {
+              "before": [20.6708984375, 19.49072265625, 20.2666015625],
+              "after": [20.6708984375, 19.49072265625, 20.2666015625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.024,
+              "systemCpuMs": 2.132,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 42
+            },
+            "commands": [
+              {
+                "branch": "probe-nativeGit-3-0",
+                "path": "$TMP_REPO/created/probe-nativeGit-3-0",
+                "code": 0,
+                "ms": 47.53241700000035,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-3-1",
+                "path": "$TMP_REPO/created/probe-nativeGit-3-1",
+                "code": 0,
+                "ms": 42.0557919999992,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-3-2",
+                "path": "$TMP_REPO/created/probe-nativeGit-3-2",
+                "code": 0,
+                "ms": 45.39800000000105,
+                "outputValid": true,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 4,
+          "order": ["worktrunk", "nativeGit"],
+          "worktrunk": {
+            "implementation": "worktrunk",
+            "wallMs": 202.51058299999931,
+            "safe": true,
+            "exactRegistration": true,
+            "inventoryCount": 52,
+            "cleanupInventoryCount": 49,
+            "peakActive": 3,
+            "loadAverage": {
+              "before": [20.6708984375, 19.49072265625, 20.2666015625],
+              "after": [20.6708984375, 19.49072265625, 20.2666015625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.944,
+              "systemCpuMs": 3.482,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 89
+            },
+            "commands": [
+              {
+                "branch": "probe-worktrunk-4-0",
+                "path": "$TMP_REPO/created/probe-worktrunk-4-0",
+                "code": 0,
+                "ms": 195.99779200000012,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-4-0 from main and worktree @ $TMP_REPO/created/probe-worktrunk-4-0"
+              },
+              {
+                "branch": "probe-worktrunk-4-1",
+                "path": "$TMP_REPO/created/probe-worktrunk-4-1",
+                "code": 0,
+                "ms": 196.47691699999996,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-4-1 from main and worktree @ $TMP_REPO/created/probe-worktrunk-4-1"
+              },
+              {
+                "branch": "probe-worktrunk-4-2",
+                "path": "$TMP_REPO/created/probe-worktrunk-4-2",
+                "code": 0,
+                "ms": 200.25254200000018,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-4-2 from main and worktree @ $TMP_REPO/created/probe-worktrunk-4-2"
+              }
+            ]
+          },
+          "nativeGit": {
+            "implementation": "nativeGit",
+            "wallMs": 47.23499999999876,
+            "safe": true,
+            "exactRegistration": true,
+            "inventoryCount": 52,
+            "cleanupInventoryCount": 49,
+            "peakActive": 3,
+            "loadAverage": {
+              "before": [20.6708984375, 19.49072265625, 20.2666015625],
+              "after": [20.6708984375, 19.49072265625, 20.2666015625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.111,
+              "systemCpuMs": 2.497,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 36
+            },
+            "commands": [
+              {
+                "branch": "probe-nativeGit-4-0",
+                "path": "$TMP_REPO/created/probe-nativeGit-4-0",
+                "code": 0,
+                "ms": 47.2237499999992,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-4-1",
+                "path": "$TMP_REPO/created/probe-nativeGit-4-1",
+                "code": 0,
+                "ms": 42.93791700000111,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-4-2",
+                "path": "$TMP_REPO/created/probe-nativeGit-4-2",
+                "code": 0,
+                "ms": 42.393959000000905,
+                "outputValid": true,
+                "stderr": ""
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "burstSize": 5,
+      "worktrunk": {
+        "wallMs": {
+          "samples": [
+            336.25545799999963, 331.8535000000011, 331.0174169999991, 333.12704099999974,
+            336.15670899999895
+          ],
+          "median": 333.12704099999974,
+          "p90": 336.25545799999963,
+          "p95": 336.25545799999963,
+          "max": 336.25545799999963
+        },
+        "commandMs": {
+          "samples": [
+            208.07133299999987, 207.97379200000069, 207.25629200000003, 204.59270800000013,
+            129.12212499999987, 205.95158300000003, 204.38495800000055, 202.43845799999872,
+            203.55179099999987, 127.30854199999885, 204.54566700000214, 201.54712499999732,
+            202.68920900000012, 201.5115420000002, 128.26145800000086, 206.9606249999997,
+            206.71829199999775, 216.87125000000015, 203.080750000001, 127.16241599999921,
+            209.53537499999948, 208.60787499999788, 207.91779099999985, 206.29720799999996,
+            127.33137499999793
+          ],
+          "median": 204.54566700000214,
+          "p90": 208.60787499999788,
+          "p95": 209.53537499999948,
+          "max": 216.87125000000015
+        },
+        "throughputPerSecond": {
+          "samples": [
+            14.869647112166744, 15.066889455738703, 15.104945369083143, 15.00928890368886,
+            14.874015202237167
+          ],
+          "median": 15.00928890368886,
+          "p90": 15.104945369083143,
+          "p95": 15.104945369083143,
+          "max": 15.104945369083143
+        },
+        "allSafe": true
+      },
+      "nativeGit": {
+        "wallMs": {
+          "samples": [
+            74.79349999999977, 76.52766699999847, 76.59470899999906, 76.77883400000064,
+            74.63254100000267
+          ],
+          "median": 76.52766699999847,
+          "p90": 76.77883400000064,
+          "p95": 76.77883400000064,
+          "max": 76.77883400000064
+        },
+        "commandMs": {
+          "samples": [
+            45.031458000001294, 43.96295900000041, 42.76008299999921, 47.148833000001105,
+            30.89483399999881, 43.84308400000009, 47.123208999999406, 47.87437499999942,
+            43.667750000000524, 32.66125000000102, 51.01629200000025, 47.93899999999849,
+            44.86408300000039, 43.3018749999992, 31.718042000000423, 46.34204099999988,
+            49.86858399999983, 44.49712499999805, 45.12299999999959, 31.119916999999987,
+            47.873209000001225, 43.58679200000188, 48.03633400000035, 41.39137500000288,
+            31.57300000000032
+          ],
+          "median": 44.49712499999805,
+          "p90": 48.03633400000035,
+          "p95": 49.86858399999983,
+          "max": 51.01629200000025
+        },
+        "throughputPerSecond": {
+          "samples": [
+            66.85072900720003, 65.33584775294536, 65.27866043593248, 65.12211425351886,
+            66.99490507766339
+          ],
+          "median": 65.33584775294536,
+          "p90": 66.99490507766339,
+          "p95": 66.99490507766339,
+          "max": 66.99490507766339
+        },
+        "allSafe": true
+      },
+      "medianImprovementFraction": 0.7702748273743454,
+      "p95ImprovementFraction": 0.7716651665472721,
+      "allSafe": true,
+      "pairs": [
+        {
+          "repetition": 0,
+          "order": ["nativeGit", "worktrunk"],
+          "worktrunk": {
+            "implementation": "worktrunk",
+            "wallMs": 336.25545799999963,
+            "safe": true,
+            "exactRegistration": true,
+            "inventoryCount": 54,
+            "cleanupInventoryCount": 49,
+            "peakActive": 4,
+            "loadAverage": {
+              "before": [20.6708984375, 19.49072265625, 20.2666015625],
+              "after": [19.41552734375, 19.25, 20.1767578125]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.665,
+              "systemCpuMs": 3.88,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 34
+            },
+            "commands": [
+              {
+                "branch": "probe-worktrunk-0-0",
+                "path": "$TMP_REPO/created/probe-worktrunk-0-0",
+                "code": 0,
+                "ms": 208.07133299999987,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-0-0 from main and worktree @ $TMP_REPO/created/probe-worktrunk-0-0"
+              },
+              {
+                "branch": "probe-worktrunk-0-1",
+                "path": "$TMP_REPO/created/probe-worktrunk-0-1",
+                "code": 0,
+                "ms": 207.97379200000069,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-0-1 from main and worktree @ $TMP_REPO/created/probe-worktrunk-0-1"
+              },
+              {
+                "branch": "probe-worktrunk-0-2",
+                "path": "$TMP_REPO/created/probe-worktrunk-0-2",
+                "code": 0,
+                "ms": 207.25629200000003,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-0-2 from main and worktree @ $TMP_REPO/created/probe-worktrunk-0-2"
+              },
+              {
+                "branch": "probe-worktrunk-0-3",
+                "path": "$TMP_REPO/created/probe-worktrunk-0-3",
+                "code": 0,
+                "ms": 204.59270800000013,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-0-3 from main and worktree @ $TMP_REPO/created/probe-worktrunk-0-3"
+              },
+              {
+                "branch": "probe-worktrunk-0-4",
+                "path": "$TMP_REPO/created/probe-worktrunk-0-4",
+                "code": 0,
+                "ms": 129.12212499999987,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-0-4 from main and worktree @ $TMP_REPO/created/probe-worktrunk-0-4"
+              }
+            ]
+          },
+          "nativeGit": {
+            "implementation": "nativeGit",
+            "wallMs": 74.79349999999977,
+            "safe": true,
+            "exactRegistration": true,
+            "inventoryCount": 54,
+            "cleanupInventoryCount": 49,
+            "peakActive": 4,
+            "loadAverage": {
+              "before": [20.6708984375, 19.49072265625, 20.2666015625],
+              "after": [20.6708984375, 19.49072265625, 20.2666015625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.289,
+              "systemCpuMs": 2.963,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 43
+            },
+            "commands": [
+              {
+                "branch": "probe-nativeGit-0-0",
+                "path": "$TMP_REPO/created/probe-nativeGit-0-0",
+                "code": 0,
+                "ms": 45.031458000001294,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-0-1",
+                "path": "$TMP_REPO/created/probe-nativeGit-0-1",
+                "code": 0,
+                "ms": 43.96295900000041,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-0-2",
+                "path": "$TMP_REPO/created/probe-nativeGit-0-2",
+                "code": 0,
+                "ms": 42.76008299999921,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-0-3",
+                "path": "$TMP_REPO/created/probe-nativeGit-0-3",
+                "code": 0,
+                "ms": 47.148833000001105,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-0-4",
+                "path": "$TMP_REPO/created/probe-nativeGit-0-4",
+                "code": 0,
+                "ms": 30.89483399999881,
+                "outputValid": true,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 1,
+          "order": ["worktrunk", "nativeGit"],
+          "worktrunk": {
+            "implementation": "worktrunk",
+            "wallMs": 331.8535000000011,
+            "safe": true,
+            "exactRegistration": true,
+            "inventoryCount": 54,
+            "cleanupInventoryCount": 49,
+            "peakActive": 4,
+            "loadAverage": {
+              "before": [19.41552734375, 19.25, 20.1767578125],
+              "after": [19.41552734375, 19.25, 20.1767578125]
+            },
+            "resourceUsage": {
+              "userCpuMs": 3.105,
+              "systemCpuMs": 4.375,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 121
+            },
+            "commands": [
+              {
+                "branch": "probe-worktrunk-1-0",
+                "path": "$TMP_REPO/created/probe-worktrunk-1-0",
+                "code": 0,
+                "ms": 205.95158300000003,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-1-0 from main and worktree @ $TMP_REPO/created/probe-worktrunk-1-0"
+              },
+              {
+                "branch": "probe-worktrunk-1-1",
+                "path": "$TMP_REPO/created/probe-worktrunk-1-1",
+                "code": 0,
+                "ms": 204.38495800000055,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-1-1 from main and worktree @ $TMP_REPO/created/probe-worktrunk-1-1"
+              },
+              {
+                "branch": "probe-worktrunk-1-2",
+                "path": "$TMP_REPO/created/probe-worktrunk-1-2",
+                "code": 0,
+                "ms": 202.43845799999872,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-1-2 from main and worktree @ $TMP_REPO/created/probe-worktrunk-1-2"
+              },
+              {
+                "branch": "probe-worktrunk-1-3",
+                "path": "$TMP_REPO/created/probe-worktrunk-1-3",
+                "code": 0,
+                "ms": 203.55179099999987,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-1-3 from main and worktree @ $TMP_REPO/created/probe-worktrunk-1-3"
+              },
+              {
+                "branch": "probe-worktrunk-1-4",
+                "path": "$TMP_REPO/created/probe-worktrunk-1-4",
+                "code": 0,
+                "ms": 127.30854199999885,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-1-4 from main and worktree @ $TMP_REPO/created/probe-worktrunk-1-4"
+              }
+            ]
+          },
+          "nativeGit": {
+            "implementation": "nativeGit",
+            "wallMs": 76.52766699999847,
+            "safe": true,
+            "exactRegistration": true,
+            "inventoryCount": 54,
+            "cleanupInventoryCount": 49,
+            "peakActive": 4,
+            "loadAverage": {
+              "before": [19.41552734375, 19.25, 20.1767578125],
+              "after": [19.41552734375, 19.25, 20.1767578125]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.164,
+              "systemCpuMs": 2.514,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 32
+            },
+            "commands": [
+              {
+                "branch": "probe-nativeGit-1-0",
+                "path": "$TMP_REPO/created/probe-nativeGit-1-0",
+                "code": 0,
+                "ms": 43.84308400000009,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-1-1",
+                "path": "$TMP_REPO/created/probe-nativeGit-1-1",
+                "code": 0,
+                "ms": 47.123208999999406,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-1-2",
+                "path": "$TMP_REPO/created/probe-nativeGit-1-2",
+                "code": 0,
+                "ms": 47.87437499999942,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-1-3",
+                "path": "$TMP_REPO/created/probe-nativeGit-1-3",
+                "code": 0,
+                "ms": 43.667750000000524,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-1-4",
+                "path": "$TMP_REPO/created/probe-nativeGit-1-4",
+                "code": 0,
+                "ms": 32.66125000000102,
+                "outputValid": true,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 2,
+          "order": ["nativeGit", "worktrunk"],
+          "worktrunk": {
+            "implementation": "worktrunk",
+            "wallMs": 331.0174169999991,
+            "safe": true,
+            "exactRegistration": true,
+            "inventoryCount": 54,
+            "cleanupInventoryCount": 49,
+            "peakActive": 4,
+            "loadAverage": {
+              "before": [19.41552734375, 19.25, 20.1767578125],
+              "after": [19.41552734375, 19.25, 20.1767578125]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.554,
+              "systemCpuMs": 4.236,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 43
+            },
+            "commands": [
+              {
+                "branch": "probe-worktrunk-2-0",
+                "path": "$TMP_REPO/created/probe-worktrunk-2-0",
+                "code": 0,
+                "ms": 204.54566700000214,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-2-0 from main and worktree @ $TMP_REPO/created/probe-worktrunk-2-0"
+              },
+              {
+                "branch": "probe-worktrunk-2-1",
+                "path": "$TMP_REPO/created/probe-worktrunk-2-1",
+                "code": 0,
+                "ms": 201.54712499999732,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-2-1 from main and worktree @ $TMP_REPO/created/probe-worktrunk-2-1"
+              },
+              {
+                "branch": "probe-worktrunk-2-2",
+                "path": "$TMP_REPO/created/probe-worktrunk-2-2",
+                "code": 0,
+                "ms": 202.68920900000012,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-2-2 from main and worktree @ $TMP_REPO/created/probe-worktrunk-2-2"
+              },
+              {
+                "branch": "probe-worktrunk-2-3",
+                "path": "$TMP_REPO/created/probe-worktrunk-2-3",
+                "code": 0,
+                "ms": 201.5115420000002,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-2-3 from main and worktree @ $TMP_REPO/created/probe-worktrunk-2-3"
+              },
+              {
+                "branch": "probe-worktrunk-2-4",
+                "path": "$TMP_REPO/created/probe-worktrunk-2-4",
+                "code": 0,
+                "ms": 128.26145800000086,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-2-4 from main and worktree @ $TMP_REPO/created/probe-worktrunk-2-4"
+              }
+            ]
+          },
+          "nativeGit": {
+            "implementation": "nativeGit",
+            "wallMs": 76.59470899999906,
+            "safe": true,
+            "exactRegistration": true,
+            "inventoryCount": 54,
+            "cleanupInventoryCount": 49,
+            "peakActive": 4,
+            "loadAverage": {
+              "before": [19.41552734375, 19.25, 20.1767578125],
+              "after": [19.41552734375, 19.25, 20.1767578125]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.291,
+              "systemCpuMs": 2.682,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 55
+            },
+            "commands": [
+              {
+                "branch": "probe-nativeGit-2-0",
+                "path": "$TMP_REPO/created/probe-nativeGit-2-0",
+                "code": 0,
+                "ms": 51.01629200000025,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-2-1",
+                "path": "$TMP_REPO/created/probe-nativeGit-2-1",
+                "code": 0,
+                "ms": 47.93899999999849,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-2-2",
+                "path": "$TMP_REPO/created/probe-nativeGit-2-2",
+                "code": 0,
+                "ms": 44.86408300000039,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-2-3",
+                "path": "$TMP_REPO/created/probe-nativeGit-2-3",
+                "code": 0,
+                "ms": 43.3018749999992,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-2-4",
+                "path": "$TMP_REPO/created/probe-nativeGit-2-4",
+                "code": 0,
+                "ms": 31.718042000000423,
+                "outputValid": true,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 3,
+          "order": ["worktrunk", "nativeGit"],
+          "worktrunk": {
+            "implementation": "worktrunk",
+            "wallMs": 333.12704099999974,
+            "safe": true,
+            "exactRegistration": true,
+            "inventoryCount": 54,
+            "cleanupInventoryCount": 49,
+            "peakActive": 4,
+            "loadAverage": {
+              "before": [18.1806640625, 18.99658203125, 20.08154296875],
+              "after": [18.1806640625, 18.99658203125, 20.08154296875]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.638,
+              "systemCpuMs": 4.276,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 92
+            },
+            "commands": [
+              {
+                "branch": "probe-worktrunk-3-0",
+                "path": "$TMP_REPO/created/probe-worktrunk-3-0",
+                "code": 0,
+                "ms": 206.9606249999997,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-3-0 from main and worktree @ $TMP_REPO/created/probe-worktrunk-3-0"
+              },
+              {
+                "branch": "probe-worktrunk-3-1",
+                "path": "$TMP_REPO/created/probe-worktrunk-3-1",
+                "code": 0,
+                "ms": 206.71829199999775,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-3-1 from main and worktree @ $TMP_REPO/created/probe-worktrunk-3-1"
+              },
+              {
+                "branch": "probe-worktrunk-3-2",
+                "path": "$TMP_REPO/created/probe-worktrunk-3-2",
+                "code": 0,
+                "ms": 216.87125000000015,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-3-2 from main and worktree @ $TMP_REPO/created/probe-worktrunk-3-2"
+              },
+              {
+                "branch": "probe-worktrunk-3-3",
+                "path": "$TMP_REPO/created/probe-worktrunk-3-3",
+                "code": 0,
+                "ms": 203.080750000001,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-3-3 from main and worktree @ $TMP_REPO/created/probe-worktrunk-3-3"
+              },
+              {
+                "branch": "probe-worktrunk-3-4",
+                "path": "$TMP_REPO/created/probe-worktrunk-3-4",
+                "code": 0,
+                "ms": 127.16241599999921,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-3-4 from main and worktree @ $TMP_REPO/created/probe-worktrunk-3-4"
+              }
+            ]
+          },
+          "nativeGit": {
+            "implementation": "nativeGit",
+            "wallMs": 76.77883400000064,
+            "safe": true,
+            "exactRegistration": true,
+            "inventoryCount": 54,
+            "cleanupInventoryCount": 49,
+            "peakActive": 4,
+            "loadAverage": {
+              "before": [18.1806640625, 18.99658203125, 20.08154296875],
+              "after": [18.1806640625, 18.99658203125, 20.08154296875]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.381,
+              "systemCpuMs": 2.839,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 48
+            },
+            "commands": [
+              {
+                "branch": "probe-nativeGit-3-0",
+                "path": "$TMP_REPO/created/probe-nativeGit-3-0",
+                "code": 0,
+                "ms": 46.34204099999988,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-3-1",
+                "path": "$TMP_REPO/created/probe-nativeGit-3-1",
+                "code": 0,
+                "ms": 49.86858399999983,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-3-2",
+                "path": "$TMP_REPO/created/probe-nativeGit-3-2",
+                "code": 0,
+                "ms": 44.49712499999805,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-3-3",
+                "path": "$TMP_REPO/created/probe-nativeGit-3-3",
+                "code": 0,
+                "ms": 45.12299999999959,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-3-4",
+                "path": "$TMP_REPO/created/probe-nativeGit-3-4",
+                "code": 0,
+                "ms": 31.119916999999987,
+                "outputValid": true,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 4,
+          "order": ["nativeGit", "worktrunk"],
+          "worktrunk": {
+            "implementation": "worktrunk",
+            "wallMs": 336.15670899999895,
+            "safe": true,
+            "exactRegistration": true,
+            "inventoryCount": 54,
+            "cleanupInventoryCount": 49,
+            "peakActive": 4,
+            "loadAverage": {
+              "before": [18.1806640625, 18.99658203125, 20.08154296875],
+              "after": [18.1806640625, 18.99658203125, 20.08154296875]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.322,
+              "systemCpuMs": 3.812,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 23
+            },
+            "commands": [
+              {
+                "branch": "probe-worktrunk-4-0",
+                "path": "$TMP_REPO/created/probe-worktrunk-4-0",
+                "code": 0,
+                "ms": 209.53537499999948,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-4-0 from main and worktree @ $TMP_REPO/created/probe-worktrunk-4-0"
+              },
+              {
+                "branch": "probe-worktrunk-4-1",
+                "path": "$TMP_REPO/created/probe-worktrunk-4-1",
+                "code": 0,
+                "ms": 208.60787499999788,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-4-1 from main and worktree @ $TMP_REPO/created/probe-worktrunk-4-1"
+              },
+              {
+                "branch": "probe-worktrunk-4-2",
+                "path": "$TMP_REPO/created/probe-worktrunk-4-2",
+                "code": 0,
+                "ms": 207.91779099999985,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-4-2 from main and worktree @ $TMP_REPO/created/probe-worktrunk-4-2"
+              },
+              {
+                "branch": "probe-worktrunk-4-3",
+                "path": "$TMP_REPO/created/probe-worktrunk-4-3",
+                "code": 0,
+                "ms": 206.29720799999996,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-4-3 from main and worktree @ $TMP_REPO/created/probe-worktrunk-4-3"
+              },
+              {
+                "branch": "probe-worktrunk-4-4",
+                "path": "$TMP_REPO/created/probe-worktrunk-4-4",
+                "code": 0,
+                "ms": 127.33137499999793,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-4-4 from main and worktree @ $TMP_REPO/created/probe-worktrunk-4-4"
+              }
+            ]
+          },
+          "nativeGit": {
+            "implementation": "nativeGit",
+            "wallMs": 74.63254100000267,
+            "safe": true,
+            "exactRegistration": true,
+            "inventoryCount": 54,
+            "cleanupInventoryCount": 49,
+            "peakActive": 4,
+            "loadAverage": {
+              "before": [18.1806640625, 18.99658203125, 20.08154296875],
+              "after": [18.1806640625, 18.99658203125, 20.08154296875]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.201,
+              "systemCpuMs": 2.769,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 55
+            },
+            "commands": [
+              {
+                "branch": "probe-nativeGit-4-0",
+                "path": "$TMP_REPO/created/probe-nativeGit-4-0",
+                "code": 0,
+                "ms": 47.873209000001225,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-4-1",
+                "path": "$TMP_REPO/created/probe-nativeGit-4-1",
+                "code": 0,
+                "ms": 43.58679200000188,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-4-2",
+                "path": "$TMP_REPO/created/probe-nativeGit-4-2",
+                "code": 0,
+                "ms": 48.03633400000035,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-4-3",
+                "path": "$TMP_REPO/created/probe-nativeGit-4-3",
+                "code": 0,
+                "ms": 41.39137500000288,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-4-4",
+                "path": "$TMP_REPO/created/probe-nativeGit-4-4",
+                "code": 0,
+                "ms": 31.57300000000032,
+                "outputValid": true,
+                "stderr": ""
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "burstSize": 20,
+      "worktrunk": {
+        "wallMs": {
+          "samples": [
+            1021.7181249999994, 979.6026660000025, 912.3058329999985, 1169.4526250000054,
+            929.5856249999997
+          ],
+          "median": 979.6026660000025,
+          "p90": 1169.4526250000054,
+          "p95": 1169.4526250000054,
+          "max": 1169.4526250000054
+        },
+        "commandMs": {
+          "samples": [
+            224.61658299999908, 230.63154199999917, 221.71741699999984, 226.89995799999815,
+            195.1137920000001, 190.7177499999998, 198.3328330000004, 188.11375000000044,
+            186.10029099999883, 181.67433299999902, 183.12879099999918, 181.29408300000068,
+            213.7485000000015, 214.87191600000006, 216.95766699999876, 217.22929099999965,
+            197.20524999999907, 200.7142500000009, 201.2407920000005, 184.40083400000003,
+            210.60579199999847, 210.4255830000002, 207.8418750000019, 209.24912499999846,
+            187.2542089999988, 183.20533400000204, 181.2479170000006, 173.57141599999886,
+            155.00808300000062, 173.80162500000006, 174.4997089999997, 173.18379099999947,
+            204.4864579999994, 204.55154200000106, 205.5584170000002, 202.66533399999753,
+            209.83433299999888, 202.65587500000038, 206.43004099999962, 205.0893329999999,
+            209.31679200000508, 213.77550000000338, 213.75554099999863, 211.2490420000031,
+            155.51904099999956, 166.21079199999804, 162.95400000000518, 163.5877079999991,
+            168.55950000000303, 180.36675000000105, 179.77391699999862, 179.55337499999587,
+            162.07383399999526, 168.48887499999546, 171.4370409999974, 168.2650829999984,
+            174.35437500000262, 185.22675000000163, 181.27666599999793, 178.9308749999982,
+            312.2924589999966, 347.231749999999, 333.2347079999963, 334.651082999997,
+            224.23483300000225, 216.82787500000268, 213.98141699999542, 217.4117910000059,
+            221.52941699999792, 229.2019999999975, 218.1152910000019, 222.4637920000023,
+            192.98795899999823, 181.07258300000103, 182.72550000000047, 189.0301249999975,
+            196.18012499999895, 192.74812499999825, 195.3915829999969, 187.2571670000034,
+            205.5012499999939, 201.24191599999904, 205.39541699999972, 200.80383299999812,
+            172.08024999999907, 170.41870899999776, 167.21166700000322, 167.9453330000033,
+            183.7479170000006, 181.10399999999936, 181.43649999999616, 189.9867499999964,
+            179.86824999999953, 177.98670799999672, 174.51845799999865, 166.90883300000132,
+            188.60495800000353, 197.14250000000175, 188.90395899999567, 185.14520799999445
+          ],
+          "median": 190.7177499999998,
+          "p90": 221.71741699999984,
+          "p95": 229.2019999999975,
+          "max": 347.231749999999
+        },
+        "throughputPerSecond": {
+          "samples": [
+            19.574870515290126, 20.416440965463796, 21.92247300911429, 17.102018134338625,
+            21.51496264800782
+          ],
+          "median": 20.416440965463796,
+          "p90": 21.92247300911429,
+          "p95": 21.92247300911429,
+          "max": 21.92247300911429
+        },
+        "allSafe": true
+      },
+      "nativeGit": {
+        "wallMs": {
+          "samples": [
+            342.0817919999972, 311.8841250000005, 420.33950000000186, 270.5228330000027,
+            224.47437499999796
+          ],
+          "median": 311.8841250000005,
+          "p90": 420.33950000000186,
+          "p95": 420.33950000000186,
+          "max": 420.33950000000186
+        },
+        "commandMs": {
+          "samples": [
+            62.72979199999827, 60.754124999999476, 62.53874999999971, 58.700708000000304,
+            71.78720899999826, 69.75962499999878, 66.65016699999978, 69.86512500000026,
+            66.00637500000084, 66.47345900000073, 64.38333299999795, 65.01929099999688,
+            68.55474999999933, 69.05745799999931, 69.07591700000194, 66.47270799999751,
+            73.3190829999985, 77.03116600000067, 70.58750000000146, 72.79233399999794,
+            53.09162500000093, 49.95245900000009, 48.044458000000304, 53.205582999999024,
+            52.72008300000016, 52.18412499999977, 50.28112500000134, 53.42920899999808,
+            71.05762500000128, 65.42674999999872, 74.37558300000092, 66.28066599999875,
+            72.67204200000197, 74.28541600000244, 74.13474999999744, 74.93229200000133,
+            62.47554200000013, 64.11979200000133, 63.06108299999687, 57.51179200000115,
+            55.44579099999828, 55.75800000000163, 56.59983300000022, 55.287499999998545,
+            58.27925000000687, 55.51370800000586, 55.8559580000001, 57.4386250000025,
+            56.04291599999851, 65.70912500000122, 56.81941699999879, 57.96533400000044,
+            73.85758400000486, 84.08983300000546, 86.13529199999903, 79.42970799999603,
+            142.02545900000405, 126.09691700000258, 132.85525000000052, 161.01112499999726,
+            44.94658299999719, 43.613250000002154, 54.113875000002736, 46.368625000002794,
+            47.61162499999773, 41.5958329999994, 40.18487499999901, 38.733916999997746,
+            55.685749999996915, 51.69154200000048, 53.57983400000376, 52.481250000004366,
+            62.55758399999468, 57.10770899999625, 63.43824999999924, 61.238584000006085,
+            63.06329199999891, 56.06908300000214, 62.767375000003085, 57.77979100000084,
+            47.898832999999286, 43.401083999997354, 48.4497080000001, 43.82650000000285,
+            56.06391699999949, 41.09733299999789, 47.20141699999658, 40.4340830000001,
+            41.083000000005995, 40.72020799999882, 40.949124999999185, 40.8481660000034,
+            41.35866700000042, 42.32266600000003, 43.247292000000016, 41.16250000000582,
+            41.05229200000031, 43.08637499999895, 43.63108300000022, 42.369916000003286
+          ],
+          "median": 57.10770899999625,
+          "p90": 74.28541600000244,
+          "p95": 84.08983300000546,
+          "max": 161.01112499999726
+        },
+        "throughputPerSecond": {
+          "samples": [
+            58.46554966597042, 64.12638027023648, 47.580586644842825, 73.93091288527131,
+            89.09702944935333
+          ],
+          "median": 64.12638027023648,
+          "p90": 89.09702944935333,
+          "p95": 89.09702944935333,
+          "max": 89.09702944935333
+        },
+        "allSafe": true
+      },
+      "medianImprovementFraction": 0.6816218086936079,
+      "p95ImprovementFraction": 0.6405673124210569,
+      "allSafe": true,
+      "pairs": [
+        {
+          "repetition": 0,
+          "order": ["worktrunk", "nativeGit"],
+          "worktrunk": {
+            "implementation": "worktrunk",
+            "wallMs": 1021.7181249999994,
+            "safe": true,
+            "exactRegistration": true,
+            "inventoryCount": 69,
+            "cleanupInventoryCount": 49,
+            "peakActive": 4,
+            "loadAverage": {
+              "before": [16.96484375, 18.73095703125, 19.9814453125],
+              "after": [16.96484375, 18.73095703125, 19.9814453125]
+            },
+            "resourceUsage": {
+              "userCpuMs": 7.605,
+              "systemCpuMs": 21.56,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 427
+            },
+            "commands": [
+              {
+                "branch": "probe-worktrunk-0-0",
+                "path": "$TMP_REPO/created/probe-worktrunk-0-0",
+                "code": 0,
+                "ms": 224.61658299999908,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-0-0 from main and worktree @ $TMP_REPO/created/probe-worktrunk-0-0"
+              },
+              {
+                "branch": "probe-worktrunk-0-1",
+                "path": "$TMP_REPO/created/probe-worktrunk-0-1",
+                "code": 0,
+                "ms": 230.63154199999917,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-0-1 from main and worktree @ $TMP_REPO/created/probe-worktrunk-0-1"
+              },
+              {
+                "branch": "probe-worktrunk-0-2",
+                "path": "$TMP_REPO/created/probe-worktrunk-0-2",
+                "code": 0,
+                "ms": 221.71741699999984,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-0-2 from main and worktree @ $TMP_REPO/created/probe-worktrunk-0-2"
+              },
+              {
+                "branch": "probe-worktrunk-0-3",
+                "path": "$TMP_REPO/created/probe-worktrunk-0-3",
+                "code": 0,
+                "ms": 226.89995799999815,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-0-3 from main and worktree @ $TMP_REPO/created/probe-worktrunk-0-3"
+              },
+              {
+                "branch": "probe-worktrunk-0-4",
+                "path": "$TMP_REPO/created/probe-worktrunk-0-4",
+                "code": 0,
+                "ms": 195.1137920000001,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-0-4 from main and worktree @ $TMP_REPO/created/probe-worktrunk-0-4"
+              },
+              {
+                "branch": "probe-worktrunk-0-5",
+                "path": "$TMP_REPO/created/probe-worktrunk-0-5",
+                "code": 0,
+                "ms": 190.7177499999998,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-0-5 from main and worktree @ $TMP_REPO/created/probe-worktrunk-0-5"
+              },
+              {
+                "branch": "probe-worktrunk-0-6",
+                "path": "$TMP_REPO/created/probe-worktrunk-0-6",
+                "code": 0,
+                "ms": 198.3328330000004,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-0-6 from main and worktree @ $TMP_REPO/created/probe-worktrunk-0-6"
+              },
+              {
+                "branch": "probe-worktrunk-0-7",
+                "path": "$TMP_REPO/created/probe-worktrunk-0-7",
+                "code": 0,
+                "ms": 188.11375000000044,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-0-7 from main and worktree @ $TMP_REPO/created/probe-worktrunk-0-7"
+              },
+              {
+                "branch": "probe-worktrunk-0-8",
+                "path": "$TMP_REPO/created/probe-worktrunk-0-8",
+                "code": 0,
+                "ms": 186.10029099999883,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-0-8 from main and worktree @ $TMP_REPO/created/probe-worktrunk-0-8"
+              },
+              {
+                "branch": "probe-worktrunk-0-9",
+                "path": "$TMP_REPO/created/probe-worktrunk-0-9",
+                "code": 0,
+                "ms": 181.67433299999902,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-0-9 from main and worktree @ $TMP_REPO/created/probe-worktrunk-0-9"
+              },
+              {
+                "branch": "probe-worktrunk-0-10",
+                "path": "$TMP_REPO/created/probe-worktrunk-0-10",
+                "code": 0,
+                "ms": 183.12879099999918,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-0-10 from main and worktree @ $TMP_REPO/created/probe-worktrunk-0-10"
+              },
+              {
+                "branch": "probe-worktrunk-0-11",
+                "path": "$TMP_REPO/created/probe-worktrunk-0-11",
+                "code": 0,
+                "ms": 181.29408300000068,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-0-11 from main and worktree @ $TMP_REPO/created/probe-worktrunk-0-11"
+              },
+              {
+                "branch": "probe-worktrunk-0-12",
+                "path": "$TMP_REPO/created/probe-worktrunk-0-12",
+                "code": 0,
+                "ms": 213.7485000000015,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-0-12 from main and worktree @ $TMP_REPO/created/probe-worktrunk-0-12"
+              },
+              {
+                "branch": "probe-worktrunk-0-13",
+                "path": "$TMP_REPO/created/probe-worktrunk-0-13",
+                "code": 0,
+                "ms": 214.87191600000006,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-0-13 from main and worktree @ $TMP_REPO/created/probe-worktrunk-0-13"
+              },
+              {
+                "branch": "probe-worktrunk-0-14",
+                "path": "$TMP_REPO/created/probe-worktrunk-0-14",
+                "code": 0,
+                "ms": 216.95766699999876,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-0-14 from main and worktree @ $TMP_REPO/created/probe-worktrunk-0-14"
+              },
+              {
+                "branch": "probe-worktrunk-0-15",
+                "path": "$TMP_REPO/created/probe-worktrunk-0-15",
+                "code": 0,
+                "ms": 217.22929099999965,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-0-15 from main and worktree @ $TMP_REPO/created/probe-worktrunk-0-15"
+              },
+              {
+                "branch": "probe-worktrunk-0-16",
+                "path": "$TMP_REPO/created/probe-worktrunk-0-16",
+                "code": 0,
+                "ms": 197.20524999999907,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-0-16 from main and worktree @ $TMP_REPO/created/probe-worktrunk-0-16"
+              },
+              {
+                "branch": "probe-worktrunk-0-17",
+                "path": "$TMP_REPO/created/probe-worktrunk-0-17",
+                "code": 0,
+                "ms": 200.7142500000009,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-0-17 from main and worktree @ $TMP_REPO/created/probe-worktrunk-0-17"
+              },
+              {
+                "branch": "probe-worktrunk-0-18",
+                "path": "$TMP_REPO/created/probe-worktrunk-0-18",
+                "code": 0,
+                "ms": 201.2407920000005,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-0-18 from main and worktree @ $TMP_REPO/created/probe-worktrunk-0-18"
+              },
+              {
+                "branch": "probe-worktrunk-0-19",
+                "path": "$TMP_REPO/created/probe-worktrunk-0-19",
+                "code": 0,
+                "ms": 184.40083400000003,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-0-19 from main and worktree @ $TMP_REPO/created/probe-worktrunk-0-19"
+              }
+            ]
+          },
+          "nativeGit": {
+            "implementation": "nativeGit",
+            "wallMs": 342.0817919999972,
+            "safe": true,
+            "exactRegistration": true,
+            "inventoryCount": 69,
+            "cleanupInventoryCount": 49,
+            "peakActive": 4,
+            "loadAverage": {
+              "before": [16.96484375, 18.73095703125, 19.9814453125],
+              "after": [16.96484375, 18.73095703125, 19.9814453125]
+            },
+            "resourceUsage": {
+              "userCpuMs": 6.552,
+              "systemCpuMs": 14.076,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 208
+            },
+            "commands": [
+              {
+                "branch": "probe-nativeGit-0-0",
+                "path": "$TMP_REPO/created/probe-nativeGit-0-0",
+                "code": 0,
+                "ms": 62.72979199999827,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-0-1",
+                "path": "$TMP_REPO/created/probe-nativeGit-0-1",
+                "code": 0,
+                "ms": 60.754124999999476,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-0-2",
+                "path": "$TMP_REPO/created/probe-nativeGit-0-2",
+                "code": 0,
+                "ms": 62.53874999999971,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-0-3",
+                "path": "$TMP_REPO/created/probe-nativeGit-0-3",
+                "code": 0,
+                "ms": 58.700708000000304,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-0-4",
+                "path": "$TMP_REPO/created/probe-nativeGit-0-4",
+                "code": 0,
+                "ms": 71.78720899999826,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-0-5",
+                "path": "$TMP_REPO/created/probe-nativeGit-0-5",
+                "code": 0,
+                "ms": 69.75962499999878,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-0-6",
+                "path": "$TMP_REPO/created/probe-nativeGit-0-6",
+                "code": 0,
+                "ms": 66.65016699999978,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-0-7",
+                "path": "$TMP_REPO/created/probe-nativeGit-0-7",
+                "code": 0,
+                "ms": 69.86512500000026,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-0-8",
+                "path": "$TMP_REPO/created/probe-nativeGit-0-8",
+                "code": 0,
+                "ms": 66.00637500000084,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-0-9",
+                "path": "$TMP_REPO/created/probe-nativeGit-0-9",
+                "code": 0,
+                "ms": 66.47345900000073,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-0-10",
+                "path": "$TMP_REPO/created/probe-nativeGit-0-10",
+                "code": 0,
+                "ms": 64.38333299999795,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-0-11",
+                "path": "$TMP_REPO/created/probe-nativeGit-0-11",
+                "code": 0,
+                "ms": 65.01929099999688,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-0-12",
+                "path": "$TMP_REPO/created/probe-nativeGit-0-12",
+                "code": 0,
+                "ms": 68.55474999999933,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-0-13",
+                "path": "$TMP_REPO/created/probe-nativeGit-0-13",
+                "code": 0,
+                "ms": 69.05745799999931,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-0-14",
+                "path": "$TMP_REPO/created/probe-nativeGit-0-14",
+                "code": 0,
+                "ms": 69.07591700000194,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-0-15",
+                "path": "$TMP_REPO/created/probe-nativeGit-0-15",
+                "code": 0,
+                "ms": 66.47270799999751,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-0-16",
+                "path": "$TMP_REPO/created/probe-nativeGit-0-16",
+                "code": 0,
+                "ms": 73.3190829999985,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-0-17",
+                "path": "$TMP_REPO/created/probe-nativeGit-0-17",
+                "code": 0,
+                "ms": 77.03116600000067,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-0-18",
+                "path": "$TMP_REPO/created/probe-nativeGit-0-18",
+                "code": 0,
+                "ms": 70.58750000000146,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-0-19",
+                "path": "$TMP_REPO/created/probe-nativeGit-0-19",
+                "code": 0,
+                "ms": 72.79233399999794,
+                "outputValid": true,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 1,
+          "order": ["nativeGit", "worktrunk"],
+          "worktrunk": {
+            "implementation": "worktrunk",
+            "wallMs": 979.6026660000025,
+            "safe": true,
+            "exactRegistration": true,
+            "inventoryCount": 69,
+            "cleanupInventoryCount": 49,
+            "peakActive": 4,
+            "loadAverage": {
+              "before": [18.56884765625, 19.0341796875, 20.0810546875],
+              "after": [18.56884765625, 19.0341796875, 20.0810546875]
+            },
+            "resourceUsage": {
+              "userCpuMs": 6.931,
+              "systemCpuMs": 20.027,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 360
+            },
+            "commands": [
+              {
+                "branch": "probe-worktrunk-1-0",
+                "path": "$TMP_REPO/created/probe-worktrunk-1-0",
+                "code": 0,
+                "ms": 210.60579199999847,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-1-0 from main and worktree @ $TMP_REPO/created/probe-worktrunk-1-0"
+              },
+              {
+                "branch": "probe-worktrunk-1-1",
+                "path": "$TMP_REPO/created/probe-worktrunk-1-1",
+                "code": 0,
+                "ms": 210.4255830000002,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-1-1 from main and worktree @ $TMP_REPO/created/probe-worktrunk-1-1"
+              },
+              {
+                "branch": "probe-worktrunk-1-2",
+                "path": "$TMP_REPO/created/probe-worktrunk-1-2",
+                "code": 0,
+                "ms": 207.8418750000019,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-1-2 from main and worktree @ $TMP_REPO/created/probe-worktrunk-1-2"
+              },
+              {
+                "branch": "probe-worktrunk-1-3",
+                "path": "$TMP_REPO/created/probe-worktrunk-1-3",
+                "code": 0,
+                "ms": 209.24912499999846,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-1-3 from main and worktree @ $TMP_REPO/created/probe-worktrunk-1-3"
+              },
+              {
+                "branch": "probe-worktrunk-1-4",
+                "path": "$TMP_REPO/created/probe-worktrunk-1-4",
+                "code": 0,
+                "ms": 187.2542089999988,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-1-4 from main and worktree @ $TMP_REPO/created/probe-worktrunk-1-4"
+              },
+              {
+                "branch": "probe-worktrunk-1-5",
+                "path": "$TMP_REPO/created/probe-worktrunk-1-5",
+                "code": 0,
+                "ms": 183.20533400000204,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-1-5 from main and worktree @ $TMP_REPO/created/probe-worktrunk-1-5"
+              },
+              {
+                "branch": "probe-worktrunk-1-6",
+                "path": "$TMP_REPO/created/probe-worktrunk-1-6",
+                "code": 0,
+                "ms": 181.2479170000006,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-1-6 from main and worktree @ $TMP_REPO/created/probe-worktrunk-1-6"
+              },
+              {
+                "branch": "probe-worktrunk-1-7",
+                "path": "$TMP_REPO/created/probe-worktrunk-1-7",
+                "code": 0,
+                "ms": 173.57141599999886,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-1-7 from main and worktree @ $TMP_REPO/created/probe-worktrunk-1-7"
+              },
+              {
+                "branch": "probe-worktrunk-1-8",
+                "path": "$TMP_REPO/created/probe-worktrunk-1-8",
+                "code": 0,
+                "ms": 155.00808300000062,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-1-8 from main and worktree @ $TMP_REPO/created/probe-worktrunk-1-8"
+              },
+              {
+                "branch": "probe-worktrunk-1-9",
+                "path": "$TMP_REPO/created/probe-worktrunk-1-9",
+                "code": 0,
+                "ms": 173.80162500000006,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-1-9 from main and worktree @ $TMP_REPO/created/probe-worktrunk-1-9"
+              },
+              {
+                "branch": "probe-worktrunk-1-10",
+                "path": "$TMP_REPO/created/probe-worktrunk-1-10",
+                "code": 0,
+                "ms": 174.4997089999997,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-1-10 from main and worktree @ $TMP_REPO/created/probe-worktrunk-1-10"
+              },
+              {
+                "branch": "probe-worktrunk-1-11",
+                "path": "$TMP_REPO/created/probe-worktrunk-1-11",
+                "code": 0,
+                "ms": 173.18379099999947,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-1-11 from main and worktree @ $TMP_REPO/created/probe-worktrunk-1-11"
+              },
+              {
+                "branch": "probe-worktrunk-1-12",
+                "path": "$TMP_REPO/created/probe-worktrunk-1-12",
+                "code": 0,
+                "ms": 204.4864579999994,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-1-12 from main and worktree @ $TMP_REPO/created/probe-worktrunk-1-12"
+              },
+              {
+                "branch": "probe-worktrunk-1-13",
+                "path": "$TMP_REPO/created/probe-worktrunk-1-13",
+                "code": 0,
+                "ms": 204.55154200000106,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-1-13 from main and worktree @ $TMP_REPO/created/probe-worktrunk-1-13"
+              },
+              {
+                "branch": "probe-worktrunk-1-14",
+                "path": "$TMP_REPO/created/probe-worktrunk-1-14",
+                "code": 0,
+                "ms": 205.5584170000002,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-1-14 from main and worktree @ $TMP_REPO/created/probe-worktrunk-1-14"
+              },
+              {
+                "branch": "probe-worktrunk-1-15",
+                "path": "$TMP_REPO/created/probe-worktrunk-1-15",
+                "code": 0,
+                "ms": 202.66533399999753,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-1-15 from main and worktree @ $TMP_REPO/created/probe-worktrunk-1-15"
+              },
+              {
+                "branch": "probe-worktrunk-1-16",
+                "path": "$TMP_REPO/created/probe-worktrunk-1-16",
+                "code": 0,
+                "ms": 209.83433299999888,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-1-16 from main and worktree @ $TMP_REPO/created/probe-worktrunk-1-16"
+              },
+              {
+                "branch": "probe-worktrunk-1-17",
+                "path": "$TMP_REPO/created/probe-worktrunk-1-17",
+                "code": 0,
+                "ms": 202.65587500000038,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-1-17 from main and worktree @ $TMP_REPO/created/probe-worktrunk-1-17"
+              },
+              {
+                "branch": "probe-worktrunk-1-18",
+                "path": "$TMP_REPO/created/probe-worktrunk-1-18",
+                "code": 0,
+                "ms": 206.43004099999962,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-1-18 from main and worktree @ $TMP_REPO/created/probe-worktrunk-1-18"
+              },
+              {
+                "branch": "probe-worktrunk-1-19",
+                "path": "$TMP_REPO/created/probe-worktrunk-1-19",
+                "code": 0,
+                "ms": 205.0893329999999,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-1-19 from main and worktree @ $TMP_REPO/created/probe-worktrunk-1-19"
+              }
+            ]
+          },
+          "nativeGit": {
+            "implementation": "nativeGit",
+            "wallMs": 311.8841250000005,
+            "safe": true,
+            "exactRegistration": true,
+            "inventoryCount": 69,
+            "cleanupInventoryCount": 49,
+            "peakActive": 4,
+            "loadAverage": {
+              "before": [18.56884765625, 19.0341796875, 20.0810546875],
+              "after": [18.56884765625, 19.0341796875, 20.0810546875]
+            },
+            "resourceUsage": {
+              "userCpuMs": 6.426,
+              "systemCpuMs": 13.887,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 232
+            },
+            "commands": [
+              {
+                "branch": "probe-nativeGit-1-0",
+                "path": "$TMP_REPO/created/probe-nativeGit-1-0",
+                "code": 0,
+                "ms": 53.09162500000093,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-1-1",
+                "path": "$TMP_REPO/created/probe-nativeGit-1-1",
+                "code": 0,
+                "ms": 49.95245900000009,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-1-2",
+                "path": "$TMP_REPO/created/probe-nativeGit-1-2",
+                "code": 0,
+                "ms": 48.044458000000304,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-1-3",
+                "path": "$TMP_REPO/created/probe-nativeGit-1-3",
+                "code": 0,
+                "ms": 53.205582999999024,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-1-4",
+                "path": "$TMP_REPO/created/probe-nativeGit-1-4",
+                "code": 0,
+                "ms": 52.72008300000016,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-1-5",
+                "path": "$TMP_REPO/created/probe-nativeGit-1-5",
+                "code": 0,
+                "ms": 52.18412499999977,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-1-6",
+                "path": "$TMP_REPO/created/probe-nativeGit-1-6",
+                "code": 0,
+                "ms": 50.28112500000134,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-1-7",
+                "path": "$TMP_REPO/created/probe-nativeGit-1-7",
+                "code": 0,
+                "ms": 53.42920899999808,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-1-8",
+                "path": "$TMP_REPO/created/probe-nativeGit-1-8",
+                "code": 0,
+                "ms": 71.05762500000128,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-1-9",
+                "path": "$TMP_REPO/created/probe-nativeGit-1-9",
+                "code": 0,
+                "ms": 65.42674999999872,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-1-10",
+                "path": "$TMP_REPO/created/probe-nativeGit-1-10",
+                "code": 0,
+                "ms": 74.37558300000092,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-1-11",
+                "path": "$TMP_REPO/created/probe-nativeGit-1-11",
+                "code": 0,
+                "ms": 66.28066599999875,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-1-12",
+                "path": "$TMP_REPO/created/probe-nativeGit-1-12",
+                "code": 0,
+                "ms": 72.67204200000197,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-1-13",
+                "path": "$TMP_REPO/created/probe-nativeGit-1-13",
+                "code": 0,
+                "ms": 74.28541600000244,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-1-14",
+                "path": "$TMP_REPO/created/probe-nativeGit-1-14",
+                "code": 0,
+                "ms": 74.13474999999744,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-1-15",
+                "path": "$TMP_REPO/created/probe-nativeGit-1-15",
+                "code": 0,
+                "ms": 74.93229200000133,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-1-16",
+                "path": "$TMP_REPO/created/probe-nativeGit-1-16",
+                "code": 0,
+                "ms": 62.47554200000013,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-1-17",
+                "path": "$TMP_REPO/created/probe-nativeGit-1-17",
+                "code": 0,
+                "ms": 64.11979200000133,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-1-18",
+                "path": "$TMP_REPO/created/probe-nativeGit-1-18",
+                "code": 0,
+                "ms": 63.06108299999687,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-1-19",
+                "path": "$TMP_REPO/created/probe-nativeGit-1-19",
+                "code": 0,
+                "ms": 57.51179200000115,
+                "outputValid": true,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 2,
+          "order": ["worktrunk", "nativeGit"],
+          "worktrunk": {
+            "implementation": "worktrunk",
+            "wallMs": 912.3058329999985,
+            "safe": true,
+            "exactRegistration": true,
+            "inventoryCount": 69,
+            "cleanupInventoryCount": 49,
+            "peakActive": 4,
+            "loadAverage": {
+              "before": [21.56591796875, 19.6474609375, 20.29150390625],
+              "after": [21.56591796875, 19.6474609375, 20.29150390625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 5.824,
+              "systemCpuMs": 18.341,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 328
+            },
+            "commands": [
+              {
+                "branch": "probe-worktrunk-2-0",
+                "path": "$TMP_REPO/created/probe-worktrunk-2-0",
+                "code": 0,
+                "ms": 209.31679200000508,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-2-0 from main and worktree @ $TMP_REPO/created/probe-worktrunk-2-0"
+              },
+              {
+                "branch": "probe-worktrunk-2-1",
+                "path": "$TMP_REPO/created/probe-worktrunk-2-1",
+                "code": 0,
+                "ms": 213.77550000000338,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-2-1 from main and worktree @ $TMP_REPO/created/probe-worktrunk-2-1"
+              },
+              {
+                "branch": "probe-worktrunk-2-2",
+                "path": "$TMP_REPO/created/probe-worktrunk-2-2",
+                "code": 0,
+                "ms": 213.75554099999863,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-2-2 from main and worktree @ $TMP_REPO/created/probe-worktrunk-2-2"
+              },
+              {
+                "branch": "probe-worktrunk-2-3",
+                "path": "$TMP_REPO/created/probe-worktrunk-2-3",
+                "code": 0,
+                "ms": 211.2490420000031,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-2-3 from main and worktree @ $TMP_REPO/created/probe-worktrunk-2-3"
+              },
+              {
+                "branch": "probe-worktrunk-2-4",
+                "path": "$TMP_REPO/created/probe-worktrunk-2-4",
+                "code": 0,
+                "ms": 155.51904099999956,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-2-4 from main and worktree @ $TMP_REPO/created/probe-worktrunk-2-4"
+              },
+              {
+                "branch": "probe-worktrunk-2-5",
+                "path": "$TMP_REPO/created/probe-worktrunk-2-5",
+                "code": 0,
+                "ms": 166.21079199999804,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-2-5 from main and worktree @ $TMP_REPO/created/probe-worktrunk-2-5"
+              },
+              {
+                "branch": "probe-worktrunk-2-6",
+                "path": "$TMP_REPO/created/probe-worktrunk-2-6",
+                "code": 0,
+                "ms": 162.95400000000518,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-2-6 from main and worktree @ $TMP_REPO/created/probe-worktrunk-2-6"
+              },
+              {
+                "branch": "probe-worktrunk-2-7",
+                "path": "$TMP_REPO/created/probe-worktrunk-2-7",
+                "code": 0,
+                "ms": 163.5877079999991,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-2-7 from main and worktree @ $TMP_REPO/created/probe-worktrunk-2-7"
+              },
+              {
+                "branch": "probe-worktrunk-2-8",
+                "path": "$TMP_REPO/created/probe-worktrunk-2-8",
+                "code": 0,
+                "ms": 168.55950000000303,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-2-8 from main and worktree @ $TMP_REPO/created/probe-worktrunk-2-8"
+              },
+              {
+                "branch": "probe-worktrunk-2-9",
+                "path": "$TMP_REPO/created/probe-worktrunk-2-9",
+                "code": 0,
+                "ms": 180.36675000000105,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-2-9 from main and worktree @ $TMP_REPO/created/probe-worktrunk-2-9"
+              },
+              {
+                "branch": "probe-worktrunk-2-10",
+                "path": "$TMP_REPO/created/probe-worktrunk-2-10",
+                "code": 0,
+                "ms": 179.77391699999862,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-2-10 from main and worktree @ $TMP_REPO/created/probe-worktrunk-2-10"
+              },
+              {
+                "branch": "probe-worktrunk-2-11",
+                "path": "$TMP_REPO/created/probe-worktrunk-2-11",
+                "code": 0,
+                "ms": 179.55337499999587,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-2-11 from main and worktree @ $TMP_REPO/created/probe-worktrunk-2-11"
+              },
+              {
+                "branch": "probe-worktrunk-2-12",
+                "path": "$TMP_REPO/created/probe-worktrunk-2-12",
+                "code": 0,
+                "ms": 162.07383399999526,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-2-12 from main and worktree @ $TMP_REPO/created/probe-worktrunk-2-12"
+              },
+              {
+                "branch": "probe-worktrunk-2-13",
+                "path": "$TMP_REPO/created/probe-worktrunk-2-13",
+                "code": 0,
+                "ms": 168.48887499999546,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-2-13 from main and worktree @ $TMP_REPO/created/probe-worktrunk-2-13"
+              },
+              {
+                "branch": "probe-worktrunk-2-14",
+                "path": "$TMP_REPO/created/probe-worktrunk-2-14",
+                "code": 0,
+                "ms": 171.4370409999974,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-2-14 from main and worktree @ $TMP_REPO/created/probe-worktrunk-2-14"
+              },
+              {
+                "branch": "probe-worktrunk-2-15",
+                "path": "$TMP_REPO/created/probe-worktrunk-2-15",
+                "code": 0,
+                "ms": 168.2650829999984,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-2-15 from main and worktree @ $TMP_REPO/created/probe-worktrunk-2-15"
+              },
+              {
+                "branch": "probe-worktrunk-2-16",
+                "path": "$TMP_REPO/created/probe-worktrunk-2-16",
+                "code": 0,
+                "ms": 174.35437500000262,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-2-16 from main and worktree @ $TMP_REPO/created/probe-worktrunk-2-16"
+              },
+              {
+                "branch": "probe-worktrunk-2-17",
+                "path": "$TMP_REPO/created/probe-worktrunk-2-17",
+                "code": 0,
+                "ms": 185.22675000000163,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-2-17 from main and worktree @ $TMP_REPO/created/probe-worktrunk-2-17"
+              },
+              {
+                "branch": "probe-worktrunk-2-18",
+                "path": "$TMP_REPO/created/probe-worktrunk-2-18",
+                "code": 0,
+                "ms": 181.27666599999793,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-2-18 from main and worktree @ $TMP_REPO/created/probe-worktrunk-2-18"
+              },
+              {
+                "branch": "probe-worktrunk-2-19",
+                "path": "$TMP_REPO/created/probe-worktrunk-2-19",
+                "code": 0,
+                "ms": 178.9308749999982,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-2-19 from main and worktree @ $TMP_REPO/created/probe-worktrunk-2-19"
+              }
+            ]
+          },
+          "nativeGit": {
+            "implementation": "nativeGit",
+            "wallMs": 420.33950000000186,
+            "safe": true,
+            "exactRegistration": true,
+            "inventoryCount": 69,
+            "cleanupInventoryCount": 49,
+            "peakActive": 4,
+            "loadAverage": {
+              "before": [21.56591796875, 19.6474609375, 20.29150390625],
+              "after": [23.8427734375, 20.15087890625, 20.46533203125]
+            },
+            "resourceUsage": {
+              "userCpuMs": 6.065,
+              "systemCpuMs": 14.86,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 211
+            },
+            "commands": [
+              {
+                "branch": "probe-nativeGit-2-0",
+                "path": "$TMP_REPO/created/probe-nativeGit-2-0",
+                "code": 0,
+                "ms": 55.44579099999828,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-2-1",
+                "path": "$TMP_REPO/created/probe-nativeGit-2-1",
+                "code": 0,
+                "ms": 55.75800000000163,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-2-2",
+                "path": "$TMP_REPO/created/probe-nativeGit-2-2",
+                "code": 0,
+                "ms": 56.59983300000022,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-2-3",
+                "path": "$TMP_REPO/created/probe-nativeGit-2-3",
+                "code": 0,
+                "ms": 55.287499999998545,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-2-4",
+                "path": "$TMP_REPO/created/probe-nativeGit-2-4",
+                "code": 0,
+                "ms": 58.27925000000687,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-2-5",
+                "path": "$TMP_REPO/created/probe-nativeGit-2-5",
+                "code": 0,
+                "ms": 55.51370800000586,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-2-6",
+                "path": "$TMP_REPO/created/probe-nativeGit-2-6",
+                "code": 0,
+                "ms": 55.8559580000001,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-2-7",
+                "path": "$TMP_REPO/created/probe-nativeGit-2-7",
+                "code": 0,
+                "ms": 57.4386250000025,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-2-8",
+                "path": "$TMP_REPO/created/probe-nativeGit-2-8",
+                "code": 0,
+                "ms": 56.04291599999851,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-2-9",
+                "path": "$TMP_REPO/created/probe-nativeGit-2-9",
+                "code": 0,
+                "ms": 65.70912500000122,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-2-10",
+                "path": "$TMP_REPO/created/probe-nativeGit-2-10",
+                "code": 0,
+                "ms": 56.81941699999879,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-2-11",
+                "path": "$TMP_REPO/created/probe-nativeGit-2-11",
+                "code": 0,
+                "ms": 57.96533400000044,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-2-12",
+                "path": "$TMP_REPO/created/probe-nativeGit-2-12",
+                "code": 0,
+                "ms": 73.85758400000486,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-2-13",
+                "path": "$TMP_REPO/created/probe-nativeGit-2-13",
+                "code": 0,
+                "ms": 84.08983300000546,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-2-14",
+                "path": "$TMP_REPO/created/probe-nativeGit-2-14",
+                "code": 0,
+                "ms": 86.13529199999903,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-2-15",
+                "path": "$TMP_REPO/created/probe-nativeGit-2-15",
+                "code": 0,
+                "ms": 79.42970799999603,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-2-16",
+                "path": "$TMP_REPO/created/probe-nativeGit-2-16",
+                "code": 0,
+                "ms": 142.02545900000405,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-2-17",
+                "path": "$TMP_REPO/created/probe-nativeGit-2-17",
+                "code": 0,
+                "ms": 126.09691700000258,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-2-18",
+                "path": "$TMP_REPO/created/probe-nativeGit-2-18",
+                "code": 0,
+                "ms": 132.85525000000052,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-2-19",
+                "path": "$TMP_REPO/created/probe-nativeGit-2-19",
+                "code": 0,
+                "ms": 161.01112499999726,
+                "outputValid": true,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 3,
+          "order": ["nativeGit", "worktrunk"],
+          "worktrunk": {
+            "implementation": "worktrunk",
+            "wallMs": 1169.4526250000054,
+            "safe": true,
+            "exactRegistration": true,
+            "inventoryCount": 69,
+            "cleanupInventoryCount": 49,
+            "peakActive": 4,
+            "loadAverage": {
+              "before": [25.93701171875, 20.64599609375, 20.63818359375],
+              "after": [25.93701171875, 20.64599609375, 20.63818359375]
+            },
+            "resourceUsage": {
+              "userCpuMs": 14.985,
+              "systemCpuMs": 24.647,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 541
+            },
+            "commands": [
+              {
+                "branch": "probe-worktrunk-3-0",
+                "path": "$TMP_REPO/created/probe-worktrunk-3-0",
+                "code": 0,
+                "ms": 312.2924589999966,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-3-0 from main and worktree @ $TMP_REPO/created/probe-worktrunk-3-0"
+              },
+              {
+                "branch": "probe-worktrunk-3-1",
+                "path": "$TMP_REPO/created/probe-worktrunk-3-1",
+                "code": 0,
+                "ms": 347.231749999999,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-3-1 from main and worktree @ $TMP_REPO/created/probe-worktrunk-3-1"
+              },
+              {
+                "branch": "probe-worktrunk-3-2",
+                "path": "$TMP_REPO/created/probe-worktrunk-3-2",
+                "code": 0,
+                "ms": 333.2347079999963,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-3-2 from main and worktree @ $TMP_REPO/created/probe-worktrunk-3-2"
+              },
+              {
+                "branch": "probe-worktrunk-3-3",
+                "path": "$TMP_REPO/created/probe-worktrunk-3-3",
+                "code": 0,
+                "ms": 334.651082999997,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-3-3 from main and worktree @ $TMP_REPO/created/probe-worktrunk-3-3"
+              },
+              {
+                "branch": "probe-worktrunk-3-4",
+                "path": "$TMP_REPO/created/probe-worktrunk-3-4",
+                "code": 0,
+                "ms": 224.23483300000225,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-3-4 from main and worktree @ $TMP_REPO/created/probe-worktrunk-3-4"
+              },
+              {
+                "branch": "probe-worktrunk-3-5",
+                "path": "$TMP_REPO/created/probe-worktrunk-3-5",
+                "code": 0,
+                "ms": 216.82787500000268,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-3-5 from main and worktree @ $TMP_REPO/created/probe-worktrunk-3-5"
+              },
+              {
+                "branch": "probe-worktrunk-3-6",
+                "path": "$TMP_REPO/created/probe-worktrunk-3-6",
+                "code": 0,
+                "ms": 213.98141699999542,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-3-6 from main and worktree @ $TMP_REPO/created/probe-worktrunk-3-6"
+              },
+              {
+                "branch": "probe-worktrunk-3-7",
+                "path": "$TMP_REPO/created/probe-worktrunk-3-7",
+                "code": 0,
+                "ms": 217.4117910000059,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-3-7 from main and worktree @ $TMP_REPO/created/probe-worktrunk-3-7"
+              },
+              {
+                "branch": "probe-worktrunk-3-8",
+                "path": "$TMP_REPO/created/probe-worktrunk-3-8",
+                "code": 0,
+                "ms": 221.52941699999792,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-3-8 from main and worktree @ $TMP_REPO/created/probe-worktrunk-3-8"
+              },
+              {
+                "branch": "probe-worktrunk-3-9",
+                "path": "$TMP_REPO/created/probe-worktrunk-3-9",
+                "code": 0,
+                "ms": 229.2019999999975,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-3-9 from main and worktree @ $TMP_REPO/created/probe-worktrunk-3-9"
+              },
+              {
+                "branch": "probe-worktrunk-3-10",
+                "path": "$TMP_REPO/created/probe-worktrunk-3-10",
+                "code": 0,
+                "ms": 218.1152910000019,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-3-10 from main and worktree @ $TMP_REPO/created/probe-worktrunk-3-10"
+              },
+              {
+                "branch": "probe-worktrunk-3-11",
+                "path": "$TMP_REPO/created/probe-worktrunk-3-11",
+                "code": 0,
+                "ms": 222.4637920000023,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-3-11 from main and worktree @ $TMP_REPO/created/probe-worktrunk-3-11"
+              },
+              {
+                "branch": "probe-worktrunk-3-12",
+                "path": "$TMP_REPO/created/probe-worktrunk-3-12",
+                "code": 0,
+                "ms": 192.98795899999823,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-3-12 from main and worktree @ $TMP_REPO/created/probe-worktrunk-3-12"
+              },
+              {
+                "branch": "probe-worktrunk-3-13",
+                "path": "$TMP_REPO/created/probe-worktrunk-3-13",
+                "code": 0,
+                "ms": 181.07258300000103,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-3-13 from main and worktree @ $TMP_REPO/created/probe-worktrunk-3-13"
+              },
+              {
+                "branch": "probe-worktrunk-3-14",
+                "path": "$TMP_REPO/created/probe-worktrunk-3-14",
+                "code": 0,
+                "ms": 182.72550000000047,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-3-14 from main and worktree @ $TMP_REPO/created/probe-worktrunk-3-14"
+              },
+              {
+                "branch": "probe-worktrunk-3-15",
+                "path": "$TMP_REPO/created/probe-worktrunk-3-15",
+                "code": 0,
+                "ms": 189.0301249999975,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-3-15 from main and worktree @ $TMP_REPO/created/probe-worktrunk-3-15"
+              },
+              {
+                "branch": "probe-worktrunk-3-16",
+                "path": "$TMP_REPO/created/probe-worktrunk-3-16",
+                "code": 0,
+                "ms": 196.18012499999895,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-3-16 from main and worktree @ $TMP_REPO/created/probe-worktrunk-3-16"
+              },
+              {
+                "branch": "probe-worktrunk-3-17",
+                "path": "$TMP_REPO/created/probe-worktrunk-3-17",
+                "code": 0,
+                "ms": 192.74812499999825,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-3-17 from main and worktree @ $TMP_REPO/created/probe-worktrunk-3-17"
+              },
+              {
+                "branch": "probe-worktrunk-3-18",
+                "path": "$TMP_REPO/created/probe-worktrunk-3-18",
+                "code": 0,
+                "ms": 195.3915829999969,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-3-18 from main and worktree @ $TMP_REPO/created/probe-worktrunk-3-18"
+              },
+              {
+                "branch": "probe-worktrunk-3-19",
+                "path": "$TMP_REPO/created/probe-worktrunk-3-19",
+                "code": 0,
+                "ms": 187.2571670000034,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-3-19 from main and worktree @ $TMP_REPO/created/probe-worktrunk-3-19"
+              }
+            ]
+          },
+          "nativeGit": {
+            "implementation": "nativeGit",
+            "wallMs": 270.5228330000027,
+            "safe": true,
+            "exactRegistration": true,
+            "inventoryCount": 69,
+            "cleanupInventoryCount": 49,
+            "peakActive": 4,
+            "loadAverage": {
+              "before": [23.8427734375, 20.15087890625, 20.46533203125],
+              "after": [23.8427734375, 20.15087890625, 20.46533203125]
+            },
+            "resourceUsage": {
+              "userCpuMs": 10.625,
+              "systemCpuMs": 12.715,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 232
+            },
+            "commands": [
+              {
+                "branch": "probe-nativeGit-3-0",
+                "path": "$TMP_REPO/created/probe-nativeGit-3-0",
+                "code": 0,
+                "ms": 44.94658299999719,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-3-1",
+                "path": "$TMP_REPO/created/probe-nativeGit-3-1",
+                "code": 0,
+                "ms": 43.613250000002154,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-3-2",
+                "path": "$TMP_REPO/created/probe-nativeGit-3-2",
+                "code": 0,
+                "ms": 54.113875000002736,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-3-3",
+                "path": "$TMP_REPO/created/probe-nativeGit-3-3",
+                "code": 0,
+                "ms": 46.368625000002794,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-3-4",
+                "path": "$TMP_REPO/created/probe-nativeGit-3-4",
+                "code": 0,
+                "ms": 47.61162499999773,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-3-5",
+                "path": "$TMP_REPO/created/probe-nativeGit-3-5",
+                "code": 0,
+                "ms": 41.5958329999994,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-3-6",
+                "path": "$TMP_REPO/created/probe-nativeGit-3-6",
+                "code": 0,
+                "ms": 40.18487499999901,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-3-7",
+                "path": "$TMP_REPO/created/probe-nativeGit-3-7",
+                "code": 0,
+                "ms": 38.733916999997746,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-3-8",
+                "path": "$TMP_REPO/created/probe-nativeGit-3-8",
+                "code": 0,
+                "ms": 55.685749999996915,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-3-9",
+                "path": "$TMP_REPO/created/probe-nativeGit-3-9",
+                "code": 0,
+                "ms": 51.69154200000048,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-3-10",
+                "path": "$TMP_REPO/created/probe-nativeGit-3-10",
+                "code": 0,
+                "ms": 53.57983400000376,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-3-11",
+                "path": "$TMP_REPO/created/probe-nativeGit-3-11",
+                "code": 0,
+                "ms": 52.481250000004366,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-3-12",
+                "path": "$TMP_REPO/created/probe-nativeGit-3-12",
+                "code": 0,
+                "ms": 62.55758399999468,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-3-13",
+                "path": "$TMP_REPO/created/probe-nativeGit-3-13",
+                "code": 0,
+                "ms": 57.10770899999625,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-3-14",
+                "path": "$TMP_REPO/created/probe-nativeGit-3-14",
+                "code": 0,
+                "ms": 63.43824999999924,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-3-15",
+                "path": "$TMP_REPO/created/probe-nativeGit-3-15",
+                "code": 0,
+                "ms": 61.238584000006085,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-3-16",
+                "path": "$TMP_REPO/created/probe-nativeGit-3-16",
+                "code": 0,
+                "ms": 63.06329199999891,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-3-17",
+                "path": "$TMP_REPO/created/probe-nativeGit-3-17",
+                "code": 0,
+                "ms": 56.06908300000214,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-3-18",
+                "path": "$TMP_REPO/created/probe-nativeGit-3-18",
+                "code": 0,
+                "ms": 62.767375000003085,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-3-19",
+                "path": "$TMP_REPO/created/probe-nativeGit-3-19",
+                "code": 0,
+                "ms": 57.77979100000084,
+                "outputValid": true,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 4,
+          "order": ["worktrunk", "nativeGit"],
+          "worktrunk": {
+            "implementation": "worktrunk",
+            "wallMs": 929.5856249999997,
+            "safe": true,
+            "exactRegistration": true,
+            "inventoryCount": 69,
+            "cleanupInventoryCount": 49,
+            "peakActive": 4,
+            "loadAverage": {
+              "before": [25.93701171875, 20.64599609375, 20.63818359375],
+              "after": [24.26025390625, 20.38623046875, 20.54638671875]
+            },
+            "resourceUsage": {
+              "userCpuMs": 5.119,
+              "systemCpuMs": 16.356,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 332
+            },
+            "commands": [
+              {
+                "branch": "probe-worktrunk-4-0",
+                "path": "$TMP_REPO/created/probe-worktrunk-4-0",
+                "code": 0,
+                "ms": 205.5012499999939,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-4-0 from main and worktree @ $TMP_REPO/created/probe-worktrunk-4-0"
+              },
+              {
+                "branch": "probe-worktrunk-4-1",
+                "path": "$TMP_REPO/created/probe-worktrunk-4-1",
+                "code": 0,
+                "ms": 201.24191599999904,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-4-1 from main and worktree @ $TMP_REPO/created/probe-worktrunk-4-1"
+              },
+              {
+                "branch": "probe-worktrunk-4-2",
+                "path": "$TMP_REPO/created/probe-worktrunk-4-2",
+                "code": 0,
+                "ms": 205.39541699999972,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-4-2 from main and worktree @ $TMP_REPO/created/probe-worktrunk-4-2"
+              },
+              {
+                "branch": "probe-worktrunk-4-3",
+                "path": "$TMP_REPO/created/probe-worktrunk-4-3",
+                "code": 0,
+                "ms": 200.80383299999812,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-4-3 from main and worktree @ $TMP_REPO/created/probe-worktrunk-4-3"
+              },
+              {
+                "branch": "probe-worktrunk-4-4",
+                "path": "$TMP_REPO/created/probe-worktrunk-4-4",
+                "code": 0,
+                "ms": 172.08024999999907,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-4-4 from main and worktree @ $TMP_REPO/created/probe-worktrunk-4-4"
+              },
+              {
+                "branch": "probe-worktrunk-4-5",
+                "path": "$TMP_REPO/created/probe-worktrunk-4-5",
+                "code": 0,
+                "ms": 170.41870899999776,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-4-5 from main and worktree @ $TMP_REPO/created/probe-worktrunk-4-5"
+              },
+              {
+                "branch": "probe-worktrunk-4-6",
+                "path": "$TMP_REPO/created/probe-worktrunk-4-6",
+                "code": 0,
+                "ms": 167.21166700000322,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-4-6 from main and worktree @ $TMP_REPO/created/probe-worktrunk-4-6"
+              },
+              {
+                "branch": "probe-worktrunk-4-7",
+                "path": "$TMP_REPO/created/probe-worktrunk-4-7",
+                "code": 0,
+                "ms": 167.9453330000033,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-4-7 from main and worktree @ $TMP_REPO/created/probe-worktrunk-4-7"
+              },
+              {
+                "branch": "probe-worktrunk-4-8",
+                "path": "$TMP_REPO/created/probe-worktrunk-4-8",
+                "code": 0,
+                "ms": 183.7479170000006,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-4-8 from main and worktree @ $TMP_REPO/created/probe-worktrunk-4-8"
+              },
+              {
+                "branch": "probe-worktrunk-4-9",
+                "path": "$TMP_REPO/created/probe-worktrunk-4-9",
+                "code": 0,
+                "ms": 181.10399999999936,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-4-9 from main and worktree @ $TMP_REPO/created/probe-worktrunk-4-9"
+              },
+              {
+                "branch": "probe-worktrunk-4-10",
+                "path": "$TMP_REPO/created/probe-worktrunk-4-10",
+                "code": 0,
+                "ms": 181.43649999999616,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-4-10 from main and worktree @ $TMP_REPO/created/probe-worktrunk-4-10"
+              },
+              {
+                "branch": "probe-worktrunk-4-11",
+                "path": "$TMP_REPO/created/probe-worktrunk-4-11",
+                "code": 0,
+                "ms": 189.9867499999964,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-4-11 from main and worktree @ $TMP_REPO/created/probe-worktrunk-4-11"
+              },
+              {
+                "branch": "probe-worktrunk-4-12",
+                "path": "$TMP_REPO/created/probe-worktrunk-4-12",
+                "code": 0,
+                "ms": 179.86824999999953,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-4-12 from main and worktree @ $TMP_REPO/created/probe-worktrunk-4-12"
+              },
+              {
+                "branch": "probe-worktrunk-4-13",
+                "path": "$TMP_REPO/created/probe-worktrunk-4-13",
+                "code": 0,
+                "ms": 177.98670799999672,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-4-13 from main and worktree @ $TMP_REPO/created/probe-worktrunk-4-13"
+              },
+              {
+                "branch": "probe-worktrunk-4-14",
+                "path": "$TMP_REPO/created/probe-worktrunk-4-14",
+                "code": 0,
+                "ms": 174.51845799999865,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-4-14 from main and worktree @ $TMP_REPO/created/probe-worktrunk-4-14"
+              },
+              {
+                "branch": "probe-worktrunk-4-15",
+                "path": "$TMP_REPO/created/probe-worktrunk-4-15",
+                "code": 0,
+                "ms": 166.90883300000132,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-4-15 from main and worktree @ $TMP_REPO/created/probe-worktrunk-4-15"
+              },
+              {
+                "branch": "probe-worktrunk-4-16",
+                "path": "$TMP_REPO/created/probe-worktrunk-4-16",
+                "code": 0,
+                "ms": 188.60495800000353,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-4-16 from main and worktree @ $TMP_REPO/created/probe-worktrunk-4-16"
+              },
+              {
+                "branch": "probe-worktrunk-4-17",
+                "path": "$TMP_REPO/created/probe-worktrunk-4-17",
+                "code": 0,
+                "ms": 197.14250000000175,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-4-17 from main and worktree @ $TMP_REPO/created/probe-worktrunk-4-17"
+              },
+              {
+                "branch": "probe-worktrunk-4-18",
+                "path": "$TMP_REPO/created/probe-worktrunk-4-18",
+                "code": 0,
+                "ms": 188.90395899999567,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-4-18 from main and worktree @ $TMP_REPO/created/probe-worktrunk-4-18"
+              },
+              {
+                "branch": "probe-worktrunk-4-19",
+                "path": "$TMP_REPO/created/probe-worktrunk-4-19",
+                "code": 0,
+                "ms": 185.14520799999445,
+                "outputValid": true,
+                "stderr": "✓ Created branch probe-worktrunk-4-19 from main and worktree @ $TMP_REPO/created/probe-worktrunk-4-19"
+              }
+            ]
+          },
+          "nativeGit": {
+            "implementation": "nativeGit",
+            "wallMs": 224.47437499999796,
+            "safe": true,
+            "exactRegistration": true,
+            "inventoryCount": 69,
+            "cleanupInventoryCount": 49,
+            "peakActive": 4,
+            "loadAverage": {
+              "before": [24.26025390625, 20.38623046875, 20.54638671875],
+              "after": [24.26025390625, 20.38623046875, 20.54638671875]
+            },
+            "resourceUsage": {
+              "userCpuMs": 5.772,
+              "systemCpuMs": 10.716,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 171
+            },
+            "commands": [
+              {
+                "branch": "probe-nativeGit-4-0",
+                "path": "$TMP_REPO/created/probe-nativeGit-4-0",
+                "code": 0,
+                "ms": 47.898832999999286,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-4-1",
+                "path": "$TMP_REPO/created/probe-nativeGit-4-1",
+                "code": 0,
+                "ms": 43.401083999997354,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-4-2",
+                "path": "$TMP_REPO/created/probe-nativeGit-4-2",
+                "code": 0,
+                "ms": 48.4497080000001,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-4-3",
+                "path": "$TMP_REPO/created/probe-nativeGit-4-3",
+                "code": 0,
+                "ms": 43.82650000000285,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-4-4",
+                "path": "$TMP_REPO/created/probe-nativeGit-4-4",
+                "code": 0,
+                "ms": 56.06391699999949,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-4-5",
+                "path": "$TMP_REPO/created/probe-nativeGit-4-5",
+                "code": 0,
+                "ms": 41.09733299999789,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-4-6",
+                "path": "$TMP_REPO/created/probe-nativeGit-4-6",
+                "code": 0,
+                "ms": 47.20141699999658,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-4-7",
+                "path": "$TMP_REPO/created/probe-nativeGit-4-7",
+                "code": 0,
+                "ms": 40.4340830000001,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-4-8",
+                "path": "$TMP_REPO/created/probe-nativeGit-4-8",
+                "code": 0,
+                "ms": 41.083000000005995,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-4-9",
+                "path": "$TMP_REPO/created/probe-nativeGit-4-9",
+                "code": 0,
+                "ms": 40.72020799999882,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-4-10",
+                "path": "$TMP_REPO/created/probe-nativeGit-4-10",
+                "code": 0,
+                "ms": 40.949124999999185,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-4-11",
+                "path": "$TMP_REPO/created/probe-nativeGit-4-11",
+                "code": 0,
+                "ms": 40.8481660000034,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-4-12",
+                "path": "$TMP_REPO/created/probe-nativeGit-4-12",
+                "code": 0,
+                "ms": 41.35866700000042,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-4-13",
+                "path": "$TMP_REPO/created/probe-nativeGit-4-13",
+                "code": 0,
+                "ms": 42.32266600000003,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-4-14",
+                "path": "$TMP_REPO/created/probe-nativeGit-4-14",
+                "code": 0,
+                "ms": 43.247292000000016,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-4-15",
+                "path": "$TMP_REPO/created/probe-nativeGit-4-15",
+                "code": 0,
+                "ms": 41.16250000000582,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-4-16",
+                "path": "$TMP_REPO/created/probe-nativeGit-4-16",
+                "code": 0,
+                "ms": 41.05229200000031,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-4-17",
+                "path": "$TMP_REPO/created/probe-nativeGit-4-17",
+                "code": 0,
+                "ms": 43.08637499999895,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-4-18",
+                "path": "$TMP_REPO/created/probe-nativeGit-4-18",
+                "code": 0,
+                "ms": 43.63108300000022,
+                "outputValid": true,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-nativeGit-4-19",
+                "path": "$TMP_REPO/created/probe-nativeGit-4-19",
+                "code": 0,
+                "ms": 42.369916000003286,
+                "outputValid": true,
+                "stderr": ""
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

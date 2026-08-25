@@ -1,0 +1,4201 @@
+{
+  "schemaVersion": 1,
+  "benchmark": "station-quick-session-native-git-verification-comparison",
+  "generatedAt": "2026-08-25T08:23:22.320Z",
+  "machine": {
+    "platform": "darwin",
+    "arch": "arm64",
+    "cpuModel": "Apple M4",
+    "logicalCpuCount": 10
+  },
+  "tools": {
+    "git": "git version 2.50.1 (Apple Git-155)"
+  },
+  "repositoryShape": {
+    "initialWorktrees": 49,
+    "ordinaryLinkedWorktrees": 48,
+    "maxConcurrent": 4,
+    "repetitions": 5
+  },
+  "keepThresholds": {
+    "filesystemVerificationP95Ms": 2,
+    "singleMedianImprovementFraction": 0.12,
+    "singleP95ImprovementFraction": 0.12,
+    "burst5MedianImprovementFraction": 0.1,
+    "burst5P95ImprovementFraction": 0.1,
+    "burst20MedianImprovementFraction": 0.08,
+    "burst20P95ImprovementFraction": 0.08,
+    "burst3MaximumRegressionFraction": 0
+  },
+  "allSafe": true,
+  "thresholdsPassed": false,
+  "scenarios": [
+    {
+      "burstSize": 1,
+      "pairs": [
+        {
+          "repetition": 0,
+          "order": ["processVerification", "filesystemVerification"],
+          "processVerification": {
+            "strategy": "processVerification",
+            "wallMs": 54.61804200000006,
+            "throughputPerSecond": 18.308968307578635,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 1,
+            "inventoryCount": 50,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [16.1298828125, 18.26318359375, 20.27099609375],
+              "after": [16.1298828125, 18.26318359375, 20.27099609375]
+            },
+            "resourceUsage": {
+              "userCpuMs": 3.318,
+              "systemCpuMs": 2.258,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 47
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 10.570083999999952,
+                "mutationMs": 32.27683399999978,
+                "verificationMs": 11.674833000000035,
+                "code": 0,
+                "registrationIdentity": "git-registration:bc3764bbd5e956c6fefaa5006718cf46cf30022fe27106f10114eef276d287ae",
+                "stderr": ""
+              }
+            ]
+          },
+          "filesystemVerification": {
+            "strategy": "filesystemVerification",
+            "wallMs": 42.97416599999997,
+            "throughputPerSecond": 23.26979422939821,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 1,
+            "inventoryCount": 50,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [15.158203125, 18.0263671875, 20.17529296875],
+              "after": [15.158203125, 18.0263671875, 20.17529296875]
+            },
+            "resourceUsage": {
+              "userCpuMs": 2.321,
+              "systemCpuMs": 1.738,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 58
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 10.546000000000276,
+                "mutationMs": 31.85174999999981,
+                "verificationMs": 0.5475419999997939,
+                "code": 0,
+                "registrationIdentity": "git-registration:13f70e33a529149dcfe28251a730842d77438a621eb1f35665725eb299a32dff",
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 1,
+          "order": ["filesystemVerification", "processVerification"],
+          "processVerification": {
+            "strategy": "processVerification",
+            "wallMs": 51.29395899999872,
+            "throughputPerSecond": 19.49547314138932,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 1,
+            "inventoryCount": 50,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [14.2646484375, 17.79345703125, 20.080078125],
+              "after": [14.2646484375, 17.79345703125, 20.080078125]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.433,
+              "systemCpuMs": 1.905,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 49
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 9.480208000000857,
+                "mutationMs": 31.014208000000508,
+                "verificationMs": 10.774583999998868,
+                "code": 0,
+                "registrationIdentity": "git-registration:17be303b1b10dd61e93d0338d3a51a6f38285bb161ea90c9c42125c4c05d5039",
+                "stderr": ""
+              }
+            ]
+          },
+          "filesystemVerification": {
+            "strategy": "filesystemVerification",
+            "wallMs": 39.54108300000007,
+            "throughputPerSecond": 25.29015201733342,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 1,
+            "inventoryCount": 50,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [14.2646484375, 17.79345703125, 20.080078125],
+              "after": [14.2646484375, 17.79345703125, 20.080078125]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.412,
+              "systemCpuMs": 1.542,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 50
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 9.196791999998823,
+                "mutationMs": 29.91704100000061,
+                "verificationMs": 0.4020409999993717,
+                "code": 0,
+                "registrationIdentity": "git-registration:238b0b3c355e321e338c2b8925fd967f63a0154e38e9b1ba25627731649723b3",
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 2,
+          "order": ["processVerification", "filesystemVerification"],
+          "processVerification": {
+            "strategy": "processVerification",
+            "wallMs": 49.781042000000525,
+            "throughputPerSecond": 20.08796842782016,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 1,
+            "inventoryCount": 50,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [13.5224609375, 17.5810546875, 19.99169921875],
+              "after": [13.5224609375, 17.5810546875, 19.99169921875]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.284,
+              "systemCpuMs": 1.869,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 44
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 10.14679200000137,
+                "mutationMs": 29.812458000000333,
+                "verificationMs": 9.802582999998776,
+                "code": 0,
+                "registrationIdentity": "git-registration:95840f30988d87a75f19a8d0ad77b0794b1c8b5bc15bdf46e7276f9cb1c6c78a",
+                "stderr": ""
+              }
+            ]
+          },
+          "filesystemVerification": {
+            "strategy": "filesystemVerification",
+            "wallMs": 39.517250000000786,
+            "throughputPerSecond": 25.305404601787323,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 1,
+            "inventoryCount": 50,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [13.5224609375, 17.5810546875, 19.99169921875],
+              "after": [13.5224609375, 17.5810546875, 19.99169921875]
+            },
+            "resourceUsage": {
+              "userCpuMs": 0.967,
+              "systemCpuMs": 1.496,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 53
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 9.679000000000087,
+                "mutationMs": 29.526082999998835,
+                "verificationMs": 0.29670900000019174,
+                "code": 0,
+                "registrationIdentity": "git-registration:eb58daa2beda83151e0275af9994431d0b632c1d594e3c7d89ea4a5bcb8fbea9",
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 3,
+          "order": ["filesystemVerification", "processVerification"],
+          "processVerification": {
+            "strategy": "processVerification",
+            "wallMs": 50.55829100000119,
+            "throughputPerSecond": 19.779149576079945,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 1,
+            "inventoryCount": 50,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [12.6796875, 17.3388671875, 19.89208984375],
+              "after": [12.6796875, 17.3388671875, 19.89208984375]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.142,
+              "systemCpuMs": 1.86,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 39
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 9.488666999997804,
+                "mutationMs": 30.759375000001455,
+                "verificationMs": 10.294499999999971,
+                "code": 0,
+                "registrationIdentity": "git-registration:68e66f41c70da74a1633ec1064ae45bb15e3bf162f3a6a8bf61d5063c78fdb4f",
+                "stderr": ""
+              }
+            ]
+          },
+          "filesystemVerification": {
+            "strategy": "filesystemVerification",
+            "wallMs": 40.829916999999114,
+            "throughputPerSecond": 24.491845036080328,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 1,
+            "inventoryCount": 50,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [12.6796875, 17.3388671875, 19.89208984375],
+              "after": [12.6796875, 17.3388671875, 19.89208984375]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.465,
+              "systemCpuMs": 1.556,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 64
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 9.476459000001341,
+                "mutationMs": 31.024915999998484,
+                "verificationMs": 0.31095899999854737,
+                "code": 0,
+                "registrationIdentity": "git-registration:ffec506b7c302f58fbf23940c87f42ae25efc834429fd59bd802c57a765038f5",
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 4,
+          "order": ["processVerification", "filesystemVerification"],
+          "processVerification": {
+            "strategy": "processVerification",
+            "wallMs": 50.171540999999706,
+            "throughputPerSecond": 19.931618205627885,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 1,
+            "inventoryCount": 50,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [11.82421875, 17.083984375, 19.787109375],
+              "after": [11.82421875, 17.083984375, 19.787109375]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.194,
+              "systemCpuMs": 1.93,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 40
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 9.69024999999965,
+                "mutationMs": 30.482959000000847,
+                "verificationMs": 9.974958999999217,
+                "code": 0,
+                "registrationIdentity": "git-registration:0edea13eebf56c65ee3dd221e858ef54c016731447f69e23146d29dd5ad72528",
+                "stderr": ""
+              }
+            ]
+          },
+          "filesystemVerification": {
+            "strategy": "filesystemVerification",
+            "wallMs": 41.931291999997484,
+            "throughputPerSecond": 23.848537745988367,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 1,
+            "inventoryCount": 50,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [11.82421875, 17.083984375, 19.787109375],
+              "after": [11.82421875, 17.083984375, 19.787109375]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.031,
+              "systemCpuMs": 1.655,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 51
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 10.007291000001715,
+                "mutationMs": 31.571625000000495,
+                "verificationMs": 0.3352089999971213,
+                "code": 0,
+                "registrationIdentity": "git-registration:87cc120d2bfebd0cd0fd3ec2b231afee73b23b8592af1ad28a2ed0314508b2e5",
+                "stderr": ""
+              }
+            ]
+          }
+        }
+      ],
+      "processVerification": {
+        "wallMs": {
+          "samples": [
+            49.781042000000525, 50.171540999999706, 50.55829100000119, 51.29395899999872,
+            54.61804200000006
+          ],
+          "median": 50.55829100000119,
+          "p90": 54.61804200000006,
+          "p95": 54.61804200000006,
+          "max": 54.61804200000006
+        },
+        "verificationMs": {
+          "samples": [
+            9.802582999998776, 9.974958999999217, 10.294499999999971, 10.774583999998868,
+            11.674833000000035
+          ],
+          "median": 10.294499999999971,
+          "p90": 11.674833000000035,
+          "p95": 11.674833000000035,
+          "max": 11.674833000000035
+        },
+        "commandMs": {
+          "samples": [
+            49.76183300000048, 50.148167999999714, 50.54254199999923, 51.26900000000023,
+            54.52175099999977
+          ],
+          "median": 50.54254199999923,
+          "p90": 54.52175099999977,
+          "p95": 54.52175099999977,
+          "max": 54.52175099999977
+        },
+        "throughputPerSecond": {
+          "samples": [
+            18.308968307578635, 19.49547314138932, 19.779149576079945, 19.931618205627885,
+            20.08796842782016
+          ],
+          "median": 19.779149576079945,
+          "p90": 20.08796842782016,
+          "p95": 20.08796842782016,
+          "max": 20.08796842782016
+        },
+        "allSafe": true
+      },
+      "filesystemVerification": {
+        "wallMs": {
+          "samples": [
+            39.517250000000786, 39.54108300000007, 40.829916999999114, 41.931291999997484,
+            42.97416599999997
+          ],
+          "median": 40.829916999999114,
+          "p90": 42.97416599999997,
+          "p95": 42.97416599999997,
+          "max": 42.97416599999997
+        },
+        "verificationMs": {
+          "samples": [
+            0.29670900000019174, 0.31095899999854737, 0.3352089999971213, 0.4020409999993717,
+            0.5475419999997939
+          ],
+          "median": 0.3352089999971213,
+          "p90": 0.5475419999997939,
+          "p95": 0.5475419999997939,
+          "max": 0.5475419999997939
+        },
+        "commandMs": {
+          "samples": [
+            39.501791999999114, 39.5158739999988, 40.81233399999837, 41.91412499999933,
+            42.94529199999988
+          ],
+          "median": 40.81233399999837,
+          "p90": 42.94529199999988,
+          "p95": 42.94529199999988,
+          "max": 42.94529199999988
+        },
+        "throughputPerSecond": {
+          "samples": [
+            23.26979422939821, 23.848537745988367, 24.491845036080328, 25.29015201733342,
+            25.305404601787323
+          ],
+          "median": 24.491845036080328,
+          "p90": 25.305404601787323,
+          "p95": 25.305404601787323,
+          "max": 25.305404601787323
+        },
+        "allSafe": true
+      },
+      "medianImprovementFraction": 0.19241896447808823,
+      "p95ImprovementFraction": 0.21318735666137717,
+      "allSafe": true
+    },
+    {
+      "burstSize": 3,
+      "pairs": [
+        {
+          "repetition": 0,
+          "order": ["filesystemVerification", "processVerification"],
+          "processVerification": {
+            "strategy": "processVerification",
+            "wallMs": 93.09233399999994,
+            "throughputPerSecond": 32.226069227139604,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 3,
+            "inventoryCount": 52,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [15.158203125, 18.0263671875, 20.17529296875],
+              "after": [15.158203125, 18.0263671875, 20.17529296875]
+            },
+            "resourceUsage": {
+              "userCpuMs": 5.25,
+              "systemCpuMs": 7.936,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 229
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 13.806750000000193,
+                "mutationMs": 57.48579199999995,
+                "verificationMs": 15.72854099999995,
+                "code": 0,
+                "registrationIdentity": "git-registration:e7bcecfb742d81e6281ccb38baa2234f16f5c8258836d8622072a1686c7791c5",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 15.134459000000334,
+                "mutationMs": 63.85699999999997,
+                "verificationMs": 12.993832999999995,
+                "code": 0,
+                "registrationIdentity": "git-registration:cdf8722eae37a4f310e080fb11eba6ed3c77bb5e62c814d28557c8662acc0d8d",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.278125000000273,
+                "mutationMs": 58.91629200000034,
+                "verificationMs": 14.302542000000358,
+                "code": 0,
+                "registrationIdentity": "git-registration:e4b4ea60beece4b3b18f991320ee5b217ff2f01d474686192fdfc84194e8d6cc",
+                "stderr": ""
+              }
+            ]
+          },
+          "filesystemVerification": {
+            "strategy": "filesystemVerification",
+            "wallMs": 76.72299999999996,
+            "throughputPerSecond": 39.10170353088385,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 3,
+            "inventoryCount": 52,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [15.158203125, 18.0263671875, 20.17529296875],
+              "after": [15.158203125, 18.0263671875, 20.17529296875]
+            },
+            "resourceUsage": {
+              "userCpuMs": 5.914,
+              "systemCpuMs": 6.868,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 211
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 17.922333999999864,
+                "mutationMs": 57.58920799999987,
+                "verificationMs": 0.7488749999997708,
+                "code": 0,
+                "registrationIdentity": "git-registration:9f7822d4d8227ea90fa3731d030abe97606760e8d386b4216f5faddba77207fc",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 15.711375000000317,
+                "mutationMs": 55.46437500000002,
+                "verificationMs": 0.6682499999997162,
+                "code": 0,
+                "registrationIdentity": "git-registration:a50cb7aeb0fd5b3b5addd8a9f04ab3d08521eb7d689395579fe3103954830865",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.186500000000251,
+                "mutationMs": 60.67970800000012,
+                "verificationMs": 0.6154999999998836,
+                "code": 0,
+                "registrationIdentity": "git-registration:5ddba8b30e5c3ba69a232e525622553ba8ccb39bfc7b0fc7886691f1d52cecf2",
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 1,
+          "order": ["processVerification", "filesystemVerification"],
+          "processVerification": {
+            "strategy": "processVerification",
+            "wallMs": 62.081083000000945,
+            "throughputPerSecond": 48.32389924640899,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 3,
+            "inventoryCount": 52,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [14.2646484375, 17.79345703125, 20.080078125],
+              "after": [14.2646484375, 17.79345703125, 20.080078125]
+            },
+            "resourceUsage": {
+              "userCpuMs": 2.176,
+              "systemCpuMs": 4.397,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 73
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 12.234209000000192,
+                "mutationMs": 39.28587499999958,
+                "verificationMs": 10.536459000000832,
+                "code": 0,
+                "registrationIdentity": "git-registration:c3b455db5b8908eba31354eab56a69be1c59cc7823fdee4e489d4066b3000210",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.199916999999914,
+                "mutationMs": 40.387916000001496,
+                "verificationMs": 9.888041000000158,
+                "code": 0,
+                "registrationIdentity": "git-registration:8ef5698bd78a15591cdd847348feb4f7bf602683f41753bd843b9dbea5f4c96a",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.16925000000083,
+                "mutationMs": 39.592124999999214,
+                "verificationMs": 11.239833999999973,
+                "code": 0,
+                "registrationIdentity": "git-registration:923b6807e24ac9dbd9aa5f1cf0ef4e3c54d5de344a05ee231492f4afc6996926",
+                "stderr": ""
+              }
+            ]
+          },
+          "filesystemVerification": {
+            "strategy": "filesystemVerification",
+            "wallMs": 55.83404100000007,
+            "throughputPerSecond": 53.73066226748654,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 3,
+            "inventoryCount": 52,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [14.2646484375, 17.79345703125, 20.080078125],
+              "after": [14.2646484375, 17.79345703125, 20.080078125]
+            },
+            "resourceUsage": {
+              "userCpuMs": 2.085,
+              "systemCpuMs": 3.466,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 126
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 11.667249999998603,
+                "mutationMs": 38.886750000001484,
+                "verificationMs": 0.31741599999986647,
+                "code": 0,
+                "registrationIdentity": "git-registration:9b2fe091071d04701039aec112c5873296e71c8d68003c09604c9341cbce0a75",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.552917000000889,
+                "mutationMs": 43.45291600000019,
+                "verificationMs": 0.23962499999834108,
+                "code": 0,
+                "registrationIdentity": "git-registration:f6e2ef904d091e4f3446ee4172ae1de6d245b1f4de626e4f720181a436fbfd46",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.951583000000028,
+                "mutationMs": 40.514790999999605,
+                "verificationMs": 0.24099999999998545,
+                "code": 0,
+                "registrationIdentity": "git-registration:9085a5c20befebaf2fc9a86ccf6c420a516d6fdc765befe871b311bfb618c1be",
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 2,
+          "order": ["filesystemVerification", "processVerification"],
+          "processVerification": {
+            "strategy": "processVerification",
+            "wallMs": 63.86083300000064,
+            "throughputPerSecond": 46.97715108100719,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 3,
+            "inventoryCount": 52,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [13.5224609375, 17.5810546875, 19.99169921875],
+              "after": [13.5224609375, 17.5810546875, 19.99169921875]
+            },
+            "resourceUsage": {
+              "userCpuMs": 2.17,
+              "systemCpuMs": 4.077,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 77
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 12.002832999998645,
+                "mutationMs": 42.44350000000122,
+                "verificationMs": 9.405042000000321,
+                "code": 0,
+                "registrationIdentity": "git-registration:62507ec1bb127c2a4934994db1fd969f4906b30464604064ebd6aada8b38c6f4",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.983833000000232,
+                "mutationMs": 40.340125000000626,
+                "verificationMs": 9.670749999999316,
+                "code": 0,
+                "registrationIdentity": "git-registration:56db08f510a621f46d7f3dab89c6379d49c17c776f77634d20152b9956c6b944",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.920667000000321,
+                "mutationMs": 39.68495900000016,
+                "verificationMs": 10.945541999999477,
+                "code": 0,
+                "registrationIdentity": "git-registration:61685cd9d85a19691ecde16995f5a2df262bbbb55f3e3f300af8fb200b9e0ac7",
+                "stderr": ""
+              }
+            ]
+          },
+          "filesystemVerification": {
+            "strategy": "filesystemVerification",
+            "wallMs": 54.87095800000134,
+            "throughputPerSecond": 54.67373104730424,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 3,
+            "inventoryCount": 52,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [13.5224609375, 17.5810546875, 19.99169921875],
+              "after": [13.5224609375, 17.5810546875, 19.99169921875]
+            },
+            "resourceUsage": {
+              "userCpuMs": 3.704,
+              "systemCpuMs": 3.264,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 121
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 10.707540999999765,
+                "mutationMs": 40.05000000000109,
+                "verificationMs": 0.234667000000627,
+                "code": 0,
+                "registrationIdentity": "git-registration:80222ed7d18fbd601b38a9fab0517c5542d0b50ba4c1f046219ba88349643631",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.447165999999925,
+                "mutationMs": 39.61512500000026,
+                "verificationMs": 0.29995899999994435,
+                "code": 0,
+                "registrationIdentity": "git-registration:5912d9f3054bc088a0188c904b11aeb87916888f78ffca8c4344be66cfc558ff",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.090791999999055,
+                "mutationMs": 43.45879199999945,
+                "verificationMs": 0.22970899999927497,
+                "code": 0,
+                "registrationIdentity": "git-registration:3602ddf2024697df9121c314c956fb529bb92de9b888041c58539c761a4dd1be",
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 3,
+          "order": ["processVerification", "filesystemVerification"],
+          "processVerification": {
+            "strategy": "processVerification",
+            "wallMs": 62.53979199999958,
+            "throughputPerSecond": 47.969459188479874,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 3,
+            "inventoryCount": 52,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [12.6796875, 17.3388671875, 19.89208984375],
+              "after": [12.6796875, 17.3388671875, 19.89208984375]
+            },
+            "resourceUsage": {
+              "userCpuMs": 2.02,
+              "systemCpuMs": 4.087,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 67
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 12.112750000000233,
+                "mutationMs": 39.07879099999991,
+                "verificationMs": 11.33087499999965,
+                "code": 0,
+                "registrationIdentity": "git-registration:f44fa14b08b63f6b28e8f5d95fc398d9b8b7bcd8024c79de0065143791a3ef19",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.022166999999172,
+                "mutationMs": 40.767291000000114,
+                "verificationMs": 10.077291000001424,
+                "code": 0,
+                "registrationIdentity": "git-registration:f89af14c8b8a843d814487712da50a1c52a64ea47075244f84e7a47beddc9fe9",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.943458999998256,
+                "mutationMs": 40.83320800000001,
+                "verificationMs": 10.647000000000844,
+                "code": 0,
+                "registrationIdentity": "git-registration:4de385a7cb6b70dbb2edce5ddccac8eb6dc5b259262e983497e47cc1d941120c",
+                "stderr": ""
+              }
+            ]
+          },
+          "filesystemVerification": {
+            "strategy": "filesystemVerification",
+            "wallMs": 55.2899159999979,
+            "throughputPerSecond": 54.259442173869715,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 3,
+            "inventoryCount": 52,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [12.6796875, 17.3388671875, 19.89208984375],
+              "after": [12.6796875, 17.3388671875, 19.89208984375]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.759,
+              "systemCpuMs": 3.243,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 119
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 12.395540999998047,
+                "mutationMs": 42.70025000000169,
+                "verificationMs": 0.18479200000001583,
+                "code": 0,
+                "registrationIdentity": "git-registration:3dc838b77fa9a42637de6fd2d91f5334a127d9615608e988d2137bdacef976c6",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.674167000001034,
+                "mutationMs": 40.91837499999747,
+                "verificationMs": 0.23562500000116415,
+                "code": 0,
+                "registrationIdentity": "git-registration:f9c03ff9b05a3a23afe8fb1180836b80e5120aa16b5ebaeeb923e881646578ae",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.828624999998283,
+                "mutationMs": 39.320332999999664,
+                "verificationMs": 0.2789999999986321,
+                "code": 0,
+                "registrationIdentity": "git-registration:5ac222fb7d398e00a3bdf6075de416658409b1212f45b2c4af48865e9cc9c698",
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 4,
+          "order": ["filesystemVerification", "processVerification"],
+          "processVerification": {
+            "strategy": "processVerification",
+            "wallMs": 64.6919170000001,
+            "throughputPerSecond": 46.37364510314318,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 3,
+            "inventoryCount": 52,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [11.82421875, 17.083984375, 19.787109375],
+              "after": [11.82421875, 17.083984375, 19.787109375]
+            },
+            "resourceUsage": {
+              "userCpuMs": 2.188,
+              "systemCpuMs": 4.448,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 76
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 11.436916000002384,
+                "mutationMs": 38.38895799999955,
+                "verificationMs": 10.404207999999926,
+                "code": 0,
+                "registrationIdentity": "git-registration:d7b4c34a7c09132bb364a56442f13ec2c8509d7a3b0089be2acac9fc207cee2b",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.247290999999677,
+                "mutationMs": 40.18800000000192,
+                "verificationMs": 9.215542000001733,
+                "code": 0,
+                "registrationIdentity": "git-registration:8398ba355f99c68f43c14b1fe25aad14a04d675ab773e519d007088954de668d",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.864041999997426,
+                "mutationMs": 43.05054100000052,
+                "verificationMs": 9.7342499999977,
+                "code": 0,
+                "registrationIdentity": "git-registration:d0ded85fc1f7c91fdcb39220936a74867869764de48b16fd8bd63a6cbc43c9e8",
+                "stderr": ""
+              }
+            ]
+          },
+          "filesystemVerification": {
+            "strategy": "filesystemVerification",
+            "wallMs": 54.63658399999986,
+            "throughputPerSecond": 54.90826439661762,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 3,
+            "inventoryCount": 52,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [11.82421875, 17.083984375, 19.787109375],
+              "after": [11.82421875, 17.083984375, 19.787109375]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.968,
+              "systemCpuMs": 3.533,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 135
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 11.920334000002185,
+                "mutationMs": 42.49725000000035,
+                "verificationMs": 0.20904200000222772,
+                "code": 0,
+                "registrationIdentity": "git-registration:fbdaf5ec80cee4ad0e4237ad3a58299a758702fe7a9967a316bb418144864dd2",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.663124999999127,
+                "mutationMs": 39.056415999999444,
+                "verificationMs": 0.29416700000001583,
+                "code": 0,
+                "registrationIdentity": "git-registration:a50aad4c77c572b61dcb5d017d75ab99b37a03db7f99497857c9b983fee836d5",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.511750000001484,
+                "mutationMs": 40.97404199999801,
+                "verificationMs": 0.234375,
+                "code": 0,
+                "registrationIdentity": "git-registration:77d01b354d3a0ddaa8436328aafaae26d2e62783dc4faa7dd1de5cd3b41401ba",
+                "stderr": ""
+              }
+            ]
+          }
+        }
+      ],
+      "processVerification": {
+        "wallMs": {
+          "samples": [
+            62.081083000000945, 62.53979199999958, 63.86083300000064, 64.6919170000001,
+            93.09233399999994
+          ],
+          "median": 63.86083300000064,
+          "p90": 93.09233399999994,
+          "p95": 93.09233399999994,
+          "max": 93.09233399999994
+        },
+        "verificationMs": {
+          "samples": [
+            9.215542000001733, 9.405042000000321, 9.670749999999316, 9.7342499999977,
+            9.888041000000158, 10.077291000001424, 10.404207999999926, 10.536459000000832,
+            10.647000000000844, 10.945541999999477, 11.239833999999973, 11.33087499999965,
+            12.993832999999995, 14.302542000000358, 15.72854099999995
+          ],
+          "median": 10.536459000000832,
+          "p90": 14.302542000000358,
+          "p95": 15.72854099999995,
+          "max": 15.72854099999995
+        },
+        "commandMs": {
+          "samples": [
+            59.65083300000333, 60.23008200000186, 60.55116799999996, 60.99470800000017,
+            61.00120900000002, 61.423666999999114, 61.47587400000157, 61.86674900000071,
+            62.0565430000006, 62.522415999999794, 63.64883299999565, 63.85137500000019,
+            86.49695900000097, 87.02108300000009, 91.9852920000003
+          ],
+          "median": 61.86674900000071,
+          "p90": 87.02108300000009,
+          "p95": 91.9852920000003,
+          "max": 91.9852920000003
+        },
+        "throughputPerSecond": {
+          "samples": [
+            32.226069227139604, 46.37364510314318, 46.97715108100719, 47.969459188479874,
+            48.32389924640899
+          ],
+          "median": 46.97715108100719,
+          "p90": 48.32389924640899,
+          "p95": 48.32389924640899,
+          "max": 48.32389924640899
+        },
+        "allSafe": true
+      },
+      "filesystemVerification": {
+        "wallMs": {
+          "samples": [
+            54.63658399999986, 54.87095800000134, 55.2899159999979, 55.83404100000007,
+            76.72299999999996
+          ],
+          "median": 55.2899159999979,
+          "p90": 76.72299999999996,
+          "p95": 76.72299999999996,
+          "max": 76.72299999999996
+        },
+        "verificationMs": {
+          "samples": [
+            0.18479200000001583, 0.20904200000222772, 0.22970899999927497, 0.234375,
+            0.234667000000627, 0.23562500000116415, 0.23962499999834108, 0.24099999999998545,
+            0.2789999999986321, 0.29416700000001583, 0.29995899999994435, 0.31741599999986647,
+            0.6154999999998836, 0.6682499999997162, 0.7488749999997708
+          ],
+          "median": 0.24099999999998545,
+          "p90": 0.6682499999997162,
+          "p95": 0.7488749999997708,
+          "max": 0.7488749999997708
+        },
+        "commandMs": {
+          "samples": [
+            49.36225000000013, 50.01370799999859, 50.42795799999658, 50.70737399999962,
+            50.72016699999949, 50.871415999999954, 50.99220800000148, 51.82816699999967,
+            53.77929299999778, 54.62662600000476, 55.24545799999942, 55.28058299999975,
+            71.84400000000005, 74.48170800000025, 76.2604169999995
+          ],
+          "median": 51.82816699999967,
+          "p90": 74.48170800000025,
+          "p95": 76.2604169999995,
+          "max": 76.2604169999995
+        },
+        "throughputPerSecond": {
+          "samples": [
+            39.10170353088385, 53.73066226748654, 54.259442173869715, 54.67373104730424,
+            54.90826439661762
+          ],
+          "median": 54.259442173869715,
+          "p90": 54.90826439661762,
+          "p95": 54.90826439661762,
+          "max": 54.90826439661762
+        },
+        "allSafe": true
+      },
+      "medianImprovementFraction": 0.13421242093730051,
+      "p95ImprovementFraction": 0.1758397635620565,
+      "allSafe": true
+    },
+    {
+      "burstSize": 5,
+      "pairs": [
+        {
+          "repetition": 0,
+          "order": ["processVerification", "filesystemVerification"],
+          "processVerification": {
+            "strategy": "processVerification",
+            "wallMs": 172.44562499999984,
+            "throughputPerSecond": 28.994646863322888,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 4,
+            "inventoryCount": 54,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [15.158203125, 18.0263671875, 20.17529296875],
+              "after": [15.158203125, 18.0263671875, 20.17529296875]
+            },
+            "resourceUsage": {
+              "userCpuMs": 10.313,
+              "systemCpuMs": 12.677,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 262
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 14.633124999999836,
+                "mutationMs": 62.10179199999993,
+                "verificationMs": 24.45508299999983,
+                "code": 0,
+                "registrationIdentity": "git-registration:5c73e9a7ac1b1dc8675341681475fa49087b16392885ce3d79f3ec18f9b8d3cb",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 15.922625000000153,
+                "mutationMs": 79.30962499999987,
+                "verificationMs": 20.323750000000018,
+                "code": 0,
+                "registrationIdentity": "git-registration:eaf48b38428e2f46108da579389eef9ac4bedbe4a6b5b4f1a660df29228e28ad",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 17.6957910000001,
+                "mutationMs": 63.22354200000018,
+                "verificationMs": 26.317457999999988,
+                "code": 0,
+                "registrationIdentity": "git-registration:6d92043485df3187996dec5128b225f857cde6cf9200d1fefac9a1d28575ff3e",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 15.246083999999883,
+                "mutationMs": 70.19100000000026,
+                "verificationMs": 20.72287499999993,
+                "code": 0,
+                "registrationIdentity": "git-registration:90d9c7beb318f2a24ebdfaf973a9cf85cad0bdfc51a79460b4437a93dfda34da",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 22.63949999999977,
+                "mutationMs": 38.269874999999956,
+                "verificationMs": 10.245417000000089,
+                "code": 0,
+                "registrationIdentity": "git-registration:7db41dce916bab23c9440890cf4f03f02ff95fa1da94f3493d738740f60c40fc",
+                "stderr": ""
+              }
+            ]
+          },
+          "filesystemVerification": {
+            "strategy": "filesystemVerification",
+            "wallMs": 588.4746249999998,
+            "throughputPerSecond": 8.496543075243052,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 4,
+            "inventoryCount": 54,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [15.158203125, 18.0263671875, 20.17529296875],
+              "after": [15.158203125, 18.0263671875, 20.17529296875]
+            },
+            "resourceUsage": {
+              "userCpuMs": 9.079,
+              "systemCpuMs": 12.076,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 401
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 189.82170900000028,
+                "mutationMs": 317.6493329999994,
+                "verificationMs": 2.03650000000016,
+                "code": 0,
+                "registrationIdentity": "git-registration:c0b946e524924f4de4db08c87b84b07858612d9d49a1c90b3b224498a492e6c7",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 85.69766600000048,
+                "mutationMs": 338.12708400000065,
+                "verificationMs": 17.497166999999536,
+                "code": 0,
+                "registrationIdentity": "git-registration:daa1366abec6206734490f2c2ef0dde4fdb7e8db7b0b3423edd24c157b10e92e",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 162.08308299999953,
+                "mutationMs": 234.77374999999938,
+                "verificationMs": 18.432292000000416,
+                "code": 0,
+                "registrationIdentity": "git-registration:732b30006a52a7491acd7377a3519a47a164d28d273fbb5c6580a2ca4cb093a1",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 139.91858300000013,
+                "mutationMs": 228.0231249999997,
+                "verificationMs": 12.928124999999454,
+                "code": 0,
+                "registrationIdentity": "git-registration:c16f065054f26a64ccbab72ea51f220fa9fcdf36bb41ec09b2a8416516f08e54",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 26.382832999999664,
+                "mutationMs": 88.55520799999977,
+                "verificationMs": 1.3100419999991573,
+                "code": 0,
+                "registrationIdentity": "git-registration:07d48553a3119c87cdfc80d2497387abc4b5becbc53305ca873d2413ad5f216d",
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 1,
+          "order": ["filesystemVerification", "processVerification"],
+          "processVerification": {
+            "strategy": "processVerification",
+            "wallMs": 134.25195799999892,
+            "throughputPerSecond": 37.24340467347255,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 4,
+            "inventoryCount": 54,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [14.2646484375, 17.79345703125, 20.080078125],
+              "after": [14.2646484375, 17.79345703125, 20.080078125]
+            },
+            "resourceUsage": {
+              "userCpuMs": 5.307,
+              "systemCpuMs": 9.901,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 210
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 12.992832999998427,
+                "mutationMs": 61.40437500000007,
+                "verificationMs": 12.784458999998606,
+                "code": 0,
+                "registrationIdentity": "git-registration:9757213071b48c44653f0bacde62f918ef0622db9c042b168fb6b1c7fa3f6aac",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.918249999998807,
+                "mutationMs": 58.54291700000067,
+                "verificationMs": 13.048166000000492,
+                "code": 0,
+                "registrationIdentity": "git-registration:1f8d5917afd8dabb3be66f6b3a9502901d8a560bedff7d694e9231dee7d3f32a",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.647458999999799,
+                "mutationMs": 61.607624999998734,
+                "verificationMs": 14.321875000001455,
+                "code": 0,
+                "registrationIdentity": "git-registration:6d6785d1ea93a8459c0ab143eea54c00f5d8797a3ae65cf895d40cb04e793846",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.77795900000092,
+                "mutationMs": 57.447792000000845,
+                "verificationMs": 13.784041999999317,
+                "code": 0,
+                "registrationIdentity": "git-registration:c32116b33923f495a9ff79bb238d0a1975f5dd74af77fb7f6f50ef5d5cc13391",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.48450000000048,
+                "mutationMs": 31.504500000000917,
+                "verificationMs": 9.592082999999548,
+                "code": 0,
+                "registrationIdentity": "git-registration:d2096e304e42e51e7422be9907e364be33cb4b426c832a17bffef2b9181ed129",
+                "stderr": ""
+              }
+            ]
+          },
+          "filesystemVerification": {
+            "strategy": "filesystemVerification",
+            "wallMs": 95.98383299999841,
+            "throughputPerSecond": 52.092105969555135,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 4,
+            "inventoryCount": 54,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [14.2646484375, 17.79345703125, 20.080078125],
+              "after": [14.2646484375, 17.79345703125, 20.080078125]
+            },
+            "resourceUsage": {
+              "userCpuMs": 4.109,
+              "systemCpuMs": 5.971,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 260
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 10.977915999999823,
+                "mutationMs": 43.721833999999944,
+                "verificationMs": 0.37833300000056624,
+                "code": 0,
+                "registrationIdentity": "git-registration:81ce6b11031af3ab7f0e17999e1e9ee0586a9fd2a37539f5f3a45064ab185179",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.035707999999431,
+                "mutationMs": 46.31029200000012,
+                "verificationMs": 0.35504199999923003,
+                "code": 0,
+                "registrationIdentity": "git-registration:e5dcc888412c91d3fb74a6093d3b94c3df577a381c70f618ed4dbf99c69291a7",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.473082999998951,
+                "mutationMs": 44.35270800000035,
+                "verificationMs": 0.2287080000005517,
+                "code": 0,
+                "registrationIdentity": "git-registration:eaa71da99271c450042790b90a1533d28a443b79d3c0acf754061ada2628e387",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.596332999999504,
+                "mutationMs": 43.627667000000656,
+                "verificationMs": 0.30199999999967986,
+                "code": 0,
+                "registrationIdentity": "git-registration:d4af645a157b032932d18c71f7d2087cfe7214ea4f471c0bf8a205893e7d11a1",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.967125000001033,
+                "mutationMs": 30.62854199999856,
+                "verificationMs": 0.2767920000005688,
+                "code": 0,
+                "registrationIdentity": "git-registration:3137bdec158c30b7d2dd51e5681b8f60af35b50c703a61f33a7b23a154813a09",
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 2,
+          "order": ["processVerification", "filesystemVerification"],
+          "processVerification": {
+            "strategy": "processVerification",
+            "wallMs": 117.88812500000131,
+            "throughputPerSecond": 42.41309292178448,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 4,
+            "inventoryCount": 54,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [13.5224609375, 17.5810546875, 19.99169921875],
+              "after": [13.5224609375, 17.5810546875, 19.99169921875]
+            },
+            "resourceUsage": {
+              "userCpuMs": 7.057,
+              "systemCpuMs": 8.046,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 190
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 11.738625000001775,
+                "mutationMs": 44.332791000000725,
+                "verificationMs": 12.48504199999661,
+                "code": 0,
+                "registrationIdentity": "git-registration:0b80d7a37c015263b25e0bc99ffb82e50e5a8ff7f12e5876fe6c92e21af73820",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.72283399999651,
+                "mutationMs": 49.40950000000157,
+                "verificationMs": 10.969583999998576,
+                "code": 0,
+                "registrationIdentity": "git-registration:137d786affe8974089c8a70910d4000f43554e27fc6bdc93d21695cb801f290d",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.706457999996928,
+                "mutationMs": 45.87154200000077,
+                "verificationMs": 10.696708999999828,
+                "code": 0,
+                "registrationIdentity": "git-registration:f4afe512acce980c05c2b33243bb46af918b397d0709c165054aaa3817c364f4",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.017833000001701,
+                "mutationMs": 42.85691600000064,
+                "verificationMs": 13.189832999996725,
+                "code": 0,
+                "registrationIdentity": "git-registration:427fc560ef3affe5c065f919e4e1451853525202bec0c5cac4cc6b217b1a6a7e",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.658041999999114,
+                "mutationMs": 30.93787499999962,
+                "verificationMs": 9.970624999998108,
+                "code": 0,
+                "registrationIdentity": "git-registration:c3e43b677190bf57306bd99a22dfcb70f94ec894cc9064e1ae26b925beb71f4e",
+                "stderr": ""
+              }
+            ]
+          },
+          "filesystemVerification": {
+            "strategy": "filesystemVerification",
+            "wallMs": 95.01695800000016,
+            "throughputPerSecond": 52.622185610278024,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 4,
+            "inventoryCount": 54,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [13.5224609375, 17.5810546875, 19.99169921875],
+              "after": [13.5224609375, 17.5810546875, 19.99169921875]
+            },
+            "resourceUsage": {
+              "userCpuMs": 3.402,
+              "systemCpuMs": 5.593,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 231
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 11.453915999998571,
+                "mutationMs": 43.36150000000271,
+                "verificationMs": 0.27362499999799184,
+                "code": 0,
+                "registrationIdentity": "git-registration:99656f1cd2cd3c980a9f113fd53bbe62b5cc4b89bb36dd424c07c019397ba49b",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.325667000000976,
+                "mutationMs": 47.82599999999729,
+                "verificationMs": 0.22304100000110338,
+                "code": 0,
+                "registrationIdentity": "git-registration:48f5b41d74fbe3b0bb7fe3e698dc8b7e9f076a16f5b4afe23a290030aef5e0da",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.867957999998907,
+                "mutationMs": 45.91583299999911,
+                "verificationMs": 0.20762499999909778,
+                "code": 0,
+                "registrationIdentity": "git-registration:62da42685ef6ea19f523a115f685c404ad17675f9145b18ea3e1184c2f22b5e7",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.27495899999849,
+                "mutationMs": 40.81641699999818,
+                "verificationMs": 0.2835839999970631,
+                "code": 0,
+                "registrationIdentity": "git-registration:e975d750531bdf8010e7e5bdc0669ece6741759899f9e61b7d207788926f03f1",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.47295799999847,
+                "mutationMs": 31.48687500000233,
+                "verificationMs": 0.2620840000017779,
+                "code": 0,
+                "registrationIdentity": "git-registration:78b239ace28506ffb51088dc4bba2ab8a84786a7c979492960b1786e4bd8f94b",
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 3,
+          "order": ["filesystemVerification", "processVerification"],
+          "processVerification": {
+            "strategy": "processVerification",
+            "wallMs": 135.33824999999706,
+            "throughputPerSecond": 36.94447061344527,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 4,
+            "inventoryCount": 54,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [12.6796875, 17.3388671875, 19.89208984375],
+              "after": [12.6796875, 17.3388671875, 19.89208984375]
+            },
+            "resourceUsage": {
+              "userCpuMs": 5.32,
+              "systemCpuMs": 9.789,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 215
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 13.151875000003201,
+                "mutationMs": 55.182042000000365,
+                "verificationMs": 15.857790999998542,
+                "code": 0,
+                "registrationIdentity": "git-registration:6efe335794279800bab212497758d2d6d92ab81a71f02ac2a63507aae7b5acf8",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.68316699999923,
+                "mutationMs": 58.32574999999997,
+                "verificationMs": 13.728791999998066,
+                "code": 0,
+                "registrationIdentity": "git-registration:2c9526e547374a4fe803f38d00b86c1604fe45474a0eca91964c7b56117ad48f",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.415750000000116,
+                "mutationMs": 60.2299579999999,
+                "verificationMs": 13.177083999999013,
+                "code": 0,
+                "registrationIdentity": "git-registration:aaf0d89cfad854f96bb188a2d03b759bcb41c2b847dbfc04e3238f804f41d1da",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.76850000000195,
+                "mutationMs": 55.39125000000058,
+                "verificationMs": 13.995458000001236,
+                "code": 0,
+                "registrationIdentity": "git-registration:a6572bb9c9fbc89623f8ceb962bc4c9086704243c04cfee9442153809d986d2a",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.067333999999391,
+                "mutationMs": 32.16441699999996,
+                "verificationMs": 10.51079199999731,
+                "code": 0,
+                "registrationIdentity": "git-registration:1cc3d32467ccf25c299d52ea10397be434134a8789a4b42882432edcb950c129",
+                "stderr": ""
+              }
+            ]
+          },
+          "filesystemVerification": {
+            "strategy": "filesystemVerification",
+            "wallMs": 95.11162500000137,
+            "throughputPerSecond": 52.56980942129764,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 4,
+            "inventoryCount": 54,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [12.6796875, 17.3388671875, 19.89208984375],
+              "after": [12.6796875, 17.3388671875, 19.89208984375]
+            },
+            "resourceUsage": {
+              "userCpuMs": 3.027,
+              "systemCpuMs": 5.798,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 252
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 10.421457999997074,
+                "mutationMs": 43.75041599999895,
+                "verificationMs": 0.30958300000202144,
+                "code": 0,
+                "registrationIdentity": "git-registration:7357fb611fbf508cd9084bf5214e0a4f9364e1e3260b6133a5e8a2b8409407f1",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.269791999999143,
+                "mutationMs": 46.26579199999833,
+                "verificationMs": 0.3212500000008731,
+                "code": 0,
+                "registrationIdentity": "git-registration:f8ef11f7d52c648d58e8c135e5749ce3dc203a5eeac6fcb9dbcd7336369a55fd",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.437666999998328,
+                "mutationMs": 43.957666000002064,
+                "verificationMs": 0.5337910000016564,
+                "code": 0,
+                "registrationIdentity": "git-registration:a042438629a5a72e89275d6f10366a0481818a20ce26a2184c929a729a17fb18",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.611832999999024,
+                "mutationMs": 46.758207999999286,
+                "verificationMs": 0.4962919999998121,
+                "code": 0,
+                "registrationIdentity": "git-registration:12cd2443f05d5210896a3a334811e9f46886b8ec2f3bb05fc2818df3f749ff9f",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.065582999999606,
+                "mutationMs": 30.24749999999767,
+                "verificationMs": 0.2854169999991427,
+                "code": 0,
+                "registrationIdentity": "git-registration:061dba7e488284ad8c8a9b73eb143e88e9a815cc0b9ac490af7fba1c2125d4d4",
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 4,
+          "order": ["processVerification", "filesystemVerification"],
+          "processVerification": {
+            "strategy": "processVerification",
+            "wallMs": 135.9067920000016,
+            "throughputPerSecond": 36.78991996220426,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 4,
+            "inventoryCount": 54,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [11.82421875, 17.083984375, 19.787109375],
+              "after": [11.82421875, 17.083984375, 19.787109375]
+            },
+            "resourceUsage": {
+              "userCpuMs": 5.041,
+              "systemCpuMs": 10.938,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 208
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 13.321083000002545,
+                "mutationMs": 51.422999999998865,
+                "verificationMs": 13.323083999999653,
+                "code": 0,
+                "registrationIdentity": "git-registration:d19ace76df9675bbabfd5dddceb860c50447b58dc9d3e66ba501c9e5b053f4fe",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.841042000000016,
+                "mutationMs": 53.859166000002006,
+                "verificationMs": 12.515999999999622,
+                "code": 0,
+                "registrationIdentity": "git-registration:951a4ef03078617d21265355b2c6fe31b7be41658c2dab7a52465e774bfc7e3e",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.322000000000116,
+                "mutationMs": 56.26612499999828,
+                "verificationMs": 13.197832999998354,
+                "code": 0,
+                "registrationIdentity": "git-registration:37fd04f252a8a95ac7bb797432fa965d5d15573e014be7cd0b71c4b78c20b0aa",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.285749999999098,
+                "mutationMs": 49.37204099999872,
+                "verificationMs": 13.172665999998571,
+                "code": 0,
+                "registrationIdentity": "git-registration:5c39d34bb7850b11faa739edb75b4714c09041da5d816b89bbb822f052121520",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.03808299999946,
+                "mutationMs": 36.58724999999686,
+                "verificationMs": 11.582749999997759,
+                "code": 0,
+                "registrationIdentity": "git-registration:f239c68ed950794428a8aded8ea6a4fc0ee3d6ffd1ec393215d1bc46a9f12a34",
+                "stderr": ""
+              }
+            ]
+          },
+          "filesystemVerification": {
+            "strategy": "filesystemVerification",
+            "wallMs": 100.89583399999901,
+            "throughputPerSecond": 49.55605996576676,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 4,
+            "inventoryCount": 54,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [11.82421875, 17.083984375, 19.787109375],
+              "after": [11.82421875, 17.083984375, 19.787109375]
+            },
+            "resourceUsage": {
+              "userCpuMs": 3.37,
+              "systemCpuMs": 6.868,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 325
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 12.972916999999143,
+                "mutationMs": 46.87104199999885,
+                "verificationMs": 0.40949999999793363,
+                "code": 0,
+                "registrationIdentity": "git-registration:76c14d0c4049717986fbb3b22293bc62c625011cadc2d25d1e3e4735d3a17e15",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.622208000000683,
+                "mutationMs": 46.356125000002066,
+                "verificationMs": 0.46366699999998673,
+                "code": 0,
+                "registrationIdentity": "git-registration:c9891d377c07b3bfa0c6fa9b190fae632ec3395014f9e1c82223f7dda1f8537a",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.3315419999999,
+                "mutationMs": 47.630583000001934,
+                "verificationMs": 0.2050409999974363,
+                "code": 0,
+                "registrationIdentity": "git-registration:7fdc4d54959043d7ba664623a94139b61000c8f35a829d6e1f880d3ac735343c",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.627375000000029,
+                "mutationMs": 46.21720800000185,
+                "verificationMs": 0.314249999999447,
+                "code": 0,
+                "registrationIdentity": "git-registration:a1dfeb28f81ef6c7640c2dd51e3d134a568792ace1e7d4e9ea80cc316a00cb20",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.710125000001426,
+                "mutationMs": 31.757541999999376,
+                "verificationMs": 0.28029199999946286,
+                "code": 0,
+                "registrationIdentity": "git-registration:eb44320665a7a1211b46affcada3876e68942f18129234f1ea2aa18f272f6be8",
+                "stderr": ""
+              }
+            ]
+          }
+        }
+      ],
+      "processVerification": {
+        "wallMs": {
+          "samples": [
+            117.88812500000131, 134.25195799999892, 135.33824999999706, 135.9067920000016,
+            172.44562499999984
+          ],
+          "median": 135.33824999999706,
+          "p90": 172.44562499999984,
+          "p95": 172.44562499999984,
+          "max": 172.44562499999984
+        },
+        "verificationMs": {
+          "samples": [
+            9.592082999999548, 9.970624999998108, 10.245417000000089, 10.51079199999731,
+            10.696708999999828, 10.969583999998576, 11.582749999997759, 12.48504199999661,
+            12.515999999999622, 12.784458999998606, 13.048166000000492, 13.172665999998571,
+            13.177083999999013, 13.189832999996725, 13.197832999998354, 13.323083999999653,
+            13.728791999998066, 13.784041999999317, 13.995458000001236, 14.321875000001455,
+            15.857790999998542, 20.323750000000018, 20.72287499999993, 24.45508299999983,
+            26.317457999999988
+          ],
+          "median": 13.177083999999013,
+          "p90": 20.72287499999993,
+          "p95": 24.45508299999983,
+          "max": 26.317457999999988
+        },
+        "commandMs": {
+          "samples": [
+            50.56654199999684, 50.581083000000945, 51.74254299999666, 59.208082999994076,
+            66.27470899999753, 67.06458199999906, 68.55645799999911, 71.10191799999666,
+            71.15479199999982, 74.83045699999639, 77.21620800000164, 78.06716700000106,
+            80.78595799999675, 82.00979300000108, 82.15520800000377, 83.73770899999727,
+            83.82279199999903, 84.19170800000211, 84.50933299999997, 86.57695899999999,
+            87.1816669999971, 101.1899999999996, 106.15995900000007, 107.23679100000027,
+            115.55600000000004
+          ],
+          "median": 80.78595799999675,
+          "p90": 106.15995900000007,
+          "p95": 107.23679100000027,
+          "max": 115.55600000000004
+        },
+        "throughputPerSecond": {
+          "samples": [
+            28.994646863322888, 36.78991996220426, 36.94447061344527, 37.24340467347255,
+            42.41309292178448
+          ],
+          "median": 36.94447061344527,
+          "p90": 42.41309292178448,
+          "p95": 42.41309292178448,
+          "max": 42.41309292178448
+        },
+        "allSafe": true
+      },
+      "filesystemVerification": {
+        "wallMs": {
+          "samples": [
+            95.01695800000016, 95.11162500000137, 95.98383299999841, 100.89583399999901,
+            588.4746249999998
+          ],
+          "median": 95.98383299999841,
+          "p90": 588.4746249999998,
+          "p95": 588.4746249999998,
+          "max": 588.4746249999998
+        },
+        "verificationMs": {
+          "samples": [
+            0.2050409999974363, 0.20762499999909778, 0.22304100000110338, 0.2287080000005517,
+            0.2620840000017779, 0.27362499999799184, 0.2767920000005688, 0.28029199999946286,
+            0.2835839999970631, 0.2854169999991427, 0.30199999999967986, 0.30958300000202144,
+            0.314249999999447, 0.3212500000008731, 0.35504199999923003, 0.37833300000056624,
+            0.40949999999793363, 0.46366699999998673, 0.4962919999998121, 0.5337910000016564,
+            1.3100419999991573, 2.03650000000016, 12.928124999999454, 17.497166999999536,
+            18.432292000000416
+          ],
+          "median": 0.314249999999447,
+          "p90": 12.928124999999454,
+          "p95": 17.497166999999536,
+          "max": 18.432292000000416
+        },
+        "commandMs": {
+          "samples": [
+            40.59849999999642, 40.87245900000016, 41.22191700000258, 41.747959000000264,
+            52.374959999993735, 54.481456999998045, 54.52599999999984, 54.92912400000205,
+            55.05449899999985, 55.07808300000033, 55.08904099999927, 55.991415999997116,
+            56.86633299999812, 57.856833999998344, 58.442000000002736, 58.70104199999878,
+            59.15883300000132, 59.37470799999937, 60.16716599999927, 60.25345899999593,
+            116.24808299999859, 380.8698329999993, 415.28912499999933, 441.32191700000067,
+            509.50754199999983
+          ],
+          "median": 56.86633299999812,
+          "p90": 415.28912499999933,
+          "p95": 441.32191700000067,
+          "max": 509.50754199999983
+        },
+        "throughputPerSecond": {
+          "samples": [
+            8.496543075243052, 49.55605996576676, 52.092105969555135, 52.56980942129764,
+            52.622185610278024
+          ],
+          "median": 52.092105969555135,
+          "p90": 52.622185610278024,
+          "p95": 52.622185610278024,
+          "max": 52.622185610278024
+        },
+        "allSafe": true
+      },
+      "medianImprovementFraction": 0.29078562047314416,
+      "p95ImprovementFraction": -2.4125227879802713,
+      "allSafe": true
+    },
+    {
+      "burstSize": 20,
+      "pairs": [
+        {
+          "repetition": 0,
+          "order": ["filesystemVerification", "processVerification"],
+          "processVerification": {
+            "strategy": "processVerification",
+            "wallMs": 439.1715839999997,
+            "throughputPerSecond": 45.54028705099466,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 4,
+            "inventoryCount": 69,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [15.158203125, 18.0263671875, 20.17529296875],
+              "after": [15.158203125, 18.0263671875, 20.17529296875]
+            },
+            "resourceUsage": {
+              "userCpuMs": 32.895,
+              "systemCpuMs": 45.999,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 987
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 14.817167000000154,
+                "mutationMs": 51.51545799999985,
+                "verificationMs": 17.449208999999428,
+                "code": 0,
+                "registrationIdentity": "git-registration:33d09f87f9442dd1ff3279df7f9870c278d506d30c94e207b4dd2b45456217b8",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.770292000000154,
+                "mutationMs": 61.63537499999984,
+                "verificationMs": 18.93579200000022,
+                "code": 0,
+                "registrationIdentity": "git-registration:38d4f2c9d66496c7d774eee79f2f9f7eb4cb040f93256751a17dee10273b4d07",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.070625000000291,
+                "mutationMs": 54.055459000000155,
+                "verificationMs": 14.21416599999975,
+                "code": 0,
+                "registrationIdentity": "git-registration:d3b6e309ef81d4b13d121f61dc9c341f67282014226fb0c537d1792d2ef79e79",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.67083300000013,
+                "mutationMs": 56.03699999999935,
+                "verificationMs": 19.426250000000437,
+                "code": 0,
+                "registrationIdentity": "git-registration:1bce09c41694a1ff085a4389b0eca2827c419df17619eb0a790755f6266fc6ab",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 15.768208000000413,
+                "mutationMs": 67.04754199999934,
+                "verificationMs": 12.589374999999563,
+                "code": 0,
+                "registrationIdentity": "git-registration:3b9f9a4bc3893e57ff521723bbcda839971dc021207adbc1c710d7ee8dae73ee",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 18.740209000000505,
+                "mutationMs": 61.04724999999962,
+                "verificationMs": 12.806542000000263,
+                "code": 0,
+                "registrationIdentity": "git-registration:edb99aba01486b876b34ba2b76c25f8d23f4796e0dbf040498bd42a189b9cedc",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 15.577916000000187,
+                "mutationMs": 64.6053750000001,
+                "verificationMs": 12.299166000000696,
+                "code": 0,
+                "registrationIdentity": "git-registration:1115400034f52c5267796fdbeee4b0a19b76d830ca1c0f4c5e4e80a703a736d3",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 16.89770899999985,
+                "mutationMs": 57.227208999999675,
+                "verificationMs": 12.087207999999919,
+                "code": 0,
+                "registrationIdentity": "git-registration:071903359bbc39487a04f4388901466fd60906747df78e99ffbb6c2e1f8da2e0",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.906084000000192,
+                "mutationMs": 57.773833999999624,
+                "verificationMs": 12.523125000000618,
+                "code": 0,
+                "registrationIdentity": "git-registration:cbf3848400f07ddb4f042ccedc9e0faf8a6a30c1c20b7f01e0e6751c3e430912",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.92266600000039,
+                "mutationMs": 61.19724999999926,
+                "verificationMs": 10.984542000000147,
+                "code": 0,
+                "registrationIdentity": "git-registration:f21175e4f1d3650b294718d16c0c0eac22bca3728fb9806251293f022ede365e",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.183208000000377,
+                "mutationMs": 60.54820799999925,
+                "verificationMs": 10.449249999999665,
+                "code": 0,
+                "registrationIdentity": "git-registration:a06449aba79356ba04a6cc7eb85d42ef53e9cb37cf1fc9dd0189654e5d5b3845",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.746666000000005,
+                "mutationMs": 64.17941700000029,
+                "verificationMs": 12.816749999999956,
+                "code": 0,
+                "registrationIdentity": "git-registration:917a10785137d39d367fc763fbd95c45a4a80a6836d9f45185792a336f9f54c1",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.3740829999997,
+                "mutationMs": 58.37474999999995,
+                "verificationMs": 15.578542000000198,
+                "code": 0,
+                "registrationIdentity": "git-registration:ba6116ea09335cdbd6d67483b858021f335f391b21348602ea3a92a0ad834310",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.870375000000422,
+                "mutationMs": 52.83666699999958,
+                "verificationMs": 16.264874999999847,
+                "code": 0,
+                "registrationIdentity": "git-registration:6dfbca4e9774210fcbf39a99d641edcbff4c16e666d6f2627f47fc7481b855cf",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.736832999999933,
+                "mutationMs": 59.65891699999975,
+                "verificationMs": 12.698250000000371,
+                "code": 0,
+                "registrationIdentity": "git-registration:fe45607de19bb9579d7bc48b128b9d960248a6c72d30cfd69e89a5748a6b1309",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.8125,
+                "mutationMs": 62.904749999999694,
+                "verificationMs": 15.574749999999767,
+                "code": 0,
+                "registrationIdentity": "git-registration:207ea40e17c8e2d84b12e6358f7779fe8a913a871b3948d507a9a4a1b3b73b3b",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 16.14587500000016,
+                "mutationMs": 64.1063750000003,
+                "verificationMs": 11.088541999999507,
+                "code": 0,
+                "registrationIdentity": "git-registration:c3a3eb0dfb240578c5e8207fbcbfd536f2e8f895c3ed1d344ec1856c00b58d74",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.092249999999694,
+                "mutationMs": 63.97662499999933,
+                "verificationMs": 10.087249999999585,
+                "code": 0,
+                "registrationIdentity": "git-registration:d9770e2a3e6e068d2106c74af7ac7a1fa1e96c9eb3b17dd59d0d34128b53ffeb",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.483540999999605,
+                "mutationMs": 59.45783400000073,
+                "verificationMs": 11.335791999999856,
+                "code": 0,
+                "registrationIdentity": "git-registration:19a042afae6f06e62e8061ee75ba8e82587ee6fb35df6ab3aef8b80e4d09ea2d",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.336707999999817,
+                "mutationMs": 57.72416700000031,
+                "verificationMs": 9.741582999999991,
+                "code": 0,
+                "registrationIdentity": "git-registration:2be01df4b749d396c74e8446a0bdb7e23628dff3dc61cf3a53078ef17f69c39f",
+                "stderr": ""
+              }
+            ]
+          },
+          "filesystemVerification": {
+            "strategy": "filesystemVerification",
+            "wallMs": 585.0924169999998,
+            "throughputPerSecond": 34.182634091461836,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 4,
+            "inventoryCount": 69,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [15.158203125, 18.0263671875, 20.17529296875],
+              "after": [15.158203125, 18.0263671875, 20.17529296875]
+            },
+            "resourceUsage": {
+              "userCpuMs": 30.534,
+              "systemCpuMs": 39.566,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 1356
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 31.456790999999612,
+                "mutationMs": 118.53729200000089,
+                "verificationMs": 0.9314999999996871,
+                "code": 0,
+                "registrationIdentity": "git-registration:5d3a9f4cc1dc5725bb31f0716adbdc842f26ac47dee1f657e933be9992e64dc7",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 18.13525000000027,
+                "mutationMs": 108.80683299999964,
+                "verificationMs": 1.4246660000007978,
+                "code": 0,
+                "registrationIdentity": "git-registration:b58060e8f7be25358c18515c3dea0c89cc48cec00783335e8d1b0780cc915e1e",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 25.58245799999986,
+                "mutationMs": 111.25304200000028,
+                "verificationMs": 1.5519580000000133,
+                "code": 0,
+                "registrationIdentity": "git-registration:5c5dd700b4c1bfd16b0505d4004d1e3e2ec0de3c07b2cc81befebf83718dc4f2",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 18.857166999999208,
+                "mutationMs": 116.95383299999958,
+                "verificationMs": 2.456833999999617,
+                "code": 0,
+                "registrationIdentity": "git-registration:a587083ed943e5b870442291c0eccd75cf910d0f8da5c5ac7a7c39f7c081e83f",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 18.71033400000033,
+                "mutationMs": 103.52991699999984,
+                "verificationMs": 1.189792000000125,
+                "code": 0,
+                "registrationIdentity": "git-registration:203c5e5e05b7dc79af180c93d9c260d5582fe32612e2461dc68fcafce2a9855f",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 24.548749999999927,
+                "mutationMs": 111.358792,
+                "verificationMs": 2.377249999999549,
+                "code": 0,
+                "registrationIdentity": "git-registration:b2b1b0ef705ff010be33ad64904009f30718d395f7126074085f8c0489805b0c",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 20.946083000000726,
+                "mutationMs": 105.35649999999987,
+                "verificationMs": 0.7654999999995198,
+                "code": 0,
+                "registrationIdentity": "git-registration:2bcd85bbf853c4567b6390b93fa928bfa9ac70f7c79629c40f2c6f960859c477",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 24.574999999999818,
+                "mutationMs": 111.70629199999985,
+                "verificationMs": 0.6851660000002084,
+                "code": 0,
+                "registrationIdentity": "git-registration:b6a18afaa7c07d6dbe1f3fe8b92dfd385377b0b73605a7cf80eed240473e05cd",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 18.864333000000443,
+                "mutationMs": 64.22387500000059,
+                "verificationMs": 0.6872499999999491,
+                "code": 0,
+                "registrationIdentity": "git-registration:824349481d5223458655a92a278f9f7b825076fb8f6bcd3366d2b8cdb435c2be",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 17.97529200000008,
+                "mutationMs": 81.9315000000006,
+                "verificationMs": 0.9234169999999722,
+                "code": 0,
+                "registrationIdentity": "git-registration:a31a8b6ef864097d7e6392d373b1f3596317dd31a82deccbcbb056101783590b",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 19.034458000000086,
+                "mutationMs": 97.39841700000034,
+                "verificationMs": 0.7669589999995878,
+                "code": 0,
+                "registrationIdentity": "git-registration:b6e8672d0d56df680b6a1dbc6b884656d101660df7a496669c7934c86c9cde70",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 18.307666999999128,
+                "mutationMs": 81.55416700000023,
+                "verificationMs": 0.8383340000000317,
+                "code": 0,
+                "registrationIdentity": "git-registration:d3356697f24f9c58a4c978e95e2b9e9628c06578c483c58bc0be4399811c6512",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 20.018165999999837,
+                "mutationMs": 78.44004099999984,
+                "verificationMs": 0.8373750000000655,
+                "code": 0,
+                "registrationIdentity": "git-registration:e9316c875cc8d2bfee47019b36f70e42a19feccd4e58645ddb8922625af198ee",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 16.597541000000092,
+                "mutationMs": 79.97962499999994,
+                "verificationMs": 0.7590000000000146,
+                "code": 0,
+                "registrationIdentity": "git-registration:4be806451032aa1443e0e6aaefa0d2e062fe2ef74bdd3e9c23d74a35c53e97af",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 19.169042000000445,
+                "mutationMs": 81.90954200000033,
+                "verificationMs": 0.7307080000000497,
+                "code": 0,
+                "registrationIdentity": "git-registration:041d85807b3453bdce431f77c48f323f20ce5b7c78a226e26a71eabe160191b6",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 19.954875000000357,
+                "mutationMs": 75.47487499999988,
+                "verificationMs": 0.8621250000005602,
+                "code": 0,
+                "registrationIdentity": "git-registration:e0dc3b8b7299ac14a3307939e2ce1cd21abf7289f3a857da48cf9b13fd472d14",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 19.075833000000785,
+                "mutationMs": 74.33420800000022,
+                "verificationMs": 0.7914169999994556,
+                "code": 0,
+                "registrationIdentity": "git-registration:800fec72011a316a5bf773bff20f2c036d395fda76ea28eb11c0f4070c61f9da",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.031041000000187,
+                "mutationMs": 74.51633300000049,
+                "verificationMs": 0.604457999999795,
+                "code": 0,
+                "registrationIdentity": "git-registration:61abbfff624fde5e8d5b616c8cb769e74ce13d80d9b78be38ee9479746e703e3",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 15.077499999999418,
+                "mutationMs": 72.41287499999999,
+                "verificationMs": 0.5891249999995125,
+                "code": 0,
+                "registrationIdentity": "git-registration:3e87a81220a6dfb8fb4839c0fc3a9f31c909ff6d534738dd609d0d83d40b3d07",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 16.882957999999235,
+                "mutationMs": 69.2227499999999,
+                "verificationMs": 0.4961249999996653,
+                "code": 0,
+                "registrationIdentity": "git-registration:0fac8ac65cee67a9798b1fddb6ee220e16e23234f640ca387c065257beda5182",
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 1,
+          "order": ["processVerification", "filesystemVerification"],
+          "processVerification": {
+            "strategy": "processVerification",
+            "wallMs": 485.003917,
+            "throughputPerSecond": 41.23678036192025,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 4,
+            "inventoryCount": 69,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [14.2646484375, 17.79345703125, 20.080078125],
+              "after": [14.2646484375, 17.79345703125, 20.080078125]
+            },
+            "resourceUsage": {
+              "userCpuMs": 27.182,
+              "systemCpuMs": 46.426,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 948
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 14.7482919999984,
+                "mutationMs": 61.306375000000116,
+                "verificationMs": 15.541166000000885,
+                "code": 0,
+                "registrationIdentity": "git-registration:2064d3d86c329a926b46ac0d4e684ee9cf6eb320446e81e24fe647fd790bdb57",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.969499999999243,
+                "mutationMs": 59.377957999999126,
+                "verificationMs": 17.035250000000815,
+                "code": 0,
+                "registrationIdentity": "git-registration:b4bea2014e73332c7ecd6ac73da051769332262e2a9a4f7a987e04ffc1f9b679",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 14.938082999999097,
+                "mutationMs": 60.96958300000006,
+                "verificationMs": 14.985499999998865,
+                "code": 0,
+                "registrationIdentity": "git-registration:4a9059a49d68382f9b6e3f90102a6b80934c01f04a3d27ab89b577153a200f0b",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.03254200000083,
+                "mutationMs": 64.31041600000026,
+                "verificationMs": 14.938707999999679,
+                "code": 0,
+                "registrationIdentity": "git-registration:ba3533a6ebcdb898d86d5d92eccaa8f6194d0f5a0d92c1428e394b2d344f5ac5",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 15.297291999999288,
+                "mutationMs": 64.58124999999927,
+                "verificationMs": 11.447999999998501,
+                "code": 0,
+                "registrationIdentity": "git-registration:e854656f237ea6bc0c6d3c4d042bdcfe36e438fb352e9b32a01c971bdc9649d6",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.781708000000435,
+                "mutationMs": 67.34820799999943,
+                "verificationMs": 13.785167000000001,
+                "code": 0,
+                "registrationIdentity": "git-registration:2302fdb97b375ce8304bf0919ec3607d0cee16699cebf00b1ed8485e44b4aa13",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.53333400000156,
+                "mutationMs": 69.74133299999994,
+                "verificationMs": 12.41912500000035,
+                "code": 0,
+                "registrationIdentity": "git-registration:7091105f6e62687ce3e9a741f2b0ec6b9ca9dc102b8680083f61b8be72ff6421",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.886749999999665,
+                "mutationMs": 61.96833300000071,
+                "verificationMs": 12.226249999999709,
+                "code": 0,
+                "registrationIdentity": "git-registration:3ba4fce79047e04270c4c11912c9ee1713819232604888a8e32972a512b621cf",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 16.45612500000061,
+                "mutationMs": 68.47687500000029,
+                "verificationMs": 13.347624999998516,
+                "code": 0,
+                "registrationIdentity": "git-registration:c8e24c88dec5af6a64854c509af3465615eed430c8a77cbb59984ab1a428a6c9",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.639208999999028,
+                "mutationMs": 72.4625419999993,
+                "verificationMs": 15.483791999999085,
+                "code": 0,
+                "registrationIdentity": "git-registration:5f11e29a36784b1bf9c35913ca04f0531884cd54241b34ff5e558b088b6be9c2",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.434124999999767,
+                "mutationMs": 68.43683299999975,
+                "verificationMs": 12.984707999999955,
+                "code": 0,
+                "registrationIdentity": "git-registration:537e30464856850111d33b3f4285eead30b58b14e16b1a8d21f0dafb26fed3a2",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.6284169999999,
+                "mutationMs": 67.55841700000019,
+                "verificationMs": 13.743249999999534,
+                "code": 0,
+                "registrationIdentity": "git-registration:dae8d4d0f9dc36a9dd5429b3a215a223abfd50d6c6f36e2c24030ea7b32121f9",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.64545900000121,
+                "mutationMs": 76.67779100000007,
+                "verificationMs": 13.860208000000057,
+                "code": 0,
+                "registrationIdentity": "git-registration:9be1956bbbb97c530e109259bf923ca989388748bf915b0a086847cbeb09371d",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.27850000000035,
+                "mutationMs": 76.81175000000076,
+                "verificationMs": 10.527874999999767,
+                "code": 0,
+                "registrationIdentity": "git-registration:a041b254f483885605a35da08229bb8a8153347d4c991a7ec8703cdc2f21dce5",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.753332999998747,
+                "mutationMs": 87.51924999999937,
+                "verificationMs": 15.153000000000247,
+                "code": 0,
+                "registrationIdentity": "git-registration:c704a3d827594a1cd650d841853d9c5b81a3a43740f8c3f4543c7d249d97c979",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.486124999999447,
+                "mutationMs": 76.36099999999897,
+                "verificationMs": 11.303499999999985,
+                "code": 0,
+                "registrationIdentity": "git-registration:ece6e54604b1373e21422f8b077bcb80d63852911e0de6f6976b31f38aeec152",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.452332999999271,
+                "mutationMs": 72.06891700000051,
+                "verificationMs": 13.923749999999927,
+                "code": 0,
+                "registrationIdentity": "git-registration:f4d51fc8fe14df3083d61698f6ea694c84d82c1017d5bc4eb44809da7d896c69",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 16.184792000000016,
+                "mutationMs": 68.07150000000001,
+                "verificationMs": 13.842499999998836,
+                "code": 0,
+                "registrationIdentity": "git-registration:7bdeef4b3a4d2edf975e5807f5ddcf83c6a80c3f2d314df5544659dc636b0e07",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.948082999999315,
+                "mutationMs": 65.5101250000007,
+                "verificationMs": 16.47466600000007,
+                "code": 0,
+                "registrationIdentity": "git-registration:5ea53775ae332505698630e89ecb710af5eb35ed911858f5adb41a1dca6370cb",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.019667000000481,
+                "mutationMs": 64.37787500000013,
+                "verificationMs": 10.93908300000112,
+                "code": 0,
+                "registrationIdentity": "git-registration:673d58585a9ebf47eccb7169d18c9f82569ecda47ac17ef511f4188dc0c20764",
+                "stderr": ""
+              }
+            ]
+          },
+          "filesystemVerification": {
+            "strategy": "filesystemVerification",
+            "wallMs": 290.3703749999986,
+            "throughputPerSecond": 68.87754992223327,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 4,
+            "inventoryCount": 69,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [13.5224609375, 17.5810546875, 19.99169921875],
+              "after": [13.5224609375, 17.5810546875, 19.99169921875]
+            },
+            "resourceUsage": {
+              "userCpuMs": 12.348,
+              "systemCpuMs": 25.562,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 1182
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 12.71941599999991,
+                "mutationMs": 51.37595800000054,
+                "verificationMs": 0.3144159999992553,
+                "code": 0,
+                "registrationIdentity": "git-registration:92aba60ee0a39bc74e4fb0cfbdb24521caa7fec727cab5af9d683f2393c8d62e",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.694790999999896,
+                "mutationMs": 49.496666999999434,
+                "verificationMs": 0.5627499999991414,
+                "code": 0,
+                "registrationIdentity": "git-registration:b065331d5796a7c9f12c2f940556b4d3fb8844f3b14084329dd421338a261f59",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 13.064124999998967,
+                "mutationMs": 50.78475000000071,
+                "verificationMs": 0.24737500000082946,
+                "code": 0,
+                "registrationIdentity": "git-registration:13d385190f2e6e164ef4f09efb8a9c9a7954d73406cb78e925e0be8767554bf9",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.00012500000048,
+                "mutationMs": 52.60737499999959,
+                "verificationMs": 0.5152500000003783,
+                "code": 0,
+                "registrationIdentity": "git-registration:067905560a41eacae5534dd2a56a8d7a056e33898ca0599b4e106761456ec23b",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.713791000000128,
+                "mutationMs": 47.36179099999936,
+                "verificationMs": 0.565416000001278,
+                "code": 0,
+                "registrationIdentity": "git-registration:f4ff70fa4a38da34c65f3b8ecdab386cf19a602d743efedf03f5e8a5a198675b",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.283792000000176,
+                "mutationMs": 41.30912499999977,
+                "verificationMs": 0.26200000000062573,
+                "code": 0,
+                "registrationIdentity": "git-registration:bb237c141ba7c38ba8c56a9821cc87d8af3d5a98e907436f51f1ab8a4f385019",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.493750000001455,
+                "mutationMs": 42.78758299999936,
+                "verificationMs": 0.26508299999841256,
+                "code": 0,
+                "registrationIdentity": "git-registration:7d4e98e0d5f3466ae1734778ec885e28fa8338aefc23ca22b183c36b01c754cb",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.470417000000452,
+                "mutationMs": 42.2627909999992,
+                "verificationMs": 0.231208000001061,
+                "code": 0,
+                "registrationIdentity": "git-registration:ac76b9b86170adc1703e0ce400812aca38e7c7539dacc71ecf2c9e693e48fb52",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.623499999999694,
+                "mutationMs": 45.70133299999907,
+                "verificationMs": 0.807541999998648,
+                "code": 0,
+                "registrationIdentity": "git-registration:5a9a2c3785c79dfcef38b5b3763bc14efbc465ffc81e9e17ef95e0e59e082d3d",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.560457999999926,
+                "mutationMs": 45.24566599999889,
+                "verificationMs": 0.8962919999994483,
+                "code": 0,
+                "registrationIdentity": "git-registration:ac46af453e0763b3cd7e247e8915f317e6c0af0e7722e8224b3498196600ffee",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.817541000000347,
+                "mutationMs": 43.64754199999879,
+                "verificationMs": 0.43370900000081747,
+                "code": 0,
+                "registrationIdentity": "git-registration:f4fd206bd0fceadf83e85576c708ea69e928e548f712a0ae407eb64a686fbf82",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.299165999998877,
+                "mutationMs": 45.4917089999999,
+                "verificationMs": 0.5083749999994325,
+                "code": 0,
+                "registrationIdentity": "git-registration:83def79e7c7268a071d31ef66f3b6b6cb1bbb569501f4744361d8967e59e8cfd",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.919834000000264,
+                "mutationMs": 50.99499999999898,
+                "verificationMs": 0.5630830000009155,
+                "code": 0,
+                "registrationIdentity": "git-registration:d5c134dba9cef309741ef924e3eb46703d6deed8ec7deb7beb9d44f2b665ec1a",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.177875000001222,
+                "mutationMs": 46.86912500000108,
+                "verificationMs": 0.24033299999973678,
+                "code": 0,
+                "registrationIdentity": "git-registration:644c03f7aed0b3a89bc7d48d32a98ed8d3b3503e8e0b99d8317243cd767e8032",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.115874999999505,
+                "mutationMs": 44.71562500000073,
+                "verificationMs": 0.3359999999993306,
+                "code": 0,
+                "registrationIdentity": "git-registration:01667e84480ff9d34b21eaec3dde6ddcc33090f1b1b68077d006f4ff3418236c",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 8.486834000001181,
+                "mutationMs": 44.94049999999879,
+                "verificationMs": 0.21770900000046822,
+                "code": 0,
+                "registrationIdentity": "git-registration:93a482a9039799932edc42722f7d8efdc69b731e976e48cf023721b8c15ef0fb",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.918916999999055,
+                "mutationMs": 47.79320899999948,
+                "verificationMs": 0.3473329999997077,
+                "code": 0,
+                "registrationIdentity": "git-registration:6258d8cbf57a8f04ab0f1391e30ef122fc235b453649c7fdace56ff6ba059b05",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.585791999999856,
+                "mutationMs": 50.48845799999981,
+                "verificationMs": 0.22358300000087183,
+                "code": 0,
+                "registrationIdentity": "git-registration:e086a73ec4686a9e44b07928d7f40c1ea45cdd153b566596fcf6a95f4f256cf9",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.217624999999316,
+                "mutationMs": 47.1557499999999,
+                "verificationMs": 0.2608749999999418,
+                "code": 0,
+                "registrationIdentity": "git-registration:4acc71de9953ed11690f77d2c1d1e0508aaa799211dea3fc871cb602236afb19",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.203332999999475,
+                "mutationMs": 45.30316700000003,
+                "verificationMs": 0.30720800000017334,
+                "code": 0,
+                "registrationIdentity": "git-registration:3b896b362498d158ee9e313a017c1e4f5a69d738eabd4d286ff027b4af32bf34",
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 2,
+          "order": ["filesystemVerification", "processVerification"],
+          "processVerification": {
+            "strategy": "processVerification",
+            "wallMs": 345.4228750000002,
+            "throughputPerSecond": 57.900044981097416,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 4,
+            "inventoryCount": 69,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [12.6796875, 17.3388671875, 19.89208984375],
+              "after": [12.6796875, 17.3388671875, 19.89208984375]
+            },
+            "resourceUsage": {
+              "userCpuMs": 16.749,
+              "systemCpuMs": 30.314,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 719
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 11.728957999999693,
+                "mutationMs": 42.906332999998995,
+                "verificationMs": 9.618625000002794,
+                "code": 0,
+                "registrationIdentity": "git-registration:cc30ce01365d5ae0c8f0b38dce969fe70a0e5f5a7d8cfdd2fb6255b200be64ea",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.147291999997833,
+                "mutationMs": 42.23912500000006,
+                "verificationMs": 12.359499999998661,
+                "code": 0,
+                "registrationIdentity": "git-registration:c85abb4c876c7cff3b0433701bf96af7b1dedb4f5e18e05350adf16435079e76",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.27612500000032,
+                "mutationMs": 42.83954100000119,
+                "verificationMs": 10.662583000001177,
+                "code": 0,
+                "registrationIdentity": "git-registration:a3dd5a687b7e0866c5cb08b3d8bcc0e89ec26a9c227e63a47060e5839c3e226e",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.73633300000074,
+                "mutationMs": 46.17937499999971,
+                "verificationMs": 9.790375000000495,
+                "code": 0,
+                "registrationIdentity": "git-registration:a7a7f09fcc7c8c978ec19bc4f90b370ad5facf201b58468711d907f9cba27c2a",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.707249999999476,
+                "mutationMs": 42.44941699999981,
+                "verificationMs": 9.570542000001296,
+                "code": 0,
+                "registrationIdentity": "git-registration:3a718f108ffcadba6c96b4b752bd21d018f21638e17215ffad0e0b12eb286cab",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.70945799999754,
+                "mutationMs": 40.620082999997976,
+                "verificationMs": 11.465832999998383,
+                "code": 0,
+                "registrationIdentity": "git-registration:8862d3cc897c57234d6762fbcb9c55476243d6d76530676a3a020a58bac13527",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.00312500000291,
+                "mutationMs": 41.61020799999824,
+                "verificationMs": 10.649583999998868,
+                "code": 0,
+                "registrationIdentity": "git-registration:85a35e26763ad659040f4533f588984140ea58e72b1ce88fa31b34297df92c46",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.149790999999823,
+                "mutationMs": 44.4517909999995,
+                "verificationMs": 10.10308299999815,
+                "code": 0,
+                "registrationIdentity": "git-registration:8a6afc379c52af61a64a59f499d6d3d83c54ff03440e4f86d21abc0ef2ca3aac",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.012500000000728,
+                "mutationMs": 44.65820800000074,
+                "verificationMs": 11.154167000000598,
+                "code": 0,
+                "registrationIdentity": "git-registration:88f3e6b021ed4a7e153f2b23caf94a006c5f90e9a960ff339ceb67138b85b419",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.94829099999697,
+                "mutationMs": 45.39404099999956,
+                "verificationMs": 10.83350000000064,
+                "code": 0,
+                "registrationIdentity": "git-registration:5b0450ff177566fcc923e2bc021ba7da2f62e20193f3494b5056395f2fa8918f",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.578459000000294,
+                "mutationMs": 47.29675000000134,
+                "verificationMs": 10.188167000000249,
+                "code": 0,
+                "registrationIdentity": "git-registration:e204b80a96e3cb5a0aad2ac215c29ffa62f70ddaddb66dd7965405e64cc77512",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.447583000001032,
+                "mutationMs": 41.57487499999843,
+                "verificationMs": 10.724957999998878,
+                "code": 0,
+                "registrationIdentity": "git-registration:30506a2f45247893edbd3be08989243446eeabcd9c1278ad59ab2f9a10bbe401",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.780917000000045,
+                "mutationMs": 53.31437499999811,
+                "verificationMs": 9.70141700000022,
+                "code": 0,
+                "registrationIdentity": "git-registration:8704fff2daa3a3c8f2ceea82d64565ce0a04d4a25eb27497e3cd60ceeee5959a",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.36816700000054,
+                "mutationMs": 47.93579200000022,
+                "verificationMs": 10.24616700000115,
+                "code": 0,
+                "registrationIdentity": "git-registration:73f87e5ba87ac018c1b43c770060ba38f52cc3c4d4cf162676265056165f05d2",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 8.998125000001892,
+                "mutationMs": 47.414457999999286,
+                "verificationMs": 11.866249999999127,
+                "code": 0,
+                "registrationIdentity": "git-registration:5d24a2da283a8d599cdbedef6040a98c050e6a9a18a7900e3cb5c9fd5fc6a30b",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.000416999999288,
+                "mutationMs": 49.994417000001704,
+                "verificationMs": 10.151416000000609,
+                "code": 0,
+                "registrationIdentity": "git-registration:7347898ec6a816b510d22c8fd53b13f03239725291e3de0cf84d5e618296b173",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.18170900000041,
+                "mutationMs": 48.85412500000166,
+                "verificationMs": 10.075542000002315,
+                "code": 0,
+                "registrationIdentity": "git-registration:fb56835465f61ec85b86a0a99744e1c17ad31475871f49f9b533c6023b4f39be",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 8.915082999999868,
+                "mutationMs": 64.71283399999811,
+                "verificationMs": 9.888499999997293,
+                "code": 0,
+                "registrationIdentity": "git-registration:eab9fd44dee5aee0170694e5dec248469e47f9896caec0e0d61ad92591fe99ee",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.068291999999929,
+                "mutationMs": 46.788040999999794,
+                "verificationMs": 10.752292000001034,
+                "code": 0,
+                "registrationIdentity": "git-registration:7efbfd5ee4d0e8c73d8f0c631c885cd37d65196cd16e6a760c16bf0bb8bf987d",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.64245800000208,
+                "mutationMs": 49.13395800000217,
+                "verificationMs": 9.160624999996799,
+                "code": 0,
+                "registrationIdentity": "git-registration:6d21debe7a3b1b716a31986c3dd5a5a5b1e2af6046d821d7bb125b9fbfc8628f",
+                "stderr": ""
+              }
+            ]
+          },
+          "filesystemVerification": {
+            "strategy": "filesystemVerification",
+            "wallMs": 292.6140000000014,
+            "throughputPerSecond": 68.34942962400946,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 4,
+            "inventoryCount": 69,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [13.5224609375, 17.5810546875, 19.99169921875],
+              "after": [13.5224609375, 17.5810546875, 19.99169921875]
+            },
+            "resourceUsage": {
+              "userCpuMs": 11.948,
+              "systemCpuMs": 24.761,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 1195
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 11.893958000000566,
+                "mutationMs": 44.40279200000077,
+                "verificationMs": 0.3966660000005504,
+                "code": 0,
+                "registrationIdentity": "git-registration:a715d9e49219506261196e091ad519e3e76ea58c2b35facf070e0e074bafbff6",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.824208000001818,
+                "mutationMs": 44.90295799999876,
+                "verificationMs": 1.045458000000508,
+                "code": 0,
+                "registrationIdentity": "git-registration:10215ae890b98df607c2fbb897df059cf962cbe91fc8a285bf831349dd8e78db",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.772082999999839,
+                "mutationMs": 50.03995799999757,
+                "verificationMs": 0.48845799999980954,
+                "code": 0,
+                "registrationIdentity": "git-registration:1a98e06008744b0c4252fc35dd97b17036d59169bea6a2ee7a5d69c1aa59bf05",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.715916000001016,
+                "mutationMs": 45.055624999997235,
+                "verificationMs": 0.7634580000012647,
+                "code": 0,
+                "registrationIdentity": "git-registration:0412647299995f66780ecc22ddad302dd970af750cdd8456c0d2e35d2bf64436",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.094999999997526,
+                "mutationMs": 44.15320799999972,
+                "verificationMs": 0.3326249999990978,
+                "code": 0,
+                "registrationIdentity": "git-registration:f1f36e6ed5a5910c90c8e12a65c83f0e2cc6cce738429a9b0277b985e1e2aa44",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.62724999999773,
+                "mutationMs": 50.27050000000236,
+                "verificationMs": 0.5137080000022252,
+                "code": 0,
+                "registrationIdentity": "git-registration:61042983cd3ded07eb8a8afe91c970c7ae667c988615fc7a6ac2d877acc7603d",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.349625000002561,
+                "mutationMs": 44.515457999998034,
+                "verificationMs": 0.2421250000006694,
+                "code": 0,
+                "registrationIdentity": "git-registration:eb9299ad4e703ca1e3081e5336c7cdd0cce80e2822c3ff5cd3007ed6285f6a81",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.175624999999854,
+                "mutationMs": 43.25225000000137,
+                "verificationMs": 0.2523330000003625,
+                "code": 0,
+                "registrationIdentity": "git-registration:c662c6c82b62b8ec07f87456d5f6a387d99a02bafd28653c4b3c8eac5bc94778",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.028125000000728,
+                "mutationMs": 45.572416999999405,
+                "verificationMs": 1.521375000000262,
+                "code": 0,
+                "registrationIdentity": "git-registration:9fb668dff88db2a7e033237c4d1ef9b816450de67370dc8a825546838301451b",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.487832999999227,
+                "mutationMs": 43.832916000003024,
+                "verificationMs": 0.48695800000132294,
+                "code": 0,
+                "registrationIdentity": "git-registration:1334bd272685186a7f8209b48e0fb5bf4374f08fbf20c27d2f8e53024252ec02",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.084208000000217,
+                "mutationMs": 45.73854200000278,
+                "verificationMs": 1.5323329999991984,
+                "code": 0,
+                "registrationIdentity": "git-registration:92aac70d1671fb8cb5d7b09a14672d5a181914ba1003235e21d1b7bf9987180b",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.52416599999924,
+                "mutationMs": 43.90324999999939,
+                "verificationMs": 0.3717910000013944,
+                "code": 0,
+                "registrationIdentity": "git-registration:c5ff84a95ee244259a8f84d117250fed8c99adb1a4af0e90482d52c8ce2f3b46",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.06224999999904,
+                "mutationMs": 49.74695799999972,
+                "verificationMs": 1.3644999999996799,
+                "code": 0,
+                "registrationIdentity": "git-registration:288939b56ea3f52eff496cdb4063df478102d0216733fba4bf705b4eb5ec6785",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.616375000001426,
+                "mutationMs": 47.43229099999735,
+                "verificationMs": 0.6324580000000424,
+                "code": 0,
+                "registrationIdentity": "git-registration:96885a53d1121f4922f81c415973aab92d934bb642ade7af2a39f18d3f31a393",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.834459000001516,
+                "mutationMs": 46.75066599999991,
+                "verificationMs": 1.492833000000246,
+                "code": 0,
+                "registrationIdentity": "git-registration:89c16a033a526e75fce65736bf3e0a6751cffcc168982ada22475ccb85a47dd0",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.650916999999026,
+                "mutationMs": 45.65570800000205,
+                "verificationMs": 1.0501670000012382,
+                "code": 0,
+                "registrationIdentity": "git-registration:62bb50676ba66f69e7dd3a4c24dfcf9663b4ff32d5d6ee2d5d33cf4961315470",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.532750000002125,
+                "mutationMs": 54.746375000002445,
+                "verificationMs": 0.20141700000021956,
+                "code": 0,
+                "registrationIdentity": "git-registration:3062f0daae82df0f8932b046cf659ab375550421803dc267e5b747e80599da64",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.36962499999936,
+                "mutationMs": 49.12645800000246,
+                "verificationMs": 0.29349999999976717,
+                "code": 0,
+                "registrationIdentity": "git-registration:04182f1267bdc244c31cd9d96c05ac2fa1b074d9dfa0205a9834286d99e43eb3",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.33941699999923,
+                "mutationMs": 52.46062499999971,
+                "verificationMs": 0.28625000000101863,
+                "code": 0,
+                "registrationIdentity": "git-registration:f25bab89d06fc354b59bee951ef11e27462cd3076652b0c266568b4f332fb3a4",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.21612499999901,
+                "mutationMs": 48.848916999999346,
+                "verificationMs": 0.24425000000337604,
+                "code": 0,
+                "registrationIdentity": "git-registration:6a53f574e663b9405651b2ff5f5c11e87743bccd8ccd26a62502a9e1038b8625",
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 3,
+          "order": ["processVerification", "filesystemVerification"],
+          "processVerification": {
+            "strategy": "processVerification",
+            "wallMs": 334.2378749999989,
+            "throughputPerSecond": 59.83762312993423,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 4,
+            "inventoryCount": 69,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [12.6796875, 17.3388671875, 19.89208984375],
+              "after": [12.6796875, 17.3388671875, 19.89208984375]
+            },
+            "resourceUsage": {
+              "userCpuMs": 15.302,
+              "systemCpuMs": 31.612,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 824
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 12.816542000000481,
+                "mutationMs": 45.744000000002416,
+                "verificationMs": 9.602291000002879,
+                "code": 0,
+                "registrationIdentity": "git-registration:d5de53e75c73a38a512fae6d02f0a121b3d4cbfa6e7d45ac3135e93131386d93",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.424041999998735,
+                "mutationMs": 43.87812500000291,
+                "verificationMs": 9.47504100000151,
+                "code": 0,
+                "registrationIdentity": "git-registration:ddb8e683a44dfff01da42d7bd366d4c6c2374cebe847fdba04f8c8683953926c",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.533415999998397,
+                "mutationMs": 44.05183400000169,
+                "verificationMs": 11.303291000000172,
+                "code": 0,
+                "registrationIdentity": "git-registration:c31ec27b8b9c20a7bd774600d2c0497bdc65efdf51c66d64fd80a6bdd4e35c63",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.023832999999286,
+                "mutationMs": 55.837375000002794,
+                "verificationMs": 9.889165999997203,
+                "code": 0,
+                "registrationIdentity": "git-registration:b22c92637456715e05eb4e9ebf9c345d83b267025a701f52486b065649ac1667",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.1552920000031,
+                "mutationMs": 46.85020900000018,
+                "verificationMs": 9.878916999998182,
+                "code": 0,
+                "registrationIdentity": "git-registration:c4cbde4c882e2cee68f7b3faf03bc685ecc13ab6507f479e6566e533c26960f0",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.108667000000423,
+                "mutationMs": 42.690167000000656,
+                "verificationMs": 11.150041000000783,
+                "code": 0,
+                "registrationIdentity": "git-registration:318b37943287c07caa53a2e3946693c30ddfe92493ca635bea68c4a83000fc69",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 8.449124999999185,
+                "mutationMs": 42.03058400000009,
+                "verificationMs": 10.766292000000249,
+                "code": 0,
+                "registrationIdentity": "git-registration:bf2b32ce11e41363787ab9aaef653dff0d3f22e28093ae154be27452ad6153e7",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.953708000000915,
+                "mutationMs": 39.06320799999958,
+                "verificationMs": 10.186874999999418,
+                "code": 0,
+                "registrationIdentity": "git-registration:82d110c8c40971bd1f1236326f62bc60e984eaf43647f6f9bb857b4dfdfb4544",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 8.725666999998793,
+                "mutationMs": 46.3259160000016,
+                "verificationMs": 11.036541000001307,
+                "code": 0,
+                "registrationIdentity": "git-registration:d379fc28c0f6d21cace512b1294c4a9051f9544ab63797a142685d87d9a7c7d6",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 8.979917000000569,
+                "mutationMs": 44.490083999997296,
+                "verificationMs": 11.368916999999783,
+                "code": 0,
+                "registrationIdentity": "git-registration:aada323dd37320e632adeab9cdbe2c35ee01381e877baf6dec89e9e9d7405fbe",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 8.622457999998005,
+                "mutationMs": 42.400792000000365,
+                "verificationMs": 11.280708999998751,
+                "code": 0,
+                "registrationIdentity": "git-registration:16ed506d57919692317b9fe3e46c735ff6ff45d01926ceaa8cb541efb1405da9",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.87987499999872,
+                "mutationMs": 40.27058300000135,
+                "verificationMs": 10.843999999997322,
+                "code": 0,
+                "registrationIdentity": "git-registration:4149827c80566873204782f0505a257cc3fcd54a66a50c35af091417f2c655af",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.430249999997613,
+                "mutationMs": 49.88145799999984,
+                "verificationMs": 11.51075000000128,
+                "code": 0,
+                "registrationIdentity": "git-registration:d62b9562113c7878de6639b5d85753dcbc88790af766859f435d128f48e208ea",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.064041000001453,
+                "mutationMs": 54.0101250000007,
+                "verificationMs": 9.72558299999946,
+                "code": 0,
+                "registrationIdentity": "git-registration:a452cc13f82b45a4dac1c2a4d60dc9b3784cb513fd359266172ae7a88ca37fb6",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.120041999998648,
+                "mutationMs": 53.55245900000227,
+                "verificationMs": 9.473750000001019,
+                "code": 0,
+                "registrationIdentity": "git-registration:f106ccd6c8116039c5f8afc9d9979f85de3dad5dc2c37c0f2ed73e90c78345e1",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.69904200000019,
+                "mutationMs": 47.84587499999907,
+                "verificationMs": 9.908542000001034,
+                "code": 0,
+                "registrationIdentity": "git-registration:becd565e6ad5781a60c9782bd2fcd3dbc1c98347656bb06b0d68d94ead60ffa9",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.488166999999521,
+                "mutationMs": 47.97479200000089,
+                "verificationMs": 11.341875000001892,
+                "code": 0,
+                "registrationIdentity": "git-registration:151f68046b204b8b6a647fb21d5737f235a263a1c902f4747435f322d62c500b",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.435999999997875,
+                "mutationMs": 48.252457999999024,
+                "verificationMs": 10.592208000001847,
+                "code": 0,
+                "registrationIdentity": "git-registration:774ff8a436874f5bbd6e94fd2eb7ae8dd7da3977d076ec6a7a34db59c7ee1fcb",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.165374999996857,
+                "mutationMs": 47.29637500000172,
+                "verificationMs": 10.312167000000045,
+                "code": 0,
+                "registrationIdentity": "git-registration:e47216b2a932455c77a39ed514004a5c8cd002132d45f1315263c4ca6971281b",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 8.692458000001352,
+                "mutationMs": 47.663958000001,
+                "verificationMs": 9.791958999998315,
+                "code": 0,
+                "registrationIdentity": "git-registration:aa28aa3f621cba91ba65c36d8d7ca8c7715d38d80af1603470b9d69ccfe8bcf0",
+                "stderr": ""
+              }
+            ]
+          },
+          "filesystemVerification": {
+            "strategy": "filesystemVerification",
+            "wallMs": 284.19525000000067,
+            "throughputPerSecond": 70.37415298109293,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 4,
+            "inventoryCount": 69,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [11.82421875, 17.083984375, 19.787109375],
+              "after": [11.82421875, 17.083984375, 19.787109375]
+            },
+            "resourceUsage": {
+              "userCpuMs": 12.649,
+              "systemCpuMs": 24.269,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 1197
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 12.223291999998764,
+                "mutationMs": 45.07983400000012,
+                "verificationMs": 0.6454159999993863,
+                "code": 0,
+                "registrationIdentity": "git-registration:10b261877cf161afbad9a938ccb1b7e270c80b571d63c4c873c28f19098ce26d",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.507041999997455,
+                "mutationMs": 43.26062499999898,
+                "verificationMs": 0.3177079999986745,
+                "code": 0,
+                "registrationIdentity": "git-registration:2084c5428f99508c8d78b0d874f7a0f6df9f92ca71fed18fc1c1989664964ec4",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.685124999999971,
+                "mutationMs": 47.716458999999304,
+                "verificationMs": 0.4516249999978754,
+                "code": 0,
+                "registrationIdentity": "git-registration:04b05ca5b4f44a1ebecbbd73677d09a0085e373c578fd8cb4e8a5561f98f4602",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.241457999996783,
+                "mutationMs": 42.82016699999804,
+                "verificationMs": 0.22145799999998417,
+                "code": 0,
+                "registrationIdentity": "git-registration:d2638a98d30b659eeb11b3850fcca33f3d6661b0107fc52bdf9cee7152a02820",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.733416999999463,
+                "mutationMs": 42.74750000000131,
+                "verificationMs": 0.30191699999704724,
+                "code": 0,
+                "registrationIdentity": "git-registration:0b9ba1f1e73b74171bd0133792289811f152de6edae9aecffe54c3c806bd51bb",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.302332999999635,
+                "mutationMs": 46.669834000000264,
+                "verificationMs": 0.5406250000014552,
+                "code": 0,
+                "registrationIdentity": "git-registration:c9d2692027d9dd725562b40d6b2e1f4610bfea61838e5d5f80857f7a0d9e572d",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 8.890583000000333,
+                "mutationMs": 42.33729200000016,
+                "verificationMs": 0.22779200000150013,
+                "code": 0,
+                "registrationIdentity": "git-registration:57e9c9d054f5c70dbc12128d043375e2ecc31ab130c366f6b34330b199680539",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 8.71233299999949,
+                "mutationMs": 41.84979199999725,
+                "verificationMs": 0.44637499999953434,
+                "code": 0,
+                "registrationIdentity": "git-registration:19f0c176d854d8e3d578823af281ecfca1200ceb4688610f296fc2a8d7fb98ca",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.794167000000016,
+                "mutationMs": 42.56762499999968,
+                "verificationMs": 0.5192499999975553,
+                "code": 0,
+                "registrationIdentity": "git-registration:ac2000268d21d5e58b1585db39bbf2681e1c8d76016ae57729e29dae39f2c6c8",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.224000000001979,
+                "mutationMs": 41.44366699999955,
+                "verificationMs": 1.097458000000188,
+                "code": 0,
+                "registrationIdentity": "git-registration:bd87869449163d8b3feba097a097e224533e938f3fa26310ae6362a8e6cc726e",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.285707999999431,
+                "mutationMs": 41.65195799999856,
+                "verificationMs": 0.515040999998746,
+                "code": 0,
+                "registrationIdentity": "git-registration:92be62466f49e2b59bd991b52e70205b2c039876e371077bb20cf51e615e0848",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.463665999999648,
+                "mutationMs": 41.532250000000204,
+                "verificationMs": 0.9868750000023283,
+                "code": 0,
+                "registrationIdentity": "git-registration:4be907ed71f7a7fe4a3bd05e46085d252b77c3799086d3fd5325467323abe792",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.996917000000394,
+                "mutationMs": 52.49579200000153,
+                "verificationMs": 0.3572500000009313,
+                "code": 0,
+                "registrationIdentity": "git-registration:25efb980ef5378796e55ef4eb45dcc2a1bf3c6c4be71e66ea35cdc723af9c274",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.627292000001034,
+                "mutationMs": 49.297709000002214,
+                "verificationMs": 0.454583000002458,
+                "code": 0,
+                "registrationIdentity": "git-registration:4c68dbfc30170eda2ee785af78e144a706ab4e6653e1e48f736e98555e3d01d9",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.561083999997209,
+                "mutationMs": 47.03900000000067,
+                "verificationMs": 0.3565420000013546,
+                "code": 0,
+                "registrationIdentity": "git-registration:3d5eefbae330f27176111b6574bdf8808eb4b35e477487294ebe20b7d147d6a9",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 8.5437090000014,
+                "mutationMs": 47.590415999999095,
+                "verificationMs": 0.8180830000019341,
+                "code": 0,
+                "registrationIdentity": "git-registration:4112461022633c374a436a951f4306c7b50e712708453c779eef77acede51a77",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.88208300000042,
+                "mutationMs": 51.65858300000036,
+                "verificationMs": 0.18387499999880674,
+                "code": 0,
+                "registrationIdentity": "git-registration:71e84bd5be627f4ef30879648ce121067e560831d66c47e9c6acad5504cffce2",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.002292000001034,
+                "mutationMs": 48.420790999996825,
+                "verificationMs": 0.3103750000009313,
+                "code": 0,
+                "registrationIdentity": "git-registration:841735f9ad10e1e07d0e6dd22795460fe91e8c131229cfcbaef6ee1708e9f43e",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.545375000001513,
+                "mutationMs": 48.580792000000656,
+                "verificationMs": 0.2482080000008864,
+                "code": 0,
+                "registrationIdentity": "git-registration:03634c6bb647b809abfab9b8e62cf0777053e192968fe043c9932d7a005085c5",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 8.783834000001661,
+                "mutationMs": 50.96812499999942,
+                "verificationMs": 0.18770800000129384,
+                "code": 0,
+                "registrationIdentity": "git-registration:1037e391b3d9df78100d8ea60fb064a0d1741b65747762b6d2ea6740e001c5f5",
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 4,
+          "order": ["filesystemVerification", "processVerification"],
+          "processVerification": {
+            "strategy": "processVerification",
+            "wallMs": 962.067332999999,
+            "throughputPerSecond": 20.788565741687044,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 4,
+            "inventoryCount": 69,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [12.478515625, 17.13232421875, 19.7880859375],
+              "after": [12.478515625, 17.13232421875, 19.7880859375]
+            },
+            "resourceUsage": {
+              "userCpuMs": 29.218,
+              "systemCpuMs": 57.07,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 1362
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 34.32141599999886,
+                "mutationMs": 184.18808300000092,
+                "verificationMs": 48.249166999998124,
+                "code": 0,
+                "registrationIdentity": "git-registration:7dd39dfb46508c318d2d344aad01018c8b34eeee2bfa873102519454f4874ae8",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 37.364582999998674,
+                "mutationMs": 139.7212499999987,
+                "verificationMs": 27.737624999997934,
+                "code": 0,
+                "registrationIdentity": "git-registration:1202c1554a25fccb49d5a0eb31dbc9bc0a15d4b3b0d1de6cae821344dd8fee7d",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 38.7544170000001,
+                "mutationMs": 170.70224999999846,
+                "verificationMs": 38.23362500000076,
+                "code": 0,
+                "registrationIdentity": "git-registration:029f694a45ac49e4c09695a369c1ade51d64f82f6a244ac2de7a55101665442f",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 34.08550000000105,
+                "mutationMs": 127.38220800000272,
+                "verificationMs": 36.6976250000007,
+                "code": 0,
+                "registrationIdentity": "git-registration:05f96460dd19de41f9261eaa945182f1cf475794f7b4a0d1086823c91ddd12d0",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 33.953333000001294,
+                "mutationMs": 143.04858400000012,
+                "verificationMs": 33.419999999998254,
+                "code": 0,
+                "registrationIdentity": "git-registration:e9daf8631f21c94e7284b4e031aa946eb119a22dce038975e23a7e7e9a45d9e6",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 26.37970800000039,
+                "mutationMs": 163.44925000000148,
+                "verificationMs": 27.438332999998238,
+                "code": 0,
+                "registrationIdentity": "git-registration:b94df3c76e74e0931ef48717b6a8e7601f5afacdc656e274216fcda2f0db30f7",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 30.386458999997558,
+                "mutationMs": 132.8166250000031,
+                "verificationMs": 26.187582999998995,
+                "code": 0,
+                "registrationIdentity": "git-registration:a376b25b1c32e184b9d67c683723622b544045dc10bf6a8985fe4ec3965a960f",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 45.402375000001484,
+                "mutationMs": 121.64662500000122,
+                "verificationMs": 26.187082999997074,
+                "code": 0,
+                "registrationIdentity": "git-registration:09636244afb3b2d49b5a0fccb39e14e2a682c91428ae0908d8d37e19635f37bb",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 24.51958300000115,
+                "mutationMs": 120.55220800000097,
+                "verificationMs": 30.309832999999344,
+                "code": 0,
+                "registrationIdentity": "git-registration:918e3109c813262cc20b9980bb24037a6064c282df76b9d016505e799eb9a4d3",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 22.58904199999961,
+                "mutationMs": 123.05595800000083,
+                "verificationMs": 44.83308400000169,
+                "code": 0,
+                "registrationIdentity": "git-registration:4f9e0107842cc7fbeb6f377e3ea48cbdea0256b489eecb97f896811e699e9583",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 30.37724999999773,
+                "mutationMs": 148.3277080000007,
+                "verificationMs": 33.08295799999905,
+                "code": 0,
+                "registrationIdentity": "git-registration:51ab1c8aeecbf4b54de61606d9fa41da56decefac1426840704d3c32771b8ea4",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 25.936291999998502,
+                "mutationMs": 139.92320800000016,
+                "verificationMs": 41.91283300000214,
+                "code": 0,
+                "registrationIdentity": "git-registration:e1e75f1e53e7c1da25ac195a01fd6245579b9673834a5e3113b0ad426ea82c72",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 46.63304100000096,
+                "mutationMs": 129.63637500000186,
+                "verificationMs": 23.129499999999098,
+                "code": 0,
+                "registrationIdentity": "git-registration:9481436f9863d125adb92687535f657e525d63b3d75964d87b7c12bf6833e615",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 43.7020420000008,
+                "mutationMs": 124.86475000000064,
+                "verificationMs": 23.790249999998196,
+                "code": 0,
+                "registrationIdentity": "git-registration:3257e39ccc19fc148eeec577d3a2d44c12645c37d9543591873d8de050c2aae5",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 30.21950000000288,
+                "mutationMs": 126.30316700000185,
+                "verificationMs": 19.720665999997436,
+                "code": 0,
+                "registrationIdentity": "git-registration:cf23eab3971592c1fb420b8a73050b44a8a06d9d3deefc7f5cda35223e2227f8",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 30.027083000000857,
+                "mutationMs": 126.90320799999972,
+                "verificationMs": 17.45483400000012,
+                "code": 0,
+                "registrationIdentity": "git-registration:4ea03079917ad3e9ca5f7a1c52e11d36353092d60473989dcbd8a2cee9674994",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 26.24224999999933,
+                "mutationMs": 80.45283400000335,
+                "verificationMs": 21.526165999999648,
+                "code": 0,
+                "registrationIdentity": "git-registration:62d56e30479765a6b976d647489c37843e12726c8342c5eda7d9ceec24be2d70",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 20.44445799999812,
+                "mutationMs": 95.1442500000012,
+                "verificationMs": 14.848834000000352,
+                "code": 0,
+                "registrationIdentity": "git-registration:bfcfab605d0ea08a18750eaf7555a3dd0601b2e4c7a04c90c064417f9356937a",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 19.98145800000202,
+                "mutationMs": 89.71583299999838,
+                "verificationMs": 13.378584000001865,
+                "code": 0,
+                "registrationIdentity": "git-registration:9402a89fbfcda7b7e50824414928062df4a12974003656b9c2e580b69e613aa1",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 19.560292000001937,
+                "mutationMs": 87.33066699999836,
+                "verificationMs": 12.91387499999837,
+                "code": 0,
+                "registrationIdentity": "git-registration:d373d72d3664c9a59eea3519430b8f1fa5fa0e40f74e771b1de63687e89369a3",
+                "stderr": ""
+              }
+            ]
+          },
+          "filesystemVerification": {
+            "strategy": "filesystemVerification",
+            "wallMs": 312.3029580000002,
+            "throughputPerSecond": 64.04037966236613,
+            "safe": true,
+            "exactInventory": true,
+            "peakActive": 4,
+            "inventoryCount": 69,
+            "cleanupInventoryCount": 49,
+            "loadAverage": {
+              "before": [11.82421875, 17.083984375, 19.787109375],
+              "after": [11.82421875, 17.083984375, 19.787109375]
+            },
+            "resourceUsage": {
+              "userCpuMs": 14.357,
+              "systemCpuMs": 26.299,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 1247
+            },
+            "commands": [
+              {
+                "safe": true,
+                "bareProbeMs": 11.336584000000585,
+                "mutationMs": 50.642667000000074,
+                "verificationMs": 1.0330839999987802,
+                "code": 0,
+                "registrationIdentity": "git-registration:49aab5d23c3e064fc4b0cd408cc1e5da445c4ac43f93b04b7986be466da9546a",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.637250000003405,
+                "mutationMs": 48.47724999999991,
+                "verificationMs": 0.4290830000027199,
+                "code": 0,
+                "registrationIdentity": "git-registration:307ba4623073924bad14dc32e9b5db6978e501f0013f9d673fd955568adda659",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.975290999998833,
+                "mutationMs": 54.491166999996494,
+                "verificationMs": 0.593791000002966,
+                "code": 0,
+                "registrationIdentity": "git-registration:84827df1012a42810002c0e6b14e15d32dcd51339682958d69051f770e7ee49c",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.007166999999754,
+                "mutationMs": 50.280625000003056,
+                "verificationMs": 0.7886250000010477,
+                "code": 0,
+                "registrationIdentity": "git-registration:fa2bd45966584dfdacdf355e6c70d917cd0283142a37e768955f2a2d8ae95770",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 12.670583000002807,
+                "mutationMs": 50.2007909999993,
+                "verificationMs": 0.39395800000056624,
+                "code": 0,
+                "registrationIdentity": "git-registration:60371d13e1e706f9967b966942fe02b92dd7833b01e4bf3004233eaad209336f",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.652125000000524,
+                "mutationMs": 47.40712500000154,
+                "verificationMs": 0.5447080000012647,
+                "code": 0,
+                "registrationIdentity": "git-registration:7c5da2f6ca61bea826b59a97f5e4bdaff5b0dd7b2f3877a203aab08b72130c4d",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.537625000000844,
+                "mutationMs": 48.21783300000243,
+                "verificationMs": 1.0720839999994496,
+                "code": 0,
+                "registrationIdentity": "git-registration:2e9f73743a470d77fd873340cb05727a4aa796840bdffde86ce41d4c539ac41f",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.914458999999624,
+                "mutationMs": 48.90129099999831,
+                "verificationMs": 0.8861669999969308,
+                "code": 0,
+                "registrationIdentity": "git-registration:1f5eb202bc1622117e1697bf662b997ade0834527665a092fbab275b7e71c535",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.245499999997264,
+                "mutationMs": 47.7912499999984,
+                "verificationMs": 0.40358300000298186,
+                "code": 0,
+                "registrationIdentity": "git-registration:01459639a6dec6e5a287ccc0d581e948c76a3ecfd1da587732201f436806ad73",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.438416999997571,
+                "mutationMs": 47.37354200000118,
+                "verificationMs": 0.6923749999987194,
+                "code": 0,
+                "registrationIdentity": "git-registration:c07ea38f4279f6deb0b6102d5c689b1027ef90d1c1d91a68af71dfbb8475b27f",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.97950000000128,
+                "mutationMs": 48.63041700000031,
+                "verificationMs": 0.4504159999996773,
+                "code": 0,
+                "registrationIdentity": "git-registration:cba6edf6e9089f46ad77fdb2cbbeeb45cefe56ced0c2936e5467ee8e13c47faf",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.08508300000176,
+                "mutationMs": 46.87504199999967,
+                "verificationMs": 0.39066599999932805,
+                "code": 0,
+                "registrationIdentity": "git-registration:e732d4adaddf919bd33d5a8fb7a14bdb4f4dad8f0f111a4a013807ed65e06b00",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.067999999999302,
+                "mutationMs": 51.70354199999929,
+                "verificationMs": 0.4684589999997115,
+                "code": 0,
+                "registrationIdentity": "git-registration:e213a642f19c14ca971163ec0889a5b6c05900b373c13b95b9a3ee5221916b16",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.417999999997846,
+                "mutationMs": 53.45454199999949,
+                "verificationMs": 0.3883749999986321,
+                "code": 0,
+                "registrationIdentity": "git-registration:38467c5e0c0dbb9a1bf91d94c7ded5c63cecb50a85770d4e2999e726f212fd88",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.225750000001426,
+                "mutationMs": 52.70808400000169,
+                "verificationMs": 1.0074160000003758,
+                "code": 0,
+                "registrationIdentity": "git-registration:013d324b295b9ede1092d175bb58e6d1ee419ebae98a6f5dd333666a7e869709",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 9.539832999998907,
+                "mutationMs": 47.820542000001296,
+                "verificationMs": 1.0741660000021511,
+                "code": 0,
+                "registrationIdentity": "git-registration:00aa3fa6d4e6c06f7f9cb306078a4e59dd402c31cbd73437bfe1bb0dea898a81",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.212041999999201,
+                "mutationMs": 53.41258300000118,
+                "verificationMs": 0.4468750000014552,
+                "code": 0,
+                "registrationIdentity": "git-registration:e17eb4b6855395fae838770458a7c3ecb390b12bdb6e56436e6a7c9cfbee3420",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 11.189374999998108,
+                "mutationMs": 55.483124999998836,
+                "verificationMs": 0.3227080000033311,
+                "code": 0,
+                "registrationIdentity": "git-registration:52a02302412414bcdff19f201b7291f995adf057224c3d2069d0d09196430452",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.178459000002476,
+                "mutationMs": 54.513458000001265,
+                "verificationMs": 0.20408300000053714,
+                "code": 0,
+                "registrationIdentity": "git-registration:d5b2481a99c0c35121b6b1820e82dbf71cc6fd5991dc0d1da4eb14119399d5d6",
+                "stderr": ""
+              },
+              {
+                "safe": true,
+                "bareProbeMs": 10.32116699999824,
+                "mutationMs": 53.40370800000164,
+                "verificationMs": 0.24295899999924586,
+                "code": 0,
+                "registrationIdentity": "git-registration:fd3e8d299e5fda6b9a916c09ed1c97e92bb3f51900f09b186049bbf3aa3be39c",
+                "stderr": ""
+              }
+            ]
+          }
+        }
+      ],
+      "processVerification": {
+        "wallMs": {
+          "samples": [
+            334.2378749999989, 345.4228750000002, 439.1715839999997, 485.003917, 962.067332999999
+          ],
+          "median": 439.1715839999997,
+          "p90": 962.067332999999,
+          "p95": 962.067332999999,
+          "max": 962.067332999999
+        },
+        "verificationMs": {
+          "samples": [
+            9.160624999996799, 9.473750000001019, 9.47504100000151, 9.570542000001296,
+            9.602291000002879, 9.618625000002794, 9.70141700000022, 9.72558299999946,
+            9.741582999999991, 9.790375000000495, 9.791958999998315, 9.878916999998182,
+            9.888499999997293, 9.889165999997203, 9.908542000001034, 10.075542000002315,
+            10.087249999999585, 10.10308299999815, 10.151416000000609, 10.186874999999418,
+            10.188167000000249, 10.24616700000115, 10.312167000000045, 10.449249999999665,
+            10.527874999999767, 10.592208000001847, 10.649583999998868, 10.662583000001177,
+            10.724957999998878, 10.752292000001034, 10.766292000000249, 10.83350000000064,
+            10.843999999997322, 10.93908300000112, 10.984542000000147, 11.036541000001307,
+            11.088541999999507, 11.150041000000783, 11.154167000000598, 11.280708999998751,
+            11.303291000000172, 11.303499999999985, 11.335791999999856, 11.341875000001892,
+            11.368916999999783, 11.447999999998501, 11.465832999998383, 11.51075000000128,
+            11.866249999999127, 12.087207999999919, 12.226249999999709, 12.299166000000696,
+            12.359499999998661, 12.41912500000035, 12.523125000000618, 12.589374999999563,
+            12.698250000000371, 12.806542000000263, 12.816749999999956, 12.91387499999837,
+            12.984707999999955, 13.347624999998516, 13.378584000001865, 13.743249999999534,
+            13.785167000000001, 13.842499999998836, 13.860208000000057, 13.923749999999927,
+            14.21416599999975, 14.848834000000352, 14.938707999999679, 14.985499999998865,
+            15.153000000000247, 15.483791999999085, 15.541166000000885, 15.574749999999767,
+            15.578542000000198, 16.264874999999847, 16.47466600000007, 17.035250000000815,
+            17.449208999999428, 17.45483400000012, 18.93579200000022, 19.426250000000437,
+            19.720665999997436, 21.526165999999648, 23.129499999999098, 23.790249999998196,
+            26.187082999997074, 26.187582999998995, 27.438332999998238, 27.737624999997934,
+            30.309832999999344, 33.08295799999905, 33.419999999998254, 36.6976250000007,
+            38.23362500000076, 41.91283300000214, 44.83308400000169, 48.249166999998124
+          ],
+          "median": 12.087207999999919,
+          "p90": 26.187582999998995,
+          "p95": 33.419999999998254,
+          "max": 48.249166999998124
+        },
+        "commandMs": {
+          "samples": [
+            59.20379099999991, 60.994457999997394, 61.246000999999524, 61.727209000000585,
+            61.74741599999834, 61.7953739999939, 62.262917000000016, 62.30395899999712,
+            62.94887500000186, 63.704664999997476, 63.77824900000269, 64.25391600000148,
+            64.74591699999655, 64.77720800000316, 64.83891799999765, 64.88854100000026,
+            65.82487500000207, 65.88441800000146, 66.0881240000017, 66.14837500000067,
+            66.17583199999717, 66.60862500000076, 66.70608300000094, 66.77391699999862,
+            67.06337600000188, 67.4534590000003, 67.93704100000105, 68.16283300000578,
+            68.2788330000003, 68.28066599999875, 68.55012600000191, 68.8048340000023,
+            69.11137600000438, 69.1462500000016, 71.82245799999873, 72.79670899999837,
+            72.79974900000161, 73.14625100000194, 75.75037399999928, 79.80245800000012,
+            79.97191699999985, 81.18066599999929, 81.27716700000019, 81.3402500000002,
+            82.20304300000043, 83.51641699999527, 83.78183399999944, 84.09400000000005,
+            84.1044579999998, 84.32737499999985, 85.15612499999861, 86.21212599999944,
+            87.13408299999992, 87.74283300000025, 88.08133300000009, 88.33662500000173,
+            89.29199999999946, 89.38270799999918, 90.89316599999802, 91.32654199999706,
+            91.34079199999996, 91.5958329999994, 92.28166600000077, 92.48245700000098,
+            92.59400100000039, 92.85566599999947, 92.93008399999962, 93.91508299999987,
+            94.93287400000008, 95.34145900000021, 95.40512499999932, 95.69379200000185,
+            98.09879199999887, 98.28062499999942, 99.44499999999971, 100.58554299999741,
+            100.61812500000087, 101.1506249999984, 104.18345800000134, 115.42558299999837,
+            119.80483399999866, 123.07587500000227, 128.22125000000233, 130.43754199999967,
+            174.3851250000007, 175.38162400000147, 176.24333300000217, 189.39066699999967,
+            190.47808400000213, 192.35704199999964, 193.23608299999978, 198.16533300000447,
+            199.39891600000192, 204.8234579999953, 207.7723330000008, 210.42191699999967,
+            211.7879159999975, 217.2672910000001, 247.69029199999932, 266.7586659999979
+          ],
+          "median": 84.32737499999985,
+          "p90": 192.35704199999964,
+          "p95": 207.7723330000008,
+          "max": 266.7586659999979
+        },
+        "throughputPerSecond": {
+          "samples": [
+            20.788565741687044, 41.23678036192025, 45.54028705099466, 57.900044981097416,
+            59.83762312993423
+          ],
+          "median": 45.54028705099466,
+          "p90": 59.83762312993423,
+          "p95": 59.83762312993423,
+          "max": 59.83762312993423
+        },
+        "allSafe": true
+      },
+      "filesystemVerification": {
+        "wallMs": {
+          "samples": [
+            284.19525000000067, 290.3703749999986, 292.6140000000014, 312.3029580000002,
+            585.0924169999998
+          ],
+          "median": 292.6140000000014,
+          "p90": 585.0924169999998,
+          "p95": 585.0924169999998,
+          "max": 585.0924169999998
+        },
+        "verificationMs": {
+          "samples": [
+            0.18387499999880674, 0.18770800000129384, 0.20141700000021956, 0.20408300000053714,
+            0.21770900000046822, 0.22145799999998417, 0.22358300000087183, 0.22779200000150013,
+            0.231208000001061, 0.24033299999973678, 0.2421250000006694, 0.24295899999924586,
+            0.24425000000337604, 0.24737500000082946, 0.2482080000008864, 0.2523330000003625,
+            0.2608749999999418, 0.26200000000062573, 0.26508299999841256, 0.28625000000101863,
+            0.29349999999976717, 0.30191699999704724, 0.30720800000017334, 0.3103750000009313,
+            0.3144159999992553, 0.3177079999986745, 0.3227080000033311, 0.3326249999990978,
+            0.3359999999993306, 0.3473329999997077, 0.3565420000013546, 0.3572500000009313,
+            0.3717910000013944, 0.3883749999986321, 0.39066599999932805, 0.39395800000056624,
+            0.3966660000005504, 0.40358300000298186, 0.4290830000027199, 0.43370900000081747,
+            0.44637499999953434, 0.4468750000014552, 0.4504159999996773, 0.4516249999978754,
+            0.454583000002458, 0.4684589999997115, 0.48695800000132294, 0.48845799999980954,
+            0.4961249999996653, 0.5083749999994325, 0.5137080000022252, 0.515040999998746,
+            0.5152500000003783, 0.5192499999975553, 0.5406250000014552, 0.5447080000012647,
+            0.5627499999991414, 0.5630830000009155, 0.565416000001278, 0.5891249999995125,
+            0.593791000002966, 0.604457999999795, 0.6324580000000424, 0.6454159999993863,
+            0.6851660000002084, 0.6872499999999491, 0.6923749999987194, 0.7307080000000497,
+            0.7590000000000146, 0.7634580000012647, 0.7654999999995198, 0.7669589999995878,
+            0.7886250000010477, 0.7914169999994556, 0.807541999998648, 0.8180830000019341,
+            0.8373750000000655, 0.8383340000000317, 0.8621250000005602, 0.8861669999969308,
+            0.8962919999994483, 0.9234169999999722, 0.9314999999996871, 0.9868750000023283,
+            1.0074160000003758, 1.0330839999987802, 1.045458000000508, 1.0501670000012382,
+            1.0720839999994496, 1.0741660000021511, 1.097458000000188, 1.189792000000125,
+            1.3644999999996799, 1.4246660000007978, 1.492833000000246, 1.521375000000262,
+            1.5323329999991984, 1.5519580000000133, 2.377249999999549, 2.456833999999617
+          ],
+          "median": 0.5083749999994325,
+          "p90": 1.0741660000021511,
+          "p95": 1.492833000000246,
+          "max": 2.456833999999617
+        },
+        "commandMs": {
+          "samples": [
+            51.008499999996275, 51.452706999996735, 51.455667000001995, 51.76512500000172,
+            51.85491700000057, 51.98279100000218, 52.680208000001585, 52.78283399999782,
+            52.88104199999725, 52.96441600000071, 53.546415999999226, 53.64504300000044,
+            53.799207000000024, 53.89879199999996, 54.08537499999511, 54.16749999999956,
+            54.283082999994804, 54.807707000003575, 54.81370799999968, 55.107208000001265,
+            55.29924999999821, 55.580832999996346, 55.702415999998266, 56.13237499999741,
+            56.287333000002036, 56.355083000002196, 56.356792000002315, 56.512792000001355,
+            56.534998999999516, 56.634249999999156, 56.69341600000189, 56.77262400000109,
+            56.95220800000243, 56.95662599999923, 57.121917000000394, 57.350791000000754,
+            57.68112399999882, 57.73345799999879, 57.94854199999827, 58.05945899999824,
+            58.07795800000167, 58.374375000003056, 58.434541000002355, 58.440332999998645,
+            58.50433399999747, 58.60395800000333, 58.640998000000764, 58.85320899999715,
+            59.30929200000173, 59.37958400000571, 59.701916999994864, 59.789583000001585,
+            59.82754200000272, 59.93966700000237, 60.060333000001265, 60.29783300000054,
+            60.30049899999722, 60.41145800000231, 61.17370799999844, 61.47791700000016,
+            61.54358300000604, 62.07641700000386, 62.72454099999959, 62.75420799999847,
+            63.01233499999944, 63.08629199999996, 63.2400009999983, 63.26533200000267,
+            63.849959000002855, 63.94125000000349, 63.96783399999913, 64.09625000000051,
+            64.4097899999997, 64.89600000000428, 65.07150000000183, 65.12275000000045,
+            65.26091699999597, 65.48054200000479, 66.0602489999983, 66.99520800000028,
+            83.77545800000098, 86.6018329999988, 88.07949999999892, 88.15183200000047,
+            94.20145800000046, 96.2918750000008, 97.33616600000005, 99.29558199999974,
+            100.7001679999994, 100.83020900000065, 101.80929200000082, 117.19983400000001,
+            123.4300430000003, 127.06808300000012, 128.3667490000007, 136.96645799999988,
+            138.2678339999984, 138.28479199999947, 138.38745800000015, 150.9255830000002
+          ],
+          "median": 59.37958400000571,
+          "p90": 100.83020900000065,
+          "p95": 128.3667490000007,
+          "max": 150.9255830000002
+        },
+        "throughputPerSecond": {
+          "samples": [
+            34.182634091461836, 64.04037966236613, 68.34942962400946, 68.87754992223327,
+            70.37415298109293
+          ],
+          "median": 68.34942962400946,
+          "p90": 70.37415298109293,
+          "p95": 70.37415298109293,
+          "max": 70.37415298109293
+        },
+        "allSafe": true
+      },
+      "medianImprovementFraction": 0.33371372224300927,
+      "p95ImprovementFraction": 0.3918383912116467,
+      "allSafe": true
+    }
+  ],
+  "repetitions": [
+    {
+      "repetition": 0,
+      "temporaryRootRemoved": true
+    },
+    {
+      "repetition": 1,
+      "temporaryRootRemoved": true
+    },
+    {
+      "repetition": 2,
+      "temporaryRootRemoved": true
+    },
+    {
+      "repetition": 3,
+      "temporaryRootRemoved": true
+    },
+    {
+      "repetition": 4,
+      "temporaryRootRemoved": true
+    }
+  ]
+}

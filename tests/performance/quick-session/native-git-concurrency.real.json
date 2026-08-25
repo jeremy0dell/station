@@ -1,0 +1,3065 @@
+{
+  "schemaVersion": 1,
+  "benchmark": "station-quick-session-native-git-concurrency",
+  "generatedAt": "2026-08-25T05:54:34.735Z",
+  "machine": {
+    "platform": "darwin",
+    "arch": "arm64",
+    "cpuModel": "Apple M4",
+    "logicalCpuCount": 10
+  },
+  "tools": {
+    "git": "git version 2.50.1 (Apple Git-155)"
+  },
+  "repositoryShape": {
+    "initialWorktrees": 49,
+    "lifecycleHooks": false,
+    "bounds": [4, 8],
+    "repetitions": 5
+  },
+  "keepThresholds": {
+    "burst5MedianImprovementFraction": 0.15,
+    "burst5P95ImprovementFraction": 0.15,
+    "burst20MedianImprovementFraction": 0.2,
+    "burst20P95ImprovementFraction": 0.2
+  },
+  "scenarios": [
+    {
+      "burstSize": 3,
+      "bound4": {
+        "wallMs": {
+          "samples": [
+            92.85975000000008, 62.56195800000023, 56.13895800000137, 50.83625000000029,
+            44.54095799999959
+          ],
+          "median": 56.13895800000137,
+          "p90": 92.85975000000008,
+          "p95": 92.85975000000008,
+          "max": 92.85975000000008
+        },
+        "commandMs": {
+          "samples": [
+            91.45849999999973, 91.49141599999984, 88.05212500000016, 61.2417089999999,
+            61.75699999999961, 58.16516700000011, 53.7706249999992, 55.38883299999907,
+            54.16554200000064, 45.72954100000061, 45.710166000000754, 48.45774999999958,
+            44.52458399999887, 41.419958000000406, 39.6309999999994
+          ],
+          "median": 54.16554200000064,
+          "p90": 91.45849999999973,
+          "p95": 91.49141599999984,
+          "max": 91.49141599999984
+        },
+        "throughputPerSecond": {
+          "samples": [
+            32.306785232568444, 47.95246338038187, 53.438825850667314, 59.013007450391854,
+            67.3537376542289
+          ],
+          "median": 53.438825850667314,
+          "p90": 67.3537376542289,
+          "p95": 67.3537376542289,
+          "max": 67.3537376542289
+        },
+        "allSafe": true
+      },
+      "bound8": {
+        "wallMs": {
+          "samples": [
+            48.875916999999845, 117.0782079999999, 45.52612500000032, 43.958582999999635,
+            54.72954100000061
+          ],
+          "median": 48.875916999999845,
+          "p90": 117.0782079999999,
+          "p95": 117.0782079999999,
+          "max": 117.0782079999999
+        },
+        "commandMs": {
+          "samples": [
+            43.50720799999999, 48.15883299999996, 40.98762499999975, 117.0449580000004,
+            109.82437500000015, 101.7802499999998, 43.034083000000464, 44.81487500000003,
+            40.63212500000009, 43.94445900000028, 42.90337499999987, 41.64795799999956,
+            42.17541600000004, 54.0563749999983, 46.06458300000122
+          ],
+          "median": 43.94445900000028,
+          "p90": 109.82437500000015,
+          "p95": 117.0449580000004,
+          "max": 117.0449580000004
+        },
+        "throughputPerSecond": {
+          "samples": [
+            61.379922549586325, 25.623897489104056, 65.8962299119457, 68.24605788589739,
+            54.81500383860275
+          ],
+          "median": 61.379922549586325,
+          "p90": 68.24605788589739,
+          "p95": 68.24605788589739,
+          "max": 68.24605788589739
+        },
+        "allSafe": true
+      },
+      "medianImprovementFraction": 0.12937612771511264,
+      "p95ImprovementFraction": -0.2608068404233245,
+      "allSafe": true,
+      "pairs": [
+        {
+          "repetition": 0,
+          "order": ["bound4", "bound8"],
+          "temporaryRootRemoved": true,
+          "bound4": {
+            "candidate": "bound4",
+            "bound": 4,
+            "wallMs": 92.85975000000008,
+            "safe": true,
+            "exactRegistration": true,
+            "inventoryCount": 52,
+            "cleanupInventoryCount": 49,
+            "peakActive": 3,
+            "loadAverage": {
+              "before": [23.62939453125, 21.0849609375, 20.791015625],
+              "after": [23.62939453125, 21.0849609375, 20.791015625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 3.348,
+              "systemCpuMs": 3.196,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 49
+            },
+            "commands": [
+              {
+                "branch": "probe-bound4-0-0",
+                "path": "$TMP_REPO/created/probe-bound4-0-0",
+                "code": 0,
+                "ms": 91.45849999999973,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-0-1",
+                "path": "$TMP_REPO/created/probe-bound4-0-1",
+                "code": 0,
+                "ms": 91.49141599999984,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-0-2",
+                "path": "$TMP_REPO/created/probe-bound4-0-2",
+                "code": 0,
+                "ms": 88.05212500000016,
+                "stderr": ""
+              }
+            ]
+          },
+          "bound8": {
+            "candidate": "bound8",
+            "bound": 8,
+            "wallMs": 48.875916999999845,
+            "safe": true,
+            "exactRegistration": true,
+            "inventoryCount": 52,
+            "cleanupInventoryCount": 49,
+            "peakActive": 3,
+            "loadAverage": {
+              "before": [23.62939453125, 21.0849609375, 20.791015625],
+              "after": [23.62939453125, 21.0849609375, 20.791015625]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.806,
+              "systemCpuMs": 2.12,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 28
+            },
+            "commands": [
+              {
+                "branch": "probe-bound8-0-0",
+                "path": "$TMP_REPO/created/probe-bound8-0-0",
+                "code": 0,
+                "ms": 43.50720799999999,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-0-1",
+                "path": "$TMP_REPO/created/probe-bound8-0-1",
+                "code": 0,
+                "ms": 48.15883299999996,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-0-2",
+                "path": "$TMP_REPO/created/probe-bound8-0-2",
+                "code": 0,
+                "ms": 40.98762499999975,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 1,
+          "order": ["bound8", "bound4"],
+          "temporaryRootRemoved": true,
+          "bound4": {
+            "candidate": "bound4",
+            "bound": 4,
+            "wallMs": 62.56195800000023,
+            "safe": true,
+            "exactRegistration": true,
+            "inventoryCount": 52,
+            "cleanupInventoryCount": 49,
+            "peakActive": 3,
+            "loadAverage": {
+              "before": [22.45751953125, 20.88427734375, 20.7216796875],
+              "after": [22.45751953125, 20.88427734375, 20.7216796875]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.301,
+              "systemCpuMs": 2.619,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 39
+            },
+            "commands": [
+              {
+                "branch": "probe-bound4-1-0",
+                "path": "$TMP_REPO/created/probe-bound4-1-0",
+                "code": 0,
+                "ms": 61.2417089999999,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-1-1",
+                "path": "$TMP_REPO/created/probe-bound4-1-1",
+                "code": 0,
+                "ms": 61.75699999999961,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-1-2",
+                "path": "$TMP_REPO/created/probe-bound4-1-2",
+                "code": 0,
+                "ms": 58.16516700000011,
+                "stderr": ""
+              }
+            ]
+          },
+          "bound8": {
+            "candidate": "bound8",
+            "bound": 8,
+            "wallMs": 117.0782079999999,
+            "safe": true,
+            "exactRegistration": true,
+            "inventoryCount": 52,
+            "cleanupInventoryCount": 49,
+            "peakActive": 3,
+            "loadAverage": {
+              "before": [22.45751953125, 20.88427734375, 20.7216796875],
+              "after": [22.45751953125, 20.88427734375, 20.7216796875]
+            },
+            "resourceUsage": {
+              "userCpuMs": 5.304,
+              "systemCpuMs": 3.274,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 73
+            },
+            "commands": [
+              {
+                "branch": "probe-bound8-1-0",
+                "path": "$TMP_REPO/created/probe-bound8-1-0",
+                "code": 0,
+                "ms": 117.0449580000004,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-1-1",
+                "path": "$TMP_REPO/created/probe-bound8-1-1",
+                "code": 0,
+                "ms": 109.82437500000015,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-1-2",
+                "path": "$TMP_REPO/created/probe-bound8-1-2",
+                "code": 0,
+                "ms": 101.7802499999998,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 2,
+          "order": ["bound4", "bound8"],
+          "temporaryRootRemoved": true,
+          "bound4": {
+            "candidate": "bound4",
+            "bound": 4,
+            "wallMs": 56.13895800000137,
+            "safe": true,
+            "exactRegistration": true,
+            "inventoryCount": 52,
+            "cleanupInventoryCount": 49,
+            "peakActive": 3,
+            "loadAverage": {
+              "before": [22.45751953125, 20.88427734375, 20.7216796875],
+              "after": [22.45751953125, 20.88427734375, 20.7216796875]
+            },
+            "resourceUsage": {
+              "userCpuMs": 2.15,
+              "systemCpuMs": 2.664,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 48
+            },
+            "commands": [
+              {
+                "branch": "probe-bound4-2-0",
+                "path": "$TMP_REPO/created/probe-bound4-2-0",
+                "code": 0,
+                "ms": 53.7706249999992,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-2-1",
+                "path": "$TMP_REPO/created/probe-bound4-2-1",
+                "code": 0,
+                "ms": 55.38883299999907,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-2-2",
+                "path": "$TMP_REPO/created/probe-bound4-2-2",
+                "code": 0,
+                "ms": 54.16554200000064,
+                "stderr": ""
+              }
+            ]
+          },
+          "bound8": {
+            "candidate": "bound8",
+            "bound": 8,
+            "wallMs": 45.52612500000032,
+            "safe": true,
+            "exactRegistration": true,
+            "inventoryCount": 52,
+            "cleanupInventoryCount": 49,
+            "peakActive": 3,
+            "loadAverage": {
+              "before": [22.45751953125, 20.88427734375, 20.7216796875],
+              "after": [22.45751953125, 20.88427734375, 20.7216796875]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.054,
+              "systemCpuMs": 1.912,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 26
+            },
+            "commands": [
+              {
+                "branch": "probe-bound8-2-0",
+                "path": "$TMP_REPO/created/probe-bound8-2-0",
+                "code": 0,
+                "ms": 43.034083000000464,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-2-1",
+                "path": "$TMP_REPO/created/probe-bound8-2-1",
+                "code": 0,
+                "ms": 44.81487500000003,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-2-2",
+                "path": "$TMP_REPO/created/probe-bound8-2-2",
+                "code": 0,
+                "ms": 40.63212500000009,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 3,
+          "order": ["bound8", "bound4"],
+          "temporaryRootRemoved": true,
+          "bound4": {
+            "candidate": "bound4",
+            "bound": 4,
+            "wallMs": 50.83625000000029,
+            "safe": true,
+            "exactRegistration": true,
+            "inventoryCount": 52,
+            "cleanupInventoryCount": 49,
+            "peakActive": 3,
+            "loadAverage": {
+              "before": [24.74267578125, 21.3837890625, 20.89892578125],
+              "after": [24.74267578125, 21.3837890625, 20.89892578125]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.796,
+              "systemCpuMs": 3.057,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 34
+            },
+            "commands": [
+              {
+                "branch": "probe-bound4-3-0",
+                "path": "$TMP_REPO/created/probe-bound4-3-0",
+                "code": 0,
+                "ms": 45.72954100000061,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-3-1",
+                "path": "$TMP_REPO/created/probe-bound4-3-1",
+                "code": 0,
+                "ms": 45.710166000000754,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-3-2",
+                "path": "$TMP_REPO/created/probe-bound4-3-2",
+                "code": 0,
+                "ms": 48.45774999999958,
+                "stderr": ""
+              }
+            ]
+          },
+          "bound8": {
+            "candidate": "bound8",
+            "bound": 8,
+            "wallMs": 43.958582999999635,
+            "safe": true,
+            "exactRegistration": true,
+            "inventoryCount": 52,
+            "cleanupInventoryCount": 49,
+            "peakActive": 3,
+            "loadAverage": {
+              "before": [24.74267578125, 21.3837890625, 20.89892578125],
+              "after": [24.74267578125, 21.3837890625, 20.89892578125]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.043,
+              "systemCpuMs": 1.907,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 36
+            },
+            "commands": [
+              {
+                "branch": "probe-bound8-3-0",
+                "path": "$TMP_REPO/created/probe-bound8-3-0",
+                "code": 0,
+                "ms": 43.94445900000028,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-3-1",
+                "path": "$TMP_REPO/created/probe-bound8-3-1",
+                "code": 0,
+                "ms": 42.90337499999987,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-3-2",
+                "path": "$TMP_REPO/created/probe-bound8-3-2",
+                "code": 0,
+                "ms": 41.64795799999956,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 4,
+          "order": ["bound4", "bound8"],
+          "temporaryRootRemoved": true,
+          "bound4": {
+            "candidate": "bound4",
+            "bound": 4,
+            "wallMs": 44.54095799999959,
+            "safe": true,
+            "exactRegistration": true,
+            "inventoryCount": 52,
+            "cleanupInventoryCount": 49,
+            "peakActive": 3,
+            "loadAverage": {
+              "before": [23.08154296875, 21.0947265625, 20.7998046875],
+              "after": [23.08154296875, 21.0947265625, 20.7998046875]
+            },
+            "resourceUsage": {
+              "userCpuMs": 0.903,
+              "systemCpuMs": 1.907,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 40
+            },
+            "commands": [
+              {
+                "branch": "probe-bound4-4-0",
+                "path": "$TMP_REPO/created/probe-bound4-4-0",
+                "code": 0,
+                "ms": 44.52458399999887,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-4-1",
+                "path": "$TMP_REPO/created/probe-bound4-4-1",
+                "code": 0,
+                "ms": 41.419958000000406,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-4-2",
+                "path": "$TMP_REPO/created/probe-bound4-4-2",
+                "code": 0,
+                "ms": 39.6309999999994,
+                "stderr": ""
+              }
+            ]
+          },
+          "bound8": {
+            "candidate": "bound8",
+            "bound": 8,
+            "wallMs": 54.72954100000061,
+            "safe": true,
+            "exactRegistration": true,
+            "inventoryCount": 52,
+            "cleanupInventoryCount": 49,
+            "peakActive": 3,
+            "loadAverage": {
+              "before": [23.08154296875, 21.0947265625, 20.7998046875],
+              "after": [23.08154296875, 21.0947265625, 20.7998046875]
+            },
+            "resourceUsage": {
+              "userCpuMs": 0.975,
+              "systemCpuMs": 1.788,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 40
+            },
+            "commands": [
+              {
+                "branch": "probe-bound8-4-0",
+                "path": "$TMP_REPO/created/probe-bound8-4-0",
+                "code": 0,
+                "ms": 42.17541600000004,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-4-1",
+                "path": "$TMP_REPO/created/probe-bound8-4-1",
+                "code": 0,
+                "ms": 54.0563749999983,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-4-2",
+                "path": "$TMP_REPO/created/probe-bound8-4-2",
+                "code": 0,
+                "ms": 46.06458300000122,
+                "stderr": ""
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "burstSize": 5,
+      "bound4": {
+        "wallMs": {
+          "samples": [
+            83.77320800000234, 93.50570900000093, 86.77687499999956, 168.4935000000005,
+            92.98016600000119
+          ],
+          "median": 92.98016600000119,
+          "p90": 168.4935000000005,
+          "p95": 168.4935000000005,
+          "max": 168.4935000000005
+        },
+        "commandMs": {
+          "samples": [
+            50.78587499999776, 55.4097920000022, 50.74170899999808, 51.69341699999859,
+            32.962250000000495, 55.57129200000054, 56.92041699999754, 56.90220799999952,
+            60.04737500000192, 37.893707999999606, 63.6585840000007, 53.741375000001426,
+            57.44683399999849, 57.73979200000031, 32.464874999997846, 90.77624999999898,
+            88.93912499999715, 83.28908299999966, 83.96195799999987, 83.95908399999826,
+            58.0892500000009, 57.05683300000237, 56.16162500000064, 54.04762499999924,
+            37.14587499999834
+          ],
+          "median": 56.90220799999952,
+          "p90": 83.96195799999987,
+          "p95": 88.93912499999715,
+          "max": 90.77624999999898
+        },
+        "throughputPerSecond": {
+          "samples": [
+            59.68495321320224, 53.47267085050336, 57.6190373299341, 29.67473522717485,
+            53.774909371531294
+          ],
+          "median": 53.774909371531294,
+          "p90": 59.68495321320224,
+          "p95": 59.68495321320224,
+          "max": 59.68495321320224
+        },
+        "allSafe": true
+      },
+      "bound8": {
+        "wallMs": {
+          "samples": [
+            77.33212500000081, 76.99604099999851, 87.77945900000122, 156.53354200000103,
+            108.77041600000302
+          ],
+          "median": 87.77945900000122,
+          "p90": 156.53354200000103,
+          "p95": 156.53354200000103,
+          "max": 156.53354200000103
+        },
+        "commandMs": {
+          "samples": [
+            73.46670900000026, 73.61575000000084, 73.26850000000195, 73.73308299999917,
+            74.17379200000141, 69.70770899999843, 73.64287500000137, 73.87133299999914,
+            73.63375000000087, 74.34983300000022, 82.10883299999841, 86.11337500000081,
+            82.94599999999991, 85.49179199999708, 79.4352919999983, 156.52583300000333,
+            141.13812499999767, 144.15304099999776, 140.82949999999983, 139.72470899999826,
+            97.76762500000041, 96.18654100000276, 98.64466700000048, 101.50579199999993,
+            102.41220800000156
+          ],
+          "median": 82.94599999999991,
+          "p90": 141.13812499999767,
+          "p95": 144.15304099999776,
+          "max": 156.52583300000333
+        },
+        "throughputPerSecond": {
+          "samples": [
+            64.65618266664659, 64.9384037810476, 56.96093433430628, 31.942035784253623,
+            45.96838169672773
+          ],
+          "median": 56.96093433430628,
+          "p90": 64.9384037810476,
+          "p95": 64.9384037810476,
+          "max": 64.9384037810476
+        },
+        "allSafe": true
+      },
+      "medianImprovementFraction": 0.05593350951857732,
+      "p95ImprovementFraction": 0.07098171739562313,
+      "allSafe": true,
+      "pairs": [
+        {
+          "repetition": 0,
+          "order": ["bound8", "bound4"],
+          "temporaryRootRemoved": true,
+          "bound4": {
+            "candidate": "bound4",
+            "bound": 4,
+            "wallMs": 83.77320800000234,
+            "safe": true,
+            "exactRegistration": true,
+            "inventoryCount": 54,
+            "cleanupInventoryCount": 49,
+            "peakActive": 4,
+            "loadAverage": {
+              "before": [23.08154296875, 21.0947265625, 20.7998046875],
+              "after": [23.08154296875, 21.0947265625, 20.7998046875]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.66,
+              "systemCpuMs": 3.221,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 38
+            },
+            "commands": [
+              {
+                "branch": "probe-bound4-0-0",
+                "path": "$TMP_REPO/created/probe-bound4-0-0",
+                "code": 0,
+                "ms": 50.78587499999776,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-0-1",
+                "path": "$TMP_REPO/created/probe-bound4-0-1",
+                "code": 0,
+                "ms": 55.4097920000022,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-0-2",
+                "path": "$TMP_REPO/created/probe-bound4-0-2",
+                "code": 0,
+                "ms": 50.74170899999808,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-0-3",
+                "path": "$TMP_REPO/created/probe-bound4-0-3",
+                "code": 0,
+                "ms": 51.69341699999859,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-0-4",
+                "path": "$TMP_REPO/created/probe-bound4-0-4",
+                "code": 0,
+                "ms": 32.962250000000495,
+                "stderr": ""
+              }
+            ]
+          },
+          "bound8": {
+            "candidate": "bound8",
+            "bound": 8,
+            "wallMs": 77.33212500000081,
+            "safe": true,
+            "exactRegistration": true,
+            "inventoryCount": 54,
+            "cleanupInventoryCount": 49,
+            "peakActive": 5,
+            "loadAverage": {
+              "before": [23.08154296875, 21.0947265625, 20.7998046875],
+              "after": [23.08154296875, 21.0947265625, 20.7998046875]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.567,
+              "systemCpuMs": 3.826,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 57
+            },
+            "commands": [
+              {
+                "branch": "probe-bound8-0-0",
+                "path": "$TMP_REPO/created/probe-bound8-0-0",
+                "code": 0,
+                "ms": 73.46670900000026,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-0-1",
+                "path": "$TMP_REPO/created/probe-bound8-0-1",
+                "code": 0,
+                "ms": 73.61575000000084,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-0-2",
+                "path": "$TMP_REPO/created/probe-bound8-0-2",
+                "code": 0,
+                "ms": 73.26850000000195,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-0-3",
+                "path": "$TMP_REPO/created/probe-bound8-0-3",
+                "code": 0,
+                "ms": 73.73308299999917,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-0-4",
+                "path": "$TMP_REPO/created/probe-bound8-0-4",
+                "code": 0,
+                "ms": 74.17379200000141,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 1,
+          "order": ["bound4", "bound8"],
+          "temporaryRootRemoved": true,
+          "bound4": {
+            "candidate": "bound4",
+            "bound": 4,
+            "wallMs": 93.50570900000093,
+            "safe": true,
+            "exactRegistration": true,
+            "inventoryCount": 54,
+            "cleanupInventoryCount": 49,
+            "peakActive": 4,
+            "loadAverage": {
+              "before": [21.47314453125, 20.7939453125, 20.6953125],
+              "after": [21.47314453125, 20.7939453125, 20.6953125]
+            },
+            "resourceUsage": {
+              "userCpuMs": 3.255,
+              "systemCpuMs": 4.177,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 68
+            },
+            "commands": [
+              {
+                "branch": "probe-bound4-1-0",
+                "path": "$TMP_REPO/created/probe-bound4-1-0",
+                "code": 0,
+                "ms": 55.57129200000054,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-1-1",
+                "path": "$TMP_REPO/created/probe-bound4-1-1",
+                "code": 0,
+                "ms": 56.92041699999754,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-1-2",
+                "path": "$TMP_REPO/created/probe-bound4-1-2",
+                "code": 0,
+                "ms": 56.90220799999952,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-1-3",
+                "path": "$TMP_REPO/created/probe-bound4-1-3",
+                "code": 0,
+                "ms": 60.04737500000192,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-1-4",
+                "path": "$TMP_REPO/created/probe-bound4-1-4",
+                "code": 0,
+                "ms": 37.893707999999606,
+                "stderr": ""
+              }
+            ]
+          },
+          "bound8": {
+            "candidate": "bound8",
+            "bound": 8,
+            "wallMs": 76.99604099999851,
+            "safe": true,
+            "exactRegistration": true,
+            "inventoryCount": 54,
+            "cleanupInventoryCount": 49,
+            "peakActive": 5,
+            "loadAverage": {
+              "before": [21.47314453125, 20.7939453125, 20.6953125],
+              "after": [21.47314453125, 20.7939453125, 20.6953125]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.791,
+              "systemCpuMs": 3.555,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 50
+            },
+            "commands": [
+              {
+                "branch": "probe-bound8-1-0",
+                "path": "$TMP_REPO/created/probe-bound8-1-0",
+                "code": 0,
+                "ms": 69.70770899999843,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-1-1",
+                "path": "$TMP_REPO/created/probe-bound8-1-1",
+                "code": 0,
+                "ms": 73.64287500000137,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-1-2",
+                "path": "$TMP_REPO/created/probe-bound8-1-2",
+                "code": 0,
+                "ms": 73.87133299999914,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-1-3",
+                "path": "$TMP_REPO/created/probe-bound8-1-3",
+                "code": 0,
+                "ms": 73.63375000000087,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-1-4",
+                "path": "$TMP_REPO/created/probe-bound8-1-4",
+                "code": 0,
+                "ms": 74.34983300000022,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 2,
+          "order": ["bound8", "bound4"],
+          "temporaryRootRemoved": true,
+          "bound4": {
+            "candidate": "bound4",
+            "bound": 4,
+            "wallMs": 86.77687499999956,
+            "safe": true,
+            "exactRegistration": true,
+            "inventoryCount": 54,
+            "cleanupInventoryCount": 49,
+            "peakActive": 4,
+            "loadAverage": {
+              "before": [21.47314453125, 20.7939453125, 20.6953125],
+              "after": [21.47314453125, 20.7939453125, 20.6953125]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.544,
+              "systemCpuMs": 3.051,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 35
+            },
+            "commands": [
+              {
+                "branch": "probe-bound4-2-0",
+                "path": "$TMP_REPO/created/probe-bound4-2-0",
+                "code": 0,
+                "ms": 63.6585840000007,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-2-1",
+                "path": "$TMP_REPO/created/probe-bound4-2-1",
+                "code": 0,
+                "ms": 53.741375000001426,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-2-2",
+                "path": "$TMP_REPO/created/probe-bound4-2-2",
+                "code": 0,
+                "ms": 57.44683399999849,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-2-3",
+                "path": "$TMP_REPO/created/probe-bound4-2-3",
+                "code": 0,
+                "ms": 57.73979200000031,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-2-4",
+                "path": "$TMP_REPO/created/probe-bound4-2-4",
+                "code": 0,
+                "ms": 32.464874999997846,
+                "stderr": ""
+              }
+            ]
+          },
+          "bound8": {
+            "candidate": "bound8",
+            "bound": 8,
+            "wallMs": 87.77945900000122,
+            "safe": true,
+            "exactRegistration": true,
+            "inventoryCount": 54,
+            "cleanupInventoryCount": 49,
+            "peakActive": 5,
+            "loadAverage": {
+              "before": [21.47314453125, 20.7939453125, 20.6953125],
+              "after": [21.47314453125, 20.7939453125, 20.6953125]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.735,
+              "systemCpuMs": 3.574,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 57
+            },
+            "commands": [
+              {
+                "branch": "probe-bound8-2-0",
+                "path": "$TMP_REPO/created/probe-bound8-2-0",
+                "code": 0,
+                "ms": 82.10883299999841,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-2-1",
+                "path": "$TMP_REPO/created/probe-bound8-2-1",
+                "code": 0,
+                "ms": 86.11337500000081,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-2-2",
+                "path": "$TMP_REPO/created/probe-bound8-2-2",
+                "code": 0,
+                "ms": 82.94599999999991,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-2-3",
+                "path": "$TMP_REPO/created/probe-bound8-2-3",
+                "code": 0,
+                "ms": 85.49179199999708,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-2-4",
+                "path": "$TMP_REPO/created/probe-bound8-2-4",
+                "code": 0,
+                "ms": 79.4352919999983,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 3,
+          "order": ["bound4", "bound8"],
+          "temporaryRootRemoved": true,
+          "bound4": {
+            "candidate": "bound4",
+            "bound": 4,
+            "wallMs": 168.4935000000005,
+            "safe": true,
+            "exactRegistration": true,
+            "inventoryCount": 54,
+            "cleanupInventoryCount": 49,
+            "peakActive": 4,
+            "loadAverage": {
+              "before": [20.07373046875, 20.51513671875, 20.59716796875],
+              "after": [20.07373046875, 20.51513671875, 20.59716796875]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.461,
+              "systemCpuMs": 3.133,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 58
+            },
+            "commands": [
+              {
+                "branch": "probe-bound4-3-0",
+                "path": "$TMP_REPO/created/probe-bound4-3-0",
+                "code": 0,
+                "ms": 90.77624999999898,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-3-1",
+                "path": "$TMP_REPO/created/probe-bound4-3-1",
+                "code": 0,
+                "ms": 88.93912499999715,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-3-2",
+                "path": "$TMP_REPO/created/probe-bound4-3-2",
+                "code": 0,
+                "ms": 83.28908299999966,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-3-3",
+                "path": "$TMP_REPO/created/probe-bound4-3-3",
+                "code": 0,
+                "ms": 83.96195799999987,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-3-4",
+                "path": "$TMP_REPO/created/probe-bound4-3-4",
+                "code": 0,
+                "ms": 83.95908399999826,
+                "stderr": ""
+              }
+            ]
+          },
+          "bound8": {
+            "candidate": "bound8",
+            "bound": 8,
+            "wallMs": 156.53354200000103,
+            "safe": true,
+            "exactRegistration": true,
+            "inventoryCount": 54,
+            "cleanupInventoryCount": 49,
+            "peakActive": 5,
+            "loadAverage": {
+              "before": [20.07373046875, 20.51513671875, 20.59716796875],
+              "after": [20.07373046875, 20.51513671875, 20.59716796875]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.254,
+              "systemCpuMs": 3.314,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 58
+            },
+            "commands": [
+              {
+                "branch": "probe-bound8-3-0",
+                "path": "$TMP_REPO/created/probe-bound8-3-0",
+                "code": 0,
+                "ms": 156.52583300000333,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-3-1",
+                "path": "$TMP_REPO/created/probe-bound8-3-1",
+                "code": 0,
+                "ms": 141.13812499999767,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-3-2",
+                "path": "$TMP_REPO/created/probe-bound8-3-2",
+                "code": 0,
+                "ms": 144.15304099999776,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-3-3",
+                "path": "$TMP_REPO/created/probe-bound8-3-3",
+                "code": 0,
+                "ms": 140.82949999999983,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-3-4",
+                "path": "$TMP_REPO/created/probe-bound8-3-4",
+                "code": 0,
+                "ms": 139.72470899999826,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 4,
+          "order": ["bound8", "bound4"],
+          "temporaryRootRemoved": true,
+          "bound4": {
+            "candidate": "bound4",
+            "bound": 4,
+            "wallMs": 92.98016600000119,
+            "safe": true,
+            "exactRegistration": true,
+            "inventoryCount": 54,
+            "cleanupInventoryCount": 49,
+            "peakActive": 4,
+            "loadAverage": {
+              "before": [22.1494140625, 20.93798828125, 20.74560546875],
+              "after": [22.1494140625, 20.93798828125, 20.74560546875]
+            },
+            "resourceUsage": {
+              "userCpuMs": 1.406,
+              "systemCpuMs": 3.392,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 61
+            },
+            "commands": [
+              {
+                "branch": "probe-bound4-4-0",
+                "path": "$TMP_REPO/created/probe-bound4-4-0",
+                "code": 0,
+                "ms": 58.0892500000009,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-4-1",
+                "path": "$TMP_REPO/created/probe-bound4-4-1",
+                "code": 0,
+                "ms": 57.05683300000237,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-4-2",
+                "path": "$TMP_REPO/created/probe-bound4-4-2",
+                "code": 0,
+                "ms": 56.16162500000064,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-4-3",
+                "path": "$TMP_REPO/created/probe-bound4-4-3",
+                "code": 0,
+                "ms": 54.04762499999924,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-4-4",
+                "path": "$TMP_REPO/created/probe-bound4-4-4",
+                "code": 0,
+                "ms": 37.14587499999834,
+                "stderr": ""
+              }
+            ]
+          },
+          "bound8": {
+            "candidate": "bound8",
+            "bound": 8,
+            "wallMs": 108.77041600000302,
+            "safe": true,
+            "exactRegistration": true,
+            "inventoryCount": 54,
+            "cleanupInventoryCount": 49,
+            "peakActive": 5,
+            "loadAverage": {
+              "before": [22.1494140625, 20.93798828125, 20.74560546875],
+              "after": [22.1494140625, 20.93798828125, 20.74560546875]
+            },
+            "resourceUsage": {
+              "userCpuMs": 2.514,
+              "systemCpuMs": 5.209,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 97
+            },
+            "commands": [
+              {
+                "branch": "probe-bound8-4-0",
+                "path": "$TMP_REPO/created/probe-bound8-4-0",
+                "code": 0,
+                "ms": 97.76762500000041,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-4-1",
+                "path": "$TMP_REPO/created/probe-bound8-4-1",
+                "code": 0,
+                "ms": 96.18654100000276,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-4-2",
+                "path": "$TMP_REPO/created/probe-bound8-4-2",
+                "code": 0,
+                "ms": 98.64466700000048,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-4-3",
+                "path": "$TMP_REPO/created/probe-bound8-4-3",
+                "code": 0,
+                "ms": 101.50579199999993,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-4-4",
+                "path": "$TMP_REPO/created/probe-bound8-4-4",
+                "code": 0,
+                "ms": 102.41220800000156,
+                "stderr": ""
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "burstSize": 20,
+      "bound4": {
+        "wallMs": {
+          "samples": [
+            342.3620410000003, 304.74204199999804, 288.99225000000297, 302.7332500000048,
+            308.45458399999916
+          ],
+          "median": 304.74204199999804,
+          "p90": 342.3620410000003,
+          "p95": 342.3620410000003,
+          "max": 342.3620410000003
+        },
+        "commandMs": {
+          "samples": [
+            61.76579199999833, 64.65670900000259, 62.97558299999946, 60.53050000000076,
+            64.63079200000357, 62.2465830000001, 65.06858300000022, 58.9007500000007,
+            75.89033400000335, 68.33533299999544, 68.77874999999767, 68.25820799999929,
+            66.44245899999805, 70.70333299999766, 76.591207999998, 71.17566700000316,
+            59.131333000004815, 65.12424999999348, 67.1507500000007, 67.51579099999799,
+            61.595792000000074, 56.37075000000186, 57.47333300000173, 55.60358399999677,
+            64.3536249999961, 64.28775000000314, 68.74287499999627, 62.997458999998344,
+            60.373083999998926, 57.851167000000714, 54.998249999996915, 56.850165999996534,
+            55.52108399999997, 58.638207999996666, 56.296082999993814, 55.954584000006435,
+            64.45995799999946, 65.13575000000128, 57.797082999997656, 63.48345800000243,
+            53.13158300000214, 55.01783299999806, 52.8324999999968, 52.721292000001995,
+            55.098457999993116, 51.44974999999977, 55.10320800000045, 57.266708000002836,
+            63.698333000000275, 65.64470799999981, 62.69770900000003, 65.00483399999939,
+            54.23070899999584, 64.24216600000364, 52.95220900000277, 55.0300419999985,
+            53.97170800000458, 52.45758300000307, 55.9353340000016, 50.48708400000032,
+            58.771082999999635, 54.14058300000033, 55.94999999999709, 56.297374999994645,
+            55.34499999999389, 53.91641600000003, 50.390958999996656, 50.70033300000068,
+            74.94483400000172, 76.67775000000256, 74.19312499999796, 70.0879169999971,
+            57.46899999999732, 60.51012499999342, 60.829750000004424, 58.3869579999955,
+            59.46799999999348, 57.21183300000121, 58.15758300000016, 56.52941699999792,
+            56.604417000002286, 53.6504999999961, 58.36624999999913, 53.807708000000275,
+            55.86166599999706, 52.29087499999878, 54.81324999999924, 58.61508300000423,
+            62.09350000000268, 64.32850000000326, 66.43666700000176, 61.32720800000243,
+            56.04254199999559, 56.676166999997804, 63.268834000002244, 63.019625000000815,
+            73.531332999999, 67.56929200000013, 61.73912500000006, 65.95704200000182
+          ],
+          "median": 58.9007500000007,
+          "p90": 68.74287499999627,
+          "p95": 73.531332999999,
+          "max": 76.67775000000256
+        },
+        "throughputPerSecond": {
+          "samples": [
+            58.41769122996898, 65.62927736764371, 69.2060081195942, 66.06476163420993,
+            64.83936708167079
+          ],
+          "median": 65.62927736764371,
+          "p90": 69.2060081195942,
+          "p95": 69.2060081195942,
+          "max": 69.2060081195942
+        },
+        "allSafe": true
+      },
+      "bound8": {
+        "wallMs": {
+          "samples": [
+            331.67987500000163, 300.9955420000042, 347.46041599999444, 311.50695899999846,
+            400.390416000002
+          ],
+          "median": 331.67987500000163,
+          "p90": 400.390416000002,
+          "p95": 400.390416000002,
+          "max": 400.390416000002
+        },
+        "commandMs": {
+          "samples": [
+            116.37562500000058, 124.37420900000143, 117.48475000000326, 118.7916250000053,
+            120.28295800000342, 122.67820799999754, 123.92533299999923, 115.47212500000023,
+            130.5692909999998, 131.59829100000206, 124.40025000000605, 152.35054200000013,
+            131.4052090000041, 151.0861670000013, 130.74654100000043, 132.6698749999996,
+            75.77474999999686, 80.90720899999724, 74.8360410000023, 76.7809999999954,
+            127.14154199999757, 121.68362499999785, 119.01712499999849, 121.73816699999588,
+            122.80070800000249, 121.10408399999869, 131.37862500000483, 124.50725000000239,
+            118.0904159999991, 124.58987499999785, 127.33562499999971, 128.0317920000016,
+            122.95770800000173, 127.99212500000431, 122.58358300000691, 122.84999999999854,
+            56.41516600000614, 52.11533299999428, 50.96929200000159, 49.86737500000163,
+            135.15595799999574, 129.69362499999988, 138.98520799999824, 135.89104199999565,
+            148.5520830000023, 156.42987500000163, 135.48029099999985, 147.1014589999977,
+            114.52745899999718, 131.62699999999313, 130.67033299999457, 131.55741699999635,
+            140.47174999999697, 132.45991700000013, 132.67725000000064, 132.06637500000215,
+            90.49666699999943, 78.58700000000681, 78.19929200000479, 72.84449999999924,
+            117.4956250000032, 118.7441669999971, 121.77375000000029, 132.81387499999983,
+            122.44066700000258, 122.87891600000148, 123.30020800000057, 125.06700000000274,
+            130.71716700000252, 130.50862499999494, 134.10245899999427, 133.3289169999989,
+            129.24775000000227, 137.9092079999973, 133.64658300000156, 129.36650000000373,
+            61.14445800000249, 59.080291999998735, 55.77045799999905, 53.33150000000023,
+            143.1943339999998, 146.92258299999958, 143.45733299999847, 138.5214580000029,
+            148.27366600000096, 155.63266699999804, 143.6255420000016, 143.07608400000026,
+            144.02524999999878, 150.48337499999616, 171.64329200000066, 150.29904199999874,
+            142.18387499999517, 150.78170800000225, 164.7080419999984, 147.26524999999674,
+            109.96666600000026, 101.0671250000014, 102.10949999999866, 102.11979199999769
+          ],
+          "median": 127.33562499999971,
+          "p90": 148.27366600000096,
+          "p95": 151.0861670000013,
+          "max": 171.64329200000066
+        },
+        "throughputPerSecond": {
+          "samples": [
+            60.29910617881143, 66.44616683392513, 57.56051359818875, 64.20402312745796,
+            49.951245586257734
+          ],
+          "median": 60.29910617881143,
+          "p90": 66.44616683392513,
+          "p95": 66.44616683392513,
+          "max": 66.44616683392513
+        },
+        "allSafe": true
+      },
+      "medianImprovementFraction": -0.08839552568202508,
+      "p95ImprovementFraction": -0.1694941846663475,
+      "allSafe": true,
+      "pairs": [
+        {
+          "repetition": 0,
+          "order": ["bound4", "bound8"],
+          "temporaryRootRemoved": true,
+          "bound4": {
+            "candidate": "bound4",
+            "bound": 4,
+            "wallMs": 342.3620410000003,
+            "safe": true,
+            "exactRegistration": true,
+            "inventoryCount": 69,
+            "cleanupInventoryCount": 49,
+            "peakActive": 4,
+            "loadAverage": {
+              "before": [22.1494140625, 20.93798828125, 20.74560546875],
+              "after": [20.85595703125, 20.68994140625, 20.6591796875]
+            },
+            "resourceUsage": {
+              "userCpuMs": 6.796,
+              "systemCpuMs": 15.141,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 298
+            },
+            "commands": [
+              {
+                "branch": "probe-bound4-0-0",
+                "path": "$TMP_REPO/created/probe-bound4-0-0",
+                "code": 0,
+                "ms": 61.76579199999833,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-0-1",
+                "path": "$TMP_REPO/created/probe-bound4-0-1",
+                "code": 0,
+                "ms": 64.65670900000259,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-0-2",
+                "path": "$TMP_REPO/created/probe-bound4-0-2",
+                "code": 0,
+                "ms": 62.97558299999946,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-0-3",
+                "path": "$TMP_REPO/created/probe-bound4-0-3",
+                "code": 0,
+                "ms": 60.53050000000076,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-0-4",
+                "path": "$TMP_REPO/created/probe-bound4-0-4",
+                "code": 0,
+                "ms": 64.63079200000357,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-0-5",
+                "path": "$TMP_REPO/created/probe-bound4-0-5",
+                "code": 0,
+                "ms": 62.2465830000001,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-0-6",
+                "path": "$TMP_REPO/created/probe-bound4-0-6",
+                "code": 0,
+                "ms": 65.06858300000022,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-0-7",
+                "path": "$TMP_REPO/created/probe-bound4-0-7",
+                "code": 0,
+                "ms": 58.9007500000007,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-0-8",
+                "path": "$TMP_REPO/created/probe-bound4-0-8",
+                "code": 0,
+                "ms": 75.89033400000335,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-0-9",
+                "path": "$TMP_REPO/created/probe-bound4-0-9",
+                "code": 0,
+                "ms": 68.33533299999544,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-0-10",
+                "path": "$TMP_REPO/created/probe-bound4-0-10",
+                "code": 0,
+                "ms": 68.77874999999767,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-0-11",
+                "path": "$TMP_REPO/created/probe-bound4-0-11",
+                "code": 0,
+                "ms": 68.25820799999929,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-0-12",
+                "path": "$TMP_REPO/created/probe-bound4-0-12",
+                "code": 0,
+                "ms": 66.44245899999805,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-0-13",
+                "path": "$TMP_REPO/created/probe-bound4-0-13",
+                "code": 0,
+                "ms": 70.70333299999766,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-0-14",
+                "path": "$TMP_REPO/created/probe-bound4-0-14",
+                "code": 0,
+                "ms": 76.591207999998,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-0-15",
+                "path": "$TMP_REPO/created/probe-bound4-0-15",
+                "code": 0,
+                "ms": 71.17566700000316,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-0-16",
+                "path": "$TMP_REPO/created/probe-bound4-0-16",
+                "code": 0,
+                "ms": 59.131333000004815,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-0-17",
+                "path": "$TMP_REPO/created/probe-bound4-0-17",
+                "code": 0,
+                "ms": 65.12424999999348,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-0-18",
+                "path": "$TMP_REPO/created/probe-bound4-0-18",
+                "code": 0,
+                "ms": 67.1507500000007,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-0-19",
+                "path": "$TMP_REPO/created/probe-bound4-0-19",
+                "code": 0,
+                "ms": 67.51579099999799,
+                "stderr": ""
+              }
+            ]
+          },
+          "bound8": {
+            "candidate": "bound8",
+            "bound": 8,
+            "wallMs": 331.67987500000163,
+            "safe": true,
+            "exactRegistration": true,
+            "inventoryCount": 69,
+            "cleanupInventoryCount": 49,
+            "peakActive": 8,
+            "loadAverage": {
+              "before": [20.85595703125, 20.68994140625, 20.6591796875],
+              "after": [20.85595703125, 20.68994140625, 20.6591796875]
+            },
+            "resourceUsage": {
+              "userCpuMs": 7.466,
+              "systemCpuMs": 15.311,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 257
+            },
+            "commands": [
+              {
+                "branch": "probe-bound8-0-0",
+                "path": "$TMP_REPO/created/probe-bound8-0-0",
+                "code": 0,
+                "ms": 116.37562500000058,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-0-1",
+                "path": "$TMP_REPO/created/probe-bound8-0-1",
+                "code": 0,
+                "ms": 124.37420900000143,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-0-2",
+                "path": "$TMP_REPO/created/probe-bound8-0-2",
+                "code": 0,
+                "ms": 117.48475000000326,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-0-3",
+                "path": "$TMP_REPO/created/probe-bound8-0-3",
+                "code": 0,
+                "ms": 118.7916250000053,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-0-4",
+                "path": "$TMP_REPO/created/probe-bound8-0-4",
+                "code": 0,
+                "ms": 120.28295800000342,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-0-5",
+                "path": "$TMP_REPO/created/probe-bound8-0-5",
+                "code": 0,
+                "ms": 122.67820799999754,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-0-6",
+                "path": "$TMP_REPO/created/probe-bound8-0-6",
+                "code": 0,
+                "ms": 123.92533299999923,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-0-7",
+                "path": "$TMP_REPO/created/probe-bound8-0-7",
+                "code": 0,
+                "ms": 115.47212500000023,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-0-8",
+                "path": "$TMP_REPO/created/probe-bound8-0-8",
+                "code": 0,
+                "ms": 130.5692909999998,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-0-9",
+                "path": "$TMP_REPO/created/probe-bound8-0-9",
+                "code": 0,
+                "ms": 131.59829100000206,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-0-10",
+                "path": "$TMP_REPO/created/probe-bound8-0-10",
+                "code": 0,
+                "ms": 124.40025000000605,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-0-11",
+                "path": "$TMP_REPO/created/probe-bound8-0-11",
+                "code": 0,
+                "ms": 152.35054200000013,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-0-12",
+                "path": "$TMP_REPO/created/probe-bound8-0-12",
+                "code": 0,
+                "ms": 131.4052090000041,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-0-13",
+                "path": "$TMP_REPO/created/probe-bound8-0-13",
+                "code": 0,
+                "ms": 151.0861670000013,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-0-14",
+                "path": "$TMP_REPO/created/probe-bound8-0-14",
+                "code": 0,
+                "ms": 130.74654100000043,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-0-15",
+                "path": "$TMP_REPO/created/probe-bound8-0-15",
+                "code": 0,
+                "ms": 132.6698749999996,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-0-16",
+                "path": "$TMP_REPO/created/probe-bound8-0-16",
+                "code": 0,
+                "ms": 75.77474999999686,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-0-17",
+                "path": "$TMP_REPO/created/probe-bound8-0-17",
+                "code": 0,
+                "ms": 80.90720899999724,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-0-18",
+                "path": "$TMP_REPO/created/probe-bound8-0-18",
+                "code": 0,
+                "ms": 74.8360410000023,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-0-19",
+                "path": "$TMP_REPO/created/probe-bound8-0-19",
+                "code": 0,
+                "ms": 76.7809999999954,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 1,
+          "order": ["bound8", "bound4"],
+          "temporaryRootRemoved": true,
+          "bound4": {
+            "candidate": "bound4",
+            "bound": 4,
+            "wallMs": 304.74204199999804,
+            "safe": true,
+            "exactRegistration": true,
+            "inventoryCount": 69,
+            "cleanupInventoryCount": 49,
+            "peakActive": 4,
+            "loadAverage": {
+              "before": [20.85595703125, 20.68994140625, 20.6591796875],
+              "after": [20.85595703125, 20.68994140625, 20.6591796875]
+            },
+            "resourceUsage": {
+              "userCpuMs": 6.858,
+              "systemCpuMs": 15.399,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 191
+            },
+            "commands": [
+              {
+                "branch": "probe-bound4-1-0",
+                "path": "$TMP_REPO/created/probe-bound4-1-0",
+                "code": 0,
+                "ms": 61.595792000000074,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-1-1",
+                "path": "$TMP_REPO/created/probe-bound4-1-1",
+                "code": 0,
+                "ms": 56.37075000000186,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-1-2",
+                "path": "$TMP_REPO/created/probe-bound4-1-2",
+                "code": 0,
+                "ms": 57.47333300000173,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-1-3",
+                "path": "$TMP_REPO/created/probe-bound4-1-3",
+                "code": 0,
+                "ms": 55.60358399999677,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-1-4",
+                "path": "$TMP_REPO/created/probe-bound4-1-4",
+                "code": 0,
+                "ms": 64.3536249999961,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-1-5",
+                "path": "$TMP_REPO/created/probe-bound4-1-5",
+                "code": 0,
+                "ms": 64.28775000000314,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-1-6",
+                "path": "$TMP_REPO/created/probe-bound4-1-6",
+                "code": 0,
+                "ms": 68.74287499999627,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-1-7",
+                "path": "$TMP_REPO/created/probe-bound4-1-7",
+                "code": 0,
+                "ms": 62.997458999998344,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-1-8",
+                "path": "$TMP_REPO/created/probe-bound4-1-8",
+                "code": 0,
+                "ms": 60.373083999998926,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-1-9",
+                "path": "$TMP_REPO/created/probe-bound4-1-9",
+                "code": 0,
+                "ms": 57.851167000000714,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-1-10",
+                "path": "$TMP_REPO/created/probe-bound4-1-10",
+                "code": 0,
+                "ms": 54.998249999996915,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-1-11",
+                "path": "$TMP_REPO/created/probe-bound4-1-11",
+                "code": 0,
+                "ms": 56.850165999996534,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-1-12",
+                "path": "$TMP_REPO/created/probe-bound4-1-12",
+                "code": 0,
+                "ms": 55.52108399999997,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-1-13",
+                "path": "$TMP_REPO/created/probe-bound4-1-13",
+                "code": 0,
+                "ms": 58.638207999996666,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-1-14",
+                "path": "$TMP_REPO/created/probe-bound4-1-14",
+                "code": 0,
+                "ms": 56.296082999993814,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-1-15",
+                "path": "$TMP_REPO/created/probe-bound4-1-15",
+                "code": 0,
+                "ms": 55.954584000006435,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-1-16",
+                "path": "$TMP_REPO/created/probe-bound4-1-16",
+                "code": 0,
+                "ms": 64.45995799999946,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-1-17",
+                "path": "$TMP_REPO/created/probe-bound4-1-17",
+                "code": 0,
+                "ms": 65.13575000000128,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-1-18",
+                "path": "$TMP_REPO/created/probe-bound4-1-18",
+                "code": 0,
+                "ms": 57.797082999997656,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-1-19",
+                "path": "$TMP_REPO/created/probe-bound4-1-19",
+                "code": 0,
+                "ms": 63.48345800000243,
+                "stderr": ""
+              }
+            ]
+          },
+          "bound8": {
+            "candidate": "bound8",
+            "bound": 8,
+            "wallMs": 300.9955420000042,
+            "safe": true,
+            "exactRegistration": true,
+            "inventoryCount": 69,
+            "cleanupInventoryCount": 49,
+            "peakActive": 8,
+            "loadAverage": {
+              "before": [20.85595703125, 20.68994140625, 20.6591796875],
+              "after": [20.85595703125, 20.68994140625, 20.6591796875]
+            },
+            "resourceUsage": {
+              "userCpuMs": 7.272,
+              "systemCpuMs": 15.009,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 268
+            },
+            "commands": [
+              {
+                "branch": "probe-bound8-1-0",
+                "path": "$TMP_REPO/created/probe-bound8-1-0",
+                "code": 0,
+                "ms": 127.14154199999757,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-1-1",
+                "path": "$TMP_REPO/created/probe-bound8-1-1",
+                "code": 0,
+                "ms": 121.68362499999785,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-1-2",
+                "path": "$TMP_REPO/created/probe-bound8-1-2",
+                "code": 0,
+                "ms": 119.01712499999849,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-1-3",
+                "path": "$TMP_REPO/created/probe-bound8-1-3",
+                "code": 0,
+                "ms": 121.73816699999588,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-1-4",
+                "path": "$TMP_REPO/created/probe-bound8-1-4",
+                "code": 0,
+                "ms": 122.80070800000249,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-1-5",
+                "path": "$TMP_REPO/created/probe-bound8-1-5",
+                "code": 0,
+                "ms": 121.10408399999869,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-1-6",
+                "path": "$TMP_REPO/created/probe-bound8-1-6",
+                "code": 0,
+                "ms": 131.37862500000483,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-1-7",
+                "path": "$TMP_REPO/created/probe-bound8-1-7",
+                "code": 0,
+                "ms": 124.50725000000239,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-1-8",
+                "path": "$TMP_REPO/created/probe-bound8-1-8",
+                "code": 0,
+                "ms": 118.0904159999991,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-1-9",
+                "path": "$TMP_REPO/created/probe-bound8-1-9",
+                "code": 0,
+                "ms": 124.58987499999785,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-1-10",
+                "path": "$TMP_REPO/created/probe-bound8-1-10",
+                "code": 0,
+                "ms": 127.33562499999971,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-1-11",
+                "path": "$TMP_REPO/created/probe-bound8-1-11",
+                "code": 0,
+                "ms": 128.0317920000016,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-1-12",
+                "path": "$TMP_REPO/created/probe-bound8-1-12",
+                "code": 0,
+                "ms": 122.95770800000173,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-1-13",
+                "path": "$TMP_REPO/created/probe-bound8-1-13",
+                "code": 0,
+                "ms": 127.99212500000431,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-1-14",
+                "path": "$TMP_REPO/created/probe-bound8-1-14",
+                "code": 0,
+                "ms": 122.58358300000691,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-1-15",
+                "path": "$TMP_REPO/created/probe-bound8-1-15",
+                "code": 0,
+                "ms": 122.84999999999854,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-1-16",
+                "path": "$TMP_REPO/created/probe-bound8-1-16",
+                "code": 0,
+                "ms": 56.41516600000614,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-1-17",
+                "path": "$TMP_REPO/created/probe-bound8-1-17",
+                "code": 0,
+                "ms": 52.11533299999428,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-1-18",
+                "path": "$TMP_REPO/created/probe-bound8-1-18",
+                "code": 0,
+                "ms": 50.96929200000159,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-1-19",
+                "path": "$TMP_REPO/created/probe-bound8-1-19",
+                "code": 0,
+                "ms": 49.86737500000163,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 2,
+          "order": ["bound4", "bound8"],
+          "temporaryRootRemoved": true,
+          "bound4": {
+            "candidate": "bound4",
+            "bound": 4,
+            "wallMs": 288.99225000000297,
+            "safe": true,
+            "exactRegistration": true,
+            "inventoryCount": 69,
+            "cleanupInventoryCount": 49,
+            "peakActive": 4,
+            "loadAverage": {
+              "before": [28.314453125, 22.23876953125, 21.2060546875],
+              "after": [28.314453125, 22.23876953125, 21.2060546875]
+            },
+            "resourceUsage": {
+              "userCpuMs": 6.626,
+              "systemCpuMs": 14.616,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 200
+            },
+            "commands": [
+              {
+                "branch": "probe-bound4-2-0",
+                "path": "$TMP_REPO/created/probe-bound4-2-0",
+                "code": 0,
+                "ms": 53.13158300000214,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-2-1",
+                "path": "$TMP_REPO/created/probe-bound4-2-1",
+                "code": 0,
+                "ms": 55.01783299999806,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-2-2",
+                "path": "$TMP_REPO/created/probe-bound4-2-2",
+                "code": 0,
+                "ms": 52.8324999999968,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-2-3",
+                "path": "$TMP_REPO/created/probe-bound4-2-3",
+                "code": 0,
+                "ms": 52.721292000001995,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-2-4",
+                "path": "$TMP_REPO/created/probe-bound4-2-4",
+                "code": 0,
+                "ms": 55.098457999993116,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-2-5",
+                "path": "$TMP_REPO/created/probe-bound4-2-5",
+                "code": 0,
+                "ms": 51.44974999999977,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-2-6",
+                "path": "$TMP_REPO/created/probe-bound4-2-6",
+                "code": 0,
+                "ms": 55.10320800000045,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-2-7",
+                "path": "$TMP_REPO/created/probe-bound4-2-7",
+                "code": 0,
+                "ms": 57.266708000002836,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-2-8",
+                "path": "$TMP_REPO/created/probe-bound4-2-8",
+                "code": 0,
+                "ms": 63.698333000000275,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-2-9",
+                "path": "$TMP_REPO/created/probe-bound4-2-9",
+                "code": 0,
+                "ms": 65.64470799999981,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-2-10",
+                "path": "$TMP_REPO/created/probe-bound4-2-10",
+                "code": 0,
+                "ms": 62.69770900000003,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-2-11",
+                "path": "$TMP_REPO/created/probe-bound4-2-11",
+                "code": 0,
+                "ms": 65.00483399999939,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-2-12",
+                "path": "$TMP_REPO/created/probe-bound4-2-12",
+                "code": 0,
+                "ms": 54.23070899999584,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-2-13",
+                "path": "$TMP_REPO/created/probe-bound4-2-13",
+                "code": 0,
+                "ms": 64.24216600000364,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-2-14",
+                "path": "$TMP_REPO/created/probe-bound4-2-14",
+                "code": 0,
+                "ms": 52.95220900000277,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-2-15",
+                "path": "$TMP_REPO/created/probe-bound4-2-15",
+                "code": 0,
+                "ms": 55.0300419999985,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-2-16",
+                "path": "$TMP_REPO/created/probe-bound4-2-16",
+                "code": 0,
+                "ms": 53.97170800000458,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-2-17",
+                "path": "$TMP_REPO/created/probe-bound4-2-17",
+                "code": 0,
+                "ms": 52.45758300000307,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-2-18",
+                "path": "$TMP_REPO/created/probe-bound4-2-18",
+                "code": 0,
+                "ms": 55.9353340000016,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-2-19",
+                "path": "$TMP_REPO/created/probe-bound4-2-19",
+                "code": 0,
+                "ms": 50.48708400000032,
+                "stderr": ""
+              }
+            ]
+          },
+          "bound8": {
+            "candidate": "bound8",
+            "bound": 8,
+            "wallMs": 347.46041599999444,
+            "safe": true,
+            "exactRegistration": true,
+            "inventoryCount": 69,
+            "cleanupInventoryCount": 49,
+            "peakActive": 8,
+            "loadAverage": {
+              "before": [28.76953125, 22.43359375, 21.28076171875],
+              "after": [28.76953125, 22.43359375, 21.28076171875]
+            },
+            "resourceUsage": {
+              "userCpuMs": 9.061,
+              "systemCpuMs": 17.953,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 270
+            },
+            "commands": [
+              {
+                "branch": "probe-bound8-2-0",
+                "path": "$TMP_REPO/created/probe-bound8-2-0",
+                "code": 0,
+                "ms": 135.15595799999574,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-2-1",
+                "path": "$TMP_REPO/created/probe-bound8-2-1",
+                "code": 0,
+                "ms": 129.69362499999988,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-2-2",
+                "path": "$TMP_REPO/created/probe-bound8-2-2",
+                "code": 0,
+                "ms": 138.98520799999824,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-2-3",
+                "path": "$TMP_REPO/created/probe-bound8-2-3",
+                "code": 0,
+                "ms": 135.89104199999565,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-2-4",
+                "path": "$TMP_REPO/created/probe-bound8-2-4",
+                "code": 0,
+                "ms": 148.5520830000023,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-2-5",
+                "path": "$TMP_REPO/created/probe-bound8-2-5",
+                "code": 0,
+                "ms": 156.42987500000163,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-2-6",
+                "path": "$TMP_REPO/created/probe-bound8-2-6",
+                "code": 0,
+                "ms": 135.48029099999985,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-2-7",
+                "path": "$TMP_REPO/created/probe-bound8-2-7",
+                "code": 0,
+                "ms": 147.1014589999977,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-2-8",
+                "path": "$TMP_REPO/created/probe-bound8-2-8",
+                "code": 0,
+                "ms": 114.52745899999718,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-2-9",
+                "path": "$TMP_REPO/created/probe-bound8-2-9",
+                "code": 0,
+                "ms": 131.62699999999313,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-2-10",
+                "path": "$TMP_REPO/created/probe-bound8-2-10",
+                "code": 0,
+                "ms": 130.67033299999457,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-2-11",
+                "path": "$TMP_REPO/created/probe-bound8-2-11",
+                "code": 0,
+                "ms": 131.55741699999635,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-2-12",
+                "path": "$TMP_REPO/created/probe-bound8-2-12",
+                "code": 0,
+                "ms": 140.47174999999697,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-2-13",
+                "path": "$TMP_REPO/created/probe-bound8-2-13",
+                "code": 0,
+                "ms": 132.45991700000013,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-2-14",
+                "path": "$TMP_REPO/created/probe-bound8-2-14",
+                "code": 0,
+                "ms": 132.67725000000064,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-2-15",
+                "path": "$TMP_REPO/created/probe-bound8-2-15",
+                "code": 0,
+                "ms": 132.06637500000215,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-2-16",
+                "path": "$TMP_REPO/created/probe-bound8-2-16",
+                "code": 0,
+                "ms": 90.49666699999943,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-2-17",
+                "path": "$TMP_REPO/created/probe-bound8-2-17",
+                "code": 0,
+                "ms": 78.58700000000681,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-2-18",
+                "path": "$TMP_REPO/created/probe-bound8-2-18",
+                "code": 0,
+                "ms": 78.19929200000479,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-2-19",
+                "path": "$TMP_REPO/created/probe-bound8-2-19",
+                "code": 0,
+                "ms": 72.84449999999924,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 3,
+          "order": ["bound8", "bound4"],
+          "temporaryRootRemoved": true,
+          "bound4": {
+            "candidate": "bound4",
+            "bound": 4,
+            "wallMs": 302.7332500000048,
+            "safe": true,
+            "exactRegistration": true,
+            "inventoryCount": 69,
+            "cleanupInventoryCount": 49,
+            "peakActive": 4,
+            "loadAverage": {
+              "before": [27.18603515625, 22.21044921875, 21.20849609375],
+              "after": [27.18603515625, 22.21044921875, 21.20849609375]
+            },
+            "resourceUsage": {
+              "userCpuMs": 5.541,
+              "systemCpuMs": 13.621,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 195
+            },
+            "commands": [
+              {
+                "branch": "probe-bound4-3-0",
+                "path": "$TMP_REPO/created/probe-bound4-3-0",
+                "code": 0,
+                "ms": 58.771082999999635,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-3-1",
+                "path": "$TMP_REPO/created/probe-bound4-3-1",
+                "code": 0,
+                "ms": 54.14058300000033,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-3-2",
+                "path": "$TMP_REPO/created/probe-bound4-3-2",
+                "code": 0,
+                "ms": 55.94999999999709,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-3-3",
+                "path": "$TMP_REPO/created/probe-bound4-3-3",
+                "code": 0,
+                "ms": 56.297374999994645,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-3-4",
+                "path": "$TMP_REPO/created/probe-bound4-3-4",
+                "code": 0,
+                "ms": 55.34499999999389,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-3-5",
+                "path": "$TMP_REPO/created/probe-bound4-3-5",
+                "code": 0,
+                "ms": 53.91641600000003,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-3-6",
+                "path": "$TMP_REPO/created/probe-bound4-3-6",
+                "code": 0,
+                "ms": 50.390958999996656,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-3-7",
+                "path": "$TMP_REPO/created/probe-bound4-3-7",
+                "code": 0,
+                "ms": 50.70033300000068,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-3-8",
+                "path": "$TMP_REPO/created/probe-bound4-3-8",
+                "code": 0,
+                "ms": 74.94483400000172,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-3-9",
+                "path": "$TMP_REPO/created/probe-bound4-3-9",
+                "code": 0,
+                "ms": 76.67775000000256,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-3-10",
+                "path": "$TMP_REPO/created/probe-bound4-3-10",
+                "code": 0,
+                "ms": 74.19312499999796,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-3-11",
+                "path": "$TMP_REPO/created/probe-bound4-3-11",
+                "code": 0,
+                "ms": 70.0879169999971,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-3-12",
+                "path": "$TMP_REPO/created/probe-bound4-3-12",
+                "code": 0,
+                "ms": 57.46899999999732,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-3-13",
+                "path": "$TMP_REPO/created/probe-bound4-3-13",
+                "code": 0,
+                "ms": 60.51012499999342,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-3-14",
+                "path": "$TMP_REPO/created/probe-bound4-3-14",
+                "code": 0,
+                "ms": 60.829750000004424,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-3-15",
+                "path": "$TMP_REPO/created/probe-bound4-3-15",
+                "code": 0,
+                "ms": 58.3869579999955,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-3-16",
+                "path": "$TMP_REPO/created/probe-bound4-3-16",
+                "code": 0,
+                "ms": 59.46799999999348,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-3-17",
+                "path": "$TMP_REPO/created/probe-bound4-3-17",
+                "code": 0,
+                "ms": 57.21183300000121,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-3-18",
+                "path": "$TMP_REPO/created/probe-bound4-3-18",
+                "code": 0,
+                "ms": 58.15758300000016,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-3-19",
+                "path": "$TMP_REPO/created/probe-bound4-3-19",
+                "code": 0,
+                "ms": 56.52941699999792,
+                "stderr": ""
+              }
+            ]
+          },
+          "bound8": {
+            "candidate": "bound8",
+            "bound": 8,
+            "wallMs": 311.50695899999846,
+            "safe": true,
+            "exactRegistration": true,
+            "inventoryCount": 69,
+            "cleanupInventoryCount": 49,
+            "peakActive": 8,
+            "loadAverage": {
+              "before": [28.76953125, 22.43359375, 21.28076171875],
+              "after": [27.18603515625, 22.21044921875, 21.20849609375]
+            },
+            "resourceUsage": {
+              "userCpuMs": 6.379,
+              "systemCpuMs": 15.141,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 282
+            },
+            "commands": [
+              {
+                "branch": "probe-bound8-3-0",
+                "path": "$TMP_REPO/created/probe-bound8-3-0",
+                "code": 0,
+                "ms": 117.4956250000032,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-3-1",
+                "path": "$TMP_REPO/created/probe-bound8-3-1",
+                "code": 0,
+                "ms": 118.7441669999971,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-3-2",
+                "path": "$TMP_REPO/created/probe-bound8-3-2",
+                "code": 0,
+                "ms": 121.77375000000029,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-3-3",
+                "path": "$TMP_REPO/created/probe-bound8-3-3",
+                "code": 0,
+                "ms": 132.81387499999983,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-3-4",
+                "path": "$TMP_REPO/created/probe-bound8-3-4",
+                "code": 0,
+                "ms": 122.44066700000258,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-3-5",
+                "path": "$TMP_REPO/created/probe-bound8-3-5",
+                "code": 0,
+                "ms": 122.87891600000148,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-3-6",
+                "path": "$TMP_REPO/created/probe-bound8-3-6",
+                "code": 0,
+                "ms": 123.30020800000057,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-3-7",
+                "path": "$TMP_REPO/created/probe-bound8-3-7",
+                "code": 0,
+                "ms": 125.06700000000274,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-3-8",
+                "path": "$TMP_REPO/created/probe-bound8-3-8",
+                "code": 0,
+                "ms": 130.71716700000252,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-3-9",
+                "path": "$TMP_REPO/created/probe-bound8-3-9",
+                "code": 0,
+                "ms": 130.50862499999494,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-3-10",
+                "path": "$TMP_REPO/created/probe-bound8-3-10",
+                "code": 0,
+                "ms": 134.10245899999427,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-3-11",
+                "path": "$TMP_REPO/created/probe-bound8-3-11",
+                "code": 0,
+                "ms": 133.3289169999989,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-3-12",
+                "path": "$TMP_REPO/created/probe-bound8-3-12",
+                "code": 0,
+                "ms": 129.24775000000227,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-3-13",
+                "path": "$TMP_REPO/created/probe-bound8-3-13",
+                "code": 0,
+                "ms": 137.9092079999973,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-3-14",
+                "path": "$TMP_REPO/created/probe-bound8-3-14",
+                "code": 0,
+                "ms": 133.64658300000156,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-3-15",
+                "path": "$TMP_REPO/created/probe-bound8-3-15",
+                "code": 0,
+                "ms": 129.36650000000373,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-3-16",
+                "path": "$TMP_REPO/created/probe-bound8-3-16",
+                "code": 0,
+                "ms": 61.14445800000249,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-3-17",
+                "path": "$TMP_REPO/created/probe-bound8-3-17",
+                "code": 0,
+                "ms": 59.080291999998735,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-3-18",
+                "path": "$TMP_REPO/created/probe-bound8-3-18",
+                "code": 0,
+                "ms": 55.77045799999905,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-3-19",
+                "path": "$TMP_REPO/created/probe-bound8-3-19",
+                "code": 0,
+                "ms": 53.33150000000023,
+                "stderr": ""
+              }
+            ]
+          }
+        },
+        {
+          "repetition": 4,
+          "order": ["bound4", "bound8"],
+          "temporaryRootRemoved": true,
+          "bound4": {
+            "candidate": "bound4",
+            "bound": 4,
+            "wallMs": 308.45458399999916,
+            "safe": true,
+            "exactRegistration": true,
+            "inventoryCount": 69,
+            "cleanupInventoryCount": 49,
+            "peakActive": 4,
+            "loadAverage": {
+              "before": [27.18603515625, 22.21044921875, 21.20849609375],
+              "after": [25.8896484375, 22.02392578125, 21.1484375]
+            },
+            "resourceUsage": {
+              "userCpuMs": 6.385,
+              "systemCpuMs": 14.989,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 220
+            },
+            "commands": [
+              {
+                "branch": "probe-bound4-4-0",
+                "path": "$TMP_REPO/created/probe-bound4-4-0",
+                "code": 0,
+                "ms": 56.604417000002286,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-4-1",
+                "path": "$TMP_REPO/created/probe-bound4-4-1",
+                "code": 0,
+                "ms": 53.6504999999961,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-4-2",
+                "path": "$TMP_REPO/created/probe-bound4-4-2",
+                "code": 0,
+                "ms": 58.36624999999913,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-4-3",
+                "path": "$TMP_REPO/created/probe-bound4-4-3",
+                "code": 0,
+                "ms": 53.807708000000275,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-4-4",
+                "path": "$TMP_REPO/created/probe-bound4-4-4",
+                "code": 0,
+                "ms": 55.86166599999706,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-4-5",
+                "path": "$TMP_REPO/created/probe-bound4-4-5",
+                "code": 0,
+                "ms": 52.29087499999878,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-4-6",
+                "path": "$TMP_REPO/created/probe-bound4-4-6",
+                "code": 0,
+                "ms": 54.81324999999924,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-4-7",
+                "path": "$TMP_REPO/created/probe-bound4-4-7",
+                "code": 0,
+                "ms": 58.61508300000423,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-4-8",
+                "path": "$TMP_REPO/created/probe-bound4-4-8",
+                "code": 0,
+                "ms": 62.09350000000268,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-4-9",
+                "path": "$TMP_REPO/created/probe-bound4-4-9",
+                "code": 0,
+                "ms": 64.32850000000326,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-4-10",
+                "path": "$TMP_REPO/created/probe-bound4-4-10",
+                "code": 0,
+                "ms": 66.43666700000176,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-4-11",
+                "path": "$TMP_REPO/created/probe-bound4-4-11",
+                "code": 0,
+                "ms": 61.32720800000243,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-4-12",
+                "path": "$TMP_REPO/created/probe-bound4-4-12",
+                "code": 0,
+                "ms": 56.04254199999559,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-4-13",
+                "path": "$TMP_REPO/created/probe-bound4-4-13",
+                "code": 0,
+                "ms": 56.676166999997804,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-4-14",
+                "path": "$TMP_REPO/created/probe-bound4-4-14",
+                "code": 0,
+                "ms": 63.268834000002244,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-4-15",
+                "path": "$TMP_REPO/created/probe-bound4-4-15",
+                "code": 0,
+                "ms": 63.019625000000815,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-4-16",
+                "path": "$TMP_REPO/created/probe-bound4-4-16",
+                "code": 0,
+                "ms": 73.531332999999,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-4-17",
+                "path": "$TMP_REPO/created/probe-bound4-4-17",
+                "code": 0,
+                "ms": 67.56929200000013,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-4-18",
+                "path": "$TMP_REPO/created/probe-bound4-4-18",
+                "code": 0,
+                "ms": 61.73912500000006,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound4-4-19",
+                "path": "$TMP_REPO/created/probe-bound4-4-19",
+                "code": 0,
+                "ms": 65.95704200000182,
+                "stderr": ""
+              }
+            ]
+          },
+          "bound8": {
+            "candidate": "bound8",
+            "bound": 8,
+            "wallMs": 400.390416000002,
+            "safe": true,
+            "exactRegistration": true,
+            "inventoryCount": 69,
+            "cleanupInventoryCount": 49,
+            "peakActive": 8,
+            "loadAverage": {
+              "before": [25.8896484375, 22.02392578125, 21.1484375],
+              "after": [25.8896484375, 22.02392578125, 21.1484375]
+            },
+            "resourceUsage": {
+              "userCpuMs": 13.588,
+              "systemCpuMs": 14.414,
+              "fsReads": 0,
+              "fsWrites": 0,
+              "voluntaryContextSwitches": 0,
+              "involuntaryContextSwitches": 286
+            },
+            "commands": [
+              {
+                "branch": "probe-bound8-4-0",
+                "path": "$TMP_REPO/created/probe-bound8-4-0",
+                "code": 0,
+                "ms": 143.1943339999998,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-4-1",
+                "path": "$TMP_REPO/created/probe-bound8-4-1",
+                "code": 0,
+                "ms": 146.92258299999958,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-4-2",
+                "path": "$TMP_REPO/created/probe-bound8-4-2",
+                "code": 0,
+                "ms": 143.45733299999847,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-4-3",
+                "path": "$TMP_REPO/created/probe-bound8-4-3",
+                "code": 0,
+                "ms": 138.5214580000029,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-4-4",
+                "path": "$TMP_REPO/created/probe-bound8-4-4",
+                "code": 0,
+                "ms": 148.27366600000096,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-4-5",
+                "path": "$TMP_REPO/created/probe-bound8-4-5",
+                "code": 0,
+                "ms": 155.63266699999804,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-4-6",
+                "path": "$TMP_REPO/created/probe-bound8-4-6",
+                "code": 0,
+                "ms": 143.6255420000016,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-4-7",
+                "path": "$TMP_REPO/created/probe-bound8-4-7",
+                "code": 0,
+                "ms": 143.07608400000026,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-4-8",
+                "path": "$TMP_REPO/created/probe-bound8-4-8",
+                "code": 0,
+                "ms": 144.02524999999878,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-4-9",
+                "path": "$TMP_REPO/created/probe-bound8-4-9",
+                "code": 0,
+                "ms": 150.48337499999616,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-4-10",
+                "path": "$TMP_REPO/created/probe-bound8-4-10",
+                "code": 0,
+                "ms": 171.64329200000066,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-4-11",
+                "path": "$TMP_REPO/created/probe-bound8-4-11",
+                "code": 0,
+                "ms": 150.29904199999874,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-4-12",
+                "path": "$TMP_REPO/created/probe-bound8-4-12",
+                "code": 0,
+                "ms": 142.18387499999517,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-4-13",
+                "path": "$TMP_REPO/created/probe-bound8-4-13",
+                "code": 0,
+                "ms": 150.78170800000225,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-4-14",
+                "path": "$TMP_REPO/created/probe-bound8-4-14",
+                "code": 0,
+                "ms": 164.7080419999984,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-4-15",
+                "path": "$TMP_REPO/created/probe-bound8-4-15",
+                "code": 0,
+                "ms": 147.26524999999674,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-4-16",
+                "path": "$TMP_REPO/created/probe-bound8-4-16",
+                "code": 0,
+                "ms": 109.96666600000026,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-4-17",
+                "path": "$TMP_REPO/created/probe-bound8-4-17",
+                "code": 0,
+                "ms": 101.0671250000014,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-4-18",
+                "path": "$TMP_REPO/created/probe-bound8-4-18",
+                "code": 0,
+                "ms": 102.10949999999866,
+                "stderr": ""
+              },
+              {
+                "branch": "probe-bound8-4-19",
+                "path": "$TMP_REPO/created/probe-bound8-4-19",
+                "code": 0,
+                "ms": 102.11979199999769,
+                "stderr": ""
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
