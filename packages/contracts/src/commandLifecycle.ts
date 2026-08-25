@@ -63,17 +63,25 @@ const CommandRecordBaseSchema = z
 type CommandRecordBase = z.infer<typeof CommandRecordBaseSchema>;
 export type CommandRecordInput = z.input<typeof CommandRecordBaseSchema>;
 
+type CorrelatedCommandRecord<TCommand extends StationCommand> = Omit<
+  CommandRecordBase,
+  "type" | "command" | "status" | "result"
+> & {
+  type: TCommand["type"];
+  command: TCommand;
+};
+
+type CommandRecordLifecycle<TCommand extends StationCommand> =
+  | { status: "accepted" | "started" | "failed"; result?: never }
+  | { status: "succeeded"; result?: StationCommandResultFor<TCommand> };
+
 export type CommandRecordFor<TCommand extends StationCommand> = TCommand extends StationCommand
-  ? Omit<CommandRecordBase, "type" | "command" | "result"> & {
-      type: TCommand["type"];
-      command: TCommand;
-      result?: StationCommandResultFor<TCommand>;
-    }
+  ? CorrelatedCommandRecord<TCommand> & CommandRecordLifecycle<TCommand>
   : never;
 
 export type CommandRecord = CommandRecordFor<StationCommand>;
 export type SucceededCommandRecord = CommandRecord & { status: "succeeded" };
-export type FailedCommandRecord = CommandRecord & { status: "failed"; result?: never };
+export type FailedCommandRecord = CommandRecord & { status: "failed" };
 export type CommandExecutionOutcome =
   | { status: "accepted"; receipt: AcceptedCommandReceipt }
   | { status: "rejected"; receipt: RejectedCommandReceipt }

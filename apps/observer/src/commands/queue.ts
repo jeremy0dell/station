@@ -245,8 +245,8 @@ async function executeCommand(
   const handler = handlers.get(context.command.type);
   let commitStarted = false;
   const handlerState: {
-    execution: Promise<StationCommandResult | undefined> | undefined;
-    result: StationCommandResult | undefined;
+    execution: Promise<unknown> | undefined;
+    result: unknown;
   } = { execution: undefined, result: undefined };
   const result = await runRuntimeBoundaryWithTimeout(
     {
@@ -283,7 +283,7 @@ async function executeCommand(
             throwIfAborted(linked.signal);
             commitStarted = true;
           },
-        }).then((handlerResult) => handlerResult ?? undefined);
+        });
         handlerState.result = await handlerState.execution;
         if (!commitStarted) throwIfAborted(linked.signal);
       } finally {
@@ -389,7 +389,7 @@ async function executeCommand(
 
 function validateCommandResult(
   command: StationCommand,
-  handlerResult: StationCommandResult | undefined,
+  handlerResult: unknown,
 ): StationCommandResult | undefined {
   const resultType = StationCommandResultTypeSchema.safeParse(command.type);
   if (!resultType.success) {

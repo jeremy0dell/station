@@ -220,6 +220,25 @@ describe("observer command queue", () => {
     sqlite.close();
   });
 
+  it("durably fails a null handler result instead of reporting a false success", async () => {
+    const { sqlite, persistence, queue } = createPersistenceAndQueue();
+    queue.registerHandler("session.rename", async () => null);
+
+    await queue.dispatch(renameSessionCommand);
+    await queue.drain();
+
+    await expect(persistence.getCommand("cmd_1")).resolves.toMatchObject({
+      status: "failed",
+      error: { code: "COMMAND_RESULT_INVALID" },
+    });
+    expect(await persistence.listEvents({ commandId: "cmd_1" })).toEqual([
+      expect.objectContaining({ type: "command.accepted" }),
+      expect.objectContaining({ type: "command.started" }),
+      expect.objectContaining({ type: "command.failed" }),
+    ]);
+    sqlite.close();
+  });
+
   it("records failed commands with SafeError and internal envelope records", async () => {
     const { sqlite, persistence, queue } = createPersistenceAndQueue();
     queue.registerHandler("observer.reconcile", async () => {

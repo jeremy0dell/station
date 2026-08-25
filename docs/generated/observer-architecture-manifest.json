@@ -8405,6 +8405,7 @@
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "runtime",
           "bindings": [
+            "CommandRecordSchema",
             "ErrorEnvelopeSchema",
             "SafeErrorSchema",
             "SessionGroupViewSchema",
