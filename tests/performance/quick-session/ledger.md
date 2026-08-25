@@ -1919,3 +1919,76 @@ must be reverted from the review branch. Next register an exit-only transport
 diagnostic that separates socket arrival, frame parsing, queue publication, and
 async-iterator resumption; do not optimize the transport from this descriptive
 result alone.
+
+## BENCH-045-D registered diagnostic plan
+
+Governing sources are `docs/debugging.md`, `docs/architecture.md`,
+`docs/observer-architecture.md`, `docs/architecture-documentation.md`,
+`tests/README.md`, the original experiment protocol, BENCH-043-T, and
+BENCH-044-W. BENCH-044 is authoritative only as a rejection: under valid
+stability and perturbation guards, server-send-to-client-frame egress supplied
+78.5% of actual-request wire/client p95 and dominated all five tails, while the
+frozen client-validation prediction was false. The source audit shows the real
+NDJSON connection parses socket `data` frames into a queue, resolves blocked
+waiters, resumes an async generator, dequeues, yields, and only then resolves
+the client's `iterator.next()`.
+
+BENCH-045 retains BENCH-044's exact temporary launch behavior, four trace
+layers, twenty-repetition compiled product boundary, full correctness matrix,
+and per-repetition stability admission. It adds exit-only client-transport
+marks for response-diagnostic arming, iterator wait, socket-data callback,
+newline extraction, JSON parse, queue publication, waiter resolution, iterator
+resumption, dequeue, generator yield, and the existing outer frame receipt.
+The diagnostic is armed only after the same connection's expected-health check
+and immediately before sending `agent.prepareExternalLaunch`; other protocol
+traffic and in-memory connections remain unrecorded. Comparable epoch and
+process-local timestamps reconstruct the BENCH-044 response-egress interval
+without reading or interpreting untrusted response fields in the transport.
+
+Expected temporary files inherited from BENCH-044 are
+`station/src/app/dashboardCapabilities.ts`,
+`station/src/app/dashboardCapabilities.test.ts`,
+`station/src/input/runtime/managedLaunch.ts`,
+`station/src/input/runtime/managedLaunch.test.ts`,
+`station/src/input/runtime/managedLaunchAttempt.ts`,
+`station/src/input/runtime/managedLaunchPhaseDiagnostic.ts`,
+`apps/observer/src/runtime/externalLaunch.ts`,
+`apps/observer/src/runtime/externalLaunchPhaseDiagnostic.ts`,
+`packages/protocol/src/client.ts`, `packages/protocol/src/server.ts`,
+`packages/protocol/src/prepareExternalLaunchPhaseDiagnostic.ts`, and
+`tests/performance/quick-session/compiledQuickSessionTui.real.test.ts`.
+BENCH-045 additionally changes `packages/protocol/src/transport.ts`. The
+focused transport unit test is validation-only unless the diagnostic requires
+a temporary exact-order regression. Raw JSON, a standalone archive summary,
+and this ledger are the evidence artifacts. No package manifest, shared
+contract/schema, provider, connector, configuration, architecture, permanent
+test, report, or user-documentation change is expected.
+
+JSDoc impact is explicit: the temporary connection diagnostic method documents
+that it arms only the next real-socket response and has no transport behavior
+authority. The temporary protocol recorder documents the transport phase
+ownership contract. No retained backend, connector, or protocol JSDoc change
+is expected because all instrumentation will be reverted after classification.
+
+The table row freezes the decision before diagnostic source is restored. All
+twenty repetitions must pass BENCH-044 admission and every product predicate.
+The transport trace must be exact, monotonic, absent before UI exit, and
+nonnegative across processes; its adjacent phases must reconstruct the existing
+server-send-to-client-frame interval within 1ms in every run. At least two
+response-egress intervals must exceed 6ms. A stage is dominant only if it
+supplies at least 60% of response-egress p95 and at least half of at least two
+over-6ms intervals. User-facing p95 remains bounded at 380ms, attachment p95 at
+30ms, residual p95 at 35ms, and response-egress p95 at 15ms. Prediction: time
+from server send return to client socket-data callback supplies at least 70% of
+response-egress p95 and at least half of every tail; callback entry through
+queue publication, waiter resolution through iterator resumption, dequeue,
+generator yield, and outer continuation each have p95 at most 1ms, and their
+combined post-callback work has p95 at most 2ms. Any failed condition rejects
+attribution mechanically.
+
+Validation before the product run will repeat Protocol, Observer, and Station
+typechecks; Protocol transport unit and client/server integration tests,
+Observer external-launch unit, focused temporary dashboard/managed-launch
+tests, Biome, `git diff --check`, and the runner's skipped-mode compile. No
+production optimization is registered until BENCH-045 passes every stability,
+attribution, and product guard.
