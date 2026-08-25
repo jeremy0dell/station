@@ -330,6 +330,32 @@ describe("CLI command dispatch/get", () => {
     });
   });
 
+  it("rejects a same-id terminal record for another command type", async () => {
+    const fixture = await createTempState();
+    const command = reconcileCommand("cli-command-type-mismatch");
+    const mismatched = commandRecord(
+      "cmd_expected",
+      { type: "project.remove", payload: { projectId: "web" } },
+      "succeeded",
+    );
+
+    await expect(
+      executeTypedObserverCommand(
+        command,
+        { config: fixture.config, timeoutMs: 1000, waitForCompletion: true },
+        runningObserverDeps({
+          socketPath: fixture.socketPath,
+          dispatch: async () => receipt("cmd_expected"),
+          waitForCommand: async () => mismatched as TerminalCommandRecord,
+        }),
+      ),
+    ).rejects.toMatchObject({
+      tag: "CommandCliError",
+      code: "COMMAND_COMPLETION_MISMATCH",
+      commandId: "cmd_expected",
+    });
+  });
+
   it("surfaces observer startup failures", async () => {
     const fixture = await createTempState();
     const command = reconcileCommand("cli-command-startup");
