@@ -1489,7 +1489,14 @@ describe("tui dev script", () => {
       "bun run --cwd .. build:ensure && ./scripts/station-isolated.sh",
     );
     expect(stationPackage.scripts?.station).toContain("bun run --cwd .. build:ensure");
-    expect(stationPackage.scripts?.station).toContain("bun run repair:node-pty");
+    expect(stationPackage.scripts?.station).toContain("bun run station:runtime");
+    expect(stationPackage.scripts?.["station:runtime"]).toBe(
+      "bun run repair:node-pty && bun src/main.tsx",
+    );
+    expect(stationPackage.scripts?.["station:runtime"]).not.toContain("build:");
+    expect(stationPackage.scripts?.["dashboard:runtime"]).toBe(
+      "bun src/dashboardRenderer/main.tsx",
+    );
     expect(nodePtyRepairScript).toContain("bun install --frozen-lockfile");
     expect(isolatedScript).toContain("STATION_DEV_TOOLCHAIN_PREPARED_ROOT:-");
 

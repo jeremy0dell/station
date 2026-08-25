@@ -50,7 +50,7 @@
     "station:ui-dev": "cd station && bun run dev",
     "stn-ingress": "bin/stn-ingress",
     "station:link": "bun run build:ensure && bun link && bun run build:ensure",
-    "station:unlink": "bun unlink",
+    "station:unlink": "node scripts/unlink-station.mjs",
     "dev": "bun run build:ensure && node scripts/tui-dev.mjs",
     "station:devbox": "bun scripts/run-dev-toolchain.mjs scripts/station-devbox.mjs",
     "station:devbox:smoke": "node scripts/test-runners/run-station-devbox-smoke.mjs",
