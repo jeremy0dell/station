@@ -28,7 +28,13 @@ import {
   SessionCurrentParamsSchema,
   SnapshotGetParamsSchema,
 } from "./messages.js";
-import { markPrepareExternalLaunchServerProtocolPhase } from "./prepareExternalLaunchPhaseDiagnostic.js";
+import {
+  beginExpectedObserverHealthServerProtocolDiagnostic,
+  commitExpectedObserverHealthServerProtocolDiagnostic,
+  completeExpectedObserverHealthServerProtocolDiagnostic,
+  type ExpectedObserverHealthServerProtocolDiagnostic,
+  markPrepareExternalLaunchServerProtocolPhase,
+} from "./prepareExternalLaunchPhaseDiagnostic.js";
 import { listenUnixSocket, type NdjsonConnection, type UnixSocketServer } from "./transport.js";
 
 const defaultRequestTimeoutMs = 5000;
@@ -68,6 +74,7 @@ async function handleConnection(
   requestTimeoutMs: number,
   requestGuard: ((method: ProtocolMethod) => void) | undefined,
 ): Promise<void> {
+  let expectedObserverHealthDiagnostic: ExpectedObserverHealthServerProtocolDiagnostic | undefined;
   try {
     for await (const message of connection.messages()) {
       const request = ProtocolRequestSchema.safeParse(message);
@@ -76,12 +83,26 @@ async function handleConnection(
         continue;
       }
       if (request.data.method === "observer.health" && request.data.id.endsWith("_health")) {
-        markPrepareExternalLaunchServerProtocolPhase("expectedObserverHealthRequestParsed");
+        expectedObserverHealthDiagnostic = beginExpectedObserverHealthServerProtocolDiagnostic();
       }
       if (request.data.method === "agent.prepareExternalLaunch") {
+        commitExpectedObserverHealthServerProtocolDiagnostic(expectedObserverHealthDiagnostic);
+        expectedObserverHealthDiagnostic = undefined;
         markPrepareExternalLaunchServerProtocolPhase("prepareRequestParsed");
       }
-      await routeRequest(connection, api, request.data, requestTimeoutMs, requestGuard);
+      await routeRequest(
+        connection,
+        api,
+        request.data,
+        requestTimeoutMs,
+        requestGuard,
+        request.data.method === "observer.health" && request.data.id.endsWith("_health")
+          ? () =>
+              completeExpectedObserverHealthServerProtocolDiagnostic(
+                expectedObserverHealthDiagnostic,
+              )
+          : undefined,
+      );
     }
   } catch {
     connection.close();
@@ -94,6 +115,7 @@ async function routeRequest(
   request: ProtocolRequest,
   requestTimeoutMs: number,
   requestGuard: ((method: ProtocolMethod) => void) | undefined,
+  onExpectedObserverHealthResponseSent?: () => void,
 ): Promise<void> {
   try {
     requestGuard?.(request.method);
@@ -136,9 +158,7 @@ async function routeRequest(
   }
   try {
     sendResult(connection, request.id, request.method, result.value);
-    if (request.method === "observer.health" && request.id.endsWith("_health")) {
-      markPrepareExternalLaunchServerProtocolPhase("expectedObserverHealthResponseSent");
-    }
+    onExpectedObserverHealthResponseSent?.();
     if (request.method === "agent.prepareExternalLaunch") {
       markPrepareExternalLaunchServerProtocolPhase("prepareResponseSent");
     }
