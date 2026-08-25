@@ -1,4 +1,4 @@
-import type { SafeError } from "@station/contracts";
+import type { SafeError, SessionGroupRepairSummary } from "@station/contracts";
 
 export type ReconcileTiming = {
   reason: string;
@@ -11,4 +11,5 @@ export type ReconcileTiming = {
   harnessRunsObserved: number;
   eventsEmitted: number;
   errors: SafeError[];
+  sessionGroupRepair?: SessionGroupRepairSummary;
 };

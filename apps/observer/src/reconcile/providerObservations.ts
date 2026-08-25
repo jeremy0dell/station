@@ -1,6 +1,7 @@
 import type {
   HarnessCapabilities,
   HarnessRunObservation,
+  ProjectId,
   ProviderHealth,
   ProviderId,
   ProviderProjectConfig,
@@ -26,11 +27,50 @@ export type ProviderReadOptions = {
   logger?: StationLogger;
 };
 
+type CompleteProviderReadOutcome = {
+  status: "complete";
+  providerId: ProviderId;
+};
+
+type IndeterminateProviderReadOutcome = {
+  status: "indeterminate";
+  providerId: ProviderId;
+  failureCode: string;
+};
+
+export type WorktreeProjectReadOutcome = (
+  | CompleteProviderReadOutcome
+  | IndeterminateProviderReadOutcome
+) & {
+  providerType: "worktree";
+  projectId: ProjectId;
+};
+
+export type TerminalProviderReadOutcome = (
+  | CompleteProviderReadOutcome
+  | IndeterminateProviderReadOutcome
+) & {
+  providerType: "terminal";
+};
+
+export type HarnessProviderReadOutcome = (
+  | CompleteProviderReadOutcome
+  | IndeterminateProviderReadOutcome
+) & {
+  providerType: "harness";
+};
+
+export type ProviderReadOutcome =
+  | WorktreeProjectReadOutcome
+  | TerminalProviderReadOutcome
+  | HarnessProviderReadOutcome;
+
 // Caps concurrent provider subprocesses (wt list / listTargets) per reconcile.
 const providerReadConcurrency = 4;
 
 /**
- * Reads worktrees with bounded provider concurrency while preserving project order and health errors.
+ * Reads worktrees with bounded provider concurrency while preserving project order, health errors,
+ * and an explicit completeness outcome for every configured project.
  */
 export async function readWorktreeObservations(input: {
   providers: ProviderRegistry;
@@ -41,6 +81,7 @@ export async function readWorktreeObservations(input: {
 }): Promise<{
   worktrees: WorktreeObservation[];
   projectsScanned: number;
+  outcomes: WorktreeProjectReadOutcome[];
 }> {
   const provider = input.providers.worktree;
   const capabilities = provider.capabilities();
@@ -56,15 +97,24 @@ export async function readWorktreeObservations(input: {
   // Indexed collection keeps worktree order deterministic (config project order)
   // while listWorktrees calls run concurrently.
   const worktreesByProject: WorktreeObservation[][] = input.projects.map(() => []);
-  let projectsScanned = 0;
+  const outcomesByProject: Array<WorktreeProjectReadOutcome | undefined> = input.projects.map(
+    () => undefined,
+  );
   // One provider-level failure stops the remaining project scans: a hung
   // provider would otherwise burn its full timeout budget once per project.
-  let providerFailed = false;
+  let providerFailureCode: string | undefined;
   await forEachConcurrent(
     input.projects,
     { concurrency: providerReadConcurrency },
     async (project, index) => {
-      if (providerFailed) {
+      if (providerFailureCode !== undefined) {
+        outcomesByProject[index] = {
+          status: "indeterminate",
+          providerType: "worktree",
+          providerId: provider.id,
+          projectId: project.id,
+          failureCode: providerFailureCode,
+        };
         return;
       }
       const result = await runProviderReadBoundary(
@@ -83,7 +133,14 @@ export async function readWorktreeObservations(input: {
         () => provider.listWorktrees(project),
       );
       if (!result.ok) {
-        providerFailed = true;
+        providerFailureCode ??= result.error.code;
+        outcomesByProject[index] = {
+          status: "indeterminate",
+          providerType: "worktree",
+          providerId: provider.id,
+          projectId: project.id,
+          failureCode: result.error.code,
+        };
         await recordProviderReadFailure({
           providers: input.providers,
           providerId: provider.id,
@@ -99,16 +156,36 @@ export async function readWorktreeObservations(input: {
         return;
       }
 
-      projectsScanned += 1;
       worktreesByProject[index] = result.value;
+      outcomesByProject[index] = {
+        status: "complete",
+        providerType: "worktree",
+        providerId: provider.id,
+        projectId: project.id,
+      };
     },
   );
 
-  return { worktrees: worktreesByProject.flat(), projectsScanned };
+  const outcomes = input.projects.map(
+    (project, index): WorktreeProjectReadOutcome =>
+      outcomesByProject[index] ?? {
+        status: "indeterminate",
+        providerType: "worktree",
+        providerId: provider.id,
+        projectId: project.id,
+        failureCode: providerFailureCode ?? "WORKTREE_LIST_FAILED",
+      },
+  );
+  return {
+    worktrees: worktreesByProject.flat(),
+    projectsScanned: outcomes.filter((outcome) => outcome.status === "complete").length,
+    outcomes,
+  };
 }
 
 /**
- * Reads all terminal providers concurrently, retaining registration order and failure health.
+ * Reads all terminal providers concurrently, retaining registration order, failure health, and
+ * one explicit completeness outcome per provider.
  */
 export async function readTerminalTargetObservations(input: {
   providers: ProviderRegistry;
@@ -117,11 +194,15 @@ export async function readTerminalTargetObservations(input: {
   errors: SafeError[];
 }): Promise<{
   terminalTargets: TerminalTargetObservation[];
+  outcomes: TerminalProviderReadOutcome[];
 }> {
   const providers = Array.from(input.providers.terminals.values());
   // Indexed collection keeps target order deterministic (provider registration
   // order) while listTargets calls run concurrently.
   const targetsByProvider: TerminalTargetObservation[][] = providers.map(() => []);
+  const outcomesByProvider: Array<TerminalProviderReadOutcome | undefined> = providers.map(
+    () => undefined,
+  );
 
   await forEachConcurrent(
     providers,
@@ -154,7 +235,18 @@ export async function readTerminalTargetObservations(input: {
       );
       if (result.ok) {
         targetsByProvider[index] = result.value;
+        outcomesByProvider[index] = {
+          status: "complete",
+          providerType: "terminal",
+          providerId: provider.id,
+        };
       } else {
+        outcomesByProvider[index] = {
+          status: "indeterminate",
+          providerType: "terminal",
+          providerId: provider.id,
+          failureCode: result.error.code,
+        };
         await recordProviderReadFailure({
           providers: input.providers,
           providerId: provider.id,
@@ -171,11 +263,23 @@ export async function readTerminalTargetObservations(input: {
     },
   );
 
-  return { terminalTargets: targetsByProvider.flat() };
+  return {
+    terminalTargets: targetsByProvider.flat(),
+    outcomes: providers.map(
+      (provider, index): TerminalProviderReadOutcome =>
+        outcomesByProvider[index] ?? {
+          status: "indeterminate",
+          providerType: "terminal",
+          providerId: provider.id,
+          failureCode: "TERMINAL_LIST_FAILED",
+        },
+    ),
+  };
 }
 
 /**
- * Discovers harness runs sequentially per provider with the shared read boundary.
+ * Discovers harness runs sequentially per provider with the shared read boundary and records one
+ * explicit completeness outcome per provider.
  */
 export async function readHarnessObservations(input: {
   providers: ProviderRegistry;
@@ -188,9 +292,11 @@ export async function readHarnessObservations(input: {
 }): Promise<{
   harnessRuns: HarnessRunObservation[];
   harnessCapabilities: Record<string, HarnessCapabilities>;
+  outcomes: HarnessProviderReadOutcome[];
 }> {
   const harnessRuns: HarnessRunObservation[] = [];
   const harnessCapabilities: Record<string, HarnessCapabilities> = {};
+  const outcomes: HarnessProviderReadOutcome[] = [];
 
   for (const provider of input.providers.harnesses.values()) {
     const capabilities = provider.capabilities();
@@ -226,8 +332,20 @@ export async function readHarnessObservations(input: {
 
     if (result.ok) {
       harnessRuns.push(...result.value);
+      outcomes.push({
+        status: "complete",
+        providerType: "harness",
+        providerId: provider.id,
+      });
       continue;
     }
+
+    outcomes.push({
+      status: "indeterminate",
+      providerType: "harness",
+      providerId: provider.id,
+      failureCode: result.error.code,
+    });
 
     await recordProviderReadFailure({
       providers: input.providers,
@@ -243,7 +361,7 @@ export async function readHarnessObservations(input: {
     });
   }
 
-  return { harnessRuns, harnessCapabilities };
+  return { harnessRuns, harnessCapabilities, outcomes };
 }
 
 /**

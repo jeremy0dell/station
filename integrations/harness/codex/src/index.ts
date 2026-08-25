@@ -6,5 +6,6 @@ export * from "./hookAdapter.js";
 export * from "./hooks.js";
 export * from "./ingressRules.js";
 export * from "./launch.js";
+export * from "./permissionReviewerEvidence.js";
 export * from "./provider.js";
 export * from "./recoveryArtifacts.js";

@@ -80,13 +80,28 @@ export type CommandRecordFor<TCommand extends StationCommand> = TCommand extends
   : never;
 
 export type CommandRecord = CommandRecordFor<StationCommand>;
-export type SucceededCommandRecord = CommandRecord & { status: "succeeded" };
-export type FailedCommandRecord = CommandRecord & { status: "failed" };
-export type CommandExecutionOutcome =
+type CommandSubtypeFor<TCommand extends StationCommand> = Extract<
+  StationCommand,
+  { type: TCommand["type"] }
+>;
+
+export type SucceededCommandRecord<TCommand extends StationCommand = StationCommand> =
+  CommandRecordFor<CommandSubtypeFor<TCommand>> & { status: "succeeded" };
+export type FailedCommandRecord<TCommand extends StationCommand = StationCommand> =
+  CommandRecordFor<CommandSubtypeFor<TCommand>> & { status: "failed" };
+export type CommandExecutionOutcome<TCommand extends StationCommand = StationCommand> =
   | { status: "accepted"; receipt: AcceptedCommandReceipt }
   | { status: "rejected"; receipt: RejectedCommandReceipt }
-  | { status: "succeeded"; receipt: AcceptedCommandReceipt; record: SucceededCommandRecord }
-  | { status: "failed"; receipt: AcceptedCommandReceipt; record: FailedCommandRecord };
+  | {
+      status: "succeeded";
+      receipt: AcceptedCommandReceipt;
+      record: SucceededCommandRecord<TCommand>;
+    }
+  | {
+      status: "failed";
+      receipt: AcceptedCommandReceipt;
+      record: FailedCommandRecord<TCommand>;
+    };
 
 export const CommandRecordSchema = CommandRecordBaseSchema.superRefine((record, context) => {
   if (record.type !== record.command.type) {

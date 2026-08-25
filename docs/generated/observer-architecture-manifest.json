@@ -5810,6 +5810,12 @@
           "purpose": null
         },
         {
+          "name": "SessionGroupRepairInput",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "SessionGroupRepairResult",
           "kind": "type",
           "role": null,
@@ -5819,7 +5825,7 @@
           "name": "SessionGroupStore",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Maintains recorded project-local Group mutation and atomic reconcile repair of definitions, exclusive membership, and parentage. Fresh-session placement is owned by SessionStore."
+          "purpose": "Maintains recorded project-local Group mutation and atomic reconcile repair of definitions, exclusive membership, and parentage. Reconcile must name the projects whose complete provider evidence authorizes absent-member pruning; identity and parent corruption repair remains unconditional. Fresh-session placement is owned by SessionStore."
         },
         {
           "name": "SessionGroupStoreConflictReason",
@@ -7936,6 +7942,12 @@
           "purpose": null
         },
         {
+          "name": "SessionGroupRepairInput",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "SessionGroupRepairResult",
           "kind": "type",
           "role": null,
@@ -7945,7 +7957,7 @@
           "name": "SessionGroupStore",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Maintains recorded project-local Group mutation and atomic reconcile repair of definitions, exclusive membership, and parentage. Fresh-session placement is owned by SessionStore."
+          "purpose": "Maintains recorded project-local Group mutation and atomic reconcile repair of definitions, exclusive membership, and parentage. Reconcile must name the projects whose complete provider evidence authorizes absent-member pruning; identity and parent corruption repair remains unconditional. Fresh-session placement is owned by SessionStore."
         },
         {
           "name": "SessionGroupStoreConflictReason",
@@ -8290,7 +8302,7 @@
           "name": "SessionGroupStore",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Maintains recorded project-local Group mutation and atomic reconcile repair of definitions, exclusive membership, and parentage. Fresh-session placement is owned by SessionStore."
+          "purpose": "Maintains recorded project-local Group mutation and atomic reconcile repair of definitions, exclusive membership, and parentage. Reconcile must name the projects whose complete provider evidence authorizes absent-member pruning; identity and parent corruption repair remains unconditional. Fresh-session placement is owned by SessionStore."
         },
         {
           "name": "SessionStore",
@@ -8332,6 +8344,7 @@
             "ProviderObservationsIngressDedupeResult",
             "RecordProviderObservationInput",
             "SessionGroupMemberExpectation",
+            "SessionGroupRepairInput",
             "SessionGroupRepairResult",
             "SessionGroupStoreResult",
             "SessionHarnessDerivedStateRepair",
@@ -8653,6 +8666,7 @@
           "bindings": [
             "SessionGroupMemberExpectation",
             "SessionGroupRepairEvidence",
+            "SessionGroupRepairInput",
             "SessionGroupRepairResult",
             "SessionGroupStoreResult",
             "SessionSeedGroupPlacement",
@@ -9279,6 +9293,12 @@
           "purpose": null
         },
         {
+          "name": "SessionGroupRepairInput",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "SessionGroupRepairResult",
           "kind": "type",
           "role": null,
@@ -9358,6 +9378,7 @@
             "HarnessEventObservation",
             "HarnessRunObservation",
             "ObservedStatus",
+            "ProjectId",
             "ProviderHealth",
             "ProviderId",
             "SafeError",
@@ -10126,7 +10147,19 @@
       "path": "apps/observer/src/reconcile/providerObservations.ts",
       "exports": [
         {
+          "name": "HarnessProviderReadOutcome",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "ProviderReadOptions",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ProviderReadOutcome",
           "kind": "type",
           "role": null,
           "purpose": null
@@ -10152,6 +10185,18 @@
         {
           "name": "readWorktreeObservations",
           "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "TerminalProviderReadOutcome",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "WorktreeProjectReadOutcome",
+          "kind": "type",
           "role": null,
           "purpose": null
         }
@@ -10182,6 +10227,7 @@
           "bindings": [
             "HarnessCapabilities",
             "HarnessRunObservation",
+            "ProjectId",
             "ProviderHealth",
             "ProviderId",
             "ProviderProjectConfig",
@@ -10224,7 +10270,7 @@
           "specifier": "@station/contracts",
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "type-only",
-          "bindings": ["SafeError"]
+          "bindings": ["SafeError", "SessionGroupRepairSummary"]
         }
       ]
     },
@@ -10235,7 +10281,7 @@
           "name": "runReconcileOnce",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Orchestrates provider reads, relationship correlation, durable harness-event repair and overlays, cached metadata hydration, Group projection, snapshot assembly, and atomic session persistence. The same resolved title records feed snapshot composition and atomic reconcile persistence."
+          "purpose": "Orchestrates provider reads and their completeness evidence, relationship correlation, durable harness-event repair and overlays, cached metadata hydration, authority-scoped Group repair and projection, snapshot assembly, and atomic session persistence. The same resolved title records feed snapshot composition and atomic reconcile persistence."
         }
       ],
       "imports": [
@@ -10314,6 +10360,12 @@
           "bindings": ["ReconcileSnapshotInputs"]
         },
         {
+          "specifier": "./sessionGroupRepairAuthority.js",
+          "resolvedPath": "apps/observer/src/reconcile/sessionGroupRepairAuthority.ts",
+          "edgeKind": "runtime",
+          "bindings": ["decideSessionGroupRepairAuthority"]
+        },
+        {
           "specifier": "./sessionGroups.js",
           "resolvedPath": "apps/observer/src/reconcile/sessionGroups.ts",
           "edgeKind": "runtime",
@@ -10336,6 +10388,7 @@
             "ProviderId",
             "ProviderProjectConfig",
             "SafeError",
+            "SessionGroupRepairSummary",
             "StationSnapshot",
             "TerminalTargetObservation",
             "WorktreeObservation"
@@ -10414,7 +10467,7 @@
           "specifier": "../providerObservations.js",
           "resolvedPath": "apps/observer/src/reconcile/providerObservations.ts",
           "edgeKind": "type-only",
-          "bindings": ["ProviderReadOptions"]
+          "bindings": ["ProviderReadOptions", "ProviderReadOutcome"]
         },
         {
           "specifier": "../worktreeMetadataOverlay.js",
@@ -10499,6 +10552,31 @@
       ]
     },
     {
+      "path": "apps/observer/src/reconcile/sessionGroupRepairAuthority.ts",
+      "exports": [
+        {
+          "name": "decideSessionGroupRepairAuthority",
+          "kind": "function",
+          "role": "POLICY",
+          "purpose": "Decides which configured projects have enough provider evidence to prune absent Group members. Terminal or harness uncertainty blocks absence pruning globally because assignments retain no provider provenance; positive identity corruption remains repairable by persistence."
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "./providerObservations.js",
+          "resolvedPath": "apps/observer/src/reconcile/providerObservations.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ProviderReadOutcome"]
+        },
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ProjectId", "SessionGroupRepairBlocker", "SessionGroupRepairSummary"]
+        }
+      ]
+    },
+    {
       "path": "apps/observer/src/reconcile/sessionGroups.ts",
       "exports": [
         {
@@ -10511,7 +10589,7 @@
           "name": "reconcileSessionGroups",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Repairs durable Group membership and parentage against canonical state, then projects configured Groups with reason-specific diagnostics."
+          "purpose": "Repairs durable Group identity and parentage against canonical state, prunes absent membership only for explicitly authoritative projects, then projects configured Groups with reason-specific diagnostics."
         },
         {
           "name": "SessionGroupProjection",
@@ -10531,7 +10609,13 @@
           "specifier": "@station/contracts",
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "type-only",
-          "bindings": ["ProviderProjectConfig", "SafeError", "SessionGroupView", "SessionView"]
+          "bindings": [
+            "ProjectId",
+            "ProviderProjectConfig",
+            "SafeError",
+            "SessionGroupView",
+            "SessionView"
+          ]
         }
       ]
     },
@@ -13684,6 +13768,73 @@
   ],
   "controlledDeclarations": [
     {
+      "path": "apps/cli/src/commands/command.ts",
+      "declaration": "executeTypedObserverCommand",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Starts or selects the pinned Observer, dispatches one typed Station command, and optionally reloads its durable terminal outcome through the race-safe protocol completion wait.",
+      "dependencies": [
+        {
+          "path": "apps/cli/src/observerProcess.ts",
+          "declaration": "startObserver",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "packages/contracts/src/observer.ts",
+          "declaration": "ObserverApi",
+          "kind": "type",
+          "role": "DRIVING PORT",
+          "edgeKind": "type-only"
+        },
+        {
+          "path": "packages/protocol/src/client.ts",
+          "declaration": "createObserverClient",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
+      "path": "apps/cli/src/commands/command.ts",
+      "declaration": "runCommandCommand",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Translates raw CLI argv and stdin JSON into typed Observer command execution or record lookup.",
+      "dependencies": [
+        {
+          "path": "apps/cli/src/commands/command.ts",
+          "declaration": "executeTypedObserverCommand",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/observerProcess.ts",
+          "declaration": "startObserver",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "packages/contracts/src/observer.ts",
+          "declaration": "ObserverApi",
+          "kind": "type",
+          "role": "DRIVING PORT",
+          "edgeKind": "type-only"
+        },
+        {
+          "path": "packages/protocol/src/client.ts",
+          "declaration": "createObserverClient",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
       "path": "apps/cli/src/commands/debugLogs.ts",
       "declaration": "runDebugLogsCommand",
       "kind": "function",
@@ -13827,6 +13978,22 @@
         {
           "path": "packages/protocol/src/client.ts",
           "declaration": "createObserverClient",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
+      "path": "apps/cli/src/commands/project.ts",
+      "declaration": "runProjectCommand",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Translates project CLI intent into configuration reads or typed Observer project commands.",
+      "dependencies": [
+        {
+          "path": "apps/cli/src/commands/command.ts",
+          "declaration": "executeTypedObserverCommand",
           "kind": "function",
           "role": "ADAPTER",
           "edgeKind": "runtime"
@@ -14344,11 +14511,18 @@
       "declaration": "sendCodexHookPayload",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Admits Codex's forwarded events before applying Station ownership/cwd correlation and translating hook stdin into shared harness ingress.",
+      "purpose": "Admits Codex's forwarded events, applies Station correlation, then adds bounded provider-private permission-reviewer evidence before shared harness ingress.",
       "dependencies": [
         {
           "path": "apps/cli/src/ingress/sender.ts",
           "declaration": "sendProviderHookEvent",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "integrations/harness/codex/src/permissionReviewerEvidence.ts",
+          "declaration": "enrichCodexPermissionReviewerEvidence",
           "kind": "function",
           "role": "ADAPTER",
           "edgeKind": "runtime"
@@ -16018,7 +16192,7 @@
       "declaration": "SessionGroupStore",
       "kind": "interface",
       "role": "DRIVEN PORT",
-      "purpose": "Maintains recorded project-local Group mutation and atomic reconcile repair of definitions, exclusive membership, and parentage. Fresh-session placement is owned by SessionStore.",
+      "purpose": "Maintains recorded project-local Group mutation and atomic reconcile repair of definitions, exclusive membership, and parentage. Reconcile must name the projects whose complete provider evidence authorizes absent-member pruning; identity and parent corruption repair remains unconditional. Fresh-session placement is owned by SessionStore.",
       "dependencies": []
     },
     {
@@ -16103,7 +16277,7 @@
       "declaration": "runReconcileOnce",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Orchestrates provider reads, relationship correlation, durable harness-event repair and overlays, cached metadata hydration, Group projection, snapshot assembly, and atomic session persistence. The same resolved title records feed snapshot composition and atomic reconcile persistence.",
+      "purpose": "Orchestrates provider reads and their completeness evidence, relationship correlation, durable harness-event repair and overlays, cached metadata hydration, authority-scoped Group repair and projection, snapshot assembly, and atomic session persistence. The same resolved title records feed snapshot composition and atomic reconcile persistence.",
       "dependencies": [
         {
           "path": "apps/observer/src/persistence/ports.ts",
@@ -16155,6 +16329,13 @@
           "edgeKind": "runtime"
         },
         {
+          "path": "apps/observer/src/reconcile/sessionGroupRepairAuthority.ts",
+          "declaration": "decideSessionGroupRepairAuthority",
+          "kind": "function",
+          "role": "POLICY",
+          "edgeKind": "runtime"
+        },
+        {
           "path": "apps/observer/src/reconcile/sessionGroups.ts",
           "declaration": "reconcileSessionGroups",
           "kind": "function",
@@ -16162,6 +16343,14 @@
           "edgeKind": "runtime"
         }
       ]
+    },
+    {
+      "path": "apps/observer/src/reconcile/sessionGroupRepairAuthority.ts",
+      "declaration": "decideSessionGroupRepairAuthority",
+      "kind": "function",
+      "role": "POLICY",
+      "purpose": "Decides which configured projects have enough provider evidence to prune absent Group members. Terminal or harness uncertainty blocks absence pruning globally because assignments retain no provider provenance; positive identity corruption remains repairable by persistence.",
+      "dependencies": []
     },
     {
       "path": "apps/observer/src/reconcile/sessionGroups.ts",
@@ -16176,7 +16365,7 @@
       "declaration": "reconcileSessionGroups",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Repairs durable Group membership and parentage against canonical state, then projects configured Groups with reason-specific diagnostics.",
+      "purpose": "Repairs durable Group identity and parentage against canonical state, prunes absent membership only for explicitly authoritative projects, then projects configured Groups with reason-specific diagnostics.",
       "dependencies": [
         {
           "path": "apps/observer/src/persistence/ports.ts",
@@ -17195,7 +17384,7 @@
       "declaration": "codexHookAdapter",
       "kind": "const",
       "role": "ADAPTER",
-      "purpose": "Normalizes Codex hook delivery into shared provider-event and harness-report contracts. Inherited Station identity is authoritative only when Codex cwd remains in the stamped worktree.",
+      "purpose": "Normalizes Codex hook delivery, including provider-private reviewer evidence, into shared harness reports. Inherited Station identity is authoritative only when Codex cwd remains in the stamped worktree.",
       "dependencies": [
         {
           "path": "packages/harness-shared/src/hookAdapter.ts",
@@ -17205,6 +17394,14 @@
           "edgeKind": "runtime"
         }
       ]
+    },
+    {
+      "path": "integrations/harness/codex/src/permissionReviewerEvidence.ts",
+      "declaration": "enrichCodexPermissionReviewerEvidence",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Removes caller-supplied reviewer claims and reads a bounded Codex transcript tail so only a strictly parsed, matching turn context can add provider-private permission-reviewer evidence.",
+      "dependencies": []
     },
     {
       "path": "integrations/harness/codex/src/provider.ts",
