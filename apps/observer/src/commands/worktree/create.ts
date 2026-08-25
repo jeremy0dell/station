@@ -4,6 +4,10 @@ import type { ProviderRegistry } from "../../providers/registry.js";
 import type { ObserverCore } from "../../reconcile/core.js";
 import type { ObserverEventBus } from "../../runtime/eventBus.js";
 import type { StationLogger } from "../../stationLogger.js";
+import {
+  createWorktreeCreateCoordinator,
+  type WorktreeCreateCoordinator,
+} from "../../worktreeCreateCoordinator.js";
 import { assertCommandType } from "../assertCommand.js";
 import type { HarnessLaunchPreflight } from "../harnessLaunchPreflight.js";
 import type { CommandResultHandler } from "../queue.js";
@@ -18,6 +22,7 @@ export type CreateWorktreeCreateHandlerOptions = {
   eventBus?: ObserverEventBus | undefined;
   clock?: RuntimeClock | undefined;
   logger?: StationLogger | undefined;
+  worktreeCreates?: WorktreeCreateCoordinator | undefined;
 };
 
 /**
@@ -25,12 +30,15 @@ export type CreateWorktreeCreateHandlerOptions = {
  *
  * Worktree-only half of session.create for Station: create and publish the
  * worktree, preflighting the selected launch harness before mutation when Station
- * will immediately host an agent through prepareExternalLaunch, then returns
- * the exact project and worktree identities created by the provider.
+ * will immediately host an agent through prepareExternalLaunch. Launch-bound
+ * creates publish the provider's authoritative observation directly; the launch's
+ * scheduled reconcile verifies the complete runtime graph. Success returns the
+ * exact project and worktree identities created by the provider.
  */
 export function createWorktreeCreateHandler(
   options: CreateWorktreeCreateHandlerOptions,
 ): CommandResultHandler<"worktree.create"> {
+  const worktreeCreates = options.worktreeCreates ?? createWorktreeCreateCoordinator();
   return async (context) => {
     assertCommandType(context, "worktree.create");
     throwIfAborted(context.signal);
@@ -65,9 +73,27 @@ export function createWorktreeCreateHandler(
           provider: options.providers.worktree.id,
         },
       },
-      () => options.providers.worktree.createWorktree(request),
+      (signal) =>
+        worktreeCreates.run(project.id, signal, () =>
+          options.providers.worktree.createWorktree(request),
+        ),
     );
     throwIfAborted(context.signal);
+
+    const result = {
+      type: "worktree.create" as const,
+      projectId: project.id,
+      worktreeId: worktree.id,
+    };
+    if (payload.launchHarness !== undefined) {
+      const event = await options.core.commitCreatedWorktreeObservation(worktree);
+      if (event !== undefined) {
+        options.eventBus?.publish(event);
+      }
+      if (options.core.getSnapshot().rows.some((row) => row.id === worktree.id)) {
+        return result;
+      }
+    }
 
     await reconcileAndPublish({
       core: options.core,
@@ -76,10 +102,6 @@ export function createWorktreeCreateHandler(
       reason: "command:worktree.create",
       trace: context.trace,
     });
-    return {
-      type: "worktree.create",
-      projectId: project.id,
-      worktreeId: worktree.id,
-    };
+    return result;
   };
 }

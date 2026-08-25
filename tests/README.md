@@ -42,6 +42,41 @@ Codex hook reconciliation has a focused cross-system gate:
 pnpm test:e2e:codex-hook-reconciliation
 ```
 
+## Quick Session performance
+
+The virtual-monotonic matrix is deterministic and runs in `test:all`:
+
+```sh
+pnpm benchmark:quick-session
+```
+
+The following opt-in lanes use installed Worktrunk, Git, Bun, or real Station
+Host processes and write raw output beneath
+`.dev-state/performance/quick-session/`:
+
+```sh
+pnpm benchmark:quick-session:real
+pnpm benchmark:quick-session:worktrunk
+pnpm benchmark:quick-session:native-git
+pnpm benchmark:quick-session:pty
+pnpm benchmark:quick-session:end-to-end
+pnpm benchmark:quick-session:end-to-end-paired
+```
+
+The real Observer matrix uses 49-worktree repositories and covers warm/cold
+singles, 3/5/20 bursts, and two projects in parallel. The paired end-to-end lane
+counterbalances fake and real terminal boundaries against a healthy warmed Host,
+and requires exact command, worktree, session, PTY, scan, inventory, and cleanup
+outcomes.
+
+See the [final report](performance/quick-session/report.md) for benchmark
+boundaries and retained results, and the
+[experiment ledger](performance/quick-session/ledger.md) for preregistered
+hypotheses and mechanical keep/revert decisions. Generated artifacts and
+one-off diagnostic runners are intentionally excluded from the review diff;
+the complete redacted evidence set is preserved on the
+[2026-08-25 evidence archive](https://github.com/jeremyodell/station/tree/archive/quick-session-performance-evidence-2026-08-25/tests/performance/quick-session).
+
 The pre-push hook is intentionally lint-only. It does not replace `test:all` or
 the focused gate required by the change.
 
@@ -54,6 +89,8 @@ the focused gate required by the change.
   clipping-edge focus, resize, and pointer/keyboard convergence; deterministic
   operation counts are preferred to wall-clock assertions for scaling policy.
 - Cross-system tests live under top-level `tests/`.
+- Repeatable performance matrices live under `tests/performance/`; generated
+  raw output belongs under `.dev-state/performance/`, not in ordinary PRs.
 - `tests/support/` owns fake providers, fake tools, temporary projects,
   assertions, databases, and sockets.
 - `tests/diagnostics/injected-failures/` owns deterministic evidence fixtures.

@@ -436,6 +436,36 @@ describe("observer command queue", () => {
     sqlite.close();
   });
 
+  it("serializes the same create branch while allowing another branch to start", async () => {
+    const { sqlite, queue } = createPersistenceAndQueue();
+    const starts: string[] = [];
+    let releaseFirst = () => {};
+    const firstBlocked = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+
+    queue.registerHandler("worktree.create", async ({ commandId }) => {
+      starts.push(commandId);
+      if (commandId === "cmd_1") await firstBlocked;
+    });
+
+    await Promise.all([
+      queue.dispatch(createWorktreeCommand),
+      queue.dispatch(createWorktreeCommand),
+      queue.dispatch({
+        type: "worktree.create",
+        payload: { projectId: "web", branch: "feature/payments" },
+      }),
+    ]);
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(starts).toEqual(["cmd_1", "cmd_3"]);
+    releaseFirst();
+    await queue.drain();
+    expect(starts).toEqual(["cmd_1", "cmd_3", "cmd_2"]);
+    sqlite.close();
+  });
+
   it("serializes terminal close execution by session scope", async () => {
     const { sqlite, queue } = createPersistenceAndQueue();
     const starts: string[] = [];

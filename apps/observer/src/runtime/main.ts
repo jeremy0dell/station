@@ -45,6 +45,7 @@ import type { ProviderRegistry } from "../providers/registry.js";
 import { createObserverCore, providerProjectsFromConfig } from "../reconcile/core.js";
 import { openObserverSqlite } from "../sqlite.js";
 import type { StationLogger } from "../stationLogger.js";
+import { createWorktreeCreateCoordinator } from "../worktreeCreateCoordinator.js";
 import { createWorktreeMutationCoordinator } from "../worktreeMutationCoordinator.js";
 import { createObserverApi } from "./api.js";
 import { createObserverEventBus } from "./eventBus.js";
@@ -522,6 +523,7 @@ async function runClaimedObserverRuntime(input: {
   await persistence.pruneExpiredProviderObservations(pruneAt);
   const commandQueue = createCommandQueue({ persistence, clock: systemClock, eventBus, logger });
   const worktreeMutations = createWorktreeMutationCoordinator();
+  const worktreeCreates = createWorktreeCreateCoordinator();
   // Fire-and-forget version probes only populate provider-owned cache state.
   void providers.refreshHarnessVersions();
   const featureFlags = createFeatureFlagEvaluator({
@@ -559,6 +561,7 @@ async function runClaimedObserverRuntime(input: {
     projectConfigWriter,
     launchPreflight,
     worktreeMutations,
+    worktreeCreates,
   });
   const eventHooks = createConfiguredEventHooks(config, eventBus, logger);
   const duplicateProcessEvidence =
@@ -676,6 +679,7 @@ async function runClaimedObserverRuntime(input: {
     persistenceHealth: persistence,
     commandQueue,
     worktreeMutations,
+    worktreeCreates,
     eventBus,
     diagnosticEvidenceSource,
     hookSpoolDir: spoolDir,

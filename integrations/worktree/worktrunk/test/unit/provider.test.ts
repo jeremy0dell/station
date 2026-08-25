@@ -747,6 +747,302 @@ describe("WorktrunkProvider", () => {
     ]);
   });
 
+  it("uses native Git for an explicitly hooks-disabled managed create and preserves discovery ID", async () => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), "station-wt-native-create-")));
+    const managedRoot = join(root, "managed");
+    const calls: ExternalCommandInput[] = [];
+    let targetPath = "";
+    const managedProject: ProviderProjectConfig = {
+      ...project,
+      root,
+      worktrunk: { ...project.worktrunk, managedRoot },
+    };
+    const provider = testProvider({
+      command: "wt",
+      useLifecycleHooks: false,
+      clock: { now: () => new Date(now) },
+      runner: async (input) => {
+        calls.push(input);
+        if (input.command === "git" && input.args?.includes("worktree")) {
+          targetPath = input.args.at(-2) ?? "";
+          return result(input, "");
+        }
+        if (input.command === "git" && input.args?.includes("rev-parse")) {
+          return result(input, `${targetPath}\nfeature\n`);
+        }
+        return result(input, JSON.stringify([{ path: targetPath, branch: "feature" }]));
+      },
+    });
+
+    try {
+      const created = await provider.createWorktree({ project: managedProject, branch: "feature" });
+      expect(created).toMatchObject({
+        provider: "worktrunk",
+        projectId: "web",
+        branch: "feature",
+        path: targetPath,
+        registrationIdentity: `git-registration:${targetPath}`,
+        source: "station",
+        state: "exists",
+      });
+      expect(calls.map((call) => call.command)).toEqual(["git", "git"]);
+      expect(calls[0]?.args).toEqual([
+        "-C",
+        root,
+        "worktree",
+        "add",
+        "--quiet",
+        "-b",
+        "feature",
+        targetPath,
+        "main",
+      ]);
+
+      const [discovered] = await provider.listWorktrees(managedProject);
+      expect(discovered?.id).toBe(created.id);
+      expect(discovered?.path).toBe(targetPath);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps hooks-enabled managed creates on Worktrunk", async () => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), "station-wt-hooks-create-")));
+    const targetPath = join(root, "managed", "feature");
+    const calls: ExternalCommandInput[] = [];
+    const managedProject: ProviderProjectConfig = {
+      ...project,
+      root,
+      worktrunk: { ...project.worktrunk, managedRoot: join(root, "managed") },
+    };
+    const provider = testProvider({
+      command: "wt",
+      useLifecycleHooks: true,
+      clock: { now: () => new Date(now) },
+      runner: async (input) => {
+        calls.push(input);
+        return result(input, JSON.stringify([{ path: targetPath, branch: "feature" }]));
+      },
+    });
+
+    try {
+      await expect(
+        provider.createWorktree({ project: managedProject, branch: "feature" }),
+      ).resolves.toMatchObject({ path: targetPath, branch: "feature" });
+      expect(calls.some((call) => call.command === "git" && call.args?.includes("worktree"))).toBe(
+        false,
+      );
+      expect(
+        calls.some(
+          (call) =>
+            call.command === "wt" && call.args?.includes("switch") && call.args.includes("--yes"),
+        ),
+      ).toBe(true);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps hooks-disabled paths outside the managed root on Worktrunk", async () => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), "station-wt-external-create-")));
+    const targetPath = join(root, "external", "feature");
+    const calls: ExternalCommandInput[] = [];
+    const managedProject: ProviderProjectConfig = {
+      ...project,
+      root,
+      worktrunk: { ...project.worktrunk, managedRoot: join(root, "managed") },
+    };
+    const provider = testProvider({
+      command: "wt",
+      useLifecycleHooks: false,
+      clock: { now: () => new Date(now) },
+      runner: async (input) => {
+        calls.push(input);
+        return result(input, JSON.stringify([{ path: targetPath, branch: "feature" }]));
+      },
+    });
+
+    try {
+      await expect(
+        provider.createWorktree({
+          project: managedProject,
+          branch: "feature",
+          path: targetPath,
+        }),
+      ).resolves.toMatchObject({ path: targetPath, branch: "feature" });
+      expect(calls.some((call) => call.command === "git" && call.args?.includes("worktree"))).toBe(
+        false,
+      );
+      expect(
+        calls.some(
+          (call) =>
+            call.command === "wt" &&
+            call.args?.includes("switch") &&
+            call.args.includes("--no-hooks"),
+        ),
+      ).toBe(true);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("seeds a native managed create before refreshing provider evidence", async () => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), "station-wt-native-seed-")));
+    const targetPath = join(root, "managed", "feature");
+    const sourcePath = join(root, "source");
+    const calls: ExternalCommandInput[] = [];
+    const managedProject: ProviderProjectConfig = {
+      ...project,
+      root,
+      worktrunk: { ...project.worktrunk, managedRoot: join(root, "managed") },
+    };
+    const provider = testProvider({
+      command: "wt",
+      useLifecycleHooks: false,
+      clock: { now: () => new Date(now) },
+      runner: async (input) => {
+        calls.push(input);
+        if (input.command === "wt") {
+          return result(
+            input,
+            JSON.stringify([{ path: targetPath, branch: "feature", dirty: true }]),
+          );
+        }
+        if (input.args?.includes("rev-parse")) {
+          return result(input, `${targetPath}\nfeature\n`);
+        }
+        if (input.args?.includes("write-tree")) {
+          return result(input, "0123456789abcdef0123456789abcdef01234567\n");
+        }
+        return result(input, "");
+      },
+    });
+
+    try {
+      await expect(
+        provider.createWorktree({
+          project: managedProject,
+          branch: "feature",
+          seedFrom: { path: sourcePath },
+        }),
+      ).resolves.toMatchObject({ path: targetPath, branch: "feature", dirty: true });
+      expect(calls.map((call) => call.args)).toEqual([
+        ["-C", root, "worktree", "add", "--quiet", "-b", "feature", targetPath, "main"],
+        [
+          "-C",
+          targetPath,
+          "rev-parse",
+          "--path-format=absolute",
+          "--show-toplevel",
+          "--abbrev-ref=strict",
+          "HEAD",
+        ],
+        ["-C", sourcePath, "read-tree", "HEAD"],
+        ["-C", sourcePath, "add", "-A"],
+        ["-C", sourcePath, "write-tree"],
+        ["-C", targetPath, "read-tree", "-m", "-u", "0123456789abcdef0123456789abcdef01234567"],
+        ["list", "--format=json"],
+      ]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects native create evidence whose verified branch does not match", async () => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), "station-wt-native-mismatch-")));
+    const managedProject: ProviderProjectConfig = {
+      ...project,
+      root,
+      worktrunk: { ...project.worktrunk, managedRoot: join(root, "managed") },
+    };
+    const provider = testProvider({
+      command: "wt",
+      useLifecycleHooks: false,
+      clock: { now: () => new Date(now) },
+      runner: async (input) =>
+        result(input, input.args?.includes("rev-parse") ? `${input.cwd}\nwrong-branch\n` : ""),
+    });
+
+    try {
+      await expect(
+        provider.createWorktree({ project: managedProject, branch: "feature" }),
+      ).rejects.toMatchObject({
+        code: "WORKTRUNK_WORKTREE_CHANGED",
+        message: "Git created the worktree but Station could not verify its exact path and branch.",
+      });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps base-less managed creates on Worktrunk", async () => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), "station-wt-native-baseless-")));
+    const calls: ExternalCommandInput[] = [];
+    const managedProject: ProviderProjectConfig = {
+      ...project,
+      root,
+      worktrunk: { enabled: true, managedRoot: join(root, "managed") },
+    };
+    const provider = testProvider({
+      command: "wt",
+      useLifecycleHooks: false,
+      clock: { now: () => new Date(now) },
+      runner: async (input) => {
+        calls.push(input);
+        return result(
+          input,
+          JSON.stringify([{ path: join(root, "managed", "feature"), branch: "feature" }]),
+        );
+      },
+    });
+
+    try {
+      await provider.createWorktree({ project: managedProject, branch: "feature" });
+      expect(calls.some((call) => call.command === "git")).toBe(false);
+      expect(calls.some((call) => call.args?.includes("switch"))).toBe(true);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("classifies duplicate branches from native Git creation", async () => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), "station-wt-native-duplicate-")));
+    const managedProject: ProviderProjectConfig = {
+      ...project,
+      root,
+      worktrunk: { ...project.worktrunk, managedRoot: join(root, "managed") },
+    };
+    const provider = testProvider({
+      command: "wt",
+      useLifecycleHooks: false,
+      clock: { now: () => new Date(now) },
+      runner: async () => {
+        throw Object.assign(new Error("git failed"), {
+          code: 128,
+          stderr: "fatal: a branch named 'feature' already exists",
+        });
+      },
+    });
+
+    try {
+      await expect(
+        provider.createWorktree({ project: managedProject, branch: "feature" }),
+      ).rejects.toMatchObject({
+        code: "WORKTRUNK_BRANCH_EXISTS",
+        diagnosticDetails: [
+          expect.objectContaining({
+            type: "external_command",
+            operation: "provider.worktrunk.native-create",
+            command: expect.stringContaining("git -C"),
+            exitCode: 128,
+          }),
+        ],
+      });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("pre-approves Worktrunk hook prompts for automated mutations when lifecycle hooks are enabled", async () => {
     const calls: ExternalCommandInput[] = [];
     const provider = testProvider({

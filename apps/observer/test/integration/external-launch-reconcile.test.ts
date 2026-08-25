@@ -31,6 +31,7 @@ import {
   providerIngressSpoolDir,
 } from "../../src/internal";
 import type { StationLogger } from "../../src/stationLogger";
+import type { WorktreeCreateCoordinator } from "../../src/worktreeCreateCoordinator";
 import { FakeDiagnosticEvidenceSource } from "../support/diagnosticEvidenceSources.js";
 
 const now = "2026-05-20T12:00:00.000Z";
@@ -61,6 +62,34 @@ const config: StationConfig = {
 // spooled during an agent launch was never flushed. Prove the launch-triggered
 // reconcile drains the spool, the same as api.reconcile does.
 describe("observer external-launch reconcile", () => {
+  it("defers global post-launch verification until all project creates are idle", async () => {
+    const stateDir = await mkdtemp(join(tmpdir(), "station-observer-ext-idle-"));
+    const projectIdle = deferred<void>();
+    const worktreeCreates: WorktreeCreateCoordinator = {
+      run: (_projectId, _signal, create) => create(),
+      whenProjectIdle: () => projectIdle.promise,
+      whenIdle: () => projectIdle.promise,
+    };
+    const fixture = createFixture(providerIngressSpoolDir(stateDir), {
+      worktreeCreates,
+      hookReconcileDebounceMs: 0,
+      interactiveReconcileDebounceMs: 0,
+    });
+    await fixture.api.reconcile("seed");
+    const scansBeforeLaunch = fixture.worktree.listCalls;
+
+    await fixture.api.prepareExternalLaunch({
+      projectId: "web",
+      worktreeId: "wt_web_feature",
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(fixture.worktree.listCalls).toBe(scansBeforeLaunch);
+
+    projectIdle.resolve();
+    await waitFor(() => fixture.worktree.listCalls > scansBeforeLaunch);
+    fixture.sqlite.close();
+  });
+
   it("publishes the custom title and drains the hook spool after external launch", async () => {
     const stateDir = await mkdtemp(join(tmpdir(), "station-observer-ext-"));
     const spoolDir = providerIngressSpoolDir(stateDir);
@@ -69,6 +98,10 @@ describe("observer external-launch reconcile", () => {
     // Seed the snapshot first (no spool record yet) so prepareExternalLaunch can
     // find the worktree without this reconcile draining the record under test.
     await fixture.api.reconcile("seed");
+    const scansBeforeLaunch = fixture.worktree.listCalls;
+    const sessionEvents = fixture.eventBus
+      .subscribe({ type: "session.created" })
+      [Symbol.asyncIterator]();
 
     const spoolPath = await writeHookSpoolRecordFixture({ spoolDir, spoolId: "spool_ext" });
     expect(await fileExists(spoolPath)).toBe(true);
@@ -80,6 +113,23 @@ describe("observer external-launch reconcile", () => {
     });
     expect(result.kind).toBe("prepared");
     if (result.kind !== "prepared") throw new Error("expected prepared launch");
+    expect(fixture.worktree.listCalls).toBe(scansBeforeLaunch);
+    expect((await fixture.api.getSnapshot()).sessions).toEqual([
+      expect.objectContaining({
+        id: result.sessionId,
+        worktreeId: "wt_web_feature",
+        title: "Hexagonal PT 12",
+        terminal: expect.objectContaining({ provider: "native", state: "open" }),
+      }),
+    ]);
+    await expect(sessionEvents.next()).resolves.toMatchObject({
+      done: false,
+      value: {
+        type: "session.created",
+        session: { id: result.sessionId, title: "Hexagonal PT 12" },
+      },
+    });
+    await sessionEvents.return?.();
     fixture.harness.addRun(
       createFakeHarnessRun({
         id: "run_web_feature",
@@ -148,6 +198,12 @@ describe("observer external-launch reconcile", () => {
       },
     });
     if (result.kind !== "prepared") throw new Error("expected prepared fork launch");
+    const immediateSnapshot = await fixture.api.getSnapshot();
+    expect(immediateSnapshot.sessionGroups.find((group) => group.id === "group_source")).toEqual(
+      expect.objectContaining({
+        sessionIds: expect.arrayContaining(["ses_web_source", result.sessionId]),
+      }),
+    );
     await fixture.api.reconcile("verify-grouped-fork");
 
     const snapshot = await fixture.api.getSnapshot();
@@ -456,6 +512,8 @@ function createFixture(
     logger?: StationLogger;
     config?: StationConfig;
     hookReconcileDebounceMs?: number;
+    interactiveReconcileDebounceMs?: number;
+    worktreeCreates?: WorktreeCreateCoordinator;
     worktrees?: WorktreeObservation[];
   } = {},
 ) {
@@ -494,6 +552,7 @@ function createFixture(
     persistence,
     persistenceHealth: persistence,
     commandQueue: queue,
+    ...(options.worktreeCreates === undefined ? {} : { worktreeCreates: options.worktreeCreates }),
     eventBus,
     diagnosticEvidenceSource: new FakeDiagnosticEvidenceSource(),
     hookSpoolDir: spoolDir,
@@ -502,9 +561,12 @@ function createFixture(
     ...(options.hookReconcileDebounceMs === undefined
       ? {}
       : { hookReconcileDebounceMs: options.hookReconcileDebounceMs }),
+    ...(options.interactiveReconcileDebounceMs === undefined
+      ? {}
+      : { interactiveReconcileDebounceMs: options.interactiveReconcileDebounceMs }),
     ...(options.logger === undefined ? {} : { logger: options.logger }),
   });
-  return { api, harness, persistence, sqlite, worktree };
+  return { api, eventBus, harness, persistence, sqlite, worktree };
 }
 
 class CountingWorktreeProvider extends FakeWorktreeProvider {
@@ -562,4 +624,12 @@ async function waitFor(predicate: () => boolean | Promise<boolean>): Promise<voi
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
   throw new Error("Timed out waiting for predicate.");
+}
+
+function deferred<T>() {
+  let resolve!: (value?: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((innerResolve) => {
+    resolve = innerResolve;
+  });
+  return { promise, resolve };
 }

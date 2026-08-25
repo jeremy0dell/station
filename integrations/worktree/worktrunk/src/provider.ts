@@ -43,6 +43,7 @@ import {
 import { WorktrunkProviderError, type WorktrunkProviderErrorCode } from "./errors.js";
 import { doctorWorktrunkHooks } from "./hooks.js";
 import { applyRecoveryBreadcrumbMetadata } from "./metadata.js";
+import { createNativeWorktree, type NativeCreateOptions } from "./nativeCreate.js";
 import { parseWorktrunkListJson, parseWorktrunkListPayload } from "./parse.js";
 import {
   WORKTRUNK_HOOK_NAMES,
@@ -72,7 +73,9 @@ const defaultCapabilities: WorktreeCapabilities = {
  * Hook diagnostics use an atomic requester runtime when supplied and retain the whole Observer composition
  * expectation as a fallback. List results are returned without retaining inventory; only the Worktrunk
  * project identifier needed to preserve managed-path precedence is memoized. Checkout roots are validated
- * before Worktrunk runs, and removal freshly revalidates native Git identity, path, and branch before mutation.
+ * before mutation. Explicitly hooks-disabled managed creates use a narrow native Git path with exact post-create
+ * verification; other creates and all removal use Worktrunk. Removal freshly revalidates native Git identity,
+ * path, and branch before mutation.
  */
 export class WorktrunkProvider implements WorktreeProvider {
   readonly id: ProviderId = "worktrunk";
@@ -297,44 +300,63 @@ export class WorktrunkProvider implements WorktreeProvider {
     await this.#assertProjectRootUsable(request.project);
     const base = request.base ?? request.project.worktrunk.base;
     const pathEnv = worktreePathEnv(request.project, request.branch, request.path);
-    const managedPathArgs = await this.#managedWorktreePathArgs(request.project, pathEnv);
-    const output = await this.#run(
-      this.#args([
-        ...managedPathArgs,
-        "switch",
-        ...this.#automationHookArgs(),
-        "--create",
-        request.branch,
-        ...(base === undefined ? [] : ["--base", base]),
-        "--no-cd",
-        "--format=json",
-      ]),
-      request.project.root,
-      {
-        code: "WORKTRUNK_COMMAND_FAILED",
-        message: "Worktrunk failed to create a worktree.",
-        ...(base === undefined ? {} : { unresolvedBase: base }),
-      },
-      {},
-      pathEnv,
-    );
-
-    const commandObservations = parseCommandObservation(output.stdout, {
-      project: request.project,
-      providerId: this.id,
-      observedAt: toIsoTimestamp(this.#clock.now()),
-    });
-    const observations = (
-      await Promise.all(
-        commandObservations.map((observation) => this.#withRegistrationIdentity(observation)),
-      )
-    ).filter((observation) => isManagedWorktreeObservation(request.project, observation));
-    const found =
-      observations.find((observation) => observation.branch === request.branch) ??
-      observations.find((observation) => observation.path === request.path) ??
-      (await this.listWorktrees(request.project)).find(
-        (observation) => observation.branch === request.branch,
+    const nativeTarget = pathEnv?.WORKTRUNK_WORKTREE_PATH;
+    const managedRoot = resolveManagedRoot(request.project);
+    let found: WorktreeObservation | undefined;
+    if (
+      this.#useLifecycleHooks === false &&
+      base !== undefined &&
+      nativeTarget !== undefined &&
+      managedRoot !== undefined &&
+      isPathInside(nativeTarget, managedRoot)
+    ) {
+      const nativeOptions: NativeCreateOptions = {
+        clock: this.#clock,
+        resolveRegistrationIdentity: this.#resolveRegistrationIdentity,
+        timeoutMs: this.#timeoutMs,
+      };
+      if (this.#runner !== undefined) nativeOptions.runner = this.#runner;
+      found = await createNativeWorktree(request, nativeTarget, base, nativeOptions);
+    } else {
+      const managedPathArgs = await this.#managedWorktreePathArgs(request.project, pathEnv);
+      const output = await this.#run(
+        this.#args([
+          ...managedPathArgs,
+          "switch",
+          ...this.#automationHookArgs(),
+          "--create",
+          request.branch,
+          ...(base === undefined ? [] : ["--base", base]),
+          "--no-cd",
+          "--format=json",
+        ]),
+        request.project.root,
+        {
+          code: "WORKTRUNK_COMMAND_FAILED",
+          message: "Worktrunk failed to create a worktree.",
+          ...(base === undefined ? {} : { unresolvedBase: base }),
+        },
+        {},
+        pathEnv,
       );
+
+      const commandObservations = parseCommandObservation(output.stdout, {
+        project: request.project,
+        providerId: this.id,
+        observedAt: toIsoTimestamp(this.#clock.now()),
+      });
+      const observations = (
+        await Promise.all(
+          commandObservations.map((observation) => this.#withRegistrationIdentity(observation)),
+        )
+      ).filter((observation) => isManagedWorktreeObservation(request.project, observation));
+      found =
+        observations.find((observation) => observation.branch === request.branch) ??
+        observations.find((observation) => observation.path === request.path) ??
+        (await this.listWorktrees(request.project)).find(
+          (observation) => observation.branch === request.branch,
+        );
+    }
     if (found === undefined) {
       throw new WorktrunkProviderError(
         "WORKTRUNK_INVALID_OUTPUT",

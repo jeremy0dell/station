@@ -16,6 +16,7 @@ const machineIsolatedConfigs = [
   "vitest.contracts.config.ts",
   "vitest.diagnostics.config.ts",
   "vitest.integration.config.ts",
+  "vitest.performance.config.ts",
   "vitest.unit.config.ts",
 ] as const;
 
