@@ -2,11 +2,16 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { rgbToHex } from "@opentui/core";
 import { MouseButtons } from "@opentui/core/testing";
 import { testRender } from "@opentui/react/test-utils";
-import { ADD_PROJECT_CHOOSE_LIST_ID, createAddProjectFlow, transitionAddProjectFlow } from "@station/dashboard-core/state";
+import {
+  ADD_PROJECT_CHOOSE_LIST_ID,
+  createAddProjectFlow,
+  transitionAddProjectFlow,
+} from "@station/dashboard-core/state";
 import type { TuiSelectionState } from "@station/dashboard-core/state";
 import { act } from "react";
 import { spanAtFrameCell } from "../../../terminal/testing/frameProbe.js";
 import type { StationMouseTarget } from "../../input/stationMouse.js";
+import { semanticItemRenderableId } from "../layout/scrollViewport.js";
 import { StationHoverProvider, StationMouseProvider } from "../stationMouseContext.js";
 import {
   nativeStationTheme,
@@ -182,6 +187,48 @@ describe("AddProjectSheetView", () => {
     expect(frame).toContain("Open");
     expect(frame).toContain("Cancel");
     expect(frame).toContain("Click selects");
+  });
+
+  it("keeps equal-path start choices as distinct semantic pointer rows", async () => {
+    const flow = createAddProjectFlow({ cwd: "/Users/example", homeDir: "/Users/example" });
+    const [currentChoice, homeChoice] = flow.choices;
+    if (currentChoice === undefined || homeChoice === undefined) {
+      throw new Error("expected current-directory and home choices");
+    }
+    const { setup, targets } = await render(
+      flow,
+      80,
+      new Map([["addProjectStart", homeChoice.id]]),
+    );
+
+    expect(currentChoice.path).toBe(homeChoice.path);
+    expect(currentChoice.id).not.toBe(homeChoice.id);
+    expect(
+      setup.renderer.root.findDescendantById(semanticItemRenderableId(currentChoice.id)),
+    ).toBeDefined();
+    expect(
+      setup.renderer.root.findDescendantById(semanticItemRenderableId(homeChoice.id)),
+    ).toBeDefined();
+
+    const lines = setup.captureCharFrame().split("\n");
+    const currentRow = lines.findIndex((line) => line.includes("current directory"));
+    const homeRow = lines.findIndex((line) => line.includes("~"));
+    expect(currentRow).toBeGreaterThan(0);
+    expect(homeRow).toBeGreaterThan(currentRow);
+
+    await setup.mockMouse.click(
+      lines[currentRow]?.indexOf("current directory") ?? -1,
+      currentRow,
+      MouseButtons.LEFT,
+    );
+    expect(targets.at(-1)).toEqual({ kind: "addProjectRow", itemId: currentChoice.id });
+
+    await setup.mockMouse.click(
+      lines[homeRow]?.indexOf("~") ?? -1,
+      homeRow,
+      MouseButtons.LEFT,
+    );
+    expect(targets.at(-1)).toEqual({ kind: "addProjectRow", itemId: homeChoice.id });
   });
 
   it("keeps one bounded frame through short, long, and review stages", async () => {

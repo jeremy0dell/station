@@ -52,9 +52,9 @@ const STATE_ACTION_CASES: readonly StateActionCase[] = [
   },
   {
     name: "addProject.selectRow",
-    action: { type: "addProject.selectRow", itemId: "/home/example" },
+    action: { type: "addProject.selectRow", itemId: "addProjectStart:homeDirectory" },
     state: addProjectStartState,
-    reduce: (state) => selectAddProjectRow(state, "/home/example"),
+    reduce: (state) => selectAddProjectRow(state, "addProjectStart:homeDirectory"),
   },
   {
     name: "screen.clickAway",

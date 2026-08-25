@@ -59,9 +59,47 @@ describe("add-project shared selection", () => {
   });
 
   it("uses the same canonical cursor for mouse selection", () => {
-    const moved = selectAddProjectRow(startState(), "/Users/example");
+    const opened = startState();
+    if (opened.screen.name !== "addProject" || opened.screen.flow.mode !== "start") {
+      throw new Error("expected Add Project start");
+    }
+    const homeChoice = opened.screen.flow.choices[1];
+    if (homeChoice === undefined) throw new Error("expected home choice");
+
+    const moved = selectAddProjectRow(opened, homeChoice.id);
     expect(addProjectSelectedIndex(moved)).toBe(1);
-    expect(moved.selection.get("addProjectStart")).toBe("/Users/example");
+    expect(moved.selection.get("addProjectStart")).toBe(homeChoice.id);
+  });
+
+  it("keeps equal current-directory and home paths independently selectable", () => {
+    const sharedContext = { cwd: "/Users/example", homeDir: "/Users/example" };
+    const opened = openAddProject(createInitialTuiState(), sharedContext);
+    if (opened.screen.name !== "addProject" || opened.screen.flow.mode !== "start") {
+      throw new Error("expected Add Project start");
+    }
+    const [currentChoice, homeChoice] = opened.screen.flow.choices;
+    if (currentChoice === undefined || homeChoice === undefined) {
+      throw new Error("expected current-directory and home choices");
+    }
+
+    expect(currentChoice.path).toBe(homeChoice.path);
+    expect(currentChoice.id).not.toBe(homeChoice.id);
+    expect(opened.selection.get("addProjectStart")).toBe(currentChoice.id);
+
+    const keyboardSelected = handleTuiKey(
+      opened,
+      { input: "", downArrow: true },
+      sharedContext,
+    ).state;
+    expect(addProjectSelectedIndex(keyboardSelected)).toBe(1);
+    expect(keyboardSelected.selection.get("addProjectStart")).toBe(homeChoice.id);
+    expect(
+      handleTuiKey(keyboardSelected, { input: "\r", return: true }, sharedContext).operations,
+    ).toEqual([{ type: "loadProjectDirectory", path: homeChoice.path }]);
+
+    const pointerSelected = selectAddProjectRow(keyboardSelected, currentChoice.id);
+    expect(addProjectSelectedIndex(pointerSelected)).toBe(0);
+    expect(pointerSelected.selection.get("addProjectStart")).toBe(currentChoice.id);
   });
 
   it("opens the selected start path with Right and closes with Escape", () => {

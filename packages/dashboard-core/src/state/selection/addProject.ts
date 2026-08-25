@@ -17,9 +17,9 @@ export function addProjectSelectedIndexForFlow(
   selection: TuiSelectionState,
 ): number | undefined {
   if (flow.mode === "start") {
-    const path = selection.get(ADD_PROJECT_START_LIST_ID);
-    if (path === undefined) return undefined;
-    const index = flow.choices.findIndex((choice) => choice.path === path);
+    const itemId = selection.get(ADD_PROJECT_START_LIST_ID);
+    if (itemId === undefined) return undefined;
+    const index = flow.choices.findIndex((choice) => choice.id === itemId);
     return index < 0 ? undefined : index;
   }
   if (flow.mode === "choose") {
@@ -58,11 +58,11 @@ export function reconcileAddProjectSelection(
     const keepCurrent =
       !reset &&
       previousFlow?.mode === "start" &&
-      flow.choices.some((choice) => choice.path === current);
+      flow.choices.some((choice) => choice.id === current);
     return withSelection(
       state,
       ADD_PROJECT_START_LIST_ID,
-      keepCurrent ? current : flow.choices[0]?.path,
+      keepCurrent ? current : flow.choices[0]?.id,
     );
   }
   if (flow.mode === "choose") {
@@ -76,17 +76,17 @@ export function reconcileAddProjectSelection(
   return state;
 }
 
-/** Pointer selection writes the stable path identity used by arrows and Enter. */
+/** Pointer selection writes the stable semantic identity used by arrows and Enter. */
 export function selectAddProjectRowById(state: DashboardState, itemId: string): DashboardState {
   if (state.screen.name !== "addProject") {
     return state;
   }
   const flow = state.screen.flow;
   if (flow.mode === "start") {
-    const selected = flow.choices.find((choice) => choice.path === itemId);
+    const selected = flow.choices.find((choice) => choice.id === itemId);
     return selected === undefined
       ? state
-      : withSelection(state, ADD_PROJECT_START_LIST_ID, selected.path);
+      : withSelection(state, ADD_PROJECT_START_LIST_ID, selected.id);
   }
   if (flow.mode === "choose") {
     const selected = addProjectRows(flow).find((row) => row.path === itemId);

@@ -12,14 +12,14 @@ export const addProjectStartListSpec = defineList({
     }
     return state.screen.flow.choices.map((choice) => ({
       selectable: true as const,
-      id: choice.path,
+      id: choice.id,
     }));
   },
-  commit: (state, path) => {
+  commit: (state, itemId) => {
     if (state.screen.name !== "addProject" || state.screen.flow.mode !== "start") {
       return { state };
     }
-    const choice = state.screen.flow.choices.find((candidate) => candidate.path === path);
+    const choice = state.screen.flow.choices.find((candidate) => candidate.id === itemId);
     return choice === undefined
       ? { state }
       : applyAddProjectAction(state, { type: "startOpen", path: choice.path });

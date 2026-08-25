@@ -138,7 +138,17 @@ function wizardFieldsFor<TMode extends AddProjectStep>(
 
 function startChoices(cwd: string, homeDir: string): AddProjectStartChoice[] {
   return [
-    { label: "current directory", path: cwd, detail: cwd },
-    { label: "~", path: homeDir, detail: "home" },
+    {
+      id: "addProjectStart:currentDirectory",
+      label: "current directory",
+      path: cwd,
+      detail: cwd,
+    },
+    {
+      id: "addProjectStart:homeDirectory",
+      label: "~",
+      path: homeDir,
+      detail: "home",
+    },
   ];
 }

@@ -91,13 +91,13 @@ function StartChoices({
       <SheetSectionLine width={width}>Start location</SheetSectionLine>
       {state.choices.map((choice, index) => (
         <SheetPickerLine
-          key={choice.path}
+          key={choice.id}
           width={width}
           selected={index === selectedIndex}
           label={choice.label}
           detail={choice.detail}
-          mouseTarget={{ kind: "addProjectRow", itemId: choice.path }}
-          itemId={startChoiceItemId(choice.path)}
+          mouseTarget={{ kind: "addProjectRow", itemId: choice.id }}
+          itemId={choice.id}
         />
       ))}
     </>
@@ -182,13 +182,9 @@ function FolderPickerContext({
 }
 
 function addProjectBodyItemIds(state: AddProjectFlowStateView): string[] {
-  if (state.mode === "start") return state.choices.map((choice) => startChoiceItemId(choice.path));
+  if (state.mode === "start") return state.choices.map((choice) => choice.id);
   if (state.mode === "choose") return addProjectRows(state).map(folderRowItemId);
   return [];
-}
-
-function startChoiceItemId(path: string): string {
-  return `start:${path}`;
 }
 
 function folderRowItemId(row: ReturnType<typeof addProjectRows>[number]): string {

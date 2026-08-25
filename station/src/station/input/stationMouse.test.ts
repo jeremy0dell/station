@@ -1478,7 +1478,7 @@ describe("routeStationMouse widget settings", () => {
     if (secondChoice === undefined) throw new Error("expected second Add Project choice");
     expect(addProjectSelectedIndex(store.state.getState())).toBe(0);
 
-    routeStationMouse({ kind: "addProjectRow", itemId: secondChoice.path }, LEFT_DOWN, store);
+    routeStationMouse({ kind: "addProjectRow", itemId: secondChoice.id }, LEFT_DOWN, store);
     const moved = store.state.getState().screen;
     if (moved.name !== "addProject" || moved.flow.mode !== "start") {
       throw new Error("expected addProject start");
