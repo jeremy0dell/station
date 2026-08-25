@@ -1,6 +1,6 @@
 import type { UiLifecycleEventInputFor } from "@station/contracts";
 import type { UiLifecycleRecorder } from "@station/observability";
-import type { HostClientIdentity } from "@station/host";
+import { HOST_PROTOCOL_VERSION, type HostClientIdentity } from "@station/host";
 import { describe, expect, it } from "bun:test";
 import { createHostLifecycleWitness } from "../hostLifecycle.js";
 
@@ -11,7 +11,7 @@ const spawnRef = {
 };
 
 const firstClient: HostClientIdentity = {
-  protocolVersion: 6,
+  protocolVersion: HOST_PROTOCOL_VERSION,
   buildVersion: "test-build",
   uiRunId: "ui_11111111-1111-4111-8111-111111111111",
   rendererPid: 100,

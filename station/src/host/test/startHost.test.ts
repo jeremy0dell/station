@@ -19,7 +19,7 @@ import { type StationHostInstance, startStationHost } from "../startHost.js";
 // startStationHost only calls logger.log; a no-op keeps the host test off the FS.
 const noopLogger = { log: async () => undefined } as never;
 const TEST_HOST_BUILD = "test-host-build";
-const TEST_HOST_IDENTITY = "test-host-build-identity";
+const TEST_HOST_IDENTITY = "a".repeat(64);
 
 let host: StationHostInstance | undefined;
 
@@ -68,6 +68,17 @@ function attachExpectation(spawned: HostSpawnResult): HostPtyAttachExpectation {
 }
 
 describe("startStationHost", () => {
+  it("requires paired valid test build overrides", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "station-host-build-"));
+    const base = { socketPath: join(dir, "host.sock"), stateDir: dir, logger: noopLogger };
+    await expect(
+      startStationHost({ ...base, buildVersion: TEST_HOST_BUILD }),
+    ).rejects.toMatchObject({ message: "Station Host test build overrides require version and identity together." });
+    await expect(
+      startStationHost({ ...base, buildVersion: TEST_HOST_BUILD, buildIdentity: "A".repeat(64) }),
+    ).rejects.toMatchObject({ name: "ZodError" });
+  });
+
   it("answers host.health over a real unix socket", async () => {
     const socketPath = await startOnTempSocket();
     const client = testClient(socketPath);
@@ -105,6 +116,7 @@ describe("startStationHost", () => {
       stateDir: dir,
       ptyImplementation: "bun-nocctty",
       buildVersion: TEST_HOST_BUILD,
+      buildIdentity: TEST_HOST_IDENTITY,
       logger: {
         log: async (record: (typeof records)[number]) => {
           records.push(record);
@@ -132,6 +144,7 @@ describe("startStationHost", () => {
       socketPath: join(dir, "station-host.sock"),
       stateDir: dir,
       buildVersion: TEST_HOST_BUILD,
+      buildIdentity: TEST_HOST_IDENTITY,
       ptyTableOptions: { createTerminal: () => scripted.terminal },
       logger: { log: async (record: (typeof records)[number]) => records.push(record) } as never,
     });
@@ -213,7 +226,7 @@ describe("startStationHost", () => {
       expect(listed).toHaveLength(1);
       expect(listed[0]).toMatchObject({ ptyId, worktreeId: "wt-1", alive: true });
       expect(listed[0]).not.toHaveProperty("handoffSupport");
-      await expect(client.recoveryInventory?.()).resolves.toMatchObject({
+      await expect(client.recoveryInventory()).resolves.toMatchObject({
         buildIdentity: TEST_HOST_IDENTITY,
         ptys: [
           {
@@ -677,6 +690,7 @@ describe("startStationHost", () => {
       stateDir: dir,
       logger: noopLogger,
       buildVersion: "host-a",
+      buildIdentity: TEST_HOST_IDENTITY,
       ptyTableOptions: { createTerminal: () => terminal },
     });
     const client = createStationHostClient({
@@ -730,6 +744,7 @@ describe("startStationHost", () => {
       stateDir: dir,
       logger: noopLogger,
       buildVersion: "host-a",
+      buildIdentity: TEST_HOST_IDENTITY,
       ptyTableOptions: { createTerminal: () => terminal },
     });
     const client = createStationHostClient({
@@ -771,6 +786,7 @@ describe("startStationHost", () => {
       stateDir: dir,
       logger: noopLogger,
       buildVersion: "host-a",
+      buildIdentity: TEST_HOST_IDENTITY,
       ptyTableOptions: {
         createTerminal: () => terminal,
         adoptTerminal: async () => ({
@@ -822,6 +838,7 @@ describe("startStationHost", () => {
       stateDir: dir,
       logger: noopLogger,
       buildVersion: "host-empty",
+      buildIdentity: TEST_HOST_IDENTITY,
     });
     const client = createStationHostClient({
       socketPath: join(dir, "station-host.sock"),
@@ -858,6 +875,7 @@ describe("startStationHost", () => {
       stateDir: dir,
       logger: noopLogger,
       buildVersion: "host-a",
+      buildIdentity: TEST_HOST_IDENTITY,
       ptyTableOptions: {
         createTerminal: () => terminal,
         adoptTerminal: async () => ({
@@ -919,6 +937,7 @@ describe("startStationHost", () => {
       stateDir: dir,
       logger: noopLogger,
       buildVersion: "host-idle",
+      buildIdentity: TEST_HOST_IDENTITY,
     });
     const stopper = createStationHostClient({
       socketPath: join(dir, "station-host.sock"),
@@ -972,6 +991,7 @@ describe("startStationHost", () => {
       stateDir: dir,
       logger: noopLogger,
       buildVersion: "host-a",
+      buildIdentity: TEST_HOST_IDENTITY,
       ptyTableOptions: {
         createTerminal: () => terminal,
         adoptTerminal: async () => ({
@@ -1013,6 +1033,7 @@ describe("startStationHost", () => {
       stateDir: dir,
       logger: noopLogger,
       buildVersion: "host-a",
+      buildIdentity: TEST_HOST_IDENTITY,
       ptyTableOptions: { createTerminal: () => scripted.terminal },
     });
     const client = createStationHostClient({
@@ -1046,6 +1067,7 @@ describe("startStationHost", () => {
       stateDir: dir,
       logger: noopLogger,
       buildVersion: "host-a",
+      buildIdentity: TEST_HOST_IDENTITY,
       ptyTableOptions: {
         createTerminal: () => {
           next += 1;

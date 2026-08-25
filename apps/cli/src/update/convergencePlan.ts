@@ -4,7 +4,7 @@ import type {
   UpdateConvergenceTerminalFact,
   UpdateReapTerminalDisposition,
 } from "@station/contracts";
-import { compareUpdateReapTerminalIdentity } from "@station/contracts";
+import { compareStationHostTerminalLifetimeIdentity } from "@station/contracts";
 import { classifyObserverBuildPrecedence } from "@station/observer/internal";
 import { parseStationObserverBuildVersion } from "@station/runtime";
 import { deriveUpdateRecoveryTerminalDispositions } from "./recoveryTerminalDispositions.js";
@@ -223,13 +223,8 @@ function hostDecision(
     );
   }
   if (host.status === "unknown") return blocked("inventory-incomplete", "inventory-incomplete");
-  if (host.compatibility === "refuse") return blocked("protocol-refused", "inventory-incomplete");
   if (input.targetRuntime.status === "not-yet-provable") {
-    if (
-      host.relation !== "different" ||
-      host.buildVersion === undefined ||
-      host.buildVersion === input.preflight.target.version
-    ) {
+    if (host.relation !== "different" || host.buildVersion === input.preflight.target.version) {
       return pair(
         { action: "reinspect", reason: "target-build-not-yet-provable" },
         { action: "reinspect", reason: "target-build-not-yet-provable" },
@@ -285,15 +280,10 @@ function hostEvidenceContradictsTarget(
   input: UpdateConvergencePlanningInput,
   host: Extract<UpdateConvergencePlanningInput["preflight"]["host"], { status: "inspected" }>,
 ): boolean {
-  const buildVersion = host.buildVersion;
-  if (buildVersion === undefined) {
-    return host.relation !== "unknown" || host.compatibility !== "refuse";
-  }
-  const displayMatches = buildVersion === input.preflight.target.version;
+  const displayMatches = host.buildVersion === input.preflight.target.version;
   if (host.compatibility === "reuse" && !displayMatches) return true;
   if (host.compatibility === "replace" && displayMatches) return true;
   if (!displayMatches) return host.relation !== "different";
-  if (host.buildIdentity === undefined) return host.relation !== "unknown";
   if (input.targetRuntime.status === "not-yet-provable") {
     return host.relation === "matching-target";
   }
@@ -334,7 +324,7 @@ function terminalDispositionsMatch(
       const expected = canonical[index];
       return (
         expected !== undefined &&
-        compareUpdateReapTerminalIdentity(disposition, expected) === 0 &&
+        compareStationHostTerminalLifetimeIdentity(disposition, expected) === 0 &&
         disposition.sessionId === expected.sessionId &&
         disposition.handoff === expected.handoff &&
         disposition.reapRecovery === expected.reapRecovery &&

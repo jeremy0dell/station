@@ -1,6 +1,6 @@
 import {
   compareCodeUnitStrings,
-  compareUpdateReapTerminalIdentity,
+  compareStationHostTerminalLifetimeIdentity,
   type UpdateReapHostEvidence,
   type UpdateReapObserverEvidence,
   type UpdateReapTerminalDisposition,
@@ -76,5 +76,5 @@ export function deriveUpdateRecoveryTerminalDispositions(input: {
         reasons: Array.from(new Set(reasons)).sort(compareCodeUnitStrings),
       };
     })
-    .sort(compareUpdateReapTerminalIdentity);
+    .sort(compareStationHostTerminalLifetimeIdentity);
 }

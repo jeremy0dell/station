@@ -41,7 +41,7 @@ describe("runUpdateRecoveryPreflight", () => {
     expect(readHookHealth).toHaveBeenCalledOnce();
   });
 
-  it("settles, sorts, and composes every terminal with retained-session recovery", async () => {
+  it("settles and composes every canonical terminal with retained-session recovery", async () => {
     const observer = observerEvidence(
       assessment([
         sessionAssessment("session-a", "recoverable", []),
@@ -49,9 +49,9 @@ describe("runUpdateRecoveryPreflight", () => {
       ]),
     );
     const host = hostEvidence([
-      terminal("terminal-z", "session-z", "bridge-releasable"),
-      terminal("terminal-missing", "session-missing", "non-releasable"),
       terminal("terminal-a", "session-a", "non-releasable"),
+      terminal("terminal-missing", "session-missing", "non-releasable"),
+      terminal("terminal-z", "session-z", "bridge-releasable"),
     ]);
     const readHookHealth = vi.fn(
       async (provider: string): Promise<ProviderHookHealth> =>
@@ -220,7 +220,7 @@ describe("runUpdateRecoveryPreflight", () => {
       target: { version: "1.1.0" },
       ports: {
         inspectObserver: async () => observer,
-        inspectHost: async () => hostEvidence([auxiliary, mismatched]),
+        inspectHost: async () => hostEvidence([mismatched, auxiliary]),
         hookProviderIds: ["codex"],
         readHookHealth: async () => ({ provider: "codex", status: "healthy" }),
       },
@@ -250,9 +250,9 @@ describe("runUpdateRecoveryPreflight", () => {
         inspectObserver: async () => ({ status: "absent" }),
         inspectHost: async () =>
           hostEvidence([
+            terminal("Z", "session-z", "bridge-releasable"),
             terminal("a", "session-a", "bridge-releasable"),
             terminal(injectedId, "session-control", "bridge-releasable"),
-            terminal("Z", "session-z", "bridge-releasable"),
           ]),
         hookProviderIds: ["a", "Z"],
         readHookHealth: async (provider) => ({ provider, status: "healthy" }),
@@ -284,6 +284,7 @@ function hostEvidence(
   return {
     status: "inspected",
     buildVersion: "1.0.0",
+    buildIdentity: "a".repeat(64),
     protocolVersion: 8,
     relation: "different",
     compatibility: "replace",

@@ -499,6 +499,8 @@ function previewWithAliases(): Extract<UpdateCommandReport, { kind: "preview" }>
       ...initial,
       host: {
         status: "inspected",
+        buildVersion: "1.2.3",
+        buildIdentity: "a".repeat(64),
         protocolVersion: 8,
         relation: "different",
         compatibility: "replace",

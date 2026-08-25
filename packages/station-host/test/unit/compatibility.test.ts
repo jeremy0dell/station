@@ -36,16 +36,13 @@ describe("classifyHostCompatibility", () => {
     ).toEqual({ action: "replace", runningBuildVersion: "1.2.3+one" });
   });
 
-  it("refuses protocol mismatches and legacy health", () => {
+  it("refuses protocol mismatches", () => {
     expect(
       classifyHostCompatibility(
         { ok: true, protocolVersion: HOST_PROTOCOL_VERSION - 1, buildVersion: "1.2.3" },
         "1.2.3",
       ),
     ).toEqual({ action: "refuse", reason: "protocol-mismatch" });
-    expect(
-      classifyHostCompatibility({ ok: true, protocolVersion: HOST_PROTOCOL_VERSION }, "1.2.3"),
-    ).toEqual({ action: "refuse", reason: "legacy-health" });
   });
 });
 

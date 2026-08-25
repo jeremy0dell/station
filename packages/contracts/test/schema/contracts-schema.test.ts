@@ -62,6 +62,7 @@ import {
   SessionRecoveryReadinessSchema,
   SessionRescueManifestSchema,
   STATION_SCHEMA_VERSION,
+  StationBuildIdentitySchema,
   StationCommandResultSchema,
   StationCommandSchema,
   StationCommandTypeSchema,
@@ -104,6 +105,12 @@ function expectFails(schema: ZodType, value: unknown, label: string) {
 }
 
 describe("contract schemas", () => {
+  it("accepts only the shared lowercase 64-hex Station build identity", () => {
+    expectParses(StationBuildIdentitySchema, "a".repeat(64), "lowercase build identity");
+    expectFails(StationBuildIdentitySchema, "A".repeat(64), "uppercase build identity");
+    expectFails(StationBuildIdentitySchema, "a".repeat(63), "short build identity");
+  });
+
   it("strictly parses provider hook artifact ownership", () => {
     const requested = {
       schemaVersion: 1,

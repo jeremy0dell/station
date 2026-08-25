@@ -47,6 +47,7 @@ const preflight = {
   host: {
     status: "inspected" as const,
     buildVersion: "1.0.0+station.host",
+    buildIdentity: "a".repeat(64),
     protocolVersion: 8,
     relation: "different" as const,
     compatibility: "replace" as const,
@@ -106,6 +107,22 @@ describe("UpdateReapRecoveryPreflightSchema", () => {
     expect(
       UpdateReapRecoveryPreflightSchema.safeParse({ ...preflight, evidenceComplete: false })
         .success,
+    ).toBe(false);
+  });
+
+  it("requires exact current Host build and protocol evidence", () => {
+    const { buildIdentity: _omitted, ...missingIdentity } = preflight.host;
+    expect(
+      UpdateReapRecoveryPreflightSchema.safeParse({
+        ...preflight,
+        host: missingIdentity,
+      }).success,
+    ).toBe(false);
+    expect(
+      UpdateReapRecoveryPreflightSchema.safeParse({
+        ...preflight,
+        host: { ...preflight.host, protocolVersion: 7 },
+      }).success,
     ).toBe(false);
   });
 

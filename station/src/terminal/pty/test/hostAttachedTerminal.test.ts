@@ -207,6 +207,7 @@ const unusedHandoffClientMethods = {
     adopted: [] as string[],
     failed: [] as Array<{ ptyId: string; reason: string }>,
   }),
+  recoveryInventory: async () => ({ buildIdentity: "a".repeat(64), ptys: [] }),
 };
 
 function clientForAttach(
@@ -216,7 +217,7 @@ function clientForAttach(
   return {
     attach,
     dispose,
-    health: async () => ({ ok: true, protocolVersion: 1 }),
+    health: async () => ({ ok: true, protocolVersion: 1, buildVersion: "test-build" }),
     stopIfIdle: async () => ({ stopping: true }),
     ...unusedHandoffClientMethods,
     spawn: async () => ({ ...PTY_REF, pid: 4242 }),
@@ -672,7 +673,7 @@ function trackingClientFactory(attachment: HostAttachment, tracking: Tracking) {
     ({
       attach: async () => attachment,
       dispose: () => {},
-      health: async () => ({ ok: true, protocolVersion: 1 }),
+      health: async () => ({ ok: true, protocolVersion: 1, buildVersion: "test-build" }),
       stopIfIdle: async () => ({ stopping: true }),
       ...unusedHandoffClientMethods,
       spawn: async (params: unknown) => {
@@ -1130,7 +1131,7 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
             return ctrl.attachment;
           },
           dispose: () => {},
-          health: async () => ({ ok: true, protocolVersion: 1 }),
+          health: async () => ({ ok: true, protocolVersion: 1, buildVersion: "test-build" }),
           stopIfIdle: async () => ({ stopping: true }),
           ...unusedHandoffClientMethods,
           spawn: async () => ({ ...PTY_REF, pid: 4242 }),
@@ -1172,7 +1173,7 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
             return attachCalls === 1 ? first.attachment : second.attachment;
           },
           dispose: () => {},
-          health: async () => ({ ok: true, protocolVersion: 1 }),
+          health: async () => ({ ok: true, protocolVersion: 1, buildVersion: "test-build" }),
           stopIfIdle: async () => ({ stopping: true }),
           ...unusedHandoffClientMethods,
           spawn: async () => ({ ...PTY_REF, pid: 4242 }),
@@ -1215,7 +1216,7 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
             return attachCalls === 1 ? first.attachment : second.attachment;
           },
           dispose: () => {},
-          health: async () => ({ ok: true, protocolVersion: 1 }),
+          health: async () => ({ ok: true, protocolVersion: 1, buildVersion: "test-build" }),
           stopIfIdle: async () => ({ stopping: true }),
           ...unusedHandoffClientMethods,
           spawn: async () => ({ ...PTY_REF, pid: 4242 }),
@@ -1257,7 +1258,7 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
             return ctrl.attachment;
           },
           dispose: () => {},
-          health: async () => ({ ok: true, protocolVersion: 1 }),
+          health: async () => ({ ok: true, protocolVersion: 1, buildVersion: "test-build" }),
           stopIfIdle: async () => ({ stopping: true }),
           ...unusedHandoffClientMethods,
           spawn: async () => ({ ...PTY_REF, pid: 4242 }),
@@ -1405,7 +1406,7 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
               throw new StationHostProviderError(code, "host attachment is unavailable");
             },
             dispose: () => {},
-            health: async () => ({ ok: true, protocolVersion: 1 }),
+            health: async () => ({ ok: true, protocolVersion: 1, buildVersion: "test-build" }),
             stopIfIdle: async () => ({ stopping: true }),
             ...unusedHandoffClientMethods,
             spawn: async () => ({ ...ptyRef("pty-gone"), pid: 1 }),
@@ -1441,7 +1442,7 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
         ({
           attach: async () => ctrl.attachment,
           dispose: () => {},
-          health: async () => ({ ok: true, protocolVersion: 1 }),
+          health: async () => ({ ok: true, protocolVersion: 1, buildVersion: "test-build" }),
           stopIfIdle: async () => ({ stopping: true }),
           ...unusedHandoffClientMethods,
           spawn: async (params: unknown) => {

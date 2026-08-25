@@ -36,6 +36,7 @@ function fakeClient(overrides: Partial<StationHostClient> = {}): StationHostClie
       pid: 1,
     }),
     list: async () => [],
+    recoveryInventory: async () => ({ buildIdentity: "a".repeat(64), ptys: [] }),
     focus: async () => undefined,
     close: async () => ({ closed: true }),
     attach: async () => {
@@ -1022,43 +1023,6 @@ describe("ensureStationHostRunning", () => {
         error: { code: "HOST_VERSION_INCOMPATIBLE" },
       });
       expect(stopIfIdle).toHaveBeenCalledTimes(1);
-      expect(spawnHost).not.toHaveBeenCalled();
-      await expect(probeUnixSocket(socketPath)).resolves.toMatchObject({ status: "listening" });
-    } finally {
-      await socket.close();
-    }
-  });
-
-  it("refuses legacy health without lifecycle calls, replacement, or socket removal", async () => {
-    const socket = await liveSocket();
-    const { socketPath } = socket;
-    const stopIfIdle = vi.fn(async () => ({ stopping: true as const }));
-    const spawnHost = vi.fn(
-      (_input: SpawnStationHostInput): ChildProcessLike => ({ pid: 999, unref: () => undefined }),
-    );
-    try {
-      const handle = await ensureStationHostRunning(
-        {
-          socketPath,
-          stateDir: tmpdir(),
-          hostCommand: ["bun", "/tmp/hostMain.ts"],
-          expectedBuildVersion,
-        },
-        {
-          clientFactory: () =>
-            fakeClient({
-              health: async () => ({ ok: true, protocolVersion: HOST_PROTOCOL_VERSION }),
-              stopIfIdle,
-            }),
-          spawnHost,
-        },
-      );
-
-      expect(handle).toMatchObject({
-        status: "unavailable",
-        error: { code: "HOST_VERSION_INCOMPATIBLE" },
-      });
-      expect(stopIfIdle).not.toHaveBeenCalled();
       expect(spawnHost).not.toHaveBeenCalled();
       await expect(probeUnixSocket(socketPath)).resolves.toMatchObject({ status: "listening" });
     } finally {

@@ -1,18 +1,15 @@
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type StationConfig, stationHostSocketPath } from "@station/config";
+import type * as HostContracts from "@station/contracts";
 import type { HostHandoffFidelity } from "@station/contracts";
 import {
   classifyHostCompatibility,
   createStationHostClient,
-  type HostHealthResult,
-  type HostListEntry,
-  type HostPtyHandoffSupport,
   type StationHostClient,
 } from "@station/host";
-import { probeUnixSocket } from "@station/protocol";
-import { isSafeError, stationBuildInfo } from "@station/runtime";
-import { ensureStationHostRunning } from "@station/terminal";
+import { stationBuildInfo } from "@station/runtime";
+import { ensureStationHostRunning, inspectStationHost } from "@station/terminal";
 import { resolveObserverPaths } from "../../paths.js";
 import { selfExecArgv } from "../../selfExec.js";
 import { parseHostArgs } from "./args.js";
@@ -23,21 +20,18 @@ export type HostCommandDeps = {
   resolveHostCommand?: () => readonly [string, ...string[]];
   /** Test/composition override for the requesting Station build identity. */
   expectedBuildVersion?: string;
-};
-
-export type HostInspectionEntry = HostListEntry & {
-  handoffSupport?: HostPtyHandoffSupport;
+  inspectHost?: typeof inspectStationHost;
 };
 
 export type HostStatusResult = {
   action: "status";
   socketPath: string;
   probe: string;
-  health?: HostHealthResult;
-  compatibility?: ReturnType<typeof classifyHostCompatibility>;
-  buildIdentity?: string;
+  health?: HostContracts.StationHostInspectedHealth;
+  compatibility?: Exclude<ReturnType<typeof classifyHostCompatibility>, { action: "refuse" }>;
+  buildIdentity?: HostContracts.StationBuildIdentity;
   livePtyCount?: number;
-  ptys?: HostInspectionEntry[];
+  ptys?: HostContracts.StationHostTerminalLifetime[];
   handoffEligible?: boolean;
   error?: string;
 };
@@ -81,7 +75,12 @@ export async function runHostCommand(
     ((path, build) => createStationHostClient({ socketPath: path, expectedBuildVersion: build }));
 
   if (parsed.action === "status") {
-    return runHostStatus({ socketPath, expectedBuildVersion, clientFactory });
+    return runHostStatus({
+      socketPath,
+      expectedBuildVersion,
+      clientFactory,
+      inspectHost: deps.inspectHost ?? inspectStationHost,
+    });
   }
   return runHostHandoff({
     socketPath,
@@ -100,7 +99,7 @@ export function hostCommandSummary(result: HostCommandResult): string {
     const lines = [`socket: ${result.socketPath}`, `probe: ${result.probe}`];
     if (result.health !== undefined) {
       lines.push(
-        `health: ok protocol=${result.health.protocolVersion} build=${result.health.buildVersion ?? "(legacy)"}`,
+        `health: ok protocol=${result.health.protocolVersion} build=${result.health.buildVersion}`,
       );
     }
     if (result.compatibility !== undefined) {
@@ -134,63 +133,40 @@ export function hostCommandSummary(result: HostCommandResult): string {
   return `${lines.join("\n")}\n`;
 }
 
+/** Projects private exact inspection into the existing read-only Host status shape. */
 async function runHostStatus(input: {
   socketPath: string;
   expectedBuildVersion: string;
   clientFactory: (socketPath: string, expectedBuildVersion: string) => StationHostClient;
+  inspectHost: typeof inspectStationHost;
 }): Promise<HostStatusResult> {
-  const probe = await probeUnixSocket(input.socketPath);
-  const result: HostStatusResult = {
-    action: "status",
-    socketPath: input.socketPath,
-    probe: probe.status,
+  const inspection = await input.inspectHost(
+    { socketPath: input.socketPath, expectedBuildVersion: input.expectedBuildVersion },
+    { clientFactory: input.clientFactory },
+  );
+  const base = { action: "status" as const, socketPath: input.socketPath };
+  if (inspection.status === "absent" || inspection.status === "stale") {
+    return { ...base, probe: inspection.status, error: "Host socket is not listening." };
+  }
+  if (inspection.status === "inaccessible" || inspection.status === "unknown") {
+    const probe = inspection.status === "inaccessible" ? "inaccessible" : "listening";
+    return { ...base, probe, error: inspection.error.message };
+  }
+  const { health, buildIdentity, terminals } = inspection.evidence;
+  const compatibility =
+    health.buildVersion === input.expectedBuildVersion
+      ? ({ action: "reuse" } as const)
+      : ({ action: "replace", runningBuildVersion: health.buildVersion } as const);
+  return {
+    ...base,
+    probe: "listening",
+    health,
+    compatibility,
+    buildIdentity,
+    livePtyCount: terminals.length,
+    ptys: terminals,
+    handoffEligible: compatibility.action === "replace" && terminals.length > 0,
   };
-  if (probe.status !== "listening") {
-    result.error = "Host socket is not listening.";
-    return result;
-  }
-  const client = input.clientFactory(input.socketPath, input.expectedBuildVersion);
-  try {
-    const health = await client.health();
-    result.health = health;
-    const compatibility = classifyHostCompatibility(health, input.expectedBuildVersion);
-    result.compatibility = compatibility;
-    // Inventory stays read-only but must pass the client's exact incumbent-build gate.
-    const inventoryClient =
-      compatibility.action === "replace"
-        ? input.clientFactory(input.socketPath, compatibility.runningBuildVersion)
-        : client;
-    try {
-      let ptys: HostInspectionEntry[];
-      if (inventoryClient.recoveryInventory === undefined) {
-        ptys = await inventoryClient.list();
-      } else {
-        try {
-          const recovery = await inventoryClient.recoveryInventory();
-          result.buildIdentity = recovery.buildIdentity;
-          ptys = recovery.ptys;
-        } catch (error) {
-          if (!isSafeError(error) || error.code !== "HOST_BAD_REQUEST") throw error;
-          // Older protocol-v8 Hosts do not implement the additive recovery query.
-          ptys = await inventoryClient.list();
-        }
-      }
-      result.ptys = ptys;
-      result.livePtyCount = ptys.length;
-      result.handoffEligible = compatibility.action === "replace" && ptys.length > 0;
-    } catch (error) {
-      result.error = error instanceof Error ? error.message : String(error);
-      result.handoffEligible = compatibility.action === "replace";
-    } finally {
-      if (inventoryClient !== client) inventoryClient.dispose();
-    }
-    return result;
-  } catch (error) {
-    result.error = error instanceof Error ? error.message : String(error);
-    return result;
-  } finally {
-    client.dispose();
-  }
 }
 
 async function runHostHandoff(input: {

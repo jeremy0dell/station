@@ -144,6 +144,17 @@ describe("createPtyTable", () => {
     ]);
   });
 
+  it("returns recovery inventory in canonical terminal-lifetime identity order", () => {
+    const { table } = tableWithScripted();
+    table.spawn({ ...baseParams, terminalTargetId: "native:z", worktreeId: "z", sessionId: "z" });
+    table.spawn({ ...baseParams, terminalTargetId: "native:a", worktreeId: "a", sessionId: "a" });
+
+    expect(table.recoveryInventory().map(({ terminalTargetId }) => terminalTargetId)).toEqual([
+      "native:a",
+      "native:z",
+    ]);
+  });
+
   it("stores and broadcasts the same compatible output and reports only the first rewrite", async () => {
     const events: Array<{ event: string; attributes: Record<string, unknown> }> = [];
     const scripted = createScriptedTerminal({ cols: 80, rows: 51 });

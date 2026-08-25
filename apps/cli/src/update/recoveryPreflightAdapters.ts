@@ -1,6 +1,8 @@
-import type { StationConfig } from "@station/config";
+import { type StationConfig, stationHostSocketPath } from "@station/config";
 import type {
   ObserverRecoveryAssessment,
+  StationBuildIdentity,
+  StationHostTerminalLifetime,
   UpdateArtifact,
   UpdateReapHostEvidence,
   UpdateReapObserverEvidence,
@@ -19,7 +21,7 @@ import {
   type StationBuildInfo,
   stationObserverBuildVersion,
 } from "@station/runtime";
-import { type HostCommandDeps, runHostCommand } from "../commands/host/index.js";
+import { type InspectStationHostDeps, inspectStationHost } from "@station/terminal";
 import { inspectExactObserverOwnerWithLocalAdapters } from "../observerProcess/inspectExactObserverOwner.js";
 import type { UpdateRecoveryPreflightPorts } from "./recoveryPreflight.js";
 import { redactedPreflightError } from "./recoveryPreflight.js";
@@ -27,10 +29,10 @@ import { redactedPreflightError } from "./recoveryPreflight.js";
 export type CreateUpdateRecoveryPreflightPortsOptions = {
   config: StationConfig;
   configPath?: string;
-  hostDeps?: HostCommandDeps;
+  hostInspectionDeps?: Pick<InspectStationHostDeps, "clientFactory">;
   inspectObserverOwner?: () => Promise<ExactObserverOwnershipEvidence>;
   providers: ProviderRegistry;
-  hostStatus?: typeof runHostCommand;
+  inspectHost?: typeof inspectStationHost;
   /** Immutable identity captured once by update command composition. */
   currentBuildInfo: StationBuildInfo;
 };
@@ -62,8 +64,10 @@ export function createUpdateRecoveryPreflightPorts(
         config: options.config,
         artifacts,
         currentBuildIdentity,
-        readStatus: options.hostStatus ?? runHostCommand,
-        ...(options.hostDeps === undefined ? {} : { hostDeps: options.hostDeps }),
+        inspectHost: options.inspectHost ?? inspectStationHost,
+        ...(options.hostInspectionDeps === undefined
+          ? {}
+          : { inspectionDeps: options.hostInspectionDeps }),
       }),
     readHookHealth: (providerId) => {
       const hookOptions: Parameters<typeof readHarnessHookHealth>[0] = { providers, providerId };
@@ -156,74 +160,75 @@ function observerInspectionUnknown(
 async function inspectHostRecoveryEvidence(input: {
   config: StationConfig;
   artifacts: { installed: UpdateArtifact; target: UpdateArtifact };
-  currentBuildIdentity: string;
-  readStatus: typeof runHostCommand;
-  hostDeps?: HostCommandDeps;
+  currentBuildIdentity: StationBuildIdentity;
+  inspectHost: typeof inspectStationHost;
+  inspectionDeps?: Pick<InspectStationHostDeps, "clientFactory">;
 }): Promise<UpdateReapHostEvidence> {
-  const deps: HostCommandDeps = {
-    ...input.hostDeps,
-    expectedBuildVersion: input.artifacts.target.version,
-  };
-  const status = await input.readStatus(["status"], { config: input.config }, deps);
-  if (status.action !== "status") {
-    return hostUnknown(
-      "health-failed",
-      "UPDATE_PREFLIGHT_HOST_HEALTH_FAILED",
-      "Host status returned an invalid result.",
-    );
-  }
-  if (status.probe === "absent") return { status: "absent" };
-  if (status.probe === "stale") {
+  const inspection = await input.inspectHost(
+    {
+      socketPath: stationHostSocketPath(input.config),
+      expectedBuildVersion: input.artifacts.target.version,
+    },
+    input.inspectionDeps,
+  );
+  if (inspection.status === "absent") return { status: "absent" };
+  if (inspection.status === "stale") {
     return hostUnknown(
       "stale-socket",
       "UPDATE_PREFLIGHT_HOST_STALE",
       "Host socket evidence is stale.",
     );
   }
-  if (status.probe === "inaccessible") {
+  if (inspection.status === "inaccessible") {
     return hostUnknown(
       "inaccessible",
       "UPDATE_PREFLIGHT_HOST_INACCESSIBLE",
       "Host socket ownership is inaccessible.",
+      inspection.error,
     );
   }
-  if (status.health === undefined || status.compatibility === undefined) {
+  if (inspection.status === "unknown") {
+    if (inspection.reason === "inventory-failed") {
+      return hostUnknown(
+        "inventory-failed",
+        "UPDATE_PREFLIGHT_HOST_INVENTORY_FAILED",
+        "Host terminal inventory could not be read.",
+        inspection.error,
+      );
+    }
+    if (inspection.reason === "endpoint-drift") {
+      return hostUnknown(
+        "inaccessible",
+        "UPDATE_PREFLIGHT_HOST_INACCESSIBLE",
+        "Host socket ownership changed during inspection.",
+        inspection.error,
+      );
+    }
     return hostUnknown(
       "health-failed",
       "UPDATE_PREFLIGHT_HOST_HEALTH_FAILED",
-      "Host health and compatibility could not be established.",
+      "Host health could not be established exactly.",
+      inspection.error,
     );
   }
-  if (status.ptys === undefined) {
-    return hostUnknown(
-      "inventory-failed",
-      "UPDATE_PREFLIGHT_HOST_INVENTORY_FAILED",
-      "Host terminal inventory could not be read.",
-    );
-  }
-  const terminals = status.ptys.map(redactedHostTerminal).sort(compareHostTerminal);
-  const evidence: Extract<UpdateReapHostEvidence, { status: "inspected" }> = {
+  const { health, buildIdentity, terminals: privateTerminals } = inspection.evidence;
+  return {
     status: "inspected",
-    protocolVersion: status.health.protocolVersion,
+    buildVersion: health.buildVersion,
+    buildIdentity,
+    protocolVersion: health.protocolVersion,
     relation: runtimeBuildRelation({
-      runningDisplayVersion: status.health.buildVersion,
-      runningBuildIdentity: status.buildIdentity,
+      runningDisplayVersion: health.buildVersion,
+      runningBuildIdentity: buildIdentity,
       currentBuildIdentity: input.currentBuildIdentity,
       artifacts: input.artifacts,
     }),
-    compatibility: status.compatibility.action,
-    terminals,
+    compatibility: health.buildVersion === input.artifacts.target.version ? "reuse" : "replace",
+    terminals: privateTerminals.map(redactedHostTerminal),
   };
-  if (status.health.buildVersion !== undefined) evidence.buildVersion = status.health.buildVersion;
-  if (status.buildIdentity !== undefined) evidence.buildIdentity = status.buildIdentity;
-  return evidence;
 }
 
-function redactedHostTerminal(
-  terminal: NonNullable<
-    Extract<Awaited<ReturnType<typeof runHostCommand>>, { action: "status" }>["ptys"]
-  >[number],
-): UpdateReapTerminalEvidence {
+function redactedHostTerminal(terminal: StationHostTerminalLifetime): UpdateReapTerminalEvidence {
   return {
     kind: terminal.kind,
     terminalTargetId: terminal.terminalTargetId,
@@ -234,19 +239,8 @@ function redactedHostTerminal(
     sessionId: terminal.sessionId,
     harnessProvider: terminal.harnessProvider,
     alive: terminal.alive,
-    handoffSupport: terminal.handoffSupport?.kind ?? "unknown",
+    handoffSupport: terminal.handoffSupport.kind,
   };
-}
-
-function compareHostTerminal(
-  left: UpdateReapTerminalEvidence,
-  right: UpdateReapTerminalEvidence,
-): number {
-  return (
-    compareCodeUnitStrings(left.terminalTargetId, right.terminalTargetId) ||
-    compareCodeUnitStrings(left.ptyId, right.ptyId) ||
-    compareCodeUnitStrings(left.ptyInstanceId, right.ptyInstanceId)
-  );
 }
 
 function runtimeBuildRelation(input: {
@@ -326,10 +320,11 @@ function hostUnknown(
   reason: Extract<UpdateReapHostEvidence, { status: "unknown" }>["reason"],
   code: string,
   message: string,
+  error?: unknown,
 ): UpdateReapHostEvidence {
   return {
     status: "unknown",
     reason,
-    error: redactedPreflightError(undefined, { code, message }),
+    error: redactedPreflightError(error, { code, message }),
   };
 }
