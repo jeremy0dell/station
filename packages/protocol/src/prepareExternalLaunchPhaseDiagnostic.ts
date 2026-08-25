@@ -37,6 +37,11 @@ type DiagnosticEvent<TPhase extends string> = {
   atMs: number;
   epochMs: number;
 };
+type DiagnosticTimestamp = Pick<DiagnosticEvent<string>, "atMs" | "epochMs">;
+export type ExpectedObserverHealthServerProtocolDiagnostic = {
+  requestParsed: DiagnosticTimestamp;
+  responseSent?: DiagnosticTimestamp;
+};
 
 const pathSchema = z.string().min(1);
 const clientPathResult = pathSchema.safeParse(
@@ -72,7 +77,41 @@ export function markPrepareExternalLaunchClientProtocolPhase(phase: ClientPhase)
 
 export function markPrepareExternalLaunchServerProtocolPhase(phase: ServerPhase): void {
   if (serverPath !== undefined) {
-    const atMs = performance.now();
-    serverEvents.push({ phase, atMs, epochMs: performance.timeOrigin + atMs });
+    serverEvents.push({ phase, ...diagnosticTimestamp() });
   }
+}
+
+/** Buffers a same-connection health exchange until a prepare request proves ownership. */
+export function beginExpectedObserverHealthServerProtocolDiagnostic():
+  | ExpectedObserverHealthServerProtocolDiagnostic
+  | undefined {
+  return serverPath === undefined ? undefined : { requestParsed: diagnosticTimestamp() };
+}
+
+export function completeExpectedObserverHealthServerProtocolDiagnostic(
+  diagnostic: ExpectedObserverHealthServerProtocolDiagnostic | undefined,
+): void {
+  if (diagnostic !== undefined) {
+    diagnostic.responseSent = diagnosticTimestamp();
+  }
+}
+
+export function commitExpectedObserverHealthServerProtocolDiagnostic(
+  diagnostic: ExpectedObserverHealthServerProtocolDiagnostic | undefined,
+): void {
+  if (serverPath !== undefined && diagnostic?.responseSent !== undefined) {
+    serverEvents.push({
+      phase: "expectedObserverHealthRequestParsed",
+      ...diagnostic.requestParsed,
+    });
+    serverEvents.push({
+      phase: "expectedObserverHealthResponseSent",
+      ...diagnostic.responseSent,
+    });
+  }
+}
+
+function diagnosticTimestamp(): DiagnosticTimestamp {
+  const atMs = performance.now();
+  return { atMs, epochMs: performance.timeOrigin + atMs };
 }
