@@ -13545,6 +13545,73 @@
   ],
   "controlledDeclarations": [
     {
+      "path": "apps/cli/src/commands/command.ts",
+      "declaration": "executeTypedObserverCommand",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Starts or selects the pinned Observer, dispatches one typed Station command, and optionally reloads its durable terminal outcome through the race-safe protocol completion wait.",
+      "dependencies": [
+        {
+          "path": "apps/cli/src/observerProcess.ts",
+          "declaration": "startObserver",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "packages/contracts/src/observer.ts",
+          "declaration": "ObserverApi",
+          "kind": "type",
+          "role": "DRIVING PORT",
+          "edgeKind": "type-only"
+        },
+        {
+          "path": "packages/protocol/src/client.ts",
+          "declaration": "createObserverClient",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
+      "path": "apps/cli/src/commands/command.ts",
+      "declaration": "runCommandCommand",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Translates raw CLI argv and stdin JSON into typed Observer command execution or record lookup.",
+      "dependencies": [
+        {
+          "path": "apps/cli/src/commands/command.ts",
+          "declaration": "executeTypedObserverCommand",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/observerProcess.ts",
+          "declaration": "startObserver",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "packages/contracts/src/observer.ts",
+          "declaration": "ObserverApi",
+          "kind": "type",
+          "role": "DRIVING PORT",
+          "edgeKind": "type-only"
+        },
+        {
+          "path": "packages/protocol/src/client.ts",
+          "declaration": "createObserverClient",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
       "path": "apps/cli/src/commands/debugLogs.ts",
       "declaration": "runDebugLogsCommand",
       "kind": "function",
@@ -13688,6 +13755,22 @@
         {
           "path": "packages/protocol/src/client.ts",
           "declaration": "createObserverClient",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
+      "path": "apps/cli/src/commands/project.ts",
+      "declaration": "runProjectCommand",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Translates project CLI intent into configuration reads or typed Observer project commands.",
+      "dependencies": [
+        {
+          "path": "apps/cli/src/commands/command.ts",
+          "declaration": "executeTypedObserverCommand",
           "kind": "function",
           "role": "ADAPTER",
           "edgeKind": "runtime"
