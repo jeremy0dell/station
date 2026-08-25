@@ -1,0 +1,2201 @@
+{
+  "schemaVersion": 1,
+  "benchmark": "station-quick-session-bench-043-protocol-residual-attribution",
+  "generatedAt": "2026-08-25T21:17:31.548Z",
+  "machine": {
+    "platform": "darwin",
+    "arch": "arm64",
+    "cpuModel": "Apple M4",
+    "logicalCpuCount": 10
+  },
+  "tools": {
+    "bun": "1.3.14",
+    "worktrunk": "wt v0.72.0",
+    "tmux": "tmux 3.7b",
+    "hostProtocolVersion": 8,
+    "displayBuildVersion": "0.0.0-pre-alpha.5.16",
+    "observerBuildVersion": "0.0.0-pre-alpha.5.16+station.e3db41b22dde0af5d49b4458e65db265d39e4ba9f6615f8723e0a4bb68f84215"
+  },
+  "binary": {
+    "buildMs": 8632.446375,
+    "bytes": 78189922,
+    "buildExcludedFromTiming": true,
+    "prebuiltExactCandidate": false
+  },
+  "repositoryShape": {
+    "worktrees": 49,
+    "repetitions": 20,
+    "lifecycleHooks": false,
+    "ordinaryObserverRestartPerRun": true,
+    "ptyUsedHostPreservedAcrossRuns": true
+  },
+  "thresholds": {
+    "intentToInteractiveP95Ms": 380,
+    "attachmentResolutionP95Ms": 30,
+    "transportResidualP95Ms": 35,
+    "residualTailIntervalMs": 20,
+    "minimumTailIntervals": 2,
+    "dominantP95Fraction": 0.4,
+    "dominantTailFraction": 0.5,
+    "minimumDominantTailIntervals": 2,
+    "phaseCoherenceToleranceMs": 0.1,
+    "residualCoherenceToleranceMs": 1
+  },
+  "setup": {
+    "repositoryShapeMs": 1384.199584,
+    "hostSeedMs": 1030.167542000001,
+    "hostSeedSafe": true,
+    "hostStoppedCleanly": false,
+    "hostStderrEmpty": false,
+    "rootRemoved": true
+  },
+  "runs": [
+    {
+      "repetition": 0,
+      "focusStrategy": "automatic",
+      "dismissalInputSent": false,
+      "readyWasReplay": false,
+      "acknowledgementCount": 1,
+      "safe": true,
+      "safetyPredicates": {
+        "dashboardProjectVisible": true,
+        "commandProjectMatches": true,
+        "commandHarnessMatches": true,
+        "worktreeProjectMatches": true,
+        "worktreeBranchMatches": true,
+        "worktreeUsesManagedRoot": true,
+        "worktreeHasRegistrationIdentity": true,
+        "sessionHarnessMatches": true,
+        "sessionTerminalMatches": true,
+        "hostWorktreeMatches": true,
+        "hostHarnessMatches": true,
+        "hostSessionMatches": true,
+        "readyMarkerObserved": true,
+        "inputAcknowledged": true,
+        "inputAcknowledgedExactlyOnce": true,
+        "hostInventoryEmpty": true,
+        "gitInventoryRestored": true,
+        "uiStoppedCleanly": true,
+        "observerStoppedCleanly": true,
+        "managedLaunchPhaseTraceValid": true,
+        "managedLaunchPhaseTraceExitOnly": true,
+        "observerExternalLaunchPhaseTraceValid": true,
+        "observerExternalLaunchPhaseTraceExitOnly": true,
+        "clientProtocolPhaseTraceValid": true,
+        "clientProtocolPhaseTraceExitOnly": true,
+        "serverProtocolPhaseTraceValid": true,
+        "serverProtocolPhaseTraceExitOnly": true,
+        "protocolResidualPhaseTraceValid": true,
+        "uiStderrMatches": true
+      },
+      "phaseCoherent": true,
+      "commandId": "cmd_f7872e50-129e-45ea-a095-1c6274396cd2",
+      "traceId": "trc_4f72c3aa-9d7d-4d07-920f-32ede980951e",
+      "branch": "compiled-tui-project-a44c8f",
+      "worktreeId": "wt_compiled-tui-project_compiled-tui-project-a44c8f_256a52e786",
+      "worktreePath": "/private/var/folders/l4/540r7_b136l9jcf36_p3qyvc0000gn/T/s-W2Zyhd/tmp/st-qtu-5Fb40i/worktrees/compiled-tui-project-a44c8f",
+      "sessionId": "ses_cc645e69-e831-4024-b0cb-09cff0d8a39c",
+      "terminalTargetId": "native:wt_compiled-tui-project_compiled-tui-project-a44c8f_256a52e786",
+      "ptyId": "pty-2",
+      "ptyInstanceId": "ptyi_1943b458-044b-4bb0-9789-3b1c409e095f",
+      "observerPid": 20659,
+      "sampledReconcileReason": "tui-startup",
+      "uiPid": 19664,
+      "launchToDashboardMs": 4425.556375,
+      "intentToOptimisticMs": 12.796917000003305,
+      "intentToCommandAcceptedMs": 23.66816700000345,
+      "intentToCommandCompletedMs": 135.07541700000002,
+      "intentToHostReadyMs": 320.4763340000027,
+      "intentToCanonicalUiMs": 332.60445900000195,
+      "intentToFocusMs": 224.95133400000122,
+      "focusToOverlayDismissedMs": 0,
+      "overlayDismissedToInputSentMs": 0.06008300000030431,
+      "inputSentToHostReadyMs": 95.46491700000115,
+      "inputSentToAckMs": 95.74954200000138,
+      "focusToInputAckMs": 95.80962500000169,
+      "phaseSumMs": 95.80962500000169,
+      "intentToInteractiveMs": 320.7609590000029,
+      "launchToInteractiveMs": 4871.604500000001,
+      "cleanupInventoryCount": 0,
+      "gitCleanupInventoryCount": 49,
+      "uiStoppedCleanly": true,
+      "observerStoppedCleanly": true,
+      "uiStderrEmpty": false,
+      "uiStderr": "Starting STATION observer…\nLaunching STATION TUI…\n__STATION_QUICK_SESSION_MANAGED_LAUNCH_PHASES__:{\"events\":[{\"phase\":\"hostedLaunchStarted\",\"atMs\":985.460875},{\"phase\":\"commandCompleted\",\"atMs\":1130.149916},{\"phase\":\"worktreeObserved\",\"atMs\":1130.212375},{\"phase\":\"attemptStarted\",\"atMs\":1130.329916},{\"phase\":\"preflightCompleted\",\"atMs\":1130.496375},{\"phase\":\"prepareStarted\",\"atMs\":1130.496583},{\"phase\":\"prepareCompleted\",\"atMs\":1165.650416},{\"phase\":\"attachmentResolveStarted\",\"atMs\":1165.79175},{\"phase\":\"attachmentResolveCompleted\",\"atMs\":1177.443333},{\"phase\":\"terminalPlaced\",\"atMs\":1177.720958},{\"phase\":\"panePublished\",\"atMs\":1177.893958},{\"phase\":\"attemptCompleted\",\"atMs\":1181.504458},{\"phase\":\"hostedLaunchCompleted\",\"atMs\":1181.506875},{\"phase\":\"quickResultReceived\",\"atMs\":1181.561833},{\"phase\":\"overlayCloseRequested\",\"atMs\":1181.562291},{\"phase\":\"canonicalWaitStarted\",\"atMs\":1181.640041},{\"phase\":\"canonicalWaitCompleted\",\"atMs\":1190.064666}]}\n",
+      "uiStderrBeforeExit": "Starting STATION observer…\nLaunching STATION TUI…\n",
+      "managedLaunchPhaseTrace": {
+        "events": [
+          {
+            "phase": "hostedLaunchStarted",
+            "atMs": 985.460875
+          },
+          {
+            "phase": "commandCompleted",
+            "atMs": 1130.149916
+          },
+          {
+            "phase": "worktreeObserved",
+            "atMs": 1130.212375
+          },
+          {
+            "phase": "attemptStarted",
+            "atMs": 1130.329916
+          },
+          {
+            "phase": "preflightCompleted",
+            "atMs": 1130.496375
+          },
+          {
+            "phase": "prepareStarted",
+            "atMs": 1130.496583
+          },
+          {
+            "phase": "prepareCompleted",
+            "atMs": 1165.650416
+          },
+          {
+            "phase": "attachmentResolveStarted",
+            "atMs": 1165.79175
+          },
+          {
+            "phase": "attachmentResolveCompleted",
+            "atMs": 1177.443333
+          },
+          {
+            "phase": "terminalPlaced",
+            "atMs": 1177.720958
+          },
+          {
+            "phase": "panePublished",
+            "atMs": 1177.893958
+          },
+          {
+            "phase": "attemptCompleted",
+            "atMs": 1181.504458
+          },
+          {
+            "phase": "hostedLaunchCompleted",
+            "atMs": 1181.506875
+          },
+          {
+            "phase": "quickResultReceived",
+            "atMs": 1181.561833
+          },
+          {
+            "phase": "overlayCloseRequested",
+            "atMs": 1181.562291
+          },
+          {
+            "phase": "canonicalWaitStarted",
+            "atMs": 1181.640041
+          },
+          {
+            "phase": "canonicalWaitCompleted",
+            "atMs": 1190.064666
+          }
+        ]
+      },
+      "managedLaunchPhaseDurations": {
+        "commandCompletionToWorktreeObservationMs": 0.06245899999998983,
+        "worktreeObservationToAttemptStartMs": 0.11754099999984646,
+        "managedPreflightMs": 0.16645900000003166,
+        "preflightToPrepareStartMs": 0.0002080000001569715,
+        "prepareExternalLaunchMs": 35.15383299999985,
+        "prepareToAttachmentResolveStartMs": 0.14133400000014262,
+        "attachmentResolutionMs": 11.651582999999846,
+        "attachmentToTerminalPlacementMs": 0.277625000000171,
+        "terminalPlacementToPanePublicationMs": 0.17300000000000182,
+        "panePublicationToAttemptCompletionMs": 3.610500000000002,
+        "attemptToHostedLaunchCompletionMs": 0.002416999999923064,
+        "hostedLaunchToQuickResultMs": 0.05495799999994233,
+        "quickResultToOverlayCloseMs": 0.00045799999998052954
+      },
+      "commandCompletionToOverlayCloseMs": 51.412374999999884,
+      "managedLaunchPhaseSumMs": 51.412374999999884,
+      "managedLaunchPhaseCoherent": true,
+      "observerExternalLaunchPhaseTrace": {
+        "events": [
+          {
+            "phase": "prepareEntered",
+            "atMs": 3359.612875
+          },
+          {
+            "phase": "mutationEntered",
+            "atMs": 3359.761834
+          },
+          {
+            "phase": "targetInventoryStarted",
+            "atMs": 3360.280709
+          },
+          {
+            "phase": "targetInventoryCompleted",
+            "atMs": 3361.615834
+          },
+          {
+            "phase": "harnessPreflightStarted",
+            "atMs": 3361.713042
+          },
+          {
+            "phase": "harnessPreflightCompleted",
+            "atMs": 3362.22175
+          },
+          {
+            "phase": "sessionPersistenceStarted",
+            "atMs": 3362.260334
+          },
+          {
+            "phase": "sessionPersistenceCompleted",
+            "atMs": 3363.505625
+          },
+          {
+            "phase": "workspaceOpenStarted",
+            "atMs": 3363.506084
+          },
+          {
+            "phase": "workspaceOpenCompleted",
+            "atMs": 3363.750209
+          },
+          {
+            "phase": "launchPlanStarted",
+            "atMs": 3363.755084
+          },
+          {
+            "phase": "launchPlanCompleted",
+            "atMs": 3363.944459
+          },
+          {
+            "phase": "hostProcessLaunchStarted",
+            "atMs": 3363.944667
+          },
+          {
+            "phase": "hostProcessLaunchCompleted",
+            "atMs": 3375.8245
+          },
+          {
+            "phase": "canonicalProjectionStarted",
+            "atMs": 3375.827459
+          },
+          {
+            "phase": "canonicalProjectionCompleted",
+            "atMs": 3376.425959
+          },
+          {
+            "phase": "prepareCompleted",
+            "atMs": 3376.426375
+          }
+        ]
+      },
+      "observerExternalLaunchPhaseDurations": {
+        "mutationAdmissionMs": 0.14895900000010442,
+        "mutationToTargetInventoryStartMs": 0.5188750000002074,
+        "targetInventoryMs": 1.3351250000000618,
+        "inventoryToHarnessPreflightMs": 0.09720799999968222,
+        "harnessPreflightMs": 0.508708000000297,
+        "preflightToSessionPersistenceMs": 0.0385839999999007,
+        "sessionPersistenceMs": 1.2452909999997246,
+        "persistenceToWorkspaceOpenMs": 0.0004590000003190653,
+        "managedWorkspaceOpenMs": 0.2441249999997126,
+        "workspaceToLaunchPlanMs": 0.0048750000000836735,
+        "harnessLaunchPlanMs": 0.18937499999992724,
+        "launchPlanToHostProcessMs": 0.00020800000038434519,
+        "hostProcessLaunchMs": 11.879832999999962,
+        "hostProcessToCanonicalProjectionMs": 0.0029589999999188876,
+        "canonicalProjectionMs": 0.5985000000000582,
+        "projectionToPrepareCompletionMs": 0.00041599999985919567
+      },
+      "observerExternalLaunchInternalMs": 16.813500000000204,
+      "observerExternalLaunchPhaseSumMs": 16.813500000000204,
+      "observerExternalLaunchPhaseCoherent": true,
+      "clientRpcMinusObserverInternalMs": 18.340332999999646,
+      "clientProtocolPhaseTrace": {
+        "events": [
+          {
+            "phase": "protocolEntered",
+            "atMs": 1130.705541
+          },
+          {
+            "phase": "boundaryTaskEntered",
+            "atMs": 1130.783041
+          },
+          {
+            "phase": "socketConnectStarted",
+            "atMs": 1130.78375
+          },
+          {
+            "phase": "socketConnected",
+            "atMs": 1131.127041
+          },
+          {
+            "phase": "expectedObserverHealthStarted",
+            "atMs": 1131.130875
+          },
+          {
+            "phase": "expectedObserverHealthCompleted",
+            "atMs": 1138.900666
+          },
+          {
+            "phase": "prepareRequestStarted",
+            "atMs": 1138.901208
+          },
+          {
+            "phase": "prepareResponseCompleted",
+            "atMs": 1165.017541
+          },
+          {
+            "phase": "boundaryTaskCompleted",
+            "atMs": 1165.044666
+          },
+          {
+            "phase": "protocolCompleted",
+            "atMs": 1165.576583
+          }
+        ]
+      },
+      "clientProtocolPhaseDurations": {
+        "protocolBoundaryAdmissionMs": 0.07749999999987267,
+        "boundaryToSocketConnectMs": 0.0007090000001426233,
+        "socketConnectMs": 0.3432909999999083,
+        "socketToExpectedObserverHealthMs": 0.0038340000000971486,
+        "expectedObserverHealthMs": 7.769790999999941,
+        "healthToPrepareRequestMs": 0.0005419999999958236,
+        "prepareRequestRoundTripMs": 26.11633299999994,
+        "responseToBoundaryCompletionMs": 0.02712500000006912,
+        "boundaryToProtocolCompletionMs": 0.5319170000000213
+      },
+      "clientProtocolTotalMs": 34.87104199999999,
+      "clientProtocolPhaseSumMs": 34.87104199999999,
+      "clientProtocolPhaseCoherent": true,
+      "serverProtocolPhaseTrace": {
+        "events": [
+          {
+            "phase": "prepareRequestParsed",
+            "atMs": 3358.930584
+          },
+          {
+            "phase": "prepareHandlerStarted",
+            "atMs": 3358.941417
+          },
+          {
+            "phase": "prepareUseCaseDispatchStarted",
+            "atMs": 3359.121042
+          },
+          {
+            "phase": "prepareUseCaseDispatchCompleted",
+            "atMs": 3377.955125
+          },
+          {
+            "phase": "prepareHandlerCompleted",
+            "atMs": 3378.113792
+          },
+          {
+            "phase": "prepareResponseSent",
+            "atMs": 3378.49175
+          }
+        ]
+      },
+      "serverProtocolPhaseDurations": {
+        "requestToHandlerAdmissionMs": 0.010832999999820458,
+        "handlerToUseCaseDispatchMs": 0.17962500000021464,
+        "useCaseDispatchMs": 18.834082999999737,
+        "useCaseToHandlerCompletionMs": 0.15866700000015044,
+        "handlerToResponseSendMs": 0.3779580000000351
+      },
+      "serverProtocolTotalMs": 19.561165999999957,
+      "serverProtocolPhaseSumMs": 19.561165999999957,
+      "serverProtocolPhaseCoherent": true,
+      "protocolResidualPhaseDurations": {
+        "serviceToProtocolEntryMs": 0.2089579999999387,
+        "protocolBoundaryAdmissionMs": 0.07749999999987267,
+        "boundaryToSocketConnectMs": 0.0007090000001426233,
+        "socketConnectMs": 0.3432909999999083,
+        "socketToExpectedObserverHealthMs": 0.0038340000000971486,
+        "expectedObserverHealthMs": 7.769790999999941,
+        "healthToPrepareRequestMs": 0.0005419999999958236,
+        "actualRequestWireClientMs": 6.555166999999983,
+        "observerProtocolPreUseCaseMs": 0.6822909999996227,
+        "observerProtocolPostUseCaseMs": 2.065375000000131,
+        "responseToBoundaryCompletionMs": 0.02712500000006912,
+        "boundaryToProtocolCompletionMs": 0.5319170000000213,
+        "protocolToServiceCompletionMs": 0.07383299999992232
+      },
+      "protocolResidualPhaseSumMs": 18.340332999999646,
+      "protocolResidualReconstructionErrorMs": 0,
+      "protocolResidualPhaseCoherent": true,
+      "loadAverage": {
+        "before": [
+          16.0048828125,
+          16.849609375,
+          19.1728515625
+        ],
+        "after": [
+          15.44384765625,
+          16.71923828125,
+          19.11279296875
+        ]
+      },
+      "resourceUsage": {
+        "userCpuMs": 287.937,
+        "systemCpuMs": 239.132,
+        "fsReads": 0,
+        "fsWrites": 0,
+        "voluntaryContextSwitches": 1,
+        "involuntaryContextSwitches": 7207
+      }
+    },
+    {
+      "repetition": 1,
+      "focusStrategy": "automatic",
+      "dismissalInputSent": false,
+      "readyWasReplay": true,
+      "acknowledgementCount": 1,
+      "safe": true,
+      "safetyPredicates": {
+        "dashboardProjectVisible": true,
+        "commandProjectMatches": true,
+        "commandHarnessMatches": true,
+        "worktreeProjectMatches": true,
+        "worktreeBranchMatches": true,
+        "worktreeUsesManagedRoot": true,
+        "worktreeHasRegistrationIdentity": true,
+        "sessionHarnessMatches": true,
+        "sessionTerminalMatches": true,
+        "hostWorktreeMatches": true,
+        "hostHarnessMatches": true,
+        "hostSessionMatches": true,
+        "readyMarkerObserved": true,
+        "inputAcknowledged": true,
+        "inputAcknowledgedExactlyOnce": true,
+        "hostInventoryEmpty": true,
+        "gitInventoryRestored": true,
+        "uiStoppedCleanly": true,
+        "observerStoppedCleanly": true,
+        "managedLaunchPhaseTraceValid": true,
+        "managedLaunchPhaseTraceExitOnly": true,
+        "observerExternalLaunchPhaseTraceValid": true,
+        "observerExternalLaunchPhaseTraceExitOnly": true,
+        "clientProtocolPhaseTraceValid": true,
+        "clientProtocolPhaseTraceExitOnly": true,
+        "serverProtocolPhaseTraceValid": true,
+        "serverProtocolPhaseTraceExitOnly": true,
+        "protocolResidualPhaseTraceValid": true,
+        "uiStderrMatches": true
+      },
+      "phaseCoherent": true,
+      "commandId": "cmd_b5c595b6-8ef2-45d4-b0a8-476866d8452c",
+      "traceId": "trc_94ef04ff-503a-4358-aaf0-2a38de0564c9",
+      "branch": "compiled-tui-project-042008",
+      "worktreeId": "wt_compiled-tui-project_compiled-tui-project-042008_ce09d8426d",
+      "worktreePath": "/private/var/folders/l4/540r7_b136l9jcf36_p3qyvc0000gn/T/s-W2Zyhd/tmp/st-qtu-5Fb40i/worktrees/compiled-tui-project-042008",
+      "sessionId": "ses_8f1482bf-ec00-435a-a482-d43c1ea5d6c2",
+      "terminalTargetId": "native:wt_compiled-tui-project_compiled-tui-project-042008_ce09d8426d",
+      "ptyId": "pty-3",
+      "ptyInstanceId": "ptyi_421157c2-abc2-4f5d-8798-7f1cb403d876",
+      "observerPid": 29669,
+      "sampledReconcileReason": "tui-startup",
+      "uiPid": 27944,
+      "launchToDashboardMs": 4044.182499999999,
+      "intentToOptimisticMs": 11.69445800000176,
+      "intentToCommandAcceptedMs": 21.561625000002095,
+      "intentToCommandCompletedMs": 98.05225000000064,
+      "intentToHostReadyMs": 136.3374580000018,
+      "intentToCanonicalUiMs": 193.7188750000023,
+      "intentToFocusMs": 163.47166600000128,
+      "focusToOverlayDismissedMs": 0,
+      "overlayDismissedToInputSentMs": 0.0027919999993173406,
+      "inputSentToHostReadyMs": -27.136999999998807,
+      "inputSentToAckMs": 22.623250000000553,
+      "focusToInputAckMs": 22.62604199999987,
+      "phaseSumMs": 22.62604199999987,
+      "intentToInteractiveMs": 186.09770800000115,
+      "launchToInteractiveMs": 4338.814125000001,
+      "cleanupInventoryCount": 0,
+      "gitCleanupInventoryCount": 49,
+      "uiStoppedCleanly": true,
+      "observerStoppedCleanly": true,
+      "uiStderrEmpty": false,
+      "uiStderr": "Launching STATION TUI…\n__STATION_QUICK_SESSION_MANAGED_LAUNCH_PHASES__:{\"events\":[{\"phase\":\"hostedLaunchStarted\",\"atMs\":997.096208},{\"phase\":\"commandCompleted\",\"atMs\":1102.835708},{\"phase\":\"worktreeObserved\",\"atMs\":1102.907208},{\"phase\":\"attemptStarted\",\"atMs\":1103.033875},{\"phase\":\"preflightCompleted\",\"atMs\":1103.211292},{\"phase\":\"prepareStarted\",\"atMs\":1103.211583},{\"phase\":\"prepareCompleted\",\"atMs\":1129.047333},{\"phase\":\"attachmentResolveStarted\",\"atMs\":1129.179917},{\"phase\":\"attachmentResolveCompleted\",\"atMs\":1137.710792},{\"phase\":\"terminalPlaced\",\"atMs\":1138.16},{\"phase\":\"panePublished\",\"atMs\":1138.362875},{\"phase\":\"attemptCompleted\",\"atMs\":1142.463542},{\"phase\":\"hostedLaunchCompleted\",\"atMs\":1142.468167},{\"phase\":\"quickResultReceived\",\"atMs\":1142.559208},{\"phase\":\"overlayCloseRequested\",\"atMs\":1142.559708},{\"phase\":\"canonicalWaitStarted\",\"atMs\":1142.662458},{\"phase\":\"canonicalWaitCompleted\",\"atMs\":1165.729417}]}\n",
+      "uiStderrBeforeExit": "Launching STATION TUI…\n",
+      "managedLaunchPhaseTrace": {
+        "events": [
+          {
+            "phase": "hostedLaunchStarted",
+            "atMs": 997.096208
+          },
+          {
+            "phase": "commandCompleted",
+            "atMs": 1102.835708
+          },
+          {
+            "phase": "worktreeObserved",
+            "atMs": 1102.907208
+          },
+          {
+            "phase": "attemptStarted",
+            "atMs": 1103.033875
+          },
+          {
+            "phase": "preflightCompleted",
+            "atMs": 1103.211292
+          },
+          {
+            "phase": "prepareStarted",
+            "atMs": 1103.211583
+          },
+          {
+            "phase": "prepareCompleted",
+            "atMs": 1129.047333
+          },
+          {
+            "phase": "attachmentResolveStarted",
+            "atMs": 1129.179917
+          },
+          {
+            "phase": "attachmentResolveCompleted",
+            "atMs": 1137.710792
+          },
+          {
+            "phase": "terminalPlaced",
+            "atMs": 1138.16
+          },
+          {
+            "phase": "panePublished",
+            "atMs": 1138.362875
+          },
+          {
+            "phase": "attemptCompleted",
+            "atMs": 1142.463542
+          },
+          {
+            "phase": "hostedLaunchCompleted",
+            "atMs": 1142.468167
+          },
+          {
+            "phase": "quickResultReceived",
+            "atMs": 1142.559208
+          },
+          {
+            "phase": "overlayCloseRequested",
+            "atMs": 1142.559708
+          },
+          {
+            "phase": "canonicalWaitStarted",
+            "atMs": 1142.662458
+          },
+          {
+            "phase": "canonicalWaitCompleted",
+            "atMs": 1165.729417
+          }
+        ]
+      },
+      "managedLaunchPhaseDurations": {
+        "commandCompletionToWorktreeObservationMs": 0.07150000000001455,
+        "worktreeObservationToAttemptStartMs": 0.12666699999999764,
+        "managedPreflightMs": 0.1774169999998776,
+        "preflightToPrepareStartMs": 0.0002910000000611035,
+        "prepareExternalLaunchMs": 25.835749999999962,
+        "prepareToAttachmentResolveStartMs": 0.13258399999995163,
+        "attachmentResolutionMs": 8.530875000000151,
+        "attachmentToTerminalPlacementMs": 0.4492079999999987,
+        "terminalPlacementToPanePublicationMs": 0.20287499999994907,
+        "panePublicationToAttemptCompletionMs": 4.10066699999993,
+        "attemptToHostedLaunchCompletionMs": 0.004625000000032742,
+        "hostedLaunchToQuickResultMs": 0.09104099999990467,
+        "quickResultToOverlayCloseMs": 0.0005000000001018634
+      },
+      "commandCompletionToOverlayCloseMs": 39.72399999999993,
+      "managedLaunchPhaseSumMs": 39.72399999999993,
+      "managedLaunchPhaseCoherent": true,
+      "observerExternalLaunchPhaseTrace": {
+        "events": [
+          {
+            "phase": "prepareEntered",
+            "atMs": 2073.807458
+          },
+          {
+            "phase": "mutationEntered",
+            "atMs": 2073.956375
+          },
+          {
+            "phase": "targetInventoryStarted",
+            "atMs": 2074.512083
+          },
+          {
+            "phase": "targetInventoryCompleted",
+            "atMs": 2075.234625
+          },
+          {
+            "phase": "harnessPreflightStarted",
+            "atMs": 2075.415125
+          },
+          {
+            "phase": "harnessPreflightCompleted",
+            "atMs": 2076.11975
+          },
+          {
+            "phase": "sessionPersistenceStarted",
+            "atMs": 2076.155333
+          },
+          {
+            "phase": "sessionPersistenceCompleted",
+            "atMs": 2076.654833
+          },
+          {
+            "phase": "workspaceOpenStarted",
+            "atMs": 2076.655
+          },
+          {
+            "phase": "workspaceOpenCompleted",
+            "atMs": 2076.7495
+          },
+          {
+            "phase": "launchPlanStarted",
+            "atMs": 2076.7515
+          },
+          {
+            "phase": "launchPlanCompleted",
+            "atMs": 2076.829542
+          },
+          {
+            "phase": "hostProcessLaunchStarted",
+            "atMs": 2076.829667
+          },
+          {
+            "phase": "hostProcessLaunchCompleted",
+            "atMs": 2086.9505
+          },
+          {
+            "phase": "canonicalProjectionStarted",
+            "atMs": 2086.954208
+          },
+          {
+            "phase": "canonicalProjectionCompleted",
+            "atMs": 2087.858542
+          },
+          {
+            "phase": "prepareCompleted",
+            "atMs": 2087.858875
+          }
+        ]
+      },
+      "observerExternalLaunchPhaseDurations": {
+        "mutationAdmissionMs": 0.1489169999999831,
+        "mutationToTargetInventoryStartMs": 0.5557079999998678,
+        "targetInventoryMs": 0.7225419999999758,
+        "inventoryToHarnessPreflightMs": 0.18049999999993815,
+        "harnessPreflightMs": 0.7046249999998508,
+        "preflightToSessionPersistenceMs": 0.035583000000315224,
+        "sessionPersistenceMs": 0.49949999999989814,
+        "persistenceToWorkspaceOpenMs": 0.00016700000014679972,
+        "managedWorkspaceOpenMs": 0.09449999999969805,
+        "workspaceToLaunchPlanMs": 0.0019999999999527063,
+        "harnessLaunchPlanMs": 0.07804200000009587,
+        "launchPlanToHostProcessMs": 0.00012500000002546585,
+        "hostProcessLaunchMs": 10.120832999999948,
+        "hostProcessToCanonicalProjectionMs": 0.0037080000001878943,
+        "canonicalProjectionMs": 0.9043339999998352,
+        "projectionToPrepareCompletionMs": 0.0003329999999550637
+      },
+      "observerExternalLaunchInternalMs": 14.051416999999674,
+      "observerExternalLaunchPhaseSumMs": 14.051416999999674,
+      "observerExternalLaunchPhaseCoherent": true,
+      "clientRpcMinusObserverInternalMs": 11.784333000000288,
+      "clientProtocolPhaseTrace": {
+        "events": [
+          {
+            "phase": "protocolEntered",
+            "atMs": 1103.433
+          },
+          {
+            "phase": "boundaryTaskEntered",
+            "atMs": 1103.517708
+          },
+          {
+            "phase": "socketConnectStarted",
+            "atMs": 1103.518583
+          },
+          {
+            "phase": "socketConnected",
+            "atMs": 1103.881125
+          },
+          {
+            "phase": "expectedObserverHealthStarted",
+            "atMs": 1103.88425
+          },
+          {
+            "phase": "expectedObserverHealthCompleted",
+            "atMs": 1106.398583
+          },
+          {
+            "phase": "prepareRequestStarted",
+            "atMs": 1106.399625
+          },
+          {
+            "phase": "prepareResponseCompleted",
+            "atMs": 1128.720083
+          },
+          {
+            "phase": "boundaryTaskCompleted",
+            "atMs": 1128.751375
+          },
+          {
+            "phase": "protocolCompleted",
+            "atMs": 1128.981333
+          }
+        ]
+      },
+      "clientProtocolPhaseDurations": {
+        "protocolBoundaryAdmissionMs": 0.08470800000009149,
+        "boundaryToSocketConnectMs": 0.0008749999999508873,
+        "socketConnectMs": 0.36254200000007586,
+        "socketToExpectedObserverHealthMs": 0.0031249999999545253,
+        "expectedObserverHealthMs": 2.5143329999998514,
+        "healthToPrepareRequestMs": 0.001042000000097687,
+        "prepareRequestRoundTripMs": 22.320457999999917,
+        "responseToBoundaryCompletionMs": 0.031292000000121334,
+        "boundaryToProtocolCompletionMs": 0.22995799999989686
+      },
+      "clientProtocolTotalMs": 25.548332999999957,
+      "clientProtocolPhaseSumMs": 25.548332999999957,
+      "clientProtocolPhaseCoherent": true,
+      "serverProtocolPhaseTrace": {
+        "events": [
+          {
+            "phase": "prepareRequestParsed",
+            "atMs": 2073.107167
+          },
+          {
+            "phase": "prepareHandlerStarted",
+            "atMs": 2073.114708
+          },
+          {
+            "phase": "prepareUseCaseDispatchStarted",
+            "atMs": 2073.224542
+          },
+          {
+            "phase": "prepareUseCaseDispatchCompleted",
+            "atMs": 2089.672375
+          },
+          {
+            "phase": "prepareHandlerCompleted",
+            "atMs": 2089.874417
+          },
+          {
+            "phase": "prepareResponseSent",
+            "atMs": 2090.334125
+          }
+        ]
+      },
+      "serverProtocolPhaseDurations": {
+        "requestToHandlerAdmissionMs": 0.007540999999946507,
+        "handlerToUseCaseDispatchMs": 0.10983399999986432,
+        "useCaseDispatchMs": 16.447833000000173,
+        "useCaseToHandlerCompletionMs": 0.20204199999989214,
+        "handlerToResponseSendMs": 0.4597079999998641
+      },
+      "serverProtocolTotalMs": 17.22695799999974,
+      "serverProtocolPhaseSumMs": 17.22695799999974,
+      "serverProtocolPhaseCoherent": true,
+      "protocolResidualPhaseDurations": {
+        "serviceToProtocolEntryMs": 0.221416999999974,
+        "protocolBoundaryAdmissionMs": 0.08470800000009149,
+        "boundaryToSocketConnectMs": 0.0008749999999508873,
+        "socketConnectMs": 0.36254200000007586,
+        "socketToExpectedObserverHealthMs": 0.0031249999999545253,
+        "expectedObserverHealthMs": 2.5143329999998514,
+        "healthToPrepareRequestMs": 0.001042000000097687,
+        "actualRequestWireClientMs": 5.093500000000176,
+        "observerProtocolPreUseCaseMs": 0.7002910000001066,
+        "observerProtocolPostUseCaseMs": 2.47524999999996,
+        "responseToBoundaryCompletionMs": 0.031292000000121334,
+        "boundaryToProtocolCompletionMs": 0.22995799999989686,
+        "protocolToServiceCompletionMs": 0.06600000000003092
+      },
+      "protocolResidualPhaseSumMs": 11.784333000000288,
+      "protocolResidualReconstructionErrorMs": 0,
+      "protocolResidualPhaseCoherent": true,
+      "loadAverage": {
+        "before": [
+          15.44384765625,
+          16.71923828125,
+          19.11279296875
+        ],
+        "after": [
+          14.81103515625,
+          16.54541015625,
+          19.009765625
+        ]
+      },
+      "resourceUsage": {
+        "userCpuMs": 254.416,
+        "systemCpuMs": 237.362,
+        "fsReads": 0,
+        "fsWrites": 0,
+        "voluntaryContextSwitches": 2,
+        "involuntaryContextSwitches": 7266
+      }
+    },
+    {
+      "repetition": 2,
+      "focusStrategy": "automatic",
+      "dismissalInputSent": false,
+      "readyWasReplay": true,
+      "acknowledgementCount": 1,
+      "safe": true,
+      "safetyPredicates": {
+        "dashboardProjectVisible": true,
+        "commandProjectMatches": true,
+        "commandHarnessMatches": true,
+        "worktreeProjectMatches": true,
+        "worktreeBranchMatches": true,
+        "worktreeUsesManagedRoot": true,
+        "worktreeHasRegistrationIdentity": true,
+        "sessionHarnessMatches": true,
+        "sessionTerminalMatches": true,
+        "hostWorktreeMatches": true,
+        "hostHarnessMatches": true,
+        "hostSessionMatches": true,
+        "readyMarkerObserved": true,
+        "inputAcknowledged": true,
+        "inputAcknowledgedExactlyOnce": true,
+        "hostInventoryEmpty": true,
+        "gitInventoryRestored": true,
+        "uiStoppedCleanly": true,
+        "observerStoppedCleanly": true,
+        "managedLaunchPhaseTraceValid": true,
+        "managedLaunchPhaseTraceExitOnly": true,
+        "observerExternalLaunchPhaseTraceValid": true,
+        "observerExternalLaunchPhaseTraceExitOnly": true,
+        "clientProtocolPhaseTraceValid": true,
+        "clientProtocolPhaseTraceExitOnly": true,
+        "serverProtocolPhaseTraceValid": true,
+        "serverProtocolPhaseTraceExitOnly": true,
+        "protocolResidualPhaseTraceValid": true,
+        "uiStderrMatches": true
+      },
+      "phaseCoherent": true,
+      "commandId": "cmd_0c32d95c-b2a0-4c10-8105-4d94bc4a4a28",
+      "traceId": "trc_786a41d3-2d0c-41cf-a392-03d6f5269b9d",
+      "branch": "compiled-tui-project-56f7db",
+      "worktreeId": "wt_compiled-tui-project_compiled-tui-project-56f7db_bd45ef9111",
+      "worktreePath": "/private/var/folders/l4/540r7_b136l9jcf36_p3qyvc0000gn/T/s-W2Zyhd/tmp/st-qtu-5Fb40i/worktrees/compiled-tui-project-56f7db",
+      "sessionId": "ses_5ba2b87b-3fe2-4156-b957-44a09340b06e",
+      "terminalTargetId": "native:wt_compiled-tui-project_compiled-tui-project-56f7db_bd45ef9111",
+      "ptyId": "pty-4",
+      "ptyInstanceId": "ptyi_17874d68-c8af-4699-963f-ce8bb2481a7d",
+      "observerPid": 36167,
+      "sampledReconcileReason": "tui-startup",
+      "uiPid": 36045,
+      "launchToDashboardMs": 1693.3368749999972,
+      "intentToOptimisticMs": 14.135957999998936,
+      "intentToCommandAcceptedMs": 20.41766700000153,
+      "intentToCommandCompletedMs": 104.64520800000173,
+      "intentToHostReadyMs": 163.84229200000118,
+      "intentToCanonicalUiMs": 230.32854200000293,
+      "intentToFocusMs": 201.85116700000071,
+      "focusToOverlayDismissedMs": 0,
+      "overlayDismissedToInputSentMs": 0.001582999997481238,
+      "inputSentToHostReadyMs": -38.010457999997016,
+      "inputSentToAckMs": 19.527083000000857,
+      "focusToInputAckMs": 19.52866599999834,
+      "phaseSumMs": 19.52866599999834,
+      "intentToInteractiveMs": 221.37983299999905,
+      "launchToInteractiveMs": 2022.7349579999973,
+      "cleanupInventoryCount": 0,
+      "gitCleanupInventoryCount": 49,
+      "uiStoppedCleanly": true,
+      "observerStoppedCleanly": true,
+      "uiStderrEmpty": false,
+      "uiStderr": "Launching STATION TUI…\n__STATION_QUICK_SESSION_MANAGED_LAUNCH_PHASES__:{\"events\":[{\"phase\":\"hostedLaunchStarted\",\"atMs\":880.865541},{\"phase\":\"commandCompleted\",\"atMs\":991.613958},{\"phase\":\"worktreeObserved\",\"atMs\":991.679833},{\"phase\":\"attemptStarted\",\"atMs\":991.794958},{\"phase\":\"preflightCompleted\",\"atMs\":991.974916},{\"phase\":\"prepareStarted\",\"atMs\":991.975208},{\"phase\":\"prepareCompleted\",\"atMs\":1021.475791},{\"phase\":\"attachmentResolveStarted\",\"atMs\":1021.604625},{\"phase\":\"attachmentResolveCompleted\",\"atMs\":1034.489},{\"phase\":\"terminalPlaced\",\"atMs\":1034.741208},{\"phase\":\"panePublished\",\"atMs\":1034.933416},{\"phase\":\"attemptCompleted\",\"atMs\":1039.260958},{\"phase\":\"hostedLaunchCompleted\",\"atMs\":1039.267333},{\"phase\":\"quickResultReceived\",\"atMs\":1039.385625},{\"phase\":\"overlayCloseRequested\",\"atMs\":1039.386333},{\"phase\":\"canonicalWaitStarted\",\"atMs\":1039.566916},{\"phase\":\"canonicalWaitCompleted\",\"atMs\":1041.89925}]}\n",
+      "uiStderrBeforeExit": "Launching STATION TUI…\n",
+      "managedLaunchPhaseTrace": {
+        "events": [
+          {
+            "phase": "hostedLaunchStarted",
+            "atMs": 880.865541
+          },
+          {
+            "phase": "commandCompleted",
+            "atMs": 991.613958
+          },
+          {
+            "phase": "worktreeObserved",
+            "atMs": 991.679833
+          },
+          {
+            "phase": "attemptStarted",
+            "atMs": 991.794958
+          },
+          {
+            "phase": "preflightCompleted",
+            "atMs": 991.974916
+          },
+          {
+            "phase": "prepareStarted",
+            "atMs": 991.975208
+          },
+          {
+            "phase": "prepareCompleted",
+            "atMs": 1021.475791
+          },
+          {
+            "phase": "attachmentResolveStarted",
+            "atMs": 1021.604625
+          },
+          {
+            "phase": "attachmentResolveCompleted",
+            "atMs": 1034.489
+          },
+          {
+            "phase": "terminalPlaced",
+            "atMs": 1034.741208
+          },
+          {
+            "phase": "panePublished",
+            "atMs": 1034.933416
+          },
+          {
+            "phase": "attemptCompleted",
+            "atMs": 1039.260958
+          },
+          {
+            "phase": "hostedLaunchCompleted",
+            "atMs": 1039.267333
+          },
+          {
+            "phase": "quickResultReceived",
+            "atMs": 1039.385625
+          },
+          {
+            "phase": "overlayCloseRequested",
+            "atMs": 1039.386333
+          },
+          {
+            "phase": "canonicalWaitStarted",
+            "atMs": 1039.566916
+          },
+          {
+            "phase": "canonicalWaitCompleted",
+            "atMs": 1041.89925
+          }
+        ]
+      },
+      "managedLaunchPhaseDurations": {
+        "commandCompletionToWorktreeObservationMs": 0.06587500000000546,
+        "worktreeObservationToAttemptStartMs": 0.11512499999992087,
+        "managedPreflightMs": 0.17995800000005602,
+        "preflightToPrepareStartMs": 0.0002919999999448919,
+        "prepareExternalLaunchMs": 29.500583000000006,
+        "prepareToAttachmentResolveStartMs": 0.12883400000009715,
+        "attachmentResolutionMs": 12.884374999999977,
+        "attachmentToTerminalPlacementMs": 0.2522079999998823,
+        "terminalPlacementToPanePublicationMs": 0.19220800000016425,
+        "panePublicationToAttemptCompletionMs": 4.327541999999994,
+        "attemptToHostedLaunchCompletionMs": 0.006374999999934516,
+        "hostedLaunchToQuickResultMs": 0.11829199999988305,
+        "quickResultToOverlayCloseMs": 0.0007080000000314612
+      },
+      "commandCompletionToOverlayCloseMs": 47.7723749999999,
+      "managedLaunchPhaseSumMs": 47.7723749999999,
+      "managedLaunchPhaseCoherent": true,
+      "observerExternalLaunchPhaseTrace": {
+        "events": [
+          {
+            "phase": "prepareEntered",
+            "atMs": 1759.379291
+          },
+          {
+            "phase": "mutationEntered",
+            "atMs": 1759.498583
+          },
+          {
+            "phase": "targetInventoryStarted",
+            "atMs": 1760.011958
+          },
+          {
+            "phase": "targetInventoryCompleted",
+            "atMs": 1761.198833
+          },
+          {
+            "phase": "harnessPreflightStarted",
+            "atMs": 1761.353416
+          },
+          {
+            "phase": "harnessPreflightCompleted",
+            "atMs": 1762.44475
+          },
+          {
+            "phase": "sessionPersistenceStarted",
+            "atMs": 1762.495125
+          },
+          {
+            "phase": "sessionPersistenceCompleted",
+            "atMs": 1763.587416
+          },
+          {
+            "phase": "workspaceOpenStarted",
+            "atMs": 1763.5875
+          },
+          {
+            "phase": "workspaceOpenCompleted",
+            "atMs": 1763.826166
+          },
+          {
+            "phase": "launchPlanStarted",
+            "atMs": 1763.831833
+          },
+          {
+            "phase": "launchPlanCompleted",
+            "atMs": 1764.052416
+          },
+          {
+            "phase": "hostProcessLaunchStarted",
+            "atMs": 1764.052625
+          },
+          {
+            "phase": "hostProcessLaunchCompleted",
+            "atMs": 1774.826541
+          },
+          {
+            "phase": "canonicalProjectionStarted",
+            "atMs": 1774.830916
+          },
+          {
+            "phase": "canonicalProjectionCompleted",
+            "atMs": 1775.63075
+          },
+          {
+            "phase": "prepareCompleted",
+            "atMs": 1775.631166
+          }
+        ]
+      },
+      "observerExternalLaunchPhaseDurations": {
+        "mutationAdmissionMs": 0.11929200000008677,
+        "mutationToTargetInventoryStartMs": 0.5133749999999964,
+        "targetInventoryMs": 1.1868749999998727,
+        "inventoryToHarnessPreflightMs": 0.15458300000000236,
+        "harnessPreflightMs": 1.091334000000188,
+        "preflightToSessionPersistenceMs": 0.05037499999980355,
+        "sessionPersistenceMs": 1.0922910000001593,
+        "persistenceToWorkspaceOpenMs": 0.00008400000001529406,
+        "managedWorkspaceOpenMs": 0.23866599999996652,
+        "workspaceToLaunchPlanMs": 0.005666999999903055,
+        "harnessLaunchPlanMs": 0.22058300000003328,
+        "launchPlanToHostProcessMs": 0.00020900000004075991,
+        "hostProcessLaunchMs": 10.773915999999872,
+        "hostProcessToCanonicalProjectionMs": 0.00437499999998181,
+        "canonicalProjectionMs": 0.7998340000001463,
+        "projectionToPrepareCompletionMs": 0.00041599999985919567
+      },
+      "observerExternalLaunchInternalMs": 16.251874999999927,
+      "observerExternalLaunchPhaseSumMs": 16.251874999999927,
+      "observerExternalLaunchPhaseCoherent": true,
+      "clientRpcMinusObserverInternalMs": 13.248708000000079,
+      "clientProtocolPhaseTrace": {
+        "events": [
+          {
+            "phase": "protocolEntered",
+            "atMs": 992.20375
+          },
+          {
+            "phase": "boundaryTaskEntered",
+            "atMs": 992.296541
+          },
+          {
+            "phase": "socketConnectStarted",
+            "atMs": 992.297375
+          },
+          {
+            "phase": "socketConnected",
+            "atMs": 992.66725
+          },
+          {
+            "phase": "expectedObserverHealthStarted",
+            "atMs": 992.671458
+          },
+          {
+            "phase": "expectedObserverHealthCompleted",
+            "atMs": 995.324583
+          },
+          {
+            "phase": "prepareRequestStarted",
+            "atMs": 995.324958
+          },
+          {
+            "phase": "prepareResponseCompleted",
+            "atMs": 1021.187958
+          },
+          {
+            "phase": "boundaryTaskCompleted",
+            "atMs": 1021.212583
+          },
+          {
+            "phase": "protocolCompleted",
+            "atMs": 1021.408875
+          }
+        ]
+      },
+      "clientProtocolPhaseDurations": {
+        "protocolBoundaryAdmissionMs": 0.09279100000003382,
+        "boundaryToSocketConnectMs": 0.0008339999999407155,
+        "socketConnectMs": 0.3698749999999791,
+        "socketToExpectedObserverHealthMs": 0.004208000000062384,
+        "expectedObserverHealthMs": 2.653124999999932,
+        "healthToPrepareRequestMs": 0.00037500000007639755,
+        "prepareRequestRoundTripMs": 25.862999999999943,
+        "responseToBoundaryCompletionMs": 0.024625000000014552,
+        "boundaryToProtocolCompletionMs": 0.19629199999997127
+      },
+      "clientProtocolTotalMs": 29.205124999999953,
+      "clientProtocolPhaseSumMs": 29.205124999999953,
+      "clientProtocolPhaseCoherent": true,
+      "serverProtocolPhaseTrace": {
+        "events": [
+          {
+            "phase": "prepareRequestParsed",
+            "atMs": 1758.87375
+          },
+          {
+            "phase": "prepareHandlerStarted",
+            "atMs": 1758.875666
+          },
+          {
+            "phase": "prepareUseCaseDispatchStarted",
+            "atMs": 1758.90375
+          },
+          {
+            "phase": "prepareUseCaseDispatchCompleted",
+            "atMs": 1777.581291
+          },
+          {
+            "phase": "prepareHandlerCompleted",
+            "atMs": 1777.762583
+          },
+          {
+            "phase": "prepareResponseSent",
+            "atMs": 1778.183875
+          }
+        ]
+      },
+      "serverProtocolPhaseDurations": {
+        "requestToHandlerAdmissionMs": 0.0019159999999374122,
+        "handlerToUseCaseDispatchMs": 0.028084000000035303,
+        "useCaseDispatchMs": 18.67754100000002,
+        "useCaseToHandlerCompletionMs": 0.1812919999999849,
+        "handlerToResponseSendMs": 0.421291999999994
+      },
+      "serverProtocolTotalMs": 19.31012499999997,
+      "serverProtocolPhaseSumMs": 19.31012499999997,
+      "serverProtocolPhaseCoherent": true,
+      "protocolResidualPhaseDurations": {
+        "serviceToProtocolEntryMs": 0.2285420000000613,
+        "protocolBoundaryAdmissionMs": 0.09279100000003382,
+        "boundaryToSocketConnectMs": 0.0008339999999407155,
+        "socketConnectMs": 0.3698749999999791,
+        "socketToExpectedObserverHealthMs": 0.004208000000062384,
+        "expectedObserverHealthMs": 2.653124999999932,
+        "healthToPrepareRequestMs": 0.00037500000007639755,
+        "actualRequestWireClientMs": 6.552874999999972,
+        "observerProtocolPreUseCaseMs": 0.5055409999999938,
+        "observerProtocolPostUseCaseMs": 2.55270900000005,
+        "responseToBoundaryCompletionMs": 0.024625000000014552,
+        "boundaryToProtocolCompletionMs": 0.19629199999997127,
+        "protocolToServiceCompletionMs": 0.06691599999999198
+      },
+      "protocolResidualPhaseSumMs": 13.248708000000079,
+      "protocolResidualReconstructionErrorMs": 0,
+      "protocolResidualPhaseCoherent": true,
+      "loadAverage": {
+        "before": [
+          14.81103515625,
+          16.54541015625,
+          19.009765625
+        ],
+        "after": [
+          14.98583984375,
+          16.552734375,
+          18.99755859375
+        ]
+      },
+      "resourceUsage": {
+        "userCpuMs": 141.773,
+        "systemCpuMs": 107.797,
+        "fsReads": 0,
+        "fsWrites": 0,
+        "voluntaryContextSwitches": 2,
+        "involuntaryContextSwitches": 3608
+      }
+    }
+  ],
+  "distributions": {
+    "launchToDashboardMs": {
+      "samples": [
+        1693.3368749999972,
+        4044.182499999999,
+        4425.556375
+      ],
+      "median": 4044.182499999999,
+      "p90": 4425.556375,
+      "p95": 4425.556375,
+      "max": 4425.556375
+    },
+    "intentToOptimisticMs": {
+      "samples": [
+        11.69445800000176,
+        12.796917000003305,
+        14.135957999998936
+      ],
+      "median": 12.796917000003305,
+      "p90": 14.135957999998936,
+      "p95": 14.135957999998936,
+      "max": 14.135957999998936
+    },
+    "intentToCommandAcceptedMs": {
+      "samples": [
+        20.41766700000153,
+        21.561625000002095,
+        23.66816700000345
+      ],
+      "median": 21.561625000002095,
+      "p90": 23.66816700000345,
+      "p95": 23.66816700000345,
+      "max": 23.66816700000345
+    },
+    "intentToCommandCompletedMs": {
+      "samples": [
+        98.05225000000064,
+        104.64520800000173,
+        135.07541700000002
+      ],
+      "median": 104.64520800000173,
+      "p90": 135.07541700000002,
+      "p95": 135.07541700000002,
+      "max": 135.07541700000002
+    },
+    "intentToHostReadyMs": {
+      "samples": [
+        136.3374580000018,
+        163.84229200000118,
+        320.4763340000027
+      ],
+      "median": 163.84229200000118,
+      "p90": 320.4763340000027,
+      "p95": 320.4763340000027,
+      "max": 320.4763340000027
+    },
+    "intentToCanonicalUiMs": {
+      "samples": [
+        193.7188750000023,
+        230.32854200000293,
+        332.60445900000195
+      ],
+      "median": 230.32854200000293,
+      "p90": 332.60445900000195,
+      "p95": 332.60445900000195,
+      "max": 332.60445900000195
+    },
+    "intentToFocusMs": {
+      "samples": [
+        163.47166600000128,
+        201.85116700000071,
+        224.95133400000122
+      ],
+      "median": 201.85116700000071,
+      "p90": 224.95133400000122,
+      "p95": 224.95133400000122,
+      "max": 224.95133400000122
+    },
+    "focusToOverlayDismissedMs": {
+      "samples": [
+        0,
+        0,
+        0
+      ],
+      "median": 0,
+      "p90": 0,
+      "p95": 0,
+      "max": 0
+    },
+    "overlayDismissedToInputSentMs": {
+      "samples": [
+        0.001582999997481238,
+        0.0027919999993173406,
+        0.06008300000030431
+      ],
+      "median": 0.0027919999993173406,
+      "p90": 0.06008300000030431,
+      "p95": 0.06008300000030431,
+      "max": 0.06008300000030431
+    },
+    "inputSentToHostReadyMs": {
+      "samples": [
+        -38.010457999997016,
+        -27.136999999998807,
+        95.46491700000115
+      ],
+      "median": -27.136999999998807,
+      "p90": 95.46491700000115,
+      "p95": 95.46491700000115,
+      "max": 95.46491700000115
+    },
+    "inputSentToAckMs": {
+      "samples": [
+        19.527083000000857,
+        22.623250000000553,
+        95.74954200000138
+      ],
+      "median": 22.623250000000553,
+      "p90": 95.74954200000138,
+      "p95": 95.74954200000138,
+      "max": 95.74954200000138
+    },
+    "focusToInputAckMs": {
+      "samples": [
+        19.52866599999834,
+        22.62604199999987,
+        95.80962500000169
+      ],
+      "median": 22.62604199999987,
+      "p90": 95.80962500000169,
+      "p95": 95.80962500000169,
+      "max": 95.80962500000169
+    },
+    "intentToInteractiveMs": {
+      "samples": [
+        186.09770800000115,
+        221.37983299999905,
+        320.7609590000029
+      ],
+      "median": 221.37983299999905,
+      "p90": 320.7609590000029,
+      "p95": 320.7609590000029,
+      "max": 320.7609590000029
+    },
+    "launchToInteractiveMs": {
+      "samples": [
+        2022.7349579999973,
+        4338.814125000001,
+        4871.604500000001
+      ],
+      "median": 4338.814125000001,
+      "p90": 4871.604500000001,
+      "p95": 4871.604500000001,
+      "max": 4871.604500000001
+    }
+  },
+  "focusComparison": {
+    "escape": {
+      "runs": 0,
+      "focusToOverlayDismissedMs": {
+        "samples": [],
+        "median": 0,
+        "p90": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "inputSentToAckMs": {
+        "samples": [],
+        "median": 0,
+        "p90": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "focusToInputAckMs": {
+        "samples": [],
+        "median": 0,
+        "p90": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "intentToInteractiveMs": {
+        "samples": [],
+        "median": 0,
+        "p90": 0,
+        "p95": 0,
+        "max": 0
+      }
+    },
+    "toggle": {
+      "runs": 0,
+      "focusToOverlayDismissedMs": {
+        "samples": [],
+        "median": 0,
+        "p90": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "inputSentToAckMs": {
+        "samples": [],
+        "median": 0,
+        "p90": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "focusToInputAckMs": {
+        "samples": [],
+        "median": 0,
+        "p90": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "intentToInteractiveMs": {
+        "samples": [],
+        "median": 0,
+        "p90": 0,
+        "p95": 0,
+        "max": 0
+      }
+    },
+    "focusToInputAckP95ImprovementFraction": 0
+  },
+  "phaseAttribution": {
+    "validRuns": 3,
+    "phaseDistributions": {
+      "commandCompletionToWorktreeObservationMs": {
+        "samples": [
+          0.06245899999998983,
+          0.06587500000000546,
+          0.07150000000001455
+        ],
+        "median": 0.06587500000000546,
+        "p90": 0.07150000000001455,
+        "p95": 0.07150000000001455,
+        "max": 0.07150000000001455
+      },
+      "worktreeObservationToAttemptStartMs": {
+        "samples": [
+          0.11512499999992087,
+          0.11754099999984646,
+          0.12666699999999764
+        ],
+        "median": 0.11754099999984646,
+        "p90": 0.12666699999999764,
+        "p95": 0.12666699999999764,
+        "max": 0.12666699999999764
+      },
+      "managedPreflightMs": {
+        "samples": [
+          0.16645900000003166,
+          0.1774169999998776,
+          0.17995800000005602
+        ],
+        "median": 0.1774169999998776,
+        "p90": 0.17995800000005602,
+        "p95": 0.17995800000005602,
+        "max": 0.17995800000005602
+      },
+      "preflightToPrepareStartMs": {
+        "samples": [
+          0.0002080000001569715,
+          0.0002910000000611035,
+          0.0002919999999448919
+        ],
+        "median": 0.0002910000000611035,
+        "p90": 0.0002919999999448919,
+        "p95": 0.0002919999999448919,
+        "max": 0.0002919999999448919
+      },
+      "prepareExternalLaunchMs": {
+        "samples": [
+          25.835749999999962,
+          29.500583000000006,
+          35.15383299999985
+        ],
+        "median": 29.500583000000006,
+        "p90": 35.15383299999985,
+        "p95": 35.15383299999985,
+        "max": 35.15383299999985
+      },
+      "prepareToAttachmentResolveStartMs": {
+        "samples": [
+          0.12883400000009715,
+          0.13258399999995163,
+          0.14133400000014262
+        ],
+        "median": 0.13258399999995163,
+        "p90": 0.14133400000014262,
+        "p95": 0.14133400000014262,
+        "max": 0.14133400000014262
+      },
+      "attachmentResolutionMs": {
+        "samples": [
+          8.530875000000151,
+          11.651582999999846,
+          12.884374999999977
+        ],
+        "median": 11.651582999999846,
+        "p90": 12.884374999999977,
+        "p95": 12.884374999999977,
+        "max": 12.884374999999977
+      },
+      "attachmentToTerminalPlacementMs": {
+        "samples": [
+          0.2522079999998823,
+          0.277625000000171,
+          0.4492079999999987
+        ],
+        "median": 0.277625000000171,
+        "p90": 0.4492079999999987,
+        "p95": 0.4492079999999987,
+        "max": 0.4492079999999987
+      },
+      "terminalPlacementToPanePublicationMs": {
+        "samples": [
+          0.17300000000000182,
+          0.19220800000016425,
+          0.20287499999994907
+        ],
+        "median": 0.19220800000016425,
+        "p90": 0.20287499999994907,
+        "p95": 0.20287499999994907,
+        "max": 0.20287499999994907
+      },
+      "panePublicationToAttemptCompletionMs": {
+        "samples": [
+          3.610500000000002,
+          4.10066699999993,
+          4.327541999999994
+        ],
+        "median": 4.10066699999993,
+        "p90": 4.327541999999994,
+        "p95": 4.327541999999994,
+        "max": 4.327541999999994
+      },
+      "attemptToHostedLaunchCompletionMs": {
+        "samples": [
+          0.002416999999923064,
+          0.004625000000032742,
+          0.006374999999934516
+        ],
+        "median": 0.004625000000032742,
+        "p90": 0.006374999999934516,
+        "p95": 0.006374999999934516,
+        "max": 0.006374999999934516
+      },
+      "hostedLaunchToQuickResultMs": {
+        "samples": [
+          0.05495799999994233,
+          0.09104099999990467,
+          0.11829199999988305
+        ],
+        "median": 0.09104099999990467,
+        "p90": 0.11829199999988305,
+        "p95": 0.11829199999988305,
+        "max": 0.11829199999988305
+      },
+      "quickResultToOverlayCloseMs": {
+        "samples": [
+          0.00045799999998052954,
+          0.0005000000001018634,
+          0.0007080000000314612
+        ],
+        "median": 0.0005000000001018634,
+        "p90": 0.0007080000000314612,
+        "p95": 0.0007080000000314612,
+        "max": 0.0007080000000314612
+      }
+    },
+    "commandCompletionToOverlayCloseMs": {
+      "samples": [
+        39.72399999999993,
+        47.7723749999999,
+        51.412374999999884
+      ],
+      "median": 47.7723749999999,
+      "p90": 51.412374999999884,
+      "p95": 51.412374999999884,
+      "max": 51.412374999999884
+    },
+    "dominantPhase": "prepareExternalLaunchMs",
+    "dominantP95Fraction": 0.683762090352759,
+    "tailIntervals": 0,
+    "dominantTailIntervals": 0,
+    "prepareExternalLaunchP95Fraction": 0.683762090352759,
+    "prepareExternalLaunchTailFractions": [],
+    "prepareExternalLaunchDominatesEveryTail": false
+  },
+  "observerPhaseAttribution": {
+    "validRuns": 3,
+    "phaseDistributions": {
+      "mutationAdmissionMs": {
+        "samples": [
+          0.11929200000008677,
+          0.1489169999999831,
+          0.14895900000010442
+        ],
+        "median": 0.1489169999999831,
+        "p90": 0.14895900000010442,
+        "p95": 0.14895900000010442,
+        "max": 0.14895900000010442
+      },
+      "mutationToTargetInventoryStartMs": {
+        "samples": [
+          0.5133749999999964,
+          0.5188750000002074,
+          0.5557079999998678
+        ],
+        "median": 0.5188750000002074,
+        "p90": 0.5557079999998678,
+        "p95": 0.5557079999998678,
+        "max": 0.5557079999998678
+      },
+      "targetInventoryMs": {
+        "samples": [
+          0.7225419999999758,
+          1.1868749999998727,
+          1.3351250000000618
+        ],
+        "median": 1.1868749999998727,
+        "p90": 1.3351250000000618,
+        "p95": 1.3351250000000618,
+        "max": 1.3351250000000618
+      },
+      "inventoryToHarnessPreflightMs": {
+        "samples": [
+          0.09720799999968222,
+          0.15458300000000236,
+          0.18049999999993815
+        ],
+        "median": 0.15458300000000236,
+        "p90": 0.18049999999993815,
+        "p95": 0.18049999999993815,
+        "max": 0.18049999999993815
+      },
+      "harnessPreflightMs": {
+        "samples": [
+          0.508708000000297,
+          0.7046249999998508,
+          1.091334000000188
+        ],
+        "median": 0.7046249999998508,
+        "p90": 1.091334000000188,
+        "p95": 1.091334000000188,
+        "max": 1.091334000000188
+      },
+      "preflightToSessionPersistenceMs": {
+        "samples": [
+          0.035583000000315224,
+          0.0385839999999007,
+          0.05037499999980355
+        ],
+        "median": 0.0385839999999007,
+        "p90": 0.05037499999980355,
+        "p95": 0.05037499999980355,
+        "max": 0.05037499999980355
+      },
+      "sessionPersistenceMs": {
+        "samples": [
+          0.49949999999989814,
+          1.0922910000001593,
+          1.2452909999997246
+        ],
+        "median": 1.0922910000001593,
+        "p90": 1.2452909999997246,
+        "p95": 1.2452909999997246,
+        "max": 1.2452909999997246
+      },
+      "persistenceToWorkspaceOpenMs": {
+        "samples": [
+          0.00008400000001529406,
+          0.00016700000014679972,
+          0.0004590000003190653
+        ],
+        "median": 0.00016700000014679972,
+        "p90": 0.0004590000003190653,
+        "p95": 0.0004590000003190653,
+        "max": 0.0004590000003190653
+      },
+      "managedWorkspaceOpenMs": {
+        "samples": [
+          0.09449999999969805,
+          0.23866599999996652,
+          0.2441249999997126
+        ],
+        "median": 0.23866599999996652,
+        "p90": 0.2441249999997126,
+        "p95": 0.2441249999997126,
+        "max": 0.2441249999997126
+      },
+      "workspaceToLaunchPlanMs": {
+        "samples": [
+          0.0019999999999527063,
+          0.0048750000000836735,
+          0.005666999999903055
+        ],
+        "median": 0.0048750000000836735,
+        "p90": 0.005666999999903055,
+        "p95": 0.005666999999903055,
+        "max": 0.005666999999903055
+      },
+      "harnessLaunchPlanMs": {
+        "samples": [
+          0.07804200000009587,
+          0.18937499999992724,
+          0.22058300000003328
+        ],
+        "median": 0.18937499999992724,
+        "p90": 0.22058300000003328,
+        "p95": 0.22058300000003328,
+        "max": 0.22058300000003328
+      },
+      "launchPlanToHostProcessMs": {
+        "samples": [
+          0.00012500000002546585,
+          0.00020800000038434519,
+          0.00020900000004075991
+        ],
+        "median": 0.00020800000038434519,
+        "p90": 0.00020900000004075991,
+        "p95": 0.00020900000004075991,
+        "max": 0.00020900000004075991
+      },
+      "hostProcessLaunchMs": {
+        "samples": [
+          10.120832999999948,
+          10.773915999999872,
+          11.879832999999962
+        ],
+        "median": 10.773915999999872,
+        "p90": 11.879832999999962,
+        "p95": 11.879832999999962,
+        "max": 11.879832999999962
+      },
+      "hostProcessToCanonicalProjectionMs": {
+        "samples": [
+          0.0029589999999188876,
+          0.0037080000001878943,
+          0.00437499999998181
+        ],
+        "median": 0.0037080000001878943,
+        "p90": 0.00437499999998181,
+        "p95": 0.00437499999998181,
+        "max": 0.00437499999998181
+      },
+      "canonicalProjectionMs": {
+        "samples": [
+          0.5985000000000582,
+          0.7998340000001463,
+          0.9043339999998352
+        ],
+        "median": 0.7998340000001463,
+        "p90": 0.9043339999998352,
+        "p95": 0.9043339999998352,
+        "max": 0.9043339999998352
+      },
+      "projectionToPrepareCompletionMs": {
+        "samples": [
+          0.0003329999999550637,
+          0.00041599999985919567,
+          0.00041599999985919567
+        ],
+        "median": 0.00041599999985919567,
+        "p90": 0.00041599999985919567,
+        "p95": 0.00041599999985919567,
+        "max": 0.00041599999985919567
+      }
+    },
+    "observerExternalLaunchInternalMs": {
+      "samples": [
+        14.051416999999674,
+        16.251874999999927,
+        16.813500000000204
+      ],
+      "median": 16.251874999999927,
+      "p90": 16.813500000000204,
+      "p95": 16.813500000000204,
+      "max": 16.813500000000204
+    },
+    "transportResidualMs": {
+      "samples": [
+        11.784333000000288,
+        13.248708000000079,
+        18.340332999999646
+      ],
+      "median": 13.248708000000079,
+      "p90": 18.340332999999646,
+      "p95": 18.340332999999646,
+      "max": 18.340332999999646
+    },
+    "dominantPhase": "hostProcessLaunchMs",
+    "dominantP95Fraction": 0.7065651411068379,
+    "tailIntervals": 0,
+    "dominantTailIntervals": 0,
+    "hostProcessLaunchP95Fraction": 0.7065651411068379,
+    "hostProcessLaunchTailFractions": [],
+    "hostProcessLaunchDominatesEveryTail": false
+  },
+  "protocolResidualAttribution": {
+    "validRuns": 3,
+    "phaseDistributions": {
+      "serviceToProtocolEntryMs": {
+        "samples": [
+          0.2089579999999387,
+          0.221416999999974,
+          0.2285420000000613
+        ],
+        "median": 0.221416999999974,
+        "p90": 0.2285420000000613,
+        "p95": 0.2285420000000613,
+        "max": 0.2285420000000613
+      },
+      "protocolBoundaryAdmissionMs": {
+        "samples": [
+          0.07749999999987267,
+          0.08470800000009149,
+          0.09279100000003382
+        ],
+        "median": 0.08470800000009149,
+        "p90": 0.09279100000003382,
+        "p95": 0.09279100000003382,
+        "max": 0.09279100000003382
+      },
+      "boundaryToSocketConnectMs": {
+        "samples": [
+          0.0007090000001426233,
+          0.0008339999999407155,
+          0.0008749999999508873
+        ],
+        "median": 0.0008339999999407155,
+        "p90": 0.0008749999999508873,
+        "p95": 0.0008749999999508873,
+        "max": 0.0008749999999508873
+      },
+      "socketConnectMs": {
+        "samples": [
+          0.3432909999999083,
+          0.36254200000007586,
+          0.3698749999999791
+        ],
+        "median": 0.36254200000007586,
+        "p90": 0.3698749999999791,
+        "p95": 0.3698749999999791,
+        "max": 0.3698749999999791
+      },
+      "socketToExpectedObserverHealthMs": {
+        "samples": [
+          0.0031249999999545253,
+          0.0038340000000971486,
+          0.004208000000062384
+        ],
+        "median": 0.0038340000000971486,
+        "p90": 0.004208000000062384,
+        "p95": 0.004208000000062384,
+        "max": 0.004208000000062384
+      },
+      "expectedObserverHealthMs": {
+        "samples": [
+          2.5143329999998514,
+          2.653124999999932,
+          7.769790999999941
+        ],
+        "median": 2.653124999999932,
+        "p90": 7.769790999999941,
+        "p95": 7.769790999999941,
+        "max": 7.769790999999941
+      },
+      "healthToPrepareRequestMs": {
+        "samples": [
+          0.00037500000007639755,
+          0.0005419999999958236,
+          0.001042000000097687
+        ],
+        "median": 0.0005419999999958236,
+        "p90": 0.001042000000097687,
+        "p95": 0.001042000000097687,
+        "max": 0.001042000000097687
+      },
+      "actualRequestWireClientMs": {
+        "samples": [
+          5.093500000000176,
+          6.552874999999972,
+          6.555166999999983
+        ],
+        "median": 6.552874999999972,
+        "p90": 6.555166999999983,
+        "p95": 6.555166999999983,
+        "max": 6.555166999999983
+      },
+      "observerProtocolPreUseCaseMs": {
+        "samples": [
+          0.5055409999999938,
+          0.6822909999996227,
+          0.7002910000001066
+        ],
+        "median": 0.6822909999996227,
+        "p90": 0.7002910000001066,
+        "p95": 0.7002910000001066,
+        "max": 0.7002910000001066
+      },
+      "observerProtocolPostUseCaseMs": {
+        "samples": [
+          2.065375000000131,
+          2.47524999999996,
+          2.55270900000005
+        ],
+        "median": 2.47524999999996,
+        "p90": 2.55270900000005,
+        "p95": 2.55270900000005,
+        "max": 2.55270900000005
+      },
+      "responseToBoundaryCompletionMs": {
+        "samples": [
+          0.024625000000014552,
+          0.02712500000006912,
+          0.031292000000121334
+        ],
+        "median": 0.02712500000006912,
+        "p90": 0.031292000000121334,
+        "p95": 0.031292000000121334,
+        "max": 0.031292000000121334
+      },
+      "boundaryToProtocolCompletionMs": {
+        "samples": [
+          0.19629199999997127,
+          0.22995799999989686,
+          0.5319170000000213
+        ],
+        "median": 0.22995799999989686,
+        "p90": 0.5319170000000213,
+        "p95": 0.5319170000000213,
+        "max": 0.5319170000000213
+      },
+      "protocolToServiceCompletionMs": {
+        "samples": [
+          0.06600000000003092,
+          0.06691599999999198,
+          0.07383299999992232
+        ],
+        "median": 0.06691599999999198,
+        "p90": 0.07383299999992232,
+        "p95": 0.07383299999992232,
+        "max": 0.07383299999992232
+      }
+    },
+    "clientPhaseDistributions": {
+      "protocolBoundaryAdmissionMs": {
+        "samples": [
+          0.07749999999987267,
+          0.08470800000009149,
+          0.09279100000003382
+        ],
+        "median": 0.08470800000009149,
+        "p90": 0.09279100000003382,
+        "p95": 0.09279100000003382,
+        "max": 0.09279100000003382
+      },
+      "boundaryToSocketConnectMs": {
+        "samples": [
+          0.0007090000001426233,
+          0.0008339999999407155,
+          0.0008749999999508873
+        ],
+        "median": 0.0008339999999407155,
+        "p90": 0.0008749999999508873,
+        "p95": 0.0008749999999508873,
+        "max": 0.0008749999999508873
+      },
+      "socketConnectMs": {
+        "samples": [
+          0.3432909999999083,
+          0.36254200000007586,
+          0.3698749999999791
+        ],
+        "median": 0.36254200000007586,
+        "p90": 0.3698749999999791,
+        "p95": 0.3698749999999791,
+        "max": 0.3698749999999791
+      },
+      "socketToExpectedObserverHealthMs": {
+        "samples": [
+          0.0031249999999545253,
+          0.0038340000000971486,
+          0.004208000000062384
+        ],
+        "median": 0.0038340000000971486,
+        "p90": 0.004208000000062384,
+        "p95": 0.004208000000062384,
+        "max": 0.004208000000062384
+      },
+      "expectedObserverHealthMs": {
+        "samples": [
+          2.5143329999998514,
+          2.653124999999932,
+          7.769790999999941
+        ],
+        "median": 2.653124999999932,
+        "p90": 7.769790999999941,
+        "p95": 7.769790999999941,
+        "max": 7.769790999999941
+      },
+      "healthToPrepareRequestMs": {
+        "samples": [
+          0.00037500000007639755,
+          0.0005419999999958236,
+          0.001042000000097687
+        ],
+        "median": 0.0005419999999958236,
+        "p90": 0.001042000000097687,
+        "p95": 0.001042000000097687,
+        "max": 0.001042000000097687
+      },
+      "prepareRequestRoundTripMs": {
+        "samples": [
+          22.320457999999917,
+          25.862999999999943,
+          26.11633299999994
+        ],
+        "median": 25.862999999999943,
+        "p90": 26.11633299999994,
+        "p95": 26.11633299999994,
+        "max": 26.11633299999994
+      },
+      "responseToBoundaryCompletionMs": {
+        "samples": [
+          0.024625000000014552,
+          0.02712500000006912,
+          0.031292000000121334
+        ],
+        "median": 0.02712500000006912,
+        "p90": 0.031292000000121334,
+        "p95": 0.031292000000121334,
+        "max": 0.031292000000121334
+      },
+      "boundaryToProtocolCompletionMs": {
+        "samples": [
+          0.19629199999997127,
+          0.22995799999989686,
+          0.5319170000000213
+        ],
+        "median": 0.22995799999989686,
+        "p90": 0.5319170000000213,
+        "p95": 0.5319170000000213,
+        "max": 0.5319170000000213
+      }
+    },
+    "serverPhaseDistributions": {
+      "requestToHandlerAdmissionMs": {
+        "samples": [
+          0.0019159999999374122,
+          0.007540999999946507,
+          0.010832999999820458
+        ],
+        "median": 0.007540999999946507,
+        "p90": 0.010832999999820458,
+        "p95": 0.010832999999820458,
+        "max": 0.010832999999820458
+      },
+      "handlerToUseCaseDispatchMs": {
+        "samples": [
+          0.028084000000035303,
+          0.10983399999986432,
+          0.17962500000021464
+        ],
+        "median": 0.10983399999986432,
+        "p90": 0.17962500000021464,
+        "p95": 0.17962500000021464,
+        "max": 0.17962500000021464
+      },
+      "useCaseDispatchMs": {
+        "samples": [
+          16.447833000000173,
+          18.67754100000002,
+          18.834082999999737
+        ],
+        "median": 18.67754100000002,
+        "p90": 18.834082999999737,
+        "p95": 18.834082999999737,
+        "max": 18.834082999999737
+      },
+      "useCaseToHandlerCompletionMs": {
+        "samples": [
+          0.15866700000015044,
+          0.1812919999999849,
+          0.20204199999989214
+        ],
+        "median": 0.1812919999999849,
+        "p90": 0.20204199999989214,
+        "p95": 0.20204199999989214,
+        "max": 0.20204199999989214
+      },
+      "handlerToResponseSendMs": {
+        "samples": [
+          0.3779580000000351,
+          0.421291999999994,
+          0.4597079999998641
+        ],
+        "median": 0.421291999999994,
+        "p90": 0.4597079999998641,
+        "p95": 0.4597079999998641,
+        "max": 0.4597079999998641
+      }
+    },
+    "transportResidualMs": {
+      "samples": [
+        11.784333000000288,
+        13.248708000000079,
+        18.340332999999646
+      ],
+      "median": 13.248708000000079,
+      "p90": 18.340332999999646,
+      "p95": 18.340332999999646,
+      "max": 18.340332999999646
+    },
+    "clientProtocolTotalMs": {
+      "samples": [
+        25.548332999999957,
+        29.205124999999953,
+        34.87104199999999
+      ],
+      "median": 29.205124999999953,
+      "p90": 34.87104199999999,
+      "p95": 34.87104199999999,
+      "max": 34.87104199999999
+    },
+    "serverProtocolTotalMs": {
+      "samples": [
+        17.22695799999974,
+        19.31012499999997,
+        19.561165999999957
+      ],
+      "median": 19.31012499999997,
+      "p90": 19.561165999999957,
+      "p95": 19.561165999999957,
+      "max": 19.561165999999957
+    },
+    "reconstructionErrorMs": {
+      "samples": [
+        0,
+        0,
+        0
+      ],
+      "median": 0,
+      "p90": 0,
+      "p95": 0,
+      "max": 0
+    },
+    "outerClientSettlementMs": {
+      "samples": [
+        0.282790999999861,
+        0.2874170000000049,
+        0.2954580000000533
+      ],
+      "median": 0.2874170000000049,
+      "p90": 0.2954580000000533,
+      "p95": 0.2954580000000533,
+      "max": 0.2954580000000533
+    },
+    "dominantPhase": "expectedObserverHealthMs",
+    "dominantP95Fraction": 0.42364503414415056,
+    "tailIntervals": 0,
+    "dominantTailIntervals": 0,
+    "expectedObserverHealthP95Fraction": 0.42364503414415056,
+    "expectedObserverHealthTailFractions": [],
+    "expectedObserverHealthDominatesEveryTail": false
+  },
+  "falseSafetyPredicates": [],
+  "safetyAuditPassed": false,
+  "predictionPassed": false,
+  "allSafe": false,
+  "thresholdsPassed": false,
+  "failure": "Compiled native Station did not expose its entry surface.\nLast frame:\n"
+}
