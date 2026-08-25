@@ -1992,3 +1992,25 @@ Observer external-launch unit, focused temporary dashboard/managed-launch
 tests, Biome, `git diff --check`, and the runner's skipped-mode compile. No
 production optimization is registered until BENCH-045 passes every stability,
 attribution, and product guard.
+
+Outcome: accepted attribution. All twenty authoritative repetitions passed
+stability admission in thirty-one attempts and passed every product, trace,
+reconstruction, perturbation, dominance, and blind-prediction rule. Intent-to-
+exact-input acknowledgement measured 196.689/286.493ms median/p95, attachment
+10.674/17.194ms, residual 16.234/23.847ms, actual-request wire/client work
+9.052/11.388ms, and server-send-to-client-frame egress 7.126/10.419ms.
+
+Server send return to client socket-data callback measured 7.097/10.329ms,
+supplied 99.1% of response-egress p95, and supplied at least 98.9% of every one
+of the eighteen intervals over 6ms. All post-callback frame extraction, JSON
+parse, queue, waiter, iterator, dequeue, yield, and outer-continuation work
+combined measured 0.034/0.081ms. The largest transport reconstruction error was
+0.000219ms and cross-process order remained nonnegative. The frozen prediction
+and every named phase bound passed.
+
+All temporary behavior and diagnostics must be reverted from the review
+branch. BENCH-045 proves ownership but does not distinguish inherent Bun/Unix-
+socket delivery from native TUI event-loop occupancy. Next compare a standalone
+compiled client, an idle native TUI connection, and the active Quick Session
+path under the same admitted Observer response before proposing worker,
+polling, or transport changes.
