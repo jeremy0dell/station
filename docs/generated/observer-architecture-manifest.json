@@ -15214,7 +15214,7 @@
       "declaration": "createDevCheckoutUpdateChannel",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Translates a clean upstream-tracking checkout into a pinned fast-forward with frozen dependency preparation, rebuild, and relinking.",
+      "purpose": "Translates a clean upstream-tracking checkout into a pinned fast-forward whose fetched target selects and preflights the matching legacy-pnpm or root-Bun preparation boundary.",
       "dependencies": [
         {
           "path": "apps/cli/src/update/updateChannel.ts",

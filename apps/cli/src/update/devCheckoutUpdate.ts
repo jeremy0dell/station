@@ -24,6 +24,54 @@ const PackageSchema = z.object({
   name: z.literal("station"),
   version: z.string().min(1),
 });
+const ExactPackageManagerVersionSchema = z
+  .string()
+  .regex(
+    /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/u,
+  );
+const PreparationScriptsSchema = z.object({
+  build: z.string().min(1),
+  "station:link": z.string().min(1),
+});
+const LegacyTargetPackageSchema = PackageSchema.extend({
+  packageManager: z
+    .string()
+    .regex(/^pnpm@/u)
+    .transform((value) => value.slice("pnpm@".length))
+    .pipe(ExactPackageManagerVersionSchema),
+  scripts: PreparationScriptsSchema,
+  workspaces: z.undefined().optional(),
+}).transform(() => ({ kind: "legacy-pnpm" }) as const);
+const RootBunTargetPackageSchema = PackageSchema.extend({
+  packageManager: z
+    .string()
+    .regex(/^bun@/u)
+    .transform((value) => value.slice("bun@".length))
+    .pipe(ExactPackageManagerVersionSchema),
+  scripts: PreparationScriptsSchema,
+  workspaces: z
+    .array(z.string())
+    .refine((workspaces) => workspaces.includes("station"), "station must be a root workspace"),
+}).transform(({ packageManager }) => ({
+  kind: "root-bun" as const,
+  requiredBunVersion: packageManager,
+}));
+const TargetPackageSchema = z.union([LegacyTargetPackageSchema, RootBunTargetPackageSchema]);
+const LegacyStationPackageSchema = z.object({
+  name: z.literal("@station/workspace"),
+  scripts: z.object({
+    "link:station": z.string().min(1),
+    "repair:node-pty": z.string().min(1),
+  }),
+});
+const RootBunStationPackageSchema = z.object({
+  name: z.literal("@station/workspace"),
+  scripts: z.object({
+    "repair:node-pty": z.string().min(1),
+  }),
+});
+
+type DevCheckoutTarget = z.infer<typeof TargetPackageSchema>;
 
 export type DevCheckoutDetection = {
   channel: typeof channel;
@@ -34,7 +82,7 @@ export type DevCheckoutDetection = {
   cliEntryPath: string;
   runtimePath: string;
   gitPath: string;
-  pnpmPath: string;
+  pnpmPath?: string;
   bunPath: string;
 };
 
@@ -65,11 +113,14 @@ export type DevCheckoutUpdateChannelDeps = {
 /**
  * ADAPTER
  *
- * Translates a clean upstream-tracking checkout into a pinned fast-forward with frozen dependency preparation, rebuild, and relinking.
+ * Translates a clean upstream-tracking checkout into a pinned fast-forward whose fetched target
+ * selects and preflights the matching legacy-pnpm or root-Bun preparation boundary.
  */
 export function createDevCheckoutUpdateChannel(
   deps: DevCheckoutUpdateChannelDeps,
 ): UpdateChannel<DevCheckoutDetection, DevCheckoutUpdatePlan, DevCheckoutUpdateReport> {
+  const recoveryCommandsByFailure = new WeakMap<object, readonly UpdateCommandArgv[]>();
+
   return {
     id: channel,
     detect: (options = {}) => detectDevCheckout(deps, options),
@@ -185,10 +236,19 @@ export function createDevCheckoutUpdateChannel(
         throw stalePlan("Git fetched a different Station revision than the planned target.");
       }
       await requireFastForward(plan, deps.commandRunner, options);
+      const target = await inspectTargetPackage(plan, deps.commandRunner, options);
+      if (target.kind === "root-bun") {
+        await requireTargetBunRuntime(plan, target.requiredBunVersion, deps.commandRunner, options);
+      } else if (plan.pnpmPath === undefined) {
+        throw planFailure(
+          "The legacy-pnpm target requires pnpm, but no pnpm executable is available.",
+        );
+      }
       await runGit(plan, ["merge", "--ff-only", plan.targetRevision], deps.commandRunner, options);
 
+      const preparationCommands = devCheckoutPreparationCommands(plan, target);
       try {
-        for (const command of devCheckoutPreparationCommands(plan)) {
+        for (const command of preparationCommands) {
           await runExternalCommand(
             commandInput(command.executable, command.args, command.cwd, options),
             deps.commandRunner,
@@ -197,12 +257,17 @@ export function createDevCheckoutUpdateChannel(
       } catch (error) {
         const cancellation = normalizeCancellationError(error);
         if (cancellation !== undefined) throw cancellation;
-        throw updateErrorFromUnknown(error, {
+        const failure = updateErrorFromUnknown(error, {
           code: "UPDATE_DEV_CHECKOUT_PREPARE_FAILED",
           message:
             "The development checkout advanced but its dependencies, build, or links could not be prepared.",
           hint: "Run the reported preparation commands before retrying Station.",
         });
+        recoveryCommandsByFailure.set(
+          failure,
+          preparationCommands.map(({ recoveryCommand }) => recoveryCommand),
+        );
+        throw failure;
       }
 
       const installedVersion = (
@@ -243,7 +308,14 @@ export function createDevCheckoutUpdateChannel(
       ) {
         return undefined;
       }
-      return devCheckoutPreparationCommands(plan).map(({ recoveryCommand }) => recoveryCommand);
+      return (
+        recoveryCommandsByFailure.get(error) ??
+        (plan.pnpmPath === undefined
+          ? undefined
+          : legacyPreparationCommands(plan, plan.pnpmPath).map(
+              ({ recoveryCommand }) => recoveryCommand,
+            ))
+      );
     },
   };
 }
@@ -257,15 +329,33 @@ type DevCheckoutPreparationCommand = {
 
 function devCheckoutPreparationCommands(
   plan: DevCheckoutUpdatePlan,
+  target: DevCheckoutTarget,
+): DevCheckoutPreparationCommand[] {
+  switch (target.kind) {
+    case "legacy-pnpm":
+      if (plan.pnpmPath === undefined) {
+        throw planFailure(
+          "The legacy-pnpm target requires pnpm, but no pnpm executable is available.",
+        );
+      }
+      return legacyPreparationCommands(plan, plan.pnpmPath);
+    case "root-bun":
+      return rootBunPreparationCommands(plan);
+  }
+}
+
+function legacyPreparationCommands(
+  plan: DevCheckoutUpdatePlan,
+  pnpmPath: string,
 ): DevCheckoutPreparationCommand[] {
   const stationRoot = resolve(plan.repoRoot, "station");
   // Bun installation prunes the manual @station links, and recreating them requires fresh root dist output.
   return [
     {
-      executable: plan.pnpmPath,
+      executable: pnpmPath,
       args: ["install", "--frozen-lockfile"],
       cwd: plan.repoRoot,
-      recoveryCommand: [plan.pnpmPath, "--dir", plan.repoRoot, "install", "--frozen-lockfile"],
+      recoveryCommand: [pnpmPath, "--dir", plan.repoRoot, "install", "--frozen-lockfile"],
     },
     {
       executable: plan.bunPath,
@@ -274,10 +364,10 @@ function devCheckoutPreparationCommands(
       recoveryCommand: [plan.bunPath, "--cwd", stationRoot, "install", "--frozen-lockfile"],
     },
     {
-      executable: plan.pnpmPath,
+      executable: pnpmPath,
       args: ["build"],
       cwd: plan.repoRoot,
-      recoveryCommand: [plan.pnpmPath, "--dir", plan.repoRoot, "build"],
+      recoveryCommand: [pnpmPath, "--dir", plan.repoRoot, "build"],
     },
     {
       executable: plan.bunPath,
@@ -292,10 +382,40 @@ function devCheckoutPreparationCommands(
       recoveryCommand: [plan.bunPath, "run", "--cwd", stationRoot, "repair:node-pty"],
     },
     {
-      executable: plan.pnpmPath,
+      executable: pnpmPath,
       args: ["station:link"],
       cwd: plan.repoRoot,
-      recoveryCommand: [plan.pnpmPath, "--dir", plan.repoRoot, "station:link"],
+      recoveryCommand: [pnpmPath, "--dir", plan.repoRoot, "station:link"],
+    },
+  ];
+}
+
+function rootBunPreparationCommands(plan: DevCheckoutUpdatePlan): DevCheckoutPreparationCommand[] {
+  const stationRoot = resolve(plan.repoRoot, "station");
+  return [
+    {
+      executable: plan.bunPath,
+      args: ["install", "--frozen-lockfile"],
+      cwd: plan.repoRoot,
+      recoveryCommand: [plan.bunPath, "install", "--cwd", plan.repoRoot, "--frozen-lockfile"],
+    },
+    {
+      executable: plan.bunPath,
+      args: ["run", "build"],
+      cwd: plan.repoRoot,
+      recoveryCommand: [plan.bunPath, "run", "--cwd", plan.repoRoot, "build"],
+    },
+    {
+      executable: plan.bunPath,
+      args: ["run", "repair:node-pty"],
+      cwd: stationRoot,
+      recoveryCommand: [plan.bunPath, "run", "--cwd", stationRoot, "repair:node-pty"],
+    },
+    {
+      executable: plan.bunPath,
+      args: ["run", "station:link"],
+      cwd: plan.repoRoot,
+      recoveryCommand: [plan.bunPath, "run", "--cwd", plan.repoRoot, "station:link"],
     },
   ];
 }
@@ -310,7 +430,7 @@ async function detectDevCheckout(
   const gitPath = await resolveExecutablePath("git", executableOptions);
   const pnpmPath = await resolveExecutablePath("pnpm", executableOptions);
   const bunPath = await resolveExecutablePath("bun", executableOptions);
-  if (gitPath === undefined || pnpmPath === undefined || bunPath === undefined) return undefined;
+  if (gitPath === undefined || bunPath === undefined) return undefined;
   try {
     const cliEntryPath = await realpath(deps.cliEntryPath);
     const runtimePath = await realpath(deps.runtimePath ?? process.execPath);
@@ -337,8 +457,8 @@ async function detectDevCheckout(
       cliEntryPath,
       runtimePath,
       gitPath,
-      pnpmPath,
       bunPath,
+      ...(pnpmPath === undefined ? {} : { pnpmPath }),
     } satisfies DevCheckoutDetection;
     detection.currentRevision = await gitLine(
       detection,
@@ -412,6 +532,72 @@ async function requireFastForward(
     const cancellation = normalizeCancellationError(error);
     if (cancellation !== undefined) throw cancellation;
     throw planFailure("The development branch cannot fast-forward to its upstream target.");
+  }
+}
+
+async function inspectTargetPackage(
+  plan: DevCheckoutUpdatePlan,
+  commandRunner: ExternalCommandRunner | undefined,
+  options: UpdateOperationOptions,
+): Promise<DevCheckoutTarget> {
+  try {
+    const result = await runGit(
+      plan,
+      ["show", `${plan.targetRevision}:package.json`],
+      commandRunner,
+      options,
+    );
+    const target = TargetPackageSchema.parse(JSON.parse(result.stdout));
+    const stationResult = await runGit(
+      plan,
+      ["show", `${plan.targetRevision}:station/package.json`],
+      commandRunner,
+      options,
+    );
+    if (target.kind === "root-bun") {
+      RootBunStationPackageSchema.parse(JSON.parse(stationResult.stdout));
+    } else {
+      LegacyStationPackageSchema.parse(JSON.parse(stationResult.stdout));
+    }
+    return target;
+  } catch (error) {
+    const cancellation = normalizeCancellationError(error);
+    if (cancellation !== undefined) throw cancellation;
+    throw updateErrorFromUnknown(
+      error,
+      {
+        code: "UPDATE_PLAN_FAILED",
+        message:
+          "The target Station revision is not a supported legacy-pnpm or exact root-Bun checkout.",
+        hint: "Inspect the fetched target package.json and rerun stn update; the checkout was not advanced.",
+      },
+      false,
+    );
+  }
+}
+
+async function requireTargetBunRuntime(
+  plan: DevCheckoutUpdatePlan,
+  requiredVersion: string,
+  commandRunner: ExternalCommandRunner | undefined,
+  options: UpdateOperationOptions,
+): Promise<void> {
+  let actualVersion: string;
+  try {
+    const result = await runExternalCommand(
+      commandInput(plan.bunPath, ["--version"], plan.repoRoot, options),
+      commandRunner,
+    );
+    actualVersion = ExactPackageManagerVersionSchema.parse(
+      oneLine(result.stdout, "Bun version output"),
+    );
+  } catch (error) {
+    const cancellation = normalizeCancellationError(error);
+    if (cancellation !== undefined) throw cancellation;
+    throw targetBunMismatch(requiredVersion, undefined, error);
+  }
+  if (actualVersion !== requiredVersion) {
+    throw targetBunMismatch(requiredVersion, actualVersion);
   }
 }
 
@@ -514,4 +700,18 @@ function stalePlan(message: string) {
     message,
     hint: "Run stn update again to build a fresh plan.",
   });
+}
+
+function targetBunMismatch(requiredVersion: string, actualVersion?: string, error?: unknown) {
+  const observed =
+    actualVersion === undefined ? "could not be verified" : `reports ${actualVersion}`;
+  return updateErrorFromUnknown(
+    error,
+    {
+      code: "UPDATE_DEV_CHECKOUT_BUN_MISMATCH",
+      message: `The target Station revision requires Bun ${requiredVersion}, but the planned Bun executable ${observed}.`,
+      hint: `Activate exact Bun ${requiredVersion} on PATH, verify bun --version, and rerun stn update; the checkout was not advanced.`,
+    },
+    false,
+  );
 }
