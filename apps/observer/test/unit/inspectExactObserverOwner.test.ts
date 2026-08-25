@@ -1,6 +1,6 @@
 import type { ObserverHealth, ObserverProcessIdentity } from "@station/contracts";
 import { STATION_SCHEMA_VERSION } from "@station/contracts";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import {
   type ExactObserverInspectionPorts,
   inspectExactObserverOwner,
@@ -157,12 +157,38 @@ describe("inspectExactObserverOwner", () => {
         throw new Error("private recovery failure");
       },
     });
-    await expect(inspectExactObserverOwner({ socketPath }, ports)).resolves.toMatchObject({
+    const result = await inspectExactObserverOwner({ socketPath }, ports);
+    expect(result).toMatchObject({
       status: "exact",
       processIdentity: identity,
       process: processEntry,
       recovery: { status: "unknown", error: { code: "OBSERVER_INSPECTION_FAILED" } },
     });
+    if (result.status !== "exact") throw new Error("expected exact evidence");
+    expectTypeOf(result.health.pid).toEqualTypeOf<number>();
+    expectTypeOf(result.health.socketPath).toEqualTypeOf<string>();
+    expectTypeOf(result.process.startupTimeoutMs).toEqualTypeOf<number>();
+    expectTypeOf(result.process.socketPath).toEqualTypeOf<string>();
+  });
+
+  it.each([
+    undefined,
+    0,
+  ])("rejects missing or non-positive startup budget %s before recovery inspection", async (startupTimeoutMs) => {
+    const readRecoveryAssessment = vi.fn(async () => assessment);
+    await expect(
+      inspectExactObserverOwner(
+        { socketPath },
+        inspectionPorts({
+          processEvidence: {
+            readCooperativeObserverProcess: () => ({ ...processEntry, startupTimeoutMs }),
+            processStartToken: () => identity.osStartTime,
+          },
+          readRecoveryAssessment,
+        }),
+      ),
+    ).resolves.toMatchObject({ status: "blocked", reason: "identity-missing" });
+    expect(readRecoveryAssessment).not.toHaveBeenCalled();
   });
 
   it.each([

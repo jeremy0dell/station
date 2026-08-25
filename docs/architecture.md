@@ -86,10 +86,18 @@ When these disagree, reconcile from config, providers, and current observer stat
 - Observer singleton selection remains generic: non-UI commands, hooks, ingress, and protocol clients may use the healthy handoff winner selected by Observer build ordering. A command-capable Station UI launcher adds a stricter composition check after that selection and proceeds only when its complete caller selector exactly equals the accepted Observer selector. Native Station directly operates Station Host, while the pane-free popup dashboard can dispatch commands that produce later Host work, so both refuse before renderer, reconcile, popup, Host, PTY, or layout effects.
 - Checkout-local devbox orchestration explicitly converges only its configured
   Observer socket to the checkout's exact immutable build before private hook
-  preparation and UI launch. The CLI lifecycle adapter may cooperatively stop a
-  different identity-pinned incumbent for that explicit operation, but it does
-  not change generic singleton ordering, inspect other sockets, or address the
-  separate persistent Station Host.
+  preparation and UI launch. Before awaiting work, the CLI strictly parses and
+  detaches current-only start-if-absent or restart-exact authority. Restart
+  requires complete health, pidfile, process-generation, executable-provenance,
+  recovery, and selected-handle evidence, then revalidates that evidence on one
+  identity-pinned current-schema NDJSON connection before its sole cooperative
+  stop. One absolute deadline covers inspection, stop receipt and peer closure,
+  preserve-incumbent startup, and an independent final exact inspection. Drift,
+  an unchanged admitted generation after known or uncertain mutation, or a later
+  non-target winner fails closed without mutating that winner. This explicit
+  operation adds no negotiation,
+  reconnect, signal, reap, repair, Host, update, or compatibility authority and
+  does not change generic singleton ordering.
 - The outer terminal environment is authoritative only for Station's OpenTUI
   renderer. Its strictly observed palette is appearance authority only for the
   embedded standalone/tmux dashboard; Station resolves that evidence into one

@@ -35,6 +35,16 @@ export interface PinnedObserverRecoveryIdentity {
   readonly version: string;
   readonly socketPath: string;
 }
+
+/** Required health identity returned only after exact ownership inspection. */
+export type ExactObserverHealthEvidence = Readonly<ObserverHealth & PinnedObserverRecoveryIdentity>;
+
+/** Complete cooperative process generation returned only after exact ownership inspection. */
+export type ExactObserverProcessEvidence = Readonly<
+  ObserverCooperativeProcessEntry &
+    Required<Pick<ObserverCooperativeProcessEntry, "socketPath" | "startupTimeoutMs">>
+>;
+
 /**
  * DRIVEN PORT
  *
@@ -59,9 +69,9 @@ export type ExactObserverOwnershipEvidence =
     }
   | {
       readonly status: "exact";
-      readonly health: Readonly<ObserverHealth>;
+      readonly health: ExactObserverHealthEvidence;
       readonly processIdentity: Readonly<ObserverProcessIdentity>;
-      readonly process: Readonly<ObserverCooperativeProcessEntry>;
+      readonly process: ExactObserverProcessEvidence;
       readonly recovery:
         | { readonly status: "assessed"; readonly assessment: ObserverRecoveryAssessment }
         | { readonly status: "unknown"; readonly error: SafeError };
@@ -85,13 +95,7 @@ export async function inspectExactObserverOwner(
   }
 
   const health = status.health;
-  if (
-    health.pid === undefined ||
-    health.startedAt === undefined ||
-    health.version === undefined ||
-    parseStationObserverBuildVersion(health.version).buildIdentity === undefined ||
-    health.socketPath !== input.socketPath
-  ) {
+  if (!hasExactHealthEvidence(health, input.socketPath)) {
     return blocked("identity-missing");
   }
   const recoveryIdentity = {
@@ -121,24 +125,27 @@ export async function inspectExactObserverOwner(
   if (before.status === "unavailable") {
     return blocked("identity-unavailable", inspectionError(before.cause));
   }
+  const process = before.process;
+  if (!hasExactProcessEvidence(process)) return blocked("identity-missing");
 
   const recoveryRead = await capture(() => ports.readRecoveryAssessment(recoveryIdentity));
   const currentStatus = await capture(ports.readStatus);
   const currentIdentityRead = await capture(() => ports.readPidfileIdentity(input.socketPath));
   const after = verifyCooperativeObserverProcessIdentity(
-    { source: "process", process: before.process },
+    { source: "process", process },
     ports.processEvidence,
   );
   if (!currentStatus.ok) return blocked("identity-drift", currentStatus.error);
   if (currentStatus.value.status !== "running") {
     return blocked("identity-drift", currentStatus.value.error);
   }
+  const currentHealth = currentStatus.value.health;
   if (
-    currentStatus.value.health.status !== health.status ||
-    currentStatus.value.health.pid !== health.pid ||
-    currentStatus.value.health.startedAt !== health.startedAt ||
-    currentStatus.value.health.version !== health.version ||
-    currentStatus.value.health.socketPath !== input.socketPath
+    !hasExactHealthEvidence(currentHealth, input.socketPath) ||
+    currentHealth.status !== health.status ||
+    currentHealth.pid !== health.pid ||
+    currentHealth.startedAt !== health.startedAt ||
+    currentHealth.version !== health.version
   ) {
     return blocked("identity-drift");
   }
@@ -159,16 +166,42 @@ export async function inspectExactObserverOwner(
       after.status === "unavailable" ? inspectionError(after.cause) : undefined,
     );
   }
+  const currentProcess = after.process;
+  if (!hasExactProcessEvidence(currentProcess)) return blocked("identity-drift");
 
   return {
     status: "exact",
-    health: currentStatus.value.health,
+    health: currentHealth,
     processIdentity: currentIdentity,
-    process: after.process,
+    process: currentProcess,
     recovery: recoveryRead.ok
       ? { status: "assessed", assessment: recoveryRead.value }
       : { status: "unknown", error: recoveryRead.error },
   };
+}
+
+function hasExactHealthEvidence(
+  health: ObserverHealth,
+  socketPath: string,
+): health is ExactObserverHealthEvidence {
+  return (
+    health.pid !== undefined &&
+    health.startedAt !== undefined &&
+    health.version !== undefined &&
+    parseStationObserverBuildVersion(health.version).buildIdentity !== undefined &&
+    health.socketPath === socketPath
+  );
+}
+
+function hasExactProcessEvidence(
+  process: ObserverCooperativeProcessEntry,
+): process is ExactObserverProcessEvidence {
+  return (
+    process.socketPath !== undefined &&
+    process.startupTimeoutMs !== undefined &&
+    Number.isSafeInteger(process.startupTimeoutMs) &&
+    process.startupTimeoutMs > 0
+  );
 }
 
 async function inspectStopped(

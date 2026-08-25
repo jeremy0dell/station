@@ -69,6 +69,12 @@ export type CreateObserverClientOptions = {
   acceptPreviousLifecycleSchema?: boolean;
 };
 
+/** Health, recovery, and cooperative-stop operations bound to one physical connection. */
+export type ExactObserverLifecycleSession = Pick<
+  ObserverApi,
+  "health" | "getSessionRecoveryAssessment" | "stop"
+>;
+
 type OpenSubscription = {
   connection: NdjsonConnection;
   iterator: AsyncIterator<unknown>;
@@ -163,6 +169,85 @@ export function createObserverClient(options: CreateObserverClientOptions): Obse
   };
 }
 
+/**
+ * ADAPTER
+ *
+ * Binds current-schema health, recovery, and one cooperative stop to one physical
+ * connection, requiring exact identity and peer closure before the absolute deadline.
+ */
+export async function withExactObserverLifecycleSession<T>(
+  options: {
+    socketPath: string;
+    expectedObserverIdentity: ExpectedObserverIdentity &
+      Required<Pick<ObserverHealth, "status" | "version">>;
+    deadlineMs: number;
+  },
+  task: (session: ExactObserverLifecycleSession) => Promise<T>,
+): Promise<T> {
+  const expected = { ...options.expectedObserverIdentity };
+  const deadlineMs = options.deadlineMs;
+  const remaining = () => remainingExactLifecycleBudget(deadlineMs);
+  return unwrapBoundaryResult(
+    await runRuntimeBoundaryWithTimeout(
+      {
+        ...protocolClientBoundary("observer.stop", remaining()),
+        operation: "protocol.client.exactLifecycleSession",
+      },
+      async ({ signal }) =>
+        openRequestConnection(
+          { socketPath: options.socketPath, timeoutMs: remaining() },
+          signal,
+          async (connection) => {
+            const iterator = connection.messages()[Symbol.asyncIterator]();
+            let stopSent = false;
+            let identityValidated = false;
+            const request = <TMethod extends ProtocolMethod>(method: TMethod) => {
+              remaining();
+              return readResponseForRequest(connection, iterator, defaultRequestId(), method);
+            };
+            return task({
+              health: async () => {
+                identityValidated = false;
+                const health = await request("observer.health");
+                assertObserverIdentity({ kind: "process", identity: expected }, health);
+                if (health.status !== expected.status) throw protocolSafeError(refusalInput);
+                if (health.socketPath !== expected.socketPath)
+                  throw protocolSafeError(refusalInput);
+                identityValidated = true;
+                return health;
+              },
+              getSessionRecoveryAssessment: () => {
+                identityValidated = false;
+                return request("session.recoveryAssessment");
+              },
+              stop: async () => {
+                if (stopSent || !identityValidated) throw protocolSafeError(refusalInput);
+                stopSent = true;
+                const receipt = await request("observer.stop");
+                if (!receipt.stopped) throw protocolSafeError(refusalInput);
+                remaining();
+                if (!(await iterator.next()).done) throw protocolSafeError(refusalInput);
+                remaining();
+                return receipt;
+              },
+            });
+          },
+        ),
+    ),
+  );
+}
+
+function remainingExactLifecycleBudget(deadlineMs: number): number {
+  const remainingMs = Math.floor(deadlineMs - Date.now());
+  if (remainingMs <= 0) throw protocolSafeError(timeoutInput);
+  return remainingMs;
+}
+
+const refusalInput = {
+  code: "PROTOCOL_REQUEST_FAILED",
+  message: "Exact Observer lifecycle authority was not proven.",
+} as const;
+
 async function requestProtocolMethod<TMethod extends ProtocolMethod>(
   options: CreateObserverClientOptions,
   id: string,
@@ -228,13 +313,15 @@ function protocolClientBoundary(method: ProtocolMethod, timeoutMs: number) {
       code: "PROTOCOL_REQUEST_FAILED",
       message: "Observer protocol request failed.",
     }),
-    timeoutError: protocolSafeError({
-      tag: "TimeoutError",
-      code: "PROTOCOL_REQUEST_TIMEOUT",
-      message: "Observer protocol request timed out.",
-    }),
+    timeoutError: protocolSafeError(timeoutInput),
   };
 }
+
+const timeoutInput = {
+  tag: "TimeoutError",
+  code: "PROTOCOL_REQUEST_TIMEOUT",
+  message: "Observer protocol request timed out.",
+} as const;
 
 async function openRequestConnection<T>(
   options: CreateObserverClientOptions,
