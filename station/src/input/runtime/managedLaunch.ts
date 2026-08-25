@@ -24,6 +24,7 @@ import {
   type ManagedLaunchAttemptResult,
   type ManagedLaunchTarget,
 } from "./managedLaunchAttempt.js";
+import { markManagedLaunchDiagnosticPhase } from "./managedLaunchPhaseDiagnostic.js";
 
 export type { ManagedLaunchTarget } from "./managedLaunchAttempt.js";
 
@@ -33,6 +34,8 @@ export type ManagedHostedSessionRequest = {
   branch: string;
   harness: ProviderId;
   group?: SessionGroupPlacementIntent;
+  /** Spawn without landing in the managed pane; deliberate creation defaults to background. */
+  background?: boolean;
 };
 
 export type ManagedHostedForkRequest = Omit<ManagedHostedSessionRequest, "group"> & {
@@ -66,6 +69,7 @@ type HostedWorktreeLaunch = {
   branch: string;
   harness: ProviderId;
   group?: FreshSessionGroupPlacementIntent;
+  background?: boolean;
   command: Extract<StationCommand, { type: "worktree.create" | "worktree.fork" }>;
   verb: "create" | "fork";
 };
@@ -82,6 +86,7 @@ export function createManagedLaunch(deps: ManagedLaunchDeps): ManagedLaunch {
   async function runHostedWorktreeLaunch(
     spec: HostedWorktreeLaunch,
   ): Promise<ManagedLaunchResult> {
+    markManagedLaunchDiagnosticPhase("hostedLaunchStarted");
     const service = deps.observerService;
     if (service === undefined) {
       return worktreeFailure({
@@ -94,6 +99,7 @@ export function createManagedLaunch(deps: ManagedLaunchDeps): ManagedLaunch {
       const execution = await executeObserverCommand(service, spec.command, {
         clientLabel: "Station",
       });
+      markManagedLaunchDiagnosticPhase("commandCompleted");
       if (execution.status !== "succeeded" && execution.status !== "accepted") {
         const error =
           execution.status === "rejected" && execution.receipt.error === undefined
@@ -118,15 +124,17 @@ export function createManagedLaunch(deps: ManagedLaunchDeps): ManagedLaunch {
           },
         };
       }
+      markManagedLaunchDiagnosticPhase("worktreeObserved");
       const attempt = await runManagedLaunchAttempt(agentWorktreePaneId(row.id), {
         projectId: spec.projectId,
         worktreeId: row.id,
         cwd: row.path,
         title: spec.title,
-        background: true,
+        background: spec.background ?? true,
         harness: spec.harness,
         ...(spec.group === undefined ? {} : { group: spec.group }),
       });
+      markManagedLaunchDiagnosticPhase("hostedLaunchCompleted");
       if (
         attempt.kind === "failure" &&
         spec.verb === "create" &&
