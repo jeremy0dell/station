@@ -47,10 +47,16 @@ const execFileAsync = promisify(execFile);
 const runFocusComparison =
   process.env.STATION_REAL_COMPILED_QUICK_SESSION_TUI_FOCUS_COMPARE === "1";
 const runSafetyAudit = process.env.STATION_REAL_COMPILED_QUICK_SESSION_TUI_SAFETY_AUDIT === "1";
+const runExp016Control =
+  process.env.STATION_REAL_COMPILED_QUICK_SESSION_TUI_EXP_016_CONTROL === "1";
+const runExp016Candidate =
+  process.env.STATION_REAL_COMPILED_QUICK_SESSION_TUI_EXP_016_CANDIDATE === "1";
 const runReal =
   process.env.STATION_REAL_COMPILED_QUICK_SESSION_TUI === "1" ||
   runFocusComparison ||
-  runSafetyAudit;
+  runSafetyAudit ||
+  runExp016Control ||
+  runExp016Candidate;
 const describeReal = runReal ? describe : describe.skip;
 const outputPath = resolve(
   z
@@ -58,11 +64,15 @@ const outputPath = resolve(
     .min(1)
     .parse(
       process.env.STATION_REAL_COMPILED_QUICK_SESSION_TUI_OUTPUT ??
-        (runFocusComparison
-          ? ".dev-state/performance/quick-session/compiled-quick-session-focus.real.json"
-          : runSafetyAudit
-            ? ".dev-state/performance/quick-session/compiled-quick-session-safety.real.json"
-            : ".dev-state/performance/quick-session/compiled-quick-session-tui.real.json"),
+        (runExp016Control
+          ? ".dev-state/performance/quick-session/exp-016-control.real.json"
+          : runExp016Candidate
+            ? ".dev-state/performance/quick-session/exp-016-candidate.real.json"
+            : runFocusComparison
+              ? ".dev-state/performance/quick-session/compiled-quick-session-focus.real.json"
+              : runSafetyAudit
+                ? ".dev-state/performance/quick-session/compiled-quick-session-safety.real.json"
+                : ".dev-state/performance/quick-session/compiled-quick-session-tui.real.json"),
     ),
 );
 const repoRoot = fileURLToPath(new URL("../../../", import.meta.url));
@@ -73,7 +83,8 @@ const buildIdentityPath = fileURLToPath(
 const packageJsonPath = fileURLToPath(new URL("../../../package.json", import.meta.url));
 const worktrunkCommand = process.env.STATION_WORKTRUNK_BIN ?? "wt";
 const tmuxCommand = process.env.STATION_TMUX_BIN ?? "tmux";
-const repetitions = runFocusComparison ? 10 : runSafetyAudit ? 1 : 5;
+const repetitions =
+  runFocusComparison || runExp016Control || runExp016Candidate ? 10 : runSafetyAudit ? 1 : 5;
 const ordinaryLinkedWorktrees = 48;
 const initialInventoryCount = ordinaryLinkedWorktrees + 1;
 const projectId = "compiled-tui-project";
@@ -96,9 +107,15 @@ const focusThresholds = {
   intentToInteractiveMedianMs: 250,
   intentToInteractiveP95Ms: 350,
 } as const;
+const exp016Thresholds = {
+  intentToInteractiveMedianMs: 200,
+  intentToInteractiveP95Ms: 350,
+  overlayDismissedToInputAckP95Ms: 100,
+} as const;
 const expectedUiProgress = "Launching STATION TUI…\n";
+const expectedObserverAndUiProgress = "Starting STATION observer…\nLaunching STATION TUI…\n";
 
-type FocusStrategy = "escape" | "toggle";
+type FocusStrategy = "automatic" | "escape" | "toggle";
 
 type BenchmarkFixture = Awaited<ReturnType<typeof createBenchmarkFixture>>;
 type BenchmarkRun = Awaited<ReturnType<typeof runRepetition>>;
@@ -107,11 +124,15 @@ describeReal("compiled CLI native Quick Session product boundary", () => {
   it("measures cold CLI startup and raw native Quick Session input independently", async () => {
     const report = {
       schemaVersion: 1,
-      benchmark: runFocusComparison
-        ? "station-quick-session-compiled-cli-native-focus-comparison"
-        : runSafetyAudit
-          ? "station-quick-session-compiled-cli-native-safety-audit"
-          : "station-quick-session-compiled-cli-native-tui",
+      benchmark: runExp016Control
+        ? "station-quick-session-exp-016-control"
+        : runExp016Candidate
+          ? "station-quick-session-exp-016-candidate"
+          : runFocusComparison
+            ? "station-quick-session-compiled-cli-native-focus-comparison"
+            : runSafetyAudit
+              ? "station-quick-session-compiled-cli-native-safety-audit"
+              : "station-quick-session-compiled-cli-native-tui",
       generatedAt: new Date().toISOString(),
       machine: {
         platform: platform(),
@@ -135,7 +156,13 @@ describeReal("compiled CLI native Quick Session product boundary", () => {
         ordinaryObserverRestartPerRun: true,
         ptyUsedHostPreservedAcrossRuns: true,
       },
-      thresholds: runFocusComparison ? focusThresholds : thresholds,
+      thresholds: runExp016Control
+        ? null
+        : runExp016Candidate
+          ? exp016Thresholds
+          : runFocusComparison
+            ? focusThresholds
+            : thresholds,
       setup: {
         repositoryShapeMs: 0,
         hostSeedMs: 0,
@@ -250,30 +277,44 @@ describeReal("compiled CLI native Quick Session product boundary", () => {
       report.setup.hostStoppedCleanly &&
       report.setup.hostStderrEmpty &&
       report.setup.rootRemoved;
-    report.thresholdsPassed = runSafetyAudit
-      ? report.safetyAuditPassed
-      : runFocusComparison
-        ? report.runs.length === repetitions &&
-          report.runs.every((run) => run.phaseCoherent) &&
-          report.focusComparison.escape.runs === 5 &&
-          report.focusComparison.toggle.runs === 5 &&
-          report.focusComparison.toggle.focusToInputAckMs.p95 <=
-            focusThresholds.focusToInputAckP95Ms &&
-          report.focusComparison.focusToInputAckP95ImprovementFraction >=
-            focusThresholds.focusToInputAckMinimumImprovementFraction &&
-          report.focusComparison.toggle.intentToInteractiveMs.median <=
-            focusThresholds.intentToInteractiveMedianMs &&
-          report.focusComparison.toggle.intentToInteractiveMs.p95 <=
-            focusThresholds.intentToInteractiveP95Ms
-        : report.runs.length === repetitions &&
-          report.distributions.launchToDashboardMs.median <= thresholds.launchToDashboardMedianMs &&
-          report.distributions.launchToDashboardMs.p95 <= thresholds.launchToDashboardP95Ms &&
-          report.distributions.intentToOptimisticMs.p95 <= thresholds.intentToOptimisticP95Ms &&
+    report.thresholdsPassed = runExp016Control
+      ? report.allSafe && report.runs.every((run) => run.dismissalInputSent)
+      : runExp016Candidate
+        ? report.allSafe &&
+          report.runs.every((run) => !run.dismissalInputSent) &&
           report.distributions.intentToInteractiveMs.median <=
-            thresholds.intentToInteractiveMedianMs &&
-          report.distributions.intentToInteractiveMs.p95 <= thresholds.intentToInteractiveP95Ms &&
-          report.distributions.intentToCanonicalUiMs.p95 <= thresholds.intentToCanonicalUiP95Ms &&
-          report.distributions.launchToInteractiveMs.p95 <= thresholds.launchToInteractiveP95Ms;
+            exp016Thresholds.intentToInteractiveMedianMs &&
+          report.distributions.intentToInteractiveMs.p95 <=
+            exp016Thresholds.intentToInteractiveP95Ms &&
+          report.distributions.focusToInputAckMs.p95 <=
+            exp016Thresholds.overlayDismissedToInputAckP95Ms
+        : runSafetyAudit
+          ? report.safetyAuditPassed
+          : runFocusComparison
+            ? report.runs.length === repetitions &&
+              report.runs.every((run) => run.phaseCoherent) &&
+              report.focusComparison.escape.runs === 5 &&
+              report.focusComparison.toggle.runs === 5 &&
+              report.focusComparison.toggle.focusToInputAckMs.p95 <=
+                focusThresholds.focusToInputAckP95Ms &&
+              report.focusComparison.focusToInputAckP95ImprovementFraction >=
+                focusThresholds.focusToInputAckMinimumImprovementFraction &&
+              report.focusComparison.toggle.intentToInteractiveMs.median <=
+                focusThresholds.intentToInteractiveMedianMs &&
+              report.focusComparison.toggle.intentToInteractiveMs.p95 <=
+                focusThresholds.intentToInteractiveP95Ms
+            : report.runs.length === repetitions &&
+              report.distributions.launchToDashboardMs.median <=
+                thresholds.launchToDashboardMedianMs &&
+              report.distributions.launchToDashboardMs.p95 <= thresholds.launchToDashboardP95Ms &&
+              report.distributions.intentToOptimisticMs.p95 <= thresholds.intentToOptimisticP95Ms &&
+              report.distributions.intentToInteractiveMs.median <=
+                thresholds.intentToInteractiveMedianMs &&
+              report.distributions.intentToInteractiveMs.p95 <=
+                thresholds.intentToInteractiveP95Ms &&
+              report.distributions.intentToCanonicalUiMs.p95 <=
+                thresholds.intentToCanonicalUiP95Ms &&
+              report.distributions.launchToInteractiveMs.p95 <= thresholds.launchToInteractiveP95Ms;
 
     await mkdir(dirname(outputPath), { recursive: true });
     await writeFile(outputPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
@@ -521,8 +562,11 @@ async function runRepetition(input: {
   expectedObserverBuildVersion: string;
 }) {
   const { fixture, hostRuntime, repetition, expectedObserverBuildVersion } = input;
-  const focusStrategy: FocusStrategy =
-    runSafetyAudit || (runFocusComparison && repetition % 2 === 1) ? "toggle" : "escape";
+  const focusStrategy: FocusStrategy = runExp016Candidate
+    ? "automatic"
+    : runExp016Control || runSafetyAudit || (runFocusComparison && repetition % 2 === 1)
+      ? "toggle"
+      : "escape";
   const sessionName = `st-qtu-${process.pid}-${repetition}`;
   const uiStderrPath = join(fixture.temporaryRoot, `ui-${repetition}.stderr`);
   const env: RealE2eEnvironment = {
@@ -559,6 +603,8 @@ async function runRepetition(input: {
   let cleanupInventoryCount = -1;
   let gitCleanupInventoryCount = -1;
   let uiStderr = "";
+  let automaticOverlayDismissed: Promise<number> | undefined;
+  let dismissalInputSent = false;
   let subscription: AsyncIterator<StationEvent> | undefined;
   let ptyClient: AttachedTmuxPtyClient | undefined;
   let viewer: HostAttachment | undefined;
@@ -649,6 +695,15 @@ async function runRepetition(input: {
     const quickCell = cellForText(dashboardFrame, "[quick session]");
     intentAt = performance.now();
     await writeSgrClick(ptyClient, quickCell);
+    if (focusStrategy === "automatic") {
+      automaticOverlayDismissed = waitForFrame(
+        env,
+        launched.target,
+        (frame) => !frame.includes("[quick session]") && !frame.includes("[shell]"),
+        10_000,
+        "Native Quick Session did not dismiss its overlay after a successful landing.",
+      ).then(() => performance.now());
+    }
     const accepted = await acceptedPromise;
     commandAcceptedAt = performance.now();
     commandId = accepted.commandId;
@@ -700,24 +755,33 @@ async function runRepetition(input: {
     let output = replayData(viewer);
     output = await readUntilMarker(viewerIterator, output, `${readyPrefix}${sessionId}`, 10_000);
     hostReadyAt = performance.now();
-    await waitForFrame(
-      env,
-      launched.target,
-      (frame) => frame.includes(branch ?? "") && !frame.includes("starting session..."),
-      10_000,
-      "Native dashboard did not replace its optimistic row with the canonical session.",
-    );
-    canonicalUiAt = performance.now();
-    focusAt = performance.now();
-    await ptyClient.write(Buffer.from(focusStrategy === "toggle" ? "\x0f" : "\x1b", "binary"));
-    await waitForFrame(
-      env,
-      launched.target,
-      (frame) => !frame.includes("[quick session]") && !frame.includes("[shell]"),
-      10_000,
-      "Native Quick Session row activation did not focus its pane.",
-    );
-    overlayDismissedAt = performance.now();
+    if (focusStrategy === "automatic") {
+      if (automaticOverlayDismissed === undefined) {
+        throw new Error("Automatic overlay observation was not armed at Quick Session intent.");
+      }
+      overlayDismissedAt = await automaticOverlayDismissed;
+      focusAt = overlayDismissedAt;
+    } else {
+      await waitForFrame(
+        env,
+        launched.target,
+        (frame) => frame.includes(branch ?? "") && !frame.includes("starting session..."),
+        10_000,
+        "Native dashboard did not replace its optimistic row with the canonical session.",
+      );
+      canonicalUiAt = performance.now();
+      focusAt = performance.now();
+      dismissalInputSent = true;
+      await ptyClient.write(Buffer.from(focusStrategy === "toggle" ? "\x0f" : "\x1b", "binary"));
+      await waitForFrame(
+        env,
+        launched.target,
+        (frame) => !frame.includes("[quick session]") && !frame.includes("[shell]"),
+        10_000,
+        "Native Quick Session row activation did not focus its pane.",
+      );
+      overlayDismissedAt = performance.now();
+    }
     const inputToken = `compiled-tui-input-${repetition}`;
     inputSentAt = performance.now();
     await ptyClient.write(Buffer.from(`${inputToken}\r`, "utf8"));
@@ -728,6 +792,17 @@ async function runRepetition(input: {
       10_000,
     );
     inputAcknowledgedAt = performance.now();
+    if (focusStrategy === "automatic") {
+      await ptyClient.write(Buffer.from("\x0f", "binary"));
+      await waitForFrame(
+        env,
+        launched.target,
+        (frame) => frame.includes(branch ?? "") && !frame.includes("starting session..."),
+        10_000,
+        "Reopened native dashboard did not expose the canonical Quick Session.",
+      );
+      canonicalUiAt = performance.now();
+    }
     await viewerIterator.return?.();
     await viewer.detach();
     viewer = undefined;
@@ -776,7 +851,9 @@ async function runRepetition(input: {
       uiStoppedCleanly,
       observerStoppedCleanly,
       uiStderrMatches:
-        uiStderr === (runFocusComparison || runSafetyAudit ? expectedUiProgress : ""),
+        runFocusComparison || runSafetyAudit || runExp016Control || runExp016Candidate
+          ? uiStderr === expectedUiProgress || uiStderr === expectedObserverAndUiProgress
+          : uiStderr.length === 0,
     };
     const boundarySafe = Object.values(safetyPredicates).every(Boolean);
     const focusToInputAckMs = inputAcknowledgedAt - focusAt;
@@ -794,6 +871,7 @@ async function runRepetition(input: {
     return {
       repetition,
       focusStrategy,
+      dismissalInputSent,
       safe,
       safetyPredicates,
       phaseCoherent,
