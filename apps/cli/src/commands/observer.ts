@@ -1,9 +1,9 @@
 import type { StationConfig } from "@station/config";
 import type { ObserverHealth, ObserverStopReceipt } from "@station/contracts";
 import { parsePositiveIntegerOption } from "../args.js";
+import { ensureExactObserverBuild } from "../observerProcess/convergeExactObserverBuild.js";
 import {
   type ExactObserverBuildStatus,
-  ensureExactObserverBuild,
   getObserverStatus,
   type ObserverProcessDeps,
   type ObserverStatus,

@@ -17,6 +17,14 @@ export * from "./commands/setup/index.js";
 export * from "./commands/snapshot.js";
 export * from "./commands/tui.js";
 export { runCliMain, shouldSuppressCliProcessOutput } from "./main.js";
+export {
+  convergeExactObserverBuild,
+  type ExactObserverConvergenceCommand,
+  type ExactObserverConvergenceDependencies,
+  type ExactObserverLifecycleSessionCapability,
+  type ExactObserverRestartEvidence,
+  parseExactObserverConvergenceCommand,
+} from "./observerProcess/convergeExactObserverBuild.js";
 export type {
   ChildProcessLike,
   ExactObserverActivationPhase,

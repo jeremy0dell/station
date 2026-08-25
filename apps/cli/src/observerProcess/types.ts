@@ -39,7 +39,7 @@ export type ExactObserverActivationPhase = "inspection" | "stop" | "start" | "ve
 export type ExactObserverIncumbentDisposition = "none" | "preserved" | "stopped" | "unknown";
 
 /**
- * Result of converging one configured socket to the caller's exact immutable build.
+ * Named current-only result contract for converging one configured socket to the caller's exact build.
  * Failures identify the phase and the last proven state of the Observer present at admission.
  */
 export type ExactObserverBuildStatus =
@@ -83,6 +83,8 @@ export type ObserverProcessDeps = {
 
 export type SpawnObserverInput = {
   paths: ObserverPaths;
+  /** Remaining absolute startup budget finalized immediately before child spawn. */
+  startupTimeoutMs: number;
   configPath?: string;
   /** Finalized executable and fixed prefix arguments for the Observer child. */
   observerCommand?: ExecutableArgv;

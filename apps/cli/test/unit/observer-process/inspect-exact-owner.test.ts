@@ -85,4 +85,29 @@ describe("inspectExactObserverOwnerWithLocalAdapters", () => {
     });
     expect(readObserverProcess).toHaveBeenCalledTimes(2);
   });
+
+  it("uses one pinned lifecycle session for both health proofs and recovery", async () => {
+    const session = {
+      health: vi.fn(async () => health),
+      getSessionRecoveryAssessment: vi.fn(async () => assessment),
+      stop: vi.fn(),
+    };
+    await expect(
+      inspectExactObserverOwnerWithLocalAdapters(
+        { paths, timeoutMs: 50, startupDeadlineMs: Date.now() + 1_000 },
+        {
+          readPidfileIdentity: async () => processIdentity,
+          processEvidence: {
+            readCooperativeObserverProcess: () => processEntry,
+            processStartToken: () => processIdentity.osStartTime,
+          },
+        },
+        session,
+      ),
+    ).resolves.toMatchObject({ status: "exact", recovery: { status: "assessed" } });
+
+    expect(session.health).toHaveBeenCalledTimes(2);
+    expect(session.getSessionRecoveryAssessment).toHaveBeenCalledTimes(1);
+    expect(session.stop).not.toHaveBeenCalled();
+  });
 });

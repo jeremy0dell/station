@@ -9,6 +9,7 @@ import {
   readdir,
   readFile,
   readlink,
+  rename,
   rm,
   stat,
   symlink,
@@ -349,7 +350,7 @@ describe("observer lifecycle e2e", () => {
     }
   });
 
-  it("preserves a typed executable mismatch when a live incumbent symlink is retargeted", async () => {
+  it("fails closed when exact convergence sees a retargeted incumbent symlink", async () => {
     const fixture = await createTempState();
     const config = observerConfig(fixture.stateDir, fixture.socketPath);
     const configPath = await writeConfigToml(fixture.root, config);
@@ -377,7 +378,10 @@ describe("observer lifecycle e2e", () => {
     const originalSocket = await stat(fixture.socketPath);
     const originalPidfile = await stat(pidfilePath);
     const originalPidfileBytes = await readFile(pidfilePath);
-
+    const observerCommand = [
+      nodeLink,
+      join(process.cwd(), "apps", "cli", "dist", "observerMain.js"),
+    ];
     try {
       await unlink(nodeLink);
       await symlink(secondNode, nodeLink);
@@ -386,10 +390,7 @@ describe("observer lifecycle e2e", () => {
           config,
           configPath,
           timeoutMs: 10_000,
-          observerCommand: [
-            nodeLink,
-            join(process.cwd(), "apps", "cli", "dist", "observerMain.js"),
-          ],
+          observerCommand,
         },
         { buildVersion: candidateVersion },
       );
@@ -481,14 +482,115 @@ describe("observer lifecycle e2e", () => {
         birthtimeMs: originalPidfile.birthtimeMs,
       });
       await expect(readFile(pidfilePath)).resolves.toEqual(originalPidfileBytes);
+
+      const activated = await ensureExactObserverBuild(
+        { config, configPath, timeoutMs: 10_000, observerCommand },
+        { buildVersion: candidateVersion },
+      );
+      expect(activated, JSON.stringify(activated, null, 2)).toMatchObject({
+        status: "unhealthy",
+        phase: "inspection",
+        incumbentDisposition: "unknown",
+        cause: { code: "OBSERVER_EXACT_INSPECTION_IDENTITY_MISMATCH" },
+      });
+      expect(processIsAlive(incumbent.child.pid)).toBe(true);
+      await expect(incumbent.client.health()).resolves.toMatchObject({
+        pid: incumbent.child.pid,
+        version: incumbentVersion,
+      });
     } finally {
+      await stopCurrentObserver(fixture.socketPath);
       await terminateFixture(incumbent.child);
-      await waitForSocketClosed(fixture.socketPath).catch(() => undefined);
+      expect(processIsAlive(incumbent.child.pid)).toBe(false);
+    }
+  });
+
+  it("cooperatively replaces an atomically replaced executable at one stable path", async () => {
+    const fixture = await createTempState();
+    const config = observerConfig(fixture.stateDir, fixture.socketPath);
+    const installedNode = join(fixture.root, "installed", "bin", "node");
+    const replacementNode = join(fixture.root, "replacement", "bin", "node");
+    await copyNodeExecutableImage(installedNode);
+    await copyNodeExecutableImage(replacementNode);
+    const originalExecutable = await stat(installedNode);
+    const build = stationBuildInfo();
+    const incumbentVersion = stationObserverBuildVersion({
+      ...build,
+      buildIdentity: "0".repeat(64),
+    });
+    const candidateVersion = stationObserverBuildVersion(build);
+    const incumbent = await startIncumbentFixture({
+      stateDir: fixture.stateDir,
+      socketPath: fixture.socketPath,
+      version: incumbentVersion,
+      executablePath: installedNode,
+    });
+    const observerCommand = [
+      installedNode,
+      join(process.cwd(), "apps", "cli", "dist", "observerMain.js"),
+    ];
+    const successorClient = createObserverClient({
+      socketPath: fixture.socketPath,
+      timeoutMs: 1000,
+    });
+    let successorPid: number | undefined;
+
+    try {
+      await rename(replacementNode, installedNode);
+      expect((await stat(installedNode)).ino).not.toBe(originalExecutable.ino);
+      const refused = await startObserver(
+        { config, timeoutMs: 10_000, observerCommand },
+        { buildVersion: candidateVersion },
+      );
+      expect(refused, JSON.stringify(refused, null, 2)).toMatchObject({
+        status: "unhealthy",
+        error: { code: "OBSERVER_HANDOFF_REFUSED" },
+        cause: { code: "OBSERVER_PROCESS_INSTALLED_PATH_REPLACED" },
+      });
+      expect(processIsAlive(incumbent.child.pid)).toBe(true);
+
+      const activated = await ensureExactObserverBuild(
+        { config, timeoutMs: 10_000, observerCommand },
+        { buildVersion: candidateVersion },
+      );
+      expect(activated, JSON.stringify(activated, null, 2)).toMatchObject({
+        status: "running",
+        lifecycle: "replaced",
+        health: {
+          pid: expect.any(Number),
+          version: candidateVersion,
+          socketPath: fixture.socketPath,
+        },
+      });
+      if (activated.status !== "running" || activated.health.pid === undefined) {
+        throw new Error("Exact activation did not start a successor Observer.");
+      }
+      successorPid = activated.health.pid;
+      expect(successorPid).not.toBe(incumbent.child.pid);
+      await expectProcessExit(incumbent.child.pid);
+      await expect(successorClient.health()).resolves.toMatchObject({
+        pid: successorPid,
+        version: candidateVersion,
+        socketPath: fixture.socketPath,
+      });
+    } finally {
+      await stopCurrentObserver(fixture.socketPath);
+      if (successorPid !== undefined) {
+        await expect(probeUnixSocket(fixture.socketPath)).resolves.toMatchObject({
+          status: "absent",
+        });
+        await expectProcessExit(successorPid);
+        expect(processIsAlive(successorPid)).toBe(false);
+      }
+      await terminateFixture(incumbent.child);
+      expect(processIsAlive(incumbent.child.pid)).toBe(false);
     }
   });
 
   it("keeps ordinary losing-build refusal but explicitly activates an exact build", async () => {
     const fixture = await createTempState();
+    const config = observerConfig(fixture.stateDir, fixture.socketPath);
+    const configPath = await writeConfigToml(fixture.root, config);
     const build = stationBuildInfo();
     const incumbentVersion = stationObserverBuildVersion({
       ...build,
@@ -504,12 +606,12 @@ describe("observer lifecycle e2e", () => {
       socketPath: fixture.socketPath,
       timeoutMs: 1000,
     });
-    let successorStarted = false;
+    let successorPid: number | undefined;
     let spawned = false;
 
     try {
       const refused = await startObserver(
-        { config: observerConfig(fixture.stateDir, fixture.socketPath), timeoutMs: 10_000 },
+        { config, timeoutMs: 10_000 },
         {
           buildVersion: candidateVersion,
           spawnObserver: async () => {
@@ -530,25 +632,47 @@ describe("observer lifecycle e2e", () => {
       });
 
       const activated = await ensureExactObserverBuild(
-        {
-          config: observerConfig(fixture.stateDir, fixture.socketPath),
-          timeoutMs: 10_000,
-        },
+        { config, timeoutMs: 10_000 },
         { buildVersion: candidateVersion },
       );
-      expect(activated).toMatchObject({
+      expect(activated, JSON.stringify(activated, null, 2)).toMatchObject({
         status: "running",
         lifecycle: "replaced",
+        health: { pid: expect.any(Number), version: candidateVersion },
+      });
+      if (activated.status !== "running" || activated.health.pid === undefined) {
+        throw new Error("Exact activation did not start a successor Observer.");
+      }
+      successorPid = activated.health.pid;
+      await expectProcessExit(incumbent.child.pid);
+      await expect(successorClient.health()).resolves.toMatchObject({
+        pid: successorPid,
+        version: candidateVersion,
+      });
+
+      const binary = spawnSync(
+        join(process.cwd(), "bin", "stn"),
+        ["--config", configPath, "observer", "ensure-exact-build", "--timeout-ms", "10000"],
+        { cwd: process.cwd(), encoding: "utf8", timeout: 20_000 },
+      );
+      if (binary.error !== undefined) throw binary.error;
+      expect(binary.status, binary.stderr).toBe(0);
+      expect(JSON.parse(binary.stdout)).toMatchObject({
+        status: "running",
+        lifecycle: "reused",
         health: { version: candidateVersion },
       });
-      successorStarted = activated.status === "running";
-      await expectProcessExit(incumbent.child.pid);
     } finally {
-      if (successorStarted) {
-        await successorClient.stop().catch(() => undefined);
-        await waitForSocketClosed(fixture.socketPath).catch(() => undefined);
+      await stopCurrentObserver(fixture.socketPath);
+      if (successorPid !== undefined) {
+        await expect(probeUnixSocket(fixture.socketPath)).resolves.toMatchObject({
+          status: "absent",
+        });
+        await expectProcessExit(successorPid);
+        expect(processIsAlive(successorPid)).toBe(false);
       }
       await terminateFixture(incumbent.child);
+      expect(processIsAlive(incumbent.child.pid)).toBe(false);
     }
   });
 
@@ -1295,6 +1419,12 @@ async function terminateFixture(child: ChildProcess): Promise<void> {
   if (child.pid === undefined || !processIsAlive(child.pid)) return;
   child.kill("SIGKILL");
   await expectProcessExit(child.pid).catch(() => undefined);
+}
+
+async function stopCurrentObserver(socketPath: string): Promise<void> {
+  const client = createObserverClient({ socketPath, timeoutMs: 1000 });
+  await client.stop().catch(() => undefined);
+  await waitForSocketClosed(socketPath).catch(() => undefined);
 }
 
 async function exitedProcessPid(): Promise<number> {

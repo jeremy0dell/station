@@ -45,13 +45,19 @@ type ExecFileStatus = { status: number | null; stdout: string; stderr: string };
 type ExecutableProvenance = ObserverCooperativeProcessEntry["executableProvenance"] | "mismatch";
 
 type LocalObserverProcessEvidenceDeps = {
-  execFile?: (file: string, args: readonly string[]) => string;
-  execFileStatus?: (file: string, args: readonly string[]) => ExecFileStatus;
+  execFile?: (file: string, args: readonly string[], timeoutMs: number) => string;
+  execFileStatus?: (file: string, args: readonly string[], timeoutMs: number) => ExecFileStatus;
   readProcessArgv?: (pid: number) => string[] | undefined;
-  processExecutableProvenance?: (pid: number, expectedPath: string) => ExecutableProvenance;
-  socketHolders?: (socketPath: string) => number[];
+  processExecutableProvenance?: (
+    pid: number,
+    expectedPath: string,
+    timeoutMs: number,
+  ) => ExecutableProvenance;
+  socketHolders?: (socketPath: string, timeoutMs: number) => number[];
   signal?: (pid: number, signal: NodeJS.Signals | 0) => void;
   evidenceTimeoutMs?: number;
+  evidenceDeadlineMs?: number;
+  nowMs?: () => number;
 };
 
 export type LocalObserverProcessEvidenceSource = ObserverDuplicateProcessEvidenceSource &
@@ -66,27 +72,31 @@ export type LocalObserverProcessEvidenceSource = ObserverDuplicateProcessEvidenc
  * socket-holder and complete file-descriptor evidence, pidfiles, socket
  * identities, and signals into conservative ownership evidence. Exact
  * executable/argv mismatch throws a stable typed refusal without weakening the
- * fail-closed ownership decision.
+ * fail-closed ownership decision. OS subprocess timeouts shrink only when an
+ * absolute evidence deadline is supplied.
  */
 export function createLocalObserverProcessEvidence(
   deps: LocalObserverProcessEvidenceDeps = {},
 ): LocalObserverProcessEvidenceSource {
-  const evidenceTimeoutMs = Math.max(
-    1,
-    deps.evidenceTimeoutMs ?? DEFAULT_PROCESS_EVIDENCE_TIMEOUT_MS,
-  );
-  const execFile =
-    deps.execFile ?? ((file, args) => defaultExecFile(file, args, evidenceTimeoutMs));
-  const execFileStatus =
-    deps.execFileStatus ?? ((file, args) => defaultExecFileStatus(file, args, evidenceTimeoutMs));
+  const maxTimeoutMs = Math.max(1, deps.evidenceTimeoutMs ?? DEFAULT_PROCESS_EVIDENCE_TIMEOUT_MS);
+  const evidenceTimeoutMs = () => {
+    if (deps.evidenceDeadlineMs === undefined) return maxTimeoutMs;
+    const remainingMs = Math.floor(deps.evidenceDeadlineMs - (deps.nowMs ?? Date.now)());
+    if (remainingMs <= 0) throw processEvidenceDeadlineError();
+    return Math.min(maxTimeoutMs, remainingMs);
+  };
+  const execFile = deps.execFile ?? defaultExecFile;
+  const execFileStatus = deps.execFileStatus ?? defaultExecFileStatus;
+  const run = (file: string, args: readonly string[]) => execFile(file, args, evidenceTimeoutMs());
+  const runStatus = (file: string, args: readonly string[]) =>
+    execFileStatus(file, args, evidenceTimeoutMs());
   const readProcessArgv = deps.readProcessArgv ?? defaultReadProcessArgv;
-  const processExecutableProvenance =
-    deps.processExecutableProvenance ??
-    ((pid: number, expectedPath: string) =>
-      defaultProcessExecutableProvenance(pid, expectedPath, execFileStatus));
+  const processExecutableProvenance = (pid: number, expectedPath: string) =>
+    deps.processExecutableProvenance?.(pid, expectedPath, evidenceTimeoutMs()) ??
+    defaultProcessExecutableProvenance(pid, expectedPath, runStatus);
   const signal = deps.signal ?? process.kill;
   const readCooperativeEntries = (args: readonly string[]): ObserverCooperativeProcessEntry[] => {
-    const parsed = parseObserverProcessList(execFile(psPath, args));
+    const parsed = parseObserverProcessList(run(psPath, args));
     return parsed.map((entry) =>
       requireExactLocalObserverProcess(entry, readProcessArgv, processExecutableProvenance),
     );
@@ -112,14 +122,16 @@ export function createLocalObserverProcessEvidence(
     readCooperativeObserverProcess: readCooperativeProcess,
     listObserverProcesses: () =>
       readCooperativeEntries(processListArgs()).map(exactInstalledProcess),
-    socketHolders: deps.socketHolders ?? readObserverSocketHolderPids,
-    processStartToken: (pid) => readProcessStartToken(pid, execFile),
-    readProcessExistence: (pid) => readLocalProcessExistence(pid, execFileStatus),
+    socketHolders: (socketPath) =>
+      deps.socketHolders?.(socketPath, evidenceTimeoutMs()) ??
+      readObserverSocketHolderPids(socketPath, evidenceTimeoutMs()),
+    processStartToken: (pid) => readProcessStartToken(pid, run),
+    readProcessExistence: (pid) => readLocalProcessExistence(pid, runStatus),
     readProcessIdentity: readObserverProcessIdentity,
     socketIdentity: readSocketIdentity,
     unixSocketFdCount: (entry) => {
       readExactProcess(entry);
-      const result = execFileStatus(lsofPath, ["-nP", "-a", "-p", String(entry.pid), "-F0pft"]);
+      const result = runStatus(lsofPath, ["-nP", "-a", "-p", String(entry.pid), "-F0pft"]);
       if (result.status !== 0 || result.stderr.trim().length !== 0) {
         throw new Error(`Unix-socket descriptor evidence failed for PID ${entry.pid}.`);
       }
@@ -545,6 +557,12 @@ function signalProcess(
     return "refused";
   }
 }
+
+const processEvidenceDeadlineError = (): SafeError => ({
+  tag: "ObserverProcessEvidenceError",
+  code: "OBSERVER_PROCESS_EVIDENCE_DEADLINE_EXCEEDED",
+  message: "Observer process evidence exceeded its absolute deadline.",
+});
 
 function defaultExecFile(file: string, args: readonly string[], timeoutMs: number): string {
   return execFileSync(file, [...args], {

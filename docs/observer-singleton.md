@@ -132,20 +132,44 @@ winner selected here.
 
 An explicit `stn observer ensure-exact-build` request is a separate CLI lifecycle
 operation for a caller that intentionally owns the configured runtime, such as a
-checkout-local devbox. Exact health is reused. A different healthy selector is
-stopped only through the existing identity-pinned cooperative stop connection;
-the operation waits for endpoint closure, starts the caller build, and requires
-that exact selector as its final postcondition. Its inspection, socket-holder
-evidence, health, stop convergence, child startup, and verification share one
-deadline. The replacement child uses preserve-incumbent admission: it may accept
-an exact successor or claim an absent/proven-stale endpoint, but it cannot invoke
-ordinary automatic handoff against a later non-exact owner. An owner change is re-probed only
-to accept an already-established exact successor or stopped endpoint; the
-operation does not repeatedly stop moving non-exact owners. It never uses reap,
-signals, forced cleanup, or a weaker socket probe. Ordinary `start`, automatic
-handoff, and deterministic winner selection retain the policy above. Failure
-results name the activation phase and the last proven disposition of the
-incumbent admitted at the beginning of the operation.
+checkout-local devbox. Before its first await, the CLI strictly parses and clones
+one current-only `start-if-absent` or `restart-exact` command. Start authority
+contains a proved-absent expectation and mutation requires a fresh absence read;
+if a target appears during admission, only a separate independent final exact
+inspection may accept it without mutation. Standalone invocation may immediately
+reuse an initially complete exact target inspection, but health alone is never
+reuse, stop, or replacement authority.
+
+Restart authority contains the complete expected generation from exact
+inspection: health status, PID, start time, selector, and socket; strict pidfile;
+exact cooperative argv, executable path and provenance, OS start token, launch
+token, selector, socket, and startup timeout; recovery assessment; and canonical
+selected session handles. The restart re-inspects that generation on one pinned
+physical NDJSON connection using only existing `observer.health`,
+`session.recoveryAssessment`, and `observer.stop` messages. Health, recovery,
+fresh health, one stop request, a `stopped: true` receipt, and peer EOF occur on
+that connection with no schema negotiation or reconnect. Complete generation and
+selected-handle equality is rechecked immediately before the sole cooperative
+stop. Evidence drift, PID reuse, handle substitution, connection uncertainty, or
+a later non-target owner refuses without stopping or replacing that owner.
+Installed-path replacement authorizes only this identity-pinned cooperative
+path.
+
+One absolute deadline shrinks across inspection and OS evidence, the pinned
+session, stop receipt and endpoint closure, preserve-incumbent child startup,
+child health, and verification. The replacement child may accept an exact
+successor or claim an absent/proven-stale endpoint, but cannot invoke ordinary
+automatic handoff against a later non-exact owner. After any known or uncertain
+stop/start mutation, a fresh independent exact inspection must prove the final
+target generation; the admitted generation cannot count as success, and a
+later non-target winner is preserved. Results retain stable activation phase,
+last proven incumbent disposition, and typed cause. The operation has no retry
+loop, signal, reap, repair, forced cleanup, Host, update, new wire method, or
+compatibility authority.
+The existing public `observer status`, `observer ensure-exact-build`,
+`observer restart`, and `observer stop` JSON and exit-code surfaces remain
+unchanged; generic start, automatic handoff, and deterministic winner ordering
+also retain their existing behavior.
 
 A winning replacement candidate may coordinate handoff only while holding the boot claim.
 After first corroborating holder, health, pidfile, argv, socket, and OS start token, it constructs

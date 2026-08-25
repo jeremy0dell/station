@@ -68,6 +68,66 @@ function unavailableClientFactory(message = "stopped") {
 }
 
 describe("CLI observer process startup", () => {
+  it("recomputes the child startup timeout immediately before spawn", async () => {
+    const fixture = await createTempState();
+    const deadlineMs = Date.now() + 10_000;
+    const clockTimes = [deadlineMs - 10_000, deadlineMs - 250, deadlineMs - 250];
+    const startupTimeouts: number[] = [];
+    let spawned = false;
+
+    const result = await startObserver(
+      {
+        config: fixture.config,
+        timeoutMs: 10_000,
+        startupDeadlineMs: deadlineMs,
+      },
+      {
+        clock: { now: () => new Date(clockTimes.shift() ?? deadlineMs - 250) },
+        spawnObserver: async (input) => {
+          spawned = true;
+          startupTimeouts.push(input.startupTimeoutMs);
+          return fakeChild();
+        },
+        clientFactory: fakeClientFactory(async () => {
+          if (!spawned) throw new Error("stopped");
+          return healthyObserver();
+        }),
+      },
+    );
+
+    expect(result).toMatchObject({ status: "running", health: { pid: 1234 } });
+    expect(startupTimeouts).toEqual([250]);
+  });
+
+  it("does not spawn when the absolute startup deadline expires before spawn", async () => {
+    const fixture = await createTempState();
+    const deadlineMs = Date.now() + 10_000;
+    const clockTimes = [deadlineMs - 100, deadlineMs, deadlineMs];
+    const spawnObserver = vi.fn(async () => fakeChild());
+
+    const result = await startObserver(
+      {
+        config: fixture.config,
+        timeoutMs: 10_000,
+        startupDeadlineMs: deadlineMs,
+      },
+      {
+        clock: { now: () => new Date(clockTimes.shift() ?? deadlineMs) },
+        spawnObserver,
+      },
+    );
+
+    expect(result).toMatchObject({
+      status: "unhealthy",
+      error: {
+        code: "OBSERVER_START_FAILED",
+        hint: expect.stringContaining("stn debug trace"),
+        traceId: expect.any(String),
+      },
+    });
+    expect(spawnObserver).not.toHaveBeenCalled();
+  });
+
   it("keeps the spawned child alive when health wins and clears delayed progress", async () => {
     const fixture = await createTempState();
     const neverExits = new Promise<never>(() => undefined);

@@ -4375,7 +4375,7 @@
           "name": "createLocalObserverProcessEvidence",
           "kind": "function",
           "role": "ADAPTER",
-          "purpose": "Translates bounded targeted and global exact argv, executable provenance, launch nonce, OS start time, non-signaling process existence, strict socket-holder and complete file-descriptor evidence, pidfiles, socket identities, and signals into conservative ownership evidence. Exact executable/argv mismatch throws a stable typed refusal without weakening the fail-closed ownership decision."
+          "purpose": "Translates bounded targeted and global exact argv, executable provenance, launch nonce, OS start time, non-signaling process existence, strict socket-holder and complete file-descriptor evidence, pidfiles, socket identities, and signals into conservative ownership evidence. Exact executable/argv mismatch throws a stable typed refusal without weakening the fail-closed ownership decision. OS subprocess timeouts shrink only when an absolute evidence deadline is supplied."
         },
         {
           "name": "createLocalObserverProcessIdentityRepair",
@@ -4636,6 +4636,12 @@
           "purpose": null
         },
         {
+          "name": "ExactObserverHealthEvidence",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "ExactObserverInspectionFailureReason",
           "kind": "type",
           "role": null,
@@ -4649,6 +4655,12 @@
         },
         {
           "name": "ExactObserverOwnershipEvidence",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ExactObserverProcessEvidence",
           "kind": "type",
           "role": null,
           "purpose": null
@@ -11115,6 +11127,12 @@
       "path": "apps/observer/src/runtime/inspectExactObserverOwner.ts",
       "exports": [
         {
+          "name": "ExactObserverHealthEvidence",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "ExactObserverInspectionFailureReason",
           "kind": "type",
           "role": null,
@@ -11128,6 +11146,12 @@
         },
         {
           "name": "ExactObserverOwnershipEvidence",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ExactObserverProcessEvidence",
           "kind": "type",
           "role": null,
           "purpose": null
@@ -12047,7 +12071,7 @@
           "name": "createLocalObserverProcessEvidence",
           "kind": "function",
           "role": "ADAPTER",
-          "purpose": "Translates bounded targeted and global exact argv, executable provenance, launch nonce, OS start time, non-signaling process existence, strict socket-holder and complete file-descriptor evidence, pidfiles, socket identities, and signals into conservative ownership evidence. Exact executable/argv mismatch throws a stable typed refusal without weakening the fail-closed ownership decision."
+          "purpose": "Translates bounded targeted and global exact argv, executable provenance, launch nonce, OS start time, non-signaling process existence, strict socket-holder and complete file-descriptor evidence, pidfiles, socket identities, and signals into conservative ownership evidence. Exact executable/argv mismatch throws a stable typed refusal without weakening the fail-closed ownership decision. OS subprocess timeouts shrink only when an absolute evidence deadline is supplied."
         },
         {
           "name": "LocalObserverProcessEvidenceSource",
@@ -13498,13 +13522,6 @@
       "dependencies": [
         {
           "path": "apps/cli/src/observerProcess.ts",
-          "declaration": "ensureExactObserverBuild",
-          "kind": "function",
-          "role": "ADAPTER",
-          "edgeKind": "runtime"
-        },
-        {
-          "path": "apps/cli/src/observerProcess.ts",
           "declaration": "getObserverStatus",
           "kind": "function",
           "role": "ADAPTER",
@@ -13527,6 +13544,13 @@
         {
           "path": "apps/cli/src/observerProcess.ts",
           "declaration": "stopObserver",
+          "kind": "function",
+          "role": "COMPOSITION ROOT",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/observerProcess/convergeExactObserverBuild.ts",
+          "declaration": "ensureExactObserverBuild",
           "kind": "function",
           "role": "COMPOSITION ROOT",
           "edgeKind": "runtime"
@@ -14257,43 +14281,6 @@
     },
     {
       "path": "apps/cli/src/observerProcess.ts",
-      "declaration": "ensureExactObserverBuild",
-      "kind": "function",
-      "role": "ADAPTER",
-      "purpose": "Converges one configured Observer socket to this caller's exact immutable build within one deadline. At most the admitted identity-pinned incumbent is stopped cooperatively; the child preserves any later non-exact owner. Failures report their phase and the admitted incumbent's last proven disposition while retaining a separate typed cause and startup evidence, without changing generic singleton ordering.",
-      "dependencies": [
-        {
-          "path": "apps/cli/src/observerProcess.ts",
-          "declaration": "getObserverStatus",
-          "kind": "function",
-          "role": "ADAPTER",
-          "edgeKind": "runtime"
-        },
-        {
-          "path": "apps/cli/src/observerProcess.ts",
-          "declaration": "logObserverLifecycleFailure",
-          "kind": "function",
-          "role": "ADAPTER",
-          "edgeKind": "runtime"
-        },
-        {
-          "path": "apps/cli/src/observerProcess/startup.ts",
-          "declaration": "startObserverProcess",
-          "kind": "function",
-          "role": "ADAPTER",
-          "edgeKind": "runtime"
-        },
-        {
-          "path": "packages/protocol/src/client.ts",
-          "declaration": "createObserverClient",
-          "kind": "function",
-          "role": "ADAPTER",
-          "edgeKind": "runtime"
-        }
-      ]
-    },
-    {
-      "path": "apps/cli/src/observerProcess.ts",
       "declaration": "getObserverStatus",
       "kind": "function",
       "role": "ADAPTER",
@@ -14385,6 +14372,36 @@
     },
     {
       "path": "apps/cli/src/observerProcess.ts",
+      "declaration": "startObserverPreservingIncumbent",
+      "kind": "const",
+      "role": "ADAPTER",
+      "purpose": "Starts a child only when singleton boot claims preserve any listening incumbent.",
+      "dependencies": [
+        {
+          "path": "apps/cli/src/observerProcess.ts",
+          "declaration": "getObserverStatus",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/observerProcess.ts",
+          "declaration": "logObserverLifecycleFailure",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/observerProcess/startup.ts",
+          "declaration": "startObserverProcess",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
+      "path": "apps/cli/src/observerProcess.ts",
       "declaration": "stopObserver",
       "kind": "function",
       "role": "COMPOSITION ROOT",
@@ -14412,6 +14429,59 @@
           "edgeKind": "runtime"
         }
       ]
+    },
+    {
+      "path": "apps/cli/src/observerProcess/convergeExactObserverBuild.ts",
+      "declaration": "convergeExactObserverBuild",
+      "kind": "function",
+      "role": "USE CASE",
+      "purpose": "Converges exact absence or one revalidated owner and requires an independent final proof.",
+      "dependencies": []
+    },
+    {
+      "path": "apps/cli/src/observerProcess/convergeExactObserverBuild.ts",
+      "declaration": "ensureExactObserverBuild",
+      "kind": "function",
+      "role": "COMPOSITION ROOT",
+      "purpose": "Preserves standalone exact reuse while wiring local adapters into exact convergence.",
+      "dependencies": [
+        {
+          "path": "apps/cli/src/observerProcess.ts",
+          "declaration": "startObserverPreservingIncumbent",
+          "kind": "const",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/observerProcess/convergeExactObserverBuild.ts",
+          "declaration": "convergeExactObserverBuild",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/observerProcess/inspectExactObserverOwner.ts",
+          "declaration": "inspectExactObserverOwnerWithLocalAdapters",
+          "kind": "function",
+          "role": "COMPOSITION ROOT",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "packages/protocol/src/client.ts",
+          "declaration": "withExactObserverLifecycleSession",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
+      "path": "apps/cli/src/observerProcess/convergeExactObserverBuild.ts",
+      "declaration": "ExactObserverLifecycleSessionCapability",
+      "kind": "type",
+      "role": "DRIVEN PORT",
+      "purpose": "Keeps exact lifecycle reads and cooperative stop on one identity-pinned connection.",
+      "dependencies": []
     },
     {
       "path": "apps/cli/src/observerProcess/evidenceRepair.ts",
@@ -14559,7 +14629,7 @@
       "declaration": "startObserverProcess",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Starts the Observer child and waits for exact-build health inside one timed runtime boundary, retaining a separate typed cause and bounded boot evidence before diagnostic handles close.",
+      "purpose": "Starts the Observer child and waits for exact-build health inside one absolute-deadline boundary, retaining a separate typed cause and bounded boot evidence before handles close.",
       "dependencies": [
         {
           "path": "apps/cli/src/observerProcess/spawn.ts",
@@ -16523,7 +16593,7 @@
       "declaration": "createLocalObserverProcessEvidence",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Translates bounded targeted and global exact argv, executable provenance, launch nonce, OS start time, non-signaling process existence, strict socket-holder and complete file-descriptor evidence, pidfiles, socket identities, and signals into conservative ownership evidence. Exact executable/argv mismatch throws a stable typed refusal without weakening the fail-closed ownership decision.",
+      "purpose": "Translates bounded targeted and global exact argv, executable provenance, launch nonce, OS start time, non-signaling process existence, strict socket-holder and complete file-descriptor evidence, pidfiles, socket identities, and signals into conservative ownership evidence. Exact executable/argv mismatch throws a stable typed refusal without weakening the fail-closed ownership decision. OS subprocess timeouts shrink only when an absolute evidence deadline is supplied.",
       "dependencies": []
     },
     {
@@ -17361,6 +17431,14 @@
       "kind": "function",
       "role": "ADAPTER",
       "purpose": "Presents Observer operations to clients through validated NDJSON requests.",
+      "dependencies": []
+    },
+    {
+      "path": "packages/protocol/src/client.ts",
+      "declaration": "withExactObserverLifecycleSession",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Binds current-schema health, recovery, and one cooperative stop to one physical connection, requiring exact identity and peer closure before the absolute deadline.",
       "dependencies": []
     },
     {
