@@ -5,5 +5,5 @@
     "rootDir": ".",
     "tsBuildInfoFile": "dist/tsconfig.type-tests.tsbuildinfo"
   },
-  "include": ["test/unit/**/*.typecheck.test.ts"]
+  "include": ["test/unit/**/*.typecheck.ts"]
 }
