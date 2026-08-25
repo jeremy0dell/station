@@ -24,6 +24,18 @@ const PackageSchema = z.object({
   name: z.literal("station"),
   version: z.string().min(1),
 });
+const ExactBunVersionSchema = z
+  .string()
+  .regex(
+    /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/u,
+  );
+const TargetPackageSchema = PackageSchema.extend({
+  packageManager: z
+    .string()
+    .regex(/^bun@/u)
+    .transform((value) => value.slice("bun@".length))
+    .pipe(ExactBunVersionSchema),
+});
 
 export type DevCheckoutDetection = {
   channel: typeof channel;
@@ -64,7 +76,8 @@ export type DevCheckoutUpdateChannelDeps = {
 /**
  * ADAPTER
  *
- * Translates a clean upstream-tracking checkout into a pinned fast-forward with one frozen root Bun install, rebuild, native-helper repair, and launcher relink.
+ * Translates a clean upstream-tracking checkout into a target-runtime-preflighted fast-forward with
+ * one frozen root Bun install, rebuild, native-helper repair, and launcher relink.
  */
 export function createDevCheckoutUpdateChannel(
   deps: DevCheckoutUpdateChannelDeps,
@@ -184,6 +197,7 @@ export function createDevCheckoutUpdateChannel(
         throw stalePlan("Git fetched a different Station revision than the planned target.");
       }
       await requireFastForward(plan, deps.commandRunner, options);
+      await requireTargetBunRuntime(plan, deps.commandRunner, options);
       await runGit(plan, ["merge", "--ff-only", plan.targetRevision], deps.commandRunner, options);
 
       try {
@@ -398,6 +412,59 @@ async function requireFastForward(
   }
 }
 
+/** Proves the pinned Bun executable matches the fetched target policy before HEAD can move. */
+async function requireTargetBunRuntime(
+  plan: DevCheckoutUpdatePlan,
+  commandRunner: ExternalCommandRunner | undefined,
+  options: UpdateOperationOptions,
+): Promise<void> {
+  const requiredVersion = await targetBunVersion(plan, commandRunner, options);
+  let actualVersion: string;
+  try {
+    const result = await runExternalCommand(
+      commandInput(plan.bunPath, ["--version"], plan.repoRoot, options),
+      commandRunner,
+    );
+    actualVersion = ExactBunVersionSchema.parse(result.stdout.trim());
+  } catch (error) {
+    const cancellation = normalizeCancellationError(error);
+    if (cancellation !== undefined) throw cancellation;
+    throw targetBunMismatch(requiredVersion, undefined, error);
+  }
+  if (actualVersion !== requiredVersion) {
+    throw targetBunMismatch(requiredVersion, actualVersion);
+  }
+}
+
+/** Reads the fetched target's exact Bun policy without changing the working tree or index. */
+async function targetBunVersion(
+  plan: DevCheckoutUpdatePlan,
+  commandRunner: ExternalCommandRunner | undefined,
+  options: UpdateOperationOptions,
+): Promise<string> {
+  try {
+    const result = await runGit(
+      plan,
+      ["show", `${plan.targetRevision}:package.json`],
+      commandRunner,
+      options,
+    );
+    return TargetPackageSchema.parse(JSON.parse(result.stdout)).packageManager;
+  } catch (error) {
+    const cancellation = normalizeCancellationError(error);
+    if (cancellation !== undefined) throw cancellation;
+    throw updateErrorFromUnknown(
+      error,
+      {
+        code: "UPDATE_PLAN_FAILED",
+        message: "The target Station revision does not declare a valid exact Bun runtime.",
+        hint: "Inspect the upstream packageManager policy and rerun stn update; the checkout was not advanced.",
+      },
+      false,
+    );
+  }
+}
+
 async function remoteRevision(
   detection: DevCheckoutDetection,
   remote: string,
@@ -497,4 +564,18 @@ function stalePlan(message: string) {
     message,
     hint: "Run stn update again to build a fresh plan.",
   });
+}
+
+function targetBunMismatch(requiredVersion: string, actualVersion?: string, error?: unknown) {
+  const observed =
+    actualVersion === undefined ? "could not be verified" : `reports ${actualVersion}`;
+  return updateErrorFromUnknown(
+    error,
+    {
+      code: "UPDATE_DEV_CHECKOUT_BUN_MISMATCH",
+      message: `The target Station revision requires Bun ${requiredVersion}, but the planned Bun executable ${observed}.`,
+      hint: `Activate exact Bun ${requiredVersion} on PATH, verify bun --version, and rerun stn update; the checkout was not advanced.`,
+    },
+    false,
+  );
 }

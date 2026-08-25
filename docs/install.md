@@ -287,9 +287,10 @@ The supported channel IDs are:
   complete GitHub release and checksums, then delegates the locked atomic swap
   to the verified `install.sh`;
 - `dev-checkout`: requires Git, the Node source runtime, and Bun plus a clean attached branch with
-  an upstream, fetches and fast-forwards to the planned SHA, prepares the root
-  dependencies through the root frozen lockfile, rebuilds the root, repairs the
-  native helper, then relinks the launchers;
+  an upstream, fetches the planned SHA, proves the target ref's exact Bun policy
+  against the pinned executable, then fast-forwards, prepares the root dependencies
+  through the frozen lockfile, rebuilds the root, repairs the native helper, and
+  relinks the launchers;
 - `homebrew`: recognizes an already Homebrew-owned formula or cask;
 - `npm-global`: recognizes the global package whose `stn` bin entry owns the
   running CLI; and
@@ -317,12 +318,16 @@ supported public Station distribution channels; it preserves manager ownership
 for installations that already use them. Use `--channel <id>` to resolve an
 ambiguous installation, but explicit selection never bypasses ownership proof.
 
-Dev-checkout preparation runs after every fast-forward rather than guessing from
-the changed files. It may take longer and access package registries, but it does
-not install or upgrade Git, Node.js, Bun, or other system tools. If a
-preparation command fails, the checkout remains at the verified target and the
-report lists the complete frozen-install, build, repair, and relink sequence to
-resume safely.
+After fetching a dev-checkout target, Station reads its root `packageManager`
+policy directly from that pinned Git ref and requires the planned Bun executable
+to report the exact version before fast-forwarding. A missing or mismatched Bun
+leaves HEAD unchanged and reports the version to activate before retrying;
+Station does not install or upgrade Git, Node.js, Bun, or other system tools.
+Once that preflight passes, preparation runs after every fast-forward rather
+than guessing from the changed files. It may take longer and access package
+registries. If a preparation command fails, the checkout remains at the
+verified target and the report lists the complete frozen-install, build,
+repair, and relink sequence to resume safely.
 
 Before mutation, `stn update` defaults to preserving a busy compatible Host with
 preflighted `processes` handoff. Absent, stale, reusable, and idle Hosts need no handoff;

@@ -14580,7 +14580,7 @@
       "declaration": "createDevCheckoutUpdateChannel",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Translates a clean upstream-tracking checkout into a pinned fast-forward with one frozen root Bun install, rebuild, native-helper repair, and launcher relink.",
+      "purpose": "Translates a clean upstream-tracking checkout into a target-runtime-preflighted fast-forward with one frozen root Bun install, rebuild, native-helper repair, and launcher relink.",
       "dependencies": [
         {
           "path": "apps/cli/src/update/updateChannel.ts",
