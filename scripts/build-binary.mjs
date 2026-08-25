@@ -1,9 +1,14 @@
 #!/usr/bin/env bun
 import { cp, mkdir, rm, symlink } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { readBuildIdentity, verifyBuildIdentity } from "./build-identity.mjs";
-import { assertBunVersion, requiredBunVersion } from "./bun-version.mjs";
+import {
+  assertBunVersion,
+  environmentWithBunRuntime,
+  locateBunRuntime,
+  requiredBunVersion,
+} from "./bun-version.mjs";
 
 const SEMVER =
   /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
@@ -46,10 +51,10 @@ function nativeTarget() {
   return target;
 }
 
-async function run(command, args, cwd) {
+async function run(command, args, cwd, env = process.env) {
   const child = Bun.spawn([command, ...args], {
     cwd,
-    env: process.env,
+    env,
     stdin: "inherit",
     stdout: "inherit",
     stderr: "inherit",
@@ -58,6 +63,29 @@ async function run(command, args, cwd) {
   if (exitCode !== 0) {
     fail(`${command} ${args.join(" ")} exited with code ${exitCode}.`);
   }
+}
+
+/** Runs a Bun child through the already-validated runtime and keeps nested Bun dispatch on it. */
+export async function runWithBunExecutable(
+  bunRuntime,
+  args,
+  cwd,
+  runner = run,
+  environment = process.env,
+) {
+  return runner(
+    bunRuntime.executable,
+    args,
+    cwd,
+    environmentWithBunRuntime(bunRuntime, environment),
+  );
+}
+
+/** Preserves the existing binary until the source build and identity have been admitted. */
+export async function removeBinaryOutputAfterSourceAdmission(outputPath, admitSourceBuild) {
+  const admission = await admitSourceBuild();
+  await rm(outputPath, { force: true });
+  return admission;
 }
 
 async function checkedBuild(options, label) {
@@ -85,19 +113,27 @@ async function main() {
   const outputDir = join(stationRoot, "dist", "bin");
   const outputPath = join(outputDir, "stn");
   const piBundlePath = join(stationRoot, "dist", "piExtension.mjs");
-
-  await rm(outputPath, { force: true });
-  await run("bun", ["run", "build"], repoRoot);
-  let buildIdentity;
+  let bunRuntime;
   try {
-    buildIdentity = await readBuildIdentity(repoRoot);
-  } catch {
-    fail("Station source build did not publish a valid build identity.");
+    bunRuntime = await locateBunRuntime(process.execPath, { cwd: repoRoot });
+  } catch (error) {
+    fail(error instanceof Error ? error.message : String(error));
   }
-  if (buildIdentity === undefined || !(await verifyBuildIdentity(buildIdentity, repoRoot))) {
-    fail("Station build inputs changed after the source build; rebuild from a stable checkout.");
-  }
-  await run("bun", ["run", "build:ctty-helper"], stationRoot);
+
+  const buildIdentity = await removeBinaryOutputAfterSourceAdmission(outputPath, async () => {
+    await runWithBunExecutable(bunRuntime, ["run", "build"], repoRoot);
+    let identity;
+    try {
+      identity = await readBuildIdentity(repoRoot);
+    } catch {
+      fail("Station source build did not publish a valid build identity.");
+    }
+    if (identity === undefined || !(await verifyBuildIdentity(identity, repoRoot))) {
+      fail("Station build inputs changed after the source build; rebuild from a stable checkout.");
+    }
+    return identity;
+  });
+  await runWithBunExecutable(bunRuntime, ["run", "build:ctty-helper"], stationRoot);
 
   await mkdir(dirname(piBundlePath), { recursive: true });
   await checkedBuild(
@@ -153,4 +189,7 @@ async function main() {
   process.stdout.write(`Built ${outputPath} (${nativeTarget()}, ${version}).\n`);
 }
 
-await main();
+const invokedPath = process.argv[1] === undefined ? undefined : resolve(process.argv[1]);
+if (invokedPath === fileURLToPath(import.meta.url)) {
+  await main();
+}

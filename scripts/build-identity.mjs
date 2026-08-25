@@ -5,12 +5,15 @@ import { lstat, mkdir, open, readdir, readFile, readlink, rename, rm } from "nod
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { environmentWithBunRuntime, resolveAndCheckBunVersion } from "./bun-version.mjs";
 
 const execFileAsync = promisify(execFile);
 const BUILD_IDENTITY_PATTERN = /^[0-9a-f]{64}$/u;
 const BUILD_IDENTITY_DOMAIN = "station-build-identity-v1";
 const BUILD_INPUT_IDENTITY_DOMAIN = "station-build-input-identity-v1";
 const BUILD_OUTPUT_IDENTITY_DOMAIN = "station-build-output-identity-v1";
+const NODE_ENGINE_PATTERN = /^>=(0|[1-9]\d*)\.(0|[1-9]\d*) <(0|[1-9]\d*)$/u;
+const NODE_VERSION_PATTERN = /^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/u;
 const repoRoot = fileURLToPath(new URL("../", import.meta.url));
 const gitLocalEnvironmentVariables = [
   "GIT_ALTERNATE_OBJECT_DIRECTORIES",
@@ -271,16 +274,88 @@ export async function ensureBuildIdentity(root, runBuildTask) {
   }
 }
 
+/** Rejects a Node runtime outside the root manifest's supported development range. */
+export function assertNodeVersion(actual, engine) {
+  if (typeof actual !== "string" || typeof engine !== "string") {
+    throw new Error("Node runtime and root engines.node policy must both be strings.");
+  }
+  const policy = NODE_ENGINE_PATTERN.exec(engine);
+  if (policy === null) {
+    throw new Error(`Root package.json must declare a supported Node engine; found ${engine}.`);
+  }
+  const version = NODE_VERSION_PATTERN.exec(actual.trim());
+  const minimumMajor = Number(policy[1]);
+  const minimumMinor = Number(policy[2]);
+  const upperMajor = Number(policy[3]);
+  const actualMajor = version === null ? Number.NaN : Number(version[1]);
+  const actualMinor = version === null ? Number.NaN : Number(version[2]);
+  const satisfiesMinimum =
+    actualMajor > minimumMajor || (actualMajor === minimumMajor && actualMinor >= minimumMinor);
+  if (!satisfiesMinimum || actualMajor >= upperMajor) {
+    throw new Error(`Station requires Node ${engine}; found ${actual}.`);
+  }
+}
+
+/** Validates the source build runtimes before any output or identity can be replaced. */
+export async function checkBuildToolchain(root = repoRoot, options = {}) {
+  const manifest = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
+  const nodeEngine = manifest?.engines?.node;
+  if (typeof nodeEngine !== "string") {
+    throw new Error("Root package.json must declare engines.node as a supported range.");
+  }
+  assertNodeVersion(options.nodeVersion ?? process.version, nodeEngine);
+  const environment = options.env ?? process.env;
+  const bun = await resolveAndCheckBunVersion(root, { env: environment, cwd: root });
+  return {
+    bunExecutable: bun.executable,
+    bunLocatorDirectory: bun.locatorDirectory,
+    env: environmentWithBunRuntime(bun, environment),
+  };
+}
+
+/** Runs a full identity build only after its source toolchain is admitted. */
+export async function buildWithToolchainIdentity(root, runBuildTask, options = {}) {
+  const toolchain = await checkBuildToolchain(root, options);
+  await buildWithIdentity(root, () => runBuildTask(toolchain));
+}
+
+/** Rebuilds stale output only after admitting the source toolchain that will mutate it. */
+export async function ensureBuildWithToolchainIdentity(root, runBuildTask, options = {}) {
+  try {
+    return await checkBuildIdentity(root);
+  } catch {
+    const toolchain = await checkBuildToolchain(root, options);
+    await buildWithIdentity(root, () => runBuildTask(toolchain));
+    return readBuildIdentity(root);
+  }
+}
+
+/** Builds one repository through the same admitted Bun executable that was version-checked. */
+export async function buildRepository(root = repoRoot, options = {}) {
+  await buildWithToolchainIdentity(
+    root,
+    (toolchain) =>
+      runBuildChild(toolchain.bunExecutable, ["run", "turbo", "run", "build"], root, toolchain.env),
+    options,
+  );
+}
+
 async function build() {
-  await buildWithIdentity(repoRoot, () =>
-    runBuildChild("bun", ["run", "turbo", "run", "build"], repoRoot),
+  await buildRepository(repoRoot);
+}
+
+/** Ensures one repository through the same admitted Bun executable when outputs are stale. */
+export async function ensureRepositoryBuild(root = repoRoot, options = {}) {
+  return ensureBuildWithToolchainIdentity(
+    root,
+    (toolchain) =>
+      runBuildChild(toolchain.bunExecutable, ["run", "turbo", "run", "build"], root, toolchain.env),
+    options,
   );
 }
 
 async function ensureBuild() {
-  await ensureBuildIdentity(repoRoot, () =>
-    runBuildChild("bun", ["run", "turbo", "run", "build"], repoRoot),
-  );
+  await ensureRepositoryBuild(repoRoot);
 }
 
 async function requireCurrentBuildIdentity(identity) {
