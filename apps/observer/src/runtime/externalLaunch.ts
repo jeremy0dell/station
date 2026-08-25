@@ -37,6 +37,7 @@ import { resolveSessionRecovery } from "../sessionRecovery.js";
 import type { StationLogger } from "../stationLogger.js";
 import { nowIso } from "../utils/time.js";
 import type { WorktreeMutationCoordinator } from "../worktreeMutationCoordinator.js";
+import { markExternalLaunchDiagnosticPhase } from "./externalLaunchPhaseDiagnostic.js";
 
 export type ExternalLaunchDeps = {
   core: ObserverCore;
@@ -76,9 +77,11 @@ export async function prepareExternalLaunch(
   deps: ExternalLaunchDeps,
   params: AgentPrepareExternalLaunchParams,
 ): Promise<ExternalLaunchOutcome<AgentPrepareExternalLaunchResult>> {
-  return deps.worktreeMutations.run(params.projectId, params.worktreeId, () =>
-    prepareExternalLaunchForWorktree(deps, params),
-  );
+  markExternalLaunchDiagnosticPhase("prepareEntered");
+  return deps.worktreeMutations.run(params.projectId, params.worktreeId, () => {
+    markExternalLaunchDiagnosticPhase("mutationEntered");
+    return prepareExternalLaunchForWorktree(deps, params);
+  });
 }
 
 async function prepareExternalLaunchForWorktree(
@@ -102,7 +105,9 @@ async function prepareExternalLaunchForWorktree(
   }
 
   const managedTerminal = deps.providers.managedTerminal;
+  markExternalLaunchDiagnosticPhase("targetInventoryStarted");
   const managedTargets = managedTerminal === undefined ? [] : await managedTerminal.listTargets();
+  markExternalLaunchDiagnosticPhase("targetInventoryCompleted");
   if (managedTerminal !== undefined) {
     for (const target of managedTargets) {
       if (
@@ -208,11 +213,13 @@ async function prepareExternalLaunchForWorktree(
   const harness =
     recovery?.harness ?? resolveHarnessProviderOrThrow(deps.providers, harnessProviderId);
 
+  markExternalLaunchDiagnosticPhase("harnessPreflightStarted");
   await assertHarnessLaunchPreconditionsOrThrow({
     providers: deps.providers,
     providerId: harnessProviderId,
     ...(deps.configPath === undefined ? {} : { stationConfigPath: deps.configPath }),
   });
+  markExternalLaunchDiagnosticPhase("harnessPreflightCompleted");
 
   if (managedTerminal === undefined) {
     throw managedTerminalUnavailableError();
@@ -247,6 +254,7 @@ async function prepareExternalLaunchForWorktree(
   let seededSession: PersistedSession | undefined;
   let groupProvenance: SessionSeedGroupProvenance | undefined;
   try {
+    markExternalLaunchDiagnosticPhase("sessionPersistenceStarted");
     if (freshSession) {
       const seed = await seedSession({
         persistence: deps.persistence,
@@ -274,7 +282,9 @@ async function prepareExternalLaunchForWorktree(
         }
       }
     }
+    markExternalLaunchDiagnosticPhase("sessionPersistenceCompleted");
 
+    markExternalLaunchDiagnosticPhase("workspaceOpenStarted");
     opened = await managedTerminal.openManagedWorkspace({
       project,
       worktree,
@@ -282,11 +292,13 @@ async function prepareExternalLaunchForWorktree(
       layout: project.defaults.layout,
       sessionId,
     });
+    markExternalLaunchDiagnosticPhase("workspaceOpenCompleted");
     const terminalTarget = terminalTargetObservationFromBinding({
       binding: opened.target,
       worktree,
       observedAt: nowIso(deps.clock),
     });
+    markExternalLaunchDiagnosticPhase("launchPlanStarted");
     const launchPlan = await harness.buildLaunch({
       project,
       worktree,
@@ -294,9 +306,11 @@ async function prepareExternalLaunchForWorktree(
       sessionId,
       ...(recovery === undefined ? {} : { resume: recovery.resume }),
     });
+    markExternalLaunchDiagnosticPhase("launchPlanCompleted");
 
     // The managed result requires an attachment exactly when it starts the process,
     // so a remote spawn can never be advertised as eligible for local fallback.
+    markExternalLaunchDiagnosticPhase("hostProcessLaunchStarted");
     const launched = await managedTerminal.launchManagedProcess({
       project,
       worktree,
@@ -305,6 +319,7 @@ async function prepareExternalLaunchForWorktree(
       bindingToken: opened.bindingToken,
       launchPlan,
     });
+    markExternalLaunchDiagnosticPhase("hostProcessLaunchCompleted");
     const outcome: Extract<AgentPrepareExternalLaunchResult, { kind: "prepared" }> = {
       kind: "prepared",
       sessionId,
@@ -319,6 +334,7 @@ async function prepareExternalLaunchForWorktree(
     }
 
     let events: StationEvent[] = [];
+    markExternalLaunchDiagnosticPhase("canonicalProjectionStarted");
     try {
       events = await deps.core.commitPreparedExternalLaunch({
         worktree,
@@ -344,6 +360,8 @@ async function prepareExternalLaunchForWorktree(
         })
         .catch(() => undefined);
     }
+    markExternalLaunchDiagnosticPhase("canonicalProjectionCompleted");
+    markExternalLaunchDiagnosticPhase("prepareCompleted");
 
     return {
       outcome,

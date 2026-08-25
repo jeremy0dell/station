@@ -55,7 +55,10 @@ const runBench040ImmediateInput =
   process.env.STATION_REAL_COMPILED_QUICK_SESSION_TUI_BENCH_040_IMMEDIATE_INPUT === "1";
 const runBench041PhaseAttribution =
   process.env.STATION_REAL_COMPILED_QUICK_SESSION_TUI_BENCH_041_PHASE_ATTRIBUTION === "1";
-const runImmediateAutomaticInput = runBench040ImmediateInput || runBench041PhaseAttribution;
+const runBench042ObserverPhaseAttribution =
+  process.env.STATION_REAL_COMPILED_QUICK_SESSION_TUI_BENCH_042_OBSERVER_PHASE_ATTRIBUTION === "1";
+const runImmediateAutomaticInput =
+  runBench040ImmediateInput || runBench041PhaseAttribution || runBench042ObserverPhaseAttribution;
 const runReal =
   process.env.STATION_REAL_COMPILED_QUICK_SESSION_TUI === "1" ||
   runFocusComparison ||
@@ -63,7 +66,8 @@ const runReal =
   runExp016Control ||
   runExp016Candidate ||
   runBench040ImmediateInput ||
-  runBench041PhaseAttribution;
+  runBench041PhaseAttribution ||
+  runBench042ObserverPhaseAttribution;
 const describeReal = runReal ? describe : describe.skip;
 const outputPath = resolve(
   z
@@ -71,19 +75,21 @@ const outputPath = resolve(
     .min(1)
     .parse(
       process.env.STATION_REAL_COMPILED_QUICK_SESSION_TUI_OUTPUT ??
-        (runBench041PhaseAttribution
-          ? ".dev-state/performance/quick-session/bench-041-managed-launch-phases.real.json"
-          : runBench040ImmediateInput
-            ? ".dev-state/performance/quick-session/bench-040-immediate-input.real.json"
-            : runExp016Control
-              ? ".dev-state/performance/quick-session/exp-016-control.real.json"
-              : runExp016Candidate
-                ? ".dev-state/performance/quick-session/exp-016-candidate.real.json"
-                : runFocusComparison
-                  ? ".dev-state/performance/quick-session/compiled-quick-session-focus.real.json"
-                  : runSafetyAudit
-                    ? ".dev-state/performance/quick-session/compiled-quick-session-safety.real.json"
-                    : ".dev-state/performance/quick-session/compiled-quick-session-tui.real.json"),
+        (runBench042ObserverPhaseAttribution
+          ? ".dev-state/performance/quick-session/bench-042-observer-launch-phases.real.json"
+          : runBench041PhaseAttribution
+            ? ".dev-state/performance/quick-session/bench-041-managed-launch-phases.real.json"
+            : runBench040ImmediateInput
+              ? ".dev-state/performance/quick-session/bench-040-immediate-input.real.json"
+              : runExp016Control
+                ? ".dev-state/performance/quick-session/exp-016-control.real.json"
+                : runExp016Candidate
+                  ? ".dev-state/performance/quick-session/exp-016-candidate.real.json"
+                  : runFocusComparison
+                    ? ".dev-state/performance/quick-session/compiled-quick-session-focus.real.json"
+                    : runSafetyAudit
+                      ? ".dev-state/performance/quick-session/compiled-quick-session-safety.real.json"
+                      : ".dev-state/performance/quick-session/compiled-quick-session-tui.real.json"),
     ),
 );
 const repoRoot = fileURLToPath(new URL("../../../", import.meta.url));
@@ -94,13 +100,14 @@ const buildIdentityPath = fileURLToPath(
 const packageJsonPath = fileURLToPath(new URL("../../../package.json", import.meta.url));
 const worktrunkCommand = process.env.STATION_WORKTRUNK_BIN ?? "wt";
 const tmuxCommand = process.env.STATION_TMUX_BIN ?? "tmux";
-const repetitions = runBench041PhaseAttribution
-  ? 20
-  : runFocusComparison || runExp016Control || runExp016Candidate || runBench040ImmediateInput
-    ? 10
-    : runSafetyAudit
-      ? 1
-      : 5;
+const repetitions =
+  runBench041PhaseAttribution || runBench042ObserverPhaseAttribution
+    ? 20
+    : runFocusComparison || runExp016Control || runExp016Candidate || runBench040ImmediateInput
+      ? 10
+      : runSafetyAudit
+        ? 1
+        : 5;
 const ordinaryLinkedWorktrees = 48;
 const initialInventoryCount = ordinaryLinkedWorktrees + 1;
 const projectId = "compiled-tui-project";
@@ -149,6 +156,24 @@ const bench041Prediction = {
   prepareExternalLaunchP95Fraction: 0.7,
   prepareExternalLaunchTailFraction: 0.5,
   attachmentResolutionP95Ms: 10,
+} as const;
+const bench042Thresholds = {
+  intentToInteractiveP95Ms: 380,
+  attachmentResolutionP95Ms: 30,
+  transportResidualP95Ms: 15,
+  tailIntervalMs: 40,
+  minimumTailIntervals: 2,
+  dominantP95Fraction: 0.5,
+  dominantTailFraction: 0.5,
+  minimumDominantTailIntervals: 2,
+} as const;
+const bench042Prediction = {
+  hostProcessLaunchP95Fraction: 0.6,
+  hostProcessLaunchTailFraction: 0.5,
+  targetInventoryP95Ms: 10,
+  sessionPersistenceP95Ms: 10,
+  canonicalProjectionP95Ms: 5,
+  transportResidualP95Ms: 10,
 } as const;
 const exp016CandidateIntentP95Ms = 357.7810000000027;
 const exp016CandidateBuildIdentity =
@@ -254,6 +279,115 @@ const managedLaunchPhaseSegments = [
     to: "overlayCloseRequested",
   },
 ] as const;
+const observerExternalLaunchDiagnosticPhases = [
+  "prepareEntered",
+  "mutationEntered",
+  "targetInventoryStarted",
+  "targetInventoryCompleted",
+  "harnessPreflightStarted",
+  "harnessPreflightCompleted",
+  "sessionPersistenceStarted",
+  "sessionPersistenceCompleted",
+  "workspaceOpenStarted",
+  "workspaceOpenCompleted",
+  "launchPlanStarted",
+  "launchPlanCompleted",
+  "hostProcessLaunchStarted",
+  "hostProcessLaunchCompleted",
+  "canonicalProjectionStarted",
+  "canonicalProjectionCompleted",
+  "prepareCompleted",
+] as const;
+const observerExternalLaunchPhaseTraceSchema = z
+  .object({
+    events: z.array(
+      z
+        .object({
+          phase: z.enum(observerExternalLaunchDiagnosticPhases),
+          atMs: z.number().nonnegative(),
+        })
+        .strict(),
+    ),
+  })
+  .strict();
+const observerExternalLaunchPhaseSegments = [
+  { key: "mutationAdmissionMs", from: "prepareEntered", to: "mutationEntered" },
+  {
+    key: "mutationToTargetInventoryStartMs",
+    from: "mutationEntered",
+    to: "targetInventoryStarted",
+  },
+  {
+    key: "targetInventoryMs",
+    from: "targetInventoryStarted",
+    to: "targetInventoryCompleted",
+  },
+  {
+    key: "inventoryToHarnessPreflightMs",
+    from: "targetInventoryCompleted",
+    to: "harnessPreflightStarted",
+  },
+  {
+    key: "harnessPreflightMs",
+    from: "harnessPreflightStarted",
+    to: "harnessPreflightCompleted",
+  },
+  {
+    key: "preflightToSessionPersistenceMs",
+    from: "harnessPreflightCompleted",
+    to: "sessionPersistenceStarted",
+  },
+  {
+    key: "sessionPersistenceMs",
+    from: "sessionPersistenceStarted",
+    to: "sessionPersistenceCompleted",
+  },
+  {
+    key: "persistenceToWorkspaceOpenMs",
+    from: "sessionPersistenceCompleted",
+    to: "workspaceOpenStarted",
+  },
+  {
+    key: "managedWorkspaceOpenMs",
+    from: "workspaceOpenStarted",
+    to: "workspaceOpenCompleted",
+  },
+  {
+    key: "workspaceToLaunchPlanMs",
+    from: "workspaceOpenCompleted",
+    to: "launchPlanStarted",
+  },
+  {
+    key: "harnessLaunchPlanMs",
+    from: "launchPlanStarted",
+    to: "launchPlanCompleted",
+  },
+  {
+    key: "launchPlanToHostProcessMs",
+    from: "launchPlanCompleted",
+    to: "hostProcessLaunchStarted",
+  },
+  {
+    key: "hostProcessLaunchMs",
+    from: "hostProcessLaunchStarted",
+    to: "hostProcessLaunchCompleted",
+  },
+  {
+    key: "hostProcessToCanonicalProjectionMs",
+    from: "hostProcessLaunchCompleted",
+    to: "canonicalProjectionStarted",
+  },
+  {
+    key: "canonicalProjectionMs",
+    from: "canonicalProjectionStarted",
+    to: "canonicalProjectionCompleted",
+  },
+  {
+    key: "projectionToPrepareCompletionMs",
+    from: "canonicalProjectionCompleted",
+    to: "prepareCompleted",
+  },
+] as const;
 
 type FocusStrategy = "automatic" | "escape" | "toggle";
 
@@ -264,19 +398,21 @@ describeReal("compiled CLI native Quick Session product boundary", () => {
   it("measures cold CLI startup and raw native Quick Session input independently", async () => {
     const report = {
       schemaVersion: 1,
-      benchmark: runBench041PhaseAttribution
-        ? "station-quick-session-bench-041-managed-launch-phase-attribution"
-        : runBench040ImmediateInput
-          ? "station-quick-session-bench-040-immediate-input"
-          : runExp016Control
-            ? "station-quick-session-exp-016-control"
-            : runExp016Candidate
-              ? "station-quick-session-exp-016-candidate"
-              : runFocusComparison
-                ? "station-quick-session-compiled-cli-native-focus-comparison"
-                : runSafetyAudit
-                  ? "station-quick-session-compiled-cli-native-safety-audit"
-                  : "station-quick-session-compiled-cli-native-tui",
+      benchmark: runBench042ObserverPhaseAttribution
+        ? "station-quick-session-bench-042-observer-launch-phase-attribution"
+        : runBench041PhaseAttribution
+          ? "station-quick-session-bench-041-managed-launch-phase-attribution"
+          : runBench040ImmediateInput
+            ? "station-quick-session-bench-040-immediate-input"
+            : runExp016Control
+              ? "station-quick-session-exp-016-control"
+              : runExp016Candidate
+                ? "station-quick-session-exp-016-candidate"
+                : runFocusComparison
+                  ? "station-quick-session-compiled-cli-native-focus-comparison"
+                  : runSafetyAudit
+                    ? "station-quick-session-compiled-cli-native-safety-audit"
+                    : "station-quick-session-compiled-cli-native-tui",
       generatedAt: new Date().toISOString(),
       machine: {
         platform: platform(),
@@ -305,17 +441,19 @@ describeReal("compiled CLI native Quick Session product boundary", () => {
         ordinaryObserverRestartPerRun: true,
         ptyUsedHostPreservedAcrossRuns: true,
       },
-      thresholds: runBench041PhaseAttribution
-        ? bench041Thresholds
-        : runBench040ImmediateInput
-          ? bench040Thresholds
-          : runExp016Control
-            ? null
-            : runExp016Candidate
-              ? exp016Thresholds
-              : runFocusComparison
-                ? focusThresholds
-                : thresholds,
+      thresholds: runBench042ObserverPhaseAttribution
+        ? bench042Thresholds
+        : runBench041PhaseAttribution
+          ? bench041Thresholds
+          : runBench040ImmediateInput
+            ? bench040Thresholds
+            : runExp016Control
+              ? null
+              : runExp016Candidate
+                ? exp016Thresholds
+                : runFocusComparison
+                  ? focusThresholds
+                  : thresholds,
       setup: {
         repositoryShapeMs: 0,
         hostSeedMs: 0,
@@ -328,6 +466,9 @@ describeReal("compiled CLI native Quick Session product boundary", () => {
       distributions: emptyDistributions(),
       focusComparison: null as ReturnType<typeof summarizeFocusComparison> | null,
       phaseAttribution: null as ReturnType<typeof summarizeManagedLaunchPhaseAttribution> | null,
+      observerPhaseAttribution: null as ReturnType<
+        typeof summarizeObserverExternalLaunchPhaseAttribution
+      > | null,
       falseSafetyPredicates: [] as string[],
       safetyAuditPassed: false,
       predictionPassed: false,
@@ -415,6 +556,7 @@ describeReal("compiled CLI native Quick Session product boundary", () => {
     report.distributions = summarizeRuns(report.runs);
     report.focusComparison = summarizeFocusComparison(report.runs);
     report.phaseAttribution = summarizeManagedLaunchPhaseAttribution(report.runs);
+    report.observerPhaseAttribution = summarizeObserverExternalLaunchPhaseAttribution(report.runs);
     report.falseSafetyPredicates = report.runs.flatMap((run) =>
       Object.entries(run.safetyPredicates)
         .filter(([, passed]) => !passed)
@@ -438,84 +580,112 @@ describeReal("compiled CLI native Quick Session product boundary", () => {
       report.setup.hostStoppedCleanly &&
       report.setup.hostStderrEmpty &&
       report.setup.rootRemoved;
-    report.predictionPassed =
-      runBench041PhaseAttribution &&
-      report.phaseAttribution.prepareExternalLaunchP95Fraction >=
-        bench041Prediction.prepareExternalLaunchP95Fraction &&
-      report.phaseAttribution.prepareExternalLaunchDominatesEveryTail &&
-      report.phaseAttribution.phaseDistributions.attachmentResolutionMs.p95 <=
-        bench041Prediction.attachmentResolutionP95Ms;
-    report.thresholdsPassed = runBench041PhaseAttribution
+    report.predictionPassed = runBench042ObserverPhaseAttribution
+      ? report.observerPhaseAttribution.hostProcessLaunchP95Fraction >=
+          bench042Prediction.hostProcessLaunchP95Fraction &&
+        report.observerPhaseAttribution.hostProcessLaunchDominatesEveryTail &&
+        report.observerPhaseAttribution.phaseDistributions.targetInventoryMs.p95 <=
+          bench042Prediction.targetInventoryP95Ms &&
+        report.observerPhaseAttribution.phaseDistributions.sessionPersistenceMs.p95 <=
+          bench042Prediction.sessionPersistenceP95Ms &&
+        report.observerPhaseAttribution.phaseDistributions.canonicalProjectionMs.p95 <=
+          bench042Prediction.canonicalProjectionP95Ms &&
+        report.observerPhaseAttribution.transportResidualMs.p95 <=
+          bench042Prediction.transportResidualP95Ms
+      : runBench041PhaseAttribution &&
+        report.phaseAttribution.prepareExternalLaunchP95Fraction >=
+          bench041Prediction.prepareExternalLaunchP95Fraction &&
+        report.phaseAttribution.prepareExternalLaunchDominatesEveryTail &&
+        report.phaseAttribution.phaseDistributions.attachmentResolutionMs.p95 <=
+          bench041Prediction.attachmentResolutionP95Ms;
+    report.thresholdsPassed = runBench042ObserverPhaseAttribution
       ? report.allSafe &&
         report.distributions.intentToInteractiveMs.p95 <=
-          bench041Thresholds.intentToInteractiveP95Ms &&
+          bench042Thresholds.intentToInteractiveP95Ms &&
         report.phaseAttribution.phaseDistributions.attachmentResolutionMs.p95 <=
-          bench041Thresholds.attachmentResolutionP95Ms &&
-        report.phaseAttribution.tailIntervals >= bench041Thresholds.minimumTailIntervals &&
-        report.phaseAttribution.dominantP95Fraction >= bench041Thresholds.dominantP95Fraction &&
-        report.phaseAttribution.dominantTailIntervals >=
-          bench041Thresholds.minimumDominantTailIntervals
-      : runBench040ImmediateInput
+          bench042Thresholds.attachmentResolutionP95Ms &&
+        report.observerPhaseAttribution.transportResidualMs.p95 >= 0 &&
+        report.observerPhaseAttribution.transportResidualMs.p95 <=
+          bench042Thresholds.transportResidualP95Ms &&
+        report.observerPhaseAttribution.tailIntervals >= bench042Thresholds.minimumTailIntervals &&
+        report.observerPhaseAttribution.dominantP95Fraction >=
+          bench042Thresholds.dominantP95Fraction &&
+        report.observerPhaseAttribution.dominantTailIntervals >=
+          bench042Thresholds.minimumDominantTailIntervals
+      : runBench041PhaseAttribution
         ? report.allSafe &&
-          report.runs.every(
-            (run) =>
-              !run.dismissalInputSent &&
-              run.acknowledgementCount === 1 &&
-              run.overlayDismissedToInputSentMs <= bench040Thresholds.dismissalToInputWriteMaxMs,
-          ) &&
-          report.runs.some(
-            (run) =>
-              !run.readyWasReplay &&
-              run.inputSentToHostReadyMs >= bench040Thresholds.minimumPreReadyWriteMs,
-          ) &&
-          report.distributions.intentToInteractiveMs.median <=
-            bench040Thresholds.intentToInteractiveMedianMs &&
           report.distributions.intentToInteractiveMs.p95 <=
-            bench040Thresholds.intentToInteractiveP95Ms &&
-          improvement(exp016CandidateIntentP95Ms, report.distributions.intentToInteractiveMs.p95) >=
-            bench040Thresholds.minimumP95ImprovementFraction &&
-          report.distributions.focusToInputAckMs.p95 <= bench040Thresholds.dismissalToInputAckP95Ms
-        : runExp016Control
-          ? report.allSafe && report.runs.every((run) => run.dismissalInputSent)
-          : runExp016Candidate
-            ? report.allSafe &&
-              report.runs.every((run) => !run.dismissalInputSent) &&
-              report.distributions.intentToInteractiveMs.median <=
-                exp016Thresholds.intentToInteractiveMedianMs &&
-              report.distributions.intentToInteractiveMs.p95 <=
-                exp016Thresholds.intentToInteractiveP95Ms &&
-              report.distributions.focusToInputAckMs.p95 <=
-                exp016Thresholds.overlayDismissedToInputAckP95Ms
-            : runSafetyAudit
-              ? report.safetyAuditPassed
-              : runFocusComparison
-                ? report.runs.length === repetitions &&
-                  report.runs.every((run) => run.phaseCoherent) &&
-                  report.focusComparison.escape.runs === 5 &&
-                  report.focusComparison.toggle.runs === 5 &&
-                  report.focusComparison.toggle.focusToInputAckMs.p95 <=
-                    focusThresholds.focusToInputAckP95Ms &&
-                  report.focusComparison.focusToInputAckP95ImprovementFraction >=
-                    focusThresholds.focusToInputAckMinimumImprovementFraction &&
-                  report.focusComparison.toggle.intentToInteractiveMs.median <=
-                    focusThresholds.intentToInteractiveMedianMs &&
-                  report.focusComparison.toggle.intentToInteractiveMs.p95 <=
-                    focusThresholds.intentToInteractiveP95Ms
-                : report.runs.length === repetitions &&
-                  report.distributions.launchToDashboardMs.median <=
-                    thresholds.launchToDashboardMedianMs &&
-                  report.distributions.launchToDashboardMs.p95 <=
-                    thresholds.launchToDashboardP95Ms &&
-                  report.distributions.intentToOptimisticMs.p95 <=
-                    thresholds.intentToOptimisticP95Ms &&
-                  report.distributions.intentToInteractiveMs.median <=
-                    thresholds.intentToInteractiveMedianMs &&
-                  report.distributions.intentToInteractiveMs.p95 <=
-                    thresholds.intentToInteractiveP95Ms &&
-                  report.distributions.intentToCanonicalUiMs.p95 <=
-                    thresholds.intentToCanonicalUiP95Ms &&
-                  report.distributions.launchToInteractiveMs.p95 <=
-                    thresholds.launchToInteractiveP95Ms;
+            bench041Thresholds.intentToInteractiveP95Ms &&
+          report.phaseAttribution.phaseDistributions.attachmentResolutionMs.p95 <=
+            bench041Thresholds.attachmentResolutionP95Ms &&
+          report.phaseAttribution.tailIntervals >= bench041Thresholds.minimumTailIntervals &&
+          report.phaseAttribution.dominantP95Fraction >= bench041Thresholds.dominantP95Fraction &&
+          report.phaseAttribution.dominantTailIntervals >=
+            bench041Thresholds.minimumDominantTailIntervals
+        : runBench040ImmediateInput
+          ? report.allSafe &&
+            report.runs.every(
+              (run) =>
+                !run.dismissalInputSent &&
+                run.acknowledgementCount === 1 &&
+                run.overlayDismissedToInputSentMs <= bench040Thresholds.dismissalToInputWriteMaxMs,
+            ) &&
+            report.runs.some(
+              (run) =>
+                !run.readyWasReplay &&
+                run.inputSentToHostReadyMs >= bench040Thresholds.minimumPreReadyWriteMs,
+            ) &&
+            report.distributions.intentToInteractiveMs.median <=
+              bench040Thresholds.intentToInteractiveMedianMs &&
+            report.distributions.intentToInteractiveMs.p95 <=
+              bench040Thresholds.intentToInteractiveP95Ms &&
+            improvement(
+              exp016CandidateIntentP95Ms,
+              report.distributions.intentToInteractiveMs.p95,
+            ) >= bench040Thresholds.minimumP95ImprovementFraction &&
+            report.distributions.focusToInputAckMs.p95 <=
+              bench040Thresholds.dismissalToInputAckP95Ms
+          : runExp016Control
+            ? report.allSafe && report.runs.every((run) => run.dismissalInputSent)
+            : runExp016Candidate
+              ? report.allSafe &&
+                report.runs.every((run) => !run.dismissalInputSent) &&
+                report.distributions.intentToInteractiveMs.median <=
+                  exp016Thresholds.intentToInteractiveMedianMs &&
+                report.distributions.intentToInteractiveMs.p95 <=
+                  exp016Thresholds.intentToInteractiveP95Ms &&
+                report.distributions.focusToInputAckMs.p95 <=
+                  exp016Thresholds.overlayDismissedToInputAckP95Ms
+              : runSafetyAudit
+                ? report.safetyAuditPassed
+                : runFocusComparison
+                  ? report.runs.length === repetitions &&
+                    report.runs.every((run) => run.phaseCoherent) &&
+                    report.focusComparison.escape.runs === 5 &&
+                    report.focusComparison.toggle.runs === 5 &&
+                    report.focusComparison.toggle.focusToInputAckMs.p95 <=
+                      focusThresholds.focusToInputAckP95Ms &&
+                    report.focusComparison.focusToInputAckP95ImprovementFraction >=
+                      focusThresholds.focusToInputAckMinimumImprovementFraction &&
+                    report.focusComparison.toggle.intentToInteractiveMs.median <=
+                      focusThresholds.intentToInteractiveMedianMs &&
+                    report.focusComparison.toggle.intentToInteractiveMs.p95 <=
+                      focusThresholds.intentToInteractiveP95Ms
+                  : report.runs.length === repetitions &&
+                    report.distributions.launchToDashboardMs.median <=
+                      thresholds.launchToDashboardMedianMs &&
+                    report.distributions.launchToDashboardMs.p95 <=
+                      thresholds.launchToDashboardP95Ms &&
+                    report.distributions.intentToOptimisticMs.p95 <=
+                      thresholds.intentToOptimisticP95Ms &&
+                    report.distributions.intentToInteractiveMs.median <=
+                      thresholds.intentToInteractiveMedianMs &&
+                    report.distributions.intentToInteractiveMs.p95 <=
+                      thresholds.intentToInteractiveP95Ms &&
+                    report.distributions.intentToCanonicalUiMs.p95 <=
+                      thresholds.intentToCanonicalUiP95Ms &&
+                    report.distributions.launchToInteractiveMs.p95 <=
+                      thresholds.launchToInteractiveP95Ms;
 
     await mkdir(dirname(outputPath), { recursive: true });
     await writeFile(outputPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
@@ -772,6 +942,10 @@ async function runRepetition(input: {
   const sessionName = `st-qtu-${process.pid}-${repetition}`;
   const inputToken = `compiled-tui-input-${repetition}`;
   const uiStderrPath = join(fixture.temporaryRoot, `ui-${repetition}.stderr`);
+  const observerPhaseTracePath = join(
+    fixture.temporaryRoot,
+    `observer-external-launch-phases-${repetition}.json`,
+  );
   const env: RealE2eEnvironment = {
     repoRoot,
     stationBin: binaryPath,
@@ -830,6 +1004,7 @@ async function runRepetition(input: {
       fixture,
       sessionName,
       stderrPath: uiStderrPath,
+      observerPhaseTracePath,
     });
     uiPid = launched.panePid;
     ptyClient = await startAttachedTmuxPtyClient({
@@ -1087,11 +1262,19 @@ async function runRepetition(input: {
     uiStderrBeforeExit = await readFile(uiStderrPath, "utf8").catch(() => "");
     await ptyClient.write(Buffer.from("\x11", "binary"));
     uiStoppedCleanly = await waitForTmuxExit(env, sessionName, 10_000);
+    const observerPhaseTraceAbsentBeforeStop = !(await pathExists(observerPhaseTracePath));
     await observer.stop();
     observerStoppedCleanly = await waitForPidExit(observerPid, 10_000);
     uiStderr = await readFile(uiStderrPath, "utf8").catch(() => "");
     const managedLaunchPhaseAnalysis = analyzeManagedLaunchPhaseTrace(
-      runBench041PhaseAttribution ? parseManagedLaunchPhaseTrace(uiStderr) : undefined,
+      runBench041PhaseAttribution || runBench042ObserverPhaseAttribution
+        ? parseManagedLaunchPhaseTrace(uiStderr)
+        : undefined,
+    );
+    const observerExternalLaunchPhaseAnalysis = analyzeObserverExternalLaunchPhaseTrace(
+      runBench042ObserverPhaseAttribution
+        ? await parseObserverExternalLaunchPhaseTrace(observerPhaseTracePath)
+        : undefined,
     );
     const safetyPredicates = {
       dashboardProjectVisible: dashboardFrame.includes(projectLabel),
@@ -1114,19 +1297,25 @@ async function runRepetition(input: {
       uiStoppedCleanly,
       observerStoppedCleanly,
       managedLaunchPhaseTraceValid:
-        !runBench041PhaseAttribution || managedLaunchPhaseAnalysis.valid,
+        (!runBench041PhaseAttribution && !runBench042ObserverPhaseAttribution) ||
+        managedLaunchPhaseAnalysis.valid,
       managedLaunchPhaseTraceExitOnly:
-        !runBench041PhaseAttribution ||
+        (!runBench041PhaseAttribution && !runBench042ObserverPhaseAttribution) ||
         !uiStderrBeforeExit.includes(managedLaunchPhaseDiagnosticPrefix),
-      uiStderrMatches: runBench041PhaseAttribution
-        ? managedLaunchUiStderrMatches(uiStderr)
-        : runFocusComparison ||
-            runSafetyAudit ||
-            runExp016Control ||
-            runExp016Candidate ||
-            runBench040ImmediateInput
-          ? uiStderr === expectedUiProgress || uiStderr === expectedObserverAndUiProgress
-          : uiStderr.length === 0,
+      observerExternalLaunchPhaseTraceValid:
+        !runBench042ObserverPhaseAttribution || observerExternalLaunchPhaseAnalysis.valid,
+      observerExternalLaunchPhaseTraceExitOnly:
+        !runBench042ObserverPhaseAttribution || observerPhaseTraceAbsentBeforeStop,
+      uiStderrMatches:
+        runBench041PhaseAttribution || runBench042ObserverPhaseAttribution
+          ? managedLaunchUiStderrMatches(uiStderr)
+          : runFocusComparison ||
+              runSafetyAudit ||
+              runExp016Control ||
+              runExp016Candidate ||
+              runBench040ImmediateInput
+            ? uiStderr === expectedUiProgress || uiStderr === expectedObserverAndUiProgress
+            : uiStderr.length === 0,
     };
     const boundarySafe = Object.values(safetyPredicates).every(Boolean);
     const focusToInputAckMs = inputAcknowledgedAt - focusAt;
@@ -1190,6 +1379,18 @@ async function runRepetition(input: {
         managedLaunchPhaseAnalysis.commandCompletionToOverlayCloseMs,
       managedLaunchPhaseSumMs: managedLaunchPhaseAnalysis.phaseSumMs,
       managedLaunchPhaseCoherent: managedLaunchPhaseAnalysis.coherent,
+      observerExternalLaunchPhaseTrace: observerExternalLaunchPhaseAnalysis.trace,
+      observerExternalLaunchPhaseDurations: observerExternalLaunchPhaseAnalysis.phaseDurations,
+      observerExternalLaunchInternalMs:
+        observerExternalLaunchPhaseAnalysis.prepareEntryToCompletionMs,
+      observerExternalLaunchPhaseSumMs: observerExternalLaunchPhaseAnalysis.phaseSumMs,
+      observerExternalLaunchPhaseCoherent: observerExternalLaunchPhaseAnalysis.coherent,
+      clientRpcMinusObserverInternalMs:
+        managedLaunchPhaseAnalysis.phaseDurations === null ||
+        observerExternalLaunchPhaseAnalysis.prepareEntryToCompletionMs === null
+          ? null
+          : managedLaunchPhaseAnalysis.phaseDurations.prepareExternalLaunchMs -
+            observerExternalLaunchPhaseAnalysis.prepareEntryToCompletionMs,
       loadAverage: { before: loadBefore, after: loadavg() },
       resourceUsage: resourceDelta(usageBefore, process.resourceUsage()),
     };
@@ -1295,11 +1496,88 @@ function analyzeManagedLaunchPhaseTrace(trace: ManagedLaunchPhaseTrace | undefin
   };
 }
 
+type ObserverExternalLaunchPhaseTrace = z.infer<typeof observerExternalLaunchPhaseTraceSchema>;
+type ObserverExternalLaunchPhaseDurations = Record<
+  (typeof observerExternalLaunchPhaseSegments)[number]["key"],
+  number
+>;
+
+async function parseObserverExternalLaunchPhaseTrace(
+  path: string,
+): Promise<ObserverExternalLaunchPhaseTrace | undefined> {
+  const raw = await readFile(path, "utf8").catch(() => undefined);
+  if (raw === undefined) {
+    return undefined;
+  }
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    const result = observerExternalLaunchPhaseTraceSchema.safeParse(parsed);
+    return result.success ? result.data : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function analyzeObserverExternalLaunchPhaseTrace(
+  trace: ObserverExternalLaunchPhaseTrace | undefined,
+) {
+  if (trace === undefined) {
+    return {
+      valid: false,
+      coherent: false,
+      trace: null,
+      phaseDurations: null,
+      prepareEntryToCompletionMs: null,
+      phaseSumMs: null,
+    };
+  }
+  const exactOrder =
+    trace.events.length === observerExternalLaunchDiagnosticPhases.length &&
+    trace.events.every(
+      (event, index) => event.phase === observerExternalLaunchDiagnosticPhases[index],
+    );
+  const monotonic = trace.events.every(
+    (event, index) => index === 0 || event.atMs >= (trace.events[index - 1]?.atMs ?? 0),
+  );
+  if (!exactOrder || !monotonic) {
+    return {
+      valid: false,
+      coherent: false,
+      trace,
+      phaseDurations: null,
+      prepareEntryToCompletionMs: null,
+      phaseSumMs: null,
+    };
+  }
+  const timestamps = new Map(trace.events.map((event) => [event.phase, event.atMs]));
+  const phaseDurations = Object.fromEntries(
+    observerExternalLaunchPhaseSegments.map((segment) => [
+      segment.key,
+      (timestamps.get(segment.to) ?? 0) - (timestamps.get(segment.from) ?? 0),
+    ]),
+  ) as ObserverExternalLaunchPhaseDurations;
+  const prepareEntryToCompletionMs =
+    (timestamps.get("prepareCompleted") ?? 0) - (timestamps.get("prepareEntered") ?? 0);
+  const phaseSumMs = Object.values(phaseDurations).reduce((sum, value) => sum + value, 0);
+  const coherent =
+    Object.values(phaseDurations).every((value) => value >= 0) &&
+    Math.abs(phaseSumMs - prepareEntryToCompletionMs) <= 0.1;
+  return {
+    valid: coherent,
+    coherent,
+    trace,
+    phaseDurations: coherent ? phaseDurations : null,
+    prepareEntryToCompletionMs: coherent ? prepareEntryToCompletionMs : null,
+    phaseSumMs: coherent ? phaseSumMs : null,
+  };
+}
+
 async function launchNativeStation(input: {
   env: RealE2eEnvironment;
   fixture: BenchmarkFixture;
   sessionName: string;
   stderrPath: string;
+  observerPhaseTracePath: string;
 }) {
   const command = [
     "exec",
@@ -1318,8 +1596,13 @@ async function launchNativeStation(input: {
     `STATION_OBSERVER_SOCKET_PATH=${shellQuote(input.fixture.observerSocketPath)}`,
     `STATION_HOST_SOCKET_PATH=${shellQuote(input.fixture.hostSocketPath)}`,
     `STATION_LAYOUT_PATH=${shellQuote(join(input.fixture.stateDir, "station", "layout.json"))}`,
-    ...(runBench041PhaseAttribution
+    ...(runBench041PhaseAttribution || runBench042ObserverPhaseAttribution
       ? ["STATION_QUICK_SESSION_MANAGED_LAUNCH_PHASE_DIAGNOSTIC=1"]
+      : []),
+    ...(runBench042ObserverPhaseAttribution
+      ? [
+          `STATION_QUICK_SESSION_EXTERNAL_LAUNCH_PHASE_DIAGNOSTIC_PATH=${shellQuote(input.observerPhaseTracePath)}`,
+        ]
       : []),
     shellQuote(binaryPath),
     "--config",
@@ -1656,6 +1939,71 @@ function summarizeManagedLaunchPhaseAttribution(runs: BenchmarkRun[]) {
       tailRuns.length >= bench041Thresholds.minimumTailIntervals &&
       prepareExternalLaunchTailFractions.every(
         (fraction) => fraction >= bench041Prediction.prepareExternalLaunchTailFraction,
+      ),
+  };
+}
+
+function summarizeObserverExternalLaunchPhaseAttribution(runs: BenchmarkRun[]) {
+  const validRuns = runs.filter(
+    (
+      run,
+    ): run is BenchmarkRun & {
+      observerExternalLaunchPhaseDurations: ObserverExternalLaunchPhaseDurations;
+      observerExternalLaunchInternalMs: number;
+      clientRpcMinusObserverInternalMs: number;
+    } =>
+      run.observerExternalLaunchPhaseDurations !== null &&
+      run.observerExternalLaunchInternalMs !== null &&
+      run.clientRpcMinusObserverInternalMs !== null,
+  );
+  const phaseDistributions = Object.fromEntries(
+    observerExternalLaunchPhaseSegments.map((segment) => [
+      segment.key,
+      distribution(validRuns.map((run) => run.observerExternalLaunchPhaseDurations[segment.key])),
+    ]),
+  ) as Record<keyof ObserverExternalLaunchPhaseDurations, ReturnType<typeof distribution>>;
+  const observerExternalLaunchInternalMs = distribution(
+    validRuns.map((run) => run.observerExternalLaunchInternalMs),
+  );
+  const transportResidualMs = distribution(
+    validRuns.map((run) => run.clientRpcMinusObserverInternalMs),
+  );
+  const dominant = observerExternalLaunchPhaseSegments.reduce((current, segment) =>
+    phaseDistributions[segment.key].p95 > phaseDistributions[current.key].p95 ? segment : current,
+  );
+  const totalP95 = observerExternalLaunchInternalMs.p95;
+  const dominantP95 = phaseDistributions[dominant.key].p95;
+  const tailRuns = validRuns.filter(
+    (run) => run.observerExternalLaunchInternalMs > bench042Thresholds.tailIntervalMs,
+  );
+  const dominantTailIntervals = tailRuns.filter(
+    (run) =>
+      run.observerExternalLaunchPhaseDurations[dominant.key] /
+        run.observerExternalLaunchInternalMs >=
+      bench042Thresholds.dominantTailFraction,
+  ).length;
+  const hostProcessLaunchP95Fraction =
+    totalP95 === 0 ? 0 : phaseDistributions.hostProcessLaunchMs.p95 / totalP95;
+  const hostProcessLaunchTailFractions = tailRuns.map(
+    (run) =>
+      run.observerExternalLaunchPhaseDurations.hostProcessLaunchMs /
+      run.observerExternalLaunchInternalMs,
+  );
+  return {
+    validRuns: validRuns.length,
+    phaseDistributions,
+    observerExternalLaunchInternalMs,
+    transportResidualMs,
+    dominantPhase: dominant.key,
+    dominantP95Fraction: totalP95 === 0 ? 0 : dominantP95 / totalP95,
+    tailIntervals: tailRuns.length,
+    dominantTailIntervals,
+    hostProcessLaunchP95Fraction,
+    hostProcessLaunchTailFractions,
+    hostProcessLaunchDominatesEveryTail:
+      tailRuns.length >= bench042Thresholds.minimumTailIntervals &&
+      hostProcessLaunchTailFractions.every(
+        (fraction) => fraction >= bench042Prediction.hostProcessLaunchTailFraction,
       ),
   };
 }
