@@ -4,10 +4,10 @@ import type {
   RepositoryRemote,
   WorktreeObservation,
 } from "@station/contracts";
-import { normalizeObservedPath, WorktreeObservationSchema } from "@station/contracts";
-import { stableName } from "@station/runtime";
+import { WorktreeObservationSchema } from "@station/contracts";
 import { WorktrunkProviderError } from "./errors.js";
 import { applyMetadataToObservation, providerNativeMetadataFromWorktrunkItem } from "./metadata.js";
+import { worktreeId } from "./worktreeIdentity.js";
 
 export type ParseWorktrunkListOptions = {
   project: ProviderProjectConfig;
@@ -273,24 +273,8 @@ function hasWorktreePath(item: unknown): item is WorktrunkListItem {
   );
 }
 
-function worktreeId(projectId: string, path: string): string {
-  const identityPath = normalizeObservedPath(path);
-  const stableDisplayName = pathDisplaySlug(identityPath);
-  return stableName({
-    prefix: "wt",
-    profile: "id",
-    display: [projectId, stableDisplayName],
-    unique: ["worktree", projectId, identityPath],
-    hash: "always",
-  });
-}
-
 function basename(path: string): string {
   return path.split(/[\\/]/).filter(Boolean).at(-1) ?? "unknown";
-}
-
-function pathDisplaySlug(path: string): string {
-  return basename(path) || "worktree";
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {

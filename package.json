@@ -56,6 +56,13 @@
     "test:unit": "vitest run --config config/vitest/vitest.unit.config.ts",
     "test:contracts": "vitest run --config config/vitest/vitest.contracts.config.ts",
     "test:integration": "pnpm build && vitest run --config config/vitest/vitest.integration.config.ts",
+    "benchmark:quick-session": "STATION_QUICK_SESSION_BENCHMARK_OUTPUT=.dev-state/performance/quick-session/latest.synthetic.json vitest run --config config/vitest/vitest.performance.config.ts tests/performance/quick-session/benchmark.test.ts",
+    "benchmark:quick-session:real": "STATION_REAL_QUICK_SESSION=1 STATION_REAL_QUICK_SESSION_BENCHMARK_OUTPUT=.dev-state/performance/quick-session/observer-worktrunk.real.json vitest run --config config/vitest/vitest.performance.config.ts tests/performance/quick-session/observerWorktrunk.real.test.ts",
+    "benchmark:quick-session:worktrunk": "node tests/performance/quick-session/worktrunkConcurrency.mjs",
+    "benchmark:quick-session:native-git": "node tests/performance/quick-session/nativeGitCreateComparison.mjs",
+    "benchmark:quick-session:pty": "STATION_REAL_QUICK_SESSION_PTY=1 STATION_REAL_QUICK_SESSION_PTY_OUTPUT=.dev-state/performance/quick-session/quick-session-pty.real.json vitest run --config config/vitest/vitest.performance.config.ts tests/performance/quick-session/quickSessionPty.real.test.ts",
+    "benchmark:quick-session:end-to-end": "STATION_REAL_QUICK_SESSION=1 STATION_REAL_QUICK_SESSION_HOST_PTY=1 STATION_REAL_QUICK_SESSION_BENCHMARK_OUTPUT=.dev-state/performance/quick-session/observer-host-pty.real.json vitest run --config config/vitest/vitest.performance.config.ts tests/performance/quick-session/observerWorktrunk.real.test.ts",
+    "benchmark:quick-session:end-to-end-paired": "STATION_REAL_QUICK_SESSION=1 STATION_REAL_QUICK_SESSION_HOST_PTY=1 STATION_REAL_QUICK_SESSION_PAIRED_TERMINAL=1 STATION_REAL_QUICK_SESSION_BENCHMARK_OUTPUT=.dev-state/performance/quick-session/observer-host-pty-paired.real.json vitest run --config config/vitest/vitest.performance.config.ts tests/performance/quick-session/observerWorktrunk.real.test.ts",
     "test:observer-claim:cross-runtime": "node scripts/test-runners/run-observer-claim-cross-runtime.mjs",
     "test:observer-claim:cross-runtime:pr": "node scripts/test-runners/run-observer-claim-cross-runtime.mjs --rounds 5 --three-contender-rounds 2",
     "test:sqlite:bun": "node scripts/test-runners/run-sqlite-cross-runtime.mjs && pnpm test:observer-claim:cross-runtime",
@@ -90,7 +97,7 @@
     "test:ci:fast": "pnpm build && pnpm test:unit && pnpm test:contracts && pnpm test:diagnostics && pnpm test:agent:scripted",
     "test:ci:station": "pnpm --dir station typecheck && pnpm --dir station test && pnpm --dir station test:pty && pnpm --dir station test:pty:bun && pnpm test:e2e:host-upgrade",
     "test:ci:binary": "pnpm build:binary -- --version 0.0.0-local && pnpm smoke:binary -- --expected-version 0.0.0-local && pnpm smoke:update -- --incumbent-binary station/dist/bin/stn --incumbent-version 0.0.0-local --target-source-version 0.0.1-local --busy-host-outcome preserved-refusal",
-    "test:all": "pnpm build && pnpm typecheck && pnpm lint && pnpm test:unit && pnpm test:contracts && pnpm test:integration && pnpm test:diagnostics && pnpm test:agent:scripted && pnpm test:e2e:setup && pnpm test:e2e:observer && pnpm smoke:install",
+    "test:all": "pnpm build && pnpm typecheck && pnpm lint && pnpm test:unit && pnpm test:contracts && pnpm test:integration && pnpm benchmark:quick-session && pnpm test:diagnostics && pnpm test:agent:scripted && pnpm test:e2e:setup && pnpm test:e2e:observer && pnpm smoke:install",
     "test:pre-push": "pnpm lint"
   },
   "devDependencies": {

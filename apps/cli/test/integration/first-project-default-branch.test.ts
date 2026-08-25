@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { promisify } from "node:util";
 import {
   type AddProjectToConfigResult,
@@ -9,7 +9,7 @@ import {
   renderSetupConfig,
 } from "@station/config";
 import type { ExternalCommandInput, ExternalCommandResult } from "@station/runtime";
-import { environmentWithoutGitLocals } from "@station/runtime";
+import { environmentWithoutGitLocals, nodeExternalCommandRunner } from "@station/runtime";
 import { WorktrunkProvider } from "@station/worktrunk";
 import { describe, expect, it } from "vitest";
 
@@ -44,19 +44,14 @@ describe("first-project default branch", () => {
         useLifecycleHooks: false,
         resolveRegistrationIdentity: async (path) => `git-registration:${path}`,
         runner: async (input) => {
-          if (input.command === "git") {
-            return result(input, "false\n");
-          }
           calls.push(input);
-          if (input.args?.[0] === "list") {
-            return result(
-              input,
-              JSON.stringify([{ path: repo, branch: defaultBranch, is_main: true }]),
-            );
+          if (input.command === "git") {
+            if (input.args?.includes("rev-parse")) {
+              return result(input, `${worktreePath}\nfeature\n`);
+            }
+            return nodeExternalCommandRunner(input);
           }
-          await mkdir(dirname(worktreePath), { recursive: true });
-          await git(repo, "worktree", "add", "-b", "feature", worktreePath, defaultBranch);
-          return result(input, JSON.stringify([{ path: worktreePath, branch: "feature" }]));
+          return result(input, "[]");
         },
       });
 
@@ -68,19 +63,35 @@ describe("first-project default branch", () => {
           path: worktreePath,
           registrationIdentity: `git-registration:${worktreePath}`,
         });
-        expect(calls).toHaveLength(2);
-        expect(calls[0]?.args).toEqual(["list", "--format=json"]);
+        expect(calls).toHaveLength(3);
+        expect(calls[0]?.args).toEqual([
+          "-C",
+          repo,
+          "config",
+          "--local",
+          "--type=bool",
+          "--get",
+          "core.bare",
+        ]);
         expect(calls[1]?.args).toEqual([
-          "--config-set",
-          `projects.${JSON.stringify(repo)}.worktree-path=${JSON.stringify(worktreePath)}`,
-          "switch",
-          "--no-hooks",
-          "--create",
+          "-C",
+          repo,
+          "worktree",
+          "add",
+          "--quiet",
+          "-b",
           "feature",
-          "--base",
+          worktreePath,
           defaultBranch,
-          "--no-cd",
-          "--format=json",
+        ]);
+        expect(calls[2]?.args).toEqual([
+          "-C",
+          worktreePath,
+          "rev-parse",
+          "--path-format=absolute",
+          "--show-toplevel",
+          "--abbrev-ref=strict",
+          "HEAD",
         ]);
       } finally {
         await git(repo, "worktree", "remove", "--force", worktreePath).catch(() => undefined);

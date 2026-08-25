@@ -17497,7 +17497,7 @@
       "declaration": "WorktrunkProvider",
       "kind": "class",
       "role": "ADAPTER",
-      "purpose": "Translates Worktrunk lifecycle output and commands into Station worktree contracts. Hook diagnostics use an atomic requester runtime when supplied and retain the whole Observer composition expectation as a fallback. List results are returned without retaining inventory; only the Worktrunk project identifier needed to preserve managed-path precedence is memoized. Checkout roots are validated before Worktrunk runs, and removal freshly revalidates native Git identity, path, and branch before mutation.",
+      "purpose": "Translates Worktrunk lifecycle output and commands into Station worktree contracts. Hook diagnostics use an atomic requester runtime when supplied and retain the whole Observer composition expectation as a fallback. List results are returned without retaining inventory; only the Worktrunk project identifier needed to preserve managed-path precedence is memoized. Checkout roots are validated before mutation. Explicitly hooks-disabled managed creates use a narrow native Git path with exact post-create verification; other creates and all removal use Worktrunk. Removal freshly revalidates native Git identity, path, and branch before mutation.",
       "dependencies": [
         {
           "path": "packages/contracts/src/providers.ts",

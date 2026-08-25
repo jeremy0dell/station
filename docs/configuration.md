@@ -119,7 +119,7 @@ accepted by config validation but become unavailable providers at runtime.
 | `base` | string (optional) | Default base branch for Worktrunk project listings and new worktrees. Project entries inherit this unless `[projects.worktrunk].base` is set; when neither is configured, Station omits `--base`. |
 | `include_main` | bool | Default include-main policy for Worktrunk project listings. Project entries inherit this unless overridden. |
 | `include_external` | bool | Default include-external policy for Worktrunk project listings. Project entries inherit this unless overridden. |
-| `use_lifecycle_hooks` | bool | Worktrunk automation mode. `false` makes automated mutations pass `--no-hooks`; `true` passes `--yes`; unset uses Worktrunk defaults. |
+| `use_lifecycle_hooks` | bool | Worktrunk automation mode. For creates with an exact managed path and configured base, `false` uses native Git and verifies the resulting path, branch, and registration without running hooks; other `false` mutations pass `--no-hooks`. `true` passes `--yes`; unset uses Worktrunk defaults. |
 | `hook_mode` | `required-for-mvp` \| `disabled` | Worktrunk lifecycle hook setup expectation. |
 | `breadcrumb_location` | `external` \| `worktree` \| `provider-native` \| `disabled` | Default recovery breadcrumb location. |
 
