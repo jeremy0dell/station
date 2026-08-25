@@ -49,6 +49,19 @@ function withoutIdleAgent(): StationSnapshot {
 }
 
 describe("createManagedLaunch", () => {
+  it("lands hosted creates only when the caller explicitly requests foreground placement", async () => {
+    const foreground = launchHarness(withoutIdleAgent());
+    await expect(
+      foreground.launch.create({ ...CREATE_REQUEST, background: false }),
+    ).resolves.toEqual({ kind: "success", landed: true });
+
+    const background = launchHarness(withoutIdleAgent());
+    await expect(background.launch.create(CREATE_REQUEST)).resolves.toEqual({
+      kind: "success",
+      landed: false,
+    });
+  });
+
   it("classifies missing Observer authority as a worktree failure", async () => {
     const { launch } = launchHarness(manyProjectsSnapshot(), false);
 

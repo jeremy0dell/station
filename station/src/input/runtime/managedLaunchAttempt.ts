@@ -28,6 +28,7 @@ import {
   readinessForWorktree,
   unreachableTerminalRow,
 } from "./stationRows.js";
+import { markManagedLaunchDiagnosticPhase } from "./managedLaunchPhaseDiagnostic.js";
 
 /** What a managed primary-agent launch needs to ask the observer to prepare it. */
 export type ManagedLaunchTarget = {
@@ -275,10 +276,12 @@ async function resolvePreparedLaunch(
       );
     }
     try {
+      markManagedLaunchDiagnosticPhase("attachmentResolveStarted");
       const createTerminal = await runtime.managedTerminalAttacher.resolve(
         prepared.attachment,
         prepared.sessionId,
       );
+      markManagedLaunchDiagnosticPhase("attachmentResolveCompleted");
       return {
         kind: "open-pane",
         createTerminal,
@@ -394,6 +397,7 @@ async function openPreparedPane(
   action: OpenPaneAction,
 ): Promise<ManagedLaunchAttemptResult> {
   const placement = placePreparedTerminal(runtime, context, action);
+  markManagedLaunchDiagnosticPhase("terminalPlaced");
   if (placement.kind === "refused") {
     return notice("The agent pane changed while Station was preparing its relaunch.");
   }
@@ -403,6 +407,7 @@ async function openPreparedPane(
     worktreeId: context.target.worktreeId,
   });
   runtime.store.actions.setPrimaryAgent(context.paneId, action.identity);
+  markManagedLaunchDiagnosticPhase("panePublished");
   if (placement.kind === "recycled") {
     if (context.landInPane) {
       runtime.store.actions.revealPane(context.paneId);
@@ -513,13 +518,17 @@ async function runManagedLaunchAttempt(
   paneId: PaneId,
   target: ManagedLaunchTarget,
 ): Promise<ManagedLaunchAttemptResult> {
+  markManagedLaunchDiagnosticPhase("attemptStarted");
   const context = createContext(runtime, paneId, target);
   const preflight = await runPreflight(runtime, context);
+  markManagedLaunchDiagnosticPhase("preflightCompleted");
   if (preflight.kind === "settled") {
     return preflight.result;
   }
   try {
+    markManagedLaunchDiagnosticPhase("prepareStarted");
     const preparation = await prepareLaunch(preflight.service, target);
+    markManagedLaunchDiagnosticPhase("prepareCompleted");
     if (preparation.kind === "failed") {
       return { kind: "failure", error: preparation.error };
     }
@@ -528,6 +537,7 @@ async function runManagedLaunchAttempt(
       return action;
     }
     const result = await performPreparedAction(runtime, context, preflight.service, action);
+    markManagedLaunchDiagnosticPhase("attemptCompleted");
     if (
       result.kind === "notice" &&
       result.notice.message === "The agent pane changed while Station was preparing its relaunch."
