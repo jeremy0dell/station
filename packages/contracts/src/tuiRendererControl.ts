@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { TerminalFocusOriginSchema } from "./commands.js";
+import { TerminalFocusOriginSchema } from "./commands/terminal.js";
 import { SafeErrorSchema } from "./errors.js";
 
 export const TUI_RENDERER_CONTROL_PROTOCOL_VERSION = 1 as const;

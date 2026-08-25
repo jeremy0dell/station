@@ -27,7 +27,7 @@ describe("protocol command wait client", () => {
     const server = await startProtocolServer({
       socketPath,
       api: createFakeObserverApi({
-        getCommand: async (commandId) => commandRecord(commandId, "succeeded"),
+        getCommand: async (commandId) => resultCommandRecord(commandId, "succeeded"),
         subscribe: () =>
           cleanupStream(() => {
             returned = true;
@@ -40,6 +40,11 @@ describe("protocol command wait client", () => {
       await expect(client.waitForCommand("cmd_done", { timeoutMs: 500 })).resolves.toMatchObject({
         id: "cmd_done",
         status: "succeeded",
+        result: {
+          type: "worktree.create",
+          projectId: "web",
+          worktreeId: "wt_protocol_result",
+        },
       });
       await waitFor(() => returned);
     } finally {
@@ -58,7 +63,7 @@ describe("protocol command wait client", () => {
         getCommand: async (commandId) => {
           order.push(`get:${commandId}`);
           getCount += 1;
-          return commandRecord(commandId, getCount === 1 ? "started" : "succeeded");
+          return resultCommandRecord(commandId, getCount === 1 ? "started" : "succeeded");
         },
         subscribe: (filter) => {
           order.push("subscribe");
@@ -79,6 +84,11 @@ describe("protocol command wait client", () => {
       await expect(client.waitForCommand("cmd_fast", { timeoutMs: 500 })).resolves.toMatchObject({
         id: "cmd_fast",
         status: "succeeded",
+        result: {
+          type: "worktree.create",
+          projectId: "web",
+          worktreeId: "wt_protocol_result",
+        },
       });
       expect(order).toEqual(["subscribe", "get:cmd_fast", "get:cmd_fast"]);
       expect(observedFilter).toEqual({
@@ -213,6 +223,37 @@ function commandRecord(commandId: CommandId, status: CommandRecord["status"]): C
     record.error = commandError();
   }
   return record;
+}
+
+function resultCommandRecord(commandId: CommandId, status: "started" | "succeeded"): CommandRecord {
+  const command = {
+    type: "worktree.create",
+    payload: { projectId: "web", branch: "protocol-result" },
+  } as const;
+  if (status === "started") {
+    return {
+      id: commandId,
+      type: command.type,
+      command,
+      status,
+      createdAt: protocolTestNow,
+      startedAt: protocolTestNow,
+    };
+  }
+  return {
+    id: commandId,
+    type: command.type,
+    command,
+    status,
+    createdAt: protocolTestNow,
+    startedAt: protocolTestNow,
+    finishedAt: protocolTestNow,
+    result: {
+      type: "worktree.create",
+      projectId: "web",
+      worktreeId: "wt_protocol_result",
+    },
+  };
 }
 
 function reconcileCommand(reason: string): StationCommand {

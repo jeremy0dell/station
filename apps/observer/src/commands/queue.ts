@@ -3,12 +3,20 @@ import type {
   CommandId,
   CommandReceipt,
   StationCommand,
+  StationCommandResult,
+  StationCommandResultFor,
+  StationCommandResultType,
   StationEvent,
   TerminalClosePayload,
   TerminalFocusPayload,
   TraceContext,
 } from "@station/contracts";
-import { CommandReceiptSchema, StationCommandSchema } from "@station/contracts";
+import {
+  CommandReceiptSchema,
+  StationCommandResultSchema,
+  StationCommandResultTypeSchema,
+  StationCommandSchema,
+} from "@station/contracts";
 import { createTraceContext } from "@station/observability";
 import { type RuntimeClock, runRuntimeBoundaryWithTimeout, systemClock } from "@station/runtime";
 import { createErrorEnvelope, toSafeError } from "../diagnostics/errors.js";
@@ -30,18 +38,33 @@ type CommandExecutionContext = Omit<CommandHandlerContext, "signal" | "beginComm
 
 export type CommandHandler = (context: CommandHandlerContext) => Promise<void>;
 
+export type CommandResultHandler<TCommandType extends StationCommandResultType> = (
+  context: CommandHandlerContext,
+) => Promise<StationCommandResultFor<Extract<StationCommand, { type: TCommandType }>>>;
+
+export type ObserverCommandHandlers = {
+  [TCommandType in StationCommand["type"]]: TCommandType extends StationCommandResultType
+    ? CommandResultHandler<TCommandType>
+    : CommandHandler;
+};
+
+type RegisteredCommandHandler = ObserverCommandHandlers[StationCommand["type"]];
+
 export type CommandQueue = {
   dispatch(command: StationCommand): Promise<CommandReceipt>;
   drain(): Promise<void>;
   shutdown(): Promise<void>;
-  registerHandler(commandType: StationCommand["type"], handler: CommandHandler): void;
+  registerHandler<TCommandType extends StationCommand["type"]>(
+    commandType: TCommandType,
+    handler: ObserverCommandHandlers[NoInfer<TCommandType>],
+  ): void;
 };
 
 export type CreateCommandQueueOptions = {
   persistence: CommandJournal & EventJournal;
   clock?: RuntimeClock;
   idFactory?: Partial<Pick<ObserverIdFactory, "commandId" | "errorId">>;
-  handlers?: Partial<Record<StationCommand["type"], CommandHandler>>;
+  handlers?: Partial<ObserverCommandHandlers>;
   logger?: StationLogger;
   eventBus?: {
     publish(event: StationEvent): void;
@@ -59,8 +82,8 @@ export function createCommandQueue(options: CreateCommandQueueOptions): CommandQ
     errorId: defaultErrorId,
     ...options.idFactory,
   };
-  const handlers = new Map<StationCommand["type"], CommandHandler>(
-    Object.entries(options.handlers ?? {}) as [StationCommand["type"], CommandHandler][],
+  const handlers = new Map<StationCommand["type"], RegisteredCommandHandler>(
+    Object.entries(options.handlers ?? {}) as [StationCommand["type"], RegisteredCommandHandler][],
   );
   // Commands serialize by the narrowest stable identity we can infer; unrelated scopes run in parallel.
   const scopeChains = new Map<string, Promise<void>>();
@@ -184,7 +207,7 @@ export function createCommandQueue(options: CreateCommandQueueOptions): CommandQ
 
 async function executeCommand(
   persistence: CommandJournal & EventJournal,
-  handlers: Map<StationCommand["type"], CommandHandler>,
+  handlers: Map<StationCommand["type"], RegisteredCommandHandler>,
   clock: RuntimeClock,
   idFactory: Pick<ObserverIdFactory, "errorId">,
   context: CommandExecutionContext,
@@ -221,7 +244,10 @@ async function executeCommand(
 
   const handler = handlers.get(context.command.type);
   let commitStarted = false;
-  let handlerExecution: Promise<void> | undefined;
+  const handlerState: {
+    execution: Promise<unknown> | undefined;
+    result: unknown;
+  } = { execution: undefined, result: undefined };
   const result = await runRuntimeBoundaryWithTimeout(
     {
       operation: `command.${context.command.type}`,
@@ -250,7 +276,7 @@ async function executeCommand(
         if (handler === undefined) {
           throw missingCommandHandlerError();
         }
-        handlerExecution = handler({
+        handlerState.execution = handler({
           ...context,
           signal: linked.signal,
           beginCommit: () => {
@@ -258,7 +284,7 @@ async function executeCommand(
             commitStarted = true;
           },
         });
-        await handlerExecution;
+        handlerState.result = await handlerState.execution;
         if (!commitStarted) throwIfAborted(linked.signal);
       } finally {
         linked.cleanup();
@@ -267,18 +293,27 @@ async function executeCommand(
   );
 
   let executionError: unknown = result.ok ? undefined : result.error;
-  if (!result.ok && commitStarted && handlerExecution !== undefined) {
+  if (!result.ok && commitStarted && handlerState.execution !== undefined) {
     try {
       // A begun durable commit must reach one completion even if its runtime budget expires.
-      await handlerExecution;
+      handlerState.result = await handlerState.execution;
       executionError = undefined;
     } catch (error) {
       executionError = error;
     }
   }
 
+  let commandResult: StationCommandResult | undefined;
   if (executionError === undefined) {
-    await persistence.markCommandSucceeded(context.commandId, nowIso(clock));
+    try {
+      commandResult = validateCommandResult(context.command, handlerState.result);
+    } catch (error) {
+      executionError = error;
+    }
+  }
+
+  if (executionError === undefined) {
+    await persistence.markCommandSucceeded(context.commandId, nowIso(clock), commandResult);
     const succeededEvent: StationEvent = {
       type: "command.succeeded",
       commandId: context.commandId,
@@ -350,6 +385,31 @@ async function executeCommand(
     error: safeError,
   });
   runtime?.eventBus?.publish(failedEvent);
+}
+
+function validateCommandResult(
+  command: StationCommand,
+  handlerResult: unknown,
+): StationCommandResult | undefined {
+  const resultType = StationCommandResultTypeSchema.safeParse(command.type);
+  if (!resultType.success) {
+    if (handlerResult !== undefined) throw invalidCommandResultError(command.type);
+    return undefined;
+  }
+
+  const parsed = StationCommandResultSchema.safeParse(handlerResult);
+  if (!parsed.success || parsed.data.type !== resultType.data) {
+    throw invalidCommandResultError(command.type);
+  }
+  return parsed.data;
+}
+
+function invalidCommandResultError(commandType: StationCommand["type"]) {
+  return {
+    tag: "CommandExecutionError",
+    code: "COMMAND_RESULT_INVALID",
+    message: `Observer handler returned an invalid result for ${commandType}.`,
+  };
 }
 
 function missingCommandHandlerError() {

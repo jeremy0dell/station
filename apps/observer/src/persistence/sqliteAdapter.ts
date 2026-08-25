@@ -97,9 +97,9 @@ export function createSqliteObserverPersistence(
         commandStore.markCommandStarted(database, commandId, startedAt ?? now()),
       ),
 
-    markCommandSucceeded: (commandId, finishedAt) =>
+    markCommandSucceeded: (commandId, finishedAt, result) =>
       transaction((database) =>
-        commandStore.markCommandSucceeded(database, commandId, finishedAt ?? now()),
+        commandStore.markCommandSucceeded(database, commandId, finishedAt ?? now(), result),
       ),
 
     markCommandFailed: (input) =>

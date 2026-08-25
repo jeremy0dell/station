@@ -163,7 +163,15 @@ describe("Observer API composition with in-memory persistence", () => {
       payload: { projectId: "web", name: "API Group", initialSessionIds: ["ses_web_task"] },
     });
     await commandQueue.drain();
-    await expect(api.getCommand(group.commandId)).resolves.toMatchObject({ status: "succeeded" });
+    await expect(api.getCommand(group.commandId)).resolves.toMatchObject({
+      status: "succeeded",
+      result: {
+        type: "sessionGroup.create",
+        projectId: "web",
+        groupId: expect.stringMatching(/^grp_/),
+        version: 1,
+      },
+    });
     expect((await api.getSnapshot()).sessionGroups).toEqual([
       expect.objectContaining({
         id: expect.stringMatching(/^grp_/),

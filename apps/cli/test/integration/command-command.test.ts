@@ -66,28 +66,35 @@ describe("CLI command dispatch/get", () => {
 
   it("waits for the final command record when --wait is provided", async () => {
     const fixture = await createTempState();
-    const command = reconcileCommand("cli-command-wait");
+    const command: StationCommand = {
+      type: "worktree.create",
+      payload: { projectId: "web", branch: "cli-result" },
+    };
+    const completed = resultCommandRecord("cmd_wait", command);
     const result = await runCommandCommand(
       ["dispatch", "--stdin", "--wait", "--timeout-ms", "1000"],
       { config: fixture.config, stdin: JSON.stringify(command) },
       runningObserverDeps({
         socketPath: fixture.socketPath,
         dispatch: async () => receipt("cmd_wait"),
-        waitForCommand: async () =>
-          commandRecord("cmd_wait", command, "succeeded") as TerminalCommandRecord,
+        waitForCommand: async () => completed as TerminalCommandRecord,
       }),
     );
 
     expect(result).toEqual({
       status: "succeeded",
       receipt: receipt("cmd_wait"),
-      command: commandRecord("cmd_wait", command, "succeeded"),
+      command: completed,
     });
   });
 
   it("returns a command record by id", async () => {
     const fixture = await createTempState();
-    const record = commandRecord("cmd_get", reconcileCommand("cli-command-get"), "failed");
+    const getCommand: StationCommand = {
+      type: "worktree.create",
+      payload: { projectId: "web", branch: "cli-get-result" },
+    };
+    const record = resultCommandRecord("cmd_get", getCommand);
     record.diagnostics = [
       {
         type: "external_command",
@@ -350,4 +357,18 @@ function commandRecord(
     };
   }
   return record;
+}
+
+function resultCommandRecord(
+  id: string,
+  command: Extract<StationCommand, { type: "worktree.create" }>,
+): CommandRecord {
+  return {
+    ...commandRecord(id, command, "succeeded"),
+    result: {
+      type: "worktree.create",
+      projectId: command.payload.projectId,
+      worktreeId: `wt_${command.payload.branch.replaceAll("-", "_")}`,
+    },
+  } as CommandRecord;
 }

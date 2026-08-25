@@ -32,6 +32,11 @@ const command: StationCommand = {
   payload: { reason: "persistence-contract" },
 };
 
+const resultCommand: StationCommand = {
+  type: "worktree.create",
+  payload: { projectId: "web", branch: "durable-result" },
+};
+
 const project: ProviderProjectConfig = {
   id: "web",
   label: "web",
@@ -108,6 +113,56 @@ export function observerPersistenceContract(
           await expect(persistence.getCommand("cmd_lifecycle")).resolves.toMatchObject({
             id: "cmd_lifecycle",
             status: "succeeded",
+          });
+        });
+      });
+
+      it("round-trips an exact optional success result", async () => {
+        await withPersistence(createFixture, async ({ persistence }) => {
+          await persistence.recordCommandAccepted({
+            commandId: "cmd_result",
+            command: resultCommand,
+            createdAt: earlier,
+          });
+          await persistence.markCommandStarted("cmd_result", now);
+          await persistence.markCommandSucceeded("cmd_result", later, {
+            type: "worktree.create",
+            projectId: "web",
+            worktreeId: "wt_web_durable_result",
+          });
+
+          await expect(persistence.getCommand("cmd_result")).resolves.toMatchObject({
+            id: "cmd_result",
+            command: resultCommand,
+            status: "succeeded",
+            result: {
+              type: "worktree.create",
+              projectId: "web",
+              worktreeId: "wt_web_durable_result",
+            },
+          });
+
+          await persistence.recordCommandAccepted({
+            commandId: "cmd_mismatched_result",
+            command: {
+              type: "worktree.fork",
+              payload: {
+                projectId: "web",
+                sourceWorktreeId: "wt_source",
+                branch: "mismatched-result",
+              },
+            },
+            createdAt: earlier,
+          });
+          await expect(
+            persistence.markCommandSucceeded("cmd_mismatched_result", later, {
+              type: "worktree.create",
+              projectId: "web",
+              worktreeId: "wt_wrong_variant",
+            }),
+          ).rejects.toBeDefined();
+          await expect(persistence.getCommand("cmd_mismatched_result")).resolves.toMatchObject({
+            status: "accepted",
           });
         });
       });

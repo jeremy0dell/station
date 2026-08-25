@@ -892,6 +892,12 @@
           "purpose": null
         },
         {
+          "name": "CommandResultHandler",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "createCommandQueue",
           "kind": "function",
           "role": null,
@@ -899,6 +905,12 @@
         },
         {
           "name": "CreateCommandQueueOptions",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ObserverCommandHandlers",
           "kind": "type",
           "role": null,
           "purpose": null
@@ -945,7 +957,12 @@
           "specifier": "@station/contracts",
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "runtime",
-          "bindings": ["CommandReceiptSchema", "StationCommandSchema"]
+          "bindings": [
+            "CommandReceiptSchema",
+            "StationCommandResultSchema",
+            "StationCommandResultTypeSchema",
+            "StationCommandSchema"
+          ]
         },
         {
           "specifier": "@station/contracts",
@@ -955,6 +972,9 @@
             "CommandId",
             "CommandReceipt",
             "StationCommand",
+            "StationCommandResult",
+            "StationCommandResultFor",
+            "StationCommandResultType",
             "StationEvent",
             "TerminalClosePayload",
             "TerminalFocusPayload",
@@ -1062,8 +1082,14 @@
         {
           "specifier": "@station/contracts",
           "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "runtime",
+          "bindings": ["CommandRecordSchema"]
+        },
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "type-only",
-          "bindings": ["CommandRecord"]
+          "bindings": ["CommandRecord", "CommandRecordInput"]
         }
       ]
     },
@@ -1116,7 +1142,7 @@
           "specifier": "./queue.js",
           "resolvedPath": "apps/observer/src/commands/queue.ts",
           "edgeKind": "type-only",
-          "bindings": ["CommandHandler", "CommandQueue"]
+          "bindings": ["CommandQueue", "ObserverCommandHandlers"]
         },
         {
           "specifier": "./reconcile.js",
@@ -1453,7 +1479,7 @@
           "name": "createSessionCreateHandler",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Preflights the selected harness, creates a session worktree on its generated branch, durably seeds its independent title with optional atomic root Group placement or inline Group creation, and launches its primary agent only after explicit placement authorization before worktree mutation and revalidation before terminal mutation; rollback removes only state owned by this command."
+          "purpose": "Preflights the selected harness, creates a session worktree on its generated branch, durably seeds its independent title with optional atomic root Group placement or inline Group creation, and launches its primary agent only after explicit placement authorization before worktree mutation and revalidation before terminal mutation; rollback removes only state owned by this command. Success returns the exact created identities and the provider-resolved placement projection."
         },
         {
           "name": "CreateSessionCreateHandlerOptions",
@@ -1489,7 +1515,7 @@
           "specifier": "../queue.js",
           "resolvedPath": "apps/observer/src/commands/queue.ts",
           "edgeKind": "type-only",
-          "bindings": ["CommandHandler"]
+          "bindings": ["CommandResultHandler"]
         },
         {
           "specifier": "../reconcile.js",
@@ -1524,7 +1550,7 @@
           "specifier": "../terminalOperations.js",
           "resolvedPath": "apps/observer/src/commands/terminalOperations.ts",
           "edgeKind": "runtime",
-          "bindings": ["ensureAgentWorkspace"]
+          "bindings": ["commandPlacementResult", "ensureAgentWorkspace"]
         },
         {
           "specifier": "../../persistence/index.js",
@@ -1577,7 +1603,7 @@
           "name": "createSessionForkHandler",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Resolves and preflights the selected harness, forks an existing worktree onto an internal branch, and atomically seeds its title with the source session's current Group when requested before launching a fresh agent with pre-mutation placement authorization and provider-side revalidation immediately before terminal mutation; cleanup retires only fork-owned state after verified rollback."
+          "purpose": "Resolves and preflights the selected harness, forks an existing worktree onto an internal branch, and atomically seeds its title with the source session's current Group when requested before launching a fresh agent with pre-mutation placement authorization and provider-side revalidation immediately before terminal mutation; cleanup retires only fork-owned state after verified rollback. Success returns the exact created identities and the provider-resolved placement projection."
         },
         {
           "name": "CreateSessionForkHandlerOptions",
@@ -1613,7 +1639,7 @@
           "specifier": "../queue.js",
           "resolvedPath": "apps/observer/src/commands/queue.ts",
           "edgeKind": "type-only",
-          "bindings": ["CommandHandler"]
+          "bindings": ["CommandResultHandler"]
         },
         {
           "specifier": "../reconcile.js",
@@ -1652,7 +1678,7 @@
           "specifier": "../terminalOperations.js",
           "resolvedPath": "apps/observer/src/commands/terminalOperations.ts",
           "edgeKind": "runtime",
-          "bindings": ["ensureAgentWorkspace"]
+          "bindings": ["commandPlacementResult", "ensureAgentWorkspace"]
         },
         {
           "specifier": "../../persistence/index.js",
@@ -2453,7 +2479,7 @@
           "name": "createSessionGroupCommandHandlers",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Validates, durably mutates, projects, and publishes project-local Session Group intent."
+          "purpose": "Validates, durably mutates, projects, and publishes project-local Session Group intent, returning the exact identity and version created by create commands."
         },
         {
           "name": "CreateSessionGroupCommandHandlersOptions",
@@ -2490,7 +2516,12 @@
           "specifier": "./queue.js",
           "resolvedPath": "apps/observer/src/commands/queue.ts",
           "edgeKind": "type-only",
-          "bindings": ["CommandHandler", "CommandHandlerContext"]
+          "bindings": [
+            "CommandHandler",
+            "CommandHandlerContext",
+            "CommandResultHandler",
+            "ObserverCommandHandlers"
+          ]
         },
         {
           "specifier": "../persistence/index.js",
@@ -2528,6 +2559,7 @@
           "edgeKind": "type-only",
           "bindings": [
             "SafeError",
+            "SessionGroupCreateCommandResult",
             "SessionGroupId",
             "SessionGroupView",
             "StationCommand",
@@ -2694,10 +2726,16 @@
           "purpose": null
         },
         {
+          "name": "commandPlacementResult",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "ensureAgentWorkspace",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Opens and launches an agent workspace. When placement is supplied, the terminal adapter alone revalidates the authority immediately before target mutation; failures close only the target opened by this invocation and never fall back to a current, recent, or focused terminal."
+          "purpose": "Opens and launches an agent workspace. When placement is supplied, the terminal adapter alone revalidates the authority immediately before target mutation; failures close only the target opened by this invocation and never fall back to a current, recent, or focused terminal. Successful explicit placement returns the provider's resolved destination proof."
         },
         {
           "name": "focusTerminal",
@@ -2784,7 +2822,9 @@
             "OpenPlacedWorkspaceResult",
             "OpenWorkspaceResult",
             "ProviderProjectConfig",
+            "ResolvedTerminalPlacement",
             "SafeError",
+            "SessionCommandPlacementResult",
             "SessionView",
             "TerminalFocusOrigin",
             "TerminalPlacementPort",
@@ -2817,7 +2857,7 @@
           "name": "createWorktreeCreateHandler",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Worktree-only half of session.create for Station: create and publish the worktree, preflighting the selected launch harness before mutation when Station will immediately host an agent through prepareExternalLaunch."
+          "purpose": "Worktree-only half of session.create for Station: create and publish the worktree, preflighting the selected launch harness before mutation when Station will immediately host an agent through prepareExternalLaunch, then returns the exact project and worktree identities created by the provider."
         },
         {
           "name": "CreateWorktreeCreateHandlerOptions",
@@ -2843,7 +2883,7 @@
           "specifier": "../queue.js",
           "resolvedPath": "apps/observer/src/commands/queue.ts",
           "edgeKind": "type-only",
-          "bindings": ["CommandHandler"]
+          "bindings": ["CommandResultHandler"]
         },
         {
           "specifier": "../reconcile.js",
@@ -2902,7 +2942,7 @@
           "name": "createWorktreeForkHandler",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Worktree-only half of session.fork: branch off the source HEAD and seed its working tree (when copyDirty), validating any source-Group inheritance intent while minting no session and launching no terminal so Station can host the inherited harness itself. A selected launch harness is preflighted before mutation. No live-agent guard on the source — the seed is a read-only snapshot."
+          "purpose": "Worktree-only half of session.fork: branch off the source HEAD and seed its working tree (when copyDirty), validating any source-Group inheritance intent while minting no session and launching no terminal so Station can host the inherited harness itself. A selected launch harness is preflighted before mutation. No live-agent guard on the source — the seed is a read-only snapshot. Success returns the exact project and forked-worktree identities."
         },
         {
           "name": "WorktreeForkHandlerOptions",
@@ -2928,7 +2968,7 @@
           "specifier": "../queue.js",
           "resolvedPath": "apps/observer/src/commands/queue.ts",
           "edgeKind": "type-only",
-          "bindings": ["CommandHandler"]
+          "bindings": ["CommandResultHandler"]
         },
         {
           "specifier": "../reconcile.js",
@@ -4279,10 +4319,22 @@
           "name": "CommandJournal",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Preserves the durable lifecycle and diagnostic history of Observer commands."
+          "purpose": "Preserves durable Observer command lifecycle, diagnostic history, and typed success results before terminal completion is observable."
+        },
+        {
+          "name": "commandPlacementResult",
+          "kind": "function",
+          "role": null,
+          "purpose": null
         },
         {
           "name": "CommandQueue",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "CommandResultHandler",
           "kind": "type",
           "role": null,
           "purpose": null
@@ -4609,7 +4661,7 @@
           "name": "ensureAgentWorkspace",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Opens and launches an agent workspace. When placement is supplied, the terminal adapter alone revalidates the authority immediately before target mutation; failures close only the target opened by this invocation and never fall back to a current, recent, or focused terminal."
+          "purpose": "Opens and launches an agent workspace. When placement is supplied, the terminal adapter alone revalidates the authority immediately before target mutation; failures close only the target opened by this invocation and never fall back to a current, recent, or focused terminal. Successful explicit placement returns the provider's resolved destination proof."
         },
         {
           "name": "EventAndObservationIngressDedupeResult",
@@ -4812,6 +4864,12 @@
         {
           "name": "observerBuildSelectorIsValid",
           "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ObserverCommandHandlers",
+          "kind": "type",
           "role": null,
           "purpose": null
         },
@@ -7066,6 +7124,25 @@
       ]
     },
     {
+      "path": "apps/observer/src/migrations/018_command_results.ts",
+      "exports": [
+        {
+          "name": "commandResultsMigration",
+          "kind": "const",
+          "role": null,
+          "purpose": null
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "./migration.js",
+          "resolvedPath": "apps/observer/src/migrations/migration.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ObserverSqliteMigration"]
+        }
+      ]
+    },
+    {
       "path": "apps/observer/src/migrations/index.ts",
       "exports": [
         {
@@ -7191,6 +7268,12 @@
           "bindings": ["sessionGroupsMigration"]
         },
         {
+          "specifier": "./018_command_results.js",
+          "resolvedPath": "apps/observer/src/migrations/018_command_results.ts",
+          "edgeKind": "runtime",
+          "bindings": ["commandResultsMigration"]
+        },
+        {
           "specifier": "./migration.js",
           "resolvedPath": "apps/observer/src/migrations/migration.ts",
           "edgeKind": "type-only",
@@ -7291,7 +7374,12 @@
           "specifier": "@station/contracts",
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "runtime",
-          "bindings": ["ErrorEnvelopeSchema", "SafeErrorSchema", "StationCommandSchema"]
+          "bindings": [
+            "ErrorEnvelopeSchema",
+            "SafeErrorSchema",
+            "StationCommandResultSchema",
+            "StationCommandSchema"
+          ]
         },
         {
           "specifier": "@station/contracts",
@@ -7302,7 +7390,8 @@
             "DiagnosticDetail",
             "ErrorEnvelope",
             "SafeError",
-            "StationCommand"
+            "StationCommand",
+            "StationCommandResult"
           ]
         }
       ]
@@ -7550,7 +7639,7 @@
           "name": "CommandJournal",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Preserves the durable lifecycle and diagnostic history of Observer commands."
+          "purpose": "Preserves durable Observer command lifecycle, diagnostic history, and typed success results before terminal completion is observable."
         },
         {
           "name": "createSqliteObserverPersistence",
@@ -8087,7 +8176,7 @@
           "name": "CommandJournal",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Preserves the durable lifecycle and diagnostic history of Observer commands."
+          "purpose": "Preserves durable Observer command lifecycle, diagnostic history, and typed success results before terminal completion is observable."
         },
         {
           "name": "EventJournal",
@@ -8196,6 +8285,7 @@
             "SessionGroupView",
             "SessionRecoveryHandle",
             "StationCommand",
+            "StationCommandResult",
             "StationEvent"
           ]
         }
@@ -8390,9 +8480,11 @@
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "runtime",
           "bindings": [
+            "CommandRecordSchema",
             "ErrorEnvelopeSchema",
             "SafeErrorSchema",
             "SessionGroupViewSchema",
+            "StationCommandResultSchema",
             "StationCommandSchema",
             "StationEventSchema"
           ]
@@ -9202,6 +9294,7 @@
             "SessionId",
             "SessionRecoveryHandle",
             "StationCommand",
+            "StationCommandResult",
             "StationEvent",
             "TerminalTargetObservation",
             "WorktreeChangeSummary",
@@ -15359,7 +15452,7 @@
       "declaration": "createSessionCreateHandler",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Preflights the selected harness, creates a session worktree on its generated branch, durably seeds its independent title with optional atomic root Group placement or inline Group creation, and launches its primary agent only after explicit placement authorization before worktree mutation and revalidation before terminal mutation; rollback removes only state owned by this command.",
+      "purpose": "Preflights the selected harness, creates a session worktree on its generated branch, durably seeds its independent title with optional atomic root Group placement or inline Group creation, and launches its primary agent only after explicit placement authorization before worktree mutation and revalidation before terminal mutation; rollback removes only state owned by this command. Success returns the exact created identities and the provider-resolved placement projection.",
       "dependencies": [
         {
           "path": "apps/observer/src/commands/terminalOperations.ts",
@@ -15375,7 +15468,7 @@
       "declaration": "createSessionForkHandler",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Resolves and preflights the selected harness, forks an existing worktree onto an internal branch, and atomically seeds its title with the source session's current Group when requested before launching a fresh agent with pre-mutation placement authorization and provider-side revalidation immediately before terminal mutation; cleanup retires only fork-owned state after verified rollback.",
+      "purpose": "Resolves and preflights the selected harness, forks an existing worktree onto an internal branch, and atomically seeds its title with the source session's current Group when requested before launching a fresh agent with pre-mutation placement authorization and provider-side revalidation immediately before terminal mutation; cleanup retires only fork-owned state after verified rollback. Success returns the exact created identities and the provider-resolved placement projection.",
       "dependencies": [
         {
           "path": "apps/observer/src/commands/terminalOperations.ts",
@@ -15454,7 +15547,7 @@
       "declaration": "createSessionGroupCommandHandlers",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Validates, durably mutates, projects, and publishes project-local Session Group intent.",
+      "purpose": "Validates, durably mutates, projects, and publishes project-local Session Group intent, returning the exact identity and version created by create commands.",
       "dependencies": [
         {
           "path": "apps/observer/src/persistence/ports.ts",
@@ -15470,7 +15563,7 @@
       "declaration": "ensureAgentWorkspace",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Opens and launches an agent workspace. When placement is supplied, the terminal adapter alone revalidates the authority immediately before target mutation; failures close only the target opened by this invocation and never fall back to a current, recent, or focused terminal.",
+      "purpose": "Opens and launches an agent workspace. When placement is supplied, the terminal adapter alone revalidates the authority immediately before target mutation; failures close only the target opened by this invocation and never fall back to a current, recent, or focused terminal. Successful explicit placement returns the provider's resolved destination proof.",
       "dependencies": [
         {
           "path": "apps/observer/src/stationLogger.ts",
@@ -15507,7 +15600,7 @@
       "declaration": "createWorktreeCreateHandler",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Worktree-only half of session.create for Station: create and publish the worktree, preflighting the selected launch harness before mutation when Station will immediately host an agent through prepareExternalLaunch.",
+      "purpose": "Worktree-only half of session.create for Station: create and publish the worktree, preflighting the selected launch harness before mutation when Station will immediately host an agent through prepareExternalLaunch, then returns the exact project and worktree identities created by the provider.",
       "dependencies": []
     },
     {
@@ -15515,7 +15608,7 @@
       "declaration": "createWorktreeForkHandler",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Worktree-only half of session.fork: branch off the source HEAD and seed its working tree (when copyDirty), validating any source-Group inheritance intent while minting no session and launching no terminal so Station can host the inherited harness itself. A selected launch harness is preflighted before mutation. No live-agent guard on the source — the seed is a read-only snapshot.",
+      "purpose": "Worktree-only half of session.fork: branch off the source HEAD and seed its working tree (when copyDirty), validating any source-Group inheritance intent while minting no session and launching no terminal so Station can host the inherited harness itself. A selected launch harness is preflighted before mutation. No live-agent guard on the source — the seed is a read-only snapshot. Success returns the exact project and forked-worktree identities.",
       "dependencies": []
     },
     {
@@ -15752,7 +15845,7 @@
       "declaration": "CommandJournal",
       "kind": "interface",
       "role": "DRIVEN PORT",
-      "purpose": "Preserves the durable lifecycle and diagnostic history of Observer commands.",
+      "purpose": "Preserves durable Observer command lifecycle, diagnostic history, and typed success results before terminal completion is observable.",
       "dependencies": []
     },
     {
@@ -17295,7 +17388,7 @@
       "declaration": "createObserverService",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Presents one build-pinned Observer protocol endpoint as the shared client service.",
+      "purpose": "Presents one build-pinned Observer protocol endpoint as the shared client service and preserves durable command results loaded at terminal completion.",
       "dependencies": [
         {
           "path": "packages/contracts/src/observer.ts",

@@ -13,15 +13,20 @@ import { describe, expect, it, vi } from "vitest";
 import { executeObserverCommand } from "../../src/index.js";
 import { createCommandSnapshot, sessionGroup } from "../support/snapshots.js";
 
-const command: StationCommand = {
+const command = {
   type: "terminal.focus",
   payload: { sessionId: "ses_command" },
-};
+} as const satisfies StationCommand;
 
-const groupCommand: StationCommand = {
+const groupCommand = {
   type: "sessionGroup.create",
   payload: { projectId: "web", name: "Active work" },
-};
+} as const satisfies StationCommand;
+
+const worktreeCommand = {
+  type: "worktree.create",
+  payload: { projectId: "web", branch: "feature/client-result" },
+} as const satisfies StationCommand;
 
 describe("executeObserverCommand", () => {
   it("normalizes rejection without waiting", async () => {
@@ -58,10 +63,25 @@ describe("executeObserverCommand", () => {
   });
 
   it("normalizes successful and failed completion exactly once", async () => {
-    const succeeded = commandService();
-    await expect(executeObserverCommand(succeeded, command)).resolves.toMatchObject({
+    const succeeded = commandService({
+      completion: {
+        status: "succeeded",
+        commandId: "cmd_accepted",
+        result: {
+          type: "worktree.create",
+          projectId: "web",
+          worktreeId: "wt_client_result",
+        },
+      },
+    });
+    await expect(executeObserverCommand(succeeded, worktreeCommand)).resolves.toMatchObject({
       status: "succeeded",
       receipt: { commandId: "cmd_accepted" },
+      result: {
+        type: "worktree.create",
+        projectId: "web",
+        worktreeId: "wt_client_result",
+      },
     });
     expect(succeeded.dispatch).toHaveBeenCalledTimes(1);
     expect(succeeded.waitForCommandCompletion).toHaveBeenCalledTimes(1);
@@ -87,11 +107,94 @@ describe("executeObserverCommand", () => {
     expect(failed.loadSnapshot).not.toHaveBeenCalled();
   });
 
-  it("loads canonical state after accepted Group terminal outcomes", async () => {
-    const succeeded = commandService();
-    await expect(executeObserverCommand(succeeded, groupCommand)).resolves.toMatchObject({
-      status: "succeeded",
+  it("rejects a completion result for a different command before updating the client", async () => {
+    const service = commandService({
+      completion: {
+        status: "succeeded",
+        commandId: "cmd_accepted",
+        result: {
+          type: "worktree.create",
+          projectId: "web",
+          worktreeId: "wt_unrelated",
+        },
+      },
+    });
+
+    await expect(executeObserverCommand(service, command)).resolves.toEqual({
+      status: "thrown",
+      receipt: { accepted: true, status: "accepted", commandId: "cmd_accepted" },
+      error: {
+        tag: "ClientObserverError",
+        code: "CLIENT_COMMAND_COMPLETION_MISMATCH",
+        message: "The observer returned completion that did not match the dispatched command.",
+        hint: "Refresh Station before retrying the operation.",
+        commandId: "cmd_accepted",
+      },
+    });
+    expect(service.loadSnapshot).not.toHaveBeenCalled();
+  });
+
+  it("rejects completion for another command id before updating the client", async () => {
+    const service = commandService({
+      completion: { status: "succeeded", commandId: "cmd_other" },
+    });
+
+    await expect(executeObserverCommand(service, command)).resolves.toMatchObject({
+      status: "thrown",
       receipt: { commandId: "cmd_accepted" },
+      error: {
+        code: "CLIENT_COMMAND_COMPLETION_MISMATCH",
+        commandId: "cmd_accepted",
+      },
+    });
+    expect(service.loadSnapshot).not.toHaveBeenCalled();
+  });
+
+  it("rejects malformed completion data before updating the client", async () => {
+    const malformedCompletion = {
+      status: "succeeded",
+      commandId: "cmd_accepted",
+      result: {
+        type: "worktree.create",
+        projectId: "web",
+        worktreeId: 42,
+      },
+    } as unknown as StationClientCommandCompletion;
+    const service = commandService({ completion: malformedCompletion });
+
+    await expect(executeObserverCommand(service, worktreeCommand)).resolves.toMatchObject({
+      status: "thrown",
+      receipt: { commandId: "cmd_accepted" },
+      error: {
+        code: "CLIENT_COMMAND_COMPLETION_MISMATCH",
+        commandId: "cmd_accepted",
+      },
+    });
+    expect(service.loadSnapshot).not.toHaveBeenCalled();
+  });
+
+  it("loads canonical state after accepted Group terminal outcomes", async () => {
+    const succeeded = commandService({
+      completion: {
+        status: "succeeded",
+        commandId: "cmd_accepted",
+        result: {
+          type: "sessionGroup.create",
+          projectId: "web",
+          groupId: "grp_created",
+          version: 1,
+        },
+      },
+    });
+    await expect(executeObserverCommand(succeeded, groupCommand)).resolves.toEqual({
+      status: "succeeded",
+      receipt: { accepted: true, status: "accepted", commandId: "cmd_accepted" },
+      result: {
+        type: "sessionGroup.create",
+        projectId: "web",
+        groupId: "grp_created",
+        version: 1,
+      },
     });
     expect(succeeded.loadSnapshot).toHaveBeenCalledTimes(1);
     expect(succeeded.waitForCommandCompletion.mock.invocationCallOrder[0]).toBeLessThan(

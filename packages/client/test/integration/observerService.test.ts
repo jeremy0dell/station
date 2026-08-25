@@ -303,13 +303,18 @@ describe("observer client service", () => {
     const service = createObserverService({
       client: fakeClient({
         waitForCommand: async (commandId) =>
-          commandRecord(commandId, "succeeded") as TerminalCommandRecord,
+          resultCommandRecord(commandId) as TerminalCommandRecord,
       }),
     });
 
     await expect(service.waitForCommandCompletion("cmd_done")).resolves.toEqual({
       status: "succeeded",
       commandId: "cmd_done",
+      result: {
+        type: "worktree.create",
+        projectId: "web",
+        worktreeId: "wt_client_result",
+      },
     });
   });
 
@@ -708,6 +713,26 @@ function commandRecord(commandId: CommandId, status: CommandRecord["status"]): C
     };
   }
   return record;
+}
+
+function resultCommandRecord(commandId: CommandId): CommandRecord {
+  return {
+    id: commandId,
+    type: "worktree.create",
+    command: {
+      type: "worktree.create",
+      payload: { projectId: "web", branch: "client-result" },
+    },
+    status: "succeeded",
+    createdAt: fixtureNow,
+    startedAt: fixtureNow,
+    finishedAt: fixtureNow,
+    result: {
+      type: "worktree.create",
+      projectId: "web",
+      worktreeId: "wt_client_result",
+    },
+  };
 }
 
 function ids(prefix: string): () => string {

@@ -13,10 +13,12 @@ export function completionFromTerminalRecord(
   record: TerminalCommandRecord,
 ): StationClientCommandCompletion {
   if (record.status === "succeeded") {
-    return {
+    const completion: StationClientCommandCompletion = {
       status: "succeeded",
       commandId: record.id,
     };
+    if (record.result !== undefined) completion.result = record.result;
+    return completion;
   }
   return {
     status: "failed",

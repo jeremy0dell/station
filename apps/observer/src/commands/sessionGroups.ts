@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type {
   SafeError,
+  SessionGroupCreateCommandResult,
   SessionGroupId,
   SessionGroupView,
   StationCommand,
@@ -18,7 +19,12 @@ import {
   sessionGroupMissingError,
   sessionGroupProjectMismatchError,
 } from "./errors.js";
-import type { CommandHandler, CommandHandlerContext } from "./queue.js";
+import type {
+  CommandHandler,
+  CommandHandlerContext,
+  CommandResultHandler,
+  ObserverCommandHandlers,
+} from "./queue.js";
 
 type SessionGroupCommand = Extract<StationCommand, { type: `sessionGroup.${string}` }>;
 
@@ -37,15 +43,20 @@ export type CreateSessionGroupCommandHandlersOptions = {
 /**
  * USE CASE
  *
- * Validates, durably mutates, projects, and publishes project-local Session Group intent.
+ * Validates, durably mutates, projects, and publishes project-local Session Group
+ * intent, returning the exact identity and version created by create commands.
  */
 export function createSessionGroupCommandHandlers(
   options: CreateSessionGroupCommandHandlersOptions,
-): Record<SessionGroupCommand["type"], CommandHandler> {
+): Pick<ObserverCommandHandlers, SessionGroupCommand["type"]> {
   const sessionGroupId = options.idFactory?.sessionGroupId ?? (() => `grp_${randomUUID()}`);
-  const handle: CommandHandler = async (context) => {
+  const handle = async (
+    context: CommandHandlerContext,
+  ): Promise<SessionGroupCreateCommandResult | undefined> => {
     const command = sessionGroupCommand(context);
     const projectId = command.payload.projectId;
+    const createdGroupId = command.type === "sessionGroup.create" ? sessionGroupId() : undefined;
+    let createdResult: SessionGroupCreateCommandResult | undefined;
     const events: Array<
       Extract<StationEvent, { type: "sessionGroup.updated" | "sessionGroup.removed" }>
     > = [];
@@ -71,10 +82,22 @@ export function createSessionGroupCommandHandlers(
         command,
         persistence: options.persistence,
         at,
-        sessionGroupId,
+        ...(createdGroupId === undefined ? {} : { createdGroupId }),
       });
       if (!result.ok) {
         throw sessionGroupConflict(result.reason, command);
+      }
+      if (command.type === "sessionGroup.create" && createdGroupId !== undefined) {
+        const created = result.groups.find((group) => group.id === createdGroupId);
+        if (created === undefined) {
+          throw createdSessionGroupMissingError(projectId);
+        }
+        createdResult = {
+          type: "sessionGroup.create",
+          projectId,
+          groupId: created.id,
+          version: created.version,
+        };
       }
 
       for (const group of result.groups) {
@@ -111,14 +134,26 @@ export function createSessionGroupCommandHandlers(
     for (const event of events) {
       options.eventBus?.publish(event);
     }
+    return createdResult;
+  };
+
+  const handleCreate: CommandResultHandler<"sessionGroup.create"> = async (context) => {
+    const result = await handle(context);
+    if (result === undefined) {
+      throw createdSessionGroupMissingError(sessionGroupCommand(context).payload.projectId);
+    }
+    return result;
+  };
+  const handleWithoutResult: CommandHandler = async (context) => {
+    await handle(context);
   };
 
   return {
-    "sessionGroup.create": handle,
-    "sessionGroup.rename": handle,
-    "sessionGroup.updateMembership": handle,
-    "sessionGroup.reparent": handle,
-    "sessionGroup.delete": handle,
+    "sessionGroup.create": handleCreate,
+    "sessionGroup.rename": handleWithoutResult,
+    "sessionGroup.updateMembership": handleWithoutResult,
+    "sessionGroup.reparent": handleWithoutResult,
+    "sessionGroup.delete": handleWithoutResult,
   };
 }
 
@@ -139,13 +174,16 @@ async function mutateSessionGroups(input: {
   command: SessionGroupCommand;
   persistence: SessionGroupStore;
   at: string;
-  sessionGroupId: () => SessionGroupId;
+  createdGroupId?: SessionGroupId;
 }) {
   const { command, persistence, at } = input;
   switch (command.type) {
     case "sessionGroup.create": {
+      if (input.createdGroupId === undefined) {
+        throw createdSessionGroupMissingError(command.payload.projectId);
+      }
       const createInput: Parameters<SessionGroupStore["createSessionGroup"]>[0] = {
-        id: input.sessionGroupId(),
+        id: input.createdGroupId,
         projectId: command.payload.projectId,
         name: command.payload.name,
         createdAt: at,
@@ -204,6 +242,15 @@ async function mutateSessionGroups(input: {
         updatedAt: at,
       });
   }
+}
+
+function createdSessionGroupMissingError(projectId: string): SafeError {
+  return {
+    tag: "CommandExecutionError",
+    code: "SESSION_GROUP_CREATE_RESULT_MISSING",
+    message: "The Session Group store did not return the created Group.",
+    projectId,
+  };
 }
 
 function validateReparentCommand(

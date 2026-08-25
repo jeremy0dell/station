@@ -1,6 +1,6 @@
 import { isAbsolute } from "node:path";
 import { z } from "zod";
-import type { TerminalFocusOrigin } from "./commands.js";
+import type { TerminalFocusOrigin } from "./commands/terminal.js";
 import type { SafeError } from "./errors.js";
 import { SafeErrorSchema } from "./errors.js";
 import type { HarnessRunId, ProviderId, SessionId, TerminalTargetId, WorktreeId } from "./ids.js";
