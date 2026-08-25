@@ -33,6 +33,8 @@ import {
   commitExpectedObserverHealthServerProtocolDiagnostic,
   completeExpectedObserverHealthServerProtocolDiagnostic,
   type ExpectedObserverHealthServerProtocolDiagnostic,
+  IDLE_RESPONSE_DELIVERY_REQUEST_ID_PREFIX,
+  markIdleResponseDeliveryServerProtocolPhase,
   markPrepareExternalLaunchServerProtocolPhase,
 } from "./prepareExternalLaunchPhaseDiagnostic.js";
 import { listenUnixSocket, type NdjsonConnection, type UnixSocketServer } from "./transport.js";
@@ -85,6 +87,12 @@ async function handleConnection(
       if (request.data.method === "observer.health" && request.data.id.endsWith("_health")) {
         expectedObserverHealthDiagnostic = beginExpectedObserverHealthServerProtocolDiagnostic();
       }
+      const diagnoseIdleResponseDelivery =
+        request.data.method === "observer.health" &&
+        request.data.id.startsWith(IDLE_RESPONSE_DELIVERY_REQUEST_ID_PREFIX);
+      if (diagnoseIdleResponseDelivery) {
+        markIdleResponseDeliveryServerProtocolPhase("requestParsed");
+      }
       if (request.data.method === "agent.prepareExternalLaunch") {
         commitExpectedObserverHealthServerProtocolDiagnostic(expectedObserverHealthDiagnostic);
         expectedObserverHealthDiagnostic = undefined;
@@ -102,6 +110,7 @@ async function handleConnection(
                 expectedObserverHealthDiagnostic,
               )
           : undefined,
+        diagnoseIdleResponseDelivery,
       );
     }
   } catch {
@@ -116,6 +125,7 @@ async function routeRequest(
   requestTimeoutMs: number,
   requestGuard: ((method: ProtocolMethod) => void) | undefined,
   onExpectedObserverHealthResponseSent?: () => void,
+  diagnoseIdleResponseDelivery = false,
 ): Promise<void> {
   try {
     requestGuard?.(request.method);
@@ -130,6 +140,8 @@ async function routeRequest(
 
   if (request.method === "agent.prepareExternalLaunch") {
     markPrepareExternalLaunchServerProtocolPhase("prepareHandlerStarted");
+  } else if (diagnoseIdleResponseDelivery) {
+    markIdleResponseDeliveryServerProtocolPhase("handlerStarted");
   }
 
   const timeoutMs = protocolHandlerTimeoutMs(request.method, requestTimeoutMs);
@@ -155,12 +167,16 @@ async function routeRequest(
   }
   if (request.method === "agent.prepareExternalLaunch") {
     markPrepareExternalLaunchServerProtocolPhase("prepareHandlerCompleted");
+  } else if (diagnoseIdleResponseDelivery) {
+    markIdleResponseDeliveryServerProtocolPhase("handlerCompleted");
   }
   try {
-    sendResult(connection, request.id, request.method, result.value);
+    sendResult(connection, request.id, request.method, result.value, diagnoseIdleResponseDelivery);
     onExpectedObserverHealthResponseSent?.();
     if (request.method === "agent.prepareExternalLaunch") {
       markPrepareExternalLaunchServerProtocolPhase("prepareResponseSent");
+    } else if (diagnoseIdleResponseDelivery) {
+      markIdleResponseDeliveryServerProtocolPhase("responseSent");
     }
   } catch (error) {
     connection.send(
@@ -284,10 +300,13 @@ function sendResult(
   id: string,
   method: ProtocolMethod,
   value: unknown,
+  diagnoseIdleResponseDelivery = false,
 ): void {
   const response = protocolSuccessResponse(id, method, value);
   if (method === "agent.prepareExternalLaunch") {
     markPrepareExternalLaunchServerProtocolPhase("prepareResponseConstructed");
+  } else if (diagnoseIdleResponseDelivery) {
+    markIdleResponseDeliveryServerProtocolPhase("responseConstructed");
   }
   connection.send(response);
 }
