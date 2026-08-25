@@ -7,6 +7,10 @@ import type { SafeError } from "@station/contracts";
 import { isSafeError, runRuntimeBoundary, runRuntimeBoundaryWithTimeout } from "@station/runtime";
 import { z } from "zod";
 import { protocolSafeError } from "./messages.js";
+import {
+  markPrepareExternalLaunchClientProtocolPhase,
+  prepareExternalLaunchClientProtocolDiagnosticEnabled,
+} from "./prepareExternalLaunchPhaseDiagnostic.js";
 import { unwrapBoundaryResult } from "./runtime.js";
 
 const DEFAULT_SOCKET_PROBE_TIMEOUT_MS = 1000;
@@ -17,6 +21,8 @@ const ErrorCodeSchema = z.object({ code: z.string() });
 export type NdjsonConnection = {
   send(value: unknown): void;
   messages(): AsyncIterable<unknown>;
+  /** Arms exit-only timing for the next real-socket response without changing delivery. */
+  armPrepareExternalLaunchResponseDeliveryDiagnostic(): void;
   close(): void;
   readonly closed: Promise<void>;
 };
@@ -369,20 +375,32 @@ function ndjsonConnection(socket: Socket): NdjsonConnection {
   const closed = new Promise<void>((resolve) => {
     closedResolve = resolve;
   });
-  const messages: unknown[] = [];
+  const messages: Array<{ value: unknown; responseDeliveryDiagnostic: boolean }> = [];
   const waiters: Array<() => void> = [];
   let done = false;
   let streamError: Error | undefined;
+  let responseDeliveryDiagnosticActive = false;
+  let responseDataCallbackRecorded = false;
 
   // Socket data is push-based, while callers consume a pull-based AsyncIterable.
   // Parsed frames queue in messages; waiters wake consumers blocked on next().
-  const wake = () => {
+  const wake = (diagnoseResponseDelivery = false) => {
+    if (diagnoseResponseDelivery) {
+      markPrepareExternalLaunchClientProtocolPhase("responseWaiterResolutionStarted");
+    }
     while (waiters.length > 0) {
       waiters.shift()?.();
+    }
+    if (diagnoseResponseDelivery) {
+      markPrepareExternalLaunchClientProtocolPhase("responseWaiterResolutionCompleted");
     }
   };
 
   socket.on("data", (chunk) => {
+    if (responseDeliveryDiagnosticActive && !responseDataCallbackRecorded) {
+      responseDataCallbackRecorded = true;
+      markPrepareExternalLaunchClientProtocolPhase("responseSocketDataCallbackEntered");
+    }
     buffer += chunk;
     for (;;) {
       const newline = buffer.indexOf("\n");
@@ -395,14 +413,25 @@ function ndjsonConnection(socket: Socket): NdjsonConnection {
         continue;
       }
       try {
-        messages.push(JSON.parse(line));
+        const diagnoseResponseDelivery = responseDeliveryDiagnosticActive;
+        if (diagnoseResponseDelivery) {
+          markPrepareExternalLaunchClientProtocolPhase("responseFrameExtracted");
+        }
+        const value: unknown = JSON.parse(line);
+        if (diagnoseResponseDelivery) {
+          markPrepareExternalLaunchClientProtocolPhase("responseJsonParsed");
+        }
+        messages.push({ value, responseDeliveryDiagnostic: diagnoseResponseDelivery });
+        if (diagnoseResponseDelivery) {
+          markPrepareExternalLaunchClientProtocolPhase("responseQueued");
+        }
       } catch (error) {
         // A malformed frame poisons the stream so the generator surfaces the parse error.
         streamError = error instanceof Error ? error : new Error("Invalid NDJSON frame.");
         socket.destroy(streamError);
       }
     }
-    wake();
+    wake(responseDeliveryDiagnosticActive);
   });
 
   socket.on("error", (error) => {
@@ -421,10 +450,23 @@ function ndjsonConnection(socket: Socket): NdjsonConnection {
     send: (value) => {
       socket.write(`${JSON.stringify(value)}\n`);
     },
+    armPrepareExternalLaunchResponseDeliveryDiagnostic: () => {
+      if (prepareExternalLaunchClientProtocolDiagnosticEnabled()) {
+        responseDeliveryDiagnosticActive = true;
+        responseDataCallbackRecorded = false;
+        markPrepareExternalLaunchClientProtocolPhase("responseDeliveryDiagnosticArmed");
+      }
+    },
     messages: async function* () {
       for (;;) {
         if (messages.length > 0) {
-          yield messages.shift();
+          const message = messages.shift();
+          if (message?.responseDeliveryDiagnostic === true) {
+            markPrepareExternalLaunchClientProtocolPhase("responseDequeued");
+            markPrepareExternalLaunchClientProtocolPhase("responseYieldStarted");
+            responseDeliveryDiagnosticActive = false;
+          }
+          yield message?.value;
           continue;
         }
         if (streamError !== undefined) {
@@ -433,9 +475,15 @@ function ndjsonConnection(socket: Socket): NdjsonConnection {
         if (done) {
           return;
         }
+        if (responseDeliveryDiagnosticActive) {
+          markPrepareExternalLaunchClientProtocolPhase("responseIteratorWaitStarted");
+        }
         await new Promise<void>((resolve) => {
           waiters.push(resolve);
         });
+        if (responseDeliveryDiagnosticActive) {
+          markPrepareExternalLaunchClientProtocolPhase("responseIteratorWaitResumed");
+        }
       }
     },
     close: () => {
@@ -514,6 +562,7 @@ function inMemoryEndpoint(incoming: PassThrough, outgoing: PassThrough): NdjsonC
     send: (value) => {
       outgoing.write(`${JSON.stringify(value)}\n`);
     },
+    armPrepareExternalLaunchResponseDeliveryDiagnostic: () => undefined,
     messages: async function* () {
       for (;;) {
         if (queue.length > 0) {
