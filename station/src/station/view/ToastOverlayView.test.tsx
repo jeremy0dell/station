@@ -200,6 +200,35 @@ describe("ToastOverlayView actions", () => {
     expect(fixture.frame()).not.toContain("[ copied ]");
   });
 
+  it("keeps copied feedback and dismissal inside the notice frame", async () => {
+    const fixture = await renderNotice();
+    const surface = fixture.setup.renderer.root.findDescendantById("station-toast-surface");
+    expect(surface).toBeDefined();
+    if (surface === undefined) {
+      throw new Error("toast surface must render");
+    }
+    const copy = cellFor(fixture.frame(), "[ copy ]");
+
+    await act(async () => {
+      await fixture.setup.mockMouse.click(copy.col, copy.row, MouseButtons.LEFT);
+      await fixture.setup.flush();
+    });
+
+    const copiedFrame = fixture.frame();
+    const copiedHeader = renderableGolden(copiedFrame, surface)
+      .split("\n")
+      .find((line) => line.includes("[ copied ]"));
+    expect(copiedHeader).toBeDefined();
+    expect(copiedHeader?.startsWith("│")).toBe(true);
+    expect(copiedHeader?.endsWith("│")).toBe(true);
+    expect(copiedHeader).toContain("[ dismiss ]");
+
+    const dismiss = cellFor(copiedFrame, "[ dismiss ]");
+    expect(dismiss.col + cellWidth("[ dismiss ]")).toBeLessThanOrEqual(
+      surface.x + surface.width - 2,
+    );
+  });
+
   it("keeps hover feedback and dismissal isolated to the dismiss control", async () => {
     const fixture = await renderNotice();
     const dismiss = cellFor(fixture.frame(), "[ dismiss ]");

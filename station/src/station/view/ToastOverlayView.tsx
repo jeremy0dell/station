@@ -169,9 +169,13 @@ function toastHeaderModel(width: number, title: string): ToastHeaderModel {
     cellWidth(title) + cellWidth(full.copiedLabel) + cellWidth(full.dismissLabel) <= innerWidth
       ? full
       : compact;
+  const copyControlWidth = Math.max(
+    cellWidth(controls.copyLabel),
+    cellWidth(controls.copiedLabel),
+  );
   const titleWidth = Math.max(
     1,
-    innerWidth - cellWidth(controls.copyLabel) - cellWidth(controls.dismissLabel),
+    innerWidth - copyControlWidth - cellWidth(controls.dismissLabel),
   );
   return {
     title: truncateCells(title, titleWidth),

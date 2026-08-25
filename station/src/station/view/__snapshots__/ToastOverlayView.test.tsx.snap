@@ -2,7 +2,7 @@
 
 exports[`ToastOverlayView actions renders a complete standard-size notice frame 1`] = `
 "┌──────────────────────────────────────────────────────────────────────┐
-│ needs attention                                  [ copy ][ dismiss ] │
+│ needs attention                                [ copy ][ dismiss ]   │
 │ The Station timed out while waiting for command completion.          │
 │ trace trace_command_timeout_123                                      │
 └──────────────────────────────────────────────────────────────────────┘"
