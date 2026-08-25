@@ -28,6 +28,7 @@ import {
   SessionCurrentParamsSchema,
   SnapshotGetParamsSchema,
 } from "./messages.js";
+import { markPrepareExternalLaunchServerProtocolPhase } from "./prepareExternalLaunchPhaseDiagnostic.js";
 import { listenUnixSocket, type NdjsonConnection, type UnixSocketServer } from "./transport.js";
 
 const defaultRequestTimeoutMs = 5000;
@@ -74,6 +75,9 @@ async function handleConnection(
         connection.send(errorResponse(requestId(message), "Invalid protocol request."));
         continue;
       }
+      if (request.data.method === "agent.prepareExternalLaunch") {
+        markPrepareExternalLaunchServerProtocolPhase("prepareRequestParsed");
+      }
       await routeRequest(connection, api, request.data, requestTimeoutMs, requestGuard);
     }
   } catch {
@@ -99,6 +103,10 @@ async function routeRequest(
     return;
   }
 
+  if (request.method === "agent.prepareExternalLaunch") {
+    markPrepareExternalLaunchServerProtocolPhase("prepareHandlerStarted");
+  }
+
   const timeoutMs = protocolHandlerTimeoutMs(request.method, requestTimeoutMs);
   const result = await runRuntimeBoundaryWithTimeout(
     {
@@ -120,8 +128,14 @@ async function routeRequest(
     connection.send(errorResponse(request.id, "Observer protocol method failed.", result.error));
     return;
   }
+  if (request.method === "agent.prepareExternalLaunch") {
+    markPrepareExternalLaunchServerProtocolPhase("prepareHandlerCompleted");
+  }
   try {
     sendResult(connection, request.id, request.method, result.value);
+    if (request.method === "agent.prepareExternalLaunch") {
+      markPrepareExternalLaunchServerProtocolPhase("prepareResponseSent");
+    }
   } catch (error) {
     connection.send(
       errorResponse(request.id, "Observer protocol response validation failed.", error),
@@ -191,8 +205,11 @@ async function routeSingleResponseRequest(
         return await api.reportHarnessEvent(params.report);
       }
       case "agent.prepareExternalLaunch": {
+        markPrepareExternalLaunchServerProtocolPhase("prepareUseCaseDispatchStarted");
         const params = AgentPrepareExternalLaunchParamsSchema.parse(request.params);
-        return await api.prepareExternalLaunch(params);
+        const result = await api.prepareExternalLaunch(params);
+        markPrepareExternalLaunchServerProtocolPhase("prepareUseCaseDispatchCompleted");
+        return result;
       }
       case "agent.reportExternalExit": {
         const params = AgentReportExternalExitParamsSchema.parse(request.params);
