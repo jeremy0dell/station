@@ -8,8 +8,9 @@ import { isSafeError, runRuntimeBoundary, runRuntimeBoundaryWithTimeout } from "
 import { z } from "zod";
 import { protocolSafeError } from "./messages.js";
 import {
-  markPrepareExternalLaunchClientProtocolPhase,
+  markResponseDeliveryClientProtocolPhase,
   prepareExternalLaunchClientProtocolDiagnosticEnabled,
+  type ResponseDeliveryDiagnosticScope,
 } from "./prepareExternalLaunchPhaseDiagnostic.js";
 import { unwrapBoundaryResult } from "./runtime.js";
 
@@ -21,8 +22,10 @@ const ErrorCodeSchema = z.object({ code: z.string() });
 export type NdjsonConnection = {
   send(value: unknown): void;
   messages(): AsyncIterable<unknown>;
-  /** Arms exit-only timing for the next real-socket response without changing delivery. */
+  /** Arms exit-only active timing for the next real-socket response without changing delivery. */
   armPrepareExternalLaunchResponseDeliveryDiagnostic(): void;
+  /** Arms exit-only idle timing for the next real-socket response without changing delivery. */
+  armIdleResponseDeliveryDiagnostic(): void;
   close(): void;
   readonly closed: Promise<void>;
 };
@@ -375,31 +378,37 @@ function ndjsonConnection(socket: Socket): NdjsonConnection {
   const closed = new Promise<void>((resolve) => {
     closedResolve = resolve;
   });
-  const messages: Array<{ value: unknown; responseDeliveryDiagnostic: boolean }> = [];
+  const messages: Array<{
+    value: unknown;
+    responseDeliveryDiagnosticScope?: ResponseDeliveryDiagnosticScope;
+  }> = [];
   const waiters: Array<() => void> = [];
   let done = false;
   let streamError: Error | undefined;
-  let responseDeliveryDiagnosticActive = false;
+  let responseDeliveryDiagnosticScope: ResponseDeliveryDiagnosticScope | undefined;
   let responseDataCallbackRecorded = false;
 
   // Socket data is push-based, while callers consume a pull-based AsyncIterable.
   // Parsed frames queue in messages; waiters wake consumers blocked on next().
-  const wake = (diagnoseResponseDelivery = false) => {
-    if (diagnoseResponseDelivery) {
-      markPrepareExternalLaunchClientProtocolPhase("responseWaiterResolutionStarted");
+  const wake = (scope?: ResponseDeliveryDiagnosticScope) => {
+    if (scope !== undefined) {
+      markResponseDeliveryClientProtocolPhase(scope, "responseWaiterResolutionStarted");
     }
     while (waiters.length > 0) {
       waiters.shift()?.();
     }
-    if (diagnoseResponseDelivery) {
-      markPrepareExternalLaunchClientProtocolPhase("responseWaiterResolutionCompleted");
+    if (scope !== undefined) {
+      markResponseDeliveryClientProtocolPhase(scope, "responseWaiterResolutionCompleted");
     }
   };
 
   socket.on("data", (chunk) => {
-    if (responseDeliveryDiagnosticActive && !responseDataCallbackRecorded) {
+    if (responseDeliveryDiagnosticScope !== undefined && !responseDataCallbackRecorded) {
       responseDataCallbackRecorded = true;
-      markPrepareExternalLaunchClientProtocolPhase("responseSocketDataCallbackEntered");
+      markResponseDeliveryClientProtocolPhase(
+        responseDeliveryDiagnosticScope,
+        "responseSocketDataCallbackEntered",
+      );
     }
     buffer += chunk;
     for (;;) {
@@ -413,17 +422,21 @@ function ndjsonConnection(socket: Socket): NdjsonConnection {
         continue;
       }
       try {
-        const diagnoseResponseDelivery = responseDeliveryDiagnosticActive;
-        if (diagnoseResponseDelivery) {
-          markPrepareExternalLaunchClientProtocolPhase("responseFrameExtracted");
+        const diagnosticScope = responseDeliveryDiagnosticScope;
+        if (diagnosticScope !== undefined) {
+          markResponseDeliveryClientProtocolPhase(diagnosticScope, "responseFrameExtracted");
         }
         const value: unknown = JSON.parse(line);
-        if (diagnoseResponseDelivery) {
-          markPrepareExternalLaunchClientProtocolPhase("responseJsonParsed");
+        if (diagnosticScope !== undefined) {
+          markResponseDeliveryClientProtocolPhase(diagnosticScope, "responseJsonParsed");
         }
-        messages.push({ value, responseDeliveryDiagnostic: diagnoseResponseDelivery });
-        if (diagnoseResponseDelivery) {
-          markPrepareExternalLaunchClientProtocolPhase("responseQueued");
+        const message =
+          diagnosticScope === undefined
+            ? { value }
+            : { value, responseDeliveryDiagnosticScope: diagnosticScope };
+        messages.push(message);
+        if (diagnosticScope !== undefined) {
+          markResponseDeliveryClientProtocolPhase(diagnosticScope, "responseQueued");
         }
       } catch (error) {
         // A malformed frame poisons the stream so the generator surfaces the parse error.
@@ -431,7 +444,7 @@ function ndjsonConnection(socket: Socket): NdjsonConnection {
         socket.destroy(streamError);
       }
     }
-    wake(responseDeliveryDiagnosticActive);
+    wake(responseDeliveryDiagnosticScope);
   });
 
   socket.on("error", (error) => {
@@ -452,19 +465,32 @@ function ndjsonConnection(socket: Socket): NdjsonConnection {
     },
     armPrepareExternalLaunchResponseDeliveryDiagnostic: () => {
       if (prepareExternalLaunchClientProtocolDiagnosticEnabled()) {
-        responseDeliveryDiagnosticActive = true;
+        responseDeliveryDiagnosticScope = "active";
         responseDataCallbackRecorded = false;
-        markPrepareExternalLaunchClientProtocolPhase("responseDeliveryDiagnosticArmed");
+        markResponseDeliveryClientProtocolPhase("active", "responseDeliveryDiagnosticArmed");
+      }
+    },
+    armIdleResponseDeliveryDiagnostic: () => {
+      if (prepareExternalLaunchClientProtocolDiagnosticEnabled()) {
+        responseDeliveryDiagnosticScope = "idle";
+        responseDataCallbackRecorded = false;
+        markResponseDeliveryClientProtocolPhase("idle", "responseDeliveryDiagnosticArmed");
       }
     },
     messages: async function* () {
       for (;;) {
         if (messages.length > 0) {
           const message = messages.shift();
-          if (message?.responseDeliveryDiagnostic === true) {
-            markPrepareExternalLaunchClientProtocolPhase("responseDequeued");
-            markPrepareExternalLaunchClientProtocolPhase("responseYieldStarted");
-            responseDeliveryDiagnosticActive = false;
+          if (message?.responseDeliveryDiagnosticScope !== undefined) {
+            markResponseDeliveryClientProtocolPhase(
+              message.responseDeliveryDiagnosticScope,
+              "responseDequeued",
+            );
+            markResponseDeliveryClientProtocolPhase(
+              message.responseDeliveryDiagnosticScope,
+              "responseYieldStarted",
+            );
+            responseDeliveryDiagnosticScope = undefined;
           }
           yield message?.value;
           continue;
@@ -475,14 +501,20 @@ function ndjsonConnection(socket: Socket): NdjsonConnection {
         if (done) {
           return;
         }
-        if (responseDeliveryDiagnosticActive) {
-          markPrepareExternalLaunchClientProtocolPhase("responseIteratorWaitStarted");
+        if (responseDeliveryDiagnosticScope !== undefined) {
+          markResponseDeliveryClientProtocolPhase(
+            responseDeliveryDiagnosticScope,
+            "responseIteratorWaitStarted",
+          );
         }
         await new Promise<void>((resolve) => {
           waiters.push(resolve);
         });
-        if (responseDeliveryDiagnosticActive) {
-          markPrepareExternalLaunchClientProtocolPhase("responseIteratorWaitResumed");
+        if (responseDeliveryDiagnosticScope !== undefined) {
+          markResponseDeliveryClientProtocolPhase(
+            responseDeliveryDiagnosticScope,
+            "responseIteratorWaitResumed",
+          );
         }
       }
     },
@@ -563,6 +595,7 @@ function inMemoryEndpoint(incoming: PassThrough, outgoing: PassThrough): NdjsonC
       outgoing.write(`${JSON.stringify(value)}\n`);
     },
     armPrepareExternalLaunchResponseDeliveryDiagnostic: () => undefined,
+    armIdleResponseDeliveryDiagnostic: () => undefined,
     messages: async function* () {
       for (;;) {
         if (queue.length > 0) {

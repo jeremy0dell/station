@@ -1,6 +1,8 @@
 import { writeFileSync } from "node:fs";
 import { z } from "zod";
 
+export const IDLE_RESPONSE_DELIVERY_REQUEST_ID_PREFIX = "req_bench_047_idle_";
+
 export const prepareExternalLaunchClientProtocolDiagnosticPhases = [
   "protocolEntered",
   "boundaryTaskEntered",
@@ -41,8 +43,48 @@ export const prepareExternalLaunchServerProtocolDiagnosticPhases = [
   "prepareResponseSent",
 ] as const;
 
+export const idleResponseDeliveryClientProtocolDiagnosticPhases = [
+  "protocolEntered",
+  "boundaryTaskEntered",
+  "socketConnectStarted",
+  "socketConnected",
+  "requestStarted",
+  "responseDeliveryDiagnosticArmed",
+  "requestConstructed",
+  "requestSent",
+  "responseIteratorWaitStarted",
+  "responseSocketDataCallbackEntered",
+  "responseFrameExtracted",
+  "responseJsonParsed",
+  "responseQueued",
+  "responseWaiterResolutionStarted",
+  "responseWaiterResolutionCompleted",
+  "responseIteratorWaitResumed",
+  "responseDequeued",
+  "responseYieldStarted",
+  "responseFrameReceived",
+  "responseEnvelopeParsed",
+  "responseValidated",
+  "boundaryTaskCompleted",
+  "protocolCompleted",
+] as const;
+
+export const idleResponseDeliveryServerProtocolDiagnosticPhases = [
+  "requestParsed",
+  "handlerStarted",
+  "handlerCompleted",
+  "responseConstructed",
+  "responseSent",
+] as const;
+
 type ClientPhase = (typeof prepareExternalLaunchClientProtocolDiagnosticPhases)[number];
 type ServerPhase = (typeof prepareExternalLaunchServerProtocolDiagnosticPhases)[number];
+export type IdleResponseDeliveryClientPhase =
+  (typeof idleResponseDeliveryClientProtocolDiagnosticPhases)[number];
+export type IdleResponseDeliveryServerPhase =
+  (typeof idleResponseDeliveryServerProtocolDiagnosticPhases)[number];
+export type ResponseDeliveryDiagnosticScope = "active" | "idle";
+export type ResponseDeliveryClientPhase = Extract<IdleResponseDeliveryClientPhase, ClientPhase>;
 type DiagnosticEvent<TPhase extends string> = {
   phase: TPhase;
   atMs: number;
@@ -65,13 +107,23 @@ const clientPath = clientPathResult.success ? clientPathResult.data : undefined;
 const serverPath = serverPathResult.success ? serverPathResult.data : undefined;
 const clientEvents: DiagnosticEvent<ClientPhase>[] = [];
 const serverEvents: DiagnosticEvent<ServerPhase>[] = [];
+const idleClientEvents: DiagnosticEvent<IdleResponseDeliveryClientPhase>[] = [];
+const idleServerEvents: DiagnosticEvent<IdleResponseDeliveryServerPhase>[] = [];
 
 process.once("exit", () => {
-  if (clientPath !== undefined && clientEvents.length > 0) {
-    writeFileSync(clientPath, `${JSON.stringify({ events: clientEvents })}\n`, "utf8");
+  if (clientPath !== undefined && (clientEvents.length > 0 || idleClientEvents.length > 0)) {
+    const report = {
+      events: clientEvents,
+      ...(idleClientEvents.length === 0 ? {} : { idleEvents: idleClientEvents }),
+    };
+    writeFileSync(clientPath, `${JSON.stringify(report)}\n`, "utf8");
   }
-  if (serverPath !== undefined && serverEvents.length > 0) {
-    writeFileSync(serverPath, `${JSON.stringify({ events: serverEvents })}\n`, "utf8");
+  if (serverPath !== undefined && (serverEvents.length > 0 || idleServerEvents.length > 0)) {
+    const report = {
+      events: serverEvents,
+      ...(idleServerEvents.length === 0 ? {} : { idleEvents: idleServerEvents }),
+    };
+    writeFileSync(serverPath, `${JSON.stringify(report)}\n`, "utf8");
   }
 });
 
@@ -88,6 +140,37 @@ export function markPrepareExternalLaunchClientProtocolPhase(phase: ClientPhase)
 
 export function prepareExternalLaunchClientProtocolDiagnosticEnabled(): boolean {
   return clientPath !== undefined;
+}
+
+export function markResponseDeliveryClientProtocolPhase(
+  scope: ResponseDeliveryDiagnosticScope,
+  phase: ResponseDeliveryClientPhase,
+): void {
+  if (scope === "active") {
+    markPrepareExternalLaunchClientProtocolPhase(phase);
+    return;
+  }
+  if (clientPath !== undefined) {
+    const atMs = performance.now();
+    idleClientEvents.push({ phase, atMs, epochMs: performance.timeOrigin + atMs });
+  }
+}
+
+export function markIdleResponseDeliveryClientProtocolPhase(
+  phase: IdleResponseDeliveryClientPhase,
+): void {
+  if (clientPath !== undefined) {
+    const atMs = performance.now();
+    idleClientEvents.push({ phase, atMs, epochMs: performance.timeOrigin + atMs });
+  }
+}
+
+export function markIdleResponseDeliveryServerProtocolPhase(
+  phase: IdleResponseDeliveryServerPhase,
+): void {
+  if (serverPath !== undefined) {
+    idleServerEvents.push({ phase, ...diagnosticTimestamp() });
+  }
 }
 
 export function markPrepareExternalLaunchServerProtocolPhase(phase: ServerPhase): void {
