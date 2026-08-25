@@ -1,5 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -10,10 +9,6 @@ import {
   parseNodePolicy,
   selectNodeExecutable,
 } from "../../scripts/run-dev-toolchain.mjs";
-import {
-  assertStationLauncherOwnership,
-  resolveBunGlobalBin,
-} from "../../scripts/unlink-station.mjs";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const internalDependencies = [
@@ -55,11 +50,13 @@ describe("Bun workspace policy", () => {
     expect(rootPackage.trustedDependencies).toEqual(["esbuild", "lefthook", "node-pty"]);
     expect(rootPackage.overrides).toEqual({ "@typescript/old": "npm:typescript@6.0.3" });
     expect(rootPackage.devDependencies.turbo).toBe("2.10.11");
-    // Bun normalizes package-bin modes during install/link, so admission is rechecked afterward.
+    // Recheck checkout/build integrity after publishing the fixed Station registry links.
     expect(rootPackage.scripts["station:link"]).toBe(
-      "bun run build:ensure && bun link && bun run build:ensure",
+      "bun run build:ensure && node scripts/station-link-registry.mjs link && bun run build:ensure",
     );
-    expect(rootPackage.scripts["station:unlink"]).toBe("node scripts/unlink-station.mjs");
+    expect(rootPackage.scripts["station:unlink"]).toBe(
+      "node scripts/station-link-registry.mjs unlink",
+    );
     expect(rootPackage.scripts["station:devbox"]).toBe(
       "bun scripts/run-dev-toolchain.mjs scripts/station-devbox.mjs",
     );
@@ -137,47 +134,6 @@ describe("Bun workspace policy", () => {
       "stn-tmux-popup": "./integrations/terminal/tmux/bin/stn-popup",
     });
     expect(tmuxPackage.bin).toBeUndefined();
-  });
-
-  it("refuses to unlink launchers claimed by another checkout", async () => {
-    const fixture = mkdtempSync(join(tmpdir(), "station-link-ownership-"));
-    try {
-      const checkoutA = join(fixture, "checkout-a");
-      const checkoutB = join(fixture, "checkout-b");
-      const globalBin = join(fixture, "global-bin");
-      const launchers = {
-        stn: join("bin", "stn"),
-        "stn-ingress": join("bin", "stn-ingress"),
-        "stn-tmux-popup": join("integrations", "terminal", "tmux", "bin", "stn-popup"),
-      };
-      mkdirSync(globalBin, { recursive: true });
-      for (const checkout of [checkoutA, checkoutB]) {
-        for (const target of Object.values(launchers)) {
-          const path = join(checkout, target);
-          mkdirSync(join(path, ".."), { recursive: true });
-          writeFileSync(path, "#!/bin/sh\n");
-        }
-      }
-      for (const [launcher, target] of Object.entries(launchers)) {
-        symlinkSync(join(checkoutA, target), join(globalBin, launcher));
-      }
-
-      await expect(assertStationLauncherOwnership(checkoutA, globalBin)).resolves.toBeUndefined();
-
-      rmSync(join(globalBin, "stn"));
-      symlinkSync(join(checkoutB, launchers.stn), join(globalBin, "stn"));
-      await expect(assertStationLauncherOwnership(checkoutA, globalBin)).rejects.toThrow(
-        "global launcher stn belongs to another checkout",
-      );
-    } finally {
-      rmSync(fixture, { recursive: true, force: true });
-    }
-  });
-
-  it("resolves Bun's global launcher directory without requiring a global package manifest", () => {
-    expect(resolveBunGlobalBin({ BUN_INSTALL_BIN: "/custom/bin" }, "/unused")).toBe("/custom/bin");
-    expect(resolveBunGlobalBin({ BUN_INSTALL: "/custom/bun" }, "/unused")).toBe("/custom/bun/bin");
-    expect(resolveBunGlobalBin({}, "/home/developer")).toBe("/home/developer/.bun/bin");
   });
 
   it("keeps install and script dispatch behavior centralized in bunfig", () => {

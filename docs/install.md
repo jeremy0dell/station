@@ -444,12 +444,16 @@ stn setup
 stn
 ```
 
-`bootstrap.sh` runs `brew bundle` (Node 24, Bun, Worktrunk, tmux, Hunk), one
-root `bun install`, `bun run build`, the retained `node-pty` helper repair, and
-`bun run station:link`. The final command uses Bun's link registry to expose
-`stn`, `stn-ingress`, and `stn-tmux-popup` while keeping them bound to this
-checkout. If you manage your own runtimes, the manual steps below are
-equivalent. See [Development](development.md) for the source workflow and
+`bootstrap.sh` runs `brew bundle` (Node 24, Bun, Worktrunk, tmux, Hunk), derives
+the exact Bun version from the root `packageManager` policy, and uses that
+version for the root install, build, retained `node-pty` helper repair, and
+`station:link`. The final command publishes only Station's package registration
+and the `stn`, `stn-ingress`, and `stn-tmux-popup` launchers in Bun's configured
+global directories. Link and unlink operations lock those directories and prove
+the exact checkout-owned symlinks before replacing or removing them; a stale
+Station lock must be inspected and removed manually only after confirming no
+link operation is active. If you manage your own runtimes, the manual steps
+below are equivalent. See [Development](development.md) for the source workflow and
 [Testing](../tests/README.md) for gate selection.
 
 ## Development Requirements

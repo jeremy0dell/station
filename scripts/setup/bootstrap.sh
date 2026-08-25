@@ -49,26 +49,36 @@ if prefix="$(brew --prefix node@24 2>/dev/null)" && [ -x "$prefix/bin/node" ]; t
   export PATH="$node24_bin:$PATH"
 fi
 
+required_bun_version="$(node "$repo_root/scripts/bun-version.mjs" --print)"
+# Homebrew provides the bootstrap executable; repository work always runs under
+# the exact packageManager version even after Homebrew's formula advances.
+bun_runtime=(bun x "bun@$required_bun_version")
+active_bun_version="$("${bun_runtime[@]}" --version)"
+if [[ "$active_bun_version" != "$required_bun_version" ]]; then
+  echo "Could not activate repository Bun $required_bun_version (found $active_bun_version)." >&2
+  exit 1
+fi
+
 step "Runtime versions"
 echo "  node $(node --version 2>/dev/null || echo 'MISSING')"
-echo "  bun  $(bun --version 2>/dev/null || echo 'MISSING')"
+echo "  bun  $active_bun_version (repository exact)"
 
 step "Installing workspace dependencies"
-bun install
+"${bun_runtime[@]}" install
 
 step "Building"
-bun run build
+"${bun_runtime[@]}" run build
 
 # node-pty is installed from the root graph, but its local native helper still
 # needs the existing repair pass before the source Host can use it.
 step "Repairing the Station native helper"
 (
   cd "$repo_root/station"
-  bun run repair:node-pty
+  "${bun_runtime[@]}" run repair:node-pty
 )
 
 step "Linking STATION launchers onto your PATH"
-bun run station:link
+"${bun_runtime[@]}" run station:link
 
 cat <<'EOF'
 
