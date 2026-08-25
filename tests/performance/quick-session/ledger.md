@@ -2082,3 +2082,28 @@ tests, Biome, `git diff --check`, the runner's skipped-mode compile, and a
 single strict standalone-probe smoke. No production optimization is registered
 until BENCH-046 passes every paired, stability, and product guard; an accepted
 result still requires an idle-native-TUI comparison before proposing a change.
+
+Outcome: rejected attribution. All twenty product repetitions and all forty
+independent stability admissions passed in fifty-one attempts. Product intent-
+to-exact-input acknowledgement was 189.949/225.946ms median/p95, attachment was
+10.001/21.126ms, residual was 15.223/27.924ms, response egress was
+5.893/11.995ms, and active server-send-to-TUI-callback delay was
+5.858/11.959ms. Every product, trace, perturbation, cleanup, and server-request
+predicate passed.
+
+Nineteen controls had nonnegative Node/Bun comparable-clock order and measured
+2.746/3.329ms server-send-to-callback plus 0.009/0.033ms callback-to-validation.
+One admitted, otherwise clean control measured -0.104ms across that epoch
+boundary, failing the frozen all-control rule. Across nineteen valid pairs, the
+active-minus-standalone delay was 3.412/15.778ms; only eight pairs were at least
+4ms slower in the active TUI versus the required fifteen. Standalone valid-pair
+p95 was 79.4% below active p95, but its median and p95 missed the predicted 1ms
+and 2ms absolute bounds. The blind prediction and mechanical attribution both
+failed, so no production optimization is authorized.
+
+All temporary behavior and diagnostics remain archive-only. The result rules
+out the registered sub-2ms universal standalone baseline but still shows an
+inconsistent active-TUI increment and heavier tail. Next compare an idle native
+TUI connection and the active Quick Session path inside the same Bun process
+against the same Observer response, eliminating the cross-runtime epoch
+ambiguity before proposing a worker, polling, or transport change.
