@@ -72,6 +72,7 @@ the winning design, and the remaining product-level frontier.
 | BENCH-039-S | BENCH-038-F collapsed every product-boundary invariant into one `safe` boolean, preventing the retained artifact from distinguishing a semantic mismatch from a faulty benchmark expectation. | Added named booleans for every existing BENCH-038 boundary predicate and ran one Ctrl-O product-boundary repetition; made no production or timing-path change. | BENCH-038-F reached every awaited milestone and exact cleanup but recorded ten unsafe rows. Accept the audit only if every semantic, identity, input, inventory, and process predicate is named, exactly one false predicate explains each unsafe result, and the root is removed. Prediction: the false predicate is a benchmark expectation rather than session identity, input, or cleanup. | Accepted. Exactly one predicate was false: the test expected canonical terminal provider `station`, while the provider-neutral Station Host ID is `native`. The run reached canonical UI in 314ms, focus-to-ack in 97ms, and intent-to-interactive in 410ms; these are diagnostic context, not a latency claim. | All other 18 named predicates passed, including exact command, worktree/registration, scripted harness, Host worktree/session, ready/input, zero Host inventory, 49-worktree cleanup, clean stops, exact progress stderr, phase coherence, and root removal. | Keep named safety evidence and correct the benchmark expectation to `STATION_HOST_PROVIDER_ID`; BENCH-038 remains rejected. | Does automatic dashboard dismissal after canonical Quick Session success eliminate the second gesture while preserving failure and deliberate-create behavior? |
 | EXP-016 | Native Quick Session already publishes a managed pane as the dashboard overlay's return target, so making only that shortcut a foreground landing and dismissing only its proven successful landing should remove the second gesture without weakening failure visibility. | Temporarily carried an explicit foreground request through native managed launch, closed the overlay only for `success` with `landed: true`, and left deliberate Create, Fork, notices, failures, and non-landing success unchanged. | BENCH-038-F Ctrl-O intent-to-interactive was 213/634ms median/p95 over five alternating control runs; BENCH-039-S was 410ms once after fixing the terminal-provider expectation. Keep only with ten safe control and ten safe candidate runs, candidate intent-to-interactive median/p95 at most 200/350ms, candidate p95 at least 25% below the fresh control, automatic overlay-dismissal-to-input-ack p95 at most 100ms, no dismissal input byte in candidate runs, and every exact identity, canonical, input, inventory, stop, stderr, phase, and root predicate true. Prediction: automatic candidate intent-to-interactive p95 is at most 300ms and at least 40% below fresh Ctrl-O control. | Rejected. Fresh Ctrl-O control was 220/2348ms median/p95; automatic dismissal was 196/358ms, improving median 11% and p95 84.8%. The candidate passed the 200ms median and relative rules but missed the 350ms absolute p95 by 7.8ms, missed the 100ms overlay-dismissal-to-input-ack p95 at 154ms, and missed its 300ms prediction by 58ms. | All ten control and ten candidate runs passed every named identity, canonical, input, inventory, stop, stderr, phase, and root predicate. Candidate runs sent no dismissal byte. Focused tests proved successful landing, non-landing success, notice, launch failure, deliberate Create, Fork, canonical continuation, and foreground/background propagation; Station typecheck passed. | Revert completely under the preregistered rule; retain the runner and raw control/candidate evidence only on the continuation archive. | Can native managed launch expose bounded child-input readiness so automatic dismissal occurs only when the pane can immediately acknowledge input? |
 | BENCH-040-I | EXP-016's runner waited for the scripted harness-ready marker before writing input, although automatic dismissal had already focused a Host-backed PTY that should accept and buffer controller input immediately. | Diagnostic only: reuse the exact rejected candidate binary and send the input token within 10ms of automatic overlay dismissal, then observe the independent ready marker and exact acknowledgement without rebuilding or changing production source. | EXP-016 automatic candidate was 196/358ms median/p95 intent-to-interactive and 24/154ms dismissal-to-ack. Its sole tail waited 100ms after dismissal for Host ready, then 54ms after write. Accept only if ten safe runs all write within 10ms of dismissal, at least one write precedes harness readiness by at least 25ms, every token is acknowledged exactly once, intent-to-interactive median/p95 are at most 200/320ms, p95 improves at least 10% over 358ms, dismissal-to-ack p95 is at most 120ms, and every EXP-016 identity, canonical, inventory, stop, stderr, phase, and root predicate passes. Prediction: at least one pre-ready write is retained without loss and intent-to-interactive p95 is at most 310ms. | Rejected. Immediate input produced 184/349ms intent-to-interactive: median passed, but p95 missed 320ms by 29ms, improved only 2.4% rather than 10%, and missed the 310ms prediction. Dismissal-to-ack passed narrowly at 24/118ms. | All ten runs passed every named safety predicate, wrote within 0.064ms of dismissal, and acknowledged the exact token once. One live-observed run safely wrote 115ms before Host readiness; no candidate sent a dismissal byte. | Retain the buffer-safety attribution, but reject the diagnostic mechanically and do not retroactively accept EXP-016. The remaining 349ms tail accumulated before automatic focus. | Which successful managed-launch phase between command completion and foreground pane focus owns the remaining tail? |
+| BENCH-041-P | BENCH-040-I's 349ms tail completed its worktree command at 181ms but did not foreground the pane until 317ms; the native path serially waits for canonical worktree observation, Observer launch preparation/Host spawn, Host attachment resolution, pane publication, and dashboard settlement. | Diagnostic only: rebuild the exact reverted EXP-016 foreground/automatic-dismissal behavior with monotonic in-memory markers at each successful phase, emit the marker array only at UI process exit, and run twenty immediate-input product repetitions. | Attribute only if every run is safe; every required marker occurs exactly once and monotonically; phase sums are exact; at least two command-completion-to-focus intervals exceed 75ms; and one named phase supplies at least 60% of total p95 plus at least 50% of each of at least two intervals over 75ms. The diagnostic user-facing p95 must remain at most 380ms and attachment-resolution p95 at most 25ms. Prediction: `prepareExternalLaunch` supplies at least 70% of total p95 and at least half of every interval over 75ms; attachment resolution p95 is at most 10ms. | Pending. | Pending. The exit-only trace line is allowed UI stderr only after interaction and must retain all BENCH-040 identity, token, inventory, stop, phase, and root predicates. | Pending; revert all instrumented and EXP-016 production behavior after attribution, regardless of outcome. | Can the dominant phase be safely shortened or overlapped without foregrounding a pane before exact managed-terminal identity exists? |
 
 ## EXP-008 preregistered change plan
 
@@ -1557,3 +1558,66 @@ input. Every named command, project, worktree, scripted harness, session/PTTY,
 ready/input, canonical, inventory, process-stop, accepted progress-stderr,
 phase-coherence, and root-removal predicate passed. This diagnostic changes no
 production source and cannot alter EXP-016's rejection.
+
+## BENCH-041-P registered diagnostic plan
+
+Governing sources are `docs/debugging.md`, `docs/architecture.md`, `docs/tui.md`,
+`tests/README.md`, the original experiment protocol, EXP-016, and BENCH-040-I.
+The runtime artifact is authoritative: BENCH-040 repetition eight completed
+the Observer worktree command at 181ms, observed Host readiness at 266ms,
+foregrounded the pane at 317ms, and acknowledged immediate input at 349ms.
+Because focus-to-ack was only 32ms, this diagnostic divides the 136ms internal
+command-completion-to-focus interval before proposing another behavior change.
+
+The diagnostic will rebuild the same candidate semantics EXP-016 already
+proved in focused tests: Quick Session alone requests a foreground managed
+launch, and the native overlay closes only after `{ kind: "success", landed:
+true }`; deliberate Create, Fork, non-landing success, notices, and failures stay
+background/visible. BENCH-040's corrected immediate-input observation remains
+the interaction boundary. No candidate behavior or timing optimization is
+being evaluated for retention in BENCH-041.
+
+An opt-in temporary recorder will add monotonic in-memory marks for hosted
+launch start, command completion, canonical worktree observation, managed
+attempt start/preflight, `prepareExternalLaunch` request/response, managed Host
+attachment resolution, terminal placement, pane publication, attempt
+settlement, Quick result receipt, and overlay-close request. It may append only
+to memory before interaction and must emit exactly one structured trace line at
+UI process exit; any earlier diagnostic I/O invalidates the run. Twenty fresh
+compiled product repetitions will parse that line alongside the existing outer
+Quick Session timestamps.
+
+Expected temporary source files are
+`station/src/app/dashboardCapabilities.ts`,
+`station/src/input/runtime/managedLaunch.ts`,
+`station/src/input/runtime/managedLaunchAttempt.ts`, and a narrowly owned
+`station/src/input/runtime/managedLaunchPhaseDiagnostic.ts`. Expected temporary
+source-adjacent coverage is
+`station/src/app/dashboardCapabilities.test.ts` and
+`station/src/input/runtime/managedLaunch.test.ts`. The one-off runner is
+`tests/performance/quick-session/compiledQuickSessionTui.real.test.ts`; raw JSON,
+an archive summary, and this ledger are the only evidence artifacts. No package,
+contract, protocol, Observer, Host, provider, connector, configuration,
+architecture, permanent test, report, or user documentation changes are
+expected.
+
+JSDoc impact is explicit: the temporary phase-recorder module will document its
+exit-only diagnostic contract, and the temporary `ManagedHostedSessionRequest`
+foreground/background option and managed-launch boundary documentation will
+match EXP-016. No backend or connector JSDoc changes are expected. After the
+diagnostic, all candidate behavior, instrumentation, source-adjacent tests, and
+JSDoc will be reverted; only the ledger stays on the review branch, while the
+runner, raw result, summary, and temporary source diff stay on a continuation
+archive.
+
+The table row fixes attribution mechanically before those edits. Every required
+mark must occur exactly once in the registered order and adjacent durations
+must sum exactly to the internal command-completion-to-overlay-close interval.
+At least two such intervals must exceed 75ms. A phase is dominant only if it
+supplies at least 60% of total p95 and at least half of each of at least two
+over-75ms samples. User-facing p95 must remain at most 380ms, attachment
+resolution p95 at most 25ms, and every BENCH-040 safety predicate must pass.
+Prediction: `prepareExternalLaunch` supplies at least 70% of total p95 and at
+least half of every over-75ms interval, while attachment-resolution p95 is at
+most 10ms. Failure to meet any attribution rule is a rejection, not permission
+to choose the most plausible phase.
