@@ -129,6 +129,7 @@ export {
 export { handleTuiKey } from "../state/transition.js";
 
 export type {
+  AddableWidgetType,
   CreateGroupFocus,
   CreateGroupReturnTarget,
   CreateGroupScreenView,
@@ -149,4 +150,5 @@ export type {
   SettingsPanelFocus,
   TuiToastEntry,
   WidgetSettingsFocus,
+  WidgetSettingsItemId,
 } from "../state/types.js";

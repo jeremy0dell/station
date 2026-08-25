@@ -9,6 +9,8 @@ export type TuiKey = {
   downArrow?: boolean;
   leftArrow?: boolean;
   rightArrow?: boolean;
+  pageUp?: boolean;
+  pageDown?: boolean;
   mouseScroll?: "up" | "down";
 };
 

@@ -1,15 +1,18 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { rgbToHex } from "@opentui/core";
+import { rgbToHex, type ScrollBoxRenderable } from "@opentui/core";
 import { MouseButtons } from "@opentui/core/testing";
+import { useTerminalDimensions } from "@opentui/react";
 import { testRender } from "@opentui/react/test-utils";
 import { nativeStationTheme, StationThemeProvider } from "../../theme/index.js";
 import type { ClientNotice } from "@station/dashboard-core/runtime";
+import { cellWidth } from "@station/dashboard-core/text";
 import { act } from "react";
 import { spanAtFrameCell } from "../../terminal/testing/frameProbe.js";
 import { manyProjectsSnapshot } from "../fixtures/scenarios.js";
 import type { StationMouseTarget } from "../input/stationMouse.js";
 import { makeStationTestRuntime } from "../test/support/makeStationTestRuntime.js";
-import { DashboardRoot } from "./DashboardRoot.js";
+import { DashboardRoot, type DashboardRootProps } from "./DashboardRoot.js";
+import { semanticItemRenderableId } from "./layout/scrollViewport.js";
 import { StationHoverProvider, StationMouseProvider } from "./stationMouseContext.js";
 
 const NOTICE: ClientNotice = {
@@ -19,6 +22,11 @@ const NOTICE: ClientNotice = {
   hint: "Open a different linked checkout, select the session again, and retry after confirming the worktree path and branch.",
   traceId: "trace_worktree_remove_123",
   diagnosticId: "diag_worktree_remove_456",
+};
+const COMMAND_TIMEOUT_NOTICE: ClientNotice = {
+  kind: "error",
+  message: "The Station timed out while waiting for command completion.",
+  traceId: "trace_command_timeout_123",
 };
 const COPY_TEXT = [
   "needs attention",
@@ -34,8 +42,123 @@ afterEach(() => {
 });
 
 describe("ToastOverlayView actions", () => {
+  it("renders a complete standard-size notice frame", async () => {
+    const fixture = await renderNotice(COMMAND_TIMEOUT_NOTICE);
+    const surface = fixture.setup.renderer.root.findDescendantById("station-toast-surface");
+    expect(surface).toBeDefined();
+    if (surface === undefined) {
+      throw new Error("toast surface must render");
+    }
+
+    const golden = renderableGolden(fixture.frame(), surface);
+    const lines = golden.split("\n");
+    expect(lines[0]).toMatch(/^┌─+┐$/u);
+    expect(lines.at(-1)).toMatch(/^└─+┘$/u);
+    for (const line of lines.slice(1, -1)) {
+      expect(line.startsWith("│")).toBe(true);
+      expect(line.endsWith("│")).toBe(true);
+    }
+    expect(golden).toMatchSnapshot();
+  });
+
+  it("keeps a wrapped prompt and notice in disjoint structural regions through resize", async () => {
+    const { runtime } = makeStationTestRuntime({ snapshot: manyProjectsSnapshot() });
+    const copied: string[] = [];
+    runtime.start();
+    runtime.actions.handleKey({ input: "R" });
+    const setup = await testRender(
+      <StationThemeProvider theme={nativeStationTheme}>
+        <ResponsiveDashboardRoot
+          state={runtime.state}
+          actions={runtime.actions}
+          layout={runtime.layout}
+          onCopyNotice={(text) => copied.push(text)}
+        />
+      </StationThemeProvider>,
+      { width: 40, height: 12 },
+    );
+    teardowns.push(() => setup.renderer.destroy());
+    await act(async () => {
+      runtime.actions.pushToast(NOTICE);
+      await Promise.resolve();
+    });
+    await setup.flush();
+
+    const prompt = setup.renderer.root.findDescendantById("station-command-prompt");
+    const controls = setup.renderer.root.findDescendantById("station-dashboard-controls");
+    const noticeRegion = setup.renderer.root.findDescendantById(
+      "station-dashboard-notice-region",
+    );
+    const toast = setup.renderer.root.findDescendantById("station-toast-surface");
+    expect(prompt?.height).toBeGreaterThan(1);
+    expect(controls).toBeDefined();
+    expect(noticeRegion).toBeDefined();
+    expect(toast).toBeDefined();
+    if (controls === undefined || noticeRegion === undefined || toast === undefined) {
+      throw new Error("dashboard controls, notice region, and toast surface must render");
+    }
+    expect(toast.y).toBeGreaterThanOrEqual(noticeRegion.y);
+    expect(toast.y + toast.height).toBeLessThanOrEqual(controls.y);
+    expect(compactGolden(setup.captureCharFrame())).toMatchSnapshot();
+
+    await act(async () => {
+      setup.renderer.resize(22, 8);
+    });
+    await setup.renderOnce();
+    await setup.flush();
+    await setup.renderOnce();
+    expect(toast.y).toBeGreaterThanOrEqual(noticeRegion.y);
+    expect(toast.y + toast.height).toBeLessThanOrEqual(controls.y);
+    expect(setup.captureCharFrame()).toContain("Rename:");
+    expect(compactGolden(setup.captureCharFrame())).toMatchSnapshot();
+    const toastBody = setup.renderer.root.findDescendantById(
+      "station-toast-body",
+    ) as ScrollBoxRenderable | undefined;
+    expect(toastBody).toBeDefined();
+    expect(
+      setup.renderer.root.findDescendantById(semanticItemRenderableId("toast:detail")),
+    ).toBeDefined();
+    await act(async () => {
+      await setup.mockMouse.scroll(4, 2, "down");
+      await setup.flush();
+    });
+    expect(toastBody?.scrollTop).toBeGreaterThan(0);
+    if (toastBody !== undefined) {
+      await scrollBodyUntilFrameContains(setup, toastBody, "diagnostic");
+    }
+
+    await act(async () => {
+      setup.renderer.resize(22, 5);
+    });
+    await setup.renderOnce();
+    await setup.flush();
+    await setup.renderOnce();
+    await Promise.resolve();
+    await setup.flush();
+    await setup.renderOnce();
+    const footer = setup.renderer.root.findDescendantById("station-dashboard-footer");
+    expect(toast.y).toBeGreaterThanOrEqual(noticeRegion.y);
+    expect(toast.y + toast.height).toBeLessThanOrEqual(controls.y);
+    expect(footer?.height).toBe(1);
+    expect((footer?.y ?? 5) + (footer?.height ?? 0)).toBeLessThanOrEqual(5);
+    const bodyClip = setup.renderer.root.findDescendantById("station-toast-body-clip");
+    expect(bodyClip?.height).toBeGreaterThanOrEqual(1);
+    if (toastBody !== undefined) {
+      await scrollBodyUntilFrameContains(setup, toastBody, "diagnostic");
+    }
+    const compactFrame = setup.captureCharFrame();
+    expect(compactFrame).toContain("diagnostic");
+    expect(compactGolden(compactFrame)).toMatchSnapshot();
+    const copy = cellFor(compactFrame, "[copy]");
+    await act(async () => {
+      await setup.mockMouse.click(copy.col, copy.row, MouseButtons.LEFT);
+    });
+    expect(copied).toEqual([COPY_TEXT]);
+  });
+
   it("keeps drag selection inert and copies the complete readable notice explicitly", async () => {
     const fixture = await renderNotice();
+    expect(fixture.frame()).toContain("Worktrunk failed");
     const message = cellFor(fixture.frame(), "Worktrunk failed");
     const copy = cellFor(fixture.frame(), "[ copy ]");
     const dismiss = cellFor(fixture.frame(), "[ dismiss ]");
@@ -43,7 +166,7 @@ describe("ToastOverlayView actions", () => {
     await fixture.setup.mockMouse.drag(
       message.col,
       message.row,
-      message.col + "Worktrunk".length,
+      message.col + cellWidth("Worktrunk"),
       message.row,
     );
     expect(fixture.setup.renderer.getSelection()?.getSelectedText()).toBe("Worktrunk");
@@ -75,6 +198,34 @@ describe("ToastOverlayView actions", () => {
     await fixture.setup.flush();
     expect(fixture.frame()).toContain("[ copy ]");
     expect(fixture.frame()).not.toContain("[ copied ]");
+  });
+
+  it("keeps copied feedback and dismissal inside the notice frame", async () => {
+    const fixture = await renderNotice();
+    const surface = fixture.setup.renderer.root.findDescendantById("station-toast-surface");
+    expect(surface).toBeDefined();
+    if (surface === undefined) {
+      throw new Error("toast surface must render");
+    }
+    const copy = cellFor(fixture.frame(), "[ copy ]");
+
+    await act(async () => {
+      await fixture.setup.mockMouse.click(copy.col, copy.row, MouseButtons.LEFT);
+    });
+
+    const copiedFrame = await fixture.setup.waitForFrame((frame) => frame.includes("[ copied ]"));
+    const copiedHeader = renderableGolden(copiedFrame, surface)
+      .split("\n")
+      .find((line) => line.includes("[ copied ]"));
+    expect(copiedHeader).toBeDefined();
+    expect(copiedHeader?.startsWith("│")).toBe(true);
+    expect(copiedHeader?.endsWith("│")).toBe(true);
+    expect(copiedHeader).toContain("[ dismiss ]");
+
+    const dismiss = cellFor(copiedFrame, "[ dismiss ]");
+    expect(dismiss.col + cellWidth("[ dismiss ]")).toBeLessThanOrEqual(
+      surface.x + surface.width - 2,
+    );
   });
 
   it("keeps hover feedback and dismissal isolated to the dismiss control", async () => {
@@ -117,7 +268,7 @@ describe("ToastOverlayView actions", () => {
   });
 });
 
-async function renderNotice() {
+async function renderNotice(notice: ClientNotice = NOTICE) {
   const { runtime: store } = makeStationTestRuntime({
     snapshot: manyProjectsSnapshot(),
     seedInitialSnapshot: false,
@@ -139,6 +290,7 @@ async function renderNotice() {
           <DashboardRoot
             state={store.state}
             actions={store.actions}
+            layout={store.layout}
             columns={99}
             rows={25}
             onCopyNotice={(text) => copied.push(text)}
@@ -151,7 +303,7 @@ async function renderNotice() {
   teardowns.push(() => setup.renderer.destroy());
   await setup.renderOnce();
   await act(async () => {
-    store.actions.pushToast(NOTICE);
+    store.actions.pushToast(notice);
     await Promise.resolve();
   });
   await setup.flush();
@@ -169,4 +321,41 @@ function cellFor(frame: string, label: string): { row: number; col: number } {
   expect(row).toBeGreaterThanOrEqual(0);
   expect(col).toBeGreaterThanOrEqual(0);
   return { row, col };
+}
+
+function compactGolden(frame: string): string {
+  return frame.replace(/[ \t]+$/gm, "");
+}
+
+function renderableGolden(
+  frame: string,
+  renderable: { x: number; y: number; width: number; height: number },
+): string {
+  return frame
+    .split("\n")
+    .slice(renderable.y, renderable.y + renderable.height)
+    .map((line) => line.slice(renderable.x, renderable.x + renderable.width))
+    .join("\n");
+}
+
+async function scrollBodyUntilFrameContains(
+  setup: Awaited<ReturnType<typeof testRender>>,
+  body: ScrollBoxRenderable,
+  expected: string,
+): Promise<void> {
+  for (let scrollTop = 0; scrollTop <= body.scrollHeight; scrollTop += 1) {
+    await act(async () => {
+      body.scrollTo(scrollTop);
+      await setup.renderOnce();
+    });
+    if (setup.captureCharFrame().includes(expected)) return;
+  }
+  throw new Error(`Toast body never revealed ${expected}.`);
+}
+
+function ResponsiveDashboardRoot(
+  props: Omit<DashboardRootProps, "columns" | "rows">,
+) {
+  const { width, height } = useTerminalDimensions();
+  return <DashboardRoot {...props} columns={width} rows={height} />;
 }

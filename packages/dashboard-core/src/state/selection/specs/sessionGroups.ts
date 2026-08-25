@@ -41,10 +41,11 @@ export const moveToGroupDestinationListSpec = defineList({
     ) {
       return [];
     }
-    return selectMoveToGroupChoices(state.snapshot, state.screen.sessionId).map((choice) => ({
-      key: choice.key,
-      value: moveToGroupExistingChoiceId(choice.value.id),
-    }));
+    return selectMoveToGroupChoices(state.snapshot, state.screen.sessionId).flatMap((choice) =>
+      choice.key === undefined
+        ? []
+        : [{ key: choice.key, value: moveToGroupExistingChoiceId(choice.value.id) }],
+    );
   },
   commit: (state, id) => {
     if (

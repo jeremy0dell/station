@@ -84,7 +84,7 @@ describe("dashboard persistent filter selector", () => {
         conditionEditor: {
           stage: "values",
           field: "status",
-          cursor: 2,
+          focusedValueId: "working",
           options: [
             { id: "needs_attention", label: "Needs attention" },
             { id: "stuck", label: "Stuck" },

@@ -3,7 +3,7 @@ import { createInitialTuiState } from "../../../src/state/screen.js";
 import {
   handleWidgetSettingsKey,
   openWidgetSettings,
-  widgetSettingsRemoveAt,
+  widgetSettingsRemoveItem,
   widgetSettingsRowLabel,
 } from "../../../src/state/screens/widgetSettings.js";
 import type { DashboardState } from "../../../src/state/types.js";
@@ -34,45 +34,57 @@ describe("widgetSettings screen", () => {
     expect("enabled" in (backOn.widgets[0] ?? {})).toBe(false);
   });
 
-  it("reorders with [ and ], cursor following the moved widget", () => {
+  it("reorders with [ and ], focus following the moved widget identity", () => {
     const down = handleWidgetSettingsKey(panelState(), { input: "]" }).state;
     expect(down.widgets.map((widget) => widget.type)).toEqual(["fleet", "time", "moon"]);
-    expect(screenOf(down).cursor).toBe(1);
+    expect(screenOf(down)).toMatchObject({
+      widgetItemIds: ["widget:1", "widget:0", "widget:2"],
+      activeWidgetItemId: "widget:0",
+    });
 
     const up = handleWidgetSettingsKey(down, { input: "[" }).state;
     expect(up.widgets.map((widget) => widget.type)).toEqual(["time", "fleet", "moon"]);
-    expect(screenOf(up).cursor).toBe(0);
+    expect(screenOf(up)).toMatchObject({
+      widgetItemIds: ["widget:0", "widget:1", "widget:2"],
+      activeWidgetItemId: "widget:0",
+    });
 
     // At the top, [ is a no-op.
     expect(handleWidgetSettingsKey(up, { input: "[" }).state).toBe(up);
   });
 
-  it("removes at the cursor and clamps it to the shorter list", () => {
+  it("removes the focused item and chooses a surviving identity", () => {
     let state = panelState();
     state = handleWidgetSettingsKey(state, { input: "", downArrow: true }).state;
     state = handleWidgetSettingsKey(state, { input: "", downArrow: true }).state;
     state = handleWidgetSettingsKey(state, { input: "x" }).state;
     expect(state.widgets.map((widget) => widget.type)).toEqual(["time", "fleet"]);
-    expect(screenOf(state).cursor).toBe(1);
+    expect(screenOf(state).activeWidgetItemId).toBe("widget:1");
   });
 
-  it("mouse-removing a row above the cursor keeps the cursor on its widget", () => {
+  it("mouse-removing a row above focus preserves the focused widget identity", () => {
     let state = panelState();
     state = handleWidgetSettingsKey(state, { input: "", downArrow: true }).state;
     state = handleWidgetSettingsKey(state, { input: "", downArrow: true }).state;
-    state = widgetSettingsRemoveAt(state, 0);
+    state = widgetSettingsRemoveItem(state, "widget:0");
     expect(state.widgets.map((widget) => widget.type)).toEqual(["fleet", "moon"]);
-    expect(screenOf(state).cursor).toBe(1);
+    expect(screenOf(state)).toMatchObject({
+      widgetItemIds: ["widget:1", "widget:2"],
+      activeWidgetItemId: "widget:2",
+    });
   });
 
-  it("adds a parameterless widget from the picker and lands the cursor on it", () => {
+  it("adds a parameterless widget from the picker and focuses its new identity", () => {
     let state = handleWidgetSettingsKey(panelState(), { input: "a" }).state;
-    expect(screenOf(state).focus).toBe("picker");
+    expect(screenOf(state)).toMatchObject({ focus: "picker", activePickerType: "time" });
     state = handleWidgetSettingsKey(state, { input: "", downArrow: true }).state;
     state = handleWidgetSettingsKey(state, { input: "\r", return: true }).state;
     expect(screenOf(state).focus).toBe("list");
     expect(state.widgets.at(-1)).toEqual({ type: "fleet" });
-    expect(screenOf(state).cursor).toBe(3);
+    expect(screenOf(state)).toMatchObject({
+      activeWidgetItemId: "widget:3",
+      widgetItemIds: ["widget:0", "widget:1", "widget:2", "widget:3"],
+    });
   });
 
   it("escape closes the picker first, then the panel", () => {

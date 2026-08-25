@@ -7,8 +7,9 @@ import {
 import {
   choiceValueByKey,
   isSelectionKey,
-  keyChoices,
+  keyedSelectionChoices,
   SELECTION_KEYS,
+  selectionChoices,
   selectNewSessionHarnessChoices,
   selectNewSessionHarnessOptions,
   selectNewSessionProjectChoices,
@@ -18,17 +19,20 @@ import { createInitialTuiState } from "../../../src/state/screen.js";
 import { createDashboardSnapshot, createExternalAgentSnapshot } from "../../fixtures/snapshots.js";
 
 describe("TUI selectors", () => {
-  it("assigns selection keys in order without 0 or uppercase keys and caps at 35", () => {
-    const choices = keyChoices(Array.from({ length: 36 }, (_, index) => index + 1));
+  it("keeps every semantic choice while assigning the available shortcut keys", () => {
+    const choices = selectionChoices(Array.from({ length: 36 }, (_, index) => index + 1));
+    const keyed = keyedSelectionChoices(choices);
 
     expect(SELECTION_KEYS).toHaveLength(35);
     expect(choices.at(8)).toEqual({ key: "9", value: 9 });
     expect(choices.at(9)).toEqual({ key: "a", value: 10 });
-    expect(choices.at(-1)).toEqual({ key: "z", value: 35 });
+    expect(choices.at(-2)).toEqual({ key: "z", value: 35 });
+    expect(choices.at(-1)).toEqual({ value: 36 });
+    expect(keyed).toHaveLength(35);
     expect(isSelectionKey("0")).toBe(false);
     expect(isSelectionKey("A")).toBe(false);
-    expect(choiceValueByKey(choices, "0")).toBeUndefined();
-    expect(choiceValueByKey(choices, "a")).toBe(10);
+    expect(choiceValueByKey(keyed, "0")).toBeUndefined();
+    expect(choiceValueByKey(keyed, "a")).toBe(10);
   });
 
   it("resolves session labels with pending overrides", () => {
@@ -113,6 +117,28 @@ describe("TUI selectors", () => {
       ["1", "web"],
       ["2", "api"],
     ]);
+  });
+
+  it("keeps projects beyond the shortcut alphabet in the semantic picker", () => {
+    const base = createDashboardSnapshot();
+    const template = base.projects[0];
+    if (template === undefined) throw new Error("missing project fixture");
+    const snapshot = {
+      ...base,
+      projects: Array.from({ length: 36 }, (_, index) => ({
+        ...template,
+        id: `project-${index + 1}`,
+        label: `Project ${index + 1}`,
+      })),
+    };
+
+    const choices = selectProjectChooserChoices(snapshot);
+
+    expect(choices).toHaveLength(36);
+    expect(choices.at(-2)).toMatchObject({ key: "z", value: { id: "project-35" } });
+    expect(choices.at(-1)).toEqual({
+      value: expect.objectContaining({ id: "project-36" }),
+    });
   });
 
   it("keys new-session project and harness choices from the same grammar", () => {

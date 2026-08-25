@@ -18,6 +18,8 @@ const NAMED_SEQUENCES: Record<string, TuiKey> = {
   [LegacyKeySequence.Backspace]: { input: "", backspace: true },
   [C0.Backspace]: { input: "", backspace: true },
   [LegacyKeySequence.Delete]: { input: "", delete: true },
+  [LegacyKeySequence.PageUp]: { input: "", pageUp: true },
+  [LegacyKeySequence.PageDown]: { input: "", pageDown: true },
   [ARROW_KEYS.up.normal]: { input: "", upArrow: true },
   [ARROW_KEYS.down.normal]: { input: "", downArrow: true },
   [ARROW_KEYS.right.normal]: { input: "", rightArrow: true },

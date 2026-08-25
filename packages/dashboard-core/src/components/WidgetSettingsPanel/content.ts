@@ -3,22 +3,36 @@ import {
   widgetSettingsRowLabel,
 } from "../../state/screens/widgetSettings.js";
 import type {
+  AddableWidgetType,
   DashboardScreenView,
   DashboardStateView,
   WidgetSettingsFocus,
+  WidgetSettingsItemId,
 } from "../../state/types.js";
 
-export type WidgetSettingsLine =
-  | { kind: "widget"; index: number; label: string; enabled: boolean; active: boolean }
-  | { kind: "empty"; label: string }
-  | { kind: "add"; label: string; active: boolean }
-  | { kind: "pickerChoice"; index: number; label: string; active: boolean };
+export type WidgetSettingsItem =
+  | {
+      kind: "widget";
+      itemId: WidgetSettingsItemId;
+      label: string;
+      enabled: boolean;
+      active: boolean;
+    }
+  | { kind: "empty"; itemId: "empty"; label: string }
+  | { kind: "add"; itemId: "add"; label: string; active: boolean }
+  | {
+      kind: "pickerChoice";
+      itemId: `picker:${AddableWidgetType}`;
+      widgetType: AddableWidgetType;
+      label: string;
+      active: boolean;
+    };
 
 export type WidgetSettingsPanelModel = {
   title: string;
   /** Config-scope reminder under the title. */
   note: string;
-  lines: readonly WidgetSettingsLine[];
+  items: readonly WidgetSettingsItem[];
   footer: string;
   focus: WidgetSettingsFocus;
 };
@@ -32,63 +46,42 @@ export function widgetSettingsPanelModel(
     return {
       title: "add widget",
       note: "weather and tz require config.toml",
-      lines: ADDABLE_WIDGET_TYPES.map((type, index) => ({
+      items: ADDABLE_WIDGET_TYPES.map((type) => ({
         kind: "pickerChoice",
-        index,
+        itemId: `picker:${type}`,
+        widgetType: type,
         label: widgetSettingsRowLabel({ type }),
-        active: index === screen.pickerCursor,
+        active: type === screen.activePickerType,
       })),
       footer: "↵ add   esc back",
       focus: "picker",
     };
   }
-  const lines: WidgetSettingsLine[] =
+  const items: WidgetSettingsItem[] =
     widgets.length === 0
-      ? [{ kind: "empty", label: "no widgets yet" }]
-      : widgets.map((widget, index) => ({
-          kind: "widget",
-          index,
-          label: widgetSettingsRowLabel(widget),
-          enabled: widget.enabled !== false,
-          active: index === screen.cursor,
-        }));
-  lines.push({ kind: "add", label: "[ + add widget ]", active: false });
+      ? [{ kind: "empty", itemId: "empty", label: "no widgets yet" }]
+      : widgets.flatMap((widget, index) => {
+          const itemId = screen.widgetItemIds[index];
+          return itemId === undefined
+            ? []
+            : [
+                {
+                  kind: "widget" as const,
+                  itemId,
+                  label: widgetSettingsRowLabel(widget),
+                  enabled: widget.enabled !== false,
+                  active: itemId === screen.activeWidgetItemId,
+                },
+              ];
+        });
+  items.push({ kind: "add", itemId: "add", label: "[ + add widget ]", active: false });
   return {
     title: "widgets",
     note: widgetsPersisted
       ? "saved to config.toml"
       : "session only · create config.toml to persist",
-    lines,
+    items,
     footer: "↵ toggle   [ ] reorder   x remove   a add   esc close",
     focus: "list",
-  };
-}
-
-export type WidgetSettingsPanelLayout = {
-  top: number;
-  left: number;
-  width: number;
-  height: number;
-  innerWidth: number;
-};
-
-const PANEL_WIDTH = 48;
-const MIN_PANEL_WIDTH = 28;
-// Border pair + title + note + footer around the line list.
-const CHROME_ROWS = 5;
-
-export function widgetSettingsPanelLayout(
-  columns: number,
-  rows: number,
-  lineCount: number,
-): WidgetSettingsPanelLayout {
-  const width = Math.min(PANEL_WIDTH, Math.max(MIN_PANEL_WIDTH, columns - 2));
-  const height = Math.min(rows, CHROME_ROWS + Math.max(1, lineCount));
-  return {
-    left: Math.max(0, Math.floor((columns - width) / 2)),
-    top: Math.max(0, Math.floor((rows - height) / 2)),
-    width,
-    height,
-    innerWidth: width - 2,
   };
 }

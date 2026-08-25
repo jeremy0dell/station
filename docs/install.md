@@ -286,11 +286,12 @@ The supported channel IDs are:
 - `installer-binary`: requires the exact installer receipt above, verifies a
   complete GitHub release and checksums, then delegates the locked atomic swap
   to the verified `install.sh`;
-- `dev-checkout`: requires Git, pnpm, and Bun plus a clean attached branch with
-  an upstream, fetches and fast-forwards to the planned SHA, prepares the root
-  and `station/` dependencies with frozen lockfiles, rebuilds the root, restores
-  the Station UI's nested `@station` links and native helper, then relinks the
-  launchers;
+- `dev-checkout`: requires Git and Bun plus a clean attached branch with an
+  upstream; pnpm is required only while the fetched target remains on the
+  legacy split workspace. It fetches the planned SHA, validates the target's
+  package-manager layout and preparation scripts, verifies an exact target Bun
+  runtime when required, then fast-forwards and runs that layout's frozen
+  install, rebuild, native-helper repair, and launcher relink;
 - `homebrew`: recognizes an already Homebrew-owned formula or cask;
 - `npm-global`: recognizes the global package whose `stn` bin entry owns the
   running CLI; and
@@ -319,11 +320,16 @@ for installations that already use them. Use `--channel <id>` to resolve an
 ambiguous installation, but explicit selection never bypasses ownership proof.
 
 Dev-checkout preparation runs after every fast-forward rather than guessing from
-the changed files. It may take longer and access package registries, but it does
-not install or upgrade Git, Node.js, pnpm, Bun, or other system tools. If a
+the changed files. Before moving HEAD, the currently loaded launcher classifies
+the fetched target as the legacy pnpm split workspace or an exact-version root
+Bun workspace and proves the tools and scripts that its matching preparation
+sequence needs. This lets the legacy launcher safely cross the package-manager
+boundary without running removed pnpm or nested-link commands after the
+fast-forward. Preparation may take longer and access package registries, but it
+does not install or upgrade Git, Node.js, pnpm, Bun, or other system tools. If a
 preparation command fails, the checkout remains at the verified target and the
-report lists the complete frozen-install, build, repair, and relink sequence to
-resume safely.
+report lists that target layout's complete frozen-install, build, repair, and
+relink sequence to resume safely.
 
 Before mutation, `stn update` defaults to preserving a busy compatible Host with
 preflighted `processes` handoff. Absent, stale, reusable, and idle Hosts need no handoff;

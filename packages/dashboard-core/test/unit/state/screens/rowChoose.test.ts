@@ -16,7 +16,6 @@ describe("dashboard row chooser", () => {
     const snapshot = createDashboardSnapshot();
     const base = createInitialTuiState({
       initialSnapshot: snapshot,
-      terminalRows: 20,
       localRows: {
         pendingCreate: [
           {
@@ -56,21 +55,24 @@ describe("dashboard row chooser", () => {
     expect(commit).toHaveBeenCalledWith(moved.state, "ses_wt_web_attention");
   });
 
-  it("enters at the first eligible canonical session in the viewport", () => {
+  it("enters at the first eligible renderer-visible canonical session", () => {
     const snapshot = createDashboardSnapshot();
     const state = {
-      ...createInitialTuiState({
-        initialSnapshot: snapshot,
-        scrollOffset: 4,
-        terminalRows: 10,
-      }),
+      ...createInitialTuiState({ initialSnapshot: snapshot }),
       screen: { name: "removeWorktree" as const, step: "chooseSlot" as const },
     };
 
     expect(
-      handleDashboardRowChoiceKey(state, { input: "", downArrow: true }, (current) => ({
-        state: current,
-      })).state.dashboardFocus,
+      handleDashboardRowChoiceKey(
+        state,
+        { input: "", downArrow: true },
+        (current) => ({
+          state: current,
+        }),
+        {
+          visibleRowIds: () => [dashboardRowIds.session("ses_wt_web_idle")],
+        },
+      ).state.dashboardFocus,
     ).toEqual({
       rowId: dashboardRowIds.session("ses_wt_web_idle"),
       cellId: "identity",
@@ -82,7 +84,6 @@ describe("dashboard row chooser", () => {
     const state = {
       ...createInitialTuiState({
         initialSnapshot: snapshot,
-        terminalRows: 20,
         dashboardFocus: {
           rowId: dashboardRowIds.session("ses_wt_web_working"),
           cellId: "identity",
@@ -97,14 +98,16 @@ describe("dashboard row chooser", () => {
     };
 
     handleDashboardRowChoiceKey(state, { input: "\r", return: true }, commit);
-    handleDashboardRowChoiceKey(state, { input: "1" }, commit);
+    handleDashboardRowChoiceKey(state, { input: "1" }, commit, {
+      visibleRowIds: () => [dashboardRowIds.session("ses_wt_web_working")],
+    });
     expect(committed).toEqual(["ses_wt_web_working", "ses_wt_web_working"]);
   });
 
-  it("uses wheel input only to pan the viewport", () => {
+  it("leaves wheel input to the renderer layout boundary", () => {
     const snapshot = createDashboardSnapshot();
     const state = {
-      ...createInitialTuiState({ initialSnapshot: snapshot, terminalRows: 10 }),
+      ...createInitialTuiState({ initialSnapshot: snapshot }),
       screen: { name: "fork" as const, step: "chooseSlot" as const },
       dashboardFocus: {
         rowId: dashboardRowIds.session("ses_wt_web_working"),
@@ -117,7 +120,7 @@ describe("dashboard row chooser", () => {
       { input: "", mouseScroll: "down" },
       (current) => ({ state: current }),
     ).state;
-    expect(moved.scrollOffset).toBe(1);
+    expect(moved).toBe(state);
     expect(moved.dashboardFocus).toEqual(state.dashboardFocus);
   });
 
@@ -126,7 +129,6 @@ describe("dashboard row chooser", () => {
     const state = {
       ...createInitialTuiState({
         initialSnapshot: snapshot,
-        terminalRows: 30,
         dashboardFocus: {
           rowId: dashboardRowIds.group("group_active"),
           cellId: "identity" as const,
@@ -148,10 +150,15 @@ describe("dashboard row chooser", () => {
       rowId: dashboardRowIds.session("ses_wt_web_attention"),
       cellId: "identity",
     });
-    handleDashboardRowChoiceKey(moved, { input: "1" }, (current, rowId) => {
-      committed.push(rowId);
-      return { state: current };
-    });
+    handleDashboardRowChoiceKey(
+      moved,
+      { input: "1" },
+      (current, rowId) => {
+        committed.push(rowId);
+        return { state: current };
+      },
+      { visibleRowIds: () => [dashboardRowIds.session("ses_wt_web_attention")] },
+    );
     expect(committed).toEqual(["ses_wt_web_attention"]);
   });
 });

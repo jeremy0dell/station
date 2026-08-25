@@ -1,49 +1,54 @@
-// Render layer: absolute-positioned sheet frame (sized by shared layout, no
-// blank-background hack). Absorbs mouse input as the sheet backdrop
-// ({ kind: "sheetBackdrop" }) so clicks don't fall through to the dashboard.
+// OpenTUI boundary: the frame anchors and constrains intrinsic sheet sections,
+// then absorbs backdrop clicks so they cannot fall through to the dashboard.
 import { TextAttributes } from "@opentui/core";
 import type { ReactNode } from "react";
-import { bottomSheetContentWidth, bottomSheetFrameLayout } from "@station/dashboard-core/selectors";
 import { toOpenTuiColor, toOpenTuiOpaqueColor, useStationTheme } from "../../../theme/index.js";
+import { bottomSheetFrame } from "../layout/bottomSheetFrame.js";
 import { useStationMouse, stationMouseProps } from "../stationMouseContext.js";
+import { SemanticScrollRegion } from "../layout/SemanticScrollViewport.js";
 import { SheetText } from "./parts.js";
 
 export type BottomSheetFrameViewProps = {
   columns: number;
   rows: number;
   title: string;
-  contentRows: number;
-  minHeight?: number;
   width?: number;
+  bodyHeader?: ReactNode;
   children: ReactNode;
+  actions?: ReactNode;
+  footer?: ReactNode;
+  bodyItemIds?: readonly string[];
+  followedBodyItemId?: string;
+  bodyPaddingTop?: number;
+  bodyPaddingBottom?: number;
 };
 
 export function BottomSheetFrameView({
   columns,
   rows,
   title,
-  contentRows,
-  minHeight = 7,
   width,
+  bodyHeader,
   children,
+  actions,
+  footer,
+  bodyItemIds = [],
+  followedBodyItemId,
+  bodyPaddingTop = 0,
+  bodyPaddingBottom = 0,
 }: BottomSheetFrameViewProps) {
   const theme = useStationTheme();
   const surfaceBackground = toOpenTuiOpaqueColor(theme.surfaces.sheet);
   const dispatch = useStationMouse();
-  const layout = bottomSheetFrameLayout({
-    columns,
-    rows,
-    contentRows,
-    minHeight,
-    ...(width === undefined ? {} : { width }),
-  });
+  const frame = bottomSheetFrame(columns, rows, width);
   return (
     <box
+      id="station-bottom-sheet"
       position="absolute"
-      left={layout.left}
-      top={layout.top}
-      width={layout.width}
-      height={layout.height}
+      left={0}
+      bottom={0}
+      width={frame.width}
+      height={frame.height}
       zIndex={10}
       border
       borderColor={toOpenTuiColor(theme.interaction.hairline)}
@@ -52,16 +57,27 @@ export function BottomSheetFrameView({
       {...stationMouseProps(dispatch, { kind: "sheetBackdrop" })}
     >
       <SheetText
+        flexShrink={0}
         fg={toOpenTuiColor(theme.text.primary)}
         attributes={TextAttributes.BOLD}
       >{` ${title}`}</SheetText>
-      <box
-        flexDirection="column"
-        width={bottomSheetContentWidth(layout.width)}
-        height={Math.max(0, layout.height - 3)}
+      {bodyHeader === undefined ? null : <box flexShrink={0}>{bodyHeader}</box>}
+      <SemanticScrollRegion
+        itemIds={bodyItemIds}
+        followedItemId={followedBodyItemId}
+        fill
       >
-        {children}
-      </box>
+        <box
+          width={frame.contentWidth}
+          flexDirection="column"
+          paddingTop={bodyPaddingTop}
+          paddingBottom={bodyPaddingBottom}
+        >
+          {children}
+        </box>
+      </SemanticScrollRegion>
+      {actions === undefined ? null : <box flexShrink={0}>{actions}</box>}
+      {footer === undefined ? null : <box flexShrink={0}>{footer}</box>}
     </box>
   );
 }

@@ -53,6 +53,12 @@ export type KeyedChoice<T> = {
   value: T;
 };
 
+/** One semantic picker item; shortcuts are accelerators, not list membership. */
+export type SelectionChoice<T> = {
+  key?: SelectionKey;
+  value: T;
+};
+
 type DashboardProjectView = DashboardSnapshotView["projects"][number];
 type DashboardProviderHealthView = DashboardSnapshotView["providerHealth"][ProviderId];
 type DashboardSnapshotHarnessView = NonNullable<DashboardSnapshotView["harnesses"]>[number];
@@ -75,14 +81,19 @@ export type MoveToGroupSessionContext = {
   currentGroup?: NewSessionGroupOption;
 };
 
-export function keyChoices<T>(values: readonly T[]): Array<KeyedChoice<T>> {
-  return values.slice(0, SELECTION_KEYS.length).map((value, index) => {
+export function selectionChoices<T>(values: readonly T[]): Array<SelectionChoice<T>> {
+  return values.map((value, index) => {
     const key = SELECTION_KEYS[index];
-    if (key === undefined) {
-      throw new Error("Selection key index exceeded configured key range.");
-    }
-    return { key, value };
+    return key === undefined ? { value } : { key, value };
   });
+}
+
+export function keyedSelectionChoices<T>(
+  choices: readonly SelectionChoice<T>[],
+): Array<KeyedChoice<T>> {
+  return choices.flatMap((choice) =>
+    choice.key === undefined ? [] : [{ key: choice.key, value: choice.value }],
+  );
 }
 
 export function choiceValueByKey<T>(
@@ -103,8 +114,8 @@ export function isSelectionKey(input: string): input is SelectionKey {
  */
 export function selectProjectChooserChoices(
   snapshot: DashboardSnapshotView,
-): Array<KeyedChoice<DashboardProjectView>> {
-  return keyChoices(snapshot.projects);
+): Array<SelectionChoice<DashboardProjectView>> {
+  return selectionChoices(snapshot.projects);
 }
 
 export function selectNewSessionProject(
@@ -118,15 +129,15 @@ export function selectNewSessionProject(
 
 export function selectNewSessionProjectChoices(
   snapshot: DashboardSnapshotView,
-): Array<KeyedChoice<DashboardProjectView>> {
-  return keyChoices(snapshot.projects);
+): Array<SelectionChoice<DashboardProjectView>> {
+  return selectionChoices(snapshot.projects);
 }
 
 export function selectNewSessionGroupChoices(
   snapshot: DashboardSnapshotView,
   projectId: ProjectId,
-): Array<KeyedChoice<NewSessionGroupOption>> {
-  return keyChoices(
+): Array<SelectionChoice<NewSessionGroupOption>> {
+  return selectionChoices(
     snapshot.sessionGroups.filter(
       (group) => group.projectId === projectId && group.parentGroupId === undefined,
     ),
@@ -162,7 +173,7 @@ export function selectMoveToGroupSessionContext(
 export function selectMoveToGroupChoices(
   snapshot: DashboardSnapshotView,
   sessionId: SessionId,
-): Array<KeyedChoice<NewSessionGroupOption>> {
+): Array<SelectionChoice<NewSessionGroupOption>> {
   const context = selectMoveToGroupSessionContext(snapshot, sessionId);
   return context === undefined ? [] : selectNewSessionGroupChoices(snapshot, context.project.id);
 }
@@ -210,8 +221,8 @@ export function selectNewSessionHarnessOptions(
 export function selectNewSessionHarnessChoices(
   snapshot: DashboardSnapshotView,
   project: DashboardProjectView,
-): Array<KeyedChoice<NewSessionHarnessOption>> {
-  return keyChoices(selectNewSessionHarnessOptions(snapshot, project));
+): Array<SelectionChoice<NewSessionHarnessOption>> {
+  return selectionChoices(selectNewSessionHarnessOptions(snapshot, project));
 }
 
 /**

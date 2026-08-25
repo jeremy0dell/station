@@ -21,8 +21,6 @@ export function createInitialTuiState(options: CreateInitialTuiStateOptions = {}
       quickSession: options.groupHeaderActionVisibility?.quickSession ?? true,
       menu: options.groupHeaderActionVisibility?.menu ?? true,
     },
-    scrollOffset: options.scrollOffset ?? 0,
-    terminalRows: options.terminalRows ?? 24,
     localRows: options.localRows ?? createEmptyTuiLocalRows(),
     selection: new Map(),
     widgets: options.widgets ?? [],

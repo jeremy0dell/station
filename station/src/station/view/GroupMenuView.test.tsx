@@ -1,8 +1,13 @@
 import { describe, expect, it } from "bun:test";
+import { rgbToHex } from "@opentui/core";
 import { testRender } from "@opentui/react/test-utils";
 import { createInitialTuiState, openGroupMenu } from "@station/dashboard-core/state";
 import { act } from "react";
-import { nativeStationTheme, StationThemeProvider } from "../../theme/index.js";
+import {
+  nativeStationTheme,
+  stationColorSnapshotValue,
+  StationThemeProvider,
+} from "../../theme/index.js";
 import { spanAtFrameCell } from "../../terminal/testing/frameProbe.js";
 import { groupedManyProjectsSnapshot } from "../fixtures/scenarios.js";
 import { GroupMenuView } from "./GroupMenuView.js";
@@ -15,14 +20,25 @@ describe("GroupMenuView", () => {
       "group_design_refresh",
     );
     if (opened.screen.name !== "groupMenu") throw new Error("Group menu did not open.");
-    const viewport = { columns: 40, rows: 12, anchorTop: 2 };
+    const menuScreen = opened.screen;
+    const group = snapshot.sessionGroups.find(
+      (candidate) => candidate.id === menuScreen.groupId,
+    );
+    if (group === undefined) throw new Error("Group fixture is missing.");
+    const boundaryId = "group-menu-test-boundary";
+    const anchorRenderableId = "group-menu-test-anchor";
     const setup = await testRender(
       <StationThemeProvider theme={nativeStationTheme}>
-        <GroupMenuView
-          snapshot={snapshot}
-          screen={opened.screen}
-          viewport={viewport}
-        />
+        <box id={boundaryId} width={40} height={12} flexDirection="column">
+          <box height={2} flexShrink={0} />
+          <box id={anchorRenderableId} height={1} flexShrink={0} />
+          <GroupMenuView
+            screen={menuScreen}
+            groupName={group.name}
+            boundaryId={boundaryId}
+            anchorRenderableId={anchorRenderableId}
+          />
+        </box>
       </StationThemeProvider>,
       { width: 40, height: 12 },
     );
@@ -32,7 +48,8 @@ describe("GroupMenuView", () => {
       const spans = setup.captureSpans();
       const lines = frame.split("\n");
       const quickSessionRow = lines.findIndex((line) => line.includes("Quick session"));
-      const newSessionRow = lines.findIndex((line) => line.includes("New session…"));
+      const groupSettingsRow = lines.findIndex((line) => line.includes("Group settings…"));
+      const groupSettingsColumn = lines[groupSettingsRow]?.indexOf("Group settings…") ?? -1;
       expect(frame).toContain("Design refresh");
       expect(lines[quickSessionRow]).toMatch(/▸Quick session\s+Q/);
       expect(lines.find((line) => line.includes("New session…"))).toMatch(/New session…\s+N/);
@@ -46,16 +63,21 @@ describe("GroupMenuView", () => {
       );
 
       await act(async () => {
-        await setup.mockMouse.moveTo(
-          lines[newSessionRow]?.indexOf("New session…") ?? -1,
-          newSessionRow,
-        );
+        await setup.mockMouse.moveTo(groupSettingsColumn, groupSettingsRow);
         await new Promise((resolve) => setTimeout(resolve, 10));
       });
       await setup.flush();
       const hoveredLines = setup.captureCharFrame().split("\n");
       expect(hoveredLines[quickSessionRow]).toContain("▸Quick session");
-      expect(hoveredLines[newSessionRow]).not.toContain("▸");
+      expect(hoveredLines[groupSettingsRow]).not.toContain("▸");
+      const hoveredBackground = spanAtFrameCell(
+        setup.captureSpans(),
+        groupSettingsRow,
+        groupSettingsColumn,
+      )?.bg;
+      expect(hoveredBackground === undefined ? undefined : rgbToHex(hoveredBackground)).toBe(
+        stationColorSnapshotValue(nativeStationTheme.contextMenu.selected),
+      );
     } finally {
       setup.renderer.destroy();
     }

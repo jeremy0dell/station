@@ -22,6 +22,15 @@ For an implementation change, finish with:
 pnpm test:all
 ```
 
+Station renderer changes also require the renderer/PTY lane before the repository
+gate:
+
+```sh
+pnpm --dir station typecheck
+pnpm --dir station test
+pnpm test:ci:station
+```
+
 `test:all` is the deterministic repository gate. It builds, typechecks, lints,
 runs unit, contract, integration, diagnostics, scripted-agent, setup E2E, and
 Observer E2E coverage, then runs the installer smoke. Use the focused scripts in
@@ -40,6 +49,10 @@ the focused gate required by the change.
 
 - Workspace unit and integration tests live under `apps/*/test`,
   `packages/*/test`, or `integrations/*/*/test`.
+- Station OpenTUI tests are colocated under `station/src` and run with Bun. Flexible
+  layout coverage should exercise production components with mixed-height content,
+  clipping-edge focus, resize, and pointer/keyboard convergence; deterministic
+  operation counts are preferred to wall-clock assertions for scaling policy.
 - Cross-system tests live under top-level `tests/`.
 - `tests/support/` owns fake providers, fake tools, temporary projects,
   assertions, databases, and sockets.

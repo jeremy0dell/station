@@ -1,4 +1,6 @@
-import stringWidth from "string-width";
+import { cellWidth, clipCells } from "../../text/cells.js";
+
+export { cellWidth, clipCells, truncateCells } from "../../text/cells.js";
 
 // Semantic only — dashboard-core stays color-value-free; renderer theme adapters resolve roles.
 export type RowColor = "blue" | "cyan" | "gray" | "green" | "red" | "yellow" | "purple";
@@ -13,6 +15,7 @@ export type RowSegment =
       highlighted?: true;
       underline?: true;
       url?: string;
+      role?: "selectionSlot";
     }
   | {
       kind: "throbber";
@@ -148,19 +151,6 @@ export const DEFAULT_WORKTREE_ROW_GRID: RowGridConfig = {
   ],
 };
 
-type GraphemeSegment = {
-  segment: string;
-};
-
-type GraphemeSegmenter = {
-  segment(input: string): Iterable<GraphemeSegment>;
-};
-
-type SegmenterConstructor = new (
-  locales?: string | string[],
-  options?: { granularity?: "grapheme" },
-) => GraphemeSegmenter;
-
 type MetadataMode = "full" | "compact" | "none";
 
 type MetadataLayout = {
@@ -178,8 +168,6 @@ const ROW_GRID_CELL_KEYS: readonly RowGridCellKey[] = [
   "metadata",
 ];
 const METADATA_MODES: readonly MetadataMode[] = ["full", "compact", "none"];
-const graphemeSegmenter = createGraphemeSegmenter();
-
 export function layoutWorktreeRowGrid(input: {
   columns: number;
   rows: readonly RowGridRowInput[];
@@ -250,25 +238,8 @@ export function layoutWorktreeRowGrid(input: {
   return fallbackLayouts(columns, input.rows);
 }
 
-export function cellWidth(text: string): number {
-  return stringWidth(sanitizeText(text));
-}
-
 export function segmentsWidth(segments: readonly RowSegment[]): number {
   return segments.reduce((total, segment) => total + segmentWidth(segment), 0);
-}
-
-export function truncateCells(text: string, cells: number): string {
-  const normalized = sanitizeText(text);
-  const limit = normalizeCells(cells);
-  if (limit <= 0) return "";
-  if (cellWidth(normalized) <= limit) return normalized;
-  const ellipsis = "…";
-  const ellipsisWidth = cellWidth(ellipsis);
-  if (limit < ellipsisWidth) {
-    return clipCells(normalized, limit);
-  }
-  return `${clipCells(normalized, limit - ellipsisWidth)}${ellipsis}`;
 }
 
 export function hardClipSegments(segments: readonly RowSegment[], cells: number): RowSegment[] {
@@ -297,6 +268,25 @@ export function hardClipSegments(segments: readonly RowSegment[], cells: number)
   return clipped;
 }
 
+/** Replaces the renderer-visible shortcut without renegotiating shared column widths. */
+export function withRowGridSelectionSlot(
+  layout: RowGridLayout,
+  slot: string | undefined,
+): RowGridLayout {
+  if (slot === undefined) return layout;
+  let replaced = false;
+  const segments = layout.segments.map((segment): RowSegment => {
+    if (segment.kind !== "text" || segment.role !== "selectionSlot") return segment;
+    replaced = true;
+    const width = cellWidth(segment.text);
+    const key = clipCells(slot, 1) || " ";
+    const clipped = clipCells(`[${key}] `, width);
+    const padding = " ".repeat(Math.max(0, width - cellWidth(clipped)));
+    return { ...segment, text: `${clipped}${padding}` };
+  });
+  return replaced ? { ...layout, segments } : layout;
+}
+
 export function textSegment(
   text: string,
   options: {
@@ -306,6 +296,7 @@ export function textSegment(
     highlighted?: true | undefined;
     underline?: true | undefined;
     url?: string | undefined;
+    role?: "selectionSlot" | undefined;
   } = {},
 ): RowSegment {
   const segment: Extract<RowSegment, { kind: "text" }> = {
@@ -318,6 +309,7 @@ export function textSegment(
   if (options.highlighted === true) segment.highlighted = true;
   if (options.underline === true) segment.underline = true;
   if (options.url !== undefined) segment.url = options.url;
+  if (options.role !== undefined) segment.role = options.role;
   return segment;
 }
 
@@ -812,27 +804,6 @@ function segmentWidth(segment: RowSegment): number {
   return segment.kind === "throbber" ? 1 : cellWidth(segment.text);
 }
 
-function clipCells(text: string, cells: number): string {
-  let remaining = normalizeCells(cells);
-  let clipped = "";
-  for (const grapheme of graphemes(text)) {
-    if (remaining <= 0) break;
-    const width = cellWidth(grapheme);
-    if (width > remaining) break;
-    clipped += grapheme;
-    remaining -= width;
-  }
-  return clipped;
-}
-
-function graphemes(text: string): string[] {
-  const normalized = sanitizeText(text);
-  if (graphemeSegmenter === undefined) {
-    return Array.from(normalized);
-  }
-  return Array.from(graphemeSegmenter.segment(normalized), (segment) => segment.segment);
-}
-
 function copyTextSegment(segment: Extract<RowSegment, { kind: "text" }>, text: string): RowSegment {
   const copied: Extract<RowSegment, { kind: "text" }> = {
     kind: "text",
@@ -844,6 +815,7 @@ function copyTextSegment(segment: Extract<RowSegment, { kind: "text" }>, text: s
   if (segment.highlighted === true) copied.highlighted = true;
   if (segment.underline === true) copied.underline = true;
   if (segment.url !== undefined) copied.url = segment.url;
+  if (segment.role !== undefined) copied.role = segment.role;
   return copied;
 }
 
@@ -871,11 +843,4 @@ function emptyMetadataLayout(): MetadataLayout {
     segments: [],
     visibleGroups: [],
   };
-}
-
-function createGraphemeSegmenter(): GraphemeSegmenter | undefined {
-  const Segmenter = (Intl as typeof Intl & { Segmenter?: SegmenterConstructor }).Segmenter;
-  return Segmenter === undefined
-    ? undefined
-    : new Segmenter(undefined, { granularity: "grapheme" });
 }

@@ -22,14 +22,14 @@ import type {
   DashboardFilterFooterSegment,
   DashboardFilterHeaderModel,
   DashboardFooterModel,
-  DashboardGroupFrameEndPayload,
   DashboardGroupHeaderPayload,
   DashboardPersistentFilterGroupMatch,
   DashboardRowId,
   DashboardSessionRow,
+  DashboardSlots,
   DashboardTableHeaderModel,
+  DashboardTreeBranch,
   DashboardTreeRow,
-  DashboardViewport,
   EditableTextInputState,
   FleetSummary,
   GroupOrderingMode,
@@ -54,6 +54,7 @@ import type {
   TuiSemanticAction,
   TuiToastEntry,
 } from "../../src/entrypoints/state.js";
+import type { TextCellUnit } from "../../src/entrypoints/text.js";
 import type {
   TopRowWidgetRuntimeDeps,
   TopRowWidgetView,
@@ -66,6 +67,7 @@ it("typechecks the role entrypoint contracts", () => {
 });
 
 export type EntrypointTypecheckWitness = [
+  TextCellUnit,
   DashboardRuntime,
   DashboardRuntimeOptions,
   DashboardStateSource,
@@ -100,11 +102,11 @@ export type EntrypointTypecheckWitness = [
   DashboardRowId,
   DashboardCellId,
   DashboardTreeRow,
-  DashboardGroupFrameEndPayload,
   DashboardGroupHeaderPayload,
+  DashboardTreeBranch,
   DashboardPersistentFilterGroupMatch,
   GroupOrderingMode,
-  DashboardViewport,
+  DashboardSlots,
   FleetSummary,
   DashboardTableHeaderModel,
   DashboardFooterModel,

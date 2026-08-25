@@ -23,7 +23,13 @@ type AddProjectBaseState = StepWizardState<AddProjectStep> & {
   firstProject: boolean;
 };
 
+export type AddProjectStartChoiceId =
+  | "addProjectStart:currentDirectory"
+  | "addProjectStart:homeDirectory";
+
 export type AddProjectStartChoice = {
+  /** Stable semantic identity; separate choices may intentionally resolve to the same path. */
+  id: AddProjectStartChoiceId;
   label: string;
   path: string;
   detail: string;

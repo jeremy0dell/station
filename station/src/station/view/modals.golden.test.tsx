@@ -2,8 +2,14 @@
 // the parity checklist, reached by driving the real machine with real keys,
 // rendered over the dashboard at 80x24. Snapshots live in __snapshots__.
 import { afterEach, describe, expect, it } from "bun:test";
-import { rgbToHex, TextRenderable, type BaseRenderable } from "@opentui/core";
+import {
+  rgbToHex,
+  TextRenderable,
+  type BaseRenderable,
+  type BoxRenderable,
+} from "@opentui/core";
 import { testRender } from "@opentui/react/test-utils";
+import { act } from "react";
 import {
   nativeStationTheme,
   stationColorSnapshotValue,
@@ -21,7 +27,8 @@ import {
   manyProjectsSnapshot,
   noProjectsSnapshot,
 } from "../fixtures/scenarios.js";
-import type { DashboardRuntime, DashboardStateSource } from "@station/dashboard-core/runtime";
+import type { DashboardStateSource } from "@station/dashboard-core/runtime";
+import type { StationTestDashboardRuntime } from "../test/support/makeStationTestRuntime.js";
 import type { TuiKey } from "@station/dashboard-core/state";
 import {
   addPendingProjectDefaultHarness,
@@ -46,6 +53,7 @@ import {
 type GoldenDashboardState = ReturnType<typeof createInitialTuiState>;
 import { makeStationTestRuntime } from "../test/support/makeStationTestRuntime.js";
 import { DashboardRoot } from "./DashboardRoot.js";
+import { FILTER_CONDITION_PANEL_ID } from "./DashboardFilterConditionView.js";
 import { StationMouseProvider } from "./stationMouseContext.js";
 import { WidgetSettingsPanelView } from "./settings/WidgetSettingsPanelView.js";
 
@@ -106,6 +114,52 @@ function markNewSessionSubmitting(state: GoldenDashboardState): GoldenDashboardS
   };
 }
 
+function openLongAddProjectChooser(
+  state: GoldenDashboardState,
+  entryCount: number,
+): GoldenDashboardState {
+  let choosing = applyAddProjectFolderLoaded(state, {
+    path: "/Users/example/Developer",
+    entries: Array.from({ length: entryCount }, (_, index) => ({
+      name: `project-${String(index).padStart(2, "0")}`,
+      path: `/Users/example/Developer/project-${String(index).padStart(2, "0")}`,
+      kind: "directory" as const,
+    })),
+  });
+  for (let index = 0; index < entryCount; index += 1) {
+    choosing = handleTuiKey(choosing, { input: "", downArrow: true }).state;
+  }
+  return choosing;
+}
+
+function overflowProjectsSnapshot(projectCount: number): ReturnType<typeof manyProjectsSnapshot> {
+  const base = manyProjectsSnapshot();
+  const station = base.projects[0];
+  if (station === undefined) throw new Error("fixture has no projects");
+  const projects = Array.from({ length: projectCount }, (_, index) => ({
+    ...station,
+    id: `sheet-project-${index}` as typeof station.id,
+    label: `sheet-project-${String(index).padStart(2, "0")}`,
+  }));
+  return { ...base, projects };
+}
+
+function withLongWidgetList(state: GoldenDashboardState): GoldenDashboardState {
+  if (state.screen.name !== "widgetSettings") return state;
+  return {
+    ...state,
+    widgets: Array.from({ length: 28 }, (_, index) => ({
+      type: index % 2 === 0 ? ("time" as const) : ("moon" as const),
+    })),
+    screen: {
+      ...state.screen,
+      widgetItemIds: Array.from({ length: 28 }, (_, index) => `widget:${index}` as const),
+      activeWidgetItemId: "widget:27",
+      nextWidgetIdentity: 28,
+    },
+  };
+}
+
 const CASES: ModalCase[] = [
   {
     name: "help overlay",
@@ -114,16 +168,45 @@ const CASES: ModalCase[] = [
       "station help",
       "Ctrl-\\",
       "split pane right",
-      "1-9/a-z",
-      "open visible session",
-      "G",
-      "quick group",
-      "M",
-      "move to group",
-      "edit/apply/cancel-clear/retain-close filter",
+      "↓ more",
+      "PgUp/PgDn",
       "╭",
       "╰",
     ],
+  },
+  {
+    name: "help overlay middle at standard size",
+    keys: [
+      { input: "H" },
+      ...Array.from({ length: 10 }, () => ({ input: "", downArrow: true })),
+    ],
+    expect: ["station help", "▸", "↓ more", "PgUp/PgDn"],
+  },
+  {
+    name: "help overlay final entry at standard size",
+    keys: [{ input: "H" }, { input: "", pageDown: true }],
+    expect: ["widgets", "delete", "▸   H/?", "refresh", "↑ more", "PgUp/PgDn"],
+  },
+  {
+    name: "help overlay top at minimum size",
+    keys: [{ input: "H" }],
+    size: { width: 40, height: 12 },
+    expect: ["station help", "Ctrl-O", "↓ more", "PgUp/PgDn"],
+  },
+  {
+    name: "help overlay middle at minimum size",
+    keys: [
+      { input: "H" },
+      ...Array.from({ length: 10 }, () => ({ input: "", downArrow: true })),
+    ],
+    size: { width: 40, height: 12 },
+    expect: ["▸", "↕ more", "PgUp/PgDn"],
+  },
+  {
+    name: "help overlay final entry at minimum size",
+    keys: [{ input: "H" }, { input: "", pageDown: true }],
+    size: { width: 40, height: 12 },
+    expect: ["widgets", "delete", "▸", "refresh", "↑ more", "PgUp/PgDn"],
   },
   {
     name: "project menu",
@@ -156,8 +239,15 @@ const CASES: ModalCase[] = [
     keys: [],
     size: { width: 30, height: 9 },
     snapshot: groupedManyProjectsSnapshot,
-    prepare: (state) => openGroupMenu(state, "group_design_refresh"),
-    expect: ["Quick session", "New session…", "Group settings…", "Remove Group…"],
+    prepare: (state) => {
+      let opened = openGroupMenu(state, "group_design_refresh");
+      for (let index = 0; index < 3; index += 1) {
+        opened = handleTuiKey(opened, { input: "", downArrow: true }).state;
+      }
+      return opened;
+    },
+    expect: ["New session…", "Group settings…", "Remove Group…"],
+    reject: ["Quick session"],
   },
   {
     name: "create group sheet",
@@ -188,8 +278,21 @@ const CASES: ModalCase[] = [
       "Current    Design refresh",
       "U Ungrouped",
       "1 Design refresh",
-      "N Create new Group…",
+      "N create",
     ],
+  },
+  {
+    name: "move to group follows the final semantic destination",
+    keys: [],
+    snapshot: groupedManyProjectsSnapshot,
+    prepare: (state) => {
+      let opened = openMoveToGroupForRow(state, "ses_wt_group_contracts");
+      for (let index = 0; index < 7; index += 1) {
+        opened = handleTuiKey(opened, { input: "", downArrow: true }).state;
+      }
+      return opened;
+    },
+    expect: ["Move to Group", "▸ N Create new Group…", "N create", "Esc cancel"],
   },
   {
     name: "move to group create sheet",
@@ -221,6 +324,23 @@ const CASES: ModalCase[] = [
     ],
   },
   {
+    name: "persistent filter condition fields at minimum size",
+    keys: [{ input: "/" }, { input: "i", ctrl: true }],
+    size: { width: 40, height: 12 },
+    expect: ["FILTER CONDITIONS", "S Status", "Apply filter (F)", "F apply"],
+  },
+  {
+    name: "persistent filter follows the final field at minimum size",
+    keys: [
+      { input: "/" },
+      { input: "i", ctrl: true },
+      { input: "", downArrow: true },
+      { input: "", downArrow: true },
+    ],
+    size: { width: 40, height: 12 },
+    expect: ["FILTER CONDITIONS", "▸ A Agent", "Apply filter (F)", "F apply"],
+  },
+  {
     name: "persistent filter status condition values",
     keys: [{ input: "/" }, { input: "i", ctrl: true }, { input: "S" }, { input: "3" }],
     expect: [
@@ -249,7 +369,7 @@ const CASES: ModalCase[] = [
     ],
     size: { width: 40, height: 12 },
     expect: [
-      "STATUS CONDITION ↑5",
+      "STATUS CONDITION",
       "▸ 7 [ ] No agent",
       "[←]",
       "[×]",
@@ -266,29 +386,46 @@ const CASES: ModalCase[] = [
     expect: ["Collapse Project", "↑↓ move   ↵ select   1-9/a-z jump   Esc cancel", "station"],
   },
   {
-    name: "collapse project sheet windows a long list",
-    keys: [{ input: "C" }],
+    name: "collapse project sheet scrolls a long semantic list",
+    keys: [
+      { input: "C" },
+      ...Array.from({ length: 24 }, () => ({ input: "", downArrow: true })),
+    ],
     snapshot: () => {
       const base = manyProjectsSnapshot();
       const station = base.projects[0];
       if (station === undefined) throw new Error("fixture has no projects");
       const extras = Array.from({ length: 21 }, (_, index) => ({
         ...station,
-        id: `filler-${index}` as typeof station.id,
-        label: `filler-${index}`,
+        id: `overflow-project-${index}` as typeof station.id,
+        label: `overflow-project-${index}`,
       }));
       return { ...base, projects: [...base.projects, ...extras] };
     },
     trimSnapshotTrailingWhitespace: true,
-    // 25 projects at 24 rows: the list windows to 18 with a range footer instead
-    // of clipping rows the cursor could still reach.
-    expect: ["Collapse Project", "↑↓ move   ↵ select   1-18 of 25   Esc cancel", "station"],
+    expect: [
+      "Collapse Project",
+      "↑↓ move   ↵ select   1-9/a-z jump   Esc cancel",
+      "▸ p overflow-project-20 healthy",
+    ],
   },
   {
     name: "project settings picker sheet",
     keys: [{ input: "P" }],
     trimSnapshotTrailingWhitespace: true,
     expect: ["Project Settings", "↑↓ move   ↵ select   1-9/a-z jump   Esc cancel", "station"],
+  },
+  {
+    name: "new session project picker reaches beyond the shortcut alphabet",
+    keys: [
+      { input: "N" },
+      { input: "P" },
+      ...Array.from({ length: 39 }, () => ({ input: "", downArrow: true })),
+    ],
+    snapshot: () => overflowProjectsSnapshot(40),
+    size: { width: 80, height: 40 },
+    trimSnapshotTrailingWhitespace: true,
+    expect: ["Choose Project", "▸   sheet-project-39", "Esc back"],
   },
   {
     name: "group settings general",
@@ -304,6 +441,14 @@ const CASES: ModalCase[] = [
       "Save",
       "Cancel",
     ],
+  },
+  {
+    name: "group settings stays compact in a tall terminal",
+    keys: [{ input: "", rightArrow: true }],
+    snapshot: groupedManyProjectsSnapshot,
+    size: { width: 120, height: 40 },
+    prepare: (state) => openGroupSettings(state, "group_design_refresh", "general"),
+    expect: ["Group settings · Design refresh", "Project station (read-only)", "Save", "Cancel"],
   },
   {
     name: "group settings sessions compact",
@@ -328,11 +473,42 @@ const CASES: ModalCase[] = [
         groupId: "group_design_refresh",
         actionId: "remove",
       }).state,
-    expect: ["Remove Group", "remain open", "delete Design refresh", "Remove", "Back"],
+    expect: [
+      "Remove Group",
+      "Sessions stay open; become ungrouped.",
+      "delete Design refresh",
+      "Remove",
+      "Back",
+    ],
+  },
+  {
+    name: "group settings remove minimum-height safety",
+    keys: [],
+    snapshot: groupedManyProjectsSnapshot,
+    size: { width: 40, height: 8 },
+    prepare: (state) =>
+      activateSessionGroupMenuAction(state, {
+        projectId: "station",
+        groupId: "group_design_refresh",
+        actionId: "remove",
+      }).state,
+    expect: [
+      "Remove Group",
+      "Sessions stay open; become ungrouped.",
+      "delete Design refresh",
+      "Remove",
+      "Back",
+    ],
   },
   {
     name: "project settings panel",
     keys: [{ input: "P" }, { input: "1" }],
+    expect: ["Project settings", "Default agent", "Remove project", "✓ current"],
+  },
+  {
+    name: "project settings stays compact in a tall terminal",
+    keys: [{ input: "P" }, { input: "1" }],
+    size: { width: 120, height: 40 },
     expect: ["Project settings", "Default agent", "Remove project", "✓ current"],
   },
   {
@@ -364,6 +540,17 @@ const CASES: ModalCase[] = [
       { input: "\r", return: true },
     ],
     expect: ["Remove project", "Worktrees & files stay on disk.", "[ Remove project (R) ]"],
+  },
+  {
+    name: "project settings remove minimum-height safety",
+    keys: [
+      { input: "P" },
+      { input: "1" },
+      { input: "", downArrow: true },
+      { input: "\r", return: true },
+    ],
+    size: { width: 40, height: 8 },
+    expect: ["Remove project", "Files stay; removed from Station.", "[ Remove project (R) ]"],
   },
   {
     name: "project settings optimistic default",
@@ -617,7 +804,17 @@ const CASES: ModalCase[] = [
     name: "new session pick Group",
     keys: [{ input: "N" }, { input: "G" }],
     snapshot: groupedManyProjectsSnapshot,
-    expect: ["Choose Group", "U Ungrouped", "1 Design refresh", "N Create new Group"],
+    expect: ["Choose Group", "U Ungrouped", "1 Design refresh", "N create"],
+  },
+  {
+    name: "new session follows the final Group choice",
+    keys: [
+      { input: "N" },
+      { input: "G" },
+      ...Array.from({ length: 7 }, () => ({ input: "", downArrow: true })),
+    ],
+    snapshot: groupedManyProjectsSnapshot,
+    expect: ["Choose Group", "▸ N Create new Group", "N create", "Esc back"],
   },
   {
     name: "new session edit inline Group",
@@ -669,6 +866,22 @@ const CASES: ModalCase[] = [
         ],
       }),
     expect: ["Choose Project Folder", "Choose (↵)", "Open (→)", "Parent (←)", "Search (/)"],
+  },
+  {
+    name: "add project long folder picker in a tall terminal",
+    keys: [{ input: "A" }],
+    size: { width: 120, height: 40 },
+    trimSnapshotTrailingWhitespace: true,
+    prepare: (state) => openLongAddProjectChooser(state, 40),
+    expect: ["Choose Project Folder", "project-39/", "Folder", "Choose (↵)", "Cancel (Esc)"],
+  },
+  {
+    name: "add project long folder picker at minimum height",
+    keys: [{ input: "A" }],
+    size: { width: 40, height: 12 },
+    trimSnapshotTrailingWhitespace: true,
+    prepare: (state) => openLongAddProjectChooser(state, 40),
+    expect: ["Choose Project Folder", "project-39/", "Folder", "Find", "Exit"],
   },
   {
     name: "add project review actions",
@@ -729,14 +942,23 @@ const CASES: ModalCase[] = [
     name: "widget settings panel",
     keys: [{ input: "W" }],
     trimSnapshotTrailingWhitespace: true,
-    prepare: (state) => ({
-      ...state,
-      widgets: [
-        { type: "time" },
-        { type: "weather", city: "New York, NY", label: "NYC", enabled: false },
-        { type: "moon" },
-      ],
-    }),
+    prepare: (state) => {
+      if (state.screen.name !== "widgetSettings") return state;
+      return {
+        ...state,
+        widgets: [
+          { type: "time" },
+          { type: "weather", city: "New York, NY", label: "NYC", enabled: false },
+          { type: "moon" },
+        ],
+        screen: {
+          ...state.screen,
+          widgetItemIds: ["widget:0", "widget:1", "widget:2"],
+          activeWidgetItemId: "widget:0",
+          nextWidgetIdentity: 3,
+        },
+      };
+    },
     expect: [
       "widgets",
       "saved to config.toml",
@@ -746,6 +968,14 @@ const CASES: ModalCase[] = [
       "[ + add widget ]",
       "↵ toggle   [ ] reorder   x remove   a add",
     ],
+  },
+  {
+    name: "widget settings long list in a tall terminal",
+    keys: [{ input: "W" }],
+    size: { width: 120, height: 40 },
+    trimSnapshotTrailingWhitespace: true,
+    prepare: withLongWidgetList,
+    expect: ["widgets", "▸ [on ] moon", "↵ toggle"],
   },
   {
     name: "widget settings picker",
@@ -761,6 +991,13 @@ const CASES: ModalCase[] = [
       "↵ add   esc back",
     ],
   },
+  {
+    name: "widget settings picker in a tall terminal",
+    keys: [{ input: "W" }, { input: "a" }],
+    size: { width: 120, height: 40 },
+    trimSnapshotTrailingWhitespace: true,
+    expect: ["add widget", "weather and tz require config.toml", "↵ add   esc back"],
+  },
 ];
 
 describe("modal flow golden frames", () => {
@@ -771,7 +1008,7 @@ describe("modal flow golden frames", () => {
     }
   });
 
-  function makeStore(snapshot = manyProjectsSnapshot()): DashboardRuntime {
+  function makeStore(snapshot = manyProjectsSnapshot()): StationTestDashboardRuntime {
     return makeStationTestRuntime({
       snapshot,
       folderService: {
@@ -815,6 +1052,7 @@ describe("modal flow golden frames", () => {
           <DashboardRoot
             state={state}
             actions={store.actions}
+            layout={store.layout}
             columns={size.width}
             rows={size.height}
             onCopyNotice={() => {}}
@@ -826,6 +1064,9 @@ describe("modal flow golden frames", () => {
         setup.renderer.destroy();
       });
       await setup.renderOnce();
+      // Layout adapters reflow from OpenTUI's layout-changed event; capture only
+      // after visual idle instead of forcing a new frame with queued geometry work.
+      await setup.flush();
       // The generated session name is uuid-seeded (stableNameHash over a
       // random token); scrub it so the goldens stay deterministic.
       const capturedFrame = setup
@@ -844,6 +1085,49 @@ describe("modal flow golden frames", () => {
       expect(frame).toMatchSnapshot();
     });
   }
+
+  it("keeps the condition popover anchored through an intrinsic stage transition", async () => {
+    const store = makeStore(manyProjectsSnapshot());
+    store.actions.handleKey({ input: "/" });
+    store.actions.handleKey({ input: "i", ctrl: true });
+    const setup = await testRender(
+      <StationThemeProvider theme={nativeStationTheme}>
+        <DashboardRoot
+          state={store.state}
+          actions={store.actions}
+          layout={store.layout}
+          columns={SIZE.width}
+          rows={SIZE.height}
+          onCopyNotice={() => {}}
+        />
+      </StationThemeProvider>,
+      SIZE,
+    );
+    teardowns.push(() => setup.renderer.destroy());
+    await setup.renderOnce();
+    await setup.flush();
+
+    const fields = conditionPanelGeometry(setup.renderer.root);
+    expect(setup.captureCharFrame()).toMatchSnapshot();
+
+    await act(async () => {
+      store.actions.handleKey({ input: "S" });
+      await Promise.resolve();
+    });
+    await setup.flush();
+    const values = conditionPanelGeometry(setup.renderer.root);
+    expect(values).toMatchObject({ x: fields.x, y: fields.y, width: fields.width });
+    expect(values.height).toBeGreaterThan(fields.height);
+    expect(setup.captureCharFrame()).toMatchSnapshot();
+
+    await act(async () => {
+      store.actions.handleKey({ input: "", leftArrow: true });
+      await Promise.resolve();
+    });
+    await setup.flush();
+    expect(conditionPanelGeometry(setup.renderer.root)).toEqual(fields);
+    expect(setup.captureCharFrame()).toMatchSnapshot();
+  });
 
   it("renders Help, sheets, settings, and prompts with opaque adaptive light roles", async () => {
     const representatives: ReadonlyArray<{
@@ -890,6 +1174,7 @@ describe("modal flow golden frames", () => {
           <DashboardRoot
             state={state}
             actions={store.actions}
+            layout={store.layout}
             columns={size.width}
             rows={size.height}
             onCopyNotice={() => {}}
@@ -947,6 +1232,7 @@ describe("modal flow golden frames", () => {
         <DashboardRoot
           state={store.state}
           actions={store.actions}
+          layout={store.layout}
           columns={SIZE.width}
           rows={SIZE.height}
           onCopyNotice={() => {}}
@@ -978,7 +1264,14 @@ describe("modal flow golden frames", () => {
       <StationThemeProvider theme={nativeStationTheme}>
         <StationMouseProvider value={() => {}}>
           <WidgetSettingsPanelView
-            screen={{ name: "widgetSettings", focus: "list", cursor: 0, pickerCursor: 0 }}
+            screen={{
+              name: "widgetSettings",
+              focus: "list",
+              widgetItemIds: ["widget:0", "widget:1"],
+              activeWidgetItemId: "widget:0",
+              activePickerType: "time",
+              nextWidgetIdentity: 2,
+            }}
             widgets={[{ type: "time" }, { type: "moon", enabled: false }]}
             widgetsPersisted
             columns={SIZE.width}
@@ -1005,4 +1298,15 @@ function collectTextRenderables(renderable: BaseRenderable): TextRenderable[] {
     collected.push(...collectTextRenderables(child));
   }
   return collected;
+}
+
+function conditionPanelGeometry(root: BaseRenderable): {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+} {
+  const panel = root.findDescendantById(FILTER_CONDITION_PANEL_ID) as BoxRenderable | undefined;
+  if (panel === undefined) throw new Error("filter condition panel must render");
+  return { x: panel.x, y: panel.y, width: panel.width, height: panel.height };
 }

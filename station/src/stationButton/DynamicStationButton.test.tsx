@@ -1,16 +1,18 @@
 import { describe, expect, it } from "bun:test";
 import { testRender } from "@opentui/react/test-utils";
+import { cellWidth } from "@station/dashboard-core/text";
 import { useState } from "react";
 import { nativeStationTheme, StationThemeProvider } from "../theme/index.js";
 import { DynamicStationButton } from "./DynamicStationButton.js";
 import {
   ANIM_MS,
+  clampSessionName,
   FRAME_MS,
   type IslandCelebration,
   type IslandDisplayInput,
   islandDisplay,
+  stationButtonTargetCellSize,
   STATION_ICON,
-  targetDims,
 } from "./layout.js";
 import type { StationButtonStatus } from "./status.js";
 
@@ -182,8 +184,8 @@ describe("DynamicStationButton", () => {
       return <DynamicStationButton input={input({ idleCount: 3 }, { celebration })} />;
     }
 
-    const restingWidth = targetDims(islandDisplay(input({ idleCount: 3 }), false)).width;
-    const notifiedWidth = targetDims(
+    const restingWidth = stationButtonTargetCellSize(islandDisplay(input({ idleCount: 3 }), false)).width;
+    const notifiedWidth = stationButtonTargetCellSize(
       islandDisplay(input({ idleCount: 3 }, { celebration: { prNumber: 42 } }), false),
     ).width;
     const setup = await testRender(
@@ -236,11 +238,11 @@ describe("DynamicStationButton", () => {
       return <DynamicStationButton input={input({ idleCount: 3 }, { celebration })} />;
     }
 
-    const restingWidth = targetDims(islandDisplay(input({ idleCount: 3 }), false)).width;
-    const firstWidth = targetDims(
+    const restingWidth = stationButtonTargetCellSize(islandDisplay(input({ idleCount: 3 }), false)).width;
+    const firstWidth = stationButtonTargetCellSize(
       islandDisplay(input({ idleCount: 3 }, { celebration: first }), false),
     ).width;
-    const secondWidth = targetDims(
+    const secondWidth = stationButtonTargetCellSize(
       islandDisplay(input({ idleCount: 3 }, { celebration: second }), false),
     ).width;
     const setup = await testRender(
@@ -300,8 +302,8 @@ describe("DynamicStationButton", () => {
       );
     }
 
-    const restingWidth = targetDims(islandDisplay(input(), false)).width;
-    const notifiedWidth = targetDims(islandDisplay(input({}, { celebration }), false)).width;
+    const restingWidth = stationButtonTargetCellSize(islandDisplay(input(), false)).width;
+    const notifiedWidth = stationButtonTargetCellSize(islandDisplay(input({}, { celebration }), false)).width;
     const setup = await testRender(
       <StationThemeProvider theme={nativeStationTheme}>
         <Harness />
@@ -346,9 +348,9 @@ describe("DynamicStationButton", () => {
       );
     }
 
-    const restingWidth = targetDims(islandDisplay(input({ idleCount: 3 }), false)).width;
-    const expandedWidth = targetDims(islandDisplay(input({ idleCount: 3 }), true)).width;
-    const notifiedWidth = targetDims(
+    const restingWidth = stationButtonTargetCellSize(islandDisplay(input({ idleCount: 3 }), false)).width;
+    const expandedWidth = stationButtonTargetCellSize(islandDisplay(input({ idleCount: 3 }), true)).width;
+    const notifiedWidth = stationButtonTargetCellSize(
       islandDisplay(input({ idleCount: 3 }, { celebration }), false),
     ).width;
     const setup = await testRender(
@@ -437,7 +439,7 @@ describe("DynamicStationButton", () => {
     }
 
     const surface = { width: 100, height: 20 };
-    const notifiedWidth = targetDims(islandDisplay(input({}, { celebration }), false)).width;
+    const notifiedWidth = stationButtonTargetCellSize(islandDisplay(input({}, { celebration }), false)).width;
     const setup = await testRender(
       <StationThemeProvider theme={nativeStationTheme}>
         <Harness />
@@ -531,6 +533,25 @@ describe("DynamicStationButton", () => {
     const bottomBorder = lines.findIndex((line) => line.slice(buttonLeft).startsWith("╰"));
     expect(bottomBorder).toBeGreaterThan(0);
     expect(lines[bottomBorder - 1]?.slice(buttonLeft).replace(/[│ ]/g, "")).toBe("");
+  });
+
+  it("keeps wide and combining session names inside the measured cell boundary", async () => {
+    const sessionName = "界e\u0301👨‍👩‍👧‍👦".repeat(8);
+    const value = input({ attention: true, needsYouCount: 1, sessionName });
+    const expected = stationButtonTargetCellSize(islandDisplay(value, true));
+    const clamped = clampSessionName(sessionName);
+    const frame = await captureFrame(<DynamicStationButton input={value} hovered />);
+
+    expect(frame).toContain(clamped);
+    expect(frame).not.toContain("�");
+    expect(renderedButtonWidth(frame)).toBe(expected.width);
+
+    const titleLine = frame.split("\n").find((line) => line.includes(clamped));
+    const left = titleLine?.indexOf("│") ?? -1;
+    const right = titleLine?.lastIndexOf("│") ?? -1;
+    expect(left).toBeGreaterThanOrEqual(0);
+    expect(right).toBeGreaterThan(left);
+    expect(cellWidth(titleLine?.slice(left, right + 1) ?? "")).toBe(expected.width);
   });
 
   it("expanded attention shows the queue when several sessions ask", async () => {

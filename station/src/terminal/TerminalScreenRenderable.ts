@@ -317,7 +317,7 @@ export class TerminalScreenRenderable extends Renderable {
       return;
     }
     // Pane-local cells are 0-based; mouse reports are 1-based, clamped to the
-    // PTY grid so a click on the border chrome can't aim outside it.
+    // PTY grid so a click on the border can't aim outside it.
     const stats = screen.bufferStats();
     const col = clampCell(local.x + 1, stats.cols);
     const row = clampCell(local.y + 1, stats.rows);

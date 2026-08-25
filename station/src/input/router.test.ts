@@ -297,19 +297,24 @@ describe("routeMouse with the station bindings", () => {
       routeMouse({ kind: "contextMenuBackdrop" }, LEFT_DOWN, paneFocusedState(), mouseBindings),
     ).toEqual({ kind: "context-menu-close" });
     expect(
-      routeMouse({ kind: "contextMenuItem", itemIndex: 2 }, LEFT_DOWN, paneFocusedState(), mouseBindings),
-    ).toEqual({ kind: "context-menu-select", itemIndex: 2 });
+      routeMouse(
+        { kind: "contextMenuItem", itemId: "pane.close" },
+        LEFT_DOWN,
+        paneFocusedState(),
+        mouseBindings,
+      ),
+    ).toEqual({ kind: "context-menu-select", itemId: "pane.close" });
   });
 
   it("maps context menu item hover to an absolute highlight, not a select", () => {
     expect(
       routeMouse(
-        { kind: "contextMenuItemHover", itemIndex: 1 },
+        { kind: "contextMenuItemHover", itemId: "pane.splitBelow" },
         { ...LEFT_DOWN, type: "move" },
         paneFocusedState(),
         mouseBindings,
       ),
-    ).toEqual({ kind: "context-menu-set-active", index: 1 });
+    ).toEqual({ kind: "context-menu-set-active", itemId: "pane.splitBelow" });
   });
 });
 

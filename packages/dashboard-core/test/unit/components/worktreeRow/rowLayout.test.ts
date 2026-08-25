@@ -3,6 +3,7 @@ import type { RowGridLayout } from "../../../../src/components/WorktreeRow/layou
 import {
   layoutWorktreeRowGrid,
   segmentsWidth,
+  withRowGridSelectionSlot,
 } from "../../../../src/components/WorktreeRow/layout.js";
 import { worktreeStyleRowGridInput } from "../../../../src/components/WorktreeRow/rowInput.js";
 
@@ -11,6 +12,29 @@ function rowText(layout: RowGridLayout): string {
 }
 
 describe("worktree row layout and filter semantics", () => {
+  it("decorates a renderer-visible slot without changing negotiated geometry", () => {
+    for (const columns of [2, 3, 7, 40]) {
+      const baseInput = worktreeStyleRowGridInput({
+        id: `base-${columns}`,
+        slot: undefined,
+        marker: { kind: "text", text: "-" },
+        title: "semantic-session",
+      });
+      const directInput = worktreeStyleRowGridInput({
+        id: `direct-${columns}`,
+        slot: "7",
+        marker: { kind: "text", text: "-" },
+        title: "semantic-session",
+      });
+      const [base] = layoutWorktreeRowGrid({ columns, rows: [baseInput] });
+      const [direct] = layoutWorktreeRowGrid({ columns, rows: [directInput] });
+      const decorated = withRowGridSelectionSlot(base, "7");
+
+      expect(rowText(decorated)).toBe(rowText(direct));
+      expect(segmentsWidth(decorated.segments)).toBe(segmentsWidth(base.segments));
+    }
+  });
+
   it("stretches the status to the row end instead of truncating while space remains", () => {
     const status = "Cursor turn ended after running the full test suite";
     const [layout] = layoutWorktreeRowGrid({

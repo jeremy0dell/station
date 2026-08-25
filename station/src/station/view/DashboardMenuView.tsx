@@ -1,14 +1,18 @@
-import { TextAttributes } from "@opentui/core";
-import { Fragment } from "react";
-import { formatMenuRow } from "../../menu/formatMenuRow.js";
-import { visibleMenuItems } from "../../menu/visibleMenuItems.js";
+import { type MouseEvent, TextAttributes } from "@opentui/core";
+import { Fragment, useState } from "react";
 import type { StationMouseTarget } from "../input/stationMouse.js";
 import { toOpenTuiColor, toOpenTuiOpaqueColor, useStationTheme } from "../../theme/index.js";
+import { SemanticScrollRegion } from "./layout/SemanticScrollViewport.js";
+import { semanticItemRenderableId } from "./layout/scrollViewport.js";
+import { semanticItemIdAtPointer } from "./layout/semanticPointerTarget.js";
+import { useAnchoredMenuPlacement } from "./layout/useAnchoredMenuPlacement.js";
 import {
   stationMouseProps,
-  useStationHoverState,
+  useStationHoverEnabled,
   useStationMouse,
 } from "./stationMouseContext.js";
+
+const DASHBOARD_MENU_VIEWPORT_ID = "station-dashboard-menu-items";
 
 export type DashboardMenuItemView = {
   readonly id: string;
@@ -22,49 +26,54 @@ export type DashboardMenuItemView = {
 
 export type DashboardMenuModel = {
   readonly items: readonly DashboardMenuItemView[];
-  readonly width: number;
+  readonly preferredWidth: number;
   readonly title?: string;
-};
-
-export type DashboardMenuViewport = {
-  readonly columns: number;
-  readonly rows: number;
-  readonly anchorTop: number;
 };
 
 export type DashboardMenuViewProps = {
   menu: DashboardMenuModel;
-  viewport: DashboardMenuViewport;
+  boundaryId: string;
+  anchorRenderableId: string;
 };
 
-/** Shared anchored-menu geometry and row presentation for dashboard feature menus. */
-export function DashboardMenuView({ menu, viewport }: DashboardMenuViewProps) {
+/** Shared semantic item presentation for structurally anchored dashboard menus. */
+export function DashboardMenuView({ menu, boundaryId, anchorRenderableId }: DashboardMenuViewProps) {
   const theme = useStationTheme();
   const dispatch = useStationMouse();
-  const width = Math.min(Math.max(1, viewport.columns), menu.width);
-  const requestedHeight =
-    menu.items.length + menu.items.filter((item) => item.separatorBefore === true).length + 2;
-  const height = Math.min(Math.max(1, viewport.rows), requestedHeight);
-  const below = viewport.anchorTop + 1;
-  const top = Math.max(
-    0,
-    Math.min(
-      viewport.rows - height,
-      below + height <= viewport.rows ? below : viewport.anchorTop - height,
-    ),
+  const hoverEnabled = useStationHoverEnabled();
+  const [hoveredItemId, setHoveredItemId] = useState<string>();
+  const menuRef = useAnchoredMenuPlacement(
+    boundaryId,
+    anchorRenderableId,
+    DASHBOARD_MENU_VIEWPORT_ID,
   );
-  const contentWidth = Math.max(1, width - 2);
-  const items = visibleMenuItems(menu.items, Math.max(0, height - 2));
+  const itemIds = menu.items.map((item) => item.id);
+  const followedItemId = menu.items.find((item) => item.focused)?.id;
+  const backdropMouseProps = stationMouseProps(dispatch, { kind: "sheetBackdrop" });
+  const dispatchPointer = (event: MouseEvent): void => {
+    event.stopPropagation();
+    const itemId = semanticItemIdAtPointer(
+      menuRef.current,
+      DASHBOARD_MENU_VIEWPORT_ID,
+      itemIds,
+      event.x,
+      event.y,
+    );
+    const item = menu.items.find((candidate) => candidate.id === itemId);
+    dispatch(item?.target ?? { kind: "sheetBackdrop" }, event);
+  };
   const titleProps: { title?: string } = {};
   if (menu.title !== undefined) titleProps.title = menu.title;
 
   return (
     <box
+      id="station-dashboard-menu"
+      ref={menuRef}
       position="absolute"
-      left={Math.max(0, viewport.columns - width)}
-      top={top}
-      width={width}
-      height={height}
+      right={0}
+      top={0}
+      width={menu.preferredWidth}
+      maxWidth="100%"
       zIndex={10}
       border
       {...titleProps}
@@ -72,53 +81,85 @@ export function DashboardMenuView({ menu, viewport }: DashboardMenuViewProps) {
       backgroundColor={toOpenTuiOpaqueColor(theme.contextMenu.surface)}
       flexDirection="column"
       overflow="hidden"
-      {...stationMouseProps(dispatch, { kind: "sheetBackdrop" })}
+      {...backdropMouseProps}
+      onMouseDown={dispatchPointer}
+      onMouseMove={(event: MouseEvent) => {
+        const itemId = semanticItemIdAtPointer(
+          menuRef.current,
+          DASHBOARD_MENU_VIEWPORT_ID,
+          itemIds,
+          event.x,
+          event.y,
+        );
+        setHoveredItemId(hoverEnabled ? itemId : undefined);
+      }}
+      onMouseOut={() => setHoveredItemId(undefined)}
     >
-      {items.map(({ item }) => (
-        <Fragment key={item.id}>
-          {item.separatorBefore === true ? (
-            <DashboardMenuSeparator width={contentWidth} />
-          ) : null}
-          <DashboardMenuItem item={item} width={contentWidth} dispatch={dispatch} />
-        </Fragment>
-      ))}
+      <SemanticScrollRegion
+        itemIds={itemIds}
+        followedItemId={followedItemId}
+        fill={false}
+        viewportId={DASHBOARD_MENU_VIEWPORT_ID}
+      >
+        {menu.items.map((item) => (
+          <Fragment key={item.id}>
+            {item.separatorBefore === true ? <DashboardMenuSeparator /> : null}
+            <DashboardMenuItem item={item} hovered={item.id === hoveredItemId} />
+          </Fragment>
+        ))}
+      </SemanticScrollRegion>
     </box>
   );
 }
 
-function DashboardMenuSeparator({ width }: { width: number }) {
+function DashboardMenuSeparator() {
   const theme = useStationTheme();
   return (
-    <text fg={toOpenTuiColor(theme.contextMenu.border)}>
-      {"─".repeat(width)}
-    </text>
+    <box
+      width="100%"
+      height={1}
+      flexShrink={0}
+      border={["top"]}
+      borderColor={toOpenTuiColor(theme.contextMenu.border)}
+    />
   );
 }
 
 function DashboardMenuItem({
   item,
-  width,
-  dispatch,
+  hovered,
 }: {
   item: DashboardMenuItemView;
-  width: number;
-  dispatch: ReturnType<typeof useStationMouse>;
+  hovered: boolean;
 }) {
   const theme = useStationTheme();
-  const [hover, setHover] = useStationHoverState();
-  const active = item.focused || hover;
-  const content = formatMenuRow(item.label, item.shortcut, Math.max(0, width - 1));
+  const active = item.focused || hovered;
+  const color = toOpenTuiColor(
+    item.danger === true ? theme.status.danger : theme.text.menu,
+  );
+  const attributes = item.focused ? TextAttributes.BOLD : TextAttributes.NONE;
   return (
-    <text
-      width={width}
-      fg={toOpenTuiColor(item.danger === true ? theme.status.danger : theme.text.menu)}
-      bg={toOpenTuiOpaqueColor(active ? theme.contextMenu.selected : theme.contextMenu.surface)}
-      attributes={item.focused ? TextAttributes.BOLD : TextAttributes.NONE}
-      {...stationMouseProps(dispatch, item.target)}
-      onMouseOver={() => setHover(true)}
-      onMouseOut={() => setHover(false)}
+    <box
+      id={semanticItemRenderableId(item.id)}
+      width="100%"
+      flexDirection="row"
+      backgroundColor={toOpenTuiOpaqueColor(
+        active ? theme.contextMenu.selected : theme.contextMenu.surface,
+      )}
     >
-      {`${item.focused ? "▸" : " "}${content}`}
-    </text>
+      <text flexShrink={0} fg={color} attributes={attributes}>
+        {item.focused ? "▸" : " "}
+      </text>
+      <box flexGrow={1} flexShrink={1} minWidth={0} overflow="hidden">
+        <text fg={color} attributes={attributes}>
+          {item.label}
+        </text>
+      </box>
+      {item.shortcut === undefined ? null : (
+        <text flexShrink={0} fg={color} attributes={attributes}>
+          {` ${item.shortcut}`}
+        </text>
+      )}
+    </box>
   );
 }

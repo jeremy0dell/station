@@ -1,8 +1,9 @@
 import type { DashboardActions, DashboardStateSource } from "@station/dashboard-core/runtime";
-import { selectDashboardViewport } from "@station/dashboard-core/selectors";
+import { selectDashboardSlots } from "@station/dashboard-core/selectors";
 import type { DashboardRowId } from "@station/dashboard-core/selectors";
 import type { TuiKey, TuiSemanticAction } from "@station/dashboard-core/state";
 import { sequenceToTuiKey } from "./sequenceToTuiKey.js";
+import type { DashboardScrollController } from "../view/layout/scrollViewport.js";
 
 type DashboardKeyInput = {
   actions: Pick<DashboardActions, "handleKey">;
@@ -11,6 +12,7 @@ type DashboardKeyInput = {
 type DashboardTransitionInput = DashboardKeyInput & {
   state: DashboardStateSource;
   actions: Pick<DashboardActions, "dispatch" | "handleKey">;
+  layout: DashboardScrollController;
 };
 
 type DashboardToastDismissal = {
@@ -48,13 +50,18 @@ export function dispatchRowSlot(runtime: DashboardTransitionInput, rowId: Dashbo
   if (state.snapshot === undefined) {
     return;
   }
-  const viewport = selectDashboardViewport(state.snapshot, state);
-  const row = viewport.rowById.get(rowId);
+  const slots = selectDashboardSlots(
+    state.snapshot,
+    state,
+    state.screen,
+    runtime.layout.snapshot(),
+  );
+  const row = slots.tree.rowById.get(rowId);
   if (row?.payload.type !== "session") {
     return;
   }
   const sessionId = row.payload.row.id;
-  const choice = viewport.rowChoices.find((candidate) => candidate.value.id === sessionId);
+  const choice = slots.rowChoices.find((candidate) => candidate.value.id === sessionId);
   if (choice !== undefined) {
     dispatchStationKey(runtime, { input: choice.key });
   }

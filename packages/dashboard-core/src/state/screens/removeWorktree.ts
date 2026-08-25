@@ -8,6 +8,7 @@ import { safeErrorToToast } from "../../services/errors/errors.js";
 import { buildRemoveWorktreeCommand, cleanupForceRequired } from "../commandBuilders.js";
 import type { TuiKey } from "../keys.js";
 import { isReturnKey } from "../keys.js";
+import type { DashboardVisibleRowsSource } from "../layoutVisibility.js";
 import { addPendingRemoveWorktreeRow } from "../localRows.js";
 import { addTuiToast } from "../toasts.js";
 import type { TuiTransition } from "../transition.js";
@@ -36,7 +37,11 @@ export function removeWorktreeScreenBehavior(screen: RemoveWorktreeScreenView) {
   return assertNever(screen);
 }
 
-export function handleRemoveWorktreeKey(state: DashboardState, key: TuiKey): TuiTransition {
+export function handleRemoveWorktreeKey(
+  state: DashboardState,
+  key: TuiKey,
+  visibleRows?: DashboardVisibleRowsSource,
+): TuiTransition {
   if (state.screen.name !== "removeWorktree") {
     return { state };
   }
@@ -48,9 +53,12 @@ export function handleRemoveWorktreeKey(state: DashboardState, key: TuiKey): Tui
   }
 
   if (state.screen.step === "chooseSlot") {
-    return handleDashboardRowChoiceKey(state, key, (current, rowId) => ({
-      state: openRemoveWorktreeConfirmForRow(current, rowId),
-    }));
+    return handleDashboardRowChoiceKey(
+      state,
+      key,
+      (current, rowId) => ({ state: openRemoveWorktreeConfirmForRow(current, rowId) }),
+      visibleRows,
+    );
   }
 
   if (state.screen.step === "unavailable") {

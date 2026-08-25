@@ -37,4 +37,28 @@ describe("StationToast", () => {
       setup.renderer.destroy();
     }
   });
+
+  it("wraps a long notice inside a narrow app canvas", async () => {
+    const store = createStationStore();
+    store.actions.showToast(
+      "Copied a long semantic selection while the native shell remained visible underneath",
+    );
+    const setup = await testRender(
+      <StationThemeProvider theme={nativeStationTheme}>
+        <StationToast store={store} />
+      </StationThemeProvider>,
+      { width: 20, height: 6 },
+    );
+    try {
+      await setup.flush();
+      const surface = setup.renderer.root.findDescendantById("station-app-toast");
+      expect(surface).toBeDefined();
+      expect(surface?.x).toBeGreaterThanOrEqual(0);
+      expect(surface?.width).toBeLessThanOrEqual(18);
+      expect(surface?.height).toBeGreaterThan(1);
+      expect((surface?.y ?? 6) + (surface?.height ?? 0)).toBeLessThanOrEqual(5);
+    } finally {
+      setup.renderer.destroy();
+    }
+  });
 });

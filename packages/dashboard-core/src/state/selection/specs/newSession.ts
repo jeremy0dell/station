@@ -35,10 +35,10 @@ export const newSessionPickProjectListSpec = flatPickerSpec<ProjectId>({
     ) {
       return [];
     }
-    return selectNewSessionProjectChoices(state.snapshot).map((choice) => ({
-      key: choice.key,
-      value: choice.value.id,
-    }));
+    return selectNewSessionProjectChoices(state.snapshot).map((choice) => {
+      const mapped = { value: choice.value.id };
+      return choice.key === undefined ? mapped : { ...mapped, key: choice.key };
+    });
   },
   commit: (state, projectId) => {
     if (
@@ -109,11 +109,13 @@ export const newSessionPickGroupListSpec = defineList({
     ) {
       return [];
     }
-    return selectNewSessionGroupChoices(state.snapshot, state.screen.flow.selectedProjectId).map(
-      (choice) => ({
-        key: choice.key,
-        value: newSessionExistingGroupChoiceId(choice.value.id),
-      }),
+    return selectNewSessionGroupChoices(
+      state.snapshot,
+      state.screen.flow.selectedProjectId,
+    ).flatMap((choice) =>
+      choice.key === undefined
+        ? []
+        : [{ key: choice.key, value: newSessionExistingGroupChoiceId(choice.value.id) }],
     );
   },
   commit: (state, id) => {

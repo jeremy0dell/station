@@ -1,4 +1,4 @@
-import type { ProjectId, SessionGroupId } from "@station/contracts";
+import type { ProjectId, SessionGroupId, SessionId } from "@station/contracts";
 import type { GroupMenuActionId } from "@station/dashboard-core/state";
 import type { PaneId, PaneSplitDirection } from "../state/types.js";
 import type { StationMouseTarget } from "../station/input/stationMouse.js";
@@ -16,7 +16,7 @@ export type ContextMenuTarget =
 export type ContextMenuState = {
   target: ContextMenuTarget;
   anchor: ContextMenuAnchor;
-  activeIndex: number;
+  activeItemId: ContextMenuItemId | undefined;
 };
 
 export type ContextMenuItemId =
@@ -43,10 +43,10 @@ export type ContextMenuItemAction =
   | { kind: "noop" }
   | { kind: "splitPane"; paneId: PaneId; direction: PaneSplitDirection }
   | { kind: "closePane"; paneId: PaneId }
-  | { kind: "renameSession"; rowId: string }
-  | { kind: "moveToGroup"; rowId: string }
-  | { kind: "forkSession"; rowId: string }
-  | { kind: "removeWorktree"; rowId: string }
+  | { kind: "renameSession"; sessionId: SessionId }
+  | { kind: "moveToGroup"; sessionId: SessionId }
+  | { kind: "forkSession"; sessionId: SessionId }
+  | { kind: "removeWorktree"; sessionId: SessionId }
   | { kind: "quickGroup"; projectId: ProjectId }
   | { kind: "newGroup"; projectId: ProjectId }
   | { kind: "setProjectDefaultAgent"; projectId: ProjectId }

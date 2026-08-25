@@ -1,12 +1,19 @@
 // Pins the mouse router's modal guards to keyboard modality (the screen ×
-// target matrix) and mouse/keyboard equivalence: a row click must produce
-// exactly the state the row's slot key produces, in every mode where rows
-// are interactive.
+// target matrix) and mouse/keyboard equivalence: a row click must run the
+// same registered semantic commit as focused Enter. Shortcut slots are only
+// optional accelerators, so pointer routing cannot depend on them.
 import { describe, expect, it } from "bun:test";
 import type { ProviderId, StationSnapshot } from "@station/contracts";
 import type { DashboardRuntimeOptions } from "@station/dashboard-core/runtime";
-import { dashboardRowIds, selectDashboardViewport } from "@station/dashboard-core/selectors";
-import { addProjectSelectedIndex, removeProjectConfirmPhrase } from "@station/dashboard-core/state";
+import { dashboardRowIds, selectDashboardSlots } from "@station/dashboard-core/selectors";
+import {
+  addProjectSelectedIndex,
+  moveToGroupExistingChoiceId,
+  NEW_SESSION_CREATE_GROUP_CHOICE_ID,
+  NEW_SESSION_UNGROUPED_CHOICE_ID,
+  newSessionExistingGroupChoiceId,
+  removeProjectConfirmPhrase,
+} from "@station/dashboard-core/state";
 import type { StationMouseEvent } from "../../input/mouse.js";
 import {
   groupedManyProjectsSnapshot,
@@ -65,10 +72,8 @@ function makeStore(
   snapshot?: StationSnapshot,
   initialState?: DashboardRuntimeOptions["initialState"],
 ): StationTestDashboardRuntime {
-  // Enough rows to keep the same visible window as before the pinned fleet bar +
-  // column header, so the station-project rows stay slot-addressable.
+  // Router tests omit renderer geometry, so every semantic target remains slot-addressable.
   return makeStationTestRuntime({
-    terminalRows: 14,
     ...(snapshot === undefined ? {} : { snapshot }),
     ...(initialState === undefined ? {} : { initialState }),
   }).runtime;
@@ -421,7 +426,6 @@ describe("routeStationMouse", () => {
 
   it("edits and clears an applied filter from footer actions only in dashboard mode", () => {
     const store = makeStationTestRuntime({
-      terminalRows: 14,
       initialState: { persistentFilter: { query: "working" } },
     }).runtime;
 
@@ -460,10 +464,8 @@ describe("routeStationMouse", () => {
 
   it("routes condition building and final apply clicks through the same transitions as keys", () => {
     const clicked = makeStationTestRuntime({
-      terminalRows: 14,
     }).runtime;
     const keyed = makeStationTestRuntime({
-      terminalRows: 14,
     }).runtime;
     for (const store of [clicked, keyed]) {
       store.actions.handleKey({ input: "/" });
@@ -501,7 +503,7 @@ describe("routeStationMouse", () => {
       draftConditions: [
         { field: "status", values: [{ id: "working", label: "Working" }] },
       ],
-      conditionEditor: { stage: "field", cursor: 0 },
+      conditionEditor: { stage: "field", focusedItemId: "status" },
     });
 
     routeStationMouse(
@@ -518,7 +520,6 @@ describe("routeStationMouse", () => {
 
   it("routes the top back and close controls independently", () => {
     const store = makeStationTestRuntime({
-      terminalRows: 14,
     }).runtime;
     store.actions.handleKey({ input: "/" });
     store.actions.handleKey({ input: "i", ctrl: true });
@@ -531,7 +532,7 @@ describe("routeStationMouse", () => {
     );
     expect(store.state.getState().screen).toMatchObject({
       name: "persistentFilter",
-      conditionEditor: { stage: "field", cursor: 0 },
+      conditionEditor: { stage: "field", focusedItemId: "status" },
     });
 
     routeStationMouse(
@@ -548,7 +549,6 @@ describe("routeStationMouse", () => {
 
   it("click-away discards only the active field's unretained changes", () => {
     const store = makeStationTestRuntime({
-      terminalRows: 14,
     }).runtime;
     store.actions.handleKey({ input: "/" });
     store.actions.handleKey({ input: "draft" });
@@ -634,18 +634,6 @@ describe("routeStationMouse", () => {
     );
     expect(store.state.getState().screen).toEqual({ name: "dashboard" });
 
-    const beforeFrame = store.state.getState();
-    routeStationMouse(
-      {
-        kind: "dashboardCell",
-        rowId: dashboardRowIds.groupFrameEnd("group_design_refresh"),
-        cellId: "identity",
-      },
-      LEFT_DOWN,
-      store,
-    );
-    expect(store.state.getState()).toEqual(beforeFrame);
-
     routeStationMouse(
       { kind: "dashboardCell", rowId: groupId, cellId: "identity" },
       LEFT_DOWN,
@@ -678,7 +666,7 @@ describe("routeStationMouse", () => {
     const snapshot = store.state.getState().snapshot;
     if (snapshot === undefined) throw new Error("expected snapshot");
     const visibleSessions = () =>
-      selectDashboardViewport(snapshot, store.state.getState()).rows.filter(
+      selectDashboardSlots(snapshot, store.state.getState()).tree.visibleRows.filter(
         (row) => row.payload.type === "session",
       ).length;
 
@@ -691,26 +679,32 @@ describe("routeStationMouse", () => {
 
   it("scrolls on wheel in row-interactive modes and nowhere else", () => {
     const store = makeStore();
+    const deltas: number[] = [];
+    store.layout.scrollBy = (delta) => void deltas.push(delta);
 
     routeStationMouse({ kind: "body" }, SCROLL_DOWN, store);
-    expect(store.state.getState().scrollOffset).toBe(1);
+    expect(deltas).toEqual([1]);
     routeStationMouse({ kind: "body" }, SCROLL_UP, store);
-    expect(store.state.getState().scrollOffset).toBe(0);
+    expect(deltas).toEqual([1, -1]);
 
     store.actions.handleKey({ input: "H" });
     routeStationMouse({ kind: "body" }, SCROLL_DOWN, store);
-    expect(store.state.getState().scrollOffset).toBe(0);
+    expect(deltas).toEqual([1, -1]);
   });
 
   it("never scrolls the dashboard under a sheet backdrop", () => {
     const store = makeStore();
+    const deltas: number[] = [];
+    store.layout.scrollBy = (delta) => void deltas.push(delta);
     const outcome = routeStationMouse({ kind: "sheetBackdrop" }, SCROLL_DOWN, store);
     expect(outcome).toEqual({ kind: "handled" });
-    expect(store.state.getState().scrollOffset).toBe(0);
+    expect(deltas).toEqual([]);
   });
 
   it("dismisses a bounded screen only on primary-down over the screen backdrop", () => {
     const store = makeStore();
+    const deltas: number[] = [];
+    store.layout.scrollBy = (delta) => void deltas.push(delta);
     store.actions.handleKey({ input: "H" });
 
     for (const event of [LEFT_UP, RIGHT_DOWN, MIDDLE_DOWN, SCROLL_DOWN]) {
@@ -728,6 +722,8 @@ describe("routeStationMouse", () => {
 
   it("keeps stale screen and sheet backdrop wheel events from scrolling after dismissal", () => {
     const store = makeStore();
+    const deltas: number[] = [];
+    store.layout.scrollBy = (delta) => void deltas.push(delta);
     store.actions.handleKey({ input: "H" });
     routeStationMouse({ kind: "screenBackdrop" }, LEFT_DOWN, store);
 
@@ -735,15 +731,17 @@ describe("routeStationMouse", () => {
     routeStationMouse({ kind: "sheetBackdrop" }, SCROLL_DOWN, store);
 
     expect(store.state.getState().screen).toEqual({ name: "dashboard" });
-    expect(store.state.getState().scrollOffset).toBe(0);
+    expect(deltas).toEqual([]);
   });
 
   it("pages on scroll-indicator clicks", () => {
     const store = makeStore();
+    const directions: number[] = [];
+    store.layout.scrollPage = (direction) => void directions.push(direction);
     routeStationMouse({ kind: "scrollIndicator", direction: "down" }, LEFT_DOWN, store);
-    expect(store.state.getState().scrollOffset).toBe(5);
+    expect(directions).toEqual([1]);
     routeStationMouse({ kind: "scrollIndicator", direction: "up" }, LEFT_DOWN, store);
-    expect(store.state.getState().scrollOffset).toBe(0);
+    expect(directions).toEqual([1, -1]);
   });
 
   it("dismisses toasts on click in any mode", () => {
@@ -765,7 +763,7 @@ describe("routeStationMouse", () => {
       flow: { mode: "pickProject" },
     });
 
-    routeStationMouse({ kind: "sheetChoice", choiceKey: "1" }, LEFT_DOWN, store);
+    routeStationMouse({ kind: "sheetListItem", itemId: "station" }, LEFT_DOWN, store);
     expect(store.state.getState().screen).toMatchObject({
       name: "newSession",
       flow: { mode: "review" },
@@ -774,10 +772,31 @@ describe("routeStationMouse", () => {
     // Outside picker modes a stray choice click is inert (no text injection).
     store.actions.handleKey({ input: "", escape: true });
     store.actions.handleKey({ input: "/" });
-    routeStationMouse({ kind: "sheetChoice", choiceKey: "1" }, LEFT_DOWN, store);
+    routeStationMouse({ kind: "sheetListItem", itemId: "station" }, LEFT_DOWN, store);
     expect(store.state.getState().screen).toMatchObject({
       name: "persistentFilter",
       draft: { value: "", cursor: 0 },
+    });
+  });
+
+  it("activates a picker item beyond the shortcut alphabet by semantic identity", () => {
+    const snapshot = manyProjectsSnapshot();
+    const template = snapshot.projects[0];
+    if (template === undefined) throw new Error("missing project fixture");
+    const projects = Array.from({ length: 40 }, (_, index) => ({
+      ...template,
+      id: `project-${index}` as typeof template.id,
+      label: `project-${index}`,
+    }));
+    const store = makeStore({ ...snapshot, projects });
+    store.actions.handleKey({ input: "N" });
+    store.actions.handleKey({ input: "P" });
+
+    routeStationMouse({ kind: "sheetListItem", itemId: "project-39" }, LEFT_DOWN, store);
+
+    expect(store.state.getState().screen).toMatchObject({
+      name: "newSession",
+      flow: { mode: "review", selectedProjectId: "project-39" },
     });
   });
 
@@ -786,7 +805,14 @@ describe("routeStationMouse", () => {
     store.actions.handleKey({ input: "N" });
     store.actions.handleKey({ input: "G" });
 
-    routeStationMouse({ kind: "sheetChoice", choiceKey: "1" }, LEFT_DOWN, store);
+    routeStationMouse(
+      {
+        kind: "sheetListItem",
+        itemId: newSessionExistingGroupChoiceId("group_design_refresh"),
+      },
+      LEFT_DOWN,
+      store,
+    );
     expect(store.state.getState().screen).toMatchObject({
       flow: {
         mode: "review",
@@ -795,13 +821,21 @@ describe("routeStationMouse", () => {
     });
 
     store.actions.handleKey({ input: "G" });
-    routeStationMouse({ kind: "sheetChoice", choiceKey: "U" }, LEFT_DOWN, store);
+    routeStationMouse(
+      { kind: "sheetListItem", itemId: NEW_SESSION_UNGROUPED_CHOICE_ID },
+      LEFT_DOWN,
+      store,
+    );
     expect(store.state.getState().screen).toMatchObject({
       flow: { mode: "review", groupSelection: { kind: "ungrouped" } },
     });
 
     store.actions.handleKey({ input: "G" });
-    routeStationMouse({ kind: "sheetChoice", choiceKey: "N" }, LEFT_DOWN, store);
+    routeStationMouse(
+      { kind: "sheetListItem", itemId: NEW_SESSION_CREATE_GROUP_CHOICE_ID },
+      LEFT_DOWN,
+      store,
+    );
     expect(store.state.getState().screen).toMatchObject({
       flow: { mode: "editGroupDraft" },
     });
@@ -817,7 +851,11 @@ describe("routeStationMouse", () => {
     });
 
     store.actions.handleKey({ input: "G" });
-    routeStationMouse({ kind: "sheetChoice", choiceKey: "N" }, LEFT_DOWN, store);
+    routeStationMouse(
+      { kind: "sheetListItem", itemId: NEW_SESSION_CREATE_GROUP_CHOICE_ID },
+      LEFT_DOWN,
+      store,
+    );
     store.actions.handleKey({ input: "Discarded" });
     routeStationMouse(
       { kind: "newSessionAction", actionId: "editGroupDraft.back" },
@@ -831,7 +869,14 @@ describe("routeStationMouse", () => {
     const store = makeStore(groupedManyProjectsSnapshot());
     store.actions.dispatch({ type: "moveToGroup.open", rowId: "ses_wt_group_contracts" });
 
-    routeStationMouse({ kind: "sheetChoice", choiceKey: "2" }, LEFT_DOWN, store);
+    routeStationMouse(
+      {
+        kind: "sheetListItem",
+        itemId: moveToGroupExistingChoiceId("group_observer_hardening"),
+      },
+      LEFT_DOWN,
+      store,
+    );
     expect(store.state.getState().screen).toMatchObject({
       name: "moveToGroup",
       step: "chooseDestination",
@@ -897,7 +942,7 @@ describe("routeStationMouse", () => {
   });
 
   it("resolves native shell targets from client truth when dashboard projection is stale", () => {
-    const fixture = makeStationTestRuntime({ terminalRows: 14 });
+    const fixture = makeStationTestRuntime();
     const canonical = manyProjectsSnapshot();
     const canonicalPath = "/canonical/station/pty-buffer";
     fixture.source.setSnapshot({
@@ -1110,7 +1155,7 @@ describe("routeStationMouse", () => {
   });
 
   it("selects a project default agent by clicking an agent picker row", async () => {
-    const fixture = makeStationTestRuntime({ terminalRows: 12 });
+    const fixture = makeStationTestRuntime();
     const store = fixture.runtime;
     routeStationMouse(
       { kind: "dashboardCell", rowId: dashboardRowIds.project("station"), cellId: "menu" },
@@ -1123,7 +1168,11 @@ describe("routeStationMouse", () => {
       store,
     );
 
-    const outcome = routeStationMouse({ kind: "sheetChoice", choiceKey: "2" }, LEFT_DOWN, store);
+    const outcome = routeStationMouse(
+      { kind: "sheetListItem", itemId: "opencode" },
+      LEFT_DOWN,
+      store,
+    );
 
     await waitFor(() => fixture.service.loadCount === 1);
     expect(outcome).toEqual({ kind: "handled" });
@@ -1197,7 +1246,7 @@ describe("routeStationMouse", () => {
 
   it("unchecks a current member and dispatches one ungroup membership delta", async () => {
     const snapshot = groupedManyProjectsSnapshot();
-    const fixture = makeStationTestRuntime({ terminalRows: 14, snapshot });
+    const fixture = makeStationTestRuntime({ snapshot });
     const store = fixture.runtime;
 
     routeStationMouse(
@@ -1299,7 +1348,7 @@ describe("routeStationMouse", () => {
   });
 
   it("fires removal when the armed remove confirmation is clicked", async () => {
-    const fixture = makeStationTestRuntime({ terminalRows: 12 });
+    const fixture = makeStationTestRuntime();
     const store = fixture.runtime;
     store.actions.dispatch({ type: "projectSettings.open", projectId: "station" });
     store.actions.dispatch({ type: "projectSettings.focusItem", itemId: "remove" });
@@ -1339,9 +1388,12 @@ function slotForRow(store: StationTestDashboardRuntime, rowId: string): string {
   if (state.snapshot === undefined) {
     throw new Error("store has no snapshot");
   }
-  // Mirrors the viewport selector the actions module uses; resolved through
-  // the store so the slot reflects current scroll/filter state.
-  const choice = selectDashboardViewport(state.snapshot, state).rowChoices.find(
+  const choice = selectDashboardSlots(
+    state.snapshot,
+    state,
+    state.screen,
+    store.layout.snapshot(),
+  ).rowChoices.find(
     (candidate) => candidate.value.id === rowId,
   );
   if (choice === undefined) {
@@ -1382,15 +1434,15 @@ describe("routeStationMouse widget settings", () => {
 
   it("toggles a clicked row and moves the cursor onto it", () => {
     const store = panelStore();
-    routeStationMouse({ kind: "widgetSettingsRow", index: 1 }, LEFT_DOWN, store);
+    routeStationMouse({ kind: "widgetSettingsRow", itemId: "widget:1" }, LEFT_DOWN, store);
     expect(store.state.getState().widgets[1]).toEqual({ type: "moon", enabled: false });
     const screen = store.state.getState().screen;
-    expect(screen.name === "widgetSettings" && screen.cursor).toBe(1);
+    expect(screen.name === "widgetSettings" && screen.activeWidgetItemId).toBe("widget:1");
   });
 
   it("removes via the row's ×", () => {
     const store = panelStore();
-    routeStationMouse({ kind: "widgetSettingsRemove", index: 0 }, LEFT_DOWN, store);
+    routeStationMouse({ kind: "widgetSettingsRemove", itemId: "widget:0" }, LEFT_DOWN, store);
     expect(store.state.getState().widgets.map((widget) => widget.type)).toEqual(["moon"]);
   });
 
@@ -1399,7 +1451,11 @@ describe("routeStationMouse widget settings", () => {
     routeStationMouse({ kind: "widgetSettingsAdd" }, LEFT_DOWN, store);
     const picking = store.state.getState().screen;
     expect(picking.name === "widgetSettings" && picking.focus).toBe("picker");
-    routeStationMouse({ kind: "widgetSettingsPickerChoice", index: 1 }, LEFT_DOWN, store);
+    routeStationMouse(
+      { kind: "widgetSettingsPickerChoice", widgetType: "fleet" },
+      LEFT_DOWN,
+      store,
+    );
     expect(store.state.getState().widgets.at(-1)).toEqual({ type: "fleet" });
     const done = store.state.getState().screen;
     expect(done.name === "widgetSettings" && done.focus).toBe("list");
@@ -1407,7 +1463,7 @@ describe("routeStationMouse widget settings", () => {
 
   it("ignores panel targets outside the widgetSettings mode", () => {
     const store = makeStore(undefined, { widgets: [{ type: "time" }] });
-    routeStationMouse({ kind: "widgetSettingsRow", index: 0 }, LEFT_DOWN, store);
+    routeStationMouse({ kind: "widgetSettingsRow", itemId: "widget:0" }, LEFT_DOWN, store);
     expect(store.state.getState().widgets[0]).toEqual({ type: "time" });
   });
 
@@ -1418,9 +1474,11 @@ describe("routeStationMouse widget settings", () => {
     if (opened.name !== "addProject" || opened.flow.mode !== "start") {
       throw new Error("expected addProject start");
     }
+    const secondChoice = opened.flow.choices[1];
+    if (secondChoice === undefined) throw new Error("expected second Add Project choice");
     expect(addProjectSelectedIndex(store.state.getState())).toBe(0);
 
-    routeStationMouse({ kind: "addProjectRow", index: 1 }, LEFT_DOWN, store);
+    routeStationMouse({ kind: "addProjectRow", itemId: secondChoice.id }, LEFT_DOWN, store);
     const moved = store.state.getState().screen;
     if (moved.name !== "addProject" || moved.flow.mode !== "start") {
       throw new Error("expected addProject start");
@@ -1539,7 +1597,7 @@ describe("routeStationMouse widget settings", () => {
   it("ignores an add-project row click outside addProject mode", () => {
     const store = makeStore();
     store.actions.handleKey({ input: "H" });
-    routeStationMouse({ kind: "addProjectRow", index: 1 }, LEFT_DOWN, store);
+    routeStationMouse({ kind: "addProjectRow", itemId: "/Users/example" }, LEFT_DOWN, store);
     expect(store.state.getState().screen.name).toBe("help");
   });
 });

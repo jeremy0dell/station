@@ -1,5 +1,5 @@
 import type { DashboardPersistentFilterProjection } from "../../selectors/dashboardPersistentFilter.js";
-import type { DashboardSessionOverflow } from "../../selectors/dashboardViewport.js";
+import type { DashboardSessionOverflow } from "../../selectors/dashboardSlots.js";
 import type { DashboardFilterConditionField } from "../../state/types.js";
 import { cellWidth, type RowGridLayout } from "../WorktreeRow/layout.js";
 import {
@@ -38,20 +38,19 @@ export type DashboardFilterHeaderModel = {
 export type DashboardTableHeaderModel =
   | { kind: "persistentFilter"; filter: DashboardFilterHeaderModel }
   | { kind: "columns"; layout: RowGridLayout }
-  | { kind: "aboveOverflow"; overflow: DashboardSessionOverflow }
-  | { kind: "empty" };
+  | { kind: "aboveOverflow"; overflow: DashboardSessionOverflow };
 
 export function dashboardTableHeaderModel({
   layout,
   overflow,
-  columns = 80,
+  columns,
   persistentFilter,
 }: {
   layout: RowGridLayout | undefined;
   overflow: DashboardSessionOverflow;
-  columns?: number;
+  columns: number;
   persistentFilter?: DashboardPersistentFilterProjection;
-}): DashboardTableHeaderModel {
+}): DashboardTableHeaderModel | undefined {
   if (persistentFilter !== undefined) {
     return {
       kind: "persistentFilter",
@@ -69,7 +68,7 @@ export function dashboardTableHeaderModel({
   if (layout !== undefined) {
     return { kind: "columns", layout };
   }
-  return { kind: "empty" };
+  return undefined;
 }
 
 export function dashboardPersistentFilterHeaderModel({

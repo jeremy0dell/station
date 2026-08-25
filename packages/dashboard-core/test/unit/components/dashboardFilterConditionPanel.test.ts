@@ -24,17 +24,12 @@ function filterScreen(
 describe("dashboard filter condition panel", () => {
   it("renders the fixed field chooser with direct keys and staged summaries", () => {
     const model = dashboardFilterConditionPanelModel({
-      screen: filterScreen({ stage: "field", cursor: 1 }),
-      columns: 20,
-      availableRows: 10,
+      screen: filterScreen({ stage: "field", focusedItemId: "project" }),
     });
 
     expect(model).toMatchObject({
       stage: "field",
       title: "FILTER CONDITIONS",
-      width: 18,
-      hiddenAbove: 0,
-      hiddenBelow: 0,
       actions: [
         { id: "close", label: "×", placement: "header" },
         {
@@ -79,9 +74,7 @@ describe("dashboard filter condition panel", () => {
 
   it("focuses the final apply action after the three condition fields", () => {
     const model = dashboardFilterConditionPanelModel({
-      screen: filterScreen({ stage: "field", cursor: 3 }),
-      columns: 50,
-      availableRows: 10,
+      screen: filterScreen({ stage: "field", focusedItemId: "applyFilter" }),
     });
 
     expect(model?.rows.every((row) => row.marker === " ")).toBe(true);
@@ -94,7 +87,7 @@ describe("dashboard filter condition panel", () => {
     });
   });
 
-  it("windows long value lists while retaining absolute stable slot assignments", () => {
+  it("projects long value lists completely with stable semantic identities and slots", () => {
     const options = Array.from({ length: 12 }, (_, index) => ({
       id: `project-${index}`,
       label: `Project ${index}`,
@@ -103,20 +96,15 @@ describe("dashboard filter condition panel", () => {
       screen: filterScreen({
         stage: "values",
         field: "project",
-        cursor: 6,
+        focusedValueId: "project-6",
         options,
         selectedIds: ["project-6"],
       }),
-      columns: 60,
-      availableRows: 6,
     });
 
     expect(model).toMatchObject({
       stage: "values",
       title: "PROJECT CONDITION",
-      height: 6,
-      hiddenAbove: 5,
-      hiddenBelow: 5,
       actions: [
         { id: "back", label: "←", placement: "header" },
         { id: "close", label: "×", placement: "header" },
@@ -129,13 +117,17 @@ describe("dashboard filter condition panel", () => {
         },
       ],
     });
+    expect(model?.rows).toHaveLength(12);
     expect(
       model?.rows.flatMap((row) =>
-        row.kind === "value" ? [[row.key, row.valueId, row.marker, row.checked]] : [],
+        row.kind === "value" && ["project-0", "project-6", "project-11"].includes(row.valueId)
+          ? [[row.id, row.key, row.valueId, row.marker, row.checked]]
+          : [],
       ),
     ).toEqual([
-      ["6", "project-5", " ", false],
-      ["7", "project-6", "▸", true],
+      ["value:project:project-0", "1", "project-0", " ", false],
+      ["value:project:project-6", "7", "project-6", "▸", true],
+      ["value:project:project-11", "c", "project-11", " ", false],
     ]);
   });
 
@@ -143,8 +135,6 @@ describe("dashboard filter condition panel", () => {
     expect(
       dashboardFilterConditionPanelModel({
         screen: filterScreen(undefined),
-        columns: 80,
-        availableRows: 20,
       }),
     ).toBeUndefined();
   });

@@ -1,22 +1,21 @@
-// Render layer for the dashboard: one <text> per line, sized by the shared
-// viewport selector. Mouse targets report through the station mouse context;
-// hover is component-local and color-only so golden frames stay layout-stable.
 import { TextAttributes } from "@opentui/core";
 import {
+  dashboardRowIds,
   dashboardTableHeaderModel,
-  dashboardRowGridInput,
-  fleetCountsLabel,
   emptyProjectLabel,
+  fleetCountsLabel,
   FIRST_RUN_BODY_LABEL,
- } from "@station/dashboard-core/selectors";
-import { layoutWorktreeRowGrid, textSegment, truncateCells } from "@station/dashboard-core/selectors";
-import type { RowGridLayout, RowGridRowInput } from "@station/dashboard-core/selectors";
-import { selectDashboardViewport, selectFleetSummary } from "@station/dashboard-core/selectors";
-import type {
-  DashboardRowId,
-  DashboardTreeRow,
-  FleetSummary,
+  selectDashboardSlotsForTree,
+  selectDashboardTree,
+  selectFleetSummary,
+  withRowGridSelectionSlot,
+  type DashboardRowId,
+  type DashboardTreeBranch,
+  type DashboardTreeRow,
+  type FleetSummary,
+  type RowGridLayout,
 } from "@station/dashboard-core/selectors";
+import { cellWidth, truncateCells } from "@station/dashboard-core/text";
 import type {
   DashboardScreenView,
   DashboardSnapshotView,
@@ -26,83 +25,193 @@ import {
   DashboardScrollIndicatorView,
   DashboardTableHeaderView,
 } from "./DashboardTableHeaderView.js";
-import { GroupFrameEndView, GroupFrameRailView } from "./GroupFrameView.js";
+import { GroupFrameView, groupFrameContentColumns } from "./GroupFrameView.js";
 import { GroupHeaderView } from "./GroupHeaderView.js";
 import { ProjectHeaderView } from "./ProjectHeaderView.js";
 import { SegmentLinkTargets, Segments } from "./segments.js";
 import { Throbber } from "./Throbber.js";
 import { FLEET_STATUS_ORDER, STATION_STATUS_UI } from "../statusUi.js";
 import { toOpenTuiColor, useStationTheme } from "../../theme/index.js";
-import { useStationHoverState, useStationMouse, stationMouseProps } from "./stationMouseContext.js";
+import {
+  StationHoverProvider,
+  useStationHoverState,
+  useStationMouse,
+  stationMouseProps,
+} from "./stationMouseContext.js";
+import { memo, useLayoutEffect, useMemo } from "react";
+import {
+  DashboardScrollViewport,
+  useDashboardVisibleRows,
+} from "./layout/DashboardScrollViewport.js";
+import {
+  semanticItemRenderableId,
+  type DashboardScrollController,
+} from "./layout/scrollViewport.js";
+import { DashboardFilterConditionView } from "./DashboardFilterConditionView.js";
+import { DashboardDividerView } from "./DashboardDividerView.js";
+import { GroupMenuView } from "./GroupMenuView.js";
+import { ProjectMenuView } from "./ProjectMenuView.js";
+import { createDashboardRowGridProjector } from "./dashboardRowGridProjection.js";
+
+const DASHBOARD_LAYOUT_BOUNDARY_ID = "station-dashboard-layout-boundary";
 
 export type DashboardViewProps = {
   snapshot: DashboardSnapshotView;
   viewState: DashboardViewState;
   screen: DashboardScreenView;
-  columns?: number;
+  layout: DashboardScrollController;
+  columns: number;
+  menuHoverEnabled: boolean;
 };
 
-export function DashboardView({ snapshot, viewState, screen, columns = 80 }: DashboardViewProps) {
+export function DashboardView({
+  snapshot,
+  viewState,
+  screen,
+  layout,
+  columns,
+  menuHoverEnabled,
+}: DashboardViewProps) {
+  const theme = useStationTheme();
+  const visibleRowIds = useDashboardVisibleRows(layout);
   const dispatch = useStationMouse();
-  const viewport = selectDashboardViewport(snapshot, viewState, screen);
+  const tree = useMemo(
+    () => selectDashboardTree(snapshot, viewState, screen),
+    [screen, snapshot, viewState],
+  );
+  const slots = selectDashboardSlotsForTree(tree, visibleRowIds);
+  const rowGridProjector = useMemo(() => createDashboardRowGridProjector(), []);
+  const itemIds = useMemo(() => tree.visibleRows.map((row) => row.id), [tree.visibleRows]);
   const contentColumns = Math.max(1, Math.floor(columns) - 1);
   const firstRun = snapshot.projects.length === 0;
-  const rowGridColumns =
-    snapshot.sessionGroups.length === 0 ? contentColumns : Math.max(1, contentColumns - 2);
   const fleet = selectFleetSummary(snapshot);
   const keyByRow = new Map(
-    viewport.displayRowChoices.map((choice) => [choice.value.id, choice.key]),
+    slots.displayRowChoices.flatMap((choice) =>
+      choice.key === undefined ? [] : [[choice.value.id, choice.key] as const],
+    ),
   );
   const { headerLayout, layoutByItem } = firstRun
     ? { headerLayout: undefined, layoutByItem: new Map<string, RowGridLayout>() }
-    : dashboardRowLayouts(
-        [...viewport.rowById.values()],
-        keyByRow,
-        rowGridColumns,
-      );
+    : rowGridProjector.project(tree, contentColumns);
   const tableHeader = dashboardTableHeaderModel({
     layout: headerLayout,
-    overflow: viewport.sessionOverflow,
+    overflow: slots.sessionOverflow,
     columns: contentColumns,
-    ...(viewport.persistentFilter === undefined
+    ...(slots.persistentFilter === undefined
       ? {}
-      : { persistentFilter: viewport.persistentFilter }),
+      : { persistentFilter: slots.persistentFilter }),
   });
+  useLayoutEffect(() => {
+    const focusedId = viewState.dashboardFocus?.rowId;
+    queueMicrotask(() => layout.follow(focusedId));
+  }, [layout, viewState.dashboardFocus?.rowId]);
+  const conditionPanelActive =
+    screen.name === "persistentFilter" && screen.conditionEditor !== undefined;
+  const dashboardMenuActive = screen.name === "projectMenu" || screen.name === "groupMenu";
+  const dashboardOwnedOverlayActive = conditionPanelActive || dashboardMenuActive;
+  const menuRowId =
+    screen.name === "projectMenu"
+      ? dashboardRowIds.project(screen.projectId)
+      : screen.name === "groupMenu"
+        ? dashboardRowIds.group(screen.groupId)
+        : undefined;
+  const menuAnchorRenderableId =
+    menuRowId !== undefined && tree.rowById.has(menuRowId)
+      ? semanticItemRenderableId(menuRowId)
+      : undefined;
+  const menuGroup =
+    screen.name === "groupMenu"
+      ? snapshot.sessionGroups.find(
+          (group) => group.id === screen.groupId && group.projectId === screen.projectId,
+        )
+      : undefined;
+  // DashboardFrameTitle overlays the owning frame's top edge, so its inset belongs here.
   return (
     <box
+      id={DASHBOARD_LAYOUT_BOUNDARY_ID}
       width="100%"
       flexGrow={1}
+      flexShrink={1}
+      minHeight={0}
       flexDirection="column"
+      paddingTop={1}
       paddingRight={1}
-      onMouseScroll={stationMouseProps(dispatch, { kind: "body" }).onMouseScroll}
+      position="relative"
     >
-      <text> </text>
+      {dashboardOwnedOverlayActive ? (
+        <box
+          position="absolute"
+          top={0}
+          left={0}
+          width="100%"
+          height="100%"
+          zIndex={9}
+          {...(conditionPanelActive
+            ? { backgroundColor: toOpenTuiColor(theme.filter.conditionBackdrop) }
+            : {})}
+          {...stationMouseProps(dispatch, { kind: "screenBackdrop" })}
+        />
+      ) : null}
       {firstRun ? null : (
         <FleetBar summary={fleet} counts={snapshot.counts} columns={contentColumns} />
       )}
-      <Divider columns={contentColumns} />
-      <DashboardTableHeaderView model={tableHeader} />
+      <DashboardDividerView />
+      {tableHeader !== undefined || conditionPanelActive ? (
+        <box
+          flexShrink={0}
+          position="relative"
+          {...(conditionPanelActive ? { zIndex: 10 } : {})}
+        >
+          {tableHeader === undefined ? null : <DashboardTableHeaderView model={tableHeader} />}
+          {conditionPanelActive ? (
+            <box position="absolute" top="100%" left={0}>
+              <DashboardFilterConditionView
+                screen={screen}
+                columns={contentColumns}
+                boundaryId={DASHBOARD_LAYOUT_BOUNDARY_ID}
+              />
+            </box>
+          ) : null}
+        </box>
+      ) : null}
       {firstRun ? (
         <box flexDirection="column" flexGrow={1}>
           <FirstProjectButton columns={contentColumns} />
         </box>
       ) : (
-        <DashboardBody
-          columns={contentColumns}
-          rows={viewport.rows}
-          rowById={viewport.rowById}
-          layoutByItem={layoutByItem}
-        />
+        <DashboardScrollViewport controller={layout} itemIds={itemIds}>
+          <DashboardBody
+            columns={contentColumns}
+            roots={tree.roots}
+            layoutByItem={layoutByItem}
+            keyByRow={keyByRow}
+          />
+        </DashboardScrollViewport>
       )}
-      <DashboardScrollIndicatorView direction="below" overflow={viewport.sessionOverflow} />
-      <Divider columns={contentColumns} />
+      <DashboardScrollIndicatorView direction="below" overflow={slots.sessionOverflow} />
+      {screen.name === "projectMenu" && menuAnchorRenderableId !== undefined ? (
+        <StationHoverProvider value={menuHoverEnabled}>
+          <ProjectMenuView
+            screen={screen}
+            boundaryId={DASHBOARD_LAYOUT_BOUNDARY_ID}
+            anchorRenderableId={menuAnchorRenderableId}
+          />
+        </StationHoverProvider>
+      ) : null}
+      {screen.name === "groupMenu" &&
+      menuAnchorRenderableId !== undefined &&
+      menuGroup !== undefined ? (
+        <StationHoverProvider value={menuHoverEnabled}>
+          <GroupMenuView
+            screen={screen}
+            groupName={menuGroup.name}
+            boundaryId={DASHBOARD_LAYOUT_BOUNDARY_ID}
+            anchorRenderableId={menuAnchorRenderableId}
+          />
+        </StationHoverProvider>
+      ) : null}
     </box>
   );
-}
-
-export function Divider({ columns }: { columns: number }) {
-  const theme = useStationTheme();
-  return <text fg={toOpenTuiColor(theme.text.muted)}>{"─".repeat(Math.max(1, columns))}</text>;
 }
 
 // Pinned fleet triage bar: glyph + colour reinforce each status lane. ready/
@@ -134,13 +243,14 @@ function FleetBar({
     ];
   });
   const lanesWidth =
-    "FLEET".length + parts.reduce((total, part) => total + 3 + 1 + part.label.length, 0);
+    cellWidth("FLEET") +
+    parts.reduce((total, part) => total + cellWidth(`  ${part.glyph} ${part.label}`), 0);
   const totals = fleetCountsLabel(
     { projects: counts.projects, sessions: counts.sessions, agents: counts.agents },
     Math.max(0, columns - lanesWidth - 2),
   );
   return (
-    <box height={1} width="100%" flexDirection="row" overflow="hidden">
+    <box height={1} flexShrink={0} width="100%" flexDirection="row" overflow="hidden">
       <text flexGrow={1} fg={toOpenTuiColor(theme.text.muted)}>
         <span attributes={TextAttributes.BOLD}>FLEET</span>
         {parts.map((part) => (
@@ -155,128 +265,183 @@ function FleetBar({
           </span>
         ))}
       </text>
-      {totals.length > 0 ? <text fg={toOpenTuiColor(theme.text.muted)}>{totals}</text> : null}
+      {totals !== "" ? <text fg={toOpenTuiColor(theme.text.muted)}>{totals}</text> : null}
     </box>
   );
 }
 
-const COLUMN_HEADER_ROW_ID = "__column_header__";
-
-function columnHeaderRowInput(): RowGridRowInput {
-  return {
-    id: COLUMN_HEADER_ROW_ID,
-    cells: {
-      identity: { key: "identity", segments: [textSegment(" ".repeat(7))], importance: "required" },
-      title: { key: "title", segments: [textSegment("SESSION")], importance: "required" },
-      agent: { key: "agent", segments: [textSegment("AGENT")], importance: "optional" },
-      activity: { key: "activity", segments: [textSegment("STATUS")], importance: "optional" },
-    },
-    // The trailing middot composes to "DIFF · PR" via the groups' joining space,
-    // and the ladder sheds diff first, so the dot can never be orphaned.
-    metadataGroups: { diff: [textSegment("DIFF ·")], pr: [textSegment("PR")] },
-  };
-}
-
-// The header shares the rows' grid layout so its columns align and shed in lockstep.
-function dashboardRowLayouts(
-  rows: readonly DashboardTreeRow[],
-  keyByRow: ReadonlyMap<string, string>,
-  columns: number,
-): { headerLayout: RowGridLayout | undefined; layoutByItem: Map<string, RowGridLayout> } {
-  const rowInputs = rows.flatMap((row) => {
-    const input = dashboardRowGridInput(row, keyByRow);
-    return input === undefined ? [] : [input];
-  });
-  const layouts = layoutWorktreeRowGrid({
-    columns: Math.max(1, columns),
-    rows: [columnHeaderRowInput(), ...rowInputs],
-  });
-  const headerLayout = layouts.find((layout) => layout.id === COLUMN_HEADER_ROW_ID);
-  const layoutByItem = new Map(
-    layouts
-      .filter((layout) => layout.id !== COLUMN_HEADER_ROW_ID)
-      .map((layout) => [layout.id, layout]),
-  );
-  return { headerLayout, layoutByItem };
-}
-
 function DashboardBody({
   columns,
-  rows,
-  rowById,
+  roots,
   layoutByItem,
+  keyByRow,
 }: {
   columns: number;
-  rows: readonly DashboardTreeRow[];
-  rowById: ReadonlyMap<DashboardRowId, DashboardTreeRow>;
+  roots: readonly DashboardTreeBranch[];
   layoutByItem: ReadonlyMap<string, RowGridLayout>;
+  keyByRow: ReadonlyMap<string, string>;
 }) {
   return (
-    <box flexDirection="column" flexGrow={1}>
-      {rows.map((row) => (
-        <DashboardRow
-          key={row.id}
+    <box flexDirection="column" width="100%" gap={1}>
+      {roots.map((branch) => (
+        <DashboardBranchView
+          key={branch.row.id}
           columns={columns}
-          row={row}
-          rowById={rowById}
-          layout={layoutByItem.get(row.id)}
+          branch={branch}
+          layoutByItem={layoutByItem}
+          keyByRow={keyByRow}
         />
       ))}
     </box>
   );
 }
 
-function DashboardRow({
+function DashboardBranchView({
   columns,
-  row,
-  rowById,
-  layout,
+  branch,
+  layoutByItem,
+  keyByRow,
 }: {
   columns: number;
+  branch: DashboardTreeBranch;
+  layoutByItem: ReadonlyMap<string, RowGridLayout>;
+  keyByRow: ReadonlyMap<string, string>;
+}) {
+  const row = branch.row;
+  if (row.payload.type === "projectHeader") {
+    return (
+      <ProjectBranchView
+        columns={columns}
+        branch={branch}
+        layoutByItem={layoutByItem}
+        keyByRow={keyByRow}
+      />
+    );
+  }
+  if (row.payload.type === "groupHeader") {
+    return (
+      <GroupBranchView
+        columns={columns}
+        branch={branch}
+        layoutByItem={layoutByItem}
+        keyByRow={keyByRow}
+      />
+    );
+  }
+  return (
+    <DashboardLeaf
+      row={row}
+      layout={layoutByItem.get(row.id)}
+      keyByRow={keyByRow}
+    />
+  );
+}
+
+function ProjectBranchView({
+  columns,
+  branch,
+  layoutByItem,
+  keyByRow,
+}: {
+  columns: number;
+  branch: DashboardTreeBranch;
+  layoutByItem: ReadonlyMap<string, RowGridLayout>;
+  keyByRow: ReadonlyMap<string, string>;
+}) {
+  const row = branch.row;
+  if (row.payload.type !== "projectHeader") return null;
+  return (
+    <box id={`station-dashboard-project:${row.id}`} flexDirection="column" width="100%">
+      <ProjectHeaderView
+        renderableId={semanticItemRenderableId(row.id)}
+        columns={columns}
+        rowId={row.id}
+        project={row.payload.project}
+        collapsed={row.payload.collapsed}
+        groupCount={row.payload.groupCount}
+        persistentFilterMatch={row.payload.persistentFilterMatch}
+        focusedCellId={row.focusedCellId}
+      />
+      {branch.children.map((child) => (
+        <DashboardBranchView
+          key={child.row.id}
+          columns={columns}
+          branch={child}
+          layoutByItem={layoutByItem}
+          keyByRow={keyByRow}
+        />
+      ))}
+    </box>
+  );
+}
+
+function GroupBranchView({
+  columns,
+  branch,
+  layoutByItem,
+  keyByRow,
+}: {
+  columns: number;
+  branch: DashboardTreeBranch;
+  layoutByItem: ReadonlyMap<string, RowGridLayout>;
+  keyByRow: ReadonlyMap<string, string>;
+}) {
+  const row = branch.row;
+  if (row.payload.type !== "groupHeader") return null;
+  const renderableId = `station-dashboard-group:${row.id}`;
+  const header = (
+    <GroupHeaderView
+      renderableId={semanticItemRenderableId(row.id)}
+      columns={row.payload.collapsed ? columns : groupFrameContentColumns(columns)}
+      rowId={row.id}
+      payload={row.payload}
+      cells={row.cells}
+      focusedCellId={row.focusedCellId}
+    />
+  );
+  if (row.payload.collapsed) {
+    return (
+      <box id={renderableId} flexDirection="column" width="100%">
+        {header}
+      </box>
+    );
+  }
+  return (
+    <GroupFrameView
+      renderableId={renderableId}
+      focus={{
+        focusedHeader: row.focusedCellId !== undefined,
+        containsFocusedRow: row.containsFocusedRow === true,
+      }}
+    >
+      {header}
+      {branch.children.map((child) => (
+        <DashboardBranchView
+          key={child.row.id}
+          columns={columns}
+          branch={child}
+          layoutByItem={layoutByItem}
+          keyByRow={keyByRow}
+        />
+      ))}
+    </GroupFrameView>
+  );
+}
+
+function DashboardLeaf({
+  row,
+  layout,
+  keyByRow,
+}: {
   row: DashboardTreeRow;
-  rowById: ReadonlyMap<DashboardRowId, DashboardTreeRow>;
   layout: RowGridLayout | undefined;
+  keyByRow: ReadonlyMap<string, string>;
 }) {
   const theme = useStationTheme();
-  // Resolve Group containment through projected ancestry so renderers never decode row IDs.
-  const groupRow = groupHeaderParent(row, rowById);
   switch (row.payload.type) {
-    case "projectGap":
-      return <box height={1} />;
-    case "projectHeader":
-      return (
-        <ProjectHeaderView
-          columns={columns}
-          rowId={row.id}
-          project={row.payload.project}
-          collapsed={row.payload.collapsed}
-          groupCount={row.payload.groupCount}
-          persistentFilterMatch={row.payload.persistentFilterMatch}
-          focusedCellId={row.focusedCellId}
-        />
-      );
-    case "groupHeader":
-      return (
-        <GroupHeaderView
-          columns={columns}
-          rowId={row.id}
-          payload={row.payload}
-          cells={row.cells}
-          focusedCellId={row.focusedCellId}
-          containsFocusedRow={row.containsFocusedRow}
-        />
-      );
-    case "groupFrameEnd":
-      return groupRow === undefined ? null : (
-        <GroupFrameEndView
-          columns={columns}
-          focusedHeader={groupRow.focusedCellId !== undefined}
-          containsFocusedRow={groupRow.containsFocusedRow === true}
-        />
-      );
     case "emptyProject":
       return (
-        <box flexDirection="row" height={1}>
+        <box id={semanticItemRenderableId(row.id)} flexDirection="row">
           <text fg={toOpenTuiColor(theme.text.muted)}>{emptyProjectLabel()}</text>
           <EmptySessionButton
             rowId={row.id}
@@ -289,67 +454,69 @@ function DashboardRow({
         <SessionRowLine
           rowId={row.id}
           layout={layout}
+          slot={keyByRow.get(row.payload.row.id)}
           focused={row.focusedCellId === "identity"}
-          groupRow={groupRow}
         />
       );
     case "createLocalRow": {
       // Local create rows have no slot and no activation target.
       if (layout === undefined) return null;
-      const content = (
-        <text
-          {...(groupRow === undefined ? {} : { flexGrow: 1 })}
-          fg={toOpenTuiColor(theme.text.primary)}
-        >
-          <Segments segments={layout.segments} />
-        </text>
-      );
-      if (groupRow === undefined) return content;
-      const frame = {
-        focusedHeader: groupRow.focusedCellId !== undefined,
-        containsFocusedRow: groupRow.containsFocusedRow === true,
-      };
       return (
-        <box flexDirection="row" width="100%" height={1}>
-          <GroupFrameRailView text="│" {...frame} />
-          {content}
-          <GroupFrameRailView text="│" {...frame} />
+        <box
+          id={semanticItemRenderableId(row.id)}
+          flexDirection="column"
+          width="100%"
+        >
+          <text fg={toOpenTuiColor(theme.text.primary)}>
+            <Segments segments={layout.segments} />
+          </text>
+          {row.payload.row.status === "failed" ? (
+            <text fg={toOpenTuiColor(theme.status.danger)}>{row.payload.row.error.message}</text>
+          ) : null}
         </box>
       );
     }
+    case "projectHeader":
+    case "groupHeader":
+      return null;
   }
 }
 
-function SessionRowLine({
+const SessionRowLine = memo(function SessionRowLine({
   rowId,
   layout,
+  slot,
   focused,
-  groupRow,
 }: {
   rowId: DashboardRowId;
   layout: RowGridLayout;
+  slot: string | undefined;
   focused?: boolean;
-  groupRow?: DashboardTreeRow | undefined;
 }) {
   const theme = useStationTheme();
   const dispatch = useStationMouse();
   const [hover, setHover] = useStationHoverState();
+  const visibleLayout = useMemo(
+    () => withRowGridSelectionSlot(layout, slot),
+    [layout, slot],
+  );
   // Persistent cursor fill sits under the transient hover fill.
   const background = hover
     ? { backgroundColor: toOpenTuiColor(theme.interaction.hover) }
     : focused === true
       ? { backgroundColor: toOpenTuiColor(theme.interaction.keyboardFocus) }
       : {};
-  const content = (
+  // Compact row-grid presentation is an intentional single-cell-high leaf layout.
+  return (
     <box
+      id={semanticItemRenderableId(rowId)}
       flexDirection="row"
       height={1}
-      {...(groupRow === undefined ? { width: "100%" as const } : { flexGrow: 1 })}
+      width="100%"
       {...background}
     >
       <box
         flexGrow={1}
-        height={1}
         onMouseOver={() => setHover(true)}
         onMouseOut={() => setHover(false)}
       >
@@ -358,38 +525,13 @@ function SessionRowLine({
           fg={toOpenTuiColor(theme.text.primary)}
           {...stationMouseProps(dispatch, { kind: "dashboardCell", rowId, cellId: "identity" })}
         >
-          <Segments segments={layout.segments} />
+          <Segments segments={visibleLayout.segments} />
         </text>
-        <SegmentLinkTargets segments={layout.segments} />
+        <SegmentLinkTargets segments={visibleLayout.segments} />
       </box>
     </box>
   );
-  if (groupRow === undefined) {
-    return content;
-  }
-  const frame = {
-    focusedHeader: groupRow.focusedCellId !== undefined,
-    containsFocusedRow: groupRow.containsFocusedRow === true,
-  };
-  return (
-    <box flexDirection="row" width="100%" height={1}>
-      <GroupFrameRailView text="│" {...frame} />
-      {content}
-      <GroupFrameRailView text="│" {...frame} />
-    </box>
-  );
-}
-
-function groupHeaderParent(
-  row: DashboardTreeRow,
-  rowById: ReadonlyMap<DashboardRowId, DashboardTreeRow>,
-): DashboardTreeRow | undefined {
-  if (row.parentId === undefined) {
-    return undefined;
-  }
-  const parent = rowById.get(row.parentId);
-  return parent?.payload.type === "groupHeader" ? parent : undefined;
-}
+});
 
 function FirstProjectButton({ columns }: { columns: number }) {
   const theme = useStationTheme();

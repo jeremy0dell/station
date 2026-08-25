@@ -1,7 +1,9 @@
 import type { ColorInput } from "@opentui/core";
+import type { ReactNode } from "react";
 import { useStore } from "zustand/react";
 import type { DashboardStateSource } from "@station/dashboard-core/runtime";
-import { dashboardFooterModel, truncateCells } from "@station/dashboard-core/selectors";
+import { dashboardFooterModel } from "@station/dashboard-core/selectors";
+import { truncateCells } from "@station/dashboard-core/text";
 import type { DashboardFooterModel } from "@station/dashboard-core/selectors";
 import {
   activeTuiToast,
@@ -34,20 +36,34 @@ export function DashboardFooterView({ state, columns }: DashboardFooterViewProps
     ...(persistentFilter === undefined ? {} : { persistentFilter }),
   });
 
+  let content: ReactNode;
   if (
     model.kind === "persistentFilterEditing" ||
     model.kind === "persistentFilterCondition" ||
     model.kind === "persistentFilterApplied"
   ) {
-    return (
+    content = (
       <DashboardFilterFooterView
         segments={model.segments}
         variant={filterFooterVariant(model.kind)}
       />
     );
+  } else {
+    content = (
+      <text flexShrink={0} fg={dashboardFooterColor(theme, model)}>
+        {truncateCells(model.text, contentColumns)}
+      </text>
+    );
   }
   return (
-    <text fg={dashboardFooterColor(theme, model)}>{truncateCells(model.text, contentColumns)}</text>
+    <box
+      id="station-dashboard-footer"
+      width="100%"
+      flexShrink={0}
+      overflow="hidden"
+    >
+      {content}
+    </box>
   );
 }
 

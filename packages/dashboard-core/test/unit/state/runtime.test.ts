@@ -73,7 +73,7 @@ describe("dashboard runtime boundary", () => {
     expect(Object.isFrozen(initialState)).toBe(false);
     expect(Object.isFrozen(initialState.snapshot)).toBe(false);
 
-    runtime.actions.setTerminalRows(initialState.terminalRows + 1);
+    runtime.actions.pushToast({ kind: "info", message: "identity" });
 
     expect(notifications).toBe(1);
     expect(runtime.state.getState()).not.toBe(initialState);
@@ -377,7 +377,6 @@ describe("dashboard runtime", () => {
       service: new FakeTuiObserverService(snapshot),
       initialSnapshot: snapshot,
       capabilities,
-      initialState: { terminalRows: 42 },
     });
 
     store.actions.dispatch({
@@ -392,7 +391,6 @@ describe("dashboard runtime", () => {
     expect(store.actions).not.toHaveProperty("addPendingCreateSession");
     expect(store.actions).not.toHaveProperty("failPendingCreateSession");
     expect(store.actions).not.toHaveProperty("removePendingCreateSession");
-    expect(store.state.getState().terminalRows).toBe(42);
     expect(vi.getTimerCount()).toBe(1);
     await store.dispose();
     expect(vi.getTimerCount()).toBe(0);
@@ -902,24 +900,6 @@ describe("dashboard runtime", () => {
         },
       },
     ]);
-  });
-
-  it("syncs terminal rows into view state and clamps dashboard scroll", () => {
-    const snapshot = createDashboardSnapshot();
-    const service = new FakeTuiObserverService(snapshot);
-    const store = createTestDashboardRuntime({
-      service,
-      initialSnapshot: snapshot,
-      initialState: {
-        scrollOffset: 8,
-        terminalRows: 10,
-      },
-    });
-
-    store.actions.setTerminalRows(24);
-
-    expect(store.state.getState().terminalRows).toBe(24);
-    expect(store.state.getState().scrollOffset).toBe(0);
   });
 
   it("uses the local folder service and dispatches project.add after confirmation", async () => {

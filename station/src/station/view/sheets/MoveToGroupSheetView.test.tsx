@@ -2,11 +2,17 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { MouseButtons } from "@opentui/core/testing";
 import { testRender } from "@opentui/react/test-utils";
 import type { DashboardScreenView } from "@station/dashboard-core/state";
+import {
+  MOVE_TO_GROUP_CREATE_CHOICE_ID,
+  MOVE_TO_GROUP_UNGROUPED_CHOICE_ID,
+  moveToGroupExistingChoiceId,
+} from "@station/dashboard-core/state";
 import { act } from "react";
 import { nativeStationTheme, StationThemeProvider } from "../../../theme/index.js";
 import { groupedManyProjectsSnapshot } from "../../fixtures/scenarios.js";
 import type { StationMouseTarget } from "../../input/stationMouse.js";
 import { StationHoverProvider, StationMouseProvider } from "../stationMouseContext.js";
+import { semanticItemRenderableId } from "../layout/scrollViewport.js";
 import { MoveToGroupSheetView } from "./MoveToGroupSheetView.js";
 
 type MoveScreen = Exclude<
@@ -46,6 +52,7 @@ async function render(
   );
   teardowns.push(() => setup.renderer.destroy());
   await setup.renderOnce();
+  await setup.flush();
   return { setup, targets };
 }
 
@@ -70,16 +77,44 @@ describe("MoveToGroupSheetView", () => {
     expect(currentLine).not.toContain("▸");
     expect(focusedLine).toContain("▸ 2 Observer hardening");
     expect(focusedLine).not.toContain("✓");
-    expect(frame).toContain("N Create new Group…");
+    expect(
+      setup.renderer.root.findDescendantById(
+        semanticItemRenderableId(MOVE_TO_GROUP_CREATE_CHOICE_ID),
+      ),
+    ).toBeDefined();
 
-    for (const label of ["U Ungrouped", "2 Observer hardening", "N Create new Group…"]) {
+    for (const label of ["U Ungrouped", "2 Observer hardening"]) {
       const row = lines.findIndex((line) => line.includes(label));
       await setup.mockMouse.click(lines[row]?.indexOf(label) ?? -1, row, MouseButtons.LEFT);
     }
-    expect(targets.filter((target) => target.kind === "sheetChoice")).toEqual([
-      { kind: "sheetChoice", choiceKey: "U" },
-      { kind: "sheetChoice", choiceKey: "2" },
-      { kind: "sheetChoice", choiceKey: "N" },
+    expect(targets.filter((target) => target.kind === "sheetListItem")).toEqual([
+      { kind: "sheetListItem", itemId: MOVE_TO_GROUP_UNGROUPED_CHOICE_ID },
+      {
+        kind: "sheetListItem",
+        itemId: moveToGroupExistingChoiceId("group_observer_hardening"),
+      },
+    ]);
+
+    const { setup: createSetup, targets: createTargets } = await render(
+      {
+        name: "moveToGroup",
+        step: "chooseDestination",
+        sessionId: "ses_wt_group_contracts",
+        sessionTitle: "group-contracts",
+        submitting: false,
+      },
+      new Map([["moveToGroupDestination", MOVE_TO_GROUP_CREATE_CHOICE_ID]]),
+    );
+    const createLines = createSetup.captureCharFrame().split("\n");
+    const createRow = createLines.findIndex((line) => line.includes("N Create new Group…"));
+    expect(createRow).toBeGreaterThanOrEqual(0);
+    await createSetup.mockMouse.click(
+      createLines[createRow]?.indexOf("N Create new Group…") ?? -1,
+      createRow,
+      MouseButtons.LEFT,
+    );
+    expect(createTargets.filter((target) => target.kind === "sheetListItem")).toEqual([
+      { kind: "sheetListItem", itemId: MOVE_TO_GROUP_CREATE_CHOICE_ID },
     ]);
 
     const { setup: currentSetup } = await render(
@@ -113,7 +148,7 @@ describe("MoveToGroupSheetView", () => {
     expect(targets.some((target) => target.kind === "moveToGroupCreateSubmit")).toBe(false);
   });
 
-  it("windows a short destination list around keyboard focus", async () => {
+  it("follows semantic focus through clipping and resize without slicing choices", async () => {
     const { setup } = await render(
       {
         name: "moveToGroup",
@@ -127,8 +162,24 @@ describe("MoveToGroupSheetView", () => {
     );
     const frame = setup.captureCharFrame();
     expect(frame).toContain("Release train");
-    expect(frame).toContain("5-6 of 6");
-    expect(frame).toContain("U Ungrouped");
-    expect(frame).toContain("N Create new Group…");
+    expect(frame).toContain("↑↓ move   ↵ select");
+    expect(frame).not.toContain("of 6");
+    expect(
+      setup.renderer.root.findDescendantById(
+        semanticItemRenderableId("moveToGroup:existing:group_input_parity"),
+      ),
+    ).toBeDefined();
+    expect(
+      setup.renderer.root.findDescendantById(
+        semanticItemRenderableId("moveToGroup:create"),
+      ),
+    ).toBeDefined();
+
+    await act(async () => setup.renderer.resize(80, 8));
+    await setup.renderOnce();
+    await setup.flush();
+    const resized = setup.captureCharFrame();
+    expect(resized).toContain("▸ 5 Release train");
+    expect(resized).toContain("↑↓ move   ↵ select");
   });
 });

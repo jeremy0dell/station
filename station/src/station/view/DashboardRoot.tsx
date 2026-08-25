@@ -1,17 +1,13 @@
-// Store-wired root for the STATION dashboard: subscribes to the view store,
-// feeds the overlay's row budget into the viewport math, and switches
+// Store-wired root for the STATION dashboard: subscribes to the view store and switches
 // between the loading/waiting/unavailable bodies and the live dashboard —
 // mirroring apps/tui's App.tsx branch for the popup posture, including the
 // toast overlay, kind-specific expiry timers, and explicit error dismissal.
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { useStore } from "zustand/react";
 import type { DashboardActions, DashboardStateSource } from "@station/dashboard-core/runtime";
 import {
-  commandPromptRows,
-  dashboardBodyTop,
-  dashboardRowIds,
-  selectDashboardViewport,
-  snapshotLoadingLines,
+  snapshotLoadingContent,
+  type SnapshotLoadingContent,
 } from "@station/dashboard-core/selectors";
 import {
   activeTuiToast,
@@ -20,30 +16,34 @@ import {
   tuiScreenBehavior,
  } from "@station/dashboard-core/state";
 import { ActiveScreenOverlayView } from "./ActiveScreenOverlayView.js";
-import { CommandPromptView } from "./CommandPromptView.js";
-import { DashboardFooterView } from "./DashboardFooterView.js";
-import { DashboardView, Divider } from "./DashboardView.js";
+import { DashboardControlsView } from "./DashboardControlsView.js";
+import { DashboardView } from "./DashboardView.js";
 import {
   StationHoverProvider,
   useStationHoverEnabled,
 } from "./stationMouseContext.js";
 import { ToastOverlayView } from "./ToastOverlayView.js";
 import { toOpenTuiColor, useStationTheme } from "../../theme/index.js";
+import type { DashboardScrollController } from "./layout/scrollViewport.js";
 
 export type DashboardRootProps = {
   state: DashboardStateSource;
-  actions: Pick<
-    DashboardActions,
-    "expireToasts" | "refreshActiveToastExpiry" | "setTerminalRows"
-  >;
+  actions: Pick<DashboardActions, "expireToasts" | "refreshActiveToastExpiry">;
+  layout: DashboardScrollController;
   /** The overlay's content area, in terminal cells. */
   columns: number;
   rows: number;
   onCopyNotice: (text: string) => void;
 };
 
-export function DashboardRoot({ state, actions, columns, rows, onCopyNotice }: DashboardRootProps) {
-  const theme = useStationTheme();
+export function DashboardRoot({
+  state,
+  actions,
+  layout,
+  columns,
+  rows,
+  onCopyNotice,
+}: DashboardRootProps) {
   const snapshot = useStore(state, (state) => state.snapshot);
   const loading = useStore(state, (state) => state.loading);
   const screen = useStore(state, (state) => state.screen);
@@ -55,7 +55,6 @@ export function DashboardRoot({ state, actions, columns, rows, onCopyNotice }: D
     state,
     (state) => state.groupHeaderActionVisibility,
   );
-  const scrollOffset = useStore(state, (state) => state.scrollOffset);
   const dashboardFocus = useStore(state, (state) => state.dashboardFocus);
   const selection = useStore(state, (state) => state.selection);
   const localRows = useStore(state, (state) => state.localRows);
@@ -70,14 +69,6 @@ export function DashboardRoot({ state, actions, columns, rows, onCopyNotice }: D
   const backgroundHoverEnabled =
     hoverEnabled && tuiScreenBehavior(screen).dashboardHoverEnabled;
   const wasToastHiddenByScreen = useRef(toastHiddenByScreen);
-
-  // The store's terminalRows feeds the keyboard scroll-clamping machinery;
-  // rendering reads the prop directly so the first frame after the popup
-  // opens never lays out against the store's stale value while this passive
-  // effect catches up.
-  useEffect(() => {
-    actions.setTerminalRows(rows);
-  }, [actions, rows]);
   useEffect(() => {
     const wasHidden = wasToastHiddenByScreen.current;
     wasToastHiddenByScreen.current = toastHiddenByScreen;
@@ -102,31 +93,22 @@ export function DashboardRoot({ state, actions, columns, rows, onCopyNotice }: D
       columns={columns}
       rows={rows}
       toast={activeToast}
-      promptRows={commandPromptRows(screen)}
       hiddenByScreen={toastHiddenByScreen}
       onCopyNotice={onCopyNotice}
     />
   );
 
   if (loading || snapshot === undefined) {
+    const content = snapshotLoadingContent(loading, observerConnectionStatus);
     // Keep both root branches padding-free because OpenTUI retains a removed inset during reconciliation.
     return (
-      <box width="100%" flexGrow={1} flexDirection="column">
-        <box flexDirection="column" flexGrow={1}>
-          {snapshotLoadingLines(loading, observerConnectionStatus).map((line, index) => (
-            <text
-              key={`${index}:${line.text}`}
-              fg={toOpenTuiColor(
-                line.color === "gray" ? theme.text.muted : theme.text.primary,
-              )}
-            >
-              {line.text}
-            </text>
-          ))}
-        </box>
-        <Divider columns={contentColumns} />
-        <DashboardFooterView state={state} columns={contentColumns} />
-        {toastOverlay}
+      <box width="100%" flexGrow={1} minHeight={0} flexDirection="column">
+        <StationHoverProvider value={backgroundHoverEnabled}>
+          <DashboardNoticeRegion overlay={toastOverlay}>
+            <DashboardLoadingContentView content={content} />
+          </DashboardNoticeRegion>
+          <DashboardControlsView state={state} screen={screen} columns={contentColumns} />
+        </StationHoverProvider>
       </box>
     );
   }
@@ -136,42 +118,25 @@ export function DashboardRoot({ state, actions, columns, rows, onCopyNotice }: D
     collapsedGroupIds,
     groupOrderingMode,
     groupHeaderActionVisibility,
-    scrollOffset,
-    terminalRows: rows,
     localRows,
     selection,
     ...(persistentFilter === undefined ? {} : { persistentFilter }),
     ...(dashboardFocus === undefined ? {} : { dashboardFocus }),
   };
-  const menuRowId =
-    screen.name === "projectMenu"
-      ? dashboardRowIds.project(screen.projectId)
-      : screen.name === "groupMenu"
-        ? dashboardRowIds.group(screen.groupId)
-        : undefined;
-  const menuAnchorTop =
-    menuRowId === undefined
-      ? undefined
-      : dashboardBodyTop() +
-        Math.max(
-          0,
-          selectDashboardViewport(snapshot, viewState, screen).rows.findIndex(
-            (row) => row.id === menuRowId,
-          ),
-        );
-
   return (
-    <box width="100%" flexGrow={1} flexDirection="column">
+    <box width="100%" flexGrow={1} minHeight={0} flexDirection="column">
       <StationHoverProvider value={backgroundHoverEnabled}>
-        <DashboardView
-          snapshot={snapshot}
-          viewState={viewState}
-          screen={screen}
-          columns={columns}
-        />
-        <DashboardFooterView state={state} columns={contentColumns} />
-        <CommandPromptView screen={screen} />
-        {toastOverlay}
+        <DashboardNoticeRegion overlay={toastOverlay}>
+          <DashboardView
+            snapshot={snapshot}
+            viewState={viewState}
+            screen={screen}
+            layout={layout}
+            columns={columns}
+            menuHoverEnabled={hoverEnabled}
+          />
+        </DashboardNoticeRegion>
+        <DashboardControlsView state={state} screen={screen} columns={contentColumns} />
       </StationHoverProvider>
       <ActiveScreenOverlayView
         snapshot={snapshot}
@@ -182,8 +147,53 @@ export function DashboardRoot({ state, actions, columns, rows, onCopyNotice }: D
         localRows={localRows}
         widgets={liveWidgets}
         widgetsPersisted={widgetsPersisted}
-        {...(menuAnchorTop === undefined ? {} : { menuAnchorTop })}
       />
+    </box>
+  );
+}
+
+function DashboardLoadingContentView({ content }: { content: SnapshotLoadingContent }) {
+  const theme = useStationTheme();
+  const muted = toOpenTuiColor(theme.text.muted);
+  return (
+    <box
+      flexDirection="column"
+      flexGrow={1}
+      minHeight={0}
+      paddingTop={content.kind === "loading" ? 0 : 1}
+    >
+      <text fg={content.kind === "loading" ? muted : toOpenTuiColor(theme.text.primary)}>
+        {content.title}
+      </text>
+      {content.kind === "reconnecting" ? <text fg={muted}>{content.detail}</text> : null}
+      {content.kind === "loading" ? null : (
+        <text marginTop={content.kind === "reconnecting" ? 1 : 0} fg={muted}>
+          {content.hint}
+        </text>
+      )}
+    </box>
+  );
+}
+
+function DashboardNoticeRegion({
+  children,
+  overlay,
+}: {
+  children: ReactNode;
+  overlay: ReactNode;
+}) {
+  return (
+    <box
+      id="station-dashboard-notice-region"
+      width="100%"
+      flexGrow={1}
+      minHeight={0}
+      flexDirection="column"
+      position="relative"
+      overflow="hidden"
+    >
+      {children}
+      {overlay}
     </box>
   );
 }

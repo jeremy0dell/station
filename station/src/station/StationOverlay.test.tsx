@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { rgbToHex } from "@opentui/core";
 import { MouseButtons } from "@opentui/core/testing";
 import { testRender } from "@opentui/react/test-utils";
-import type { DashboardRuntime } from "@station/dashboard-core/runtime";
+import type { StationTestDashboardRuntime } from "./test/support/makeStationTestRuntime.js";
 import { dashboardRowIds } from "@station/dashboard-core/selectors";
 import { act } from "react";
 import type { StationMouseEvent } from "../input/mouse.js";
@@ -152,7 +152,7 @@ describe("StationOverlay", () => {
     const groupId = dashboardRowIds.group("group_design_refresh");
     const header = cellFor(setup.captureCharFrame(), "Design refresh");
 
-    expect(setup.captureCharFrame()).toContain("╭ ▼ Design refresh 2 sessions");
+    expect(setup.captureCharFrame()).toContain("│ ▼ Design refresh 2 sessions");
     await setup.mockMouse.click(header.col, header.row, MouseButtons.LEFT);
 
     expect(calls.at(-1)).toEqual({
@@ -232,11 +232,11 @@ describe("StationOverlay", () => {
 
 async function renderOverlay(
   dispatchMouse: (target: MouseTargetRef, event: StationMouseEvent) => boolean = () => true,
-  store: DashboardRuntime = makeStationTestRuntime().runtime,
+  store: StationTestDashboardRuntime = makeStationTestRuntime().runtime,
 ) {
   const setup = await testRender(
     <StationThemeProvider theme={nativeStationTheme}>
-      <StationOverlay state={store.state} actions={store.actions} dispatchMouse={dispatchMouse} onCopyNotice={() => {}} />
+      <StationOverlay state={store.state} actions={store.actions} layout={store.layout} dispatchMouse={dispatchMouse} onCopyNotice={() => {}} />
     </StationThemeProvider>,
     SURFACE,
   );

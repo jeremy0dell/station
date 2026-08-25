@@ -84,7 +84,7 @@ const screenBehaviorCases: readonly [
       name: "persistentFilter",
       draft: createEditableTextInputState("api"),
       draftConditions: [],
-      conditionEditor: { stage: "field", cursor: 0 },
+      conditionEditor: { stage: "field", focusedItemId: "status" },
     },
     "present",
   ],
@@ -185,12 +185,26 @@ const screenBehaviorCases: readonly [
   ],
   [
     "widget settings list",
-    { name: "widgetSettings", focus: "list", cursor: 0, pickerCursor: 0 },
+    {
+      name: "widgetSettings",
+      focus: "list",
+      widgetItemIds: ["widget:0"],
+      activeWidgetItemId: "widget:0",
+      activePickerType: "time",
+      nextWidgetIdentity: 1,
+    },
     "present",
   ],
   [
     "widget add picker",
-    { name: "widgetSettings", focus: "picker", cursor: 0, pickerCursor: 1 },
+    {
+      name: "widgetSettings",
+      focus: "picker",
+      widgetItemIds: ["widget:0"],
+      activeWidgetItemId: "widget:0",
+      activePickerType: "fleet",
+      nextWidgetIdentity: 1,
+    },
     "present",
   ],
 ];
@@ -378,7 +392,14 @@ describe("TUI screen behavior", () => {
 
   it("preserves applied widget changes while backing out of picker and panel", () => {
     const state: DashboardState = {
-      ...withScreen({ name: "widgetSettings", focus: "picker", cursor: 1, pickerCursor: 2 }),
+      ...withScreen({
+        name: "widgetSettings",
+        focus: "picker",
+        widgetItemIds: ["widget:0", "widget:1"],
+        activeWidgetItemId: "widget:1",
+        activePickerType: "prs",
+        nextWidgetIdentity: 2,
+      }),
       widgets: [{ type: "time", enabled: false }, { type: "moon" }],
     };
 
@@ -386,8 +407,10 @@ describe("TUI screen behavior", () => {
     expect(pickerDismissed.screen).toEqual({
       name: "widgetSettings",
       focus: "list",
-      cursor: 1,
-      pickerCursor: 2,
+      widgetItemIds: ["widget:0", "widget:1"],
+      activeWidgetItemId: "widget:1",
+      activePickerType: "prs",
+      nextWidgetIdentity: 2,
     });
     expect(pickerDismissed.widgets).toBe(state.widgets);
     const panelDismissed = clickAway(pickerDismissed);

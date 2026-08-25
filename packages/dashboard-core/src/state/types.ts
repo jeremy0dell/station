@@ -14,6 +14,7 @@ import type { AddProjectFlowState } from "../flows/addProject/types.js";
 import type { NewSessionFlowState } from "../flows/newSession.js";
 import type { DashboardFocus, GroupOrderingMode } from "../selectors/dashboardTree.js";
 import type { ClientNotice } from "../services/types.js";
+import type { HelpEntryId } from "./helpEntries.js";
 import type { TuiLocalRows } from "./localRows.js";
 import type { ReadonlyDeep } from "./readonly.js";
 import type { TuiSelectionState } from "./selection/types.js";
@@ -50,11 +51,16 @@ export type DashboardFilterConditionOption = {
 };
 
 export type DashboardFilterConditionEditor =
-  | { stage: "field"; cursor: number }
+  | {
+      stage: "field";
+      /** Stable field/action identity; array position never crosses the state boundary. */
+      focusedItemId: DashboardFilterConditionField | "applyFilter";
+    }
   | {
       stage: "values";
       field: DashboardFilterConditionField;
-      cursor: number;
+      /** Stable option identity followed by keyboard, pointer, and renderer scrolling. */
+      focusedValueId?: string;
       /** Frozen for the panel lifetime so snapshots cannot reassign visible slot keys. */
       options: readonly DashboardFilterConditionOption[];
       selectedIds: readonly string[];
@@ -81,8 +87,6 @@ export type TuiViewState = {
   collapsedGroupIds: ReadonlySet<SessionGroupId>;
   groupOrderingMode: GroupOrderingMode;
   groupHeaderActionVisibility: DashboardGroupHeaderActionVisibility;
-  scrollOffset: number;
-  terminalRows: number;
   localRows: TuiLocalRows;
   /** Branded dashboard row/cell cursor; native overlays synchronize session identity once per open. */
   dashboardFocus?: DashboardFocus;
@@ -158,7 +162,7 @@ export type GroupSettingsPendingMutation = "rename" | "membership" | "delete";
 
 export type TuiScreen =
   | { name: "dashboard" }
-  | { name: "help" }
+  | { name: "help"; focusedEntryId?: HelpEntryId }
   | { name: "projectMenu"; projectId: ProjectId; focus: ProjectMenuActionId }
   | {
       name: "groupMenu";
@@ -275,10 +279,22 @@ export type TuiScreen =
       removeDraft: EditableTextInputState;
       pending?: GroupSettingsPendingMutation;
     }
-  | { name: "widgetSettings"; focus: WidgetSettingsFocus; cursor: number; pickerCursor: number };
+  | {
+      name: "widgetSettings";
+      focus: WidgetSettingsFocus;
+      /** Stable identities paired with `widgets` while this settings screen is open. */
+      widgetItemIds: readonly WidgetSettingsItemId[];
+      activeWidgetItemId?: WidgetSettingsItemId;
+      activePickerType: AddableWidgetType;
+      nextWidgetIdentity: number;
+    };
 
 /** Whether the widget list or the add-widget picker owns keyboard input. */
 export type WidgetSettingsFocus = "list" | "picker";
+
+export type WidgetSettingsItemId = `widget:${number}`;
+
+export type AddableWidgetType = "time" | "fleet" | "prs" | "moon";
 
 /** Left-list item ids; extend alongside the registry in screens/projectSettings.ts. */
 export type ProjectSettingsItemId = "agent" | "remove";
@@ -312,8 +328,6 @@ export type CreateInitialTuiStateOptions = {
   groupOrderingMode?: GroupOrderingMode;
   /** Optional overrides; omitted Group header actions remain visible. */
   groupHeaderActionVisibility?: Partial<DashboardGroupHeaderActionVisibility>;
-  scrollOffset?: number;
-  terminalRows?: number;
   localRows?: TuiLocalRows;
   dashboardFocus?: DashboardFocus;
   widgets?: readonly TuiWidgetConfig[];

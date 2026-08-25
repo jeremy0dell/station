@@ -279,9 +279,6 @@ function focusedProjectId(state: DashboardState): ProjectId | undefined {
       return row.payload.row.worktree.projectId;
     case "createLocalRow":
       return row.payload.row.projectId;
-    case "groupFrameEnd":
-    case "projectGap":
-      return undefined;
   }
 }
 

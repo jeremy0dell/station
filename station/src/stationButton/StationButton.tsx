@@ -28,6 +28,8 @@ export type StationButtonProps = {
   dispatchMouse: (target: MouseTargetRef, event: StationMouseEvent) => boolean;
   /** Opt-in island display modes from `[tui.island]`. */
   island?: TuiIslandConfig | undefined;
+  /** False while the owning native overlay occupies the canvas. */
+  visible?: boolean | undefined;
 };
 
 // Reuses the existing `{ kind: "header" }` mouse path so the route to STATION mode
@@ -39,6 +41,7 @@ export function StationButton({
   clientState,
   dispatchMouse,
   island,
+  visible = true,
 }: StationButtonProps) {
   const getStatus = useStableStatus(clientState, dashboardState, island?.projectRollup === true);
   const subscribe = useCallback(
@@ -101,6 +104,8 @@ export function StationButton({
     },
     [clientState, dispatchMouse, status.attentionSessionId, status.attentionWorktreeId, store],
   );
+
+  if (!visible) return null;
 
   return (
     <DynamicStationButton

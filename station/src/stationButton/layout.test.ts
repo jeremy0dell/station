@@ -1,11 +1,13 @@
 import { describe, expect, it } from "bun:test";
+import { cellWidth } from "@station/dashboard-core/text";
 import {
   attentionLines,
   celebrationText,
+  clampSessionName,
   COLLAPSED_BASE_COLS,
   islandDisplay,
   type IslandDisplayInput,
-  targetDims,
+  stationButtonTargetCellSize,
 } from "./layout.js";
 import type { StationButtonStatus } from "./status.js";
 
@@ -25,7 +27,7 @@ function input(
 }
 
 function dims(value: IslandDisplayInput, expanded: boolean) {
-  return targetDims(islandDisplay(value, expanded));
+  return stationButtonTargetCellSize(islandDisplay(value, expanded));
 }
 
 describe("islandDisplay", () => {
@@ -82,7 +84,7 @@ describe("islandDisplay", () => {
   });
 });
 
-describe("targetDims", () => {
+describe("stationButtonTargetCellSize", () => {
   it("keeps the summary card width stable as live counts change", () => {
     const width = (workingCount: number, idleCount: number): number =>
       dims(input({ workingCount, idleCount }), true).width;
@@ -147,7 +149,7 @@ describe("targetDims", () => {
     expect(at({ prNumber: 12345 }).width).toBe(at({ prNumber: 42 }).width + 3);
     expect(at({ prNumber: 42 }).height).toBe(dims(input(), false).height);
     expect(at({ prNumber: 42, title: "fix things" }).width).toBe(
-      at({ prNumber: 42 }).width + " · fix things".length,
+      at({ prNumber: 42 }).width + cellWidth(" · fix things"),
     );
   });
 });
@@ -163,7 +165,33 @@ describe("celebrationText", () => {
       title: "a very long pull request title that keeps going",
     });
     expect(long.endsWith("…")).toBe(true);
-    expect(long.length).toBe("✓ #42 merged · ".length + 28);
+    expect(cellWidth(long)).toBe(cellWidth("✓ #42 merged · ") + 28);
+  });
+
+  it("clamps wide and combining titles by terminal cells", () => {
+    const prefix = "✓ #42 merged · ";
+    const wide = celebrationText({ prNumber: 42, title: "界".repeat(20) });
+    const combining = celebrationText({ prNumber: 42, title: "e\u0301".repeat(28) });
+
+    expect(wide.endsWith("…")).toBe(true);
+    expect(cellWidth(wide) - cellWidth(prefix)).toBeLessThanOrEqual(28);
+    expect(combining.endsWith("…")).toBe(false);
+    expect(cellWidth(combining) - cellWidth(prefix)).toBe(28);
+  });
+});
+
+describe("clampSessionName", () => {
+  it("preserves complete graphemes within the stable terminal-cell budget", () => {
+    const wide = clampSessionName("界".repeat(20));
+    const combining = clampSessionName("e\u0301".repeat(20));
+    const family = clampSessionName("👨‍👩‍👧‍👦".repeat(12));
+
+    expect(wide.endsWith("…")).toBe(true);
+    expect(cellWidth(wide)).toBeLessThanOrEqual(20);
+    expect(combining.endsWith("…")).toBe(false);
+    expect(cellWidth(combining)).toBe(20);
+    expect(family.endsWith("…")).toBe(true);
+    expect(cellWidth(family)).toBeLessThanOrEqual(20);
   });
 });
 
