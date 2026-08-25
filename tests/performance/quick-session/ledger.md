@@ -1892,3 +1892,30 @@ typechecks; Protocol client/server integration, Observer external-launch unit,
 focused temporary dashboard/managed-launch tests, Biome, `git diff --check`, and
 the runner's skipped-mode compile. No production optimization is registered
 until BENCH-044 passes every stability, attribution, and product guard.
+
+Outcome: rejected mechanically. The corrected authoritative attempt admitted
+all twenty product repetitions in twenty-five stability attempts and passed
+every product, trace, reconstruction, and perturbation guard. Intent-to-exact-
+input acknowledgement measured 174.134/294.324ms median/p95, attachment
+8.166/18.173ms, and client-minus-Observer residual 13.699/20.016ms. The actual-
+request wire/client remainder measured 6.832/11.093ms.
+
+Server-send-to-client-frame egress scheduling was descriptively dominant at
+5.902/8.708ms, supplied 78.5% of wire/client p95, and supplied at least half of
+all five intervals over 10ms. Client frame-to-result validation measured only
+0.402/0.560ms, supplied 5.0% of p95, and supplied 3.2-5.4% of every tail,
+disproving the frozen blind prediction. Request construction/send measured
+0.292/0.644ms and 0.019/0.031ms; ingress scheduling 0.154/1.497ms; expected-
+health 2.147/4.539ms; server response construction/send 0.392/0.731ms and
+0.014/0.021ms. Full residual reconstruction error was zero and the maximum
+cross-clock error was 0.000212ms.
+
+The first twenty-run attempt is invalid and retained separately because its
+server recorder captured health exchanges from unrelated Observer connections.
+The corrected recorder committed only the health exchange on the same socket
+immediately preceding prepare; Protocol typecheck and all 43 integration tests
+passed before the authoritative rerun. All temporary behavior and diagnostics
+must be reverted from the review branch. Next register an exit-only transport
+diagnostic that separates socket arrival, frame parsing, queue publication, and
+async-iterator resumption; do not optimize the transport from this descriptive
+result alone.
