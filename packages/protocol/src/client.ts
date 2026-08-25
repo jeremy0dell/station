@@ -385,17 +385,27 @@ async function readResponseForRequest<TMethod extends ProtocolMethod>(
   acceptPreviousLifecycleSchema = false,
   usePreviousLifecycleSchema = false,
 ): Promise<ProtocolResult<TMethod>> {
+  const diagnosePrepareExternalLaunch = method === "agent.prepareExternalLaunch";
   const request = protocolRequest(id, method, params);
+  if (diagnosePrepareExternalLaunch) {
+    markPrepareExternalLaunchClientProtocolPhase("prepareRequestConstructed");
+  }
   connection.send(
     usePreviousLifecycleSchema
       ? { ...request, schemaVersion: PREVIOUS_LIFECYCLE_SCHEMA_VERSION }
       : request,
   );
+  if (diagnosePrepareExternalLaunch) {
+    markPrepareExternalLaunchClientProtocolPhase("prepareRequestSent");
+  }
 
   for (;;) {
     const next = await iterator.next();
     if (next.done) {
       throw protocolSocketClosedError();
+    }
+    if (diagnosePrepareExternalLaunch) {
+      markPrepareExternalLaunchClientProtocolPhase("prepareResponseFrameReceived");
     }
     if (acceptPreviousLifecycleSchema && !usePreviousLifecycleSchema) {
       const previousError = PreviousLifecycleErrorResponseSchema.safeParse(next.value);
@@ -407,6 +417,9 @@ async function readResponseForRequest<TMethod extends ProtocolMethod>(
       }
     }
     const response = parseProtocolResponseMessage(next.value, acceptPreviousLifecycleSchema);
+    if (diagnosePrepareExternalLaunch) {
+      markPrepareExternalLaunchClientProtocolPhase("prepareResponseEnvelopeParsed");
+    }
     if (response.id !== id) {
       continue;
     }
