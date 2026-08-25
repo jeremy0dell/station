@@ -71,6 +71,7 @@ the winning design, and the remaining product-level frontier.
 | BENCH-038-F | BENCH-037-U sends raw Escape to dismiss the dashboard after the created pane is queued; terminal input must delay lone Escape to distinguish it from a sequence, while Ctrl-O is an unambiguous existing overlay toggle and should focus the same pane immediately. | Alternated five Escape and five Ctrl-O focus gestures across otherwise identical compiled CLI/native Quick Session runs, adding timestamps for focus gesture→overlay dismissal and dismissal→input acknowledgement. No Quick Session, Observer, Host, or focus semantics changed. | BENCH-037-U intent→canonical UI median/p95 was 168/283ms but intent→interactive was 715/819ms, leaving 536ms at the p95 focus/input boundary. Attribute and advance only if Ctrl-O focus→ack p95 is ≤100ms and improves ≥75% over same-window Escape, Ctrl-O intent→interactive median/p95 are ≤250/350ms, all phase sums are coherent, and all ten exact gates pass. Prediction: Ctrl-O focus→ack p95 ≤50ms and intent→interactive p95 ≤300ms. | Rejected. Escape→Ctrl-O focus-to-ack median/p95 was 542/600→33/165ms and intent-to-interactive was 794/846→213/634ms. Ctrl-O overlay dismissal itself was 21/24ms, but one 148ms post-write acknowledgement outlier made focus-to-ack p95 miss 100ms, same-window p95 improvement reach only 72.6%, and intent p95 miss 350ms. | All ten phase sums were coherent and every run reached exact ready/input, canonical UI, cleanup, and process-stop milestones. The aggregate exact-safety assertion failed: one run emitted an additional expected Observer-start progress line, and the report did not retain named boundary predicates needed to explain why the other nine rows also recorded `safe=false`. | Reject mechanically; retain the Escape attribution but do not advance an automatic dashboard dismissal from this result. | Which collapsed boundary predicate made all rows unsafe, and does a named safety audit confirm the semantic path independently of the timing reject? |
 | BENCH-039-S | BENCH-038-F collapsed every product-boundary invariant into one `safe` boolean, preventing the retained artifact from distinguishing a semantic mismatch from a faulty benchmark expectation. | Added named booleans for every existing BENCH-038 boundary predicate and ran one Ctrl-O product-boundary repetition; made no production or timing-path change. | BENCH-038-F reached every awaited milestone and exact cleanup but recorded ten unsafe rows. Accept the audit only if every semantic, identity, input, inventory, and process predicate is named, exactly one false predicate explains each unsafe result, and the root is removed. Prediction: the false predicate is a benchmark expectation rather than session identity, input, or cleanup. | Accepted. Exactly one predicate was false: the test expected canonical terminal provider `station`, while the provider-neutral Station Host ID is `native`. The run reached canonical UI in 314ms, focus-to-ack in 97ms, and intent-to-interactive in 410ms; these are diagnostic context, not a latency claim. | All other 18 named predicates passed, including exact command, worktree/registration, scripted harness, Host worktree/session, ready/input, zero Host inventory, 49-worktree cleanup, clean stops, exact progress stderr, phase coherence, and root removal. | Keep named safety evidence and correct the benchmark expectation to `STATION_HOST_PROVIDER_ID`; BENCH-038 remains rejected. | Does automatic dashboard dismissal after canonical Quick Session success eliminate the second gesture while preserving failure and deliberate-create behavior? |
 | EXP-016 | Native Quick Session already publishes a managed pane as the dashboard overlay's return target, so making only that shortcut a foreground landing and dismissing only its proven successful landing should remove the second gesture without weakening failure visibility. | Temporarily carried an explicit foreground request through native managed launch, closed the overlay only for `success` with `landed: true`, and left deliberate Create, Fork, notices, failures, and non-landing success unchanged. | BENCH-038-F Ctrl-O intent-to-interactive was 213/634ms median/p95 over five alternating control runs; BENCH-039-S was 410ms once after fixing the terminal-provider expectation. Keep only with ten safe control and ten safe candidate runs, candidate intent-to-interactive median/p95 at most 200/350ms, candidate p95 at least 25% below the fresh control, automatic overlay-dismissal-to-input-ack p95 at most 100ms, no dismissal input byte in candidate runs, and every exact identity, canonical, input, inventory, stop, stderr, phase, and root predicate true. Prediction: automatic candidate intent-to-interactive p95 is at most 300ms and at least 40% below fresh Ctrl-O control. | Rejected. Fresh Ctrl-O control was 220/2348ms median/p95; automatic dismissal was 196/358ms, improving median 11% and p95 84.8%. The candidate passed the 200ms median and relative rules but missed the 350ms absolute p95 by 7.8ms, missed the 100ms overlay-dismissal-to-input-ack p95 at 154ms, and missed its 300ms prediction by 58ms. | All ten control and ten candidate runs passed every named identity, canonical, input, inventory, stop, stderr, phase, and root predicate. Candidate runs sent no dismissal byte. Focused tests proved successful landing, non-landing success, notice, launch failure, deliberate Create, Fork, canonical continuation, and foreground/background propagation; Station typecheck passed. | Revert completely under the preregistered rule; retain the runner and raw control/candidate evidence only on the continuation archive. | Can native managed launch expose bounded child-input readiness so automatic dismissal occurs only when the pane can immediately acknowledge input? |
+| BENCH-040-I | EXP-016's runner waited for the scripted harness-ready marker before writing input, although automatic dismissal had already focused a Host-backed PTY that should accept and buffer controller input immediately. | Diagnostic only: reuse the exact rejected candidate binary and send the input token within 10ms of automatic overlay dismissal, then observe the independent ready marker and exact acknowledgement without rebuilding or changing production source. | EXP-016 automatic candidate was 196/358ms median/p95 intent-to-interactive and 24/154ms dismissal-to-ack. Its sole tail waited 100ms after dismissal for Host ready, then 54ms after write. Accept only if ten safe runs all write within 10ms of dismissal, at least one write precedes harness readiness by at least 25ms, every token is acknowledged exactly once, intent-to-interactive median/p95 are at most 200/320ms, p95 improves at least 10% over 358ms, dismissal-to-ack p95 is at most 120ms, and every EXP-016 identity, canonical, inventory, stop, stderr, phase, and root predicate passes. Prediction: at least one pre-ready write is retained without loss and intent-to-interactive p95 is at most 310ms. | Rejected. Immediate input produced 184/349ms intent-to-interactive: median passed, but p95 missed 320ms by 29ms, improved only 2.4% rather than 10%, and missed the 310ms prediction. Dismissal-to-ack passed narrowly at 24/118ms. | All ten runs passed every named safety predicate, wrote within 0.064ms of dismissal, and acknowledged the exact token once. One live-observed run safely wrote 115ms before Host readiness; no candidate sent a dismissal byte. | Retain the buffer-safety attribution, but reject the diagnostic mechanically and do not retroactively accept EXP-016. The remaining 349ms tail accumulated before automatic focus. | Which successful managed-launch phase between command completion and foreground pane focus owns the remaining tail? |
 
 ## EXP-008 preregistered change plan
 
@@ -1504,3 +1505,55 @@ propagation, and Station typecheck passed. Those correctness results cannot
 override either failed timing rule. The production, source-adjacent test, JSDoc,
 and `docs/tui.md` candidate edits were restored; the one-off runner and raw JSON
 are retained only on the continuation evidence archive.
+
+## BENCH-040-I registered diagnostic plan
+
+Governing sources are `docs/debugging.md`, `docs/architecture.md`, `docs/tui.md`,
+`tests/README.md`, the original experiment protocol, and EXP-016. The raw
+EXP-016 candidate artifact is the runtime evidence: repetition zero dismissed
+at 203ms, waited until the harness-ready marker at 304ms, wrote at 304ms, and
+received acknowledgement at 358ms. The other nine runs reached harness readiness
+before automatic dismissal and wrote within 0.01ms afterward. This diagnostic
+tests whether the exceptional 100ms interval is required for input safety or is
+serialization introduced by the one-off runner.
+
+The exact rejected candidate binary remains locally available at
+`station/dist/bin/stn` with embedded Observer build identity
+`0.0.0-pre-alpha.5.16+station.35acc427d7a27d641d8b0295a07faf73e78270230eed4fff0d19e0ab3f9fa744`.
+BENCH-040-I must verify that identity before running and must not rebuild it from
+the reverted source tree. On each of ten repetitions, the runner will arm raw
+overlay-disappearance observation at Quick Session intent, write the unique
+input token immediately after disappearance, and independently observe the
+Host ready marker and acknowledgement. It will then reopen the dashboard to
+verify canonical convergence before exact removal and shutdown.
+
+Expected files are the ignored one-off runner
+`tests/performance/quick-session/compiledQuickSessionTui.real.test.ts`, raw
+`.dev-state/performance/quick-session/bench-040-immediate-input.real.json`, and
+this ledger. The runner and raw JSON will be added only to the continuation
+archive after classification. No production, test, package, contract, protocol,
+Observer, Host, provider, connector, configuration, architecture, report, or
+JSDoc file changes. The table row fixes every timing and correctness rule before
+the diagnostic. Acceptance establishes only that focused Host PTY input can be
+buffered before the harness-ready marker in this boundary; rejection leaves the
+EXP-016 conclusion and next question unchanged.
+
+Outcome: rejected mechanically, while the narrower input-buffering prediction
+was proved. All ten runs wrote within 0.064ms of automatic overlay dismissal
+and the immutable PTY acknowledged each unique token exactly once. In the live
+non-replay sample, input was written 115ms before the scripted harness-ready
+marker and acknowledged 118ms after focus without loss or duplication.
+Dismissal-to-ack therefore passed its 120ms p95 rule at 118ms, and all other
+focus-to-ack samples were at most 33.5ms.
+
+Intent-to-interactive was 184/349ms median/p95. The median passed 200ms, but the
+p95 missed 320ms by 29ms, improved only 2.4% from EXP-016's 358ms rather than
+the required 10%, and missed the 310ms prediction by 39ms. The 349ms sample
+spent 317ms reaching foreground focus and only 32ms from focus through exact
+acknowledgement; its command had completed at 181ms and Host readiness arrived
+at 266ms. The next target is therefore the successful managed-launch interval
+before foreground focus, not a readiness wait after the pane is accepting
+input. Every named command, project, worktree, scripted harness, session/PTTY,
+ready/input, canonical, inventory, process-stop, accepted progress-stderr,
+phase-coherence, and root-removal predicate passed. This diagnostic changes no
+production source and cannot alter EXP-016's rejection.
