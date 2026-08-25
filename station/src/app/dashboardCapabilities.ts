@@ -20,6 +20,7 @@ import {
   waitForSessionPlacementByBranch,
 } from "../input/runtime/stationRows.js";
 import type { PtyRegistry } from "../terminal/registry/ptyRegistry.js";
+import { markManagedLaunchDiagnosticPhase } from "../input/runtime/managedLaunchPhaseDiagnostic.js";
 import {
   finalizeNativeWorktreeRemoval,
   prepareNativeWorktreeRemoval,
@@ -59,6 +60,7 @@ export function createDashboardCapabilities(
   });
   const runManagedSessionCreate = (
     request: Parameters<DashboardCapabilities["managedSessions"]["create"]>[0],
+    background?: boolean,
   ): Promise<ManagedLaunchResult> =>
     options.managedLaunch.create({
       projectId: request.project.id,
@@ -66,6 +68,7 @@ export function createDashboardCapabilities(
       branch: request.hiddenBranch,
       harness: request.harness,
       ...(request.group === undefined ? {} : { group: request.group }),
+      ...(background === undefined ? {} : { background }),
     });
   const createManagedSession: DashboardCapabilities["managedSessions"]["create"] = (request) =>
     dashboardExecution(
@@ -104,14 +107,21 @@ export function createDashboardCapabilities(
     request,
   ) =>
     managedSessionExecution(
-      runManagedSessionCreate(request).then(async (result) => {
+      runManagedSessionCreate(request, false).then(async (result) => {
+        markManagedLaunchDiagnosticPhase("quickResultReceived");
         if (result.kind === "success") {
+          if (result.landed) {
+            markManagedLaunchDiagnosticPhase("overlayCloseRequested");
+            options.store.actions.closeOverlay();
+          }
           // Native preparation publishes its session through an asynchronous Observer reconcile.
+          markManagedLaunchDiagnosticPhase("canonicalWaitStarted");
           await waitForSessionByBranch(
             options.clientState,
             request.project.id,
             request.hiddenBranch,
           );
+          markManagedLaunchDiagnosticPhase("canonicalWaitCompleted");
         }
         return result;
       }),
