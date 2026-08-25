@@ -9,6 +9,10 @@ import type { ProviderRegistry } from "../../providers/registry.js";
 import type { ObserverCore } from "../../reconcile/core.js";
 import type { ObserverEventBus } from "../../runtime/eventBus.js";
 import type { StationLogger } from "../../stationLogger.js";
+import {
+  createWorktreeCreateCoordinator,
+  type WorktreeCreateCoordinator,
+} from "../../worktreeCreateCoordinator.js";
 import { assertCommandType } from "../assertCommand.js";
 import type { HarnessLaunchPreflight } from "../harnessLaunchPreflight.js";
 import {
@@ -47,6 +51,7 @@ export type CreateSessionForkHandlerOptions = {
   clock?: RuntimeClock | undefined;
   idFactory?: Partial<SessionCommandIdFactory> | undefined;
   logger?: StationLogger | undefined;
+  worktreeCreates?: WorktreeCreateCoordinator | undefined;
 };
 
 /**
@@ -59,6 +64,7 @@ export type CreateSessionForkHandlerOptions = {
  * retires only fork-owned state after verified rollback.
  */
 export function createSessionForkHandler(options: CreateSessionForkHandlerOptions): CommandHandler {
+  const worktreeCreates = options.worktreeCreates ?? createWorktreeCreateCoordinator();
   const idFactory = {
     ...defaultSessionCommandIdFactory,
     ...options.idFactory,
@@ -153,13 +159,17 @@ export function createSessionForkHandler(options: CreateSessionForkHandlerOption
             provider: options.providers.worktree.id,
           },
         },
-        () =>
-          options.providers.worktree.createWorktree({
-            project,
-            branch: payload.branch,
-            base,
-            ...(copyDirty ? { seedFrom: { path: sourceRow.path, worktreeId: sourceRow.id } } : {}),
-          }),
+        (signal) =>
+          worktreeCreates.run(project.id, signal, () =>
+            options.providers.worktree.createWorktree({
+              project,
+              branch: payload.branch,
+              base,
+              ...(copyDirty
+                ? { seedFrom: { path: sourceRow.path, worktreeId: sourceRow.id } }
+                : {}),
+            }),
+          ),
       );
       createdWorktree = worktree;
       throwIfAborted(context.signal);

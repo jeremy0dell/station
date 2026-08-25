@@ -4,6 +4,10 @@ import type { ProviderRegistry } from "../../providers/registry.js";
 import type { ObserverCore } from "../../reconcile/core.js";
 import type { ObserverEventBus } from "../../runtime/eventBus.js";
 import type { StationLogger } from "../../stationLogger.js";
+import {
+  createWorktreeCreateCoordinator,
+  type WorktreeCreateCoordinator,
+} from "../../worktreeCreateCoordinator.js";
 import { assertCommandType } from "../assertCommand.js";
 import type { HarnessLaunchPreflight } from "../harnessLaunchPreflight.js";
 import type { CommandHandler } from "../queue.js";
@@ -25,6 +29,7 @@ export type WorktreeForkHandlerOptions = {
   eventBus?: ObserverEventBus | undefined;
   clock?: RuntimeClock | undefined;
   logger?: StationLogger | undefined;
+  worktreeCreates?: WorktreeCreateCoordinator | undefined;
 };
 
 /**
@@ -37,6 +42,7 @@ export type WorktreeForkHandlerOptions = {
  * read-only snapshot.
  */
 export function createWorktreeForkHandler(options: WorktreeForkHandlerOptions): CommandHandler {
+  const worktreeCreates = options.worktreeCreates ?? createWorktreeCreateCoordinator();
   return async (context) => {
     assertCommandType(context, "worktree.fork");
     throwIfAborted(context.signal);
@@ -93,7 +99,10 @@ export function createWorktreeForkHandler(options: WorktreeForkHandlerOptions): 
           provider: options.providers.worktree.id,
         },
       },
-      () => options.providers.worktree.createWorktree(request),
+      (signal) =>
+        worktreeCreates.run(project.id, signal, () =>
+          options.providers.worktree.createWorktree(request),
+        ),
     );
     throwIfAborted(context.signal);
 

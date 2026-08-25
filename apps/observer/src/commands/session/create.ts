@@ -9,6 +9,10 @@ import type { ProviderRegistry } from "../../providers/registry.js";
 import type { ObserverCore } from "../../reconcile/core.js";
 import type { ObserverEventBus } from "../../runtime/eventBus.js";
 import type { StationLogger } from "../../stationLogger.js";
+import {
+  createWorktreeCreateCoordinator,
+  type WorktreeCreateCoordinator,
+} from "../../worktreeCreateCoordinator.js";
 import { assertCommandType } from "../assertCommand.js";
 import type { HarnessLaunchPreflight } from "../harnessLaunchPreflight.js";
 import {
@@ -43,6 +47,7 @@ export type CreateSessionCreateHandlerOptions = {
   clock?: RuntimeClock | undefined;
   idFactory?: Partial<SessionCommandIdFactory> | undefined;
   logger?: StationLogger | undefined;
+  worktreeCreates?: WorktreeCreateCoordinator | undefined;
 };
 
 /**
@@ -57,6 +62,7 @@ export type CreateSessionCreateHandlerOptions = {
 export function createSessionCreateHandler(
   options: CreateSessionCreateHandlerOptions,
 ): CommandHandler {
+  const worktreeCreates = options.worktreeCreates ?? createWorktreeCreateCoordinator();
   const idFactory = {
     ...defaultSessionCommandIdFactory,
     ...options.idFactory,
@@ -116,12 +122,14 @@ export function createSessionCreateHandler(
             provider: options.providers.worktree.id,
           },
         },
-        () =>
-          options.providers.worktree.createWorktree({
-            project,
-            branch: payload.branch,
-            ...(payload.base === undefined ? {} : { base: payload.base }),
-          }),
+        (signal) =>
+          worktreeCreates.run(project.id, signal, () =>
+            options.providers.worktree.createWorktree({
+              project,
+              branch: payload.branch,
+              ...(payload.base === undefined ? {} : { base: payload.base }),
+            }),
+          ),
       );
       createdWorktree = worktree;
       throwIfAborted(context.signal);
