@@ -1,9 +1,12 @@
-import type { KeyedChoice, NewSessionHarnessOption } from "@station/dashboard-core/selectors";
+import type {
+  NewSessionHarnessOption,
+  SelectionChoice,
+} from "@station/dashboard-core/selectors";
 import { providerHealthColor, useStationTheme } from "../../../theme/index.js";
 import { SheetChoiceLine } from "./parts.js";
 
 export type AgentChoiceListViewProps = {
-  choices: readonly KeyedChoice<NewSessionHarnessOption>[];
+  choices: readonly SelectionChoice<NewSessionHarnessOption>[];
   width: number;
   /** The option to mark as current (a project's default harness), if any. */
   currentId?: NewSessionHarnessOption["id"];
@@ -49,6 +52,7 @@ export function AgentChoiceListView({
             width={width}
             current={current}
             selected={choice.value.id === selectedId}
+            itemId={choice.value.id}
             {...(current && pending ? { note: "updating…" } : {})}
           />
         );

@@ -12,10 +12,12 @@ function parseArgs(argv: readonly string[]): {
   socketPath: string;
   stateDir: string;
   buildVersion?: string;
+  buildIdentity?: string;
 } {
   let socketPath: string | undefined;
   let stateDir: string | undefined;
   let buildVersion: string | undefined;
+  let buildIdentity: string | undefined;
   for (let i = 0; i < argv.length; i += 1) {
     if (argv[i] === "--socket") {
       socketPath = argv[i + 1];
@@ -24,15 +26,10 @@ function parseArgs(argv: readonly string[]): {
       stateDir = argv[i + 1];
       i += 1;
     } else if (argv[i] === "--build-version") {
-      // Test-only A/B identity; require an explicit harness gate so production
-      // launchers cannot spoof opaque build identity via argv.
-      if (process.env.STATION_HOST_ALLOW_BUILD_VERSION_OVERRIDE !== "1") {
-        process.stderr.write(
-          "station-station-host --build-version requires STATION_HOST_ALLOW_BUILD_VERSION_OVERRIDE=1\n",
-        );
-        process.exit(2);
-      }
       buildVersion = argv[i + 1];
+      i += 1;
+    } else if (argv[i] === "--build-identity") {
+      buildIdentity = argv[i + 1];
       i += 1;
     }
   }
@@ -40,14 +37,20 @@ function parseArgs(argv: readonly string[]): {
     process.stderr.write("station-station-host requires --socket <path> --state-dir <dir>\n");
     process.exit(2);
   }
-  if (buildVersion !== undefined && buildVersion.length === 0) {
-    process.stderr.write("station-station-host --build-version requires a non-empty value\n");
+  if ((buildVersion === undefined) !== (buildIdentity === undefined)) {
+    process.stderr.write("station-station-host test build overrides require version and identity\n");
+    process.exit(2);
+  }
+  if (buildVersion !== undefined && process.env.STATION_HOST_ALLOW_BUILD_VERSION_OVERRIDE !== "1") {
+    process.stderr.write("station-station-host test build overrides require STATION_HOST_ALLOW_BUILD_VERSION_OVERRIDE=1\n");
     process.exit(2);
   }
   return {
     socketPath,
     stateDir,
-    ...(buildVersion === undefined ? {} : { buildVersion }),
+    ...(buildVersion === undefined || buildIdentity === undefined
+      ? {}
+      : { buildVersion, buildIdentity }),
   };
 }
 
@@ -61,14 +64,14 @@ export async function runStationHostMain(
   argv: readonly string[],
   options: RunStationHostMainOptions = {},
 ): Promise<void> {
-  const { socketPath, stateDir, buildVersion } = parseArgs(argv);
+  const { socketPath, stateDir, buildVersion, buildIdentity } = parseArgs(argv);
   const ptyRuntime = await options.preparePtyRuntime?.(stateDir);
   let host: StationHostInstance;
   try {
     host = await startStationHost({
       socketPath,
       stateDir,
-      ...(buildVersion === undefined ? {} : { buildVersion }),
+      ...(buildVersion === undefined ? {} : { buildVersion, buildIdentity }),
       ...(ptyRuntime === undefined
         ? {}
         : {

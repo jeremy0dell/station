@@ -32,17 +32,23 @@ export function StationToast({ store }: { store: StationStore }) {
   }
   return (
     <box
+      id="station-app-toast"
       position="absolute"
       right={2}
       bottom={1}
+      maxWidth="90%"
+      maxHeight="90%"
       zIndex={100}
       backgroundColor={toOpenTuiColor(
         toast.kind === "error" ? theme.status.danger : theme.status.info,
       )}
       paddingLeft={1}
       paddingRight={1}
+      overflow="hidden"
     >
-      <text fg={toOpenTuiColor(theme.text.inverse)}>{toast.message}</text>
+      <text width="100%" fg={toOpenTuiColor(theme.text.inverse)} wrapMode="word">
+        {toast.message}
+      </text>
     </box>
   );
 }

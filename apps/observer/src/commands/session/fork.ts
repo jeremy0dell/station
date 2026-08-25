@@ -16,9 +16,9 @@ import {
   resolveTerminalPlacementPortOrThrow,
   resolveTerminalProviderOrThrow,
 } from "../providers.js";
-import type { CommandHandler } from "../queue.js";
+import type { CommandResultHandler } from "../queue.js";
 import { reconcileAndPublish } from "../reconcile.js";
-import { ensureAgentWorkspace } from "../terminalOperations.js";
+import { commandPlacementResult, ensureAgentWorkspace } from "../terminalOperations.js";
 import {
   commandValidationError,
   defaultSessionCommandIdFactory,
@@ -56,9 +56,12 @@ export type CreateSessionForkHandlerOptions = {
  * branch, and atomically seeds its title with the source session's current Group when requested
  * before launching a fresh agent with pre-mutation placement authorization and
  * provider-side revalidation immediately before terminal mutation; cleanup
- * retires only fork-owned state after verified rollback.
+ * retires only fork-owned state after verified rollback. Success returns the
+ * exact created identities and the provider-resolved placement projection.
  */
-export function createSessionForkHandler(options: CreateSessionForkHandlerOptions): CommandHandler {
+export function createSessionForkHandler(
+  options: CreateSessionForkHandlerOptions,
+): CommandResultHandler<"session.fork"> {
   const idFactory = {
     ...defaultSessionCommandIdFactory,
     ...options.idFactory,
@@ -127,6 +130,7 @@ export function createSessionForkHandler(options: CreateSessionForkHandlerOption
     let createdWorktree: WorktreeObservation | undefined;
     let sessionSeeded = false;
     let groupProvenance: SessionSeedGroupProvenance | undefined;
+    let placementResult: ReturnType<typeof commandPlacementResult>;
 
     try {
       await runProviderMutation(
@@ -179,7 +183,7 @@ export function createSessionForkHandler(options: CreateSessionForkHandlerOption
       groupProvenance = seed.groupProvenance;
       throwIfAborted(context.signal);
 
-      await ensureAgentWorkspace({
+      const resolvedPlacement = await ensureAgentWorkspace({
         terminal,
         harness,
         launchPreflight: options.launchPreflight,
@@ -195,6 +199,7 @@ export function createSessionForkHandler(options: CreateSessionForkHandlerOption
         clock: options.clock,
         logger: options.logger,
       });
+      placementResult = commandPlacementResult(payload.placement, resolvedPlacement);
       throwIfAborted(context.signal);
     } catch (error) {
       if (isTerminalCleanupUncertain(error)) {
@@ -260,5 +265,12 @@ export function createSessionForkHandler(options: CreateSessionForkHandlerOption
       context,
       clock: options.clock,
     });
+    return {
+      type: "session.fork",
+      projectId: project.id,
+      worktreeId: createdWorktree.id,
+      sessionId,
+      ...placementResult,
+    };
   };
 }

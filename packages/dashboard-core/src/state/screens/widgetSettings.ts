@@ -3,7 +3,7 @@ import type { TuiKey } from "../keys.js";
 import { isReturnKey } from "../keys.js";
 import type { ReadonlyDeep } from "../readonly.js";
 import type { TuiTransition } from "../transition.js";
-import type { DashboardState } from "../types.js";
+import type { AddableWidgetType, DashboardState, WidgetSettingsItemId } from "../types.js";
 
 export const widgetSettingsScreenBehavior = {
   dashboardHoverEnabled: false,
@@ -15,7 +15,12 @@ export const widgetSettingsScreenBehavior = {
  * and tz need config fields (city, zones), so they are added in config.toml
  * and managed (toggle/reorder/remove) here like any other entry.
  */
-export const ADDABLE_WIDGET_TYPES = ["time", "fleet", "prs", "moon"] as const;
+export const ADDABLE_WIDGET_TYPES = [
+  "time",
+  "fleet",
+  "prs",
+  "moon",
+] as const satisfies readonly AddableWidgetType[];
 
 /** One human label per widget entry, shown in the settings list. */
 export function widgetSettingsRowLabel(config: ReadonlyDeep<TuiWidgetConfig>): string {
@@ -36,71 +41,100 @@ export function widgetSettingsRowLabel(config: ReadonlyDeep<TuiWidgetConfig>): s
 }
 
 export function openWidgetSettings(state: DashboardState): DashboardState {
+  const widgetItemIds = state.widgets.map((_, index) => widgetItemId(index));
+  const activeWidgetItemId = widgetItemIds[0];
   return {
     ...state,
-    screen: { name: "widgetSettings", focus: "list", cursor: 0, pickerCursor: 0 },
+    screen: {
+      name: "widgetSettings",
+      focus: "list",
+      widgetItemIds,
+      ...(activeWidgetItemId === undefined ? {} : { activeWidgetItemId }),
+      activePickerType: ADDABLE_WIDGET_TYPES[0],
+      nextWidgetIdentity: widgetItemIds.length,
+    },
   };
 }
 
-/** Mouse path: toggle the clicked row and move the cursor onto it. */
-export function widgetSettingsToggleAt(state: DashboardState, index: number): DashboardState {
-  const screen = state.screen;
-  if (screen.name !== "widgetSettings" || index < 0 || index >= state.widgets.length) {
-    return state;
-  }
-  return withScreen(
-    { ...state, widgets: toggleWidgetEnabled(state.widgets, index) },
-    { ...screen, focus: "list", cursor: index },
-  );
-}
-
-/** Mouse path: remove the clicked row; the cursor follows the widget it was on
- * (rows above it shift up by one), clamping only when the cursor row itself went away. */
-export function widgetSettingsRemoveAt(state: DashboardState, index: number): DashboardState {
-  const screen = state.screen;
-  if (screen.name !== "widgetSettings" || index < 0 || index >= state.widgets.length) {
-    return state;
-  }
-  const widgets = state.widgets.filter((_, i) => i !== index);
-  return withScreen(
-    { ...state, widgets },
-    {
-      ...screen,
-      focus: "list",
-      cursor: clampCursor(
-        index < screen.cursor ? screen.cursor - 1 : screen.cursor,
-        widgets.length,
-      ),
-    },
-  );
-}
-
-/** Mouse path: open the add-widget picker. */
-export function widgetSettingsOpenPicker(state: DashboardState): DashboardState {
-  const screen = state.screen;
-  if (screen.name !== "widgetSettings") {
-    return state;
-  }
-  return withScreen(state, { ...screen, focus: "picker", pickerCursor: 0 });
-}
-
-/** Mouse path: add the clicked picker choice and land the cursor on it. */
-export function widgetSettingsAddFromPicker(
+/** Pointer path: toggle the clicked semantic item and focus that same identity. */
+export function widgetSettingsToggleItem(
   state: DashboardState,
-  pickerIndex: number,
+  itemId: WidgetSettingsItemId,
 ): DashboardState {
   const screen = state.screen;
   if (screen.name !== "widgetSettings") {
     return state;
   }
-  const type = ADDABLE_WIDGET_TYPES[pickerIndex];
-  if (type === undefined) {
+  const index = screen.widgetItemIds.indexOf(itemId);
+  if (index < 0 || index >= state.widgets.length) return state;
+  return withScreen(
+    { ...state, widgets: toggleWidgetEnabled(state.widgets, index) },
+    { ...screen, focus: "list", activeWidgetItemId: itemId },
+  );
+}
+
+/** Pointer path: remove one semantic item while retaining any surviving focus identity. */
+export function widgetSettingsRemoveItem(
+  state: DashboardState,
+  itemId: WidgetSettingsItemId,
+): DashboardState {
+  const screen = state.screen;
+  if (screen.name !== "widgetSettings") {
     return state;
   }
-  const widgets = [...state.widgets, { type }];
+  const index = screen.widgetItemIds.indexOf(itemId);
+  if (index < 0 || index >= state.widgets.length) return state;
+  const widgets = state.widgets.filter((_, i) => i !== index);
+  const widgetItemIds = screen.widgetItemIds.filter((candidate) => candidate !== itemId);
+  const activeWidgetItemId =
+    screen.activeWidgetItemId === itemId
+      ? (widgetItemIds[index] ?? widgetItemIds.at(-1))
+      : screen.activeWidgetItemId;
   return withScreen(
     { ...state, widgets },
-    { ...screen, focus: "list", cursor: widgets.length - 1 },
+    widgetSettingsScreen(screen, {
+      focus: "list",
+      widgetItemIds,
+      activeWidgetItemId,
+    }),
+  );
+}
+
+/** Pointer path: open the add-widget picker. */
+export function widgetSettingsOpenPicker(state: DashboardState): DashboardState {
+  const screen = state.screen;
+  if (screen.name !== "widgetSettings") {
+    return state;
+  }
+  return withScreen(state, {
+    ...screen,
+    focus: "picker",
+    activePickerType: ADDABLE_WIDGET_TYPES[0],
+  });
+}
+
+/** Pointer path: add the clicked picker choice and focus its new identity. */
+export function widgetSettingsAddType(
+  state: DashboardState,
+  widgetType: AddableWidgetType,
+): DashboardState {
+  const screen = state.screen;
+  if (screen.name !== "widgetSettings") {
+    return state;
+  }
+  if (!ADDABLE_WIDGET_TYPES.includes(widgetType)) return state;
+  const widgets = [...state.widgets, { type: widgetType }];
+  const itemId = widgetItemId(screen.nextWidgetIdentity);
+  return withScreen(
+    { ...state, widgets },
+    {
+      ...screen,
+      focus: "list",
+      widgetItemIds: [...screen.widgetItemIds, itemId],
+      activeWidgetItemId: itemId,
+      activePickerType: widgetType,
+      nextWidgetIdentity: screen.nextWidgetIdentity + 1,
+    },
   );
 }
 
@@ -127,56 +161,42 @@ function handleListKey(
   key: TuiKey,
 ): TuiTransition {
   const widgets = state.widgets;
-  const cursor = clampCursor(screen.cursor, widgets.length);
+  const activeIndex = activeWidgetIndex(screen);
   if (key.escape === true) {
     return { state: closeWidgetSettings(state) };
   }
   if (key.upArrow === true) {
-    return { state: withScreen(state, { ...screen, cursor: Math.max(0, cursor - 1) }) };
+    return { state: focusWidgetAt(state, Math.max(0, activeIndex - 1)) };
   }
   if (key.downArrow === true) {
-    return {
-      state: withScreen(state, {
-        ...screen,
-        cursor: clampCursor(cursor + 1, widgets.length),
-      }),
-    };
+    return { state: focusWidgetAt(state, Math.min(widgets.length - 1, activeIndex + 1)) };
   }
   if (key.input === "a") {
-    return { state: withScreen(state, { ...screen, focus: "picker", pickerCursor: 0 }) };
+    return { state: widgetSettingsOpenPicker(state) };
   }
   if (widgets.length === 0) {
     return { state };
   }
   if (isReturnKey(key) || key.input === " ") {
-    return {
-      state: withScreen(
-        { ...state, widgets: toggleWidgetEnabled(widgets, cursor) },
-        { ...screen, cursor },
-      ),
-    };
+    const itemId = screen.widgetItemIds[activeIndex];
+    return { state: itemId === undefined ? state : widgetSettingsToggleItem(state, itemId) };
   }
   if (key.input === "[" || key.input === "]") {
     const delta = key.input === "[" ? -1 : 1;
-    const target = cursor + delta;
+    const target = activeIndex + delta;
     if (target < 0 || target >= widgets.length) {
       return { state };
     }
     return {
       state: withScreen(
-        { ...state, widgets: swapWidgets(widgets, cursor, target) },
-        { ...screen, cursor: target },
+        { ...state, widgets: swapItems(widgets, activeIndex, target) },
+        { ...screen, widgetItemIds: swapItems(screen.widgetItemIds, activeIndex, target) },
       ),
     };
   }
   if (key.input === "x") {
-    const next = widgets.filter((_, index) => index !== cursor);
-    return {
-      state: withScreen(
-        { ...state, widgets: next },
-        { ...screen, cursor: clampCursor(cursor, next.length) },
-      ),
-    };
+    const itemId = screen.widgetItemIds[activeIndex];
+    return { state: itemId === undefined ? state : widgetSettingsRemoveItem(state, itemId) };
   }
   return { state };
 }
@@ -190,30 +210,28 @@ function handlePickerKey(
     return { state: backFromWidgetSettings(state) };
   }
   if (key.upArrow === true) {
-    return {
-      state: withScreen(state, { ...screen, pickerCursor: Math.max(0, screen.pickerCursor - 1) }),
-    };
-  }
-  if (key.downArrow === true) {
+    const pickerIndex = ADDABLE_WIDGET_TYPES.indexOf(screen.activePickerType);
     return {
       state: withScreen(state, {
         ...screen,
-        pickerCursor: Math.min(ADDABLE_WIDGET_TYPES.length - 1, screen.pickerCursor + 1),
+        activePickerType:
+          ADDABLE_WIDGET_TYPES[Math.max(0, pickerIndex - 1)] ?? ADDABLE_WIDGET_TYPES[0],
+      }),
+    };
+  }
+  if (key.downArrow === true) {
+    const pickerIndex = ADDABLE_WIDGET_TYPES.indexOf(screen.activePickerType);
+    return {
+      state: withScreen(state, {
+        ...screen,
+        activePickerType:
+          ADDABLE_WIDGET_TYPES[Math.min(ADDABLE_WIDGET_TYPES.length - 1, pickerIndex + 1)] ??
+          ADDABLE_WIDGET_TYPES[0],
       }),
     };
   }
   if (isReturnKey(key)) {
-    const type = ADDABLE_WIDGET_TYPES[screen.pickerCursor];
-    if (type === undefined) {
-      return { state: withScreen(state, { ...screen, focus: "list" }) };
-    }
-    const widgets = [...state.widgets, { type }];
-    return {
-      state: withScreen(
-        { ...state, widgets },
-        { ...screen, focus: "list", cursor: widgets.length - 1 },
-      ),
-    };
+    return { state: widgetSettingsAddType(state, screen.activePickerType) };
   }
   return { state };
 }
@@ -235,8 +253,44 @@ function closeWidgetSettings(state: DashboardState): DashboardState {
   return { ...state, screen: { name: "dashboard" } };
 }
 
-function clampCursor(cursor: number, length: number): number {
-  return Math.max(0, Math.min(cursor, length - 1));
+function widgetItemId(identity: number): WidgetSettingsItemId {
+  return `widget:${identity}`;
+}
+
+function activeWidgetIndex(screen: WidgetSettingsScreen): number {
+  const index =
+    screen.activeWidgetItemId === undefined
+      ? -1
+      : screen.widgetItemIds.indexOf(screen.activeWidgetItemId);
+  return Math.max(0, index);
+}
+
+function focusWidgetAt(state: DashboardState, index: number): DashboardState {
+  if (state.screen.name !== "widgetSettings") return state;
+  const activeWidgetItemId = state.screen.widgetItemIds[index];
+  if (activeWidgetItemId === undefined || activeWidgetItemId === state.screen.activeWidgetItemId) {
+    return state;
+  }
+  return withScreen(state, { ...state.screen, activeWidgetItemId });
+}
+
+function widgetSettingsScreen(
+  screen: WidgetSettingsScreen,
+  input: {
+    focus: "list";
+    widgetItemIds: readonly WidgetSettingsItemId[];
+    activeWidgetItemId: WidgetSettingsItemId | undefined;
+  },
+): WidgetSettingsScreen {
+  const { activeWidgetItemId: _removed, ...withoutActive } = screen;
+  return {
+    ...withoutActive,
+    focus: input.focus,
+    widgetItemIds: input.widgetItemIds,
+    ...(input.activeWidgetItemId === undefined
+      ? {}
+      : { activeWidgetItemId: input.activeWidgetItemId }),
+  };
 }
 
 // On = the key is absent (default), so a session toggle round-trips to the
@@ -257,16 +311,12 @@ function toggleWidgetEnabled(
   });
 }
 
-function swapWidgets(
-  widgets: readonly TuiWidgetConfig[],
-  a: number,
-  b: number,
-): readonly TuiWidgetConfig[] {
-  const next = [...widgets];
+function swapItems<T>(items: readonly T[], a: number, b: number): readonly T[] {
+  const next = [...items];
   const left = next[a];
   const right = next[b];
   if (left === undefined || right === undefined) {
-    return widgets;
+    return items;
   }
   next[a] = right;
   next[b] = left;

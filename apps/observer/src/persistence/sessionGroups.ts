@@ -6,6 +6,7 @@ import {
 import type {
   SessionGroupMemberExpectation,
   SessionGroupRepairEvidence,
+  SessionGroupRepairInput,
   SessionGroupRepairResult,
   SessionGroupStoreResult,
   SessionSeedGroupPlacement,
@@ -425,9 +426,10 @@ export function deleteSessionGroup(
 
 export function repairSessionGroups(
   state: SessionGroupPersistenceState,
-  input: { sessions: Array<{ id: string; projectId: string }>; updatedAt: string },
+  input: SessionGroupRepairInput & { updatedAt: string },
 ): SessionGroupMutation<SessionGroupRepairResult> {
   const validSessions = new Map(input.sessions.map((session) => [session.id, session.projectId]));
+  const absenceAuthorityProjectIds = new Set(input.absenceAuthorityProjectIds);
   const draft = cloneSessionGroupState(state);
   const touched = new Set<SessionGroupId>();
   const repairs: SessionGroupRepairEvidence[] = [];
@@ -443,10 +445,12 @@ export function repairSessionGroups(
     if (group === undefined) {
       throw new Error("Session Group assignment references a missing Group.");
     }
-    if (
-      validSessions.get(sessionId) !== group.projectId ||
-      assignment.projectId !== group.projectId
-    ) {
+    const currentProjectId = validSessions.get(sessionId);
+    const identityMismatch = currentProjectId !== undefined && currentProjectId !== group.projectId;
+    const assignmentCorrupt = assignment.projectId !== group.projectId;
+    const authoritativeAbsence =
+      currentProjectId === undefined && absenceAuthorityProjectIds.has(group.projectId);
+    if (identityMismatch || assignmentCorrupt || authoritativeAbsence) {
       draft.assignments.delete(sessionId);
       touched.add(group.id);
       recordRepair({

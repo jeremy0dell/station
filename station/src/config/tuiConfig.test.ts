@@ -138,7 +138,7 @@ root = "${projectRoot}"
 
     await writes.flush();
     await writes.dispose();
-    store.actions.dispatch({ type: "widgetSettings.toggle", index: 0 });
+    store.actions.dispatch({ type: "widgetSettings.toggle", itemId: "widget:0" });
     await new Promise((resolve) => setTimeout(resolve, 50));
 
     const loadedAfterDispose = await loadStationTuiConfig({ path: configPath });

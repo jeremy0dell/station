@@ -14,6 +14,12 @@ import {
   SessionRecoveryAssessmentReasonsSchema,
 } from "./recoveryAssessment.js";
 import { compareCodeUnitStrings, nonEmptyStringSchema } from "./shared.js";
+import { StationBuildIdentitySchema } from "./stationBuildIdentity.js";
+import {
+  compareStationHostTerminalLifetimeIdentity,
+  StationHostProtocolVersionSchema,
+  stationHostTerminalLifetimeIdentitiesAreCanonical,
+} from "./stationHostInspection.js";
 import { UpdateArtifactSchema } from "./updateArtifact.js";
 
 export const UpdateRuntimeBuildRelationSchema = z.enum(["matching-target", "different", "unknown"]);
@@ -182,12 +188,14 @@ export const UpdateReapHostEvidenceSchema = z.discriminatedUnion("status", [
   z
     .object({
       status: z.literal("inspected"),
-      buildVersion: nonEmptyStringSchema.optional(),
-      buildIdentity: nonEmptyStringSchema.optional(),
-      protocolVersion: z.number().int(),
+      buildVersion: nonEmptyStringSchema,
+      buildIdentity: StationBuildIdentitySchema,
+      protocolVersion: StationHostProtocolVersionSchema,
       relation: UpdateRuntimeBuildRelationSchema,
-      compatibility: z.enum(["reuse", "replace", "refuse"]),
-      terminals: z.array(UpdateReapTerminalEvidenceSchema),
+      compatibility: z.enum(["reuse", "replace"]),
+      terminals: z
+        .array(UpdateReapTerminalEvidenceSchema)
+        .refine(stationHostTerminalLifetimeIdentitiesAreCanonical),
     })
     .strict(),
 ]);
@@ -306,7 +314,7 @@ export const UpdateReapRecoveryPreflightSchema = z
       });
     }
 
-    if (!strictlySortedTerminals(preflight.terminalDispositions)) {
+    if (!stationHostTerminalLifetimeIdentitiesAreCanonical(preflight.terminalDispositions)) {
       context.addIssue({
         code: "custom",
         path: ["terminalDispositions"],
@@ -321,7 +329,7 @@ export const UpdateReapRecoveryPreflightSchema = z
           const disposition = preflight.terminalDispositions[index];
           return (
             disposition === undefined ||
-            compareUpdateReapTerminalIdentity(terminal, disposition) !== 0 ||
+            compareStationHostTerminalLifetimeIdentity(terminal, disposition) !== 0 ||
             terminal.sessionId !== disposition.sessionId
           );
         })
@@ -348,39 +356,6 @@ export const UpdateReapRecoveryPreflightSchema = z
     }
   });
 export type UpdateReapRecoveryPreflight = z.infer<typeof UpdateReapRecoveryPreflightSchema>;
-
-/** Orders canonical physical PTY identity; Station session identity is deliberately excluded. */
-export function compareUpdateReapTerminalIdentity(
-  left: {
-    terminalTargetId: string;
-    ptyId: string;
-    ptyInstanceId: string;
-  },
-  right: {
-    terminalTargetId: string;
-    ptyId: string;
-    ptyInstanceId: string;
-  },
-): number {
-  return (
-    compareCodeUnitStrings(left.terminalTargetId, right.terminalTargetId) ||
-    compareCodeUnitStrings(left.ptyId, right.ptyId) ||
-    compareCodeUnitStrings(left.ptyInstanceId, right.ptyInstanceId)
-  );
-}
-
-function strictlySortedTerminals(
-  terminals: readonly {
-    terminalTargetId: string;
-    ptyId: string;
-    ptyInstanceId: string;
-  }[],
-): boolean {
-  return terminals.every((terminal, index) => {
-    const previous = terminals[index - 1];
-    return previous === undefined || compareUpdateReapTerminalIdentity(previous, terminal) < 0;
-  });
-}
 
 function strictlySortedStrings(values: readonly string[]): boolean {
   return values.every((value, index) => {

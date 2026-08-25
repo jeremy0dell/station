@@ -39,6 +39,18 @@ export function commitCurrentCursor(
   return id === undefined ? { state } : spec.commit(state, id, "cursor");
 }
 
+/** Focuses and commits one semantic list item, independent of shortcut availability. */
+export function activateListItem(
+  spec: RegisteredListSpec,
+  state: DashboardState,
+  itemId: string,
+): TuiTransition {
+  if (!selectableIds(spec, state).includes(itemId)) {
+    return { state };
+  }
+  return spec.commit(withCursor(state, spec.listId, itemId), itemId, "cursor");
+}
+
 /** Move the cursor one selectable row; clamp (never wrap) and seed from the edge if unset. */
 export function moveCursor(
   spec: RegisteredListSpec,
@@ -59,9 +71,9 @@ export function moveCursor(
 }
 
 /**
- * The dispatch heart. Slots (viewport-relative) resolve before cursor keys
- * (full-list). Returns undefined for anything the list doesn't own, so the
- * screen reducer keeps every bespoke chord.
+ * The dispatch heart. Renderer-visible semantic slots resolve before full-list cursor keys.
+ * Returns undefined for anything the list doesn't own, so the screen reducer keeps every
+ * bespoke chord.
  */
 export function resolveListKey(
   spec: RegisteredListSpec,

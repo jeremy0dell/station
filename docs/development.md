@@ -25,6 +25,8 @@ Use the repository's workspace TypeScript version in your editor.
   Observer, TUI, and tmux workflows without disturbing another worktree.
 - Use [TUI development](tui.md) for OpenTUI components, keymaps, rendering,
   native terminal behavior, and Station Host work.
+- Use [Dashboard architecture](dashboard-architecture.md) for semantic UI tree,
+  focus, flexible layout, scrolling/clipping ownership, and terminal-cell boundaries.
 - Use [Setup testing](setup-testing.md) for guided setup, shell behavior, and
   clean-profile acceptance.
 - Use [Testing](../tests/README.md) to choose a deterministic, compiled, PTY,
@@ -75,6 +77,12 @@ checks. The workflows themselves are the source of truth for lane selection.
 - Reproduce a regression with the smallest focused test before changing code.
 - Keep one responsibility per change and run its focused gate while iterating.
 - Treat current code, schemas, tests, and runtime evidence as authoritative.
+- For layout or render performance work, record the representative baseline first,
+  alternate baseline/current measurements, derive tolerances from observed noise,
+  and protect algorithmic scaling with deterministic operation-count coverage when possible.
+- Keep semantic component state independent of terminal rows and coordinates. Add
+  OpenTUI geometry only to a named renderer-boundary module and update its ownership
+  inventory test when a new physical adapter is genuinely required.
 - Update architecture manifests only through their checked-in generator and
   check commands.
 - Keep provider-specific behavior behind its provider boundary.

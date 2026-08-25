@@ -474,7 +474,7 @@ describeRealTmux("real tmux dev popup routing", () => {
 
     const baseline = await captureStableFrame(fixture);
     assertStructuralDashboardFrame(baseline);
-    assertConfiguredWidgetChrome(baseline.lines[0] ?? "", "20 agents · 1 open PR");
+    assertConfiguredWidgetTitle(baseline.lines[0] ?? "", "20 agents · 1 open PR");
     expect(baseline).toEqual(await readExpectedDashboardFrame());
 
     await fixture.ptyClient.write(Buffer.from("W", "utf8"));
@@ -527,7 +527,7 @@ describeRealTmux("real tmux dev popup routing", () => {
       await resizeDashboardSurface(fixture, dimensions);
       const resized = await captureStableFrame(fixture);
       assertStructuralDashboardFrame(resized);
-      assertConfiguredWidgetChrome(resized.lines[0] ?? "", "20 agents · 1 open PR");
+      assertConfiguredWidgetTitle(resized.lines[0] ?? "", "20 agents · 1 open PR");
       expectDashboardRuntimeUnchanged(
         firstRuntime,
         await currentDashboardRuntimeEvidence(fixture, firstPopup, process.pid),
@@ -547,7 +547,7 @@ describeRealTmux("real tmux dev popup routing", () => {
       "dashboard did not render configured widgets after outer-input dismissal and reopen",
     );
     const reopenedFrame = await captureStableFrame(fixture);
-    assertConfiguredWidgetChrome(reopenedFrame.lines[0] ?? "", "20 agents · 1 open PR");
+    assertConfiguredWidgetTitle(reopenedFrame.lines[0] ?? "", "20 agents · 1 open PR");
     const reopened = await currentDashboardRuntimeEvidence(fixture, secondPopup, process.pid);
     expect(reopened.panePid).toBe(firstRuntime.panePid);
     expect(reopened.cliPid).toBe(firstRuntime.cliPid);
@@ -858,7 +858,7 @@ describeRealTmux("real tmux dev popup routing", () => {
       );
       assertDashboardFrameGeometry(content, geometry.pane, geometry.label);
       if (geometry.pane.columns === 80 || geometry.pane.columns === 99) {
-        assertConfiguredWidgetChrome(dashboardFrameLines(content)[0] ?? "");
+        assertConfiguredWidgetTitle(dashboardFrameLines(content)[0] ?? "");
       }
 
       const processes = await waitForDashboardProcessEvidence(fixture, pane);
@@ -2968,7 +2968,7 @@ function assertStructuralDashboardFrame(frame: CapturedFrame): void {
   expect(frame.lines.at(-1)).toContain("? help");
 }
 
-function assertConfiguredWidgetChrome(titleRow: string, expectedWidgets?: string): void {
+function assertConfiguredWidgetTitle(titleRow: string, expectedWidgets?: string): void {
   expect(titleRow).toContain("station · overview");
   expect(titleRow).toContain("[+]");
   if (expectedWidgets === undefined) {

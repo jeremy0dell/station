@@ -154,7 +154,7 @@ async function runFakeRouter(
       case "host.recoveryInventory":
         server.send(
           hostSuccess(request.id, {
-            buildIdentity: options.buildIdentity ?? "test-build-identity",
+            buildIdentity: options.buildIdentity ?? "a".repeat(64),
             ptys: options.recoveryPtys ?? [],
           }),
         );
@@ -360,6 +360,7 @@ describe("createStationHostClient", () => {
       handoffSupport: { kind: "bridge-releasable" },
     };
     const { client: clientConn, server } = inMemoryNdjsonConnectionPair();
+    const identities: Array<NonNullable<ReturnType<typeof HostRequestSchema.parse>["client"]>> = [];
     startFakeRouter(server, {
       listPtys: [
         {
@@ -379,7 +380,8 @@ describe("createStationHostClient", () => {
         },
       ],
       recoveryPtys: [pty],
-      buildIdentity: "1.0.0+station.host.revision-a",
+      buildIdentity: "b".repeat(64),
+      onClient: (identity) => identities.push(identity),
     });
     const client = createStationHostClient({
       socketPath: "unused",
@@ -389,8 +391,8 @@ describe("createStationHostClient", () => {
     const listed = await client.list();
     expect(listed).toMatchObject([{ ptyId: "pty-1", ptyInstanceId: "pty-instance-1" }]);
     expect(listed[0]).not.toHaveProperty("handoffSupport");
-    await expect(client.recoveryInventory?.()).resolves.toMatchObject({
-      buildIdentity: "1.0.0+station.host.revision-a",
+    await expect(client.recoveryInventory()).resolves.toMatchObject({
+      buildIdentity: "b".repeat(64),
       ptys: [
         {
           ptyId: "pty-1",
@@ -399,6 +401,12 @@ describe("createStationHostClient", () => {
         },
       ],
     });
+    expect(identities.at(-1)).toEqual(
+      expect.objectContaining({
+        protocolVersion: HOST_PROTOCOL_VERSION,
+        buildVersion: "test-build",
+      }),
+    );
     client.dispose();
   });
 
@@ -578,6 +586,25 @@ describe("createStationHostClient", () => {
     client.dispose();
   });
 
+  it("rejects malformed raw health that omits the required current build", async () => {
+    const { client: clientConn, server } = inMemoryNdjsonConnectionPair();
+    void (async () => {
+      for await (const message of server.messages()) {
+        if (HostClientShutdownNotificationSchema.safeParse(message).success) continue;
+        const request = HostRequestSchema.parse(message);
+        server.send(hostSuccess(request.id, { ok: true, protocolVersion: HOST_PROTOCOL_VERSION }));
+      }
+    })();
+    const client = createStationHostClient({
+      socketPath: "unused",
+      expectedBuildVersion: "test-build",
+      connect: async () => clientConn,
+    });
+
+    await expect(client.health()).rejects.toMatchObject({ code: "HOST_REQUEST_FAILED" });
+    client.dispose();
+  });
+
   it("routes frames only after a valid acknowledgement installs the attempt sink", async () => {
     const { client: clientConn, server } = inMemoryNdjsonConnectionPair();
     void (async () => {
@@ -595,7 +622,6 @@ describe("createStationHostClient", () => {
         } else if (request.method === "host.attach") {
           server.send({ type: "data", ptyId: PTY_REF.ptyId, data: "before-ack" });
           server.send(hostSuccess(request.id, attachAck()));
-          await delay(0);
           server.send({ type: "data", ptyId: PTY_REF.ptyId, data: "after-ack" });
         }
       }

@@ -9,7 +9,11 @@ import {
   type StationState,
   worktreeIdFromAgentPaneId,
 } from "./types.js";
-import type { ContextMenuAnchor, ContextMenuTarget } from "../contextMenu/types.js";
+import type {
+  ContextMenuAnchor,
+  ContextMenuItemId,
+  ContextMenuTarget,
+} from "../contextMenu/types.js";
 import { resolveInitialState, type StationStoreOptions } from "./initialState.js";
 import { paneTreeIds } from "./paneTree.js";
 import { closeContextMenuState, openContextMenuState } from "./reducers/contextMenu.js";
@@ -67,9 +71,13 @@ export type StationStoreActions = {
   openOverlay(overlayId: OverlayId): void;
   closeOverlay(): void;
   toggleOverlay(overlayId: OverlayId): void;
-  openContextMenu(target: ContextMenuTarget, anchor: ContextMenuAnchor): void;
+  openContextMenu(
+    target: ContextMenuTarget,
+    anchor: ContextMenuAnchor,
+    activeItemId?: ContextMenuItemId,
+  ): void;
   closeContextMenu(): void;
-  setContextMenuActiveIndex(activeIndex: number): void;
+  setContextMenuActiveItemId(activeItemId: ContextMenuItemId): void;
   /** Track mouse-over on the floating island (gates its hover-scoped ↵ jump). */
   setStationButtonHover(hovered: boolean): void;
   /**
@@ -333,22 +341,22 @@ export function createStationStore(options?: StationStoreOptions): StationStore 
             : openOverlayState(state, overlayId),
         );
       },
-      openContextMenu: (target, anchor) => {
-        setState(openContextMenuState(state, target, anchor));
+      openContextMenu: (target, anchor, activeItemId) => {
+        setState(openContextMenuState(state, target, anchor, activeItemId));
       },
       closeContextMenu: () => {
         setState(closeContextMenuState(state));
       },
-      setContextMenuActiveIndex: (activeIndex) => {
+      setContextMenuActiveItemId: (activeItemId) => {
         const contextMenu = state.input.contextMenu;
-        if (contextMenu === null || contextMenu.activeIndex === activeIndex) {
+        if (contextMenu === null || contextMenu.activeItemId === activeItemId) {
           return;
         }
         setState({
           ...state,
           input: {
             ...state.input,
-            contextMenu: { ...contextMenu, activeIndex },
+            contextMenu: { ...contextMenu, activeItemId },
           },
         });
       },

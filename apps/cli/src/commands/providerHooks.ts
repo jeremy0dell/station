@@ -6,6 +6,7 @@ import type {
   ProviderId,
   SafeError,
 } from "@station/contracts";
+import { reconcileProviderHooks } from "@station/observer/internal";
 import {
   ProviderHookArtifactOwnershipError,
   resolveExecutablePath,
@@ -213,8 +214,9 @@ export function createProviderHooksRunner<
           enabled: adapter.isEnabled(options.config),
         });
       }
-      if (action === "reconcile" && adapter.reconcile !== undefined) {
-        return await adapter.reconcile(hookOptions);
+      const reconcile = adapter.reconcile;
+      if (action === "reconcile" && reconcile !== undefined) {
+        return await reconcileProviderHooks(adapter.provider, () => reconcile(hookOptions));
       }
     } catch (error) {
       if (error instanceof ProviderHookArtifactOwnershipError) {

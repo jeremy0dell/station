@@ -8,6 +8,8 @@ import { describe, expect, it } from "bun:test";
 
 const HOST_ENTRY = fileURLToPath(new URL("../hostMain.ts", import.meta.url));
 const SMOKE = process.env.STATION_PTY_SMOKE === "1";
+const HOST_A_IDENTITY = "a".repeat(64);
+const HOST_B_IDENTITY = "b".repeat(64);
 
 const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
@@ -63,6 +65,8 @@ function spawnHost(input: {
       input.stateDir,
       "--build-version",
       input.buildVersion,
+      "--build-identity",
+      input.buildVersion.endsWith("-a") ? HOST_A_IDENTITY : HOST_B_IDENTITY,
     ],
     {
       detached: true,

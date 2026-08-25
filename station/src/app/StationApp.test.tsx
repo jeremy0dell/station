@@ -27,6 +27,7 @@ import { FakeStationSource } from "../station/test/support/fakeStationSource.js"
 import { FakeTuiObserverService } from "../station/test/support/fakeObserverService.js";
 import { createStationStubObserverService } from "../station/store/stubObserverService.js";
 import { stationPopupLayout } from "../station/StationOverlay.js";
+import { STATION_ICON } from "../stationButton/layout.js";
 
 const SURFACE = { width: 100, height: 28 };
 const teardowns: Array<() => void> = [];
@@ -49,6 +50,46 @@ describe("Station app composition", () => {
     for (const teardown of teardowns.splice(0)) {
       teardown();
     }
+  });
+
+  it("keeps the floating Station control out of the open native overlay at standard size", async () => {
+    const station = await renderComposedStation();
+    expect(await waitForFrame(station, (frame) => frame.includes(STATION_ICON))).toContain(
+      STATION_ICON,
+    );
+
+    station.setup.mockInput.pressKey("o", { ctrl: true });
+    await waitFor(() => overlayVisible(station));
+    const frame = await waitForFrame(
+      station,
+      (candidate) => candidate.includes("FLEET") && candidate.includes("showing 5 of 10"),
+    );
+
+    expect(frame).not.toContain(STATION_ICON);
+    expect(frame).toMatchSnapshot();
+
+    station.setup.mockInput.pressKey("o", { ctrl: true });
+    await waitFor(() => !overlayVisible(station));
+    expect(await waitForFrame(station, (candidate) => candidate.includes(STATION_ICON))).toContain(
+      STATION_ICON,
+    );
+  });
+
+  it("keeps the native overlay unobscured in a 40x12 terminal", async () => {
+    const station = await renderComposedStation({ size: { width: 40, height: 12 } });
+    expect(await waitForFrame(station, (frame) => frame.includes(STATION_ICON))).toContain(
+      STATION_ICON,
+    );
+
+    station.setup.mockInput.pressKey("o", { ctrl: true });
+    await waitFor(() => overlayVisible(station));
+    const frame = await waitForFrame(
+      station,
+      (candidate) => candidate.includes("FLEET") && candidate.includes("showing 2 of 10"),
+    );
+
+    expect(frame).not.toContain(STATION_ICON);
+    expect(frame).toMatchSnapshot();
   });
 
   it("wires overlay input, source updates, preserved view state, and teardown", async () => {
@@ -349,9 +390,9 @@ describe("Station app composition", () => {
     expect(initialFrame).not.toContain("terminal starting shell");
     const ctaRows = buttonRows(initialFrame);
     expect(ctaRows).toHaveLength(3);
-    expect(ctaRows[0]?.trim()).toMatch(/^\+-+\+$/);
+    expect(ctaRows[0]?.trim()).toMatch(/^┌─+┐$/);
     expect(ctaRows[1]).toContain("Open project view");
-    expect(ctaRows[2]?.trim()).toMatch(/^\+-+\+$/);
+    expect(ctaRows[2]?.trim()).toMatch(/^└─+┘$/);
 
     station.composition.stationInput.dispatchMouse({ kind: "welcomeOpenProjectView" }, LEFT_DOWN);
     await waitFor(() => overlayVisible(station));
@@ -734,9 +775,12 @@ root = "${projectRoot}"
 
     composition.start();
     composition.dashboard.actions.dispatch({ type: "widgetSettings.open" });
-    composition.dashboard.actions.dispatch({ type: "widgetSettings.remove", index: 0 });
+    composition.dashboard.actions.dispatch({ type: "widgetSettings.remove", itemId: "widget:0" });
     composition.dashboard.actions.dispatch({ type: "widgetSettings.openPicker" });
-    composition.dashboard.actions.dispatch({ type: "widgetSettings.addFromPicker", index: 3 });
+    composition.dashboard.actions.dispatch({
+      type: "widgetSettings.addFromPicker",
+      widgetType: "moon",
+    });
 
     await waitFor(() => readFileSync(configPath, "utf8").includes('type = "moon"'));
     const sourceText = readFileSync(configPath, "utf8");
@@ -792,6 +836,7 @@ async function renderComposedStation(
     topRowWidgetDeps?: TopRowWidgetRuntimeDeps;
     boot?: "empty";
     snapshot?: StationSnapshot;
+    size?: { width: number; height: number };
   } = {},
 ) {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
@@ -830,7 +875,7 @@ async function renderComposedStation(
       <StationApp {...composition.viewProps} />
     </StationThemeProvider>,
     {
-      ...SURFACE,
+      ...(options.size ?? SURFACE),
       prependInputHandlers: [composition.stationInput.handleSequence],
       kittyKeyboard: false,
     },

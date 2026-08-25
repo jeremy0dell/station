@@ -16,6 +16,10 @@
       "types": "./dist/entrypoints/selectors.d.ts",
       "import": "./dist/entrypoints/selectors.js"
     },
+    "./text": {
+      "types": "./dist/entrypoints/text.d.ts",
+      "import": "./dist/entrypoints/text.js"
+    },
     "./widgets": {
       "types": "./dist/entrypoints/widgets.d.ts",
       "import": "./dist/entrypoints/widgets.js"

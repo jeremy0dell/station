@@ -9,10 +9,7 @@ import type {
   ProviderHookReconciliationResult,
   SafeError,
 } from "@station/contracts";
-import {
-  ProviderHookHealthSchema,
-  ProviderHookReconciliationResultSchema,
-} from "@station/contracts";
+import { ProviderHookHealthSchema } from "@station/contracts";
 import {
   classifyProviderHookArtifactOwnership,
   commandLine,
@@ -20,6 +17,7 @@ import {
   expectedProviderHookScript,
   hookCommandsForEvents,
   installConfigScriptHook,
+  normalizeCancellationError,
   ProviderHookArtifactOwnershipError,
   type ProviderHookScriptOptions,
   planConfigScriptHook,
@@ -350,7 +348,7 @@ export async function inspectCodexHookHealth(
   try {
     return codexHealthFromDoctor(await doctorCodexHooksWithinBoundary(options, boundary));
   } catch (cause) {
-    rethrowCodexHookBoundaryInterruption(cause, options, boundary);
+    rethrowCodexHookBoundaryInterruption(cause, boundary.signal);
     return ProviderHookHealthSchema.parse({
       provider: "codex",
       status: "inspection-failed",
@@ -370,13 +368,13 @@ export async function reconcileCodexHooks(
   options: CodexHookReconciliationOptions,
 ): Promise<ProviderHookReconciliationResult> {
   if (!options.enabled) {
-    return ProviderHookReconciliationResultSchema.parse({
+    return {
       provider: "codex",
       status: "configured-disabled",
       changed: false,
       verified: false,
       followUp: { action: "enable-hooks" },
-    });
+    } satisfies ProviderHookReconciliationResult;
   }
   if (options.artifactOwner === undefined) {
     return reconciliationFailure(
@@ -395,17 +393,11 @@ export async function reconcileCodexHooks(
   try {
     plan = await planCodexHooksWithinBoundary(reconciliationOptions, boundary);
   } catch (cause) {
-    rethrowCodexHookBoundaryInterruption(cause, reconciliationOptions, boundary);
+    rethrowCodexHookBoundaryInterruption(cause, boundary.signal);
     return reconciliationFailure("inspection-failed", false, cause);
   }
   if (isOwnershipConflict(plan.ownership)) {
-    return ProviderHookReconciliationResultSchema.parse({
-      provider: "codex",
-      status: "ownership-conflict",
-      changed: false,
-      verified: false,
-      followUp: { action: "run-explicit-takeover" },
-    });
+    return { ...ownershipConflictReconciliation };
   }
 
   let changed = false;
@@ -414,12 +406,9 @@ export async function reconcileCodexHooks(
       changed = true;
     });
     if (repaired.verified) {
-      return ProviderHookReconciliationResultSchema.parse({
-        provider: "codex",
-        status: repaired.changed ? "repaired" : "healthy",
-        changed: repaired.changed,
-        verified: true,
-      });
+      return repaired.changed
+        ? { provider: "codex", status: "repaired", changed: true, verified: true }
+        : { provider: "codex", status: "healthy", changed: false, verified: true };
     }
     const failure = "error" in repaired ? repaired.error : undefined;
     return reconciliationFailure(
@@ -428,15 +417,9 @@ export async function reconcileCodexHooks(
       failure ?? new Error("Codex hook doctor did not verify the completed reconciliation."),
     );
   } catch (cause) {
-    rethrowCodexHookBoundaryInterruption(cause, reconciliationOptions, boundary);
+    rethrowCodexHookBoundaryInterruption(cause, boundary.signal);
     if (isOwnershipConflictError(cause)) {
-      return ProviderHookReconciliationResultSchema.parse({
-        provider: "codex",
-        status: "ownership-conflict",
-        changed: false,
-        verified: false,
-        followUp: { action: "run-explicit-takeover" },
-      });
+      return { ...ownershipConflictReconciliation };
     }
     return reconciliationFailure("write-failed", changed, cause);
   }
@@ -535,7 +518,7 @@ async function verifyCodexHookInstallWithinBoundary(
       }),
     };
   } catch (cause) {
-    rethrowCodexHookBoundaryInterruption(cause, options, boundary);
+    rethrowCodexHookBoundaryInterruption(cause, boundary.signal);
     const error = publicSafeErrorFromUnknown(cause, {
       tag: "CodexHookSetupError",
       code: "CODEX_HOOK_VERIFICATION_FAILED",
@@ -1080,18 +1063,17 @@ function assertCodexHookOperationCanContinue(boundary: CodexHookOperationBoundar
 
 function rethrowCodexHookBoundaryInterruption(
   cause: unknown,
-  options: CodexHookPlanOptions,
-  boundary: CodexHookOperationBoundary,
+  signal: AbortSignal | undefined,
 ): void {
+  const cancellation = normalizeCancellationError(cause);
   if (
-    cause instanceof CodexHookSetupError &&
-    (cause.code === "CODEX_HOOK_RECONCILIATION_CANCELLED" ||
-      cause.code === "CODEX_HOOK_RECONCILIATION_TIMEOUT")
+    cancellation !== undefined ||
+    (cause instanceof CodexHookSetupError &&
+      (cause.code === "CODEX_HOOK_RECONCILIATION_CANCELLED" ||
+        cause.code === "CODEX_HOOK_RECONCILIATION_TIMEOUT")) ||
+    (signal?.aborted === true && cause === signal.reason)
   ) {
-    throw cause;
-  }
-  if (!boundary.mutationStarted && options.signal?.aborted) {
-    throw options.signal.reason ?? cause;
+    throw cancellation !== undefined && signal?.aborted ? (signal.reason ?? cause) : cause;
   }
 }
 
@@ -1133,34 +1115,45 @@ function reconciliationFailure(
     "inspection-failed": {
       code: "CODEX_HOOK_INSPECTION_FAILED",
       message: "Codex hook inspection failed.",
-      action: "run-doctor",
     },
     "write-failed": {
       code: "CODEX_HOOK_WRITE_FAILED",
       message: "Codex hook reconciliation could not complete its writes.",
-      action: "retry",
     },
     "post-write-doctor-failed": {
       code: "CODEX_HOOK_POST_WRITE_DOCTOR_FAILED",
       message: "Codex hook writes were not verified by provider doctor.",
-      action: "run-doctor",
     },
   } as const;
   const fallback = fallbackByStatus[status];
-  return ProviderHookReconciliationResultSchema.parse({
+  const error = publicSafeErrorFromUnknown(cause, {
+    tag: "CodexHookSetupError",
+    code: fallback.code,
+    message: fallback.message,
     provider: "codex",
-    status,
-    changed: status === "inspection-failed" ? false : changed,
-    verified: false,
-    error: publicSafeErrorFromUnknown(cause, {
-      tag: "CodexHookSetupError",
-      code: fallback.code,
-      message: fallback.message,
-      provider: "codex",
-    }),
-    followUp: { action: fallback.action },
   });
+  const base = { provider: "codex", verified: false, error } satisfies {
+    provider: "codex";
+    verified: false;
+    error: SafeError;
+  };
+  switch (status) {
+    case "inspection-failed":
+      return { ...base, status, changed: false, followUp: { action: "run-doctor" } };
+    case "write-failed":
+      return { ...base, status, changed, followUp: { action: "retry" } };
+    case "post-write-doctor-failed":
+      return { ...base, status, changed, followUp: { action: "run-doctor" } };
+  }
 }
+
+const ownershipConflictReconciliation = {
+  provider: "codex",
+  status: "ownership-conflict",
+  changed: false,
+  verified: false,
+  followUp: { action: "run-explicit-takeover" },
+} satisfies ProviderHookReconciliationResult;
 
 function isOwnershipConflict(
   ownership: ProviderHookArtifactOwnership | undefined,
@@ -1172,7 +1165,5 @@ function isOwnershipConflict(
 }
 
 function isOwnershipConflictError(cause: unknown): boolean {
-  return (
-    cause instanceof Error && "code" in cause && cause.code === "PROVIDER_HOOK_OWNERSHIP_CONFLICT"
-  );
+  return cause instanceof ProviderHookArtifactOwnershipError;
 }

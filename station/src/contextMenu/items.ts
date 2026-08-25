@@ -1,8 +1,16 @@
 import { normalize } from "node:path";
-import type { ProjectId, SessionGroupId } from "@station/contracts";
+import type { ProjectId, SessionGroupId, SessionId } from "@station/contracts";
 import type { Automation } from "../config/stationConfig.js";
-import { MAIN_PANE_ID, worktreeIdFromAgentPaneId, type StationState } from "../state/types.js";
-import { selectDashboardViewport } from "@station/dashboard-core/selectors";
+import {
+  MAIN_PANE_ID,
+  worktreeIdFromAgentPaneId,
+  type PaneRecord,
+  type StationState,
+} from "../state/types.js";
+import {
+  selectDashboardSessionRows,
+  selectDashboardSlots,
+} from "@station/dashboard-core/selectors";
 import type { DashboardSessionRow } from "@station/dashboard-core/selectors";
 import { GROUP_MENU_ITEMS, isAgentRemovalUnavailable } from "@station/dashboard-core/state";
 import type { DashboardStateView, GroupMenuActionId } from "@station/dashboard-core/state";
@@ -20,7 +28,7 @@ export function buildContextMenuItems(
 ): readonly ContextMenuItem[] {
   switch (target.kind) {
     case "pane":
-      return buildPaneItems(target.paneId, state, automations);
+      return buildPaneItems(target.paneId, state, stationState, automations);
     case "header":
       return [noActionsItem()];
     case "station":
@@ -40,6 +48,7 @@ export function resolveContextMenuAction(
 function buildPaneItems(
   paneId: string,
   state: StationState,
+  stationState: DashboardStateView | undefined,
   automations: readonly Automation[],
 ): readonly ContextMenuItem[] {
   const pane = state.workspace.panes.find((candidate) => candidate.id === paneId);
@@ -67,12 +76,14 @@ function buildPaneItems(
   const items: ContextMenuItem[] = [];
   // Rename is offered only for primary-agent panes and leads the menu so the
   // direct rename flow stays one keystroke from the dashboard.
-  const rowId = pane?.role === "primary-agent" ? worktreeIdFromAgentPaneId(pane.id) : undefined;
-  if (rowId !== undefined) {
+  const sessionId = pane?.role === "primary-agent"
+    ? stationSessionIdForPane(pane, stationState)
+    : undefined;
+  if (sessionId !== undefined) {
     items.push({
       id: "station.renameSession",
       label: "Rename",
-      action: { kind: "renameSession", rowId },
+      action: { kind: "renameSession", sessionId },
     });
   }
   items.push(
@@ -92,6 +103,23 @@ function buildPaneItems(
   return items;
 }
 
+function stationSessionIdForPane(
+  pane: PaneRecord,
+  state: DashboardStateView | undefined,
+): SessionId | undefined {
+  const snapshot = state?.snapshot;
+  const worktreeId = pane.worktreeId ?? worktreeIdFromAgentPaneId(pane.id);
+  if (snapshot === undefined || worktreeId === undefined) return undefined;
+  const rows = selectDashboardSessionRows(snapshot);
+  const boundSessionId = pane.agentIdentity?.sessionId;
+  return rows.find(
+    (row) =>
+      row.session.origin === "station" &&
+      row.worktree.id === worktreeId &&
+      (boundSessionId === undefined || row.id === boundSessionId),
+  )?.id;
+}
+
 function buildStationItems(
   target: Extract<ContextMenuTarget, { kind: "station" }>["target"],
   state: DashboardStateView | undefined,
@@ -102,8 +130,8 @@ function buildStationItems(
   if (target.kind !== "dashboardCell") {
     return [noActionsItem()];
   }
-  const viewport = selectDashboardViewport(state.snapshot, state);
-  const row = viewport.rowById.get(target.rowId);
+  const slots = selectDashboardSlots(state.snapshot, state, state.screen);
+  const row = slots.tree.rowById.get(target.rowId);
   if (row === undefined || !row.cells.includes(target.cellId)) {
     return [noActionsItem()];
   }
@@ -114,14 +142,12 @@ function buildStationItems(
       return buildGroupItems(row.payload.group.id, row.payload.group.projectId, state);
     case "session": {
       const sessionRow = row.payload.row;
-      return viewport.rowChoices.some((choice) => choice.value.id === sessionRow.id)
+      return slots.rowChoices.some((choice) => choice.value.id === sessionRow.id)
         ? buildSessionItems(sessionRow, state)
         : [noActionsItem()];
     }
     case "createLocalRow":
     case "emptyProject":
-    case "groupFrameEnd":
-    case "projectGap":
       return [noActionsItem()];
   }
 }
@@ -141,19 +167,19 @@ function buildSessionItems(
     items.push({
       id: "station.renameSession",
       label: "Rename Session",
-      action: { kind: "renameSession", rowId: row.id },
+      action: { kind: "renameSession", sessionId: row.id },
     });
   }
   items.push({
     id: "station.moveToGroup",
     label: "Move to Group…",
-    action: { kind: "moveToGroup", rowId: row.id },
+    action: { kind: "moveToGroup", sessionId: row.id },
   });
   // Any worktree can be forked (branch off its HEAD, copy its dirty tree).
   items.push({
     id: "station.forkSession",
     label: "Fork Session",
-    action: { kind: "forkSession", rowId: row.id },
+    action: { kind: "forkSession", sessionId: row.id },
   });
   if (project === undefined || !samePath(row.worktree.path, project.root)) {
     items.push({
@@ -162,7 +188,7 @@ function buildSessionItems(
         ? "Delete Worktree…"
         : "Delete Session",
       danger: true,
-      action: { kind: "removeWorktree", rowId: row.id },
+      action: { kind: "removeWorktree", sessionId: row.id },
     });
   }
   return items.length === 0 ? [noActionsItem()] : items;

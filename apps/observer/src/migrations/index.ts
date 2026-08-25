@@ -15,6 +15,7 @@ import { nativeBindingIngressClaimsMigration } from "./014_native_binding_ingres
 import { dropRecoveryBreadcrumbsMigration } from "./015_drop_recovery_breadcrumbs.js";
 import { worktreeDisplayTitlesMigration } from "./016_worktree_display_titles.js";
 import { sessionGroupsMigration } from "./017_session_groups.js";
+import { commandResultsMigration } from "./018_command_results.js";
 
 /** @knipignore Retains the historical migration type import surface. */
 export type { ObserverSqliteMigration } from "./migration.js";
@@ -37,6 +38,7 @@ export const migrations = [
   dropRecoveryBreadcrumbsMigration,
   worktreeDisplayTitlesMigration,
   sessionGroupsMigration,
+  commandResultsMigration,
 ] as const;
 
 export const latestSchemaVersion = migrations[migrations.length - 1]?.version ?? 0;

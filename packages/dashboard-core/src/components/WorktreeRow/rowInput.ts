@@ -222,7 +222,7 @@ function identitySegments(
   // never shifts the shared grid geometry.
   const segments: RowSegment[] = [
     focused === true ? textSegment("▏", { color: "cyan" }) : textSegment(" ", { color }),
-    textSegment(`[${slot ?? " "}] `, { color }),
+    textSegment(`[${slot ?? " "}] `, { color, role: "selectionSlot" }),
   ];
   if (marker.kind === "throbber") {
     const throbberColor = markerColor ?? color;

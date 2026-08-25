@@ -1,7 +1,23 @@
 export type EditableTextInputState = {
   value: string;
+  /** UTF-16 offset normalized to a complete grapheme boundary. */
   cursor: number;
 };
+
+type GraphemeSegment = {
+  readonly segment: string;
+  readonly index: number;
+};
+
+type GraphemeSegmenter = {
+  segment(input: string): Iterable<GraphemeSegment>;
+};
+
+const graphemeSegmenter = new Intl.Segmenter(undefined, {
+  granularity: "grapheme",
+}) as GraphemeSegmenter;
+let cachedGraphemeValue: string | undefined;
+let cachedGraphemeBoundaries: readonly number[] = [];
 
 export type EditableTextInputKey = {
   ctrl?: boolean;
@@ -57,7 +73,7 @@ export function editableTextInputIntentForInput(
   if (input.key.ctrl === true && input.input === "u") {
     return { type: "edit", action: { type: "deleteBeforeCursor" } };
   }
-  return input.input.length > 0
+  return input.input !== ""
     ? { type: "edit", action: { type: "insert", input: input.input } }
     : { type: "none" };
 }
@@ -92,23 +108,29 @@ export function insertEditableText(
 }
 
 export function backspaceEditableText(state: EditableTextInputState): EditableTextInputState {
-  const cursor = clampEditableTextCursor(state.cursor, state.value);
+  const boundaries = graphemeBoundaries(state.value);
+  const cursor = cursorBoundaryAtOrBefore(state.cursor, state.value.length, boundaries);
   if (cursor === 0) {
     return cursor === state.cursor ? state : { ...state, cursor };
   }
+  const current = boundaries.indexOf(cursor);
+  const previous = boundaries[Math.max(0, current - 1)] ?? 0;
   return {
-    value: `${state.value.slice(0, cursor - 1)}${state.value.slice(cursor)}`,
-    cursor: cursor - 1,
+    value: `${state.value.slice(0, previous)}${state.value.slice(cursor)}`,
+    cursor: previous,
   };
 }
 
 export function deleteEditableText(state: EditableTextInputState): EditableTextInputState {
-  const cursor = clampEditableTextCursor(state.cursor, state.value);
+  const boundaries = graphemeBoundaries(state.value);
+  const cursor = cursorBoundaryAtOrBefore(state.cursor, state.value.length, boundaries);
   if (cursor >= state.value.length) {
     return cursor === state.cursor ? state : { ...state, cursor };
   }
+  const current = boundaries.indexOf(cursor);
+  const next = boundaries[Math.min(boundaries.length - 1, current + 1)] ?? state.value.length;
   return {
-    value: `${state.value.slice(0, cursor)}${state.value.slice(cursor + 1)}`,
+    value: `${state.value.slice(0, cursor)}${state.value.slice(next)}`,
     cursor,
   };
 }
@@ -130,12 +152,42 @@ export function moveEditableTextCursor(
   state: EditableTextInputState,
   delta: number,
 ): EditableTextInputState {
+  const boundaries = graphemeBoundaries(state.value);
+  const cursor = cursorBoundaryAtOrBefore(state.cursor, state.value.length, boundaries);
+  const current = Math.max(0, boundaries.indexOf(cursor));
+  const next = Math.min(boundaries.length - 1, Math.max(0, current + Math.trunc(delta)));
   return {
     ...state,
-    cursor: clampEditableTextCursor(state.cursor + delta, state.value),
+    cursor: boundaries[next] ?? 0,
   };
 }
 
 export function clampEditableTextCursor(cursor: number, value: string): number {
-  return Math.min(Math.max(0, cursor), value.length);
+  return cursorBoundaryAtOrBefore(cursor, value.length, graphemeBoundaries(value));
+}
+
+function cursorBoundaryAtOrBefore(
+  cursor: number,
+  valueLength: number,
+  boundaries: readonly number[],
+): number {
+  const bounded = Math.min(Math.max(0, Math.trunc(cursor)), valueLength);
+  for (let index = boundaries.length - 1; index >= 0; index -= 1) {
+    const boundary = boundaries[index] ?? 0;
+    if (boundary <= bounded) return boundary;
+  }
+  return 0;
+}
+
+function graphemeBoundaries(value: string): readonly number[] {
+  // Cursor-only navigation reuses the unchanged value, so keep segmentation off the key-repeat path.
+  if (value === cachedGraphemeValue) return cachedGraphemeBoundaries;
+  const boundaries = [0];
+  for (const grapheme of graphemeSegmenter.segment(value)) {
+    const end = grapheme.index + grapheme.segment.length;
+    if (end !== boundaries.at(-1)) boundaries.push(end);
+  }
+  cachedGraphemeValue = value;
+  cachedGraphemeBoundaries = boundaries;
+  return cachedGraphemeBoundaries;
 }

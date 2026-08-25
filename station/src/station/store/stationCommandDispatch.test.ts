@@ -10,7 +10,7 @@ import {
   dashboardExecution,
 } from "@station/dashboard-core/runtime";
 import type { DashboardCapabilities } from "@station/dashboard-core/runtime";
-import { dashboardRowIds, selectDashboardViewport } from "@station/dashboard-core/selectors";
+import { dashboardRowIds, selectDashboardSlots } from "@station/dashboard-core/selectors";
 import { createObserverStationClient } from "../../sources/observerStationClient.js";
 import type { StationClient } from "../../sources/types.js";
 import { waitFor } from "../../terminal/testing/waitFor.js";
@@ -234,7 +234,12 @@ function slotForRow(store: StationDashboardRuntime, rowId: string): string {
   if (state.snapshot === undefined) {
     throw new Error("store has no snapshot");
   }
-  const choice = selectDashboardViewport(state.snapshot, state).rowChoices.find(
+  const choice = selectDashboardSlots(
+    state.snapshot,
+    state,
+    state.screen,
+    store.layout.snapshot(),
+  ).rowChoices.find(
     (candidate) => candidate.value.id === rowId,
   );
   if (choice === undefined) {

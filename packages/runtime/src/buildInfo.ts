@@ -2,12 +2,12 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { type StationBuildIdentity, StationBuildIdentitySchema } from "@station/contracts";
 
 declare const STATION_BUILD_VERSION: string;
 declare const STATION_BUILD_COMPILED: boolean;
 declare const STATION_BUILD_IDENTITY: string;
 
-const BUILD_IDENTITY_PATTERN = /^[0-9a-f]{64}$/u;
 const OBSERVER_BUILD_IDENTITY_MARKER = /\+(?:[0-9A-Za-z-]+\.)*station\./u;
 const OBSERVER_BUILD_IDENTITY_PATTERN = /^(.+)([+.])station\.([0-9a-f]{64})$/u;
 const verifiedSourceBuildIdentitySlot = Symbol.for(
@@ -18,7 +18,7 @@ export type StationBuildInfo = {
   version: string;
   compiled: boolean;
   /** Immutable content identity shared by source and packaged artifacts from one build. */
-  buildIdentity: string;
+  buildIdentity: StationBuildIdentity;
 };
 
 /**
@@ -39,7 +39,7 @@ export function stationBuildInfo(): StationBuildInfo {
 
 /** Encodes immutable identity as reserved SemVer metadata for Observer handoff evidence. */
 export function stationObserverBuildVersion(info: StationBuildInfo = stationBuildInfo()): string {
-  if (!BUILD_IDENTITY_PATTERN.test(info.buildIdentity)) {
+  if (!StationBuildIdentitySchema.safeParse(info.buildIdentity).success) {
     throw new Error("Station build identity must be 64 lowercase hexadecimal characters.");
   }
   if (hasStationObserverBuildIdentityMarker(info.version)) {
@@ -102,7 +102,7 @@ function sourceBuildIdentity(): string {
     }
     throw error;
   }
-  if (!BUILD_IDENTITY_PATTERN.test(identity)) {
+  if (!StationBuildIdentitySchema.safeParse(identity).success) {
     throw new Error(`Station build identity at ${path} is invalid. Run bun run build.`);
   }
   try {
@@ -121,5 +121,5 @@ function sourceBuildIdentity(): string {
     );
   }
   processSlots[verifiedSourceBuildIdentitySlot] = identity;
-  return identity;
+  return StationBuildIdentitySchema.parse(identity);
 }

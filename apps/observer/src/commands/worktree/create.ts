@@ -6,7 +6,7 @@ import type { ObserverEventBus } from "../../runtime/eventBus.js";
 import type { StationLogger } from "../../stationLogger.js";
 import { assertCommandType } from "../assertCommand.js";
 import type { HarnessLaunchPreflight } from "../harnessLaunchPreflight.js";
-import type { CommandHandler } from "../queue.js";
+import type { CommandResultHandler } from "../queue.js";
 import { reconcileAndPublish } from "../reconcile.js";
 import { findProjectOrThrow, runProviderMutation, throwIfAborted } from "../session/shared.js";
 
@@ -25,11 +25,12 @@ export type CreateWorktreeCreateHandlerOptions = {
  *
  * Worktree-only half of session.create for Station: create and publish the
  * worktree, preflighting the selected launch harness before mutation when Station
- * will immediately host an agent through prepareExternalLaunch.
+ * will immediately host an agent through prepareExternalLaunch, then returns
+ * the exact project and worktree identities created by the provider.
  */
 export function createWorktreeCreateHandler(
   options: CreateWorktreeCreateHandlerOptions,
-): CommandHandler {
+): CommandResultHandler<"worktree.create"> {
   return async (context) => {
     assertCommandType(context, "worktree.create");
     throwIfAborted(context.signal);
@@ -51,7 +52,7 @@ export function createWorktreeCreateHandler(
       request.path = payload.path;
     }
 
-    await runProviderMutation(
+    const worktree = await runProviderMutation(
       {
         clock: options.clock,
         signal: context.signal,
@@ -75,5 +76,10 @@ export function createWorktreeCreateHandler(
       reason: "command:worktree.create",
       trace: context.trace,
     });
+    return {
+      type: "worktree.create",
+      projectId: project.id,
+      worktreeId: worktree.id,
+    };
   };
 }

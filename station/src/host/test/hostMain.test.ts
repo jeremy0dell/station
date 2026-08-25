@@ -5,6 +5,9 @@ import { createStationHostClient } from "@station/host";
 import { expect, it } from "bun:test";
 import { runStationHostMain } from "../hostMain.js";
 
+const TEST_BUILD = "host-main-test";
+const TEST_BUILD_IDENTITY = "c".repeat(64);
+
 it("releases the packaged PTY runtime when the protocol stops an idle host", async () => {
   const stateDir = await mkdtemp(join(tmpdir(), "station-host-main-"));
   const socketPath = join(stateDir, "station-host.sock");
@@ -14,7 +17,14 @@ it("releases the packaged PTY runtime when the protocol stops an idle host", asy
     resolveExit = resolve;
   });
 
-  await runStationHostMain(["--socket", socketPath, "--state-dir", stateDir], {
+  const previousOverride = process.env.STATION_HOST_ALLOW_BUILD_VERSION_OVERRIDE;
+  process.env.STATION_HOST_ALLOW_BUILD_VERSION_OVERRIDE = "1";
+  await runStationHostMain([
+    "--socket", socketPath,
+    "--state-dir", stateDir,
+    "--build-version", TEST_BUILD,
+    "--build-identity", TEST_BUILD_IDENTITY,
+  ], {
     preparePtyRuntime: async () => ({
       implementation: "bun-nocctty",
       createTerminal: () => {
@@ -27,12 +37,17 @@ it("releases the packaged PTY runtime when the protocol stops an idle host", asy
     exit: resolveExit,
   });
 
-  const client = createStationHostClient({ socketPath });
+  const client = createStationHostClient({ socketPath, expectedBuildVersion: TEST_BUILD });
   try {
+    await expect(client.recoveryInventory()).resolves.toMatchObject({
+      buildIdentity: TEST_BUILD_IDENTITY,
+    });
     await expect(client.stopIfIdle("next-build")).resolves.toEqual({ stopping: true });
     expect(await exited).toBe(0);
     expect(disposals).toBe(1);
   } finally {
     client.dispose();
+    if (previousOverride === undefined) delete process.env.STATION_HOST_ALLOW_BUILD_VERSION_OVERRIDE;
+    else process.env.STATION_HOST_ALLOW_BUILD_VERSION_OVERRIDE = previousOverride;
   }
 });

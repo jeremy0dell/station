@@ -31,19 +31,20 @@ describe("dashboard cursor", () => {
     expect(clearDashboardFocus(state)).toBe(state);
   });
 
-  it("enters relative to the visible terminal window", () => {
+  it("enters relative to renderer-visible semantic identities", () => {
     const snapshot = createDashboardSnapshot();
-    const state = createInitialTuiState({
-      initialSnapshot: snapshot,
-      scrollOffset: 4,
-      terminalRows: 10,
-    });
+    const state = createInitialTuiState({ initialSnapshot: snapshot });
+    const visible = [
+      dashboardRowIds.session("ses_wt_web_idle"),
+      dashboardRowIds.session("ses_wt_web_unknown"),
+      dashboardRowIds.session("ses_wt_web_stuck"),
+    ];
 
-    expect(moveDashboardCursor(state, 1).dashboardFocus).toEqual({
+    expect(moveDashboardCursor(state, 1, visible).dashboardFocus).toEqual({
       rowId: dashboardRowIds.session("ses_wt_web_idle"),
       cellId: "identity",
     });
-    expect(moveDashboardCursor(state, -1).dashboardFocus).toEqual({
+    expect(moveDashboardCursor(state, -1, visible).dashboardFocus).toEqual({
       rowId: dashboardRowIds.session("ses_wt_web_stuck"),
       cellId: "identity",
     });
@@ -155,11 +156,10 @@ describe("dashboard cursor", () => {
     });
   });
 
-  it("uses a chooser policy that skips headers, gaps, local rows, and pending sessions", () => {
+  it("uses a chooser policy that skips containers, local rows, and pending sessions", () => {
     const snapshot = createDashboardSnapshot();
     const state = createInitialTuiState({
       initialSnapshot: snapshot,
-      terminalRows: 20,
       dashboardFocus: { rowId: dashboardRowIds.project("web"), cellId: "identity" },
       localRows: {
         pendingCreate: [
@@ -338,20 +338,19 @@ describe("dashboard cursor", () => {
     expect(next.collapsedGroupIds).toEqual(previous.collapsedGroupIds);
   });
 
-  it("preserves exact identity through resize and follows it into view", () => {
+  it("preserves exact identity without storing renderer resize state", () => {
     const snapshot = createDashboardSnapshot();
     const previous = createInitialTuiState({
       initialSnapshot: snapshot,
-      terminalRows: 20,
       dashboardFocus: {
         rowId: dashboardRowIds.session("ses_wt_api_working"),
         cellId: "identity",
       },
     });
-    const next = reconcileDashboardFocus(previous, { ...previous, terminalRows: 10 });
+    const next = reconcileDashboardFocus(previous, previous);
 
     expect(next.dashboardFocus).toEqual(previous.dashboardFocus);
-    expect(next.scrollOffset).toBe(7);
+    expect(next).toBe(previous);
   });
 
   it("falls to the next retained position after filtering removes the focused row", () => {

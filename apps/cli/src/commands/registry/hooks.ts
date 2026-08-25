@@ -1,3 +1,4 @@
+import { providerHookReconciliationSucceeded } from "@station/contracts";
 import {
   actionNeedsYes,
   hookCommandExitCode,
@@ -78,6 +79,13 @@ async function runProviderHookCliCommand(context: CliCommandRunContext) {
       const codexOptions: ProviderHooksCommandOptions = loadedCommandOptions(context);
       if (context.options.env !== undefined) {
         codexOptions.env = context.options.env;
+      }
+      if (hookAction === "reconcile") {
+        const result = await runCodexHooksCommand(
+          ["reconcile", ...context.args.slice(1)],
+          codexOptions,
+        );
+        return { code: providerHookReconciliationSucceeded(result) ? 0 : 1, output: result };
       }
       const result = await runCodexHooksCommand(hookArgs, codexOptions);
       return { code: hookCommandExitCode(result), output: result };

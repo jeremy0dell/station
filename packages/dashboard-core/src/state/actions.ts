@@ -5,7 +5,6 @@ import type { NewSessionActionId } from "../flows/newSession.js";
 import type { DashboardCellId, DashboardRowId } from "../selectors/dashboardTree.js";
 import type { ClientNotice } from "../services/types.js";
 import { activateDashboardCell } from "./dashboardCells.js";
-import { scrollDashboard } from "./dashboardScroll.js";
 import type { TuiKey } from "./keys.js";
 import { openDashboardRowShell } from "./rowActivation.js";
 import { tuiScreenBehavior } from "./screenBehavior.js";
@@ -67,13 +66,15 @@ import {
 import { openRenameEditForRow } from "./screens/sessionRows.js";
 import {
   openWidgetSettings,
-  widgetSettingsAddFromPicker,
+  widgetSettingsAddType,
   widgetSettingsOpenPicker,
-  widgetSettingsRemoveAt,
-  widgetSettingsToggleAt,
+  widgetSettingsRemoveItem,
+  widgetSettingsToggleItem,
 } from "./screens/widgetSettings.js";
+import { activateCurrentListItem } from "./selection/middleware.js";
 import type { TuiRuntimeContext, TuiTransition } from "./transition.js";
 import type {
+  AddableWidgetType,
   CreateGroupReturnTarget,
   DashboardFilterConditionField,
   DashboardState,
@@ -81,6 +82,7 @@ import type {
   GroupSettingsDetailFocus,
   GroupSettingsSection,
   ProjectSettingsItemId,
+  WidgetSettingsItemId,
 } from "./types.js";
 
 /**
@@ -94,7 +96,6 @@ export type DashboardActions = {
   handleKey(key: TuiKey): void;
   /** Resolve one typed action through the shared transition and runtime effect path. */
   dispatch(action: DashboardAction): void;
-  setTerminalRows(rows: number): void;
   /** Synchronize row focus from a canonical observer session identity. */
   focusDashboardSession(sessionId: SessionId): void;
   /** Remove transient row focus without changing other dashboard state. */
@@ -157,12 +158,12 @@ export type TuiSemanticAction =
   | { type: "groupSettings.save" }
   | { type: "groupSettings.back" };
 
-/** State-only dashboard events for focus, screen, selection, scrolling, and widget transitions. */
+/** State-only dashboard events for focus, screens, semantic selection, and widget transitions. */
 export type DashboardStateAction =
-  | { type: "dashboard.scroll"; delta: number }
+  | { type: "selection.item.activate"; itemId: string }
   | { type: "newSession.open"; projectId?: ProjectId; groupId?: SessionGroupId }
   | { type: "projectSettings.focusItem"; itemId: ProjectSettingsItemId }
-  | { type: "addProject.selectRow"; index: number }
+  | { type: "addProject.selectRow"; itemId: string }
   | { type: "screen.clickAway" }
   | { type: "renameSession.openEdit"; rowId: SessionId; returnTo: "dashboard" }
   | { type: "moveToGroup.open"; rowId: SessionId }
@@ -172,10 +173,10 @@ export type DashboardStateAction =
   | { type: "groupSettings.open"; groupId: SessionGroupId; section: GroupSettingsSection }
   | { type: "forkSession.openDetails"; rowId: SessionId; returnTo: "dashboard" }
   | { type: "widgetSettings.open" }
-  | { type: "widgetSettings.toggle"; index: number }
-  | { type: "widgetSettings.remove"; index: number }
+  | { type: "widgetSettings.toggle"; itemId: WidgetSettingsItemId }
+  | { type: "widgetSettings.remove"; itemId: WidgetSettingsItemId }
   | { type: "widgetSettings.openPicker" }
-  | { type: "widgetSettings.addFromPicker"; index: number };
+  | { type: "widgetSettings.addFromPicker"; widgetType: AddableWidgetType };
 
 /** Closed renderer-neutral action/event set accepted by dashboard state. */
 export type DashboardAction = TuiSemanticAction | DashboardStateAction;
@@ -264,8 +265,8 @@ function handleDashboardStateAction(
   action: DashboardStateAction,
 ): TuiTransition {
   switch (action.type) {
-    case "dashboard.scroll":
-      return stateTransition(scrollDashboard(state, action.delta));
+    case "selection.item.activate":
+      return activateCurrentListItem(state, action.itemId);
     case "newSession.open":
       return openNewSession(state, {
         ...(action.projectId === undefined ? {} : { projectId: action.projectId }),
@@ -274,7 +275,7 @@ function handleDashboardStateAction(
     case "projectSettings.focusItem":
       return stateTransition(focusProjectSettingsItem(state, action.itemId));
     case "addProject.selectRow":
-      return stateTransition(selectAddProjectRow(state, action.index));
+      return stateTransition(selectAddProjectRow(state, action.itemId));
     case "screen.clickAway":
     case "renameSession.openEdit":
     case "moveToGroup.open":
@@ -339,13 +340,13 @@ function handleDashboardWidgetAction(
     case "widgetSettings.open":
       return stateTransition(openWidgetSettings(state));
     case "widgetSettings.toggle":
-      return stateTransition(widgetSettingsToggleAt(state, action.index));
+      return stateTransition(widgetSettingsToggleItem(state, action.itemId));
     case "widgetSettings.remove":
-      return stateTransition(widgetSettingsRemoveAt(state, action.index));
+      return stateTransition(widgetSettingsRemoveItem(state, action.itemId));
     case "widgetSettings.openPicker":
       return stateTransition(widgetSettingsOpenPicker(state));
     case "widgetSettings.addFromPicker":
-      return stateTransition(widgetSettingsAddFromPicker(state, action.index));
+      return stateTransition(widgetSettingsAddType(state, action.widgetType));
     default:
       return assertNeverAction(action);
   }

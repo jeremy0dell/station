@@ -23,7 +23,7 @@ describe("Group Settings panel content", () => {
     const setup = sessionsState();
     const staged = toggleGroupSettingsSession(setup.state, "ses_wt_web_working");
     if (staged.screen.name !== "groupSettings") throw new Error("expected Group Settings");
-    const model = groupSettingsPanelModel(setup.snapshot, staged.screen, 20);
+    const model = groupSettingsPanelModel(setup.snapshot, staged.screen);
     const moving = model?.sessions.find((session) => session.sessionId === "ses_wt_web_working");
     expect(moving).toMatchObject({
       title: "cache-refactor",
@@ -39,7 +39,7 @@ describe("Group Settings panel content", () => {
     const setup = sessionsState();
     const staged = toggleGroupSettingsSession(setup.state, "ses_wt_web_attention");
     if (staged.screen.name !== "groupSettings") throw new Error("expected Group Settings");
-    const model = groupSettingsPanelModel(setup.snapshot, staged.screen, 20);
+    const model = groupSettingsPanelModel(setup.snapshot, staged.screen);
     const member = model?.sessions.find((session) => session.sessionId === "ses_wt_web_attention");
 
     expect(member).toMatchObject({
@@ -52,18 +52,19 @@ describe("Group Settings panel content", () => {
     ).toMatchObject({ checked: true, membershipLabel: "in this Group" });
   });
 
-  it("windows a long canonical Project list around the stable cursor", () => {
+  it("projects every canonical Project session independently of the stable cursor", () => {
     const setup = sessionsState();
     const lastSession = setup.snapshot.sessions
       .filter((session) => session.projectId === "web")
       .at(-1);
     if (lastSession === undefined) throw new Error("expected sessions");
     const screen = { ...setup.screen, sessionCursor: lastSession.id };
-    const model = groupSettingsPanelModel(setup.snapshot, screen, 3);
-    expect(model?.sessions).toHaveLength(3);
+    const model = groupSettingsPanelModel(setup.snapshot, screen);
+    expect(model?.sessions).toHaveLength(
+      setup.snapshot.sessions.filter((session) => session.projectId === "web").length,
+    );
     expect(model?.sessions.at(-1)?.sessionId).toBe(lastSession.id);
-    expect(model?.hiddenAbove).toBeGreaterThan(0);
-    expect(model?.hiddenBelow).toBe(0);
+    expect(model?.sessions.at(-1)?.focused).toBe(true);
   });
 
   it("keeps an empty Project usable and supplies bounded confirmation copy", () => {
@@ -75,7 +76,7 @@ describe("Group Settings panel content", () => {
         group.projectId === "web" ? { ...group, sessionIds: [] } : group,
       ),
     };
-    const model = groupSettingsPanelModel(emptySnapshot, setup.screen, 4);
+    const model = groupSettingsPanelModel(emptySnapshot, setup.screen);
     expect(model?.sessions).toEqual([]);
     expect(model?.sessionCount).toBe(0);
     expect(model?.removePhrase).toBe("delete Active work");

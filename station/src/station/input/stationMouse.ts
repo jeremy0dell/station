@@ -7,6 +7,7 @@ import type {
 } from "@station/dashboard-core/selectors";
 import { deriveTuiInputMode, isRemoveProjectArmed, LIST_REGISTRY } from "@station/dashboard-core/state";
 import type {
+  AddableWidgetType,
   AddProjectActionId,
   DashboardFilterConditionField,
   ForkSessionActionId,
@@ -17,6 +18,7 @@ import type {
   NewSessionActionId,
   PersistentFilterActionId,
   ProjectSettingsItemId,
+  WidgetSettingsItemId,
   ProjectMenuInputActionId,
   RemoveWorktreeActionId,
   TuiInputMode,
@@ -26,13 +28,14 @@ import {
   dismissStationToasts,
   dispatchRowSlot,
   dispatchStationAction,
-  dispatchStationKey,
 } from "./stationActions.js";
+import type { DashboardScrollController } from "../view/layout/scrollViewport.js";
 
 /** Read/action surface required by the pointer router shared by both Station renderers. */
 export type DashboardMouseRuntime = {
   state: DashboardStateSource;
   actions: Pick<DashboardActions, "dismissToasts" | "dispatch" | "handleKey">;
+  layout: DashboardScrollController;
 };
 
 export type StationMouseTarget =
@@ -54,7 +57,7 @@ export type StationMouseTarget =
   | { kind: "body" }
   | { kind: "scrollIndicator"; direction: "up" | "down" }
   | { kind: "toast" }
-  | { kind: "sheetChoice"; choiceKey: string }
+  | { kind: "sheetListItem"; itemId: string }
   | { kind: "removeWorktreeAction"; actionId: RemoveWorktreeActionId }
   | { kind: "freshStartAction"; actionId: FreshStartActionId }
   | { kind: "projectSettingsItem"; itemId: ProjectSettingsItemId }
@@ -64,11 +67,11 @@ export type StationMouseTarget =
   | { kind: "groupSettingsSession"; sessionId: SessionId }
   | { kind: "groupSettingsAction"; actionId: "save" | "back" }
   | { kind: "widgetSettingsOpen" }
-  | { kind: "widgetSettingsRow"; index: number }
-  | { kind: "widgetSettingsRemove"; index: number }
+  | { kind: "widgetSettingsRow"; itemId: WidgetSettingsItemId }
+  | { kind: "widgetSettingsRemove"; itemId: WidgetSettingsItemId }
   | { kind: "widgetSettingsAdd" }
-  | { kind: "widgetSettingsPickerChoice"; index: number }
-  | { kind: "addProjectRow"; index: number }
+  | { kind: "widgetSettingsPickerChoice"; widgetType: AddableWidgetType }
+  | { kind: "addProjectRow"; itemId: string }
   | { kind: "addProjectAction"; actionId: AddProjectActionId }
   | { kind: "newSessionAction"; actionId: NewSessionActionId }
   | { kind: "projectMenuAction"; actionId: ProjectMenuInputActionId }
@@ -83,7 +86,6 @@ export type StationMouseTarget =
 export type StationMouseEventKind = "down" | "scroll-up" | "scroll-down";
 export type StationMouseOutcome = { kind: "handled" } | { kind: "open-url"; url: string };
 
-const SCROLL_PAGE_ROWS = 5;
 const ROW_INTERACTIVE_MODES: ReadonlySet<TuiInputMode> = new Set([
   "dashboard",
   "removeChooseSlot",
@@ -164,18 +166,15 @@ export function routeStationMouse(
       return { kind: "handled" };
     case "scrollIndicator":
       if (ROW_INTERACTIVE_MODES.has(mode)) {
-        runtime.actions.dispatch({
-          type: "dashboard.scroll",
-          delta: target.direction === "up" ? -SCROLL_PAGE_ROWS : SCROLL_PAGE_ROWS,
-        });
+        runtime.layout.scrollPage(target.direction === "up" ? -1 : 1);
       }
       return { kind: "handled" };
     case "toast":
       dismissStationToasts(runtime);
       return { kind: "handled" };
-    case "sheetChoice":
+    case "sheetListItem":
       if (SHEET_CHOICE_MODES.has(mode)) {
-        dispatchStationKey(runtime, { input: target.choiceKey });
+        runtime.actions.dispatch({ type: "selection.item.activate", itemId: target.itemId });
       }
       return { kind: "handled" };
     case "removeWorktreeAction":
@@ -234,12 +233,12 @@ export function routeStationMouse(
       return { kind: "handled" };
     case "widgetSettingsRow":
       if (mode === "widgetSettings") {
-        runtime.actions.dispatch({ type: "widgetSettings.toggle", index: target.index });
+        runtime.actions.dispatch({ type: "widgetSettings.toggle", itemId: target.itemId });
       }
       return { kind: "handled" };
     case "widgetSettingsRemove":
       if (mode === "widgetSettings") {
-        runtime.actions.dispatch({ type: "widgetSettings.remove", index: target.index });
+        runtime.actions.dispatch({ type: "widgetSettings.remove", itemId: target.itemId });
       }
       return { kind: "handled" };
     case "widgetSettingsAdd":
@@ -247,12 +246,15 @@ export function routeStationMouse(
       return { kind: "handled" };
     case "widgetSettingsPickerChoice":
       if (mode === "widgetSettings") {
-        runtime.actions.dispatch({ type: "widgetSettings.addFromPicker", index: target.index });
+        runtime.actions.dispatch({
+          type: "widgetSettings.addFromPicker",
+          widgetType: target.widgetType,
+        });
       }
       return { kind: "handled" };
     case "addProjectRow":
       if (ADD_PROJECT_ROW_MODES.has(mode)) {
-        runtime.actions.dispatch({ type: "addProject.selectRow", index: target.index });
+        runtime.actions.dispatch({ type: "addProject.selectRow", itemId: target.itemId });
       }
       return { kind: "handled" };
     case "addProjectAction":
@@ -351,8 +353,5 @@ function routeStationWheel(
   ) {
     return;
   }
-  runtime.actions.dispatch({
-    type: "dashboard.scroll",
-    delta: eventKind === "scroll-up" ? -1 : 1,
-  });
+  runtime.layout.scrollBy(eventKind === "scroll-up" ? -1 : 1);
 }

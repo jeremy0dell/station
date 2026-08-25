@@ -359,10 +359,6 @@ export type TuiDashboardBinding =
 /** Typed dashboard action vocabulary decoded by the keyboard binding table. */
 export type TuiDashboardAction = TuiDashboardBinding["action"];
 
-export type TuiHelpContentLine =
-  | { text: string; align?: "center" }
-  | { key: string; description: string };
-
 export type TuiDashboardBindingId = (typeof TUI_DASHBOARD_BINDINGS)[number]["id"];
 
 export type DashboardFooterWidth = "full" | "compact";

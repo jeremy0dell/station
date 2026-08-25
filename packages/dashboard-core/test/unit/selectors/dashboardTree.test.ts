@@ -9,7 +9,7 @@ import {
 } from "../../fixtures/snapshots.js";
 
 describe("dashboard tree", () => {
-  it("projects the current Project to Session hierarchy with stable ids, gaps, and cells", () => {
+  it("projects Projects as semantic containers of their Sessions with stable ids and cells", () => {
     const snapshot = createDashboardSnapshot();
     const state = createInitialTuiState({ initialSnapshot: snapshot });
     const tree = selectDashboardTree(snapshot, state, state.screen);
@@ -22,7 +22,6 @@ describe("dashboard tree", () => {
       "session:ses_wt_web_idle",
       "session:ses_wt_web_unknown",
       "session:ses_wt_web_stuck",
-      "gap:api",
       "project:api",
       "session:ses_wt_api_working",
     ]);
@@ -39,11 +38,15 @@ describe("dashboard tree", () => {
       defaultCell: "identity",
       payload: { type: "session" },
     });
-    expect(tree.rowById.get(dashboardRowIds.gap("api"))).toMatchObject({
-      depth: 0,
-      cells: [],
-      payload: { type: "projectGap", projectId: "api" },
-    });
+    expect(tree.roots.map((branch) => branch.row.id)).toEqual(["project:web", "project:api"]);
+    expect(tree.roots[0]?.children.map((branch) => branch.row.id)).toEqual([
+      "session:ses_wt_web_working",
+      "session:ses_wt_web_attention",
+      "session:ses_wt_web_exited",
+      "session:ses_wt_web_idle",
+      "session:ses_wt_web_unknown",
+      "session:ses_wt_web_stuck",
+    ]);
   });
 
   it("joins canonical sessions only and renders a truly empty project action", () => {
@@ -178,7 +181,7 @@ describe("dashboard tree", () => {
     expect(tree.collapsedAncestorById.get(sessionId)).toBe(dashboardRowIds.project("web"));
   });
 
-  it("projects flat Group blocks with direct canonical counts and groups-first ordering", () => {
+  it("projects Groups as child-owning containers with direct canonical counts", () => {
     const snapshot = createGroupedDashboardSnapshot();
     const state = createInitialTuiState({ initialSnapshot: snapshot });
     const tree = selectDashboardTree(snapshot, state, state.screen);
@@ -188,20 +191,15 @@ describe("dashboard tree", () => {
       "group:group_active",
       "session:ses_wt_web_attention",
       "session:ses_wt_web_idle",
-      "group-frame-end:group_active",
       "group:group_build",
       "session:ses_wt_web_working",
-      "group-frame-end:group_build",
       "group:group_empty",
-      "group-frame-end:group_empty",
       "session:ses_wt_web_exited",
       "session:ses_wt_web_unknown",
       "session:ses_wt_web_stuck",
-      "gap:api",
       "project:api",
       "group:group_api",
       "session:ses_wt_api_working",
-      "group-frame-end:group_api",
     ]);
     expect(tree.rowById.get(dashboardRowIds.project("web"))?.payload).toMatchObject({
       type: "projectHeader",
@@ -229,12 +227,14 @@ describe("dashboard tree", () => {
       sessionCount: 0,
       visibleSessionCount: 0,
     });
-    expect(tree.rowById.get(dashboardRowIds.groupFrameEnd("group_empty"))).toMatchObject({
-      depth: 2,
-      parentId: "group:group_empty",
-      cells: [],
-      payload: { type: "groupFrameEnd", groupId: "group_empty" },
-    });
+    const web = tree.roots.find((branch) => branch.row.id === dashboardRowIds.project("web"));
+    const active = web?.children.find(
+      (branch) => branch.row.id === dashboardRowIds.group("group_active"),
+    );
+    expect(active?.children.map((branch) => branch.row.id)).toEqual([
+      dashboardRowIds.session("ses_wt_web_attention"),
+      dashboardRowIds.session("ses_wt_web_idle"),
+    ]);
   });
 
   it("projects only the enabled Group header action cells", () => {
@@ -390,14 +390,7 @@ describe("dashboard tree", () => {
     const groupTree = selectDashboardTree(snapshot, groupState, groupState.screen);
 
     expect(groupTree.visibleIndexById.has(memberId)).toBe(false);
-    expect(groupTree.visibleIndexById.has(dashboardRowIds.groupFrameEnd("group_active"))).toBe(
-      false,
-    );
-    expect(groupTree.rowById.has(dashboardRowIds.groupFrameEnd("group_active"))).toBe(true);
     expect(groupTree.collapsedAncestorById.get(memberId)).toBe(
-      dashboardRowIds.group("group_active"),
-    );
-    expect(groupTree.collapsedAncestorById.get(dashboardRowIds.groupFrameEnd("group_active"))).toBe(
       dashboardRowIds.group("group_active"),
     );
 
@@ -461,8 +454,7 @@ describe("dashboard tree", () => {
       persistentFilterMatch: { matched: false },
     });
     expect(tree.visibleRows.map((row) => row.id)).toContain("group:group_empty");
-    expect(tree.visibleRows.map((row) => row.id)).toContain("group-frame-end:group_empty");
-    expect(tree.visibleRows.map((row) => row.id)).not.toContain("group-frame-end:group_build");
+    expect(tree.visibleRows.some((row) => row.payload.type === "groupHeader")).toBe(true);
     expect(state.collapsedGroupIds.has("group_build")).toBe(true);
   });
 
@@ -495,7 +487,7 @@ describe("dashboard tree", () => {
     };
     const tree = selectDashboardTree(snapshot, state, state.screen);
 
-    expect(tree.visibleRows).toHaveLength(10);
+    expect(tree.visibleRows).toHaveLength(9);
     expect(tree.persistentFilter).toMatchObject({ source: "draft", matchCount: 1, totalCount: 7 });
     expect(tree.rowById.get(dashboardRowIds.session("ses_wt_web_stuck"))?.payload).toMatchObject({
       type: "session",
@@ -517,7 +509,6 @@ describe("dashboard tree", () => {
 
     expect(tree.visibleRows.map((row) => row.id)).toEqual([
       "project:web",
-      "gap:api",
       "project:api",
       "session:ses_wt_api_working",
     ]);

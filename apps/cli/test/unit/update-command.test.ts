@@ -1101,6 +1101,7 @@ function recoveryPreflightFixture() {
   const inspectHost = vi.fn(async () => ({
     status: "inspected" as const,
     buildVersion: "1.0.0+station.host",
+    buildIdentity: "b".repeat(64),
     protocolVersion: HOST_PROTOCOL_VERSION,
     relation: "different" as const,
     compatibility: "replace" as const,
@@ -1245,6 +1246,30 @@ async function createLiveHostFixture(
         list: async () => {
           if (options.listError !== undefined) throw options.listError;
           return [{ ptyId: "pty-1", pid: 42, alive: true }];
+        },
+        recoveryInventory: async () => {
+          if (options.listError !== undefined) throw options.listError;
+          return {
+            buildIdentity: "b".repeat(64),
+            ptys: [
+              {
+                kind: "agent",
+                terminalTargetId: "target-1",
+                ptyId: "pty-1",
+                ptyInstanceId: "instance-1",
+                worktreeId: "worktree-1",
+                projectId: "project-1",
+                sessionId: "session-1",
+                worktreePath: "/repo/one",
+                harnessProvider: "codex",
+                pid: 42,
+                alive: true,
+                cols: 80,
+                rows: 24,
+                handoffSupport: { kind: "bridge-releasable" },
+              },
+            ],
+          };
         },
         dispose: () => undefined,
       }) as never,

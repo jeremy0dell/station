@@ -15,7 +15,13 @@ export function openPersistentFilterConditionEditor(state: DashboardState): Dash
   }
   return {
     ...state,
-    screen: { ...state.screen, conditionEditor: { stage: "field", cursor: 0 } },
+    screen: {
+      ...state.screen,
+      conditionEditor: {
+        stage: "field",
+        focusedItemId: DASHBOARD_FILTER_CONDITION_FIELDS[0] ?? "applyFilter",
+      },
+    },
   };
 }
 
@@ -42,8 +48,9 @@ export function handlePersistentFilterConditionKey(
       return movePersistentFilterConditionCursor(state, 1);
     }
     if (isReturnKey(key)) {
-      const field = DASHBOARD_FILTER_CONDITION_FIELDS[editor.cursor];
-      return field === undefined ? state : selectPersistentFilterConditionField(state, field);
+      return editor.focusedItemId === "applyFilter"
+        ? state
+        : selectPersistentFilterConditionField(state, editor.focusedItemId);
     }
     return state;
   }
@@ -58,7 +65,7 @@ export function handlePersistentFilterConditionKey(
     return movePersistentFilterConditionCursor(state, 1);
   }
   if (key.input === " ") {
-    const option = editor.options[editor.cursor];
+    const option = editor.options.find((candidate) => candidate.id === editor.focusedValueId);
     return option === undefined
       ? state
       : togglePersistentFilterConditionValue(state, editor.field, option.id);
@@ -91,7 +98,8 @@ export function selectPersistentFilterConditionField(
     state.screen.draftConditions
       .find((condition) => condition.field === field)
       ?.values.map((value) => value.id) ?? [];
-  const selectedCursor = options.findIndex((option) => selectedIds.includes(option.id));
+  const focusedValueId =
+    options.find((option) => selectedIds.includes(option.id))?.id ?? options[0]?.id;
   return {
     ...state,
     screen: {
@@ -99,7 +107,7 @@ export function selectPersistentFilterConditionField(
       conditionEditor: {
         stage: "values",
         field,
-        cursor: Math.max(0, selectedCursor),
+        ...(focusedValueId === undefined ? {} : { focusedValueId }),
         options,
         selectedIds,
       },
@@ -120,8 +128,7 @@ export function togglePersistentFilterConditionValue(
     return state;
   }
   const editor = state.screen.conditionEditor;
-  const optionIndex = editor.options.findIndex((option) => option.id === valueId);
-  if (optionIndex < 0) return state;
+  if (!editor.options.some((option) => option.id === valueId)) return state;
   const selected = new Set(editor.selectedIds);
   if (selected.has(valueId)) selected.delete(valueId);
   else selected.add(valueId);
@@ -131,7 +138,7 @@ export function togglePersistentFilterConditionValue(
       ...state.screen,
       conditionEditor: {
         ...editor,
-        cursor: optionIndex,
+        focusedValueId: valueId,
         selectedIds: editor.options.flatMap((option) =>
           selected.has(option.id) ? [option.id] : [],
         ),
@@ -161,14 +168,30 @@ function movePersistentFilterConditionCursor(state: DashboardState, delta: -1 | 
     return state;
   }
   const editor = state.screen.conditionEditor;
-  const length =
-    editor.stage === "field" ? DASHBOARD_FILTER_CONDITION_FIELDS.length + 1 : editor.options.length;
-  if (length === 0) return state;
-  const cursor = Math.min(length - 1, Math.max(0, editor.cursor + delta));
-  if (cursor === editor.cursor) return state;
+  if (editor.stage === "field") {
+    const itemIds: readonly (DashboardFilterConditionField | "applyFilter")[] = [
+      ...DASHBOARD_FILTER_CONDITION_FIELDS,
+      "applyFilter",
+    ];
+    const current = Math.max(0, itemIds.indexOf(editor.focusedItemId));
+    const focusedItemId = itemIds[Math.min(itemIds.length - 1, Math.max(0, current + delta))];
+    if (focusedItemId === undefined || focusedItemId === editor.focusedItemId) return state;
+    return {
+      ...state,
+      screen: { ...state.screen, conditionEditor: { ...editor, focusedItemId } },
+    };
+  }
+  if (editor.options.length === 0) return state;
+  const current = Math.max(
+    0,
+    editor.options.findIndex((option) => option.id === editor.focusedValueId),
+  );
+  const focusedValueId =
+    editor.options[Math.min(editor.options.length - 1, Math.max(0, current + delta))]?.id;
+  if (focusedValueId === undefined || focusedValueId === editor.focusedValueId) return state;
   return {
     ...state,
-    screen: { ...state.screen, conditionEditor: { ...editor, cursor } },
+    screen: { ...state.screen, conditionEditor: { ...editor, focusedValueId } },
   };
 }
 
@@ -186,13 +209,12 @@ function retainPersistentFilterConditionEditor(state: DashboardState): Dashboard
     editor.options,
     editor.selectedIds,
   );
-  const fieldCursor = DASHBOARD_FILTER_CONDITION_FIELDS.indexOf(editor.field);
   return {
     ...state,
     screen: {
       ...state.screen,
       draftConditions,
-      conditionEditor: { stage: "field", cursor: Math.max(0, fieldCursor) },
+      conditionEditor: { stage: "field", focusedItemId: editor.field },
     },
   };
 }

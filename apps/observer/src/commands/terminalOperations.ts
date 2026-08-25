@@ -5,7 +5,9 @@ import type {
   OpenPlacedWorkspaceResult,
   OpenWorkspaceResult,
   ProviderProjectConfig,
+  ResolvedTerminalPlacement,
   SafeError,
+  SessionCommandPlacementResult,
   SessionView,
   TerminalFocusOrigin,
   TerminalPlacementPort,
@@ -49,32 +51,44 @@ type HarnessLaunchOptions = {
   sandboxMode?: string | undefined;
 };
 
+type EnsureAgentWorkspaceInput = {
+  terminal: TerminalProvider;
+  placementPort?: TerminalPlacementPort | undefined;
+  placement?: TerminalPlacementRequest | undefined;
+  harness: HarnessProvider;
+  launchPreflight: HarnessLaunchPreflight;
+  project: ProviderProjectConfig;
+  worktree: WorktreeObservation;
+  sessionId: string;
+  layout: string;
+  harnessOptions?: HarnessLaunchOptions | undefined;
+  focus?: boolean | undefined;
+  origin?: TerminalFocusOrigin | undefined;
+  initialPrompt?: string | undefined;
+  resume?: HarnessResumeOptions | undefined;
+} & TerminalOperationRuntime;
+
 /**
  * USE CASE
  *
  * Opens and launches an agent workspace. When placement is supplied, the terminal
  * adapter alone revalidates the authority immediately before target mutation;
  * failures close only the target opened by this invocation and never fall back
- * to a current, recent, or focused terminal.
+ * to a current, recent, or focused terminal. Successful explicit placement
+ * returns the provider's resolved destination proof.
  */
+export function ensureAgentWorkspace(
+  input: EnsureAgentWorkspaceInput & {
+    placementPort: TerminalPlacementPort;
+    placement: TerminalPlacementRequest;
+  },
+): Promise<ResolvedTerminalPlacement>;
+export function ensureAgentWorkspace(
+  input: EnsureAgentWorkspaceInput,
+): Promise<ResolvedTerminalPlacement | undefined>;
 export async function ensureAgentWorkspace(
-  input: {
-    terminal: TerminalProvider;
-    placementPort?: TerminalPlacementPort | undefined;
-    placement?: TerminalPlacementRequest | undefined;
-    harness: HarnessProvider;
-    launchPreflight: HarnessLaunchPreflight;
-    project: ProviderProjectConfig;
-    worktree: WorktreeObservation;
-    sessionId: string;
-    layout: string;
-    harnessOptions?: HarnessLaunchOptions | undefined;
-    focus?: boolean | undefined;
-    origin?: TerminalFocusOrigin | undefined;
-    initialPrompt?: string | undefined;
-    resume?: HarnessResumeOptions | undefined;
-  } & TerminalOperationRuntime,
-): Promise<void> {
+  input: EnsureAgentWorkspaceInput,
+): Promise<ResolvedTerminalPlacement | undefined> {
   throwIfAborted(input.context.signal);
   await input.launchPreflight(input.harness.id, {
     signal: input.context.signal,
@@ -187,6 +201,41 @@ export async function ensureAgentWorkspace(
       { commandId: input.context.commandId },
     );
   }
+  return placedOpened?.placement;
+}
+
+export function commandPlacementResult(
+  requested: TerminalPlacementRequest,
+  resolved: ResolvedTerminalPlacement,
+): SessionCommandPlacementResult {
+  if (requested.intent !== resolved.intent) {
+    throw {
+      tag: "TerminalProviderError",
+      code: "TERMINAL_PLACEMENT_RESULT_MISMATCH",
+      message: "The terminal provider resolved a different placement intent than requested.",
+      provider: resolved.provider,
+    } satisfies SafeError;
+  }
+  if (resolved.intent === "sibling") {
+    return {
+      requestedPlacement: "sibling",
+      resolvedPlacement: {
+        provider: resolved.provider,
+        targetId: resolved.targetId,
+        generation: resolved.generation,
+        presentation: resolved.presentation,
+      },
+    };
+  }
+  return {
+    requestedPlacement: "detached",
+    resolvedPlacement: {
+      provider: resolved.provider,
+      targetId: resolved.targetId,
+      generation: resolved.generation,
+      presentation: resolved.presentation,
+    },
+  };
 }
 
 async function releasePlacedTargetOrThrow(

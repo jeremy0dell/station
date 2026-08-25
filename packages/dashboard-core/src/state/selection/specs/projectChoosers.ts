@@ -9,10 +9,10 @@ function projectChoices(state: DashboardState) {
   if (state.snapshot === undefined) {
     return [];
   }
-  return selectProjectChooserChoices(state.snapshot).map((choice) => ({
-    key: choice.key,
-    value: choice.value.id,
-  }));
+  return selectProjectChooserChoices(state.snapshot).map((choice) => {
+    const mapped = { value: choice.value.id };
+    return choice.key === undefined ? mapped : { ...mapped, key: choice.key };
+  });
 }
 
 export const projectCollapseListSpec = flatPickerSpec<ProjectId>({

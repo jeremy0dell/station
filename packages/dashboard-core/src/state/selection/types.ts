@@ -6,8 +6,7 @@ import type { DashboardState } from "../types.js";
 export type ListId = string;
 
 /**
- * One row in a list's cursor space. Non-selectable rows (headers, dividers,
- * gaps) hold viewport positions but the cursor steps over them.
+ * One item in a list's semantic cursor order. The cursor steps over non-selectable context items.
  */
 export type ListRow<TId extends string> = { selectable: true; id: TId } | { selectable: false };
 
@@ -27,7 +26,7 @@ export type ListSpec<TId extends string> = {
   active?: (state: DashboardState) => boolean;
   /** Full ordered cursor space. */
   rows: (state: DashboardState) => readonly ListRow<TId>[];
-  /** Viewport-relative slot accelerators; OMIT to opt a list out of slot-jump. */
+  /** Accelerators for renderer-visible semantic items; OMIT to opt a list out of slot-jump. */
   slots?: (state: DashboardState) => readonly KeyedChoice<TId>[];
   /** The only screen-authored behavior; returns a full transition (commands/operations/toasts). */
   commit: (state: DashboardState, id: TId, via: CommitVia) => TuiTransition;

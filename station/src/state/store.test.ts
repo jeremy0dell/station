@@ -681,7 +681,7 @@ describe("createStationStore", () => {
     expect(state.input.contextMenu).toEqual({
       target: { kind: "pane", paneId: "pane-second" },
       anchor: { x: 7, y: 4 },
-      activeIndex: 0,
+      activeItemId: undefined,
     });
   });
 
@@ -702,12 +702,12 @@ describe("createStationStore", () => {
     expect(state.input.focus).toEqual({ kind: "contextMenu" });
   });
 
-  it("moves context menu active index and closes back to the underlying focus", () => {
+  it("moves context menu active identity and closes back to the underlying focus", () => {
     const store = createStationStore();
     store.actions.openContextMenu({ kind: "pane", paneId: MAIN_PANE_ID }, { x: 1, y: 1 });
 
-    store.actions.setContextMenuActiveIndex(2);
-    expect(store.getState().input.contextMenu?.activeIndex).toBe(2);
+    store.actions.setContextMenuActiveItemId("pane.close");
+    expect(store.getState().input.contextMenu?.activeItemId).toBe("pane.close");
     store.actions.closeContextMenu();
 
     expect(store.getState().input.contextMenu).toBeNull();
@@ -738,7 +738,7 @@ describe("createStationStore", () => {
     const menu = {
       target: { kind: "station" as const, target: { kind: "dashboardCell" as const, rowId: dashboardRowIds.session(rowId), cellId: "identity" as const } },
       anchor: { x: 12, y: 6 },
-      activeIndex: 0,
+      activeItemId: undefined,
     };
 
     store.actions.createPane(paneId, { role: "primary-agent" });

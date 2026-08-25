@@ -1,3 +1,4 @@
+import { safeErrorFromUnknown } from "@station/runtime";
 import { loadedConfigCommandOptions } from "../cliCommand/helpers.js";
 import type { CliCommandNode, CliCommandRunContext } from "../cliCommand/types.js";
 import { hostCommandSummary, runHostCommand } from "../host/index.js";
@@ -52,14 +53,18 @@ async function runHostCliCommand(context: CliCommandRunContext) {
     const failed =
       (result.action === "handoff" &&
         (result.status === "refused" || result.status === "unavailable")) ||
-      (result.action === "status" && result.probe !== "listening");
+      (result.action === "status" && (result.probe !== "listening" || result.error !== undefined));
     return {
       code: failed ? 1 : 0,
       output: hostCommandSummary(result),
       outputFormat: "text" as const,
     };
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    return { code: 2, output: `${message}\n`, outputFormat: "text" as const };
+    const normalized = safeErrorFromUnknown(error, {
+      tag: "HostCommandError",
+      code: "HOST_COMMAND_FAILED",
+      message: "Host command failed.",
+    });
+    return { code: 2, output: `${normalized.message}\n`, outputFormat: "text" as const };
   }
 }

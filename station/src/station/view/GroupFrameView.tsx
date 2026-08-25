@@ -1,67 +1,41 @@
-import { TextAttributes } from "@opentui/core";
-import { truncateCells } from "@station/dashboard-core/selectors";
-import {
-  toOpenTuiColor,
-  useStationTheme,
-  type StationTheme,
-} from "../../theme/index.js";
+import type { ReactNode } from "react";
+import { toOpenTuiColor, useStationTheme } from "../../theme/index.js";
 
 export type GroupFrameFocus = {
   focusedHeader: boolean;
   containsFocusedRow: boolean;
 };
 
-export function GroupFrameText({ text, focus }: { text: string; focus: GroupFrameFocus }) {
+export function GroupFrameView({
+  renderableId,
+  focus,
+  children,
+}: {
+  renderableId?: string;
+  focus: GroupFrameFocus;
+  children: ReactNode;
+}) {
   const theme = useStationTheme();
-  const presentation = groupFramePresentation(theme, focus);
+  const emphasized = focus.focusedHeader || focus.containsFocusedRow;
   return (
-    <text flexShrink={0} fg={presentation.fg} attributes={presentation.attributes}>
-      {text}
-    </text>
+    // Keep the border unclipped: OpenTUI's bordered scissor drops the final content row from hit-testing.
+    <box
+      {...(renderableId === undefined ? {} : { id: renderableId })}
+      width="100%"
+      flexDirection="column"
+      border
+      borderStyle="rounded"
+      borderColor={toOpenTuiColor(
+        emphasized ? theme.status.working : theme.interaction.hairline,
+      )}
+      overflow="visible"
+    >
+      {children}
+    </box>
   );
 }
 
-export function GroupFrameRailView({
-  text,
-  focusedHeader,
-  containsFocusedRow,
-}: {
-  text: string;
-  focusedHeader: boolean;
-  containsFocusedRow: boolean;
-}) {
-  return <GroupFrameText text={text} focus={{ focusedHeader, containsFocusedRow }} />;
-}
-
-export function GroupFrameEndView({
-  columns,
-  focusedHeader,
-  containsFocusedRow,
-}: {
-  columns: number;
-  focusedHeader: boolean;
-  containsFocusedRow: boolean;
-}) {
-  const width = Math.max(1, Math.floor(columns));
-  const line = width < 2 ? truncateCells("╰", width) : `╰${"─".repeat(width - 2)}╯`;
-  return <GroupFrameText text={line} focus={{ focusedHeader, containsFocusedRow }} />;
-}
-
-function groupFramePresentation(theme: StationTheme, focus: GroupFrameFocus) {
-  if (focus.focusedHeader) {
-    return {
-      fg: toOpenTuiColor(theme.status.working),
-      attributes: TextAttributes.NONE,
-    };
-  }
-  if (focus.containsFocusedRow) {
-    return {
-      fg: toOpenTuiColor(theme.status.working),
-      attributes: TextAttributes.DIM,
-    };
-  }
-  return {
-    fg: toOpenTuiColor(theme.interaction.hairline),
-    attributes: TextAttributes.NONE,
-  };
+/** Renderer-boundary width available inside the frame's two vertical border cells. */
+export function groupFrameContentColumns(columns: number): number {
+  return Math.max(1, Math.floor(columns) - 2);
 }

@@ -34,7 +34,6 @@ function makeViewStore(
   station?: StationStore,
   options: {
     snapshot?: StationSnapshot;
-    terminalRows?: number;
     activatedSessionIds?: string[];
   } = {},
 ): StationTestDashboardRuntime {
@@ -127,7 +126,7 @@ describe("station overlay layer in the keymap stack", () => {
     const snapshot = groupedManyProjectsSnapshot();
     const station = makeStationStore(true);
     const activatedSessionIds: string[] = [];
-    const view = makeViewStore(station, { snapshot, terminalRows: 40, activatedSessionIds });
+    const view = makeViewStore(station, { snapshot, activatedSessionIds });
     const keymap = createStationKeymap(view);
     const groupId = dashboardRowIds.group("group_design_refresh");
 

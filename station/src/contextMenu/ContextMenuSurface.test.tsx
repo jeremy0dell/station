@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { rgbToHex } from "@opentui/core";
+import { rgbToHex, ScrollBoxRenderable } from "@opentui/core";
 import { MouseButtons } from "@opentui/core/testing";
 import { testRender } from "@opentui/react/test-utils";
 import {
@@ -17,7 +17,12 @@ import { spanAtFrameCell } from "../terminal/testing/frameProbe.js";
 import type { MouseTargetRef } from "../input/router.js";
 import type { StationMouseEvent } from "../input/mouse.js";
 import type { ContextMenuItem } from "./types.js";
-import { ContextMenuSurface } from "./ContextMenuSurface.js";
+import {
+  ContextMenuSurface,
+  contextMenuItemRenderableId,
+} from "./ContextMenuSurface.js";
+
+const TEST_BOUNDARY_ID = "context-menu-surface-test-boundary";
 
 const ITEMS: readonly ContextMenuItem[] = [
   { id: "pane.splitRight", label: "Split Right", disabled: true, action: { kind: "noop" } },
@@ -34,24 +39,27 @@ describe("ContextMenuSurface", () => {
       expect(frame).toContain("Split Below");
       expect(frame).toContain("Close Pane");
       expect(frame.split("\n").find((line) => line.includes("Close Pane"))).toContain(
-        "|▸Close Pane",
+        "▸Close Pane",
       );
     } finally {
       setup.renderer.destroy();
     }
   });
 
-  it("routes item mouse targets with normalized click events", async () => {
+  it("routes semantic item identities with normalized click events", async () => {
     const calls: Array<{ target: MouseTargetRef; event: StationMouseEvent }> = [];
     const setup = await renderSurface((target, event) => {
       calls.push({ target, event });
       return true;
     });
     try {
-      await setup.mockMouse.click(2, 3, MouseButtons.LEFT);
+      const lines = setup.captureCharFrame().split("\n");
+      const closeRow = lines.findIndex((line) => line.includes("Close Pane"));
+      const closeColumn = lines[closeRow]?.indexOf("Close Pane") ?? -1;
+      await setup.mockMouse.click(closeColumn, closeRow, MouseButtons.LEFT);
       expect(calls).toEqual([
         {
-          target: { kind: "contextMenuItem", itemIndex: 2 },
+          target: { kind: "contextMenuItem", itemId: "pane.close" },
           event: {
             type: "down",
             button: "left",
@@ -102,7 +110,7 @@ describe("ContextMenuSurface", () => {
     }
   });
 
-  it("renders Group keyboard shortcuts and separators without changing item indices", async () => {
+  it("renders Group shortcuts and separators without changing semantic identities", async () => {
     const calls: MouseTargetRef[] = [];
     const items: readonly ContextMenuItem[] = [
       {
@@ -135,16 +143,19 @@ describe("ContextMenuSurface", () => {
     ];
     const setup = await testRender(
       <StationThemeProvider theme={nativeStationTheme}>
-        <ContextMenuSurface
-          items={items}
-          activeIndex={0}
-          width={22}
-          height={8}
-          dispatchMouse={(target) => {
-            calls.push(target);
-            return true;
-          }}
-        />
+        <box id={TEST_BOUNDARY_ID} width={24} height="100%">
+          <ContextMenuSurface
+            items={items}
+            activeItemId="group.quickSession"
+            anchor={{ x: 0, y: -1 }}
+            preferredWidth={22}
+            boundaryId={TEST_BOUNDARY_ID}
+            dispatchMouse={(target) => {
+              calls.push(target);
+              return true;
+            }}
+          />
+        </box>
       </StationThemeProvider>,
       { width: 24, height: 9 },
     );
@@ -153,16 +164,18 @@ describe("ContextMenuSurface", () => {
       const frame = setup.captureCharFrame();
       const spans = setup.captureSpans();
       const lines = frame.split("\n");
-      expect(lines[1]).toMatch(/\|▸Quick session\s+Q\|/);
-      expect(lines[2]).toMatch(/\| New session…\s+N\|/);
-      expect(lines[3]).toContain("+--------------------+");
-      expect(lines[4]).toMatch(/\| Group settings…\s+S\|/);
-      expect(lines[5]).toContain("+--------------------+");
-      expect(lines[6]).toMatch(/\| Remove Group…\s+R\|/);
+      expect(lines[1]).toMatch(/▸Quick session\s+Q/);
+      expect(lines[2]).toMatch(/ New session…\s+N/);
+      expect(lines[3]).toContain("────────────────────");
+      expect(lines[4]).toMatch(/ Group settings…\s+S/);
+      expect(lines[5]).toContain("────────────────────");
+      expect(lines[6]).toMatch(/ Remove Group…\s+R/);
       expect(lines.filter((line) => line.includes("▸"))).toHaveLength(1);
       expect(spanAtFrameCell(spans, 6, 2)?.fg).not.toEqual(spanAtFrameCell(spans, 1, 2)?.fg);
-      await setup.mockMouse.click(2, 6, MouseButtons.LEFT);
-      expect(calls.at(-1)).toEqual({ kind: "contextMenuItem", itemIndex: 3 });
+      const removeRow = lines.findIndex((line) => line.includes("Remove Group…"));
+      const removeColumn = lines[removeRow]?.indexOf("Remove Group…") ?? -1;
+      await setup.mockMouse.click(removeColumn, removeRow, MouseButtons.LEFT);
+      expect(calls.at(-1)).toEqual({ kind: "contextMenuItem", itemId: "group.remove" });
     } finally {
       setup.renderer.destroy();
     }
@@ -176,14 +189,182 @@ describe("ContextMenuSurface", () => {
     });
     try {
       await setup.mockMouse.moveTo(2, 2);
-      // Hover over the middle row highlights it (index 1) without selecting.
-      expect(calls.at(-1)?.target).toEqual({ kind: "contextMenuItemHover", itemIndex: 1 });
+      // Hover over the middle row highlights it by identity without selecting.
+      expect(calls.at(-1)?.target).toEqual({
+        kind: "contextMenuItemHover",
+        itemId: "pane.splitBelow",
+      });
       expect(calls.at(-1)?.event.type).toBe("move");
     } finally {
       setup.renderer.destroy();
     }
   });
+
+  it("maps every painted line of a wrapped action to one semantic pointer target", async () => {
+    const calls: MouseTargetRef[] = [];
+    const items: readonly ContextMenuItem[] = [
+      {
+        id: "pane.automation.verbose",
+        label: "Run the verbose automation action",
+        action: { kind: "noop" },
+      },
+      { id: "pane.close", label: "Close", action: { kind: "closePane", paneId: "pane-a" } },
+    ];
+    const setup = await testRender(
+      <StationThemeProvider theme={nativeStationTheme}>
+        <box id={TEST_BOUNDARY_ID} width={14} height="100%">
+          <ContextMenuSurface
+            items={items}
+            activeItemId="pane.automation.verbose"
+            anchor={{ x: 0, y: -1 }}
+            preferredWidth={14}
+            boundaryId={TEST_BOUNDARY_ID}
+            dispatchMouse={(target) => {
+              calls.push(target);
+              return true;
+            }}
+          />
+        </box>
+      </StationThemeProvider>,
+      { width: 14, height: 8 },
+    );
+    await setup.flush();
+    try {
+      const verbose = setup.renderer.root.findDescendantById(
+        contextMenuItemRenderableId("pane.automation.verbose"),
+      );
+      expect(verbose?.height).toBeGreaterThan(1);
+      if (verbose === undefined) throw new Error("verbose context action did not render");
+      await setup.mockMouse.click(
+        verbose.screenX + 2,
+        verbose.screenY + 1,
+        MouseButtons.LEFT,
+      );
+      expect(calls.at(-1)).toEqual({
+        kind: "contextMenuItem",
+        itemId: "pane.automation.verbose",
+      });
+    } finally {
+      setup.renderer.destroy();
+    }
+  });
+
+  it("keeps a long semantic action list mounted and follows focus through resize", async () => {
+    const items: readonly ContextMenuItem[] = Array.from({ length: 14 }, (_, index) => ({
+      id: `pane.automation.action-${index}`,
+      label: `Action ${index}`,
+      action: { kind: "noop" as const },
+      ...(index > 0 && index % 4 === 0 ? { separatorBefore: true as const } : {}),
+    }));
+    const setup = await testRender(
+      <StationThemeProvider theme={nativeStationTheme}>
+        <box id={TEST_BOUNDARY_ID} width={24} height="100%">
+          <ContextMenuSurface
+            items={items}
+            activeItemId="pane.automation.action-13"
+            anchor={{ x: 20, y: 7 }}
+            preferredWidth={18}
+            boundaryId={TEST_BOUNDARY_ID}
+            dispatchMouse={() => true}
+          />
+        </box>
+      </StationThemeProvider>,
+      { width: 24, height: 8 },
+    );
+    await setup.flush();
+    try {
+      expect(setup.captureCharFrame()).toContain("▸Action 13");
+      expect(
+        setup.renderer.root.findDescendantById(
+          contextMenuItemRenderableId("pane.automation.action-0"),
+        ),
+      ).toBeDefined();
+      expect(
+        setup.renderer.root.findDescendantById(
+          contextMenuItemRenderableId("pane.automation.action-13"),
+        ),
+      ).toBeDefined();
+
+      setup.renderer.resize(24, 5);
+      await setup.flush();
+      await setup.renderOnce();
+      expect(setup.captureCharFrame()).toContain("▸Action 13");
+    } finally {
+      setup.renderer.destroy();
+    }
+  });
+
+  it("keeps clipped top and bottom borders inert for click and hover", async () => {
+    const items: readonly ContextMenuItem[] = Array.from({ length: 12 }, (_, index) => ({
+      id: `pane.automation.border-action-${index}`,
+      label: `Border action ${index}`,
+      action: { kind: "noop" as const },
+    }));
+    const calls: MouseTargetRef[] = [];
+    const setup = await testRender(
+      <StationThemeProvider theme={nativeStationTheme}>
+        <box id={TEST_BOUNDARY_ID} width={24} height="100%">
+          <ContextMenuSurface
+            items={items}
+            activeItemId="pane.automation.border-action-11"
+            anchor={{ x: 20, y: 7 }}
+            preferredWidth={18}
+            boundaryId={TEST_BOUNDARY_ID}
+            dispatchMouse={(target) => {
+              calls.push(target);
+              return true;
+            }}
+          />
+        </box>
+      </StationThemeProvider>,
+      { width: 24, height: 8 },
+    );
+    await setup.flush();
+    try {
+      const surface = setup.renderer.root.findDescendantById("station-context-menu-surface");
+      const scrollbox = setup.renderer.root.findDescendantById("station-context-menu-items");
+      if (surface === undefined || !(scrollbox instanceof ScrollBoxRenderable)) {
+        throw new Error("context menu geometry did not render");
+      }
+      const x = surface.screenX + 2;
+      const top = surface.screenY;
+      expect(rawSemanticItemAtPointer(setup, items, x, top)).toBeDefined();
+      await setup.mockMouse.moveTo(x, top);
+      await setup.mockMouse.click(x, top, MouseButtons.LEFT);
+      expect(calls).toEqual([]);
+
+      scrollbox.scrollTop = 0;
+      await setup.renderOnce();
+      const bottom = surface.screenY + surface.height - 1;
+      expect(rawSemanticItemAtPointer(setup, items, x, bottom)).toBeDefined();
+      await setup.mockMouse.moveTo(x, bottom);
+      await setup.mockMouse.click(x, bottom, MouseButtons.LEFT);
+      expect(calls).toEqual([]);
+    } finally {
+      setup.renderer.destroy();
+    }
+  });
 });
+
+function rawSemanticItemAtPointer(
+  setup: Awaited<ReturnType<typeof testRender>>,
+  items: readonly ContextMenuItem[],
+  x: number,
+  y: number,
+): ContextMenuItem | undefined {
+  return items.find((item) => {
+    const renderable = setup.renderer.root.findDescendantById(
+      contextMenuItemRenderableId(item.id),
+    );
+    return (
+      renderable !== undefined &&
+      x >= renderable.screenX &&
+      x < renderable.screenX + renderable.width &&
+      y >= renderable.screenY &&
+      y < renderable.screenY + renderable.height
+    );
+  });
+}
 
 async function renderSurface(
   dispatchMouse: (target: MouseTargetRef, event: StationMouseEvent) => boolean = () => true,
@@ -191,13 +372,16 @@ async function renderSurface(
 ) {
   const setup = await testRender(
     <StationThemeProvider theme={theme}>
-      <ContextMenuSurface
-        items={ITEMS}
-        activeIndex={2}
-        width={18}
-        height={5}
-        dispatchMouse={dispatchMouse}
-      />
+      <box id={TEST_BOUNDARY_ID} width={24} height="100%">
+        <ContextMenuSurface
+          items={ITEMS}
+          activeItemId="pane.close"
+          anchor={{ x: 0, y: -1 }}
+          preferredWidth={18}
+          boundaryId={TEST_BOUNDARY_ID}
+          dispatchMouse={dispatchMouse}
+        />
+      </box>
     </StationThemeProvider>,
     { width: 24, height: 8 },
   );

@@ -816,6 +816,12 @@ describe("observer protocol server", () => {
     await expect(client.getCommand(groupReceipt.commandId)).resolves.toMatchObject({
       id: "cmd_2",
       status: "succeeded",
+      result: {
+        type: "sessionGroup.create",
+        projectId: "web",
+        groupId: expect.stringMatching(/^grp_/),
+        version: 1,
+      },
     });
     await expect(client.getSnapshot()).resolves.toMatchObject({
       sessionGroups: [

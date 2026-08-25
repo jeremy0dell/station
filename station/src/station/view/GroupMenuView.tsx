@@ -1,31 +1,38 @@
 import {
   GROUP_MENU_ITEMS,
-  type DashboardSnapshotView,
   type GroupMenuScreenView,
 } from "@station/dashboard-core/state";
 import {
   DashboardMenuView,
   type DashboardMenuItemView,
   type DashboardMenuModel,
-  type DashboardMenuViewport,
 } from "./DashboardMenuView.js";
 
 export type GroupMenuViewProps = {
-  snapshot: DashboardSnapshotView;
   screen: GroupMenuScreenView;
-  viewport: DashboardMenuViewport;
+  groupName: string;
+  boundaryId: string;
+  anchorRenderableId: string;
 };
 
-export function GroupMenuView({ snapshot, screen, viewport }: GroupMenuViewProps) {
-  const group = snapshot.sessionGroups.find((candidate) => candidate.id === screen.groupId);
-  if (group === undefined || group.projectId !== screen.projectId) return null;
-
+export function GroupMenuView({
+  screen,
+  groupName,
+  boundaryId,
+  anchorRenderableId,
+}: GroupMenuViewProps) {
   const menu: DashboardMenuModel = {
     items: groupMenuItems(screen),
-    width: 28,
-    title: group.name,
+    preferredWidth: 28,
+    title: groupName,
   };
-  return <DashboardMenuView menu={menu} viewport={viewport} />;
+  return (
+    <DashboardMenuView
+      menu={menu}
+      boundaryId={boundaryId}
+      anchorRenderableId={anchorRenderableId}
+    />
+  );
 }
 
 function groupMenuItems(screen: GroupMenuScreenView): readonly DashboardMenuItemView[] {

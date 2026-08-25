@@ -17,6 +17,7 @@ import {
   StationHoverProvider,
   StationMouseProvider,
 } from "../stationMouseContext.js";
+import { semanticItemRenderableId } from "../layout/scrollViewport.js";
 import { GroupSettingsPanelView } from "./GroupSettingsPanelView.js";
 
 type GroupSettingsScreen = Extract<DashboardScreenView, { name: "groupSettings" }>;
@@ -60,6 +61,8 @@ async function render(
     size,
   );
   teardowns.push(() => setup.renderer.destroy());
+  await setup.renderOnce();
+  await setup.flush();
   await setup.renderOnce();
   return { setup, targets };
 }
@@ -113,13 +116,39 @@ describe("GroupSettingsPanelView", () => {
     expect(line).toContain("ungroup on Save");
   });
 
+  it("renders every semantic session and follows a clipped cursor in a short panel", async () => {
+    const state = settingsState("sessions");
+    const projectSessions = state.snapshot.sessions.filter(
+      (session) => session.projectId === state.screen.projectId,
+    );
+    const first = projectSessions[0];
+    const last = projectSessions.at(-1);
+    if (first === undefined || last === undefined) throw new Error("expected Project sessions");
+    const screen: GroupSettingsScreen = {
+      ...state.screen,
+      detailFocus: "sessionList",
+      sessionCursor: last.id,
+    };
+    const { setup } = await render(state.snapshot, screen, { width: 80, height: 8 });
+
+    expect(setup.captureCharFrame()).toContain(last.title);
+    expect(setup.captureCharFrame()).toContain("↑↓ focus");
+    expect(
+      setup.renderer.root.findDescendantById(semanticItemRenderableId(first.id)),
+    ).toBeDefined();
+    expect(
+      setup.renderer.root.findDescendantById(semanticItemRenderableId(last.id)),
+    ).toBeDefined();
+  });
+
   it("keeps destructive copy and actions visible in a short minimum-width frame", async () => {
     const state = settingsState("remove");
     const { setup } = await render(state.snapshot, state.screen, { width: 40, height: 12 });
     const frame = setup.captureCharFrame();
 
     expect(frame).toContain("Remove Group");
-    expect(frame).toContain("remain open");
+    expect(frame).toContain("Sessions stay open; become ungrouped.");
+    expect(frame).toContain("Confirm: delete Design refresh");
     expect(frame).toContain("Remove");
     expect(frame).toContain("Back");
   });

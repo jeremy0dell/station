@@ -5,6 +5,7 @@ import type {
   ProviderId,
   ProviderProjectConfig,
   SafeError,
+  SessionGroupRepairSummary,
   StationSnapshot,
   TerminalTargetObservation,
   WorktreeObservation,
@@ -30,6 +31,7 @@ import {
   readCurrentReconcileObservations,
 } from "./run/currentObservations.js";
 import { type ReconcileSnapshotInputs, readReconcileSnapshotInputs } from "./run/snapshotInputs.js";
+import { decideSessionGroupRepairAuthority } from "./sessionGroupRepairAuthority.js";
 import { reconcileSessionGroups } from "./sessionGroups.js";
 import { harnessesFromRegistry } from "./snapshotSeed.js";
 
@@ -62,9 +64,10 @@ type ReconcileOnceResult = {
 /**
  * USE CASE
  *
- * Orchestrates provider reads, relationship correlation, durable harness-event repair and overlays,
- * cached metadata hydration, Group projection, snapshot assembly, and atomic session persistence.
- * The same resolved title records feed snapshot composition and atomic reconcile persistence.
+ * Orchestrates provider reads and their completeness evidence, relationship correlation, durable
+ * harness-event repair and overlays, cached metadata hydration, authority-scoped Group repair and
+ * projection, snapshot assembly, and atomic session persistence. The same resolved title records
+ * feed snapshot composition and atomic reconcile persistence.
  */
 export async function runReconcileOnce(input: ReconcileOnceInput): Promise<ReconcileOnceResult> {
   const started = toIsoTimestamp(input.read.clock.now());
@@ -94,6 +97,10 @@ export async function runReconcileOnce(input: ReconcileOnceInput): Promise<Recon
     errors,
   });
   const finishedAt = observations.observedAt;
+  const sessionGroupRepair = decideSessionGroupRepairAuthority({
+    projectIds: input.projects.map((project) => project.id),
+    providerReadOutcomes: observations.providerReadOutcomes,
+  });
 
   // Snapshot records are loaded after current identities so title evidence is reattached correctly.
   const snapshotInputs = await readReconcileSnapshotInputs({
@@ -116,6 +123,9 @@ export async function runReconcileOnce(input: ReconcileOnceInput): Promise<Recon
     eventsEmitted: 0,
     errors,
   };
+  if (input.persistence !== undefined) {
+    lastReconcile.sessionGroupRepair = sessionGroupRepair;
+  }
 
   // Graph assembly and atomic persistence consume the same correlated records.
   const snapshot = await buildReconcileSnapshot({
@@ -129,6 +139,7 @@ export async function runReconcileOnce(input: ReconcileOnceInput): Promise<Recon
     terminalTargets: observations.terminalTargets,
     harnessRuns: observations.harnessRuns,
     snapshotInputs,
+    sessionGroupRepair,
     ...(input.featureFlags === undefined ? {} : { featureFlags: input.featureFlags }),
     ...(input.persistence === undefined ? {} : { persistence: input.persistence }),
     generatedAt: finishedAt,
@@ -146,7 +157,7 @@ export async function runReconcileOnce(input: ReconcileOnceInput): Promise<Recon
     providerObservationRetentionDays: retentionDays,
   });
 
-  await input.read.logger?.info("Reconcile finished.", {
+  const finishedLogAttributes: Record<string, unknown> = {
     reason: input.reason,
     durationMs: lastReconcile.durationMs,
     projectsScanned: observations.projectsScanned,
@@ -154,7 +165,11 @@ export async function runReconcileOnce(input: ReconcileOnceInput): Promise<Recon
     terminalTargetsObserved: observations.terminalTargetsRead,
     harnessRunsObserved: observations.harnessRuns.length,
     errorCount: errors.length,
-  });
+  };
+  if (input.persistence !== undefined) {
+    finishedLogAttributes.sessionGroupRepair = sessionGroupRepair;
+  }
+  await input.read.logger?.info("Reconcile finished.", finishedLogAttributes);
 
   return {
     snapshot,
@@ -164,7 +179,8 @@ export async function runReconcileOnce(input: ReconcileOnceInput): Promise<Recon
 }
 
 /**
- * Builds the graph and applies durable Group repair from the same correlated records used for persistence.
+ * Builds the provider-truthful graph and applies durable Group repair with the explicit absence
+ * authority derived from the same provider-read completeness evidence.
  */
 async function buildReconcileSnapshot(input: {
   generatedAt: string;
@@ -178,6 +194,7 @@ async function buildReconcileSnapshot(input: {
   terminalTargets: TerminalTargetObservation[];
   harnessRuns: HarnessRunObservation[];
   snapshotInputs: ReconcileSnapshotInputs;
+  sessionGroupRepair: SessionGroupRepairSummary;
   featureFlags?: ClientFeatureFlags;
   persistence?: SessionGroupStore;
   errors: SafeError[];
@@ -203,6 +220,7 @@ async function buildReconcileSnapshot(input: {
     ...(input.persistence === undefined ? {} : { store: input.persistence }),
     projects: input.projects,
     sessions: baseSnapshot.sessions,
+    absenceAuthorityProjectIds: input.sessionGroupRepair.absenceAuthorityProjectIds,
     updatedAt: input.generatedAt,
   });
   input.errors.push(...groupProjection.errors);

@@ -6,7 +6,6 @@ import {
   DashboardMenuView,
   type DashboardMenuItemView,
   type DashboardMenuModel,
-  type DashboardMenuViewport,
 } from "./DashboardMenuView.js";
 
 const PROJECT_MENU_ITEMS: readonly {
@@ -24,15 +23,22 @@ type ProjectMenuScreen = Extract<DashboardScreenView, { name: "projectMenu" }>;
 
 export type ProjectMenuViewProps = {
   screen: ProjectMenuScreen;
-  viewport: DashboardMenuViewport;
+  boundaryId: string;
+  anchorRenderableId: string;
 };
 
-export function ProjectMenuView({ screen, viewport }: ProjectMenuViewProps) {
+export function ProjectMenuView({ screen, boundaryId, anchorRenderableId }: ProjectMenuViewProps) {
   const menu: DashboardMenuModel = {
     items: projectMenuItems(screen),
-    width: 24,
+    preferredWidth: 24,
   };
-  return <DashboardMenuView menu={menu} viewport={viewport} />;
+  return (
+    <DashboardMenuView
+      menu={menu}
+      boundaryId={boundaryId}
+      anchorRenderableId={anchorRenderableId}
+    />
+  );
 }
 
 function projectMenuItems(screen: ProjectMenuScreen): readonly DashboardMenuItemView[] {

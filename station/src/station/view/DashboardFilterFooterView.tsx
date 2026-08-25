@@ -23,6 +23,7 @@ export function DashboardFilterFooterView({
   return (
     <box
       height={1}
+      flexShrink={0}
       width="100%"
       flexDirection="row"
       {...footerBackground(theme, variant)}

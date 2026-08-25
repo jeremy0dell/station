@@ -215,6 +215,7 @@ describe("CLI tui command", () => {
           stateDir: join(fixture.root, ".local/state/station"),
           socketPath: join(fixture.root, ".local/state/station/run/observer.sock"),
         }),
+        startupTimeoutMs: expect.any(Number),
       },
     ]);
     expect(envs).toEqual([

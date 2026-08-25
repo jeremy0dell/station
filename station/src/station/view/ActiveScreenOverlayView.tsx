@@ -3,17 +3,13 @@
 import { tuiScreenBehavior } from "@station/dashboard-core/state";
 import type { DashboardScreenView, DashboardSnapshotView, DashboardStateView } from "@station/dashboard-core/state";
 import type { ReactNode } from "react";
-import { toOpenTuiColor, useStationTheme } from "../../theme/index.js";
 import { AddProjectSheetView } from "./sheets/AddProjectSheetView.js";
-import { DashboardFilterConditionView } from "./DashboardFilterConditionView.js";
 import { HelpOverlayView } from "./HelpOverlayView.js";
 import { NewSessionSheetView } from "./sheets/NewSessionSheetView.js";
 import { ProjectChoiceSheetView } from "./sheets/ProjectChoiceSheetView.js";
 import { ProjectDefaultAgentSheetView } from "./sheets/ProjectDefaultAgentSheetView.js";
 import { GroupSettingsPanelView } from "./settings/GroupSettingsPanelView.js";
 import { ProjectSettingsPanelView } from "./settings/ProjectSettingsPanelView.js";
-import { GroupMenuView } from "./GroupMenuView.js";
-import { ProjectMenuView } from "./ProjectMenuView.js";
 import { WidgetSettingsPanelView } from "./settings/WidgetSettingsPanelView.js";
 import { RenameSessionSheetView } from "./sheets/RenameSessionSheetView.js";
 import { RemoveSessionSheetView } from "./sheets/RemoveSessionSheetView.js";
@@ -34,46 +30,30 @@ export type ActiveScreenOverlayViewProps = {
   widgets?: DashboardStateView["widgets"];
   /** False when widget edits cannot be written back to config.toml. */
   widgetsPersisted?: boolean;
-  /** Absolute row containing the visible dashboard header that owns an open menu. */
-  menuAnchorTop?: number;
 };
 
 export function ActiveScreenOverlayView(props: ActiveScreenOverlayViewProps) {
   const { screen, columns, rows } = props;
-  const theme = useStationTheme();
   const dispatch = useStationMouse();
   const behavior = tuiScreenBehavior(screen);
   const conditionPanelActive =
     screen.name === "persistentFilter" && screen.conditionEditor !== undefined;
+  const dashboardMenuActive = screen.name === "projectMenu" || screen.name === "groupMenu";
+  const dashboardOwnedOverlay = conditionPanelActive || dashboardMenuActive;
   const overlay = renderActiveScreenOverlay(props);
 
   return (
     <>
-      {behavior.clickAway !== undefined ? (
-        <>
-          <box
-            position="absolute"
-            left={0}
-            top={0}
-            width={columns}
-            height={rows}
-            zIndex={9}
-            {...stationMouseProps(dispatch, { kind: "screenBackdrop" })}
-          />
-          {/* Keep the modal help visible while the transparent full-screen layer still blocks it. */}
-          {conditionPanelActive && rows > 1 ? (
-            <box
-              position="absolute"
-              left={0}
-              top={0}
-              width={columns}
-              height={rows - 1}
-              zIndex={9}
-              backgroundColor={toOpenTuiColor(theme.filter.conditionBackdrop)}
-              {...stationMouseProps(dispatch, { kind: "screenBackdrop" })}
-            />
-          ) : null}
-        </>
+      {behavior.clickAway !== undefined && !dashboardOwnedOverlay ? (
+        <box
+          position="absolute"
+          left={0}
+          top={0}
+          width={columns}
+          height={rows}
+          zIndex={9}
+          {...stationMouseProps(dispatch, { kind: "screenBackdrop" })}
+        />
       ) : null}
       {overlay}
     </>
@@ -89,30 +69,24 @@ function renderActiveScreenOverlay({
   localRows,
   widgets = [],
   widgetsPersisted = true,
-  menuAnchorTop = 0,
 }: ActiveScreenOverlayViewProps): ReactNode {
-  const menuViewport = { columns, rows, anchorTop: menuAnchorTop };
   switch (screen.name) {
     case "dashboard":
       return null;
     case "persistentFilter": {
-      if (screen.conditionEditor === undefined) return null;
-      const top = snapshot.projects.length === 0 ? 3 : 4;
-      return (
-        <DashboardFilterConditionView
-          screen={screen}
-          columns={columns}
-          availableRows={Math.max(4, rows - top - 1)}
-          top={top}
-        />
-      );
+      return null;
     }
     case "help":
-      return <HelpOverlayView columns={columns} rows={rows} />;
+      return (
+        <HelpOverlayView
+          columns={columns}
+          rows={rows}
+          focusedEntryId={screen.focusedEntryId}
+        />
+      );
     case "projectMenu":
-      return <ProjectMenuView screen={screen} viewport={menuViewport} />;
     case "groupMenu":
-      return <GroupMenuView snapshot={snapshot} screen={screen} viewport={menuViewport} />;
+      return null;
     case "createGroup":
       return <CreateGroupSheetView screen={screen} columns={columns} rows={rows} />;
     case "moveToGroup":

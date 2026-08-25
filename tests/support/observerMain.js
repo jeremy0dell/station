@@ -40,6 +40,13 @@ server = await startProtocolServer({
       socketPath: options.socketPath,
       stateDir: options.stateDir,
     }),
+    getSessionRecoveryAssessment: async () => ({
+      schemaVersion: 1,
+      inventory: { schemaVersion: 1, sessions: [], recoveryHandles: [] },
+      resumeEnabled: true,
+      providerCapabilities: [],
+      sessions: [],
+    }),
     stop,
   },
 });

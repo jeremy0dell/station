@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { selectDashboardSlots } from "../../../src/selectors/dashboardSlots.js";
 import { dashboardRowIds } from "../../../src/selectors/dashboardTree.js";
-import { selectDashboardViewport } from "../../../src/selectors/dashboardViewport.js";
 import { deriveTuiInputMode } from "../../../src/state/keymap.js";
 import type { TuiKey } from "../../../src/state/keys.js";
 import { createInitialTuiState, replaceSnapshot } from "../../../src/state/screen.js";
@@ -79,6 +79,29 @@ describe("TUI screen transitions", () => {
     expect(dismissedError.state.toasts).toEqual([]);
   });
 
+  it("moves Help focus by stable identity and supports semantic endpoints", () => {
+    const base = createInitialTuiState({ initialSnapshot: createDashboardSnapshot() });
+    const context = {
+      cwd: "/workspace",
+      homeDir: "/home/example",
+      helpEntries: {
+        entryIds: () => ["help:first", "help:middle", "help:last"],
+      },
+    };
+    const opened = handleTuiKey(base, { input: "H" }, context).state;
+
+    const first = handleTuiKey(opened, { input: "", downArrow: true }, context).state;
+    expect(first.screen).toEqual({ name: "help", focusedEntryId: "help:first" });
+    const middle = handleTuiKey(first, { input: "", downArrow: true }, context).state;
+    expect(middle.screen).toEqual({ name: "help", focusedEntryId: "help:middle" });
+    const previous = handleTuiKey(middle, { input: "", upArrow: true }, context).state;
+    expect(previous.screen).toEqual({ name: "help", focusedEntryId: "help:first" });
+    const last = handleTuiKey(previous, { input: "", pageDown: true }, context).state;
+    expect(last.screen).toEqual({ name: "help", focusedEntryId: "help:last" });
+    const firstAgain = handleTuiKey(last, { input: "", pageUp: true }, context).state;
+    expect(firstAgain.screen).toEqual({ name: "help", focusedEntryId: "help:first" });
+  });
+
   it("opens remove session slot selection from the dashboard", () => {
     const state = createInitialTuiState({ initialSnapshot: createDashboardSnapshot() });
     const transition = handleTuiKey(state, { input: "X" });
@@ -153,33 +176,11 @@ describe("TUI screen transitions", () => {
     expect(committed.screen).toEqual({ name: "removeWorktree", step: "chooseSlot" });
   });
 
-  it("scrolls dashboard rows with mouse wheel events", () => {
-    const state = createInitialTuiState({
-      initialSnapshot: createDashboardSnapshot(),
-      terminalRows: 10,
-    });
+  it("leaves mouse-wheel geometry to the renderer", () => {
+    const state = createInitialTuiState({ initialSnapshot: createDashboardSnapshot() });
 
-    const wheelDown = handleTuiKey(state, { input: "", mouseScroll: "down" });
-    const wheelDownAgain = handleTuiKey(wheelDown.state, { input: "", mouseScroll: "down" });
-    const wheelUp = handleTuiKey(wheelDownAgain.state, { input: "", mouseScroll: "up" });
-
-    expect(wheelDown.state.scrollOffset).toBe(1);
-    expect(wheelDownAgain.state.scrollOffset).toBe(2);
-    expect(wheelUp.state.scrollOffset).toBe(1);
-  });
-
-  it("clamps dashboard scrolling at the top and bottom", () => {
-    const state = createInitialTuiState({
-      initialSnapshot: createDashboardSnapshot(),
-      scrollOffset: 8,
-      terminalRows: 10,
-    });
-
-    expect(handleTuiKey(state, { input: "", mouseScroll: "down" }).state.scrollOffset).toBe(7);
-    expect(
-      handleTuiKey({ ...state, scrollOffset: 0 }, { input: "", mouseScroll: "up" }).state
-        .scrollOffset,
-    ).toBe(0);
+    expect(handleTuiKey(state, { input: "", mouseScroll: "down" }).state).toBe(state);
+    expect(handleTuiKey(state, { input: "", mouseScroll: "up" }).state).toBe(state);
   });
 
   it("confirms a fresh start for a retained no-agent dashboard slot", () => {
@@ -358,7 +359,7 @@ describe("TUI screen transitions", () => {
       ],
     };
     const state = createInitialTuiState({ initialSnapshot: snapshot });
-    const choice = selectDashboardViewport(snapshot, state).rowChoices.find(
+    const choice = selectDashboardSlots(snapshot, state).rowChoices.find(
       (candidate) => candidate.value.id === externalSession.id,
     );
     if (choice === undefined) throw new Error("external session must be selectable");
@@ -611,22 +612,15 @@ describe("TUI screen transitions", () => {
     });
   });
 
-  it("remaps remove slot choices to the visible viewport after scrolling", () => {
-    const scrolled = handleTuiKey(
-      handleTuiKey(
-        handleTuiKey(
-          createInitialTuiState({
-            initialSnapshot: createDashboardSnapshot(),
-            terminalRows: 10,
-          }),
-          { input: "", mouseScroll: "down" },
-        ).state,
-        { input: "", mouseScroll: "down" },
-      ).state,
+  it("maps remove slots to renderer-visible semantic identities", () => {
+    const context = visibleRows(dashboardRowIds.session("ses_wt_web_attention"));
+    const choosing = handleTuiKey(
+      createInitialTuiState({ initialSnapshot: createDashboardSnapshot() }),
       { input: "X" },
+      context,
     );
 
-    const transition = handleTuiKey(scrolled.state, { input: "1" });
+    const transition = handleTuiKey(choosing.state, { input: "1" }, context);
 
     expect(transition.state.screen).toMatchObject({
       name: "removeWorktree",
@@ -635,22 +629,15 @@ describe("TUI screen transitions", () => {
     });
   });
 
-  it("remaps rename slot choices to the visible viewport after scrolling", () => {
-    const scrolled = handleTuiKey(
-      handleTuiKey(
-        handleTuiKey(
-          createInitialTuiState({
-            initialSnapshot: createDashboardSnapshot(),
-            terminalRows: 10,
-          }),
-          { input: "", mouseScroll: "down" },
-        ).state,
-        { input: "", mouseScroll: "down" },
-      ).state,
+  it("maps rename slots to renderer-visible semantic identities", () => {
+    const context = visibleRows(dashboardRowIds.session("ses_wt_web_attention"));
+    const choosing = handleTuiKey(
+      createInitialTuiState({ initialSnapshot: createDashboardSnapshot() }),
       { input: "R" },
+      context,
     );
 
-    const transition = handleTuiKey(scrolled.state, { input: "1" });
+    const transition = handleTuiKey(choosing.state, { input: "1" }, context);
 
     expect(transition.state.screen).toMatchObject({
       name: "renameSession",
@@ -662,19 +649,16 @@ describe("TUI screen transitions", () => {
     });
   });
 
-  it("keeps scrolling while choosing a rename slot", () => {
+  it("keeps chooser state unchanged for renderer-owned wheel input", () => {
     const opened = handleTuiKey(
-      createInitialTuiState({
-        initialSnapshot: createDashboardSnapshot(),
-        terminalRows: 10,
-      }),
+      createInitialTuiState({ initialSnapshot: createDashboardSnapshot() }),
       { input: "R" },
     );
 
     const transition = handleTuiKey(opened.state, { input: "", mouseScroll: "down" });
 
     expect(transition.state.screen).toEqual({ name: "renameSession", step: "chooseSlot" });
-    expect(transition.state.scrollOffset).toBe(1);
+    expect(transition.state).toBe(opened.state);
   });
 
   it("does not offer a rename slot for a bare worktree", () => {
@@ -1305,20 +1289,15 @@ describe("TUI screen transitions", () => {
     });
   });
 
-  it("clamps dashboard scroll across durable filter containers", () => {
+  it("applies a durable filter without renderer geometry in semantic state", () => {
     const opened = handleTuiKey(
-      createInitialTuiState({
-        initialSnapshot: createDashboardSnapshot(),
-        scrollOffset: 4,
-        terminalRows: 10,
-      }),
+      createInitialTuiState({ initialSnapshot: createDashboardSnapshot() }),
       { input: "/" },
     );
     const typed = handleTuiKey(opened.state, { input: "nav" });
     const transition = handleTuiKey(typed.state, { input: "\r", return: true });
 
     expect(transition.state.persistentFilter).toEqual({ query: "nav" });
-    expect(transition.state.scrollOffset).toBe(1);
   });
 
   it("preserves Group collapse and ordering while applying and clearing a filter", () => {
@@ -1338,18 +1317,21 @@ describe("TUI screen transitions", () => {
     expect(cleared.groupOrderingMode).toBe("alphabetical-interleaved");
   });
 
-  it("clamps dashboard scroll after collapsing a project", () => {
+  it("collapses a project without coupling semantic state to renderer geometry", () => {
     const opened = handleTuiKey(
-      createInitialTuiState({
-        initialSnapshot: createDashboardSnapshot(),
-        scrollOffset: 8,
-        terminalRows: 10,
-      }),
+      createInitialTuiState({ initialSnapshot: createDashboardSnapshot() }),
       { input: "C" },
     );
     const transition = handleTuiKey(opened.state, { input: "1" });
 
     expect(transition.state.collapsedProjectIds.has("web")).toBe(true);
-    expect(transition.state.scrollOffset).toBe(1);
   });
 });
+
+function visibleRows(...rowIds: string[]) {
+  return {
+    cwd: "/workspace",
+    homeDir: "/home/example",
+    visibleDashboardRows: { visibleRowIds: () => rowIds },
+  };
+}

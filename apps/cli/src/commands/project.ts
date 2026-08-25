@@ -1,8 +1,15 @@
 import { doctorProject, loadConfig, type ProjectConfig, type StationConfig } from "@station/config";
-import type { CommandReceipt, CommandRecord, StationCommand } from "@station/contracts";
+import type {
+  AcceptedCommandReceipt,
+  FailedCommandRecord,
+  RejectedCommandReceipt,
+  SafeError,
+  StationCommand,
+  SucceededCommandRecord,
+} from "@station/contracts";
 import { parsePositiveIntegerOption, parseRequiredOptionValue } from "../args.js";
 import type { ObserverProcessDeps } from "../observerProcess.js";
-import { runCommandCommand } from "./command.js";
+import { executeTypedObserverCommand, type TypedObserverCommandOptions } from "./command.js";
 
 export type ProjectCommandOptions = {
   config?: StationConfig;
@@ -16,6 +23,8 @@ export type ProjectSummary = {
   root: string;
 };
 
+type ProjectMutationCommand = Extract<StationCommand, { type: "project.add" | "project.remove" }>;
+
 export type ProjectCommandResult =
   | {
       action: "list";
@@ -23,9 +32,22 @@ export type ProjectCommandResult =
     }
   | {
       action: "add" | "remove";
-      status: "succeeded" | "failed";
-      receipt: CommandReceipt;
-      command: CommandRecord;
+      status: "succeeded";
+      receipt: AcceptedCommandReceipt;
+      command: SucceededCommandRecord<ProjectMutationCommand>;
+      projects: ProjectSummary[];
+    }
+  | {
+      action: "add" | "remove";
+      status: "failed";
+      receipt: AcceptedCommandReceipt;
+      command: FailedCommandRecord<ProjectMutationCommand>;
+      projects: ProjectSummary[];
+    }
+  | {
+      action: "add" | "remove";
+      status: "rejected";
+      receipt: RejectedCommandReceipt;
       projects: ProjectSummary[];
     }
   | {
@@ -59,6 +81,11 @@ type ParsedProjectArgs =
       projectId: string;
     };
 
+/**
+ * ADAPTER
+ *
+ * Translates project CLI intent into configuration reads or typed Observer project commands.
+ */
 export async function runProjectCommand(
   args: string[],
   options: ProjectCommandOptions = {},
@@ -87,35 +114,73 @@ export async function runProjectCommand(
 
   const command = commandForParsedArgs(parsed);
   const timeoutMs = parsed.timeoutMs ?? options.timeoutMs ?? 30_000;
-  const dispatched = await runCommandCommand(
-    ["dispatch", "--stdin", "--wait", "--timeout-ms", String(timeoutMs)],
-    { ...options, stdin: JSON.stringify(command), timeoutMs },
-    deps,
-  );
-  if (!("receipt" in dispatched) || !("command" in dispatched)) {
-    throw new Error("Project command dispatch did not return a completed command record.");
-  }
+  const executionOptions = projectExecutionOptions(options, timeoutMs);
+  const outcome = await executeTypedObserverCommand(command, executionOptions, deps);
+  if (outcome.status === "accepted") throw missingProjectCompletionError(outcome.receipt.commandId);
   const loaded =
     options.configPath === undefined
       ? await loadConfig()
       : await loadConfig({ configPath: options.configPath });
+  const projects = summarizeProjects(loaded.projects);
+  if (outcome.status === "rejected") {
+    return {
+      action: parsed.action,
+      status: "rejected",
+      receipt: outcome.receipt,
+      projects,
+    };
+  }
+  if (outcome.status === "succeeded") {
+    return {
+      action: parsed.action,
+      status: "succeeded",
+      receipt: outcome.receipt,
+      command: outcome.record,
+      projects,
+    };
+  }
   return {
     action: parsed.action,
-    status: dispatched.status,
-    receipt: dispatched.receipt,
-    command: dispatched.command,
-    projects: summarizeProjects(loaded.projects),
+    status: "failed",
+    receipt: outcome.receipt,
+    command: outcome.record,
+    projects,
   };
 }
 
 export function projectCommandExitCode(result: ProjectCommandResult): number {
-  if ((result.action === "add" || result.action === "remove") && result.status === "failed") {
+  if (
+    (result.action === "add" || result.action === "remove") &&
+    (result.status === "rejected" || result.status === "failed")
+  ) {
     return 1;
   }
   if (result.action === "doctor" && result.status === "warn") {
     return 1;
   }
   return 0;
+}
+
+function projectExecutionOptions(
+  options: ProjectCommandOptions,
+  timeoutMs: number,
+): TypedObserverCommandOptions {
+  const executionOptions: TypedObserverCommandOptions = {
+    timeoutMs,
+    waitForCompletion: true,
+  };
+  if (options.config !== undefined) executionOptions.config = options.config;
+  if (options.configPath !== undefined) executionOptions.configPath = options.configPath;
+  return executionOptions;
+}
+
+function missingProjectCompletionError(commandId: string): SafeError {
+  return {
+    tag: "ProjectCliError",
+    code: "PROJECT_COMMAND_COMPLETION_MISSING",
+    message: "The project command returned before its durable completion was available.",
+    commandId,
+  };
 }
 
 function parseProjectArgs(args: string[]): ParsedProjectArgs {
@@ -214,7 +279,7 @@ function parseDoctorArgs(args: string[]): Extract<ParsedProjectArgs, { action: "
 
 function commandForParsedArgs(
   parsed: Extract<ParsedProjectArgs, { action: "add" | "remove" }>,
-): StationCommand {
+): ProjectMutationCommand {
   if (parsed.action === "remove") {
     return {
       type: "project.remove",

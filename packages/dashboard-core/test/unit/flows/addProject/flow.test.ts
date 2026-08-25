@@ -13,11 +13,17 @@ describe("add project flow", () => {
 
     expect(started.choices).toEqual([
       {
+        id: "addProjectStart:currentDirectory",
         label: "current directory",
         path: "/Users/example/Developer/station",
         detail: "/Users/example/Developer/station",
       },
-      { label: "~", path: "/Users/example", detail: "home" },
+      {
+        id: "addProjectStart:homeDirectory",
+        label: "~",
+        path: "/Users/example",
+        detail: "home",
+      },
     ]);
   });
 

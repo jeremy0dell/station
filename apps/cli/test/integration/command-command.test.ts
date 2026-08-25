@@ -1,13 +1,18 @@
 import { runCli } from "@station/cli";
-import { runCommandCommand } from "@station/cli/internal";
+import { executeTypedObserverCommand, runCommandCommand } from "@station/cli/internal";
 import type { CommandReceipt, CommandRecord, StationCommand } from "@station/contracts";
+import { StationCommandSchema } from "@station/contracts";
 import type { TerminalCommandRecord } from "@station/protocol";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createTempState, writeConfigToml } from "../../../../tests/support/temp-projects";
 
 const now = "2026-05-22T12:00:00.000Z";
 const incumbentBuildVersion = `1.2.3+station.${"a".repeat(64)}`;
 const replacementBuildVersion = `1.2.3+station.${"b".repeat(64)}`;
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe("CLI command dispatch/get", () => {
   it("dispatches typed command JSON from stdin through the observer protocol", async () => {
@@ -15,6 +20,7 @@ describe("CLI command dispatch/get", () => {
     const configPath = await writeConfigToml(fixture.root, fixture.config);
     const command = reconcileCommand("cli-command-dispatch");
     const dispatched: StationCommand[] = [];
+    const parseCommand = vi.spyOn(StationCommandSchema, "safeParse");
 
     const result = await runCli(["--config", configPath, "command", "dispatch", "--stdin"], {
       stdin: JSON.stringify(command),
@@ -27,6 +33,10 @@ describe("CLI command dispatch/get", () => {
       }),
     });
 
+    expect(parseCommand).toHaveBeenCalledTimes(1);
+    const parsed = parseCommand.mock.results[0]?.value;
+    expect(parsed?.success).toBe(true);
+    if (parsed?.success !== true) throw new Error("Expected command input to parse.");
     expect(result).toEqual({
       code: 0,
       output: {
@@ -35,6 +45,60 @@ describe("CLI command dispatch/get", () => {
       },
     });
     expect(dispatched).toEqual([command]);
+    expect(dispatched[0]).toBe(parsed.data);
+  });
+
+  it("dispatches an already-typed command without re-entering command parsing", async () => {
+    const fixture = await createTempState();
+    const command = reconcileCommand("typed-command-dispatch");
+    const dispatched: StationCommand[] = [];
+    const parseCommand = vi.spyOn(StationCommandSchema, "safeParse");
+
+    const outcome = await executeTypedObserverCommand(
+      command,
+      { config: fixture.config, timeoutMs: 1000 },
+      runningObserverDeps({
+        socketPath: fixture.socketPath,
+        dispatch: async (input) => {
+          dispatched.push(input);
+          return receipt("cmd_typed");
+        },
+      }),
+    );
+
+    expect(outcome).toEqual({ status: "accepted", receipt: receipt("cmd_typed") });
+    expect(parseCommand).not.toHaveBeenCalled();
+    expect(dispatched).toEqual([command]);
+    expect(dispatched[0]).toBe(command);
+  });
+
+  it("preserves a rejected receipt and returns a nonzero raw CLI outcome", async () => {
+    const fixture = await createTempState();
+    const configPath = await writeConfigToml(fixture.root, fixture.config);
+    const command = reconcileCommand("cli-command-rejected");
+    const rejected = rejectedReceipt("cmd_rejected");
+
+    const result = await runCli(
+      ["--config", configPath, "command", "dispatch", "--stdin", "--wait"],
+      {
+        stdin: JSON.stringify(command),
+        observerDeps: runningObserverDeps({
+          socketPath: fixture.socketPath,
+          dispatch: async () => rejected,
+          waitForCommand: async () => {
+            throw new Error("rejected commands must not wait for completion");
+          },
+        }),
+      },
+    );
+
+    expect(result).toEqual({
+      code: 1,
+      output: {
+        status: "rejected",
+        receipt: rejected,
+      },
+    });
   });
 
   it("dispatches Cursor session.create JSON from stdin without rewriting the payload", async () => {
@@ -66,28 +130,63 @@ describe("CLI command dispatch/get", () => {
 
   it("waits for the final command record when --wait is provided", async () => {
     const fixture = await createTempState();
-    const command = reconcileCommand("cli-command-wait");
+    const command: StationCommand = {
+      type: "worktree.create",
+      payload: { projectId: "web", branch: "cli-result" },
+    };
+    const completed = resultCommandRecord("cmd_wait", command);
     const result = await runCommandCommand(
       ["dispatch", "--stdin", "--wait", "--timeout-ms", "1000"],
       { config: fixture.config, stdin: JSON.stringify(command) },
       runningObserverDeps({
         socketPath: fixture.socketPath,
         dispatch: async () => receipt("cmd_wait"),
-        waitForCommand: async () =>
-          commandRecord("cmd_wait", command, "succeeded") as TerminalCommandRecord,
+        waitForCommand: async () => completed as TerminalCommandRecord,
       }),
     );
 
     expect(result).toEqual({
       status: "succeeded",
       receipt: receipt("cmd_wait"),
-      command: commandRecord("cmd_wait", command, "succeeded"),
+      command: completed,
+    });
+  });
+
+  it("preserves a failed terminal record and returns a nonzero raw CLI outcome", async () => {
+    const fixture = await createTempState();
+    const configPath = await writeConfigToml(fixture.root, fixture.config);
+    const command = reconcileCommand("cli-command-failed");
+    const failed = commandRecord("cmd_failed", command, "failed");
+
+    const result = await runCli(
+      ["--config", configPath, "command", "dispatch", "--stdin", "--wait"],
+      {
+        stdin: JSON.stringify(command),
+        observerDeps: runningObserverDeps({
+          socketPath: fixture.socketPath,
+          dispatch: async () => receipt("cmd_failed"),
+          waitForCommand: async () => failed as TerminalCommandRecord,
+        }),
+      },
+    );
+
+    expect(result).toEqual({
+      code: 1,
+      output: {
+        status: "failed",
+        receipt: receipt("cmd_failed"),
+        command: failed,
+      },
     });
   });
 
   it("returns a command record by id", async () => {
     const fixture = await createTempState();
-    const record = commandRecord("cmd_get", reconcileCommand("cli-command-get"), "failed");
+    const getCommand: StationCommand = {
+      type: "worktree.create",
+      payload: { projectId: "web", branch: "cli-get-result" },
+    };
+    const record = resultCommandRecord("cmd_get", getCommand);
     record.diagnostics = [
       {
         type: "external_command",
@@ -184,6 +283,76 @@ describe("CLI command dispatch/get", () => {
       ),
     ).rejects.toMatchObject({
       code: "COMMAND_WAIT_TIMEOUT",
+    });
+  });
+
+  it("preserves the dispatch timeout code before a receipt exists", async () => {
+    const fixture = await createTempState();
+    const command = reconcileCommand("cli-command-dispatch-timeout");
+
+    await expect(
+      executeTypedObserverCommand(
+        command,
+        { config: fixture.config, timeoutMs: 5 },
+        runningObserverDeps({
+          socketPath: fixture.socketPath,
+          dispatch: async () => new Promise<CommandReceipt>(() => undefined),
+        }),
+      ),
+    ).rejects.toMatchObject({
+      code: "COMMAND_DISPATCH_TIMEOUT",
+    });
+  });
+
+  it("rejects a terminal record that does not match the dispatched command", async () => {
+    const fixture = await createTempState();
+    const command = reconcileCommand("cli-command-mismatch");
+    const mismatched = commandRecord(
+      "cmd_other",
+      reconcileCommand("different-command"),
+      "succeeded",
+    );
+
+    await expect(
+      executeTypedObserverCommand(
+        command,
+        { config: fixture.config, timeoutMs: 1000, waitForCompletion: true },
+        runningObserverDeps({
+          socketPath: fixture.socketPath,
+          dispatch: async () => receipt("cmd_expected"),
+          waitForCommand: async () => mismatched as TerminalCommandRecord,
+        }),
+      ),
+    ).rejects.toMatchObject({
+      tag: "CommandCliError",
+      code: "COMMAND_COMPLETION_MISMATCH",
+      commandId: "cmd_expected",
+    });
+  });
+
+  it("rejects a same-id terminal record for another command type", async () => {
+    const fixture = await createTempState();
+    const command = reconcileCommand("cli-command-type-mismatch");
+    const mismatched = commandRecord(
+      "cmd_expected",
+      { type: "project.remove", payload: { projectId: "web" } },
+      "succeeded",
+    );
+
+    await expect(
+      executeTypedObserverCommand(
+        command,
+        { config: fixture.config, timeoutMs: 1000, waitForCompletion: true },
+        runningObserverDeps({
+          socketPath: fixture.socketPath,
+          dispatch: async () => receipt("cmd_expected"),
+          waitForCommand: async () => mismatched as TerminalCommandRecord,
+        }),
+      ),
+    ).rejects.toMatchObject({
+      tag: "CommandCliError",
+      code: "COMMAND_COMPLETION_MISMATCH",
+      commandId: "cmd_expected",
     });
   });
 
@@ -322,6 +491,21 @@ function receipt(commandId: string): CommandReceipt {
   };
 }
 
+function rejectedReceipt(commandId: string): CommandReceipt {
+  return {
+    commandId,
+    traceId: "trc_cli",
+    spanId: "spn_cli",
+    accepted: false,
+    status: "rejected",
+    error: {
+      tag: "CommandRejectedError",
+      code: "COMMAND_REJECTED_FOR_TEST",
+      message: "Observer rejected the command before execution.",
+    },
+  };
+}
+
 function commandRecord(
   id: string,
   command: StationCommand,
@@ -350,4 +534,18 @@ function commandRecord(
     };
   }
   return record;
+}
+
+function resultCommandRecord(
+  id: string,
+  command: Extract<StationCommand, { type: "worktree.create" }>,
+): CommandRecord {
+  return {
+    ...commandRecord(id, command, "succeeded"),
+    result: {
+      type: "worktree.create",
+      projectId: command.payload.projectId,
+      worktreeId: `wt_${command.payload.branch.replaceAll("-", "_")}`,
+    },
+  } as CommandRecord;
 }

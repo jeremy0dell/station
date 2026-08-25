@@ -1,8 +1,9 @@
 // Fork details share semantic controls across pointer and keyboard activation;
 // only submit invokes the managed-session capability, so Copy-focused Enter remains a core toggle.
-import { bottomSheetContentWidth } from "@station/dashboard-core/selectors";
+import { cellWidth } from "@station/dashboard-core/text";
 import type { DashboardScreenView } from "@station/dashboard-core/state";
 import { EditableTextInputView } from "../EditableTextInputView.js";
+import { bottomSheetContentWidth } from "../layout/bottomSheetFrame.js";
 import { BottomSheetFrameView } from "./BottomSheetFrameView.js";
 import {
   compactSheetWidth,
@@ -13,7 +14,6 @@ import {
   SheetControlRow,
   SheetFooter,
   SheetLabelValue,
-  SheetLine,
   SheetMessageLine,
 } from "./parts.js";
 
@@ -28,10 +28,6 @@ export type ForkSessionSheetViewProps = {
 
 const SOURCE_LABEL_WIDTH = 8;
 const CONTROL_LABEL_WIDTH = 6;
-const CHOOSE_SLOT_CONTENT_ROWS = 5;
-const CHOOSE_SLOT_MIN_HEIGHT = 7;
-const DETAILS_BASE_CONTENT_ROWS = 8;
-const DETAILS_MIN_HEIGHT = 10;
 
 const FORK_ACTION_HELP = {
   expanded: "↑↓ focus · Enter fork · Esc back",
@@ -70,12 +66,10 @@ export function ForkSessionSheetView({ screen, columns, rows }: ForkSessionSheet
         rows={rows}
         width={sheetWidth}
         title="Select session to fork"
-        contentRows={CHOOSE_SLOT_CONTENT_ROWS}
-        minHeight={CHOOSE_SLOT_MIN_HEIGHT}
+        bodyPaddingTop={1}
+        footer={<SheetFooter width={contentWidth}>Esc:cancel</SheetFooter>}
       >
-        <SheetLine width={contentWidth}> </SheetLine>
         <SheetMessageLine width={contentWidth}>↑↓ move · ↵ choose · slot or click</SheetMessageLine>
-        <SheetFooter width={contentWidth}>Esc:cancel</SheetFooter>
       </BottomSheetFrameView>
     );
   }
@@ -117,18 +111,33 @@ function ForkDetails({
       : screen.inheritSourceGroup
         ? `[x] create in ${screen.sourceGroup.name}`
         : "[ ] (Ungrouped)";
-  const extraRows = [
-    screen.sourceAgentRunning,
-    screen.validationError !== undefined,
-  ].filter(Boolean).length;
   return (
     <BottomSheetFrameView
       columns={columns}
       rows={rows}
       width={sheetWidth}
       title="Fork Session"
-      contentRows={DETAILS_BASE_CONTENT_ROWS + extraRows}
-      minHeight={DETAILS_MIN_HEIGHT}
+      bodyPaddingBottom={1}
+      actions={
+        <SheetButtonRow
+          width={contentWidth}
+          buttons={[
+            {
+              id: "fork.submit",
+              label: "Fork",
+              shortcut: "enter",
+              tone: "success",
+              mouseTarget: {
+                kind: "forkSessionAction",
+                actionId: "details.submit",
+              },
+              focused: focus === "submit",
+              disabled: false,
+            },
+          ]}
+        />
+      }
+      footer={<SheetFooter width={contentWidth}>{footerText}</SheetFooter>}
     >
       <SheetLabelValue
         width={contentWidth}
@@ -141,7 +150,7 @@ function ForkDetails({
         label="Name"
         labelWidth={CONTROL_LABEL_WIDTH}
         value={titleValue}
-        valueCells={screen.draftTitle.value.length + Number(focus === "name")}
+        valueCells={cellWidth(screen.draftTitle.value) + Number(focus === "name")}
         focused={focus === "name"}
         mouseTarget={{ kind: "forkSessionAction", actionId: "details.name" }}
       />
@@ -158,7 +167,7 @@ function ForkDetails({
           label="Group"
           labelWidth={CONTROL_LABEL_WIDTH}
           value={groupValue}
-          valueCells={groupValue.length}
+          valueCells={cellWidth(groupValue)}
           focused={focus === "group"}
           mouseTarget={{ kind: "forkSessionAction", actionId: "details.group" }}
         />
@@ -181,25 +190,6 @@ function ForkDetails({
           {screen.validationError}
         </SheetMessageLine>
       ) : null}
-      <SheetLine width={contentWidth}> </SheetLine>
-      <SheetButtonRow
-        width={contentWidth}
-        buttons={[
-          {
-            id: "fork.submit",
-            label: "Fork",
-            shortcut: "enter",
-            tone: "success",
-            mouseTarget: {
-              kind: "forkSessionAction",
-              actionId: "details.submit",
-            },
-            focused: focus === "submit",
-            disabled: false,
-          },
-        ]}
-      />
-      <SheetFooter width={contentWidth}>{footerText}</SheetFooter>
     </BottomSheetFrameView>
   );
 }

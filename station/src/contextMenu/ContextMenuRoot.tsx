@@ -3,7 +3,7 @@ import { useSyncExternalStore } from "react";
 import type { DashboardStateSource } from "@station/dashboard-core/runtime";
 import type { DashboardStateView } from "@station/dashboard-core/state";
 import { buildContextMenuItems } from "./items.js";
-import { measureContextMenu, placeContextMenu } from "./placement.js";
+import { measureContextMenuWidth } from "./placement.js";
 import { ContextMenuLayer } from "./ContextMenuLayer.js";
 import type { StationMouseEvent } from "../input/mouse.js";
 import type { MouseTargetRef } from "../input/router.js";
@@ -42,15 +42,14 @@ export function ContextMenuRoot({
   }
 
   const items = buildContextMenuItems(menu.target, state, stationState, automations);
-  const placement = placeContextMenu(menu.anchor, measureContextMenu(items), { width, height });
-
   return (
     <ContextMenuLayer
       terminalWidth={width}
       terminalHeight={height}
-      placement={placement}
+      anchor={menu.anchor}
+      preferredWidth={measureContextMenuWidth(items)}
       items={items}
-      activeIndex={menu.activeIndex}
+      activeItemId={menu.activeItemId}
       dispatchMouse={dispatchMouse}
     />
   );

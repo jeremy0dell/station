@@ -1,36 +1,34 @@
 import type { SessionId } from "@station/contracts";
-import { selectDashboardViewport } from "../../selectors/dashboardViewport.js";
+import { selectDashboardSlots } from "../../selectors/dashboardSlots.js";
 import { choiceValueByKey } from "../../selectors/selectors.js";
 import { focusedChooserSession, moveDashboardChooserCursor } from "../dashboardFocus.js";
-import { scrollDashboard } from "../dashboardScroll.js";
 import { isSlotKey } from "../keymap.js";
 import { isReturnKey, type TuiKey } from "../keys.js";
+import type { DashboardVisibleRowsSource } from "../layoutVisibility.js";
 import type { TuiTransition } from "../transition.js";
 import type { DashboardState } from "../types.js";
 
 /**
- * The shared choose-a-dashboard-row step behind remove/rename/fork. Arrows move
- * the session-only cursor (with follow-scroll), ↵ commits the focused row, and a
- * slot key commits the viewport row — all three converge on `commit(state, id)`.
+ * The shared choose-a-session step behind remove/rename/fork. Arrows move the
+ * session-only cursor, ↵ commits the focused session, and a slot key commits a
+ * renderer-visible session — all three converge on `commit(state, id)`.
  * Esc is handled by each screen's own reducer. Reuses the dashboard's cursor
- * rather than the generic engine because these list the full dashboard row
- * stream (viewport-windowed slots, follow-scroll) the engine deliberately omits.
+ * rather than the generic engine because these list the full semantic session
+ * sequence while the renderer supplies the identities intersecting its viewport.
  */
 export function handleDashboardRowChoiceKey(
   state: DashboardState,
   key: TuiKey,
   commit: (state: DashboardState, rowId: SessionId) => TuiTransition,
+  visibleRows?: DashboardVisibleRowsSource,
 ): TuiTransition {
   if (key.upArrow === true) {
-    return { state: moveDashboardChooserCursor(state, -1) };
+    return { state: moveDashboardChooserCursor(state, -1, visibleRows?.visibleRowIds()) };
   }
   if (key.downArrow === true) {
-    return { state: moveDashboardChooserCursor(state, 1) };
+    return { state: moveDashboardChooserCursor(state, 1, visibleRows?.visibleRowIds()) };
   }
-  // The wheel still pans the viewport without moving the cursor.
-  if (key.mouseScroll !== undefined) {
-    return { state: scrollDashboard(state, key.mouseScroll === "up" ? -1 : 1) };
-  }
+  if (key.mouseScroll !== undefined) return { state };
   if (state.snapshot === undefined) {
     return { state };
   }
@@ -40,7 +38,8 @@ export function handleDashboardRowChoiceKey(
   }
   if (isSlotKey(key)) {
     const row = choiceValueByKey(
-      selectDashboardViewport(state.snapshot, state).rowChoices,
+      selectDashboardSlots(state.snapshot, state, state.screen, visibleRows?.visibleRowIds())
+        .rowChoices,
       key.input,
     );
     return row === undefined ? { state } : commit(state, row.id);

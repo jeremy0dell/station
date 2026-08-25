@@ -1,11 +1,15 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { rgbToHex } from "@opentui/core";
+import { Renderable, rgbToHex } from "@opentui/core";
 import { MouseButtons } from "@opentui/core/testing";
 import { testRender } from "@opentui/react/test-utils";
 import { dashboardRowIds } from "@station/dashboard-core/selectors";
 import type { TuiWidgetConfig } from "@station/dashboard-core/widgets";
 import { act } from "react";
-import { groupedManyProjectsSnapshot } from "../station/fixtures/scenarios.js";
+import {
+  groupedManyProjectsSnapshot,
+  manyProjectsSnapshot,
+} from "../station/fixtures/scenarios.js";
+import { groupActionRenderableId } from "../station/view/GroupHeaderView.js";
 import { makeStationTestRuntime } from "../station/test/support/makeStationTestRuntime.js";
 import {
   stationColorSnapshotValue,
@@ -73,8 +77,8 @@ afterEach(async () => {
 });
 
 describe("FullscreenDashboard surface ownership", () => {
-  it("uses terminal-default background intent for its canvas and title chrome", async () => {
-    const fixture = makeStationTestRuntime({ terminalRows: SURFACE.height });
+  it("uses terminal-default background intent for its canvas and frame title", async () => {
+    const fixture = makeStationTestRuntime();
     const setup = await render(fixture.runtime);
 
     expectTerminalDefaultBackground(setup, "station · overview");
@@ -87,7 +91,7 @@ describe("FullscreenDashboard surface ownership", () => {
   });
 
   it("renders a coherent light terminal canvas", async () => {
-    const fixture = makeStationTestRuntime({ terminalRows: SURFACE.height });
+    const fixture = makeStationTestRuntime();
     const lightSource: StationThemeSource = {
       getSnapshot: () => LIGHT_THEME,
       subscribe: () => () => {},
@@ -118,7 +122,6 @@ describe("FullscreenDashboard surface ownership", () => {
   it("keeps the focused light Add Session control readable", async () => {
     const size = { width: 120, height: 40 };
     const fixture = makeStationTestRuntime({
-      terminalRows: size.height,
       initialState: {
         dashboardFocus: { rowId: dashboardRowIds.empty("empty-project"), cellId: "addSession" },
       },
@@ -143,7 +146,6 @@ describe("FullscreenDashboard surface ownership", () => {
   it("keeps focused light controls visually distinct from the canvas", async () => {
     const size = { width: 120, height: 40 };
     const fixture = makeStationTestRuntime({
-      terminalRows: size.height,
       initialState: {
         dashboardFocus: { rowId: dashboardRowIds.empty("empty-project"), cellId: "addSession" },
       },
@@ -169,7 +171,7 @@ describe("FullscreenDashboard surface ownership", () => {
   });
 
   it("keeps focused light sheet-button roles readable", async () => {
-    const fixture = makeStationTestRuntime({ terminalRows: SURFACE.height });
+    const fixture = makeStationTestRuntime();
     const lightSource: StationThemeSource = {
       getSnapshot: () => LIGHT_THEME,
       subscribe: () => () => {},
@@ -211,7 +213,7 @@ describe("FullscreenDashboard surface ownership", () => {
   });
 
   it("repaints in place when the external theme source changes", async () => {
-    const fixture = makeStationTestRuntime({ terminalRows: SURFACE.height });
+    const fixture = makeStationTestRuntime();
     const source = new MutableThemeSource(DARK_THEME);
     const setup = await render(fixture.runtime, SURFACE, NO_OP_OPEN_URL, source);
     const title = cellFor(setup.captureCharFrame(), "station · overview");
@@ -241,7 +243,7 @@ describe("FullscreenDashboard surface ownership", () => {
     { name: "project settings", keys: ["P", "1"], needle: "Project settings" },
   ] as const) {
     it(`uses terminal-default background intent for the ${testCase.name}`, async () => {
-      const fixture = makeStationTestRuntime({ terminalRows: SURFACE.height });
+      const fixture = makeStationTestRuntime();
       const setup = await render(fixture.runtime);
 
       await actOn(async () => {
@@ -256,7 +258,7 @@ describe("FullscreenDashboard surface ownership", () => {
   }
 
   it("uses terminal-default background intent for dashboard toasts", async () => {
-    const fixture = makeStationTestRuntime({ terminalRows: SURFACE.height });
+    const fixture = makeStationTestRuntime();
     const setup = await render(fixture.runtime);
 
     await actOn(async () => {
@@ -271,7 +273,7 @@ describe("FullscreenDashboard surface ownership", () => {
   });
 
   it("obscures dashboard cells with an opaque default background and restores them", async () => {
-    const fixture = makeStationTestRuntime({ terminalRows: SURFACE.height });
+    const fixture = makeStationTestRuntime();
     const setup = await render(fixture.runtime);
     const before = setup.captureCharFrame();
 
@@ -297,7 +299,7 @@ describe("FullscreenDashboard surface ownership", () => {
 
 describe("FullscreenDashboard mouse composition", () => {
   it("routes a row click into the observer-backed dashboard command flow", async () => {
-    const fixture = makeStationTestRuntime({ terminalRows: SURFACE.height });
+    const fixture = makeStationTestRuntime();
     const setup = await render(fixture.runtime);
     const row = cellFor(setup.captureCharFrame(), "docs-cleanup");
 
@@ -321,7 +323,7 @@ describe("FullscreenDashboard mouse composition", () => {
   });
 
   it("collapses a project once for a complete primary down/up click", async () => {
-    const fixture = makeStationTestRuntime({ terminalRows: SURFACE.height });
+    const fixture = makeStationTestRuntime();
     const setup = await render(fixture.runtime);
     const header = cellFor(setup.captureCharFrame(), "▼ station");
 
@@ -334,7 +336,6 @@ describe("FullscreenDashboard mouse composition", () => {
     const size = { width: 120, height: 40 };
     const fixture = makeStationTestRuntime({
       snapshot: groupedManyProjectsSnapshot(),
-      terminalRows: size.height,
     });
     const setup = await render(fixture.runtime, size);
     const groupId = dashboardRowIds.group("group_design_refresh");
@@ -344,7 +345,7 @@ describe("FullscreenDashboard mouse composition", () => {
       return { row, line: lines[row] ?? "" };
     };
 
-    expect(setup.captureCharFrame()).toContain("╭ ▼ Design refresh 2 sessions");
+    expect(setup.captureCharFrame()).toContain("│ ▼ Design refresh 2 sessions");
     expect(setup.captureCharFrame()).toContain("│ [1]");
     const member = cellFor(setup.captureCharFrame(), "group-contracts");
     await actOn(async () => {
@@ -365,9 +366,14 @@ describe("FullscreenDashboard mouse composition", () => {
       ),
     ).toHaveLength(1);
     let group = groupLine();
-    await actOn(() =>
-      setup.mockMouse.click(group.line.indexOf("[quick session]"), group.row, MouseButtons.LEFT),
-    );
+    await actOn(async () => {
+      await setup.mockMouse.click(
+        group.line.indexOf("[quick session]"),
+        group.row,
+        MouseButtons.LEFT,
+      );
+      await setup.flush();
+    });
     expect(fixture.runtime.state.getState().dashboardFocus).toEqual({
       rowId: groupId,
       cellId: "quickSession",
@@ -376,9 +382,19 @@ describe("FullscreenDashboard mouse composition", () => {
     expect([...fixture.runtime.state.getState().collapsedGroupIds]).toEqual([]);
 
     group = groupLine();
-    await actOn(() =>
-      setup.mockMouse.click(group.line.indexOf("[▾]"), group.row, MouseButtons.LEFT),
+    const menuTarget = setup.renderer.root.findDescendantById(
+      groupActionRenderableId(groupId, "menu"),
     );
+    expect(menuTarget).toBeDefined();
+    expect(group.line.indexOf("[▾]")).toBe(menuTarget?.screenX);
+    const hit = Renderable.renderablesByNumber.get(
+      setup.renderer.hitTest(group.line.indexOf("[▾]"), group.row),
+    );
+    expect(hit?.num).toBe(menuTarget?.num);
+    await actOn(async () => {
+      await setup.mockMouse.click(group.line.indexOf("[▾]"), group.row, MouseButtons.LEFT);
+      await setup.flush();
+    });
     expect(fixture.runtime.state.getState().dashboardFocus).toEqual({
       rowId: groupId,
       cellId: "menu",
@@ -392,7 +408,10 @@ describe("FullscreenDashboard mouse composition", () => {
     });
     expect(setup.captureCharFrame()).toContain("Group settings…");
     const settings = cellFor(setup.captureCharFrame(), "Group settings…");
-    await actOn(() => setup.mockMouse.click(settings.col, settings.row, MouseButtons.LEFT));
+    await actOn(async () => {
+      await setup.mockMouse.click(settings.col, settings.row, MouseButtons.LEFT);
+      await setup.flush();
+    });
     expect(fixture.runtime.state.getState().screen).toMatchObject({
       name: "groupSettings",
       groupId: "group_design_refresh",
@@ -404,9 +423,14 @@ describe("FullscreenDashboard mouse composition", () => {
     });
 
     group = groupLine();
-    await actOn(() =>
-      setup.mockMouse.click(group.line.indexOf("Design refresh"), group.row, MouseButtons.LEFT),
-    );
+    await actOn(async () => {
+      await setup.mockMouse.click(
+        group.line.indexOf("Design refresh"),
+        group.row,
+        MouseButtons.LEFT,
+      );
+      await setup.flush();
+    });
     expect([...fixture.runtime.state.getState().collapsedGroupIds]).toEqual([
       "group_design_refresh",
     ]);
@@ -418,8 +442,35 @@ describe("FullscreenDashboard mouse composition", () => {
     expect(setup.captureCharFrame()).not.toContain("group-contracts");
   });
 
+  it("converges keyboard focus and pointer activation beyond picker shortcuts", async () => {
+    const snapshot = manyProjectsSnapshot();
+    const template = snapshot.projects[0];
+    if (template === undefined) throw new Error("missing project fixture");
+    const projects = Array.from({ length: 40 }, (_, index) => ({
+      ...template,
+      id: `project-${index}` as typeof template.id,
+      label: `project-${index}`,
+    }));
+    const fixture = makeStationTestRuntime({ snapshot: { ...snapshot, projects } });
+    fixture.runtime.actions.handleKey({ input: "C" });
+    for (let index = 1; index < projects.length; index += 1) {
+      fixture.runtime.actions.handleKey({ input: "", downArrow: true });
+    }
+    const setup = await render(fixture.runtime, { width: 80, height: 24 });
+    const target = cellFor(setup.captureCharFrame(), "project-39 healthy");
+    expect(setup.captureCharFrame()).toContain("▸   project-39 healthy");
+
+    await actOn(async () => {
+      await setup.mockMouse.click(target.col, target.row, MouseButtons.LEFT);
+      await setup.flush();
+    });
+
+    expect(fixture.runtime.state.getState().screen).toEqual({ name: "dashboard" });
+    expect([...fixture.runtime.state.getState().collapsedProjectIds]).toContain("project-39");
+  });
+
   it("does not activate a dashboard row when the same click dismisses a bounded screen", async () => {
-    const fixture = makeStationTestRuntime({ terminalRows: SURFACE.height });
+    const fixture = makeStationTestRuntime();
     const setup = await render(fixture.runtime);
     const frame = setup.captureCharFrame();
     const row = cellFor(frame, "docs-cleanup");
@@ -457,7 +508,7 @@ describe("FullscreenDashboard mouse composition", () => {
   });
 
   it("dismisses a bounded screen from the obscured title row", async () => {
-    const fixture = makeStationTestRuntime({ terminalRows: SURFACE.height });
+    const fixture = makeStationTestRuntime();
     const setup = await render(fixture.runtime);
     const titleAction = cellFor(setup.captureCharFrame(), "[+]");
     await actOn(async () => {
@@ -472,7 +523,7 @@ describe("FullscreenDashboard mouse composition", () => {
   });
 
   it("dismisses outside a bounded screen while its inner surface still consumes clicks", async () => {
-    const fixture = makeStationTestRuntime({ terminalRows: SURFACE.height });
+    const fixture = makeStationTestRuntime();
     const setup = await render(fixture.runtime);
     await actOn(async () => {
       fixture.runtime.actions.handleKey({ input: "H" });
@@ -488,7 +539,7 @@ describe("FullscreenDashboard mouse composition", () => {
   });
 
   it("keeps controls inside a bounded screen interactive", async () => {
-    const fixture = makeStationTestRuntime({ terminalRows: SURFACE.height });
+    const fixture = makeStationTestRuntime();
     const setup = await render(fixture.runtime);
     await actOn(async () => {
       fixture.runtime.actions.handleKey({ input: "W" });
@@ -515,7 +566,7 @@ describe("FullscreenDashboard mouse composition", () => {
   });
 
   it("omits click-away interception while choose-row screens select dashboard rows", async () => {
-    const fixture = makeStationTestRuntime({ terminalRows: SURFACE.height });
+    const fixture = makeStationTestRuntime();
     const setup = await render(fixture.runtime);
     await actOn(async () => {
       fixture.runtime.actions.handleKey({ input: "X" });
@@ -543,7 +594,7 @@ describe("FullscreenDashboard mouse composition", () => {
   });
 
   it("routes rendered Remove actions without leaking to the dashboard", async () => {
-    const fixture = makeStationTestRuntime({ terminalRows: SURFACE.height });
+    const fixture = makeStationTestRuntime();
     const setup = await render(fixture.runtime);
     const row = cellFor(setup.captureCharFrame(), "docs-cleanup");
     await actOn(async () => {
@@ -561,7 +612,7 @@ describe("FullscreenDashboard mouse composition", () => {
   });
 
   it("routes rendered Fork field clicks without submitting", async () => {
-    const fixture = makeStationTestRuntime({ terminalRows: SURFACE.height });
+    const fixture = makeStationTestRuntime();
     const setup = await render(fixture.runtime);
     const row = cellFor(setup.captureCharFrame(), "docs-cleanup");
     await actOn(async () => {
@@ -592,7 +643,6 @@ describe("FullscreenDashboard mouse composition", () => {
 
   it("routes the grouped Fork placement row through standalone pointer input", async () => {
     const fixture = makeStationTestRuntime({
-      terminalRows: SURFACE.height,
       snapshot: groupedManyProjectsSnapshot(),
     });
     const setup = await render(fixture.runtime);
@@ -617,18 +667,19 @@ describe("FullscreenDashboard mouse composition", () => {
   });
 
   it("scrolls when the wheel is used over a child row", async () => {
-    const fixture = makeStationTestRuntime({ terminalRows: 12 });
+    const fixture = makeStationTestRuntime();
     const setup = await render(fixture.runtime, { width: 80, height: 12 });
     const row = cellFor(setup.captureCharFrame(), "docs-cleanup");
+    const before = fixture.runtime.layout.snapshot();
 
     await actOn(() => setup.mockMouse.scroll(row.col, row.row, "down"));
 
-    expect(fixture.runtime.state.getState().scrollOffset).toBe(1);
+    expect(fixture.runtime.layout.snapshot()).not.toEqual(before);
   });
 
   it("renders and routes the same project actions as native Station", async () => {
     const size = { width: 120, height: 40 };
-    const fixture = makeStationTestRuntime({ terminalRows: size.height });
+    const fixture = makeStationTestRuntime();
     const setup = await render(fixture.runtime, size);
     const frame = setup.captureCharFrame();
 
@@ -660,7 +711,7 @@ describe("FullscreenDashboard mouse composition", () => {
 
   it("routes the empty-project add-session button and pull-request links", async () => {
     const size = { width: 120, height: 40 };
-    const fixture = makeStationTestRuntime({ terminalRows: size.height });
+    const fixture = makeStationTestRuntime();
     const openedUrls: string[] = [];
     const setup = await render(fixture.runtime, size, (url: string) => openedUrls.push(url));
     const frame = setup.captureCharFrame();
@@ -679,7 +730,7 @@ describe("FullscreenDashboard mouse composition", () => {
   });
 
   it("keeps the dashboard open with its existing toast when a clicked command is rejected", async () => {
-    const fixture = makeStationTestRuntime({ terminalRows: SURFACE.height });
+    const fixture = makeStationTestRuntime();
     fixture.service.nextReceipt = {
       commandId: "cmd_tui_rejected",
       accepted: false,
@@ -718,7 +769,6 @@ describe("FullscreenDashboard mouse composition", () => {
 describe("FullscreenDashboard configured widgets", () => {
   async function renderWidgets(widgets: readonly TuiWidgetConfig[]) {
     const fixture = makeStationTestRuntime({
-      terminalRows: WIDGET_SURFACE.height,
       initialState: { widgets },
     });
     const setup = await render(fixture.runtime, WIDGET_SURFACE);

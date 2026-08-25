@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { selectDashboardSlots } from "../../../../src/selectors/dashboardSlots.js";
 import { dashboardRowIds } from "../../../../src/selectors/dashboardTree.js";
-import { selectDashboardViewport } from "../../../../src/selectors/dashboardViewport.js";
 import { createInitialTuiState, replaceSnapshot } from "../../../../src/state/screen.js";
 import { handleTuiKey } from "../../../../src/state/transition.js";
 import { createDashboardSnapshot } from "../../../fixtures/snapshots.js";
@@ -54,11 +54,9 @@ describe("persistent-filter screen", () => {
     expect(clearedBeforeCursor.screen).toMatchObject({ draft: { value: "", cursor: 0 } });
   });
 
-  it("applies a nonblank hard projection, retains matching focus, and clamps scroll", () => {
+  it("applies a nonblank hard projection and retains matching semantic focus", () => {
     const base = createInitialTuiState({
       initialSnapshot: createDashboardSnapshot(),
-      scrollOffset: 3,
-      terminalRows: 10,
       dashboardFocus: {
         rowId: dashboardRowIds.session("ses_wt_web_idle"),
         cellId: "identity",
@@ -71,7 +69,6 @@ describe("persistent-filter screen", () => {
 
     expect(applied.screen).toEqual({ name: "dashboard" });
     expect(applied.persistentFilter).toEqual({ query: "NaV" });
-    expect(applied.scrollOffset).toBe(1);
     expect(applied.dashboardFocus).toEqual(base.dashboardFocus);
   });
 
@@ -110,17 +107,16 @@ describe("persistent-filter screen", () => {
 
     const replaced = replaceSnapshot(edited, withoutApi);
     expect(
-      selectDashboardViewport(withoutApi, replaced).rows.filter(
+      selectDashboardSlots(withoutApi, replaced, replaced.screen).tree.visibleRows.filter(
         (row) => row.payload.type === "session",
       ),
     ).toHaveLength(6);
 
     const cancelled = handle(replaced, { input: "", escape: true });
     expect(cancelled.persistentFilter).toEqual({ query: "working" });
-    expect(selectDashboardViewport(withoutApi, cancelled).rows.map((row) => row.id)).toEqual([
-      "project:web",
-      "session:ses_wt_web_working",
-    ]);
+    expect(
+      selectDashboardSlots(withoutApi, cancelled).tree.visibleRows.map((row) => row.id),
+    ).toEqual(["project:web", "session:ses_wt_web_working"]);
   });
 
   it("removes the optional applied state instead of assigning undefined when blank is applied", () => {

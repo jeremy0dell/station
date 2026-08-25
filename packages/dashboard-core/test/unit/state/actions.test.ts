@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import { dashboardRowIds } from "../../../src/selectors/dashboardTree.js";
 import type { DashboardStateAction } from "../../../src/state/actions.js";
 import { handleTuiAction } from "../../../src/state/actions.js";
-import { scrollDashboard } from "../../../src/state/dashboardScroll.js";
 import { createInitialTuiState } from "../../../src/state/screen.js";
 import { tuiScreenBehavior } from "../../../src/state/screenBehavior.js";
 import {
@@ -20,10 +19,10 @@ import { openRemoveWorktreeConfirmForRow } from "../../../src/state/screens/remo
 import { openRenameEditForRow } from "../../../src/state/screens/sessionRows.js";
 import {
   openWidgetSettings,
-  widgetSettingsAddFromPicker,
+  widgetSettingsAddType,
   widgetSettingsOpenPicker,
-  widgetSettingsRemoveAt,
-  widgetSettingsToggleAt,
+  widgetSettingsRemoveItem,
+  widgetSettingsToggleItem,
 } from "../../../src/state/screens/widgetSettings.js";
 import { handleTuiKey } from "../../../src/state/transition.js";
 import type { DashboardState } from "../../../src/state/types.js";
@@ -46,12 +45,6 @@ type StateActionCase = Readonly<{
 
 const STATE_ACTION_CASES: readonly StateActionCase[] = [
   {
-    name: "dashboard.scroll",
-    action: { type: "dashboard.scroll", delta: 5 },
-    state: scrollingDashboardState,
-    reduce: (state) => scrollDashboard(state, 5),
-  },
-  {
     name: "projectSettings.focusItem",
     action: { type: "projectSettings.focusItem", itemId: "remove" },
     state: projectSettingsState,
@@ -59,9 +52,9 @@ const STATE_ACTION_CASES: readonly StateActionCase[] = [
   },
   {
     name: "addProject.selectRow",
-    action: { type: "addProject.selectRow", index: 1 },
+    action: { type: "addProject.selectRow", itemId: "addProjectStart:homeDirectory" },
     state: addProjectStartState,
-    reduce: (state) => selectAddProjectRow(state, 1),
+    reduce: (state) => selectAddProjectRow(state, "addProjectStart:homeDirectory"),
   },
   {
     name: "screen.clickAway",
@@ -111,15 +104,15 @@ const STATE_ACTION_CASES: readonly StateActionCase[] = [
   },
   {
     name: "widgetSettings.toggle",
-    action: { type: "widgetSettings.toggle", index: 1 },
+    action: { type: "widgetSettings.toggle", itemId: "widget:1" },
     state: widgetSettingsState,
-    reduce: (state) => widgetSettingsToggleAt(state, 1),
+    reduce: (state) => widgetSettingsToggleItem(state, "widget:1"),
   },
   {
     name: "widgetSettings.remove",
-    action: { type: "widgetSettings.remove", index: 0 },
+    action: { type: "widgetSettings.remove", itemId: "widget:0" },
     state: widgetSettingsState,
-    reduce: (state) => widgetSettingsRemoveAt(state, 0),
+    reduce: (state) => widgetSettingsRemoveItem(state, "widget:0"),
   },
   {
     name: "widgetSettings.openPicker",
@@ -129,15 +122,16 @@ const STATE_ACTION_CASES: readonly StateActionCase[] = [
   },
   {
     name: "widgetSettings.addFromPicker",
-    action: { type: "widgetSettings.addFromPicker", index: 2 },
+    action: { type: "widgetSettings.addFromPicker", widgetType: "prs" },
     state: widgetSettingsState,
-    reduce: (state) => widgetSettingsAddFromPicker(state, 2),
+    reduce: (state) => widgetSettingsAddType(state, "prs"),
   },
 ];
 
 const STALE_STATE_ACTIONS: readonly DashboardStateAction[] = [
+  { type: "selection.item.activate", itemId: "missing" },
   { type: "projectSettings.focusItem", itemId: "agent" },
-  { type: "addProject.selectRow", index: 0 },
+  { type: "addProject.selectRow", itemId: "missing" },
   { type: "screen.clickAway" },
   {
     type: "renameSession.openEdit",
@@ -153,10 +147,10 @@ const STALE_STATE_ACTIONS: readonly DashboardStateAction[] = [
     rowId: "missing",
     returnTo: "dashboard",
   },
-  { type: "widgetSettings.toggle", index: 0 },
-  { type: "widgetSettings.remove", index: 0 },
+  { type: "widgetSettings.toggle", itemId: "widget:0" },
+  { type: "widgetSettings.remove", itemId: "widget:0" },
   { type: "widgetSettings.openPicker" },
-  { type: "widgetSettings.addFromPicker", index: 0 },
+  { type: "widgetSettings.addFromPicker", widgetType: "time" },
 ];
 
 describe("semantic TUI actions", () => {
@@ -362,11 +356,11 @@ describe("dashboard state actions", () => {
   it("keeps invalid widget rows inert", () => {
     const state = widgetSettingsState();
 
-    expect(handleTuiAction(state, { type: "widgetSettings.toggle", index: 99 }, context)).toEqual({
-      state,
-    });
     expect(
-      handleTuiAction(state, { type: "widgetSettings.addFromPicker", index: 99 }, context),
+      handleTuiAction(state, { type: "widgetSettings.toggle", itemId: "widget:99" }, context),
+    ).toEqual({ state });
+    expect(
+      handleTuiAction(state, { type: "widgetSettings.remove", itemId: "widget:99" }, context),
     ).toEqual({ state });
   });
 
@@ -593,10 +587,6 @@ function dashboardState(): DashboardState {
 
 function groupedDashboardState(): DashboardState {
   return createInitialTuiState({ initialSnapshot: createGroupedDashboardSnapshot() });
-}
-
-function scrollingDashboardState(): DashboardState {
-  return { ...dashboardState(), terminalRows: 8 };
 }
 
 function projectSettingsState(): DashboardState {

@@ -47,13 +47,14 @@ type StartedObserverResult =
 /**
  * ADAPTER
  *
- * Starts the Observer child and waits for exact-build health inside one timed runtime boundary,
- * retaining a separate typed cause and bounded boot evidence before diagnostic handles close.
+ * Starts the Observer child and waits for exact-build health inside one absolute-deadline
+ * boundary, retaining a separate typed cause and bounded boot evidence before handles close.
  */
 export async function startObserverProcess(
   input: {
     paths: SpawnObserverInput["paths"];
     timeoutMs: number;
+    startupDeadlineMs?: number;
     buildVersion: string;
     replaceableIncumbent?: ObserverHealth;
     trace: RuntimeTraceContext;
@@ -69,6 +70,13 @@ export async function startObserverProcess(
   let child: ChildProcessLike | undefined;
   let startupCause: SafeError | undefined;
   let startupEvidence: ObserverStartupEvidence | undefined;
+  const startupTimeoutError: SafeError = {
+    tag: "ObserverStartupError",
+    code: "OBSERVER_START_FAILED",
+    message: "Observer did not become healthy before the startup timeout.",
+    hint: `Run stn debug trace ${input.trace.traceId}.`,
+    traceId: input.trace.traceId,
+  };
   const result = await runRuntimeBoundaryWithTimeout(
     {
       operation: "cli.observer.start",
@@ -81,20 +89,17 @@ export async function startObserverProcess(
         hint: `Run stn debug trace ${input.trace.traceId}.`,
         traceId: input.trace.traceId,
       },
-      timeoutError: {
-        tag: "ObserverStartupError",
-        code: "OBSERVER_START_FAILED",
-        message: "Observer did not become healthy before the startup timeout.",
-        hint: `Run stn debug trace ${input.trace.traceId}.`,
-        traceId: input.trace.traceId,
-      },
+      timeoutError: startupTimeoutError,
       trace: input.trace,
     },
     async ({ signal }) => {
       try {
         await mkdir(input.paths.stateDir, { recursive: true, mode: 0o700 });
         await mkdir(dirname(input.paths.socketPath), { recursive: true, mode: 0o700 });
-        const spawnInput: SpawnObserverInput = { paths: input.paths };
+        const spawnInput: SpawnObserverInput = {
+          paths: input.paths,
+          startupTimeoutMs: input.timeoutMs,
+        };
         if (input.configPath !== undefined) {
           spawnInput.configPath = input.configPath;
         }
@@ -104,11 +109,20 @@ export async function startObserverProcess(
         if (input.incumbentPolicy !== undefined) {
           spawnInput.incumbentPolicy = input.incumbentPolicy;
         }
+        spawnInput.startupTimeoutMs =
+          input.startupDeadlineMs === undefined
+            ? input.timeoutMs
+            : Math.min(
+                input.timeoutMs,
+                Math.floor(input.startupDeadlineMs - input.clock.now().getTime()),
+              );
+        if (spawnInput.startupTimeoutMs <= 0) {
+          throw startupTimeoutError;
+        }
         child =
           deps.spawnObserver === undefined
             ? await defaultSpawnObserver({
                 ...spawnInput,
-                startupTimeoutMs: input.timeoutMs,
                 buildVersion: input.buildVersion,
               })
             : await deps.spawnObserver(spawnInput);
@@ -121,7 +135,7 @@ export async function startObserverProcess(
           {
             child,
             paths: input.paths,
-            timeoutMs: input.timeoutMs,
+            timeoutMs: spawnInput.startupTimeoutMs,
             buildVersion: input.buildVersion,
             ...(input.replaceableIncumbent === undefined
               ? {}

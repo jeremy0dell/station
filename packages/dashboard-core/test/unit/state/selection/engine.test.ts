@@ -1,7 +1,12 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { deriveTuiInputMode } from "../../../../src/state/keymap.js";
 import { createInitialTuiState } from "../../../../src/state/screen.js";
-import { cursorId, moveCursor, resolveListKey } from "../../../../src/state/selection/engine.js";
+import {
+  activateListItem,
+  cursorId,
+  moveCursor,
+  resolveListKey,
+} from "../../../../src/state/selection/engine.js";
 import { flatPickerSpec } from "../../../../src/state/selection/flatPicker.js";
 import { selectionMiddleware } from "../../../../src/state/selection/middleware.js";
 import { LIST_REGISTRY } from "../../../../src/state/selection/registry.js";
@@ -135,24 +140,24 @@ describe("selection engine — resolveListKey", () => {
 });
 
 describe("flatPickerSpec", () => {
-  it("marks every choice selectable and exposes them as both rows and slots", () => {
+  it("keeps unkeyed choices selectable while exposing only accelerators as slots", () => {
     const spec = flatPickerSpec<string>({
       listId: "flat",
-      choices: () => [
-        { key: "1", value: "x" },
-        { key: "2", value: "y" },
-      ],
+      choices: () => [{ key: "1", value: "x" }, { key: "2", value: "y" }, { value: "z" }],
       commit: (state, id) => ({ state, reconcileReason: id }),
     });
     const state = createInitialTuiState();
     expect(spec.rows(state)).toEqual([
       { selectable: true, id: "x" },
       { selectable: true, id: "y" },
+      { selectable: true, id: "z" },
     ]);
     expect(spec.slots?.(state)).toEqual([
       { key: "1", value: "x" },
       { key: "2", value: "y" },
     ]);
+    expect(activateListItem(spec, state, "z").reconcileReason).toBe("z");
+    expect(activateListItem(spec, state, "missing")).toEqual({ state });
   });
 });
 

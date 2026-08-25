@@ -13,8 +13,9 @@ import { isCodexForwardedEventType } from "./ingressRules.js";
 /**
  * ADAPTER
  *
- * Normalizes Codex hook delivery into shared provider-event and harness-report contracts.
- * Inherited Station identity is authoritative only when Codex cwd remains in the stamped worktree.
+ * Normalizes Codex hook delivery, including provider-private reviewer evidence, into shared
+ * harness reports. Inherited Station identity is authoritative only when Codex cwd remains in
+ * the stamped worktree.
  */
 export const codexHookAdapter = createHarnessHookAdapter({
   provider: "codex",

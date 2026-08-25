@@ -1,10 +1,15 @@
 import { runCli } from "@station/cli";
-import { runObserverCommand, shouldSuppressCliProcessOutput } from "@station/cli/internal";
+import {
+  type ObserverProcessDeps,
+  runObserverCommand,
+  shouldSuppressCliProcessOutput,
+} from "@station/cli/internal";
 import {
   type ReconcileReceipt,
   StationCommandSchema,
   type StationSnapshot,
 } from "@station/contracts";
+import { createObserverClient } from "@station/protocol";
 import { describe, expect, it } from "vitest";
 import { createTempState, writeConfigToml } from "../../../../tests/support/temp-projects";
 import { cliCommandRegistry } from "../../src/commandRegistry.js";
@@ -56,6 +61,7 @@ describe("CLI manual-smoke commands", () => {
     const fixture = await createTempState();
     const configPath = await writeConfigToml(fixture.root, fixture.config);
     const reconciles: Array<string | undefined> = [];
+    const clientRequests: ObserverClientRequest[] = [];
     const receipt: ReconcileReceipt = {
       schemaVersion: "0.11.0",
       reason: "manual-smoke",
@@ -70,6 +76,7 @@ describe("CLI manual-smoke commands", () => {
           reconciles.push(reason);
           return receipt;
         },
+        onClient: (...request) => clientRequests.push(request),
       }),
     });
 
@@ -78,6 +85,18 @@ describe("CLI manual-smoke commands", () => {
       output: receipt,
     });
     expect(reconciles).toEqual(["manual-smoke"]);
+    expect(clientRequests).toContainEqual([
+      fixture.socketPath,
+      {
+        expectedObserverIdentity: {
+          pid: 1234,
+          startedAt: now,
+          version: observerBuildVersion,
+          socketPath: fixture.socketPath,
+        },
+        timeoutMs: 30_000,
+      },
+    ]);
   });
 
   it("passes observer startup timeouts from observer commands", async () => {
@@ -321,33 +340,38 @@ function fixtureRootPath(): string {
   return "/tmp/station-help-fixture";
 }
 
+type ObserverClientRequest = Parameters<NonNullable<ObserverProcessDeps["clientFactory"]>>;
+
 function runningObserverDeps(options: {
   socketPath: string;
   snapshot?: StationSnapshot;
   reconcile?: (reason?: string) => Promise<ReconcileReceipt>;
-}) {
+  onClient?: (...request: ObserverClientRequest) => void;
+}): ObserverProcessDeps {
   return {
     buildVersion: observerBuildVersion,
-    clientFactory: (socketPath: string) =>
-      ({
-        health: async () => ({
+    clientFactory: (socketPath, clientOptions) => {
+      options.onClient?.(socketPath, clientOptions);
+      const client = createObserverClient({ socketPath });
+      client.health = async () => ({
+        schemaVersion: "0.11.0",
+        status: "healthy",
+        pid: 1234,
+        startedAt: now,
+        version: observerBuildVersion,
+        socketPath,
+      });
+      client.getSnapshot = async () => options.snapshot ?? snapshotFixture();
+      client.reconcile =
+        options.reconcile ??
+        (async (reason?: string) => ({
           schemaVersion: "0.11.0",
-          status: "healthy",
-          pid: 1234,
-          startedAt: now,
-          version: observerBuildVersion,
-          socketPath,
-        }),
-        getSnapshot: async () => options.snapshot ?? snapshotFixture(),
-        reconcile:
-          options.reconcile ??
-          (async (reason?: string) => ({
-            schemaVersion: "0.11.0",
-            reason: reason ?? "manual",
-            reconciledAt: now,
-            snapshot: options.snapshot ?? snapshotFixture(),
-          })),
-      }) as never,
+          reason: reason ?? "manual",
+          reconciledAt: now,
+          snapshot: options.snapshot ?? snapshotFixture(),
+        }));
+      return client;
+    },
     sleep: async () => undefined,
   };
 }

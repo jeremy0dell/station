@@ -2,18 +2,17 @@
  * Role entrypoint: dashboard selectors and view models.
  *
  * Pure projections from the readonly state view and canonical snapshot into
- * rows, viewport, header/footer/filter models, and layout primitives. No
+ * semantic trees, visibility-based slots, header/footer/filter models, and leaf layout
+ * primitives. No
  * mutation, lifecycle, or effects live here.
  */
 
+export type {
+  CommandPromptModel,
+  SnapshotLoadingContent,
+} from "../components/Dashboard/content.js";
 export {
-  bottomSheetContentWidth,
-  bottomSheetFrameLayout,
-} from "../components/BottomSheetFrame/layout.js";
-
-export {
-  commandPromptLineForScreen,
-  commandPromptRows,
+  commandPromptForScreen,
   emptyProjectLabel,
   FIRST_RUN_BODY_LABEL,
   fleetCountsLabel,
@@ -21,7 +20,7 @@ export {
   observerHeaderStatusForConnection,
   projectHeaderLabelParts,
   scrollIndicatorLabel,
-  snapshotLoadingLines,
+  snapshotLoadingContent,
 } from "../components/Dashboard/content.js";
 export type {
   DashboardFilterConditionPanelAction,
@@ -33,7 +32,6 @@ export type {
   DashboardFooterModel,
 } from "../components/Dashboard/footer.js";
 export { dashboardFooterModel } from "../components/Dashboard/footer.js";
-export { dashboardBodyTop } from "../components/Dashboard/layout.js";
 export { dashboardRowGridInput } from "../components/Dashboard/rowGridInput.js";
 export type {
   DashboardFilterHeaderModel,
@@ -57,25 +55,14 @@ export type {
 export { createGroupSheetContent } from "../components/GroupCreateSheet/content.js";
 export type {
   GroupSettingsPanelModel,
-  GroupSettingsSessionLine,
+  GroupSettingsSessionItem,
 } from "../components/GroupSettingsPanel/content.js";
 export { groupSettingsPanelModel } from "../components/GroupSettingsPanel/content.js";
-export {
-  helpPanelLayout,
-  helpPanelLines,
-} from "../components/HelpOverlay/helpPanel.js";
 export {
   newSessionEditGroupDraftContent,
   newSessionEditNameContent,
   newSessionReviewContent,
 } from "../components/NewSessionBottomSheet/content.js";
-export { newSessionContentRowCount } from "../components/NewSessionBottomSheet/layout.js";
-
-export type {
-  SettingsPanelLayout,
-  SettingsPanelPaneMode,
-} from "../components/SettingsPanel/layout.js";
-export { settingsPanelLayout } from "../components/SettingsPanel/layout.js";
 
 export { textMatchSegments } from "../components/TextMatch/segments.js";
 export type { ToastBorderColorName } from "../components/ToastOverlay/content.js";
@@ -85,13 +72,8 @@ export {
   toastDetail,
   toastTitle,
 } from "../components/ToastOverlay/content.js";
-
-export { toastOverlayLayout } from "../components/ToastOverlay/layout.js";
-export type { WidgetSettingsLine } from "../components/WidgetSettingsPanel/content.js";
-export {
-  widgetSettingsPanelLayout,
-  widgetSettingsPanelModel,
-} from "../components/WidgetSettingsPanel/content.js";
+export type { WidgetSettingsItem } from "../components/WidgetSettingsPanel/content.js";
+export { widgetSettingsPanelModel } from "../components/WidgetSettingsPanel/content.js";
 export type {
   RowColor,
   RowGridLayout,
@@ -99,10 +81,9 @@ export type {
   RowSegment,
 } from "../components/WorktreeRow/layout.js";
 export {
-  cellWidth,
   layoutWorktreeRowGrid,
   textSegment,
-  truncateCells,
+  withRowGridSelectionSlot,
 } from "../components/WorktreeRow/layout.js";
 
 export { isReadyToRead } from "../selectors/agentStatus.js";
@@ -123,19 +104,23 @@ export {
   sessionRowDisplayTitle,
 } from "../selectors/dashboardSessionRows.js";
 export type {
+  DashboardSessionOverflow,
+  DashboardSlots,
+} from "../selectors/dashboardSlots.js";
+export {
+  selectDashboardSlots,
+  selectDashboardSlotsForTree,
+} from "../selectors/dashboardSlots.js";
+export type {
   DashboardCellId,
-  DashboardGroupFrameEndPayload,
   DashboardGroupHeaderPayload,
   DashboardRowId,
+  DashboardTreeBranch,
+  DashboardTreeProjection,
   DashboardTreeRow,
   GroupOrderingMode,
 } from "../selectors/dashboardTree.js";
-export { dashboardRowIds } from "../selectors/dashboardTree.js";
-export type {
-  DashboardSessionOverflow,
-  DashboardViewport,
-} from "../selectors/dashboardViewport.js";
-export { selectDashboardViewport } from "../selectors/dashboardViewport.js";
+export { dashboardRowIds, selectDashboardTree } from "../selectors/dashboardTree.js";
 export type { FleetSummary } from "../selectors/fleetSummary.js";
 export { selectFleetSummary } from "../selectors/fleetSummary.js";
 export type {
@@ -143,6 +128,7 @@ export type {
   MoveToGroupSessionContext,
   NewSessionGroupOption,
   NewSessionHarnessOption,
+  SelectionChoice,
 } from "../selectors/selectors.js";
 export {
   selectMoveToGroupChoices,
@@ -153,3 +139,4 @@ export {
   selectProjectChooserChoices,
   selectProjectDefaultHarness,
 } from "../selectors/selectors.js";
+export { cellWidth, clipCells, truncateCells } from "../text/cells.js";

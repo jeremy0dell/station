@@ -20,7 +20,7 @@ import {
   createProjectSetDefaultHarnessHandler,
 } from "./project.js";
 import type { ProjectConfigWriter } from "./projectConfigWriter.js";
-import type { CommandHandler, CommandQueue } from "./queue.js";
+import type { CommandQueue, ObserverCommandHandlers } from "./queue.js";
 import { createObserverReconcileHandler } from "./reconcile.js";
 import { createSessionAcknowledgeTurnHandler } from "./session/acknowledgeTurn.js";
 import { createSessionCloseHandler } from "./session/close.js";
@@ -229,7 +229,7 @@ export function registerObserverCommandHandlers(
       clock: options.clock,
     }),
     ...sessionGroupHandlers,
-  } satisfies Record<StationCommand["type"], CommandHandler>;
+  } satisfies ObserverCommandHandlers;
 
   const commandTypes = Object.keys(handlers) as StationCommand["type"][];
   for (const commandType of commandTypes) {

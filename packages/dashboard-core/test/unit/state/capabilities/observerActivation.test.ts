@@ -28,6 +28,47 @@ describe("observer activation capability", () => {
     ]);
   });
 
+  it("keeps focus UX failed when completion belongs to another command", async () => {
+    const snapshot = createCommandSnapshot("idle");
+    const service = new FakeTuiObserverService(snapshot);
+    service.nextCompletion = {
+      status: "succeeded",
+      commandId: "cmd_tui_1",
+      result: {
+        type: "worktree.create",
+        projectId: "web",
+        worktreeId: "wt_unrelated",
+      },
+    };
+    let focusSuccessCount = 0;
+    const capability = createObserverActivationCapabilities({
+      source: new FakeClientStateSource(snapshot),
+      service,
+      waitForFocusCompletion: true,
+      onFocusSuccess: async () => {
+        focusSuccessCount += 1;
+      },
+    });
+
+    const handle = capability.activate({
+      sessionId: "ses_wt_web_idle",
+      projectId: "web",
+      worktreeId: "wt_web_idle",
+      branch: "fix-nav-mobile",
+      preferredObserverAction: "focus",
+    });
+
+    await expect(handle.completion).resolves.toMatchObject({
+      kind: "failure",
+      disposition: "remove-immediately",
+      error: {
+        code: "CLIENT_COMMAND_COMPLETION_MISMATCH",
+        commandId: "cmd_tui_1",
+      },
+    });
+    expect(focusSuccessCount).toBe(0);
+  });
+
   it("returns a stale-target notice without dispatching", async () => {
     const snapshot = createCommandSnapshot("idle");
     const service = new FakeTuiObserverService(snapshot);

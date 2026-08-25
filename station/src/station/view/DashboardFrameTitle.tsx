@@ -3,6 +3,7 @@ import { useStore } from "zustand/react";
 import type { DashboardStateSource } from "@station/dashboard-core/runtime";
 import { headerStrip, observerHeaderStatusForConnection, selectFleetSummary } from "@station/dashboard-core/selectors";
 import { tuiScreenBehavior } from "@station/dashboard-core/state";
+import { cellWidth } from "@station/dashboard-core/text";
 import { resolveTopRowWidgets } from "@station/dashboard-core/widgets";
 import type { TopRowWidgetView } from "@station/dashboard-core/widgets";
 import { toOpenTuiColor, toOpenTuiOpaqueColor, useStationTheme } from "../../theme/index.js";
@@ -60,14 +61,14 @@ export function DashboardFrameTitle({
   const status = observerHeaderStatusForConnection(observerConnectionStatus, snapshot !== undefined);
   const affordance = ` ${WIDGET_SETTINGS_AFFORDANCE} `;
   const stripBudget =
-    frame.width - 2 * EDGE - Bun.stringWidth(title) - Bun.stringWidth(affordance) - 2;
+    frame.width - 2 * EDGE - cellWidth(title) - cellWidth(affordance) - 2;
   const strip = headerStrip({
     widgets: resolveTopRowWidgets(topRowWidgets, snapshot),
     ...(status === undefined ? {} : { status }),
     maxWidth: Math.max(0, stripBudget),
   });
   const right = strip.length > 0 ? ` ${strip}${affordance}` : affordance;
-  const rightLeft = frame.left + frame.width - EDGE - Bun.stringWidth(right);
+  const rightLeft = frame.left + frame.width - EDGE - cellWidth(right);
 
   return (
     <>

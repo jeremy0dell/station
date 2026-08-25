@@ -11,6 +11,7 @@ const error = {
   message: "Hook operation failed.",
   provider: "codex",
 } as const;
+const followUpActions = ["enable-hooks", "run-doctor", "run-explicit-takeover", "retry"] as const;
 
 describe("provider hook contracts", () => {
   it.each([
@@ -34,6 +35,21 @@ describe("provider hook contracts", () => {
   ])("strictly parses hook health status $status", (health) => {
     expect(ProviderHookHealthSchema.parse(health)).toEqual(health);
     expect(ProviderHookHealthSchema.safeParse({ ...health, providerData: {} }).success).toBe(false);
+  });
+
+  it.each([
+    [{ provider: "codex", status: "configured-disabled" }, "enable-hooks"],
+    [
+      { provider: "codex", status: "ownership-conflict", ownership: "different-owner" },
+      "run-explicit-takeover",
+    ],
+    [{ provider: "codex", status: "inspection-failed", error }, "run-doctor"],
+  ] as const)("enforces the $1 follow-up for hook health", (health, expectedAction) => {
+    for (const action of followUpActions) {
+      expect(ProviderHookHealthSchema.safeParse({ ...health, followUp: { action } }).success).toBe(
+        action === expectedAction,
+      );
+    }
   });
 
   it.each([
@@ -84,6 +100,23 @@ describe("provider hook contracts", () => {
       ProviderHookReconciliationResultSchema.safeParse({ ...result, resolvedPaths: ["/secret"] })
         .success,
     ).toBe(false);
+  });
+
+  it.each([
+    ["configured-disabled", "enable-hooks"],
+    ["ownership-conflict", "run-explicit-takeover"],
+    ["write-failed", "retry"],
+    ["post-write-doctor-failed", "run-doctor"],
+    ["inspection-failed", "run-doctor"],
+  ] as const)("enforces the %s reconciliation follow-up", (status, expectedAction) => {
+    for (const action of followUpActions) {
+      expect(
+        ProviderHookReconciliationResultSchema.safeParse({
+          ...reconciliationFixture(status),
+          followUp: { action },
+        }).success,
+      ).toBe(action === expectedAction);
+    }
   });
 
   it("rejects contradictory verified and changed states", () => {

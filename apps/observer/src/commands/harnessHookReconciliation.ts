@@ -1,15 +1,14 @@
 import {
-  type HarnessProvider,
   type ProviderHookReconciliationContext,
   type ProviderHookReconciliationResult,
+  ProviderHookReconciliationResultSchema,
   type ProviderId,
   providerHookReconciliationSucceeded,
   type SafeError,
-  SafeErrorSchema,
+  type SuccessfulProviderHookReconciliationResult,
 } from "@station/contracts";
 import { toSafeError } from "../diagnostics/errors.js";
 import type { ProviderRegistry } from "../providers/registry.js";
-import { resolveHarnessProviderOrThrow } from "./providers.js";
 
 export type ReconcileHarnessHooksOptions = {
   providers: ProviderRegistry;
@@ -23,20 +22,45 @@ export type ReconcileHarnessHooksOptions = {
 /**
  * USE CASE
  *
- * Requests one provider-owned reconciliation and rejects every unverified enabled outcome.
+ * Requests one provider-owned reconciliation and returns its provider-neutral result.
  */
-export async function reconcileHarnessHooksOrThrow(
+export async function reconcileHarnessHooks(
   options: ReconcileHarnessHooksOptions,
 ): Promise<ProviderHookReconciliationResult> {
-  const provider = resolveHarnessProviderOrThrow(options.providers, options.providerId);
-  return reconcileProviderHooksOrThrow(provider, providerReconciliationContext(options));
+  const provider = options.providers.harnesses.get(options.providerId);
+  if (provider === undefined) {
+    return hookReconciliationFailure(options.providerId, {
+      tag: "HarnessProviderError",
+      code: "HARNESS_PROVIDER_UNAVAILABLE",
+      message: "The requested harness provider is not registered.",
+      provider: options.providerId,
+    });
+  }
+  if (provider.id !== options.providerId) {
+    return hookReconciliationFailure(options.providerId, invalidReconciliationResult());
+  }
+  const context = providerReconciliationContext(options);
+  const reconcile = provider.reconcileHooks?.bind(provider, context);
+  return reconcileProviderHooks(options.providerId, reconcile);
 }
 
 /**
  * USE CASE
  *
- * Reconciles every composed provider capability within the caller's startup budget before Observer
- * health is published.
+ * Requests one provider-owned reconciliation and rejects every unverified enabled outcome.
+ */
+export async function reconcileHarnessHooksOrThrow(
+  options: ReconcileHarnessHooksOptions,
+): Promise<ProviderHookReconciliationResult> {
+  const result = await reconcileHarnessHooks(options);
+  if (providerHookReconciliationSucceeded(result)) return result;
+  throw reconciliationError(result);
+}
+
+/**
+ * USE CASE
+ *
+ * Reconciles all configured provider hooks within one Observer startup budget.
  */
 export async function reconcileConfiguredHarnessHooksOrThrow(options: {
   providers: ProviderRegistry;
@@ -49,50 +73,63 @@ export async function reconcileConfiguredHarnessHooksOrThrow(options: {
     options.timeoutMs === undefined
       ? undefined
       : performance.now() + Math.max(0, options.timeoutMs);
-  for (const provider of options.providers.harnesses.values()) {
+  for (const providerId of options.providers.harnesses.keys()) {
     throwIfHookReconciliationAborted(options.signal);
     const timeoutMs = remainingHookReconciliationMs(deadline);
-    const context = providerReconciliationContext({
-      ...options,
-      ...(timeoutMs === undefined ? {} : { timeoutMs }),
-    });
-    results.push(await reconcileProviderHooksOrThrow(provider, context));
+    results.push(
+      await reconcileHarnessHooksOrThrow({
+        ...options,
+        providerId,
+        ...(timeoutMs === undefined ? {} : { timeoutMs }),
+      }),
+    );
   }
   return results;
 }
 
-async function reconcileProviderHooksOrThrow(
-  provider: HarnessProvider,
-  context: ProviderHookReconciliationContext | undefined,
+/**
+ * USE CASE
+ *
+ * Admits only canonical requested-provider results from one provider callback.
+ */
+export async function reconcileProviderHooks(
+  providerId: ProviderId,
+  reconcile: (() => Promise<unknown>) | undefined,
 ): Promise<ProviderHookReconciliationResult> {
-  if (provider.reconcileHooks === undefined) {
+  if (reconcile === undefined) {
     return {
-      provider: provider.id,
+      provider: providerId,
       status: "unsupported",
       changed: false,
       verified: false,
     };
   }
 
-  let result: ProviderHookReconciliationResult;
+  let untrustedResult: unknown;
   try {
-    result = await provider.reconcileHooks(context);
-  } catch (error) {
-    if (context?.signal?.aborted) {
-      throw context.signal.reason ?? error;
-    }
-    if (hookReconciliationTimedOut(error)) throw error;
-    throw toSafeError(error, {
-      tag: "HarnessProviderError",
-      code: "HARNESS_HOOK_RECONCILIATION_FAILED",
-      message: "Configured harness hooks could not be reconciled.",
-      provider: provider.id,
-    });
+    untrustedResult = await reconcile();
+  } catch (cause) {
+    return hookReconciliationFailure(providerId, cause);
   }
 
-  if (providerHookReconciliationSucceeded(result)) return result;
-  throw reconciliationError(result);
+  const parsed = ProviderHookReconciliationResultSchema.safeParse(untrustedResult);
+  if (
+    !parsed.success ||
+    parsed.data.provider !== providerId ||
+    ("error" in parsed.data &&
+      parsed.data.error.provider !== undefined &&
+      parsed.data.error.provider !== providerId)
+  ) {
+    return hookReconciliationFailure(providerId, invalidReconciliationResult());
+  }
+  return parsed.data;
 }
+
+const invalidReconciliationResult = (): SafeError => ({
+  tag: "HarnessProviderError",
+  code: "HARNESS_HOOK_RECONCILIATION_INVALID_RESULT",
+  message: "Harness hook reconciliation returned invalid provider-neutral evidence.",
+});
 
 function throwIfHookReconciliationAborted(signal: AbortSignal | undefined): void {
   if (signal?.aborted) {
@@ -112,11 +149,6 @@ function remainingHookReconciliationMs(deadline: number | undefined): number | u
   throw Object.assign(new Error(error.message), error);
 }
 
-function hookReconciliationTimedOut(error: unknown): boolean {
-  const parsed = SafeErrorSchema.safeParse(error);
-  return parsed.success && parsed.data.code.endsWith("_TIMEOUT");
-}
-
 function providerReconciliationContext(input: {
   stationConfigPath?: string | undefined;
   signal?: AbortSignal | undefined;
@@ -131,17 +163,29 @@ function providerReconciliationContext(input: {
   return Object.keys(context).length === 0 ? undefined : context;
 }
 
+function hookReconciliationFailure(
+  provider: ProviderId,
+  cause: unknown,
+): ProviderHookReconciliationResult {
+  const normalized = toSafeError(cause, {
+    tag: "HarnessProviderError",
+    code: "HARNESS_HOOK_RECONCILIATION_FAILED",
+    message: "Configured harness hooks could not be reconciled.",
+    provider,
+  });
+  const error: SafeError = { ...normalized, provider };
+  return {
+    provider,
+    status: "inspection-failed",
+    changed: false,
+    verified: false,
+    error,
+    followUp: { action: "run-doctor" },
+  };
+}
+
 function reconciliationError(
-  result: Extract<
-    ProviderHookReconciliationResult,
-    {
-      status:
-        | "ownership-conflict"
-        | "write-failed"
-        | "post-write-doctor-failed"
-        | "inspection-failed";
-    }
-  >,
+  result: Exclude<ProviderHookReconciliationResult, SuccessfulProviderHookReconciliationResult>,
 ): SafeError {
   const error: SafeError =
     "error" in result

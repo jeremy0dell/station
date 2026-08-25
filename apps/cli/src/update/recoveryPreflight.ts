@@ -1,6 +1,5 @@
 import {
   compareCodeUnitStrings,
-  compareUpdateReapTerminalIdentity,
   type ProviderHookHealth,
   ProviderHookHealthSchema,
   type ProviderId,
@@ -99,10 +98,7 @@ async function inspectHost(
   artifacts: UpdateRecoveryArtifacts,
 ): Promise<UpdateReapHostEvidence> {
   try {
-    const host = await ports.inspectHost(artifacts);
-    return host.status === "inspected"
-      ? { ...host, terminals: [...host.terminals].sort(compareUpdateReapTerminalIdentity) }
-      : host;
+    return await ports.inspectHost(artifacts);
   } catch (error) {
     return {
       status: "unknown",

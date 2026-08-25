@@ -2,11 +2,16 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { rgbToHex } from "@opentui/core";
 import { MouseButtons } from "@opentui/core/testing";
 import { testRender } from "@opentui/react/test-utils";
-import { ADD_PROJECT_CHOOSE_LIST_ID, createAddProjectFlow, transitionAddProjectFlow } from "@station/dashboard-core/state";
+import {
+  ADD_PROJECT_CHOOSE_LIST_ID,
+  createAddProjectFlow,
+  transitionAddProjectFlow,
+} from "@station/dashboard-core/state";
 import type { TuiSelectionState } from "@station/dashboard-core/state";
 import { act } from "react";
 import { spanAtFrameCell } from "../../../terminal/testing/frameProbe.js";
 import type { StationMouseTarget } from "../../input/stationMouse.js";
+import { semanticItemRenderableId } from "../layout/scrollViewport.js";
 import { StationHoverProvider, StationMouseProvider } from "../stationMouseContext.js";
 import {
   nativeStationTheme,
@@ -42,19 +47,22 @@ async function render(
   flow: AddProjectSheetFlowState,
   width = 80,
   selection: TuiSelectionState = new Map(),
+  height = 24,
 ) {
   const targets: StationMouseTarget[] = [];
   const setup = await testRender(
     <StationThemeProvider theme={nativeStationTheme}>
       <StationHoverProvider value>
         <StationMouseProvider value={(target) => targets.push(target)}>
-          <AddProjectSheetView state={flow} selection={selection} columns={width} rows={24} />
+          <AddProjectSheetView state={flow} selection={selection} columns={width} rows={height} />
         </StationMouseProvider>
       </StationHoverProvider>
     </StationThemeProvider>,
-    { width, height: 24 },
+    { width, height },
   );
   teardowns.push(() => setup.renderer.destroy());
+  await setup.renderOnce();
+  await setup.flush();
   await setup.renderOnce();
   return { setup, targets };
 }
@@ -179,5 +187,88 @@ describe("AddProjectSheetView", () => {
     expect(frame).toContain("Open");
     expect(frame).toContain("Cancel");
     expect(frame).toContain("Click selects");
+  });
+
+  it("keeps equal-path start choices as distinct semantic pointer rows", async () => {
+    const flow = createAddProjectFlow({ cwd: "/Users/example", homeDir: "/Users/example" });
+    const [currentChoice, homeChoice] = flow.choices;
+    if (currentChoice === undefined || homeChoice === undefined) {
+      throw new Error("expected current-directory and home choices");
+    }
+    const { setup, targets } = await render(
+      flow,
+      80,
+      new Map([["addProjectStart", homeChoice.id]]),
+    );
+
+    expect(currentChoice.path).toBe(homeChoice.path);
+    expect(currentChoice.id).not.toBe(homeChoice.id);
+    expect(
+      setup.renderer.root.findDescendantById(semanticItemRenderableId(currentChoice.id)),
+    ).toBeDefined();
+    expect(
+      setup.renderer.root.findDescendantById(semanticItemRenderableId(homeChoice.id)),
+    ).toBeDefined();
+
+    const lines = setup.captureCharFrame().split("\n");
+    const currentRow = lines.findIndex((line) => line.includes("current directory"));
+    const homeRow = lines.findIndex((line) => line.includes("~"));
+    expect(currentRow).toBeGreaterThan(0);
+    expect(homeRow).toBeGreaterThan(currentRow);
+
+    await setup.mockMouse.click(
+      lines[currentRow]?.indexOf("current directory") ?? -1,
+      currentRow,
+      MouseButtons.LEFT,
+    );
+    expect(targets.at(-1)).toEqual({ kind: "addProjectRow", itemId: currentChoice.id });
+
+    await setup.mockMouse.click(
+      lines[homeRow]?.indexOf("~") ?? -1,
+      homeRow,
+      MouseButtons.LEFT,
+    );
+    expect(targets.at(-1)).toEqual({ kind: "addProjectRow", itemId: homeChoice.id });
+  });
+
+  it("keeps one bounded frame through short, long, and review stages", async () => {
+    const started = createAddProjectFlow({ cwd: "/workspace", homeDir: "/home/example" });
+    const entries = Array.from({ length: 40 }, (_, index) => ({
+      name: `project-${String(index).padStart(2, "0")}`,
+      path: `/workspace/project-${String(index).padStart(2, "0")}`,
+      kind: "directory" as const,
+    }));
+    const choosing = transitionAddProjectFlow(started, {
+      type: "folderLoaded",
+      result: { path: "/workspace", entries },
+    }).state;
+    if (choosing?.mode !== "choose") throw new Error("expected chooser");
+
+    const start = await render(started, 80, new Map(), 40);
+    const choose = await render(
+      choosing,
+      80,
+      new Map([[ADD_PROJECT_CHOOSE_LIST_ID, entries.at(-1)?.path ?? "/workspace"]]),
+      40,
+    );
+    const review = await render(reviewFlow(true), 80, new Map(), 40);
+
+    expect(start.setup.renderer.root.findDescendantById("station-bottom-sheet")?.height).toBe(12);
+    expect(choose.setup.renderer.root.findDescendantById("station-bottom-sheet")?.height).toBe(12);
+    expect(review.setup.renderer.root.findDescendantById("station-bottom-sheet")?.height).toBe(12);
+    expect(choose.setup.captureCharFrame()).toContain("Folder  /workspace");
+    expect(choose.setup.captureCharFrame()).toContain("project-39/");
+    expect(choose.setup.captureCharFrame()).not.toContain("project-00/");
+    const lines = choose.setup.captureCharFrame().split("\n");
+    const selectedRow = lines.findIndex((line) => line.includes("project-39/"));
+    await choose.setup.mockMouse.click(
+      lines[selectedRow]?.indexOf("project-39/") ?? -1,
+      selectedRow,
+      MouseButtons.LEFT,
+    );
+    expect(choose.targets.at(-1)).toEqual({
+      kind: "addProjectRow",
+      itemId: "/workspace/project-39",
+    });
   });
 });

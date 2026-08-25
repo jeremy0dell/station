@@ -1,8 +1,12 @@
-import type { CommandRecord } from "@station/contracts";
+import {
+  type CommandRecord,
+  type CommandRecordInput,
+  CommandRecordSchema,
+} from "@station/contracts";
 import type { PersistedCommand } from "../persistence/index.js";
 
 export function commandRecordFromPersisted(command: PersistedCommand): CommandRecord {
-  const record: CommandRecord = {
+  const record: CommandRecordInput = {
     id: command.id,
     type: command.type,
     command: command.command,
@@ -15,5 +19,6 @@ export function commandRecordFromPersisted(command: PersistedCommand): CommandRe
   if (command.spanId !== undefined) record.spanId = command.spanId;
   if (command.error !== undefined) record.error = command.error;
   if (command.diagnostics !== undefined) record.diagnostics = command.diagnostics;
-  return record;
+  if (command.result !== undefined) record.result = command.result;
+  return CommandRecordSchema.parse(record) as CommandRecord;
 }

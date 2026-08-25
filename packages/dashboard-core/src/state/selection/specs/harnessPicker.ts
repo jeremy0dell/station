@@ -30,10 +30,10 @@ export function harnessPickerSpec(config: {
       if (project === undefined) {
         return [];
       }
-      return selectNewSessionHarnessChoices(state.snapshot, project).map((choice) => ({
-        key: choice.key,
-        value: choice.value.id,
-      }));
+      return selectNewSessionHarnessChoices(state.snapshot, project).map((choice) => {
+        const mapped = { value: choice.value.id };
+        return choice.key === undefined ? mapped : { ...mapped, key: choice.key };
+      });
     },
     commit: config.commit,
   });

@@ -1,15 +1,13 @@
-import { bottomSheetContentWidth } from "@station/dashboard-core/selectors";
 import { addProjectActions, addProjectRows, addProjectSelectedIndexForFlow } from "@station/dashboard-core/state";
 import type { AddProjectFlowStateView, TuiSelectionState } from "@station/dashboard-core/state";
 import { EditableTextInputView } from "../EditableTextInputView.js";
+import { bottomSheetContentWidth } from "../layout/bottomSheetFrame.js";
 import { BottomSheetFrameView } from "./BottomSheetFrameView.js";
 import {
   SheetButtonRow,
   type SheetButtonSpec,
-  SheetFill,
   SheetFooter,
   SheetLabelValue,
-  SheetLine,
   SheetMessageLine,
   SheetMetaLine,
   SheetPickerLine,
@@ -25,18 +23,24 @@ export type AddProjectSheetViewProps = {
 };
 
 export function AddProjectSheetView({ state, selection, columns, rows }: AddProjectSheetViewProps) {
-  const targetHeight = fixedSheetHeight(rows);
   const contentWidth = bottomSheetContentWidth(columns);
   const selectedIndex = addProjectSelectedIndexForFlow(state, selection);
+  const bodyItemIds = addProjectBodyItemIds(state);
   return (
     <BottomSheetFrameView
       columns={columns}
       rows={rows}
       title={titleForState(state)}
-      contentRows={Math.max(1, targetHeight - 2)}
-      minHeight={targetHeight}
+      bodyHeader={
+        state.mode === "choose" ? <FolderPickerContext state={state} width={contentWidth} /> : undefined
+      }
+      bodyItemIds={bodyItemIds}
+      followedBodyItemId={selectedIndex === undefined ? undefined : bodyItemIds[selectedIndex]}
+      bodyPaddingBottom={state.mode === "review" && state.gitRoot !== undefined ? 1 : 0}
+      actions={<AddProjectActionBar width={contentWidth} state={state} selectedIndex={selectedIndex} />}
+      footer={addProjectFooter(state, contentWidth)}
     >
-      {renderState(state, selectedIndex, contentWidth, Math.max(1, targetHeight - 3))}
+      {renderState(state, selectedIndex, contentWidth)}
     </BottomSheetFrameView>
   );
 }
@@ -45,7 +49,6 @@ function renderState(
   state: AddProjectFlowStateView,
   selectedIndex: number | undefined,
   width: number,
-  contentRows: number,
 ) {
   if (state.mode === "start") {
     return (
@@ -53,7 +56,6 @@ function renderState(
         state={state}
         selectedIndex={selectedIndex}
         width={width}
-        contentRows={contentRows}
       />
     );
   }
@@ -63,7 +65,6 @@ function renderState(
         state={state}
         selectedIndex={selectedIndex}
         width={width}
-        contentRows={contentRows}
       />
     );
   }
@@ -73,38 +74,32 @@ function renderState(
   if (state.mode === "success") {
     return <Success state={state} width={width} />;
   }
-  return <Failure state={state} width={width} contentRows={contentRows} />;
+  return <Failure state={state} width={width} />;
 }
 
 function StartChoices({
   state,
   selectedIndex,
   width,
-  contentRows,
 }: {
   state: Extract<AddProjectFlowStateView, { mode: "start" }>;
   selectedIndex: number | undefined;
   width: number;
-  contentRows: number;
 }) {
-  const visible = state.choices.slice(0, Math.max(0, contentRows - 4));
   return (
     <>
       <SheetSectionLine width={width}>Start location</SheetSectionLine>
-      <SheetLine width={width}> </SheetLine>
-      {visible.map((choice, index) => (
+      {state.choices.map((choice, index) => (
         <SheetPickerLine
-          key={choice.path}
+          key={choice.id}
           width={width}
           selected={index === selectedIndex}
           label={choice.label}
           detail={choice.detail}
-          mouseTarget={{ kind: "addProjectRow", index }}
+          mouseTarget={{ kind: "addProjectRow", itemId: choice.id }}
+          itemId={choice.id}
         />
       ))}
-      <SheetFill count={Math.max(0, contentRows - visible.length - 4)} width={width} />
-      <AddProjectActionBar width={width} state={state} selectedIndex={selectedIndex} />
-      <SheetFooter width={width}>Click selects · Open enters · ↑↓ + Enter supported</SheetFooter>
     </>
   );
 }
@@ -113,24 +108,15 @@ function FolderPicker({
   state,
   selectedIndex,
   width,
-  contentRows,
 }: {
   state: Extract<AddProjectFlowStateView, { mode: "choose" }>;
   selectedIndex: number | undefined;
   width: number;
-  contentRows: number;
 }) {
   const rows = addProjectRows(state);
-  const hasSearchPrompt = state.filterMode || state.filter.length > 0;
-  const errorRows = Number(state.error !== undefined) + Number(state.searchError !== undefined);
-  const listHeight = Math.max(1, contentRows - (hasSearchPrompt ? 6 : 5) - errorRows);
-  const start = Math.max(0, Math.min(selectedIndex ?? 0, rows.length - listHeight));
-  const visible = rows.slice(start, start + listHeight);
   if (state.filter.length > 0 && rows.length === 0) {
     return (
       <>
-        <SheetMetaLine width={width} label="Folder" value={state.currentPath} />
-        <SheetMetaLine width={width} label="Search" value={state.filter} />
         <SheetMessageLine width={width} tone="muted">
           {state.searching ? "Searching likely code folders..." : "0 matches"}
         </SheetMessageLine>
@@ -140,28 +126,11 @@ function FolderPicker({
         <SheetMessageLine width={width} tone="muted">
           Try another search or paste a full path.
         </SheetMessageLine>
-        <SheetFill count={Math.max(0, contentRows - 7)} width={width} />
-        <AddProjectActionBar width={width} state={state} selectedIndex={selectedIndex} />
-        <SheetFooter width={width}>Backspace edit · Ctrl-U clear · Esc clears search</SheetFooter>
       </>
     );
   }
   return (
     <>
-      <SheetMetaLine width={width} label="Folder" value={state.currentPath} />
-      {hasSearchPrompt ? (
-        <SheetMetaLine
-          width={width}
-          label="Search"
-          value={
-            state.filter.length > 0
-              ? `${state.filter}   ${matchSummary(state, rows.length)}   ${start + 1}-${start + visible.length} of ${rows.length}`
-              : ""
-          }
-        />
-      ) : (
-        <SheetLine width={width}> </SheetLine>
-      )}
       {state.error === undefined ? null : (
         <SheetMessageLine width={width} tone="danger">
           {state.error.message}
@@ -172,26 +141,54 @@ function FolderPicker({
           {`Search failed: ${state.searchError.message}`}
         </SheetMessageLine>
       )}
-      {visible.map((row, index) => (
+      {rows.map((row, index) => (
         <SheetPickerLine
           key={`${row.kind}:${row.path}`}
           width={width}
-          selected={start + index === selectedIndex}
+          selected={index === selectedIndex}
           label={rowLabel(row)}
           detail={rowDetail(row.kind)}
-          mouseTarget={{ kind: "addProjectRow", index: start + index }}
+          mouseTarget={{ kind: "addProjectRow", itemId: row.path }}
+          itemId={folderRowItemId(row)}
         />
       ))}
-      <SheetFill
-        count={Math.max(0, contentRows - visible.length - 5 - errorRows)}
-        width={width}
-      />
-      <AddProjectActionBar width={width} state={state} selectedIndex={selectedIndex} />
-      <SheetFooter width={width}>
-        {state.filterMode ? "Type search/path · Esc clears" : "Single-click selects · actions complete navigation"}
-      </SheetFooter>
     </>
   );
+}
+
+function FolderPickerContext({
+  state,
+  width,
+}: {
+  state: Extract<AddProjectFlowStateView, { mode: "choose" }>;
+  width: number;
+}) {
+  const rows = addProjectRows(state);
+  const hasSearchPrompt = state.filterMode || state.filter.length > 0;
+  return (
+    <box flexDirection="column" marginBottom={hasSearchPrompt ? 0 : 1}>
+      <SheetMetaLine width={width} label="Folder" value={state.currentPath} />
+      {hasSearchPrompt ? (
+        <SheetMetaLine
+          width={width}
+          label="Search"
+          value={
+            state.filter.length > 0 ? `${state.filter}   ${matchSummary(state, rows.length)}` : ""
+          }
+        />
+      ) : null}
+    </box>
+  );
+}
+
+function addProjectBodyItemIds(state: AddProjectFlowStateView): string[] {
+  if (state.mode === "start") return state.choices.map((choice) => choice.id);
+  if (state.mode === "choose") return addProjectRows(state).map(folderRowItemId);
+  return [];
+}
+
+function folderRowItemId(row: ReturnType<typeof addProjectRows>[number]): string {
+  return `${row.kind}:${row.path}`;
 }
 
 function rowLabel(row: ReturnType<typeof addProjectRows>[number]): string {
@@ -237,15 +234,7 @@ function Review({
         <SheetMessageLine width={width} tone="warning">
           Choose a folder inside an existing Git repository.
         </SheetMessageLine>
-      ) : (
-        <SheetLine width={width}> </SheetLine>
-      )}
-      <AddProjectActionBar width={width} state={state} />
-      {state.submitting ? (
-        <SheetProgressFooter width={width}>Adding project</SheetProgressFooter>
-      ) : (
-        <SheetFooter width={width}>{reviewHelper(state)}</SheetFooter>
-      )}
+      ) : null}
     </>
   );
 }
@@ -264,8 +253,6 @@ function Success({
       <SheetMessageLine width={width} tone="success">
         Config updated. Reconciled successfully.
       </SheetMessageLine>
-      <AddProjectActionBar width={width} state={state} />
-      <SheetFooter width={width}>Enter or D returns to dashboard</SheetFooter>
     </>
   );
 }
@@ -273,17 +260,11 @@ function Success({
 function Failure({
   state,
   width,
-  contentRows,
 }: {
   state: Extract<AddProjectFlowStateView, { mode: "failed" }>;
   width: number;
-  contentRows: number;
 }) {
-  const staticRows = state.error.hint === undefined ? 7 : 8;
-  const metadataRows = failureMetadataRows(state.error).slice(
-    0,
-    Math.max(0, contentRows - staticRows),
-  );
+  const metadataRows = failureMetadataRows(state.error);
   return (
     <>
       <SheetMessageLine width={width} tone="danger">
@@ -298,8 +279,6 @@ function Failure({
       {metadataRows.map((row) => (
         <SheetMetaLine key={row.label} width={width} label={row.label} value={row.value} />
       ))}
-      <AddProjectActionBar width={width} state={state} />
-      <SheetFooter width={width}>←→ action · Enter activates focused action</SheetFooter>
     </>
   );
 }
@@ -340,8 +319,35 @@ function titleForState(state: AddProjectFlowStateView): string {
   return "Add Project Failed";
 }
 
-function fixedSheetHeight(rows: number): number {
-  return Math.min(Math.max(1, rows - 2), 18);
+function addProjectFooter(state: AddProjectFlowStateView, width: number) {
+  if (state.mode === "start") {
+    return (
+      <SheetFooter width={width}>Click selects · Open enters · ↑↓ + Enter supported</SheetFooter>
+    );
+  }
+  if (state.mode === "choose") {
+    const noMatches = state.filter.length > 0 && addProjectRows(state).length === 0;
+    return (
+      <SheetFooter width={width}>
+        {noMatches
+          ? "Backspace edit · Ctrl-U clear · Esc clears search"
+          : state.filterMode
+            ? "Type search/path · Esc clears"
+            : "Single-click selects · actions complete navigation"}
+      </SheetFooter>
+    );
+  }
+  if (state.mode === "review") {
+    return state.submitting ? (
+      <SheetProgressFooter width={width}>Adding project</SheetProgressFooter>
+    ) : (
+      <SheetFooter width={width}>{reviewHelper(state)}</SheetFooter>
+    );
+  }
+  if (state.mode === "success") {
+    return <SheetFooter width={width}>Enter or D returns to dashboard</SheetFooter>;
+  }
+  return <SheetFooter width={width}>←→ action · Enter activates focused action</SheetFooter>;
 }
 
 function AddProjectActionBar({

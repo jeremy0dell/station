@@ -1,10 +1,11 @@
 // OpenTUI port of apps/tui's RenameSessionBottomSheet.
-import { bottomSheetContentWidth, truncateCells } from "@station/dashboard-core/selectors";
+import { truncateCells } from "@station/dashboard-core/text";
 import type { DashboardScreenView } from "@station/dashboard-core/state";
 import { EditableTextInputView } from "../EditableTextInputView.js";
 import { toOpenTuiColor, useStationTheme } from "../../../theme/index.js";
+import { bottomSheetContentWidth } from "../layout/bottomSheetFrame.js";
 import { BottomSheetFrameView } from "./BottomSheetFrameView.js";
-import { SheetButtonRow, SheetFooter, SheetLabelValue, SheetLine, SheetText } from "./parts.js";
+import { SheetButtonRow, SheetFooter, SheetLabelValue, SheetText } from "./parts.js";
 
 export type RenameSessionSheetViewProps = {
   state: Extract<DashboardScreenView, { name: "renameSession"; step: "editName" }>;
@@ -22,10 +23,25 @@ export function RenameSessionSheetView({ state, columns, rows }: RenameSessionSh
       columns={columns}
       rows={rows}
       title="Rename Session"
-      contentRows={4}
-      minHeight={7}
+      bodyPaddingTop={state.validationError === undefined ? 1 : 0}
+      actions={
+        <SheetButtonRow
+          width={contentWidth}
+          buttons={[
+            {
+              id: "rename.submit",
+              label: "Rename",
+              shortcut: "enter",
+              tone: "primary",
+              mouseTarget: { kind: "renameSessionSubmit" },
+              focused: false,
+              disabled: false,
+            },
+          ]}
+        />
+      }
+      footer={<SheetFooter width={contentWidth}>{footer}</SheetFooter>}
     >
-      {state.validationError === undefined ? <SheetLine width={contentWidth}> </SheetLine> : null}
       <SheetLabelValue
         width={contentWidth}
         label="Name"
@@ -37,21 +53,6 @@ export function RenameSessionSheetView({ state, columns, rows }: RenameSessionSh
           {truncateCells(` ${state.validationError}`, contentWidth)}
         </SheetText>
       )}
-      <SheetButtonRow
-        width={contentWidth}
-        buttons={[
-          {
-            id: "rename.submit",
-            label: "Rename",
-            shortcut: "enter",
-            tone: "primary",
-            mouseTarget: { kind: "renameSessionSubmit" },
-            focused: false,
-            disabled: false,
-          },
-        ]}
-      />
-      <SheetFooter width={contentWidth}>{footer}</SheetFooter>
     </BottomSheetFrameView>
   );
 }

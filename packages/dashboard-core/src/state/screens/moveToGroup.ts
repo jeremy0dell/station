@@ -12,6 +12,7 @@ import { selectMoveToGroupSessionContext } from "../../selectors/selectors.js";
 import { buildCreateSessionGroupCommand } from "../commandBuilders.js";
 import type { TuiKey } from "../keys.js";
 import { isReturnKey } from "../keys.js";
+import type { DashboardVisibleRowsSource } from "../layoutVisibility.js";
 import { resolveMoveSessionToGroupOperation } from "../operations/sessionGroups.js";
 import { addTuiToast } from "../toasts.js";
 import type { TuiTransition } from "../transition.js";
@@ -36,13 +37,20 @@ export function moveToGroupScreenBehavior(screen: MoveToGroupScreenView) {
   return screen.step === "chooseSlot" ? chooseSlotBehavior : sheetBehavior;
 }
 
-export function handleMoveToGroupKey(state: DashboardState, key: TuiKey): TuiTransition {
+export function handleMoveToGroupKey(
+  state: DashboardState,
+  key: TuiKey,
+  visibleRows?: DashboardVisibleRowsSource,
+): TuiTransition {
   if (state.screen.name !== "moveToGroup") return { state };
   if (state.screen.step === "chooseSlot") {
     if (key.escape === true) return { state: cancelMoveToGroup(state) };
-    return handleDashboardRowChoiceKey(state, key, (current, rowId) => ({
-      state: openMoveToGroupForRow(current, rowId),
-    }));
+    return handleDashboardRowChoiceKey(
+      state,
+      key,
+      (current, rowId) => ({ state: openMoveToGroupForRow(current, rowId) }),
+      visibleRows,
+    );
   }
   if (state.screen.submitting) return { state };
   if (state.screen.step === "chooseDestination") {

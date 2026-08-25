@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import { MouseButtons } from "@opentui/core/testing";
 import { testRender } from "@opentui/react/test-utils";
-import { settingsPanelLayout } from "@station/dashboard-core/selectors";
 import { nativeStationTheme, StationThemeProvider } from "../../../theme/index.js";
 import type { StationMouseTarget } from "../../input/stationMouse.js";
 import {
@@ -22,7 +21,8 @@ async function render(focus: "list" | "detail", size = { width: 80, height: 20 }
       <StationHoverProvider value>
         <StationMouseProvider value={(target) => targets.push(target)}>
           <SettingsPanelView
-            layout={settingsPanelLayout(size.width, size.height)}
+            columns={size.width}
+            rows={size.height}
             focus={focus}
             title="Settings title"
             compactDetailTitle="Detail title"
@@ -84,6 +84,14 @@ describe("SettingsPanelView", () => {
     expect(detail.setup.captureCharFrame()).toContain("Detail title");
     expect(detail.setup.captureCharFrame()).toContain("FOCUSED");
     expect(detail.setup.captureCharFrame()).not.toContain("General");
+  });
+
+  it("centers a compact preferred-height panel in a tall terminal", async () => {
+    const { setup } = await render("list", { width: 80, height: 32 });
+    const panel = setup.renderer.root.findDescendantById("station-settings-panel");
+
+    expect(panel?.height).toBe(20);
+    expect(panel?.y).toBe(6);
   });
 
   it("emits each feature-owned semantic item target", async () => {

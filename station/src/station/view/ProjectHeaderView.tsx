@@ -1,5 +1,5 @@
 import { TextAttributes, type ColorInput } from "@opentui/core";
-import { projectHeaderLabelParts, textMatchSegments, truncateCells } from "@station/dashboard-core/selectors";
+import { projectHeaderLabelParts, textMatchSegments } from "@station/dashboard-core/selectors";
 import type {
   DashboardCellId,
   DashboardPersistentFilterProjectMatch,
@@ -20,9 +20,9 @@ import {
 } from "./dashboardHeaderActionLabels.js";
 
 const MENU_AFFORDANCE_LABEL = "[▾]";
-const PROJECT_HEADER_SEPARATOR_COUNT = 3;
 
 export function ProjectHeaderView({
+  renderableId,
   columns,
   rowId,
   project,
@@ -31,6 +31,7 @@ export function ProjectHeaderView({
   focusedCellId,
   persistentFilterMatch,
 }: {
+  renderableId?: string;
   columns: number;
   rowId: DashboardRowId;
   project: DashboardProjectView;
@@ -41,25 +42,18 @@ export function ProjectHeaderView({
 }) {
   const shellLabel = dashboardShellActionLabel(columns);
   const quickSessionLabel = dashboardQuickSessionActionLabel(columns);
-  const controlsWidth =
-    shellLabel.length +
-    quickSessionLabel.length +
-    MENU_AFFORDANCE_LABEL.length +
-    PROJECT_HEADER_SEPARATOR_COUNT;
   const dimmed = persistentFilterMatch?.matched === false;
   return (
-    <box flexDirection="row" width="100%" height={1} overflow="hidden">
+    <box id={renderableId} flexDirection="row" width="100%" overflow="hidden">
       <ProjectHeaderPrimary
         rowId={rowId}
         project={project}
         collapsed={collapsed}
         groupCount={groupCount}
-        width={Math.max(1, columns - controlsWidth)}
         focused={focusedCellId === "identity"}
         dimmed={dimmed}
         persistentFilterMatch={persistentFilterMatch}
       />
-      <box flexGrow={1} height={1} />
       <ProjectHeaderCursor focused={focusedCellId === "shell"} dimmed={dimmed} />
       <ProjectHeaderAction
         label={shellLabel}
@@ -93,7 +87,6 @@ function ProjectHeaderPrimary({
   project,
   collapsed,
   groupCount,
-  width,
   focused,
   dimmed,
   persistentFilterMatch,
@@ -102,7 +95,6 @@ function ProjectHeaderPrimary({
   project: DashboardProjectView;
   collapsed: boolean;
   groupCount: number;
-  width: number;
   focused: boolean;
   dimmed: boolean;
   persistentFilterMatch?: DashboardPersistentFilterProjectMatch | undefined;
@@ -111,25 +103,28 @@ function ProjectHeaderPrimary({
   const dispatch = useStationMouse();
   const [hover, setHover] = useStationHoverState();
   return (
-    <text
-      flexShrink={0}
-      fg={toOpenTuiColor(theme.text.primary)}
-      attributes={dimmed ? TextAttributes.DIM : TextAttributes.NONE}
-      {...projectHeaderBackground(theme, hover, focused)}
-      {...stationMouseProps(dispatch, { kind: "dashboardCell", rowId, cellId: "identity" })}
-      onMouseOver={() => setHover(true)}
-      onMouseOut={() => setHover(false)}
-    >
-      {focused ? "▸" : " "}
-      <ProjectHeaderLabel
-        project={project}
-        collapsed={collapsed}
-        groupCount={groupCount}
-        width={Math.max(0, width - 1)}
-        dimmed={dimmed}
-        persistentFilterMatch={persistentFilterMatch}
-      />
-    </text>
+    <box minWidth={0} flexGrow={1} flexShrink={1} flexDirection="row" overflow="hidden">
+      <text
+        flexShrink={0}
+        wrapMode="none"
+        fg={toOpenTuiColor(theme.text.primary)}
+        attributes={dimmed ? TextAttributes.DIM : TextAttributes.NONE}
+        {...projectHeaderBackground(theme, hover, focused)}
+        {...stationMouseProps(dispatch, { kind: "dashboardCell", rowId, cellId: "identity" })}
+        onMouseOver={() => setHover(true)}
+        onMouseOut={() => setHover(false)}
+      >
+        {focused ? "▸" : " "}
+        <ProjectHeaderLabel
+          project={project}
+          collapsed={collapsed}
+          groupCount={groupCount}
+          dimmed={dimmed}
+          persistentFilterMatch={persistentFilterMatch}
+        />
+      </text>
+      <box flexGrow={1} />
+    </box>
   );
 }
 
@@ -182,33 +177,26 @@ function ProjectHeaderLabel({
   project,
   collapsed,
   groupCount,
-  width,
   dimmed,
   persistentFilterMatch,
 }: {
   project: DashboardProjectView;
   collapsed: boolean;
   groupCount: number;
-  width: number;
   dimmed: boolean;
   persistentFilterMatch?: DashboardPersistentFilterProjectMatch | undefined;
 }) {
   const theme = useStationTheme();
   const parts = projectHeaderLabelParts(project, collapsed, groupCount);
-  const combined = truncateCells(`${parts.title}${parts.counts}`, width);
-  const title = combined.slice(0, parts.title.length);
-  const prefixLength = Math.min(title.length, parts.title.length - project.label.length);
-  const prefix = title.slice(0, prefixLength);
-  const label = title.slice(prefixLength);
   return (
     <>
       <ProjectHeaderLabelText
-        prefix={prefix}
-        label={label}
+        prefix={`${collapsed ? "▶" : "▼"} `}
+        label={project.label}
         ranges={persistentFilterMatch?.labelRanges ?? []}
         dimmed={dimmed}
       />
-      <span fg={toOpenTuiColor(theme.text.muted)}>{combined.slice(parts.title.length)}</span>
+      <span fg={toOpenTuiColor(theme.text.muted)}>{parts.counts}</span>
     </>
   );
 }

@@ -1,110 +1,148 @@
-// OpenTUI port of apps/tui's HelpOverlay: centered box-drawn panel above the
-// dashboard (absolute + zIndex; the dashboard must never reflow for it).
-// Lines come from the shared panel generator over Station's visible help copy.
-import { DASHBOARD_FILTER_CONDITION_KEYS, helpPanelLayout, helpPanelLines } from "@station/dashboard-core/selectors";
-import {
-  dashboardBindingHelp,
-  type TuiDashboardBindingId,
-} from "@station/dashboard-core/state";
-import { stationKeymapHelp } from "../../input/keymap/stationBindings.js";
+// Renderer-owned overlay: OpenTUI centers and clips the semantic help entries,
+// while the structural panel owns its border, padding, and continuation cue.
+import { useMemo, useSyncExternalStore } from "react";
 import { toOpenTuiColor, toOpenTuiOpaqueColor, useStationTheme } from "../../theme/index.js";
+import {
+  STATION_HELP_ENTRIES,
+  STATION_HELP_ENTRY_IDS,
+  type StationHelpEntry,
+} from "../helpEntries.js";
+import { SemanticScrollRegion } from "./layout/SemanticScrollViewport.js";
+import {
+  createScrollViewportController,
+  semanticItemRenderableId,
+} from "./layout/scrollViewport.js";
+import { helpPanelFrame } from "./layout/helpPanelFrame.js";
 import { useStationMouse, stationMouseProps } from "./stationMouseContext.js";
 
-const FILTER_CONDITION_KEY_HINT = DASHBOARD_FILTER_CONDITION_KEYS.join("/");
-
-function dashboardHelp(id: TuiDashboardBindingId): { key: string; description: string } {
-  const help = dashboardBindingHelp(id);
-  if (help === undefined) throw new Error(`Dashboard binding ${id} has no Help metadata.`);
-  return {
-    key: help.panelKeys ?? help.keys,
-    description: help.panelLabel ?? help.label,
-  };
-}
-
-function dashboardHelpGroup(
-  ids: readonly TuiDashboardBindingId[],
-): { key: string; description: string } {
-  const entries = ids.map(dashboardHelp);
-  return {
-    key: entries.map(({ key }) => key).join("/"),
-    description: [...new Set(entries.map(({ description }) => description))].join("/"),
-  };
-}
-
-function dashboardKeys(ids: readonly TuiDashboardBindingId[]): string {
-  return ids.map((id) => dashboardHelp(id).key).join(" ");
-}
-
-const navigation = dashboardHelpGroup(["tui.dashboard.focusUp", "tui.dashboard.focusDown"]);
-const helpAliases = dashboardHelpGroup(["tui.dashboard.help", "tui.dashboard.helpAlias"]);
-const refresh = dashboardHelp("tui.dashboard.refresh");
-
-const STATION_HELP_CONTENT = [
-  { text: "station help", align: "center" as const },
-  ...stationKeymapHelp(),
-  { text: "station project view", align: "center" as const },
-  { key: navigation.key, description: `${navigation.description} · wheel scroll` },
-  dashboardHelp("tui.dashboard.focusActivate"),
-  dashboardHelp("tui.dashboard.nextNeedsMe"),
-  dashboardHelpGroup(["tui.dashboard.quickGroup", "tui.dashboard.moveToGroup"]),
-  {
-    key: dashboardKeys([
-      "tui.dashboard.filter",
-      "tui.dashboard.focusActivate",
-      "tui.dashboard.dismissEsc",
-      "tui.dashboard.quit",
-    ]),
-    description: "edit/apply/cancel-clear/retain-close filter",
-  },
-  {
-    key: `Tab ${FILTER_CONDITION_KEY_HINT}`,
-    description: "build filter conditions · F applies builder",
-  },
-  dashboardHelp("tui.dashboard.slotActivate"),
-  dashboardHelpGroup([
-    "tui.dashboard.newSession",
-    "tui.dashboard.addProject",
-    "tui.dashboard.rename",
-    "tui.dashboard.collapse",
-    "tui.dashboard.fork",
-    "tui.dashboard.projectSettings",
-  ]),
-  dashboardHelp("tui.dashboard.widgetSettings"),
-  dashboardHelp("tui.dashboard.remove"),
-  {
-    key: helpAliases.key,
-    description: `${helpAliases.description} · ${refresh.key} ${refresh.description}`,
-  },
-] as const;
-
-export function HelpOverlayView({ columns, rows }: { columns: number; rows: number }) {
+export function HelpOverlayView({
+  columns,
+  rows,
+  focusedEntryId,
+}: {
+  columns: number;
+  rows: number;
+  focusedEntryId?: string;
+}) {
   const theme = useStationTheme();
   const helpBackground = toOpenTuiOpaqueColor(theme.surfaces.help);
   const dispatch = useStationMouse();
-  const layout = helpPanelLayout(columns, rows, STATION_HELP_CONTENT);
-  const panelLines = helpPanelLines(layout.width, layout.height, STATION_HELP_CONTENT);
+  const frame = helpPanelFrame(columns, rows);
+  const controller = useMemo(() => createScrollViewportController<string>(), []);
+  const visibleEntryIds = useSyncExternalStore(
+    controller.subscribe,
+    controller.snapshot,
+    controller.snapshot,
+  );
+  const continuation = helpContinuation(visibleEntryIds);
 
   return (
     <box
       position="absolute"
-      top={layout.top}
-      left={layout.left}
-      width={layout.width}
-      height={layout.height}
+      top={0}
+      left={0}
+      width={Math.max(1, columns)}
+      height={Math.max(1, rows)}
       zIndex={10}
-      flexDirection="column"
-      backgroundColor={helpBackground}
-      {...stationMouseProps(dispatch, { kind: "sheetBackdrop" })}
+      alignItems="center"
+      justifyContent="center"
+      {...stationMouseProps(dispatch, { kind: "screenBackdrop" })}
     >
-      {panelLines.map((line, index) => (
-        <text
-          key={`${index}:${line}`}
-          fg={toOpenTuiColor(theme.text.primary)}
-          bg={helpBackground}
+      <box
+        id="station-help-surface"
+        width={frame.width}
+        height={frame.height}
+        maxWidth={64}
+        flexDirection="column"
+        flexShrink={1}
+        border
+        borderStyle="rounded"
+        borderColor={toOpenTuiColor(theme.interaction.hairline)}
+        backgroundColor={helpBackground}
+        overflow="hidden"
+        {...stationMouseProps(dispatch, { kind: "sheetBackdrop" })}
+      >
+        <SemanticScrollRegion
+          itemIds={STATION_HELP_ENTRY_IDS}
+          followedItemId={focusedEntryId}
+          viewportId="station-help-content"
+          controller={controller}
         >
-          {line}
+          <box width="100%" flexDirection="column" paddingLeft={2} paddingRight={2}>
+            {STATION_HELP_ENTRIES.map((entry) => (
+              <HelpEntryView
+                key={entry.id}
+                entry={entry}
+                focused={entry.id === focusedEntryId}
+              />
+            ))}
+          </box>
+        </SemanticScrollRegion>
+        <text
+          flexShrink={0}
+          fg={toOpenTuiColor(theme.text.muted)}
+          selectable={false}
+          wrapMode="none"
+        >
+          {` ${continuation} · ↑↓ · PgUp/PgDn · Esc`}
         </text>
-      ))}
+      </box>
     </box>
   );
+}
+
+function HelpEntryView({ entry, focused }: { entry: StationHelpEntry; focused: boolean }) {
+  const theme = useStationTheme();
+  const foreground = toOpenTuiColor(theme.text.primary);
+  if ("text" in entry) {
+    return (
+      <box id={semanticItemRenderableId(entry.id)} width="100%" flexDirection="row">
+        <text width={2} fg={toOpenTuiColor(theme.action.primary)} selectable={false}>
+          {focused ? "▸ " : "  "}
+        </text>
+        <box flexGrow={1} justifyContent="center">
+          <text fg={foreground} selectable={false}>
+            {entry.text}
+          </text>
+        </box>
+      </box>
+    );
+  }
+  return (
+    <box
+      id={semanticItemRenderableId(entry.id)}
+      width="100%"
+      flexDirection="row"
+      columnGap={2}
+    >
+      <text width={2} fg={toOpenTuiColor(theme.action.primary)} selectable={false}>
+        {focused ? "▸ " : "  "}
+      </text>
+      <text width={11} flexShrink={1} fg={foreground} selectable={false}>
+        {entry.key}
+      </text>
+      <text
+        minWidth={1}
+        flexGrow={1}
+        flexShrink={1}
+        fg={foreground}
+        wrapMode="word"
+        selectable={false}
+      >
+        {entry.description}
+      </text>
+    </box>
+  );
+}
+
+function helpContinuation(visibleEntryIds: readonly string[] | undefined): string {
+  const first = visibleEntryIds?.[0];
+  const last = visibleEntryIds?.at(-1);
+  const hasAbove = first !== undefined && STATION_HELP_ENTRY_IDS.indexOf(first) > 0;
+  const hasBelow =
+    last !== undefined && STATION_HELP_ENTRY_IDS.indexOf(last) < STATION_HELP_ENTRY_IDS.length - 1;
+  if (hasAbove && hasBelow) return "↕ more";
+  if (hasAbove) return "↑ more";
+  if (hasBelow) return "↓ more";
+  return "all visible";
 }

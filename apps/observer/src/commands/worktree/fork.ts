@@ -6,7 +6,7 @@ import type { ObserverEventBus } from "../../runtime/eventBus.js";
 import type { StationLogger } from "../../stationLogger.js";
 import { assertCommandType } from "../assertCommand.js";
 import type { HarnessLaunchPreflight } from "../harnessLaunchPreflight.js";
-import type { CommandHandler } from "../queue.js";
+import type { CommandResultHandler } from "../queue.js";
 import { reconcileAndPublish } from "../reconcile.js";
 import {
   commandValidationError,
@@ -34,9 +34,11 @@ export type WorktreeForkHandlerOptions = {
  * working tree (when copyDirty), validating any source-Group inheritance intent while minting no
  * session and launching no terminal so Station can host the inherited harness itself. A selected
  * launch harness is preflighted before mutation. No live-agent guard on the source — the seed is a
- * read-only snapshot.
+ * read-only snapshot. Success returns the exact project and forked-worktree identities.
  */
-export function createWorktreeForkHandler(options: WorktreeForkHandlerOptions): CommandHandler {
+export function createWorktreeForkHandler(
+  options: WorktreeForkHandlerOptions,
+): CommandResultHandler<"worktree.fork"> {
   return async (context) => {
     assertCommandType(context, "worktree.fork");
     throwIfAborted(context.signal);
@@ -80,7 +82,7 @@ export function createWorktreeForkHandler(options: WorktreeForkHandlerOptions): 
       request.seedFrom = { path: sourceRow.path, worktreeId: sourceRow.id };
     }
 
-    await runProviderMutation(
+    const worktree = await runProviderMutation(
       {
         clock: options.clock,
         signal: context.signal,
@@ -104,5 +106,10 @@ export function createWorktreeForkHandler(options: WorktreeForkHandlerOptions): 
       reason: "command:worktree.fork",
       trace: context.trace,
     });
+    return {
+      type: "worktree.fork",
+      projectId: project.id,
+      worktreeId: worktree.id,
+    };
   };
 }

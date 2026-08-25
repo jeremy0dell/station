@@ -1,10 +1,10 @@
-import stringWidth from "string-width";
-import type { DashboardSessionOverflow } from "../../selectors/dashboardViewport.js";
+import type { DashboardSessionOverflow } from "../../selectors/dashboardSlots.js";
 import type {
   DashboardScreenView,
   DashboardSnapshotView,
   DashboardStateView,
 } from "../../state/types.js";
+import { cellWidth } from "../../text/cells.js";
 
 type DashboardProjectView = DashboardSnapshotView["projects"][number];
 type DashboardObserverConnectionStatusView = DashboardStateView["observerConnectionStatus"];
@@ -39,7 +39,7 @@ export function headerStrip({
       if (joined.length === 0) {
         continue;
       }
-      if (stringWidth(joined) <= maxWidth) {
+      if (cellWidth(joined) <= maxWidth) {
         return joined;
       }
     }
@@ -83,11 +83,11 @@ export function fleetCountsLabel(
     counts.sessions,
     "session",
   )} · ${counts.agents} ${plural(counts.agents, "agent")}`;
-  if (full.length <= maxWidth) {
+  if (cellWidth(full) <= maxWidth) {
     return full;
   }
   const compact = `${counts.projects} · ${counts.sessions} · ${counts.agents}`;
-  return compact.length <= maxWidth ? compact : "";
+  return cellWidth(compact) <= maxWidth ? compact : "";
 }
 
 export function projectHeaderLabelParts(
@@ -125,43 +125,34 @@ export function scrollIndicatorLabel(
   return `▼ ${overflow.below} below · showing ${overflow.visible} of ${overflow.total}`;
 }
 
-export type SnapshotLoadingLine = {
-  id: string;
-  text: string;
-  color?: "gray";
-};
+export type SnapshotLoadingContent =
+  | { kind: "loading"; title: string }
+  | { kind: "unavailable"; title: string; hint: string }
+  | { kind: "reconnecting"; title: string; detail: string; hint: string };
 
-export function snapshotLoadingLines(
+/** Semantic copy for the dashboard body while no Observer snapshot is available. */
+export function snapshotLoadingContent(
   loading: boolean,
   observerConnectionStatus: DashboardObserverConnectionStatusView,
-): SnapshotLoadingLine[] {
+): SnapshotLoadingContent {
   if (observerConnectionStatus.state === "reconnecting") {
-    return [
-      { id: "top-spacer", text: " " },
-      { id: "title", text: "waiting for observer" },
-      { id: "status", text: "retrying connection", color: "gray" },
-      { id: "bottom-spacer", text: " " },
-      {
-        id: "hint",
-        text: "The dashboard will appear when the observer is ready.",
-        color: "gray",
-      },
-    ];
+    return {
+      kind: "reconnecting",
+      title: "waiting for observer",
+      detail: "retrying connection",
+      hint: "The dashboard will appear when the observer is ready.",
+    };
   }
 
   if (!loading) {
-    return [
-      { id: "top-spacer", text: " " },
-      { id: "title", text: "observer snapshot unavailable" },
-      {
-        id: "hint",
-        text: "Check the error details and try refreshing when ready.",
-        color: "gray",
-      },
-    ];
+    return {
+      kind: "unavailable",
+      title: "observer snapshot unavailable",
+      hint: "Check the error details and try refreshing when ready.",
+    };
   }
 
-  return [{ id: "loading", text: "Loading observer snapshot...", color: "gray" }];
+  return { kind: "loading", title: "Loading observer snapshot..." };
 }
 
 export function observerHeaderStatusForConnection(
@@ -177,25 +168,14 @@ export function observerHeaderStatusForConnection(
   return undefined;
 }
 
-export type CommandPromptLine = { text: string; color: "yellow" | "red" };
+export type CommandPromptModel = { text: string; tone: "warning" | "danger" };
 
-/**
- * The prompt line per screen (the special-cased rename-slot and
- * remove-confirm lines), flattened to text+color so render adapters only
- * render. Lives beside commandPromptRows, which guards the same screens.
- */
-export function commandPromptLineForScreen(
+/** Semantic prompt content for screens that augment the dashboard controls. */
+export function commandPromptForScreen(
   screen: DashboardScreenView,
-): CommandPromptLine | undefined {
+): CommandPromptModel | undefined {
   if (screen.name === "renameSession" && screen.step === "chooseSlot") {
-    return { text: "Rename: ↑↓ move · ↵ choose · 1-9/a-z or click", color: "yellow" };
+    return { text: "Rename: ↑↓ move · ↵ choose · 1-9/a-z or click", tone: "warning" };
   }
   return undefined;
-}
-
-export function commandPromptRows(screen: DashboardScreenView): number {
-  if (screen.name === "renameSession" && screen.step === "chooseSlot") {
-    return 2;
-  }
-  return 0;
 }

@@ -22,7 +22,7 @@ describe("persistent-filter conditions", () => {
     const chooser = key(openFilter(), TAB);
     expect(chooser.screen).toMatchObject({
       name: "persistentFilter",
-      conditionEditor: { stage: "field", cursor: 0 },
+      conditionEditor: { stage: "field", focusedItemId: "status" },
     });
 
     const values = key(chooser, { input: "S" });
@@ -31,7 +31,7 @@ describe("persistent-filter conditions", () => {
       conditionEditor: {
         stage: "values",
         field: "status",
-        cursor: 0,
+        focusedValueId: "needs_attention",
         selectedIds: [],
       },
     });
@@ -59,7 +59,7 @@ describe("persistent-filter conditions", () => {
         { field: "project", values: [{ id: "api", label: "api" }] },
         { field: "agent", values: [{ id: "codex", label: "codex" }] },
       ],
-      conditionEditor: { stage: "field", cursor: 2 },
+      conditionEditor: { stage: "field", focusedItemId: "agent" },
     });
 
     const applied = key(built, { input: "F" });
@@ -89,7 +89,7 @@ describe("persistent-filter conditions", () => {
     );
 
     expect(applyFocused.screen).toMatchObject({
-      conditionEditor: { stage: "field", cursor: 3 },
+      conditionEditor: { stage: "field", focusedItemId: "applyFilter" },
     });
     expect(key(applyFocused, RETURN)).toMatchObject({
       screen: { name: "dashboard" },
@@ -105,7 +105,7 @@ describe("persistent-filter conditions", () => {
       name: "persistentFilter",
       draft: { value: "", cursor: 0 },
       draftConditions: [{ field: "status", values: [{ id: "working", label: "Working" }] }],
-      conditionEditor: { stage: "field", cursor: 0 },
+      conditionEditor: { stage: "field", focusedItemId: "status" },
     });
 
     const closed = key(values, { input: "", escape: true });
@@ -154,7 +154,7 @@ describe("persistent-filter conditions", () => {
 
     expect(done.screen).toMatchObject({
       draftConditions: [],
-      conditionEditor: { stage: "field", cursor: 0 },
+      conditionEditor: { stage: "field", focusedItemId: "status" },
     });
     expect(key(done, { input: "F" }).persistentFilter).toEqual({ query: "api" });
   });

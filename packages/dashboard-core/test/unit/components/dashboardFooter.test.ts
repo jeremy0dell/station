@@ -101,7 +101,7 @@ describe("dashboard persistent filter footer", () => {
         columns: 80,
         screen: {
           ...FILTER_SCREEN,
-          conditionEditor: { stage: "field", cursor: 0 },
+          conditionEditor: { stage: "field", focusedItemId: "status" },
         },
       }),
     );
@@ -112,7 +112,7 @@ describe("dashboard persistent filter footer", () => {
         conditionEditor: {
           stage: "values",
           field: "status",
-          cursor: 0,
+          focusedValueId: "working",
           options: [{ id: "working", label: "Working" }],
           selectedIds: [],
         },

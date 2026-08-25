@@ -1,29 +1,31 @@
 import type { MouseEvent } from "@opentui/core";
 import { normalizeStationMouseEvent, type StationMouseEvent } from "../input/mouse.js";
 import type { MouseTargetRef } from "../input/router.js";
-import type { ContextMenuPlacement } from "./placement.js";
-import type { ContextMenuItem } from "./types.js";
+import type { ContextMenuAnchor, ContextMenuItem, ContextMenuItemId } from "./types.js";
 import { ContextMenuSurface } from "./ContextMenuSurface.js";
 
 export type ContextMenuLayerProps = {
   terminalWidth: number;
   terminalHeight: number;
-  placement: ContextMenuPlacement;
+  anchor: ContextMenuAnchor;
+  preferredWidth: number;
   items: readonly ContextMenuItem[];
-  activeIndex: number;
+  activeItemId: ContextMenuItemId | undefined;
   dispatchMouse: (target: MouseTargetRef, event: StationMouseEvent) => boolean;
 };
 
 export function ContextMenuLayer({
   terminalWidth,
   terminalHeight,
-  placement,
+  anchor,
+  preferredWidth,
   items,
-  activeIndex,
+  activeItemId,
   dispatchMouse,
 }: ContextMenuLayerProps) {
   return (
     <box
+      id="station-context-menu-boundary"
       position="absolute"
       left={0}
       top={0}
@@ -35,15 +37,14 @@ export function ContextMenuLayer({
         dispatchMouse({ kind: "contextMenuBackdrop" }, normalizeStationMouseEvent(event));
       }}
     >
-      <box position="absolute" left={placement.left} top={placement.top} zIndex={41}>
-        <ContextMenuSurface
-          items={items}
-          activeIndex={activeIndex}
-          width={placement.width}
-          height={placement.height}
-          dispatchMouse={dispatchMouse}
-        />
-      </box>
+      <ContextMenuSurface
+        items={items}
+        activeItemId={activeItemId}
+        anchor={anchor}
+        preferredWidth={preferredWidth}
+        boundaryId="station-context-menu-boundary"
+        dispatchMouse={dispatchMouse}
+      />
     </box>
   );
 }

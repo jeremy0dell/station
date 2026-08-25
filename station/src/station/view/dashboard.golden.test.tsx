@@ -1,8 +1,7 @@
-// Golden frames: every scenario at every surface size, captured immediately
-// after first render (before the 120ms throbber tick) so the working-row
-// throbber shows its first braille frame (⠋) deterministically.
+// Golden frames cover structural output; normalize the independently timed
+// throbber so renderer speed cannot change an otherwise identical snapshot.
 import { afterEach, describe, expect, it } from "bun:test";
-import { rgbToHex, TextAttributes } from "@opentui/core";
+import { rgbToHex, TextAttributes, type BaseRenderable } from "@opentui/core";
 import { MouseButtons } from "@opentui/core/testing";
 import { testRender } from "@opentui/react/test-utils";
 import type { StationClientConnectionState } from "@station/client";
@@ -13,6 +12,7 @@ import type {
   DashboardRuntimeOptions,
 } from "@station/dashboard-core/runtime";
 import { dashboardRowIds } from "@station/dashboard-core/selectors";
+import { cellWidth } from "@station/dashboard-core/text";
 import { act } from "react";
 import { spanAtFrameCell } from "../../terminal/testing/frameProbe.js";
 import {
@@ -34,7 +34,13 @@ import {
 import { parseStationTerminalPaletteObservation } from "../../theme/terminalPalette/observation.js";
 import { lightTerminalColors } from "../../theme/terminalPalette/test/fixtures.js";
 import { createTerminalPaletteTheme } from "../../theme/terminalPalette/theme.js";
-import { StationHoverProvider, StationMouseProvider } from "./stationMouseContext.js";
+import {
+  StationHoverProvider,
+  StationMouseProvider,
+  type StationMouseDispatch,
+} from "./stationMouseContext.js";
+import { semanticItemRenderableId } from "./layout/scrollViewport.js";
+import { FullscreenDashboard } from "../../dashboardRenderer/FullscreenDashboard.js";
 
 function spanHex(span: ReturnType<typeof spanAtFrameCell>): string | undefined {
   return span?.fg === undefined ? undefined : rgbToHex(span.fg);
@@ -56,6 +62,12 @@ const SIZES = [
   { width: 60, height: 16 },
   { width: 40, height: 12 },
 ] as const;
+
+const BRAILLE_THROBBER_FRAME = /[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]/gu;
+
+function stableGoldenFrame(frame: string): string {
+  return frame.replace(BRAILLE_THROBBER_FRAME, "⠋");
+}
 
 const SNAPSHOT_SCENARIOS: ReadonlyArray<{ name: string; snapshot: () => StationSnapshot }> = [
   { name: "many-projects", snapshot: manyProjectsSnapshot },
@@ -115,7 +127,7 @@ describe("dashboard golden frames", () => {
     height: number;
     snapshot?: StationSnapshot;
     connection?: StationClientConnectionState;
-    dispatchMouse?: (target: StationMouseTarget) => void;
+    dispatchMouse?: StationMouseDispatch;
     hoverEnabled?: boolean;
     toast?: ClientNotice;
     theme?: StationTheme;
@@ -134,6 +146,7 @@ describe("dashboard golden frames", () => {
       <DashboardRoot
         state={store.state}
         actions={store.actions}
+        layout={store.layout}
         columns={input.width}
         rows={input.height}
         onCopyNotice={() => {}}
@@ -143,7 +156,7 @@ describe("dashboard golden frames", () => {
       input.dispatchMouse === undefined ? (
         dashboard
       ) : (
-        <StationMouseProvider value={(target) => input.dispatchMouse?.(target)}>
+        <StationMouseProvider value={input.dispatchMouse}>
           {dashboard}
         </StationMouseProvider>
       );
@@ -159,6 +172,7 @@ describe("dashboard golden frames", () => {
       setup.renderer.destroy();
     });
     await setup.renderOnce();
+    await setup.flush();
     const toast = input.toast;
     if (toast !== undefined) {
       await act(async () => {
@@ -174,7 +188,7 @@ describe("dashboard golden frames", () => {
     for (const size of SIZES) {
       it(`renders ${scenario.name} at ${size.width}x${size.height}`, async () => {
         const setup = await renderDashboard({ ...size, snapshot: scenario.snapshot() });
-        expect(setup.captureCharFrame()).toMatchSnapshot();
+        expect(stableGoldenFrame(setup.captureCharFrame())).toMatchSnapshot();
       });
     }
   }
@@ -205,7 +219,7 @@ describe("dashboard golden frames", () => {
     expect(collapsed.captureCharFrame()).not.toContain("runtime-cleanup");
     expect(collapsed.captureCharFrame()).toContain("[b]");
     expect(collapsed.captureCharFrame()).not.toContain("[c]");
-    expect(collapsed.captureCharFrame()).toMatchSnapshot();
+    expect(stableGoldenFrame(collapsed.captureCharFrame())).toMatchSnapshot();
 
     const interleaved = await renderDashboard({
       width: 120,
@@ -219,10 +233,10 @@ describe("dashboard golden frames", () => {
     const input = interleavedLines.findIndex((line) => line.includes("▼ Input parity"));
     expect(design).toBeLessThan(docs);
     expect(docs).toBeLessThan(input);
-    expect(interleaved.captureCharFrame()).toMatchSnapshot();
+    expect(stableGoldenFrame(interleaved.captureCharFrame())).toMatchSnapshot();
   });
 
-  it("frames a targeted pending Quick Session inside its Group", async () => {
+  it("keeps a targeted Quick Session inside its semantic Group and Project boxes", async () => {
     const setup = await renderDashboard({
       width: 80,
       height: 40,
@@ -246,16 +260,99 @@ describe("dashboard golden frames", () => {
         },
       },
     });
-    const pendingLine = setup
-      .captureCharFrame()
-      .split("\n")
-      .find((line) => line.includes("station-quick-group"));
+    const lines = setup.captureCharFrame().split("\n");
+    const firstLine = lines.findIndex((line) => line.includes("station-quick-group"));
+    const pending = setup.renderer.root.findDescendantById(
+      semanticItemRenderableId(dashboardRowIds.create("create:station:quick-group")),
+    );
+    const group = setup.renderer.root.findDescendantById(
+      "station-dashboard-group:group:group_post_launch",
+    );
 
-    expect(pendingLine?.startsWith("│")).toBe(true);
-    expect(pendingLine?.trimEnd().endsWith("│")).toBe(true);
+    expect(pending?.height).toBe(1);
+    expect(group).toBeDefined();
+    expect(hasAncestor(pending, "station-dashboard-group:group:group_post_launch")).toBe(true);
+    expect(hasAncestor(group, "station-dashboard-project:project:station")).toBe(true);
+    expect(lines[firstLine]?.startsWith("│")).toBe(true);
+    expect(lines[firstLine]?.trimEnd().endsWith("│")).toBe(true);
   });
 
-  it("renders filtered Group counts and clips framed blocks as ordinary rows", async () => {
+  it("lays out mixed-height children and follows semantic focus through resize and reflow", async () => {
+    const failedId = dashboardRowIds.create("failed-layout-proof");
+    const focusedId = dashboardRowIds.session("ses_wt_scripts_unknown");
+    const { runtime: store } = makeStationTestRuntime({
+      snapshot: manyProjectsSnapshot(),
+      seedInitialSnapshot: false,
+      initialState: {
+        localRows: {
+          pendingCreate: [],
+          failedCreate: [
+            {
+              localId: "failed-layout-proof",
+              projectId: "station",
+              title: "failed-layout-child",
+              branch: "failed-layout-child",
+              error: {
+                tag: "ClientObserverError",
+                code: "CREATE_FAILED",
+                message: "Failure detail occupies its own intrinsic child box.",
+              },
+              expiresAt: Date.now() + 60_000,
+            },
+          ],
+          pendingRemove: [],
+          pendingStart: [],
+        },
+      },
+    });
+    store.start();
+    const setup = await testRender(
+      <StationThemeProvider theme={nativeStationTheme}>
+        <FullscreenDashboard
+          runtime={store}
+          openUrl={() => {}}
+          onCopyNotice={() => {}}
+        />
+      </StationThemeProvider>,
+      { width: 80, height: 16 },
+    );
+    teardowns.push(() => setup.renderer.destroy());
+    await setup.renderOnce();
+    await setup.flush();
+    const failedRenderable = setup.renderer.root.findDescendantById(
+      semanticItemRenderableId(failedId),
+    );
+    const initialLines = setup.captureCharFrame().split("\n");
+    const failedTitle = initialLines.findIndex((line) => line.includes("failed-layout-child"));
+
+    expect(failedRenderable?.height).toBe(2);
+    expect(initialLines[failedTitle + 1]).toContain(
+      "Failure detail occupies its own intrinsic child box.",
+    );
+
+    store.actions.focusDashboardSession("ses_wt_scripts_unknown");
+    await setup.flush();
+    expect(store.layout.snapshot()).toContain(focusedId);
+
+    await act(async () => setup.renderer.resize(60, 10));
+    await setup.renderOnce();
+    await setup.flush();
+    expect(store.layout.snapshot()).toContain(focusedId);
+
+    store.actions.dispatch({
+      type: "dashboard.cell.activate",
+      rowId: dashboardRowIds.project("station"),
+      cellId: "identity",
+    });
+    store.actions.focusDashboardSession("ses_wt_scripts_unknown");
+    await setup.flush();
+    await setup.flush();
+
+    expect(store.state.getState().collapsedProjectIds.has("station")).toBe(true);
+    expect(store.layout.snapshot()).toContain(focusedId);
+  });
+
+  it("renders filtered Group counts and clips structural Group boxes", async () => {
     const snapshot = groupedManyProjectsSnapshot();
     const filtered = await renderDashboard({
       width: 80,
@@ -268,18 +365,19 @@ describe("dashboard golden frames", () => {
     expect(filteredFrame).toContain("▼ Design refresh 0 visible");
     expect(filteredFrame).toContain("▼ Post-launch 0 sessions");
     expect(filteredFrame).not.toContain("group-contracts");
-    expect(filteredFrame).toMatchSnapshot();
+    expect(stableGoldenFrame(filteredFrame)).toMatchSnapshot();
 
     const scrolled = await renderDashboard({
       width: 80,
       height: 16,
       snapshot,
-      initialState: { scrollOffset: 8 },
     });
+    scrolled.store.layout.scrollBy(8);
+    await scrolled.flush();
     const scrolledFrame = scrolled.captureCharFrame();
     expect(scrolledFrame).toContain("▲");
     expect(scrolledFrame).toContain("│");
-    expect(scrolledFrame).toMatchSnapshot();
+    expect(stableGoldenFrame(scrolledFrame)).toMatchSnapshot();
   });
 
   it("uses the same responsive Quick Session label for Group and Project headers", async () => {
@@ -301,6 +399,35 @@ describe("dashboard golden frames", () => {
       expect(groupLine).toContain(label);
       expect(groupLine).not.toContain(absent);
     }
+  });
+
+  it("clips wide Project and Group names without shifting structural or action cells", async () => {
+    const base = groupedManyProjectsSnapshot();
+    const wideName = "界e\u0301 layout surface with a long semantic name";
+    const wideGroupName = `A ${wideName}`;
+    const setup = await renderDashboard({
+      width: 40,
+      height: 16,
+      snapshot: {
+        ...base,
+        projects: base.projects.map((project) => ({ ...project, label: wideName })),
+        sessionGroups: base.sessionGroups.map((group) =>
+          group.id === "group_design_refresh" ? { ...group, name: wideGroupName } : group,
+        ),
+      },
+    });
+    const lines = setup.captureCharFrame().split("\n");
+    const project = lines.find((line) => line.includes("▼ 界e\u0301"));
+    const group = lines.find((line) => line.includes("▼ A 界e\u0301") && line.startsWith("│"));
+
+    expect(project).toBeDefined();
+    expect(group).toBeDefined();
+    expect(project).not.toContain("�");
+    expect(group).not.toContain("�");
+    expect(project?.trimEnd().endsWith("[sh] [qs] [▾]")).toBe(true);
+    expect(group?.trimEnd().endsWith("[qs] [▾]│")).toBe(true);
+    expect(cellWidth(project ?? "")).toBe(40);
+    expect(cellWidth(group ?? "")).toBe(40);
   });
 
   it("paints exact Group focus targets and focused-member containment", async () => {
@@ -378,7 +505,7 @@ describe("dashboard golden frames", () => {
     const ring = spanAtFrameCell(spans, headerRow, 0);
 
     expect(spanHex(ring)).toBe(stationColorSnapshotValue(nativeStationTheme.status.working));
-    expect(((ring?.attributes ?? 0) & TextAttributes.DIM) !== 0).toBe(true);
+    expect(((ring?.attributes ?? 0) & TextAttributes.DIM) !== 0).toBe(false);
     expect(memberLines[memberRow]).toMatch(/^│▏/u);
     expect(memberLines[memberRow]?.match(/▏/gu)).toHaveLength(1);
     expect(spanBgHex(spanAtFrameCell(spans, memberRow, memberColumn))).toBe(
@@ -392,25 +519,25 @@ describe("dashboard golden frames", () => {
         visibility: { quickSession: true, menu: true },
         quickSession: true,
         menu: true,
-        expandedSuffix: "[qs] [▾]╮",
+        expandedSuffix: "[qs] [▾]│",
       },
       {
         visibility: { quickSession: true, menu: false },
         quickSession: true,
         menu: false,
-        expandedSuffix: "[qs]╮",
+        expandedSuffix: "[qs]│",
       },
       {
         visibility: { quickSession: false, menu: true },
         quickSession: false,
         menu: true,
-        expandedSuffix: "[▾]╮",
+        expandedSuffix: "[▾]│",
       },
       {
         visibility: { quickSession: false, menu: false },
         quickSession: false,
         menu: false,
-        expandedSuffix: "─╮",
+        expandedSuffix: "│",
       },
     ] as const;
 
@@ -435,7 +562,7 @@ describe("dashboard golden frames", () => {
         expect(line?.includes("[▾]")).toBe(testCase.menu);
         if (!collapsed) {
           expect(line?.trimEnd().endsWith(testCase.expandedSuffix)).toBe(true);
-          expect(line?.lastIndexOf("╮")).toBe(78);
+          expect(line?.lastIndexOf("│")).toBe(78);
         }
       }
     }
@@ -458,20 +585,31 @@ describe("dashboard golden frames", () => {
     });
     await setup.flush();
     const lines = setup.captureCharFrame().split("\n");
+    const frame = setup.renderer.root.findDescendantById(
+      `station-dashboard-group:${groupId}`,
+    );
     const headerRow = lines.findIndex((line) => line.includes("▼ Design refresh"));
     const memberRow = lines.findIndex((line) => line.includes("group-contracts"));
-    const frameEndRow = memberRow + 2;
+    const frameEndRow = (frame?.screenY ?? 0) + (frame?.height ?? 0) - 1;
     const line = lines[headerRow] ?? "";
     const identity = line.indexOf("Design refresh");
     const quick = line.indexOf("[qs]");
     const menu = line.indexOf("[▾]");
-    const rightEdge = line.lastIndexOf("╮");
+    const leftEdge = frame?.screenX ?? 0;
+    const rightEdge = leftEdge + (frame?.width ?? 0) - 1;
+    const frameStartRow = frame?.screenY ?? 0;
 
-    await setup.mockMouse.click(0, headerRow, MouseButtons.LEFT);
+    await setup.mockMouse.click(leftEdge, frameStartRow, MouseButtons.LEFT);
+    await setup.mockMouse.click(Math.floor(rightEdge / 2), frameStartRow, MouseButtons.LEFT);
+    await setup.mockMouse.click(leftEdge, headerRow, MouseButtons.LEFT);
     await setup.mockMouse.click(quick - 2, headerRow, MouseButtons.LEFT);
-    await setup.mockMouse.click(quick + "[qs]".length, headerRow, MouseButtons.LEFT);
+    await setup.mockMouse.click(
+      cellWidth(line.slice(0, quick)) + cellWidth("[qs]"),
+      headerRow,
+      MouseButtons.LEFT,
+    );
     await setup.mockMouse.click(rightEdge, headerRow, MouseButtons.LEFT);
-    await setup.mockMouse.click(0, memberRow, MouseButtons.LEFT);
+    await setup.mockMouse.click(leftEdge, memberRow, MouseButtons.LEFT);
     await setup.mockMouse.click(rightEdge, memberRow, MouseButtons.LEFT);
     await setup.mockMouse.click(0, frameEndRow, MouseButtons.LEFT);
     await setup.mockMouse.click(Math.floor(rightEdge / 2), frameEndRow, MouseButtons.LEFT);
@@ -504,6 +642,39 @@ describe("dashboard golden frames", () => {
     );
   });
 
+  it("routes hover and right-click through the final Group member", async () => {
+    const calls: Array<{ target: StationMouseTarget; button: number }> = [];
+    const memberId = dashboardRowIds.session("ses_wt_group_keyboard");
+    const setup = await renderDashboard({
+      width: 80,
+      height: 24,
+      snapshot: groupedManyProjectsSnapshot(),
+      dispatchMouse: (target, event) => calls.push({ target, button: event.button }),
+    });
+    const lines = setup.captureCharFrame().split("\n");
+    const memberRow = lines.findIndex((line) => line.includes("group-keyboard"));
+    const memberColumn = lines[memberRow]?.indexOf("group-keyboard") ?? -1;
+
+    expect(memberRow).toBeGreaterThanOrEqual(0);
+    expect(memberColumn).toBeGreaterThanOrEqual(0);
+    await act(async () => {
+      await setup.mockMouse.moveTo(memberColumn, memberRow);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    await setup.flush();
+    expect(spanBgHex(spanAtFrameCell(setup.captureSpans(), memberRow, memberColumn))).toBe(
+      stationColorSnapshotValue(nativeStationTheme.interaction.hover),
+    );
+
+    await setup.mockMouse.click(memberColumn, memberRow, MouseButtons.RIGHT);
+    expect(calls).toEqual([
+      {
+        target: { kind: "dashboardCell", rowId: memberId, cellId: "identity" },
+        button: MouseButtons.RIGHT,
+      },
+    ]);
+  });
+
   it("renders the persistent filter soft-preview editor at wide width", async () => {
     const setup = await renderDashboard({
       width: 120,
@@ -518,7 +689,7 @@ describe("dashboard golden frames", () => {
     await setup.flush();
 
     const frame = setup.captureCharFrame();
-    expect(frame).toMatchSnapshot();
+    expect(stableGoldenFrame(frame)).toMatchSnapshot();
     expect(frame).toContain("FILTER /cli▏");
     expect(frame).toContain("FILTER");
     const lines = frame.split("\n");
@@ -562,7 +733,7 @@ describe("dashboard golden frames", () => {
     });
     await setup.flush();
 
-    expect(setup.captureCharFrame()).toMatchSnapshot();
+    expect(stableGoldenFrame(setup.captureCharFrame())).toMatchSnapshot();
     expect(setup.captureCharFrame()).toContain("0/10 matches");
   });
 
@@ -583,9 +754,11 @@ describe("dashboard golden frames", () => {
       await Promise.resolve();
     });
     await setup.flush();
+    await setup.flush();
+    await setup.renderOnce();
 
     const frame = setup.captureCharFrame();
-    expect(frame).toMatchSnapshot();
+    expect(stableGoldenFrame(frame)).toMatchSnapshot();
     expect(frame).toContain("FILTER working · Status=Working");
     expect(frame).toContain("▼ scripts");
     expect(frame).toContain("▼ empty-project");
@@ -634,7 +807,7 @@ describe("dashboard golden frames", () => {
     });
     await setup.flush();
 
-    expect(setup.captureCharFrame()).toMatchSnapshot();
+    expect(stableGoldenFrame(setup.captureCharFrame())).toMatchSnapshot();
     expect(setup.captureCharFrame().split("\n")).toHaveLength(13);
   });
 
@@ -661,7 +834,7 @@ describe("dashboard golden frames", () => {
     store.start();
     const setup = await testRender(
       <StationThemeProvider theme={nativeStationTheme}>
-        <DashboardRoot state={store.state} actions={store.actions} columns={width} rows={height} onCopyNotice={() => {}} />
+        <DashboardRoot state={store.state} actions={store.actions} layout={store.layout} columns={width} rows={height} onCopyNotice={() => {}} />
       </StationThemeProvider>,
       { width, height },
     );
@@ -984,7 +1157,7 @@ describe("dashboard golden frames", () => {
       const lines = setup.captureCharFrame().split("\n");
       const row = lines.findIndex((line) => line.includes("[ + add session ]"));
       const col = lines[row]?.indexOf("[ + add session ]") ?? -1;
-      const after = col + "[ + add session ]".length;
+      const after = cellWidth((lines[row] ?? "").slice(0, col)) + cellWidth("[ + add session ]");
       expect(row).toBeGreaterThan(0);
       expect(col).toBeGreaterThan(0);
 
@@ -1045,7 +1218,7 @@ describe("dashboard golden frames", () => {
     store.start();
     const setup = await testRender(
       <StationThemeProvider theme={nativeStationTheme}>
-        <DashboardRoot state={store.state} actions={store.actions} columns={80} rows={24} onCopyNotice={() => {}} />
+        <DashboardRoot state={store.state} actions={store.actions} layout={store.layout} columns={80} rows={24} onCopyNotice={() => {}} />
       </StationThemeProvider>,
       { width: 80, height: 24 },
     );
@@ -1102,7 +1275,7 @@ describe("dashboard golden frames", () => {
         const shellStart = line.indexOf(shellLabel);
         const quickStart = line.indexOf(quickLabel);
         const defaultStart = line.indexOf("[▾]");
-        const primaryEnd = line.slice(0, shellStart - 1).trimEnd().length;
+        const primaryEnd = cellWidth(line.slice(0, shellStart - 1).trimEnd());
         expect(row).toBeGreaterThan(0);
         expect(line.trimStart()).toMatch(/^(?:▸)?▼ station/u);
         expect(line).not.toContain("▏");
@@ -1164,7 +1337,7 @@ describe("dashboard golden frames", () => {
     const shell = line.indexOf("[shell]");
     const quick = line.indexOf("[quick session]");
     const picker = line.indexOf("[▾]");
-    const inert = line.slice(0, shell).trimEnd().length + 1;
+    const inert = cellWidth(line.slice(0, shell).trimEnd()) + 1;
 
     await setup.mockMouse.click(1, row, MouseButtons.LEFT);
     await setup.mockMouse.click(inert, row, MouseButtons.LEFT);
@@ -1281,6 +1454,52 @@ describe("dashboard golden frames", () => {
     );
   });
 
+  it("keeps Project and Group menu hover active while their dashboard rows are inert", async () => {
+    for (const testCase of [
+      {
+        snapshot: manyProjectsSnapshot(),
+        rowId: dashboardRowIds.project("station"),
+        label: "Project settings…",
+      },
+      {
+        snapshot: groupedManyProjectsSnapshot(),
+        rowId: dashboardRowIds.group("group_design_refresh"),
+        label: "Group settings…",
+      },
+    ]) {
+      const setup = await renderDashboard({
+        width: 80,
+        height: 24,
+        snapshot: testCase.snapshot,
+      });
+      await act(async () => {
+        setup.store.actions.dispatch({
+          type: "dashboard.cell.activate",
+          rowId: testCase.rowId,
+          cellId: "menu",
+        });
+        await Promise.resolve();
+      });
+      await setup.flush();
+
+      const lines = setup.captureCharFrame().split("\n");
+      const row = lines.findIndex((line) => line.includes(testCase.label));
+      const column = lines[row]?.indexOf(testCase.label) ?? -1;
+      expect(row).toBeGreaterThanOrEqual(0);
+      expect(column).toBeGreaterThanOrEqual(0);
+
+      await act(async () => {
+        await setup.mockMouse.moveTo(column, row);
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      });
+      await setup.flush();
+
+      expect(spanBgHex(spanAtFrameCell(setup.captureSpans(), row, column))).toBe(
+        stationColorSnapshotValue(nativeStationTheme.contextMenu.selected),
+      );
+    }
+  });
+
   it("suppresses popup hover styling without removing click targets", async () => {
     let clicked: StationMouseTarget | undefined;
     const setup = await renderDashboard({
@@ -1308,6 +1527,25 @@ describe("dashboard golden frames", () => {
       kind: "dashboardCell",
       cellId: "identity",
     });
+
+    await act(async () => {
+      setup.store.actions.dispatch({
+        type: "dashboard.cell.activate",
+        rowId: dashboardRowIds.project("station"),
+        cellId: "menu",
+      });
+      await Promise.resolve();
+    });
+    await setup.flush();
+    const menuLines = setup.captureCharFrame().split("\n");
+    const settingsRow = menuLines.findIndex((line) => line.includes("Project settings…"));
+    const settingsColumn = menuLines[settingsRow]?.indexOf("Project settings…") ?? -1;
+    await setup.mockMouse.moveTo(settingsColumn, settingsRow);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    await setup.flush();
+    expect(
+      spanBgHex(spanAtFrameCell(setup.captureSpans(), settingsRow, settingsColumn)),
+    ).not.toBe(stationColorSnapshotValue(nativeStationTheme.contextMenu.selected));
   });
 
   it("wraps the complete actionable error at wide and narrow widths", async () => {
@@ -1322,27 +1560,61 @@ describe("dashboard golden frames", () => {
       });
       const frame = setup.captureCharFrame();
       const lines = frame.split("\n");
-      const top = lines.findIndex((line) => line.includes("┌"));
-      const bottom = lines.findIndex((line, index) => index > top && line.includes("└"));
-      const left = lines[top]?.indexOf("┌") ?? -1;
-      const right = lines[top]?.lastIndexOf("┐") ?? -1;
-      const noticeText = lines
-        .slice(top + 1, bottom)
-        .map((line) => line.slice(left + 1, right).trim())
+      const surface = setup.renderer.root.findDescendantById("station-toast-surface");
+      const noticeRegion = setup.renderer.root.findDescendantById(
+        "station-dashboard-notice-region",
+      );
+      const controls = setup.renderer.root.findDescendantById("station-dashboard-controls");
+      expect(surface).toBeDefined();
+      expect(noticeRegion).toBeDefined();
+      expect(controls).toBeDefined();
+      if (surface === undefined || noticeRegion === undefined || controls === undefined) {
+        throw new Error("toast surface, notice region, and dashboard controls must render");
+      }
+      const message = setup.renderer.root.findDescendantById(
+        semanticItemRenderableId("toast:message"),
+      );
+      const detail = setup.renderer.root.findDescendantById(
+        semanticItemRenderableId("toast:detail"),
+      );
+      expect(message).toBeDefined();
+      expect(detail).toBeDefined();
+      if (message === undefined || detail === undefined) {
+        throw new Error("toast message and detail must remain mounted");
+      }
+      const noticeText = [message, detail]
+        .flatMap((renderable) =>
+          lines
+            .slice(renderable.y, renderable.y + renderable.height)
+            .map((line) => line.slice(renderable.x, renderable.x + renderable.width).trim()),
+        )
         .join(" ")
         .replace(/\s+/g, " ");
 
-      expect(top).toBeGreaterThanOrEqual(3);
-      expect(bottom).toBeLessThan(size.height - 3);
-      expect(left).toBe(2 + Math.max(0, size.width - 76));
-      expect(size.width - right - 1).toBe(2);
+      expect(surface.y).toBeGreaterThanOrEqual(noticeRegion.y);
+      expect(surface.y + surface.height).toBeLessThanOrEqual(controls.y);
+      expect(surface.height).toBeLessThan(noticeRegion.height);
+      expect(surface.x).toBe(2 + Math.max(0, size.width - 76));
+      expect(size.width - surface.x - surface.width).toBe(2);
       expect(noticeText).toContain(WORKTREE_ERROR_MESSAGE);
       expect(noticeText).toContain(WORKTREE_ERROR_HINT);
       expect(noticeText).toContain("trace trace_worktree_remove_123");
       expect(noticeText).toContain("diagnostic diag_worktree_remove_456");
       expect(noticeText).not.toContain("…");
       expect(frame).toContain("Esc:dismiss  Q:close");
-      expect(frame.replace(/[ \t]+$/gm, "")).toMatchSnapshot();
+      expect(stableGoldenFrame(frame.replace(/[ \t]+$/gm, ""))).toMatchSnapshot();
     }
   });
 });
+
+function hasAncestor(
+  renderable: BaseRenderable | undefined,
+  ancestorId: string,
+): boolean {
+  let current = renderable?.parent;
+  while (current !== null && current !== undefined) {
+    if (current.id === ancestorId) return true;
+    current = current.parent;
+  }
+  return false;
+}

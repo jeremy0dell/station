@@ -1,11 +1,15 @@
 import type {
+  AcceptedCommandReceipt,
   CommandReceipt,
+  RejectedCommandReceipt,
   SafeError,
   StationCommand,
+  StationCommandResultFor,
   StationSnapshot,
 } from "@station/contracts";
+import { StationCommandResultSchema } from "@station/contracts";
 import { toSafeError } from "./errors.js";
-import type { ObserverService } from "./types.js";
+import type { ObserverService, StationClientCommandCompletion } from "./types.js";
 
 /**
  * Normalized outcome of dispatching one typed Observer command and, by default,
@@ -15,12 +19,16 @@ import type { ObserverService } from "./types.js";
  * callers can preserve command and trace identity in diagnostics or notices.
  * Accepted Group terminal outcomes are returned only after a canonical load.
  */
-export type ObserverCommandExecutionResult =
-  | { status: "rejected"; receipt: CommandReceipt; error: SafeError }
-  | { status: "accepted"; receipt: CommandReceipt }
-  | { status: "succeeded"; receipt: CommandReceipt }
-  | { status: "failed"; receipt: CommandReceipt; error: SafeError }
-  | { status: "thrown"; error: SafeError; receipt?: CommandReceipt };
+export type ObserverCommandExecutionResult<TCommand extends StationCommand = StationCommand> =
+  | { status: "rejected"; receipt: RejectedCommandReceipt; error: SafeError }
+  | { status: "accepted"; receipt: AcceptedCommandReceipt }
+  | {
+      status: "succeeded";
+      receipt: AcceptedCommandReceipt;
+      result?: StationCommandResultFor<TCommand>;
+    }
+  | { status: "failed"; receipt: AcceptedCommandReceipt; error: SafeError }
+  | { status: "thrown"; error: SafeError; receipt?: AcceptedCommandReceipt };
 
 type ExecuteObserverCommandOptions = {
   /** Return after an accepted receipt instead of waiting for terminal completion. */
@@ -31,7 +39,9 @@ type ExecuteObserverCommandOptions = {
 
 /**
  * Dispatch a typed Observer command through the shared client service and
- * normalize rejection, acceptance, completion, and thrown failures once.
+ * normalize rejection, acceptance, completion, and thrown failures once. Completion
+ * identity and any durable result are correlated to the submitted command before
+ * success reaches the caller.
  *
  * Accepted Group commands load canonical state after terminal completion. A
  * stale single-session assignment failure names that session's loaded destination.
@@ -39,11 +49,11 @@ type ExecuteObserverCommandOptions = {
  * This helper owns no optimistic UI policy and performs no renderer, provider,
  * or Station Host behavior.
  */
-export async function executeObserverCommand(
+export async function executeObserverCommand<TCommand extends StationCommand>(
   service: ObserverService,
-  command: StationCommand,
+  command: TCommand,
   options: ExecuteObserverCommandOptions = {},
-): Promise<ObserverCommandExecutionResult> {
+): Promise<ObserverCommandExecutionResult<TCommand>> {
   let receipt: CommandReceipt;
   try {
     receipt = await service.dispatch(command);
@@ -67,20 +77,28 @@ export async function executeObserverCommand(
 
   try {
     const completion = await service.waitForCommandCompletion(receipt.commandId);
+    assertCompletionIdentity(receipt, completion);
+    const commandResult =
+      completion.status === "succeeded"
+        ? correlatedCommandResult(command, completion.result)
+        : undefined;
     const snapshot = command.type.startsWith("sessionGroup.")
       ? await service.loadSnapshot()
       : undefined;
-    return completion.status === "succeeded"
-      ? { status: "succeeded", receipt }
-      : {
-          status: "failed",
-          receipt,
-          error: normalizeGroupAssignmentConflict(
-            withReceiptIdentity(completion.error, receipt),
-            command,
-            snapshot,
-          ),
-        };
+    if (completion.status === "succeeded") {
+      const succeeded: ObserverCommandExecutionResult<TCommand> = { status: "succeeded", receipt };
+      if (commandResult !== undefined) succeeded.result = commandResult;
+      return succeeded;
+    }
+    return {
+      status: "failed",
+      receipt,
+      error: normalizeGroupAssignmentConflict(
+        withReceiptIdentity(completion.error, receipt),
+        command,
+        snapshot,
+      ),
+    };
   } catch (error: unknown) {
     return {
       status: "thrown",
@@ -88,6 +106,38 @@ export async function executeObserverCommand(
       error: withReceiptIdentity(normalizeThrownFailure(error, options.clientLabel), receipt),
     };
   }
+}
+
+function assertCompletionIdentity(
+  receipt: AcceptedCommandReceipt,
+  completion: StationClientCommandCompletion,
+): void {
+  if (completion.commandId !== receipt.commandId) {
+    throw commandCompletionMismatchError(receipt.commandId);
+  }
+}
+
+function correlatedCommandResult<TCommand extends StationCommand>(
+  command: TCommand,
+  result: unknown,
+): StationCommandResultFor<TCommand> | undefined {
+  if (result === undefined) return undefined;
+  const parsed = StationCommandResultSchema.safeParse(result);
+  if (!parsed.success || parsed.data.type !== command.type) {
+    throw commandCompletionMismatchError(undefined);
+  }
+  return parsed.data as StationCommandResultFor<TCommand>;
+}
+
+function commandCompletionMismatchError(commandId: string | undefined): SafeError {
+  const error: SafeError = {
+    tag: "ClientObserverError",
+    code: "CLIENT_COMMAND_COMPLETION_MISMATCH",
+    message: "The observer returned completion that did not match the dispatched command.",
+    hint: "Refresh Station before retrying the operation.",
+  };
+  if (commandId !== undefined) error.commandId = commandId;
+  return error;
 }
 
 function normalizeGroupAssignmentConflict(

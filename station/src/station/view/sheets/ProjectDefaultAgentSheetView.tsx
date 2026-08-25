@@ -1,10 +1,14 @@
 import type { ProviderId } from "@station/contracts";
-import { bottomSheetContentWidth, selectNewSessionHarnessChoices } from "@station/dashboard-core/selectors";
-import type { KeyedChoice, NewSessionHarnessOption } from "@station/dashboard-core/selectors";
+import { selectNewSessionHarnessChoices } from "@station/dashboard-core/selectors";
+import type {
+  NewSessionHarnessOption,
+  SelectionChoice,
+} from "@station/dashboard-core/selectors";
 import type { DashboardScreenView, DashboardSnapshotView, DashboardStateView } from "@station/dashboard-core/state";
 import { AgentChoiceListView } from "./AgentChoiceListView.js";
+import { bottomSheetContentWidth } from "../layout/bottomSheetFrame.js";
 import { BottomSheetFrameView } from "./BottomSheetFrameView.js";
-import { SheetFooter, SheetLine } from "./parts.js";
+import { SheetFooter } from "./parts.js";
 
 export type ProjectDefaultAgentSheetViewProps = {
   snapshot: DashboardSnapshotView;
@@ -24,6 +28,7 @@ export function ProjectDefaultAgentSheetView({
   const project = snapshot.projects.find((candidate) => candidate.id === screen.projectId);
   const choices = project === undefined ? [] : selectNewSessionHarnessChoices(snapshot, project);
   const contentWidth = bottomSheetContentWidth(columns);
+  const selectedId = selection.get("projectDefaultAgent") as ProviderId | undefined;
   const title =
     project === undefined ? "Select Project Default Agent" : `Select default agent for ${project.label}`;
   return (
@@ -31,13 +36,21 @@ export function ProjectDefaultAgentSheetView({
       columns={columns}
       rows={rows}
       title={title}
-      contentRows={choices.length + 4}
+      bodyItemIds={choices.map((choice) => choice.value.id)}
+      followedBodyItemId={selectedId}
+      bodyPaddingTop={1}
+      bodyPaddingBottom={1}
+      footer={
+        <SheetFooter width={contentWidth}>
+          {"✓ current   ↑↓ move   ↵ select   1-9/a-z jump   Esc cancel"}
+        </SheetFooter>
+      }
     >
       <ProjectDefaultAgentPicker
         choices={choices}
         width={contentWidth}
         currentId={project?.defaults.harness}
-        selectedId={selection.get("projectDefaultAgent") as ProviderId | undefined}
+        selectedId={selectedId}
       />
     </BottomSheetFrameView>
   );
@@ -49,22 +62,19 @@ function ProjectDefaultAgentPicker({
   currentId,
   selectedId,
 }: {
-  choices: readonly KeyedChoice<NewSessionHarnessOption>[];
+  choices: readonly SelectionChoice<NewSessionHarnessOption>[];
   width: number;
   currentId?: NewSessionHarnessOption["id"];
   selectedId?: NewSessionHarnessOption["id"];
 }) {
   return (
     <>
-      <SheetLine width={width}> </SheetLine>
       <AgentChoiceListView
         choices={choices}
         width={width}
         currentId={currentId}
         selectedId={selectedId}
       />
-      <SheetLine width={width}> </SheetLine>
-      <SheetFooter width={width}>{"✓ current   ↑↓ move   ↵ select   1-9/a-z jump   Esc cancel"}</SheetFooter>
     </>
   );
 }
