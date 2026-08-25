@@ -34,6 +34,37 @@ describe("quick session", () => {
     );
   });
 
+  it("expands a collapsed Project before showing its pending Quick Session", async () => {
+    const snapshot = createCommandSnapshot("idle");
+    const project = snapshot.projects[0];
+    if (project === undefined) throw new Error("project fixture missing");
+    const service = new FakeTuiObserverService(snapshot);
+    const capabilities = createFakeDashboardCapabilities();
+    const store = createTestDashboardRuntime({
+      service,
+      capabilities,
+      initialSnapshot: snapshot,
+      initialState: { collapsedProjectIds: new Set([project.id]) },
+    });
+
+    store.actions.dispatch({
+      type: "dashboard.cell.activate",
+      rowId: dashboardRowIds.project(project.id),
+      cellId: "quickSession",
+    });
+
+    expect(capabilities.quickCreateRequests).toHaveLength(1);
+    expect(store.state.getState().collapsedProjectIds.has(project.id)).toBe(false);
+    expect(store.state.getState().localRows.pendingCreate).toEqual([
+      expect.objectContaining({ projectId: project.id }),
+    ]);
+    expect(store.state.getState().dashboardFocus).toEqual({
+      rowId: dashboardRowIds.project(project.id),
+      cellId: "quickSession",
+    });
+    await store.dispose();
+  });
+
   it("retains accepted empty-project focus through capability invocation", () => {
     const snapshot = createZeroWorktreeSnapshot();
     const service = new FakeTuiObserverService(snapshot);

@@ -67,8 +67,13 @@ export function submitQuickSession(state: DashboardState, projectId: string): Tu
   if (project === undefined) return { state };
 
   const { title, branch, harnessProvider, token } = resolution;
+  const collapsedProjectIds = new Set(state.collapsedProjectIds);
+  collapsedProjectIds.delete(project.id);
   return {
-    state,
+    state:
+      collapsedProjectIds.size === state.collapsedProjectIds.size
+        ? state
+        : { ...state, collapsedProjectIds },
     operations: [
       {
         type: "quickCreateManagedSession",
