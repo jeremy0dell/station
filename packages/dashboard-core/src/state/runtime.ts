@@ -1,4 +1,8 @@
-import type { StationClientStateSource } from "@station/client";
+import {
+  beginDashboardSourceRendererOccupancy,
+  markDashboardSourceRendererOccupancy,
+  type StationClientStateSource,
+} from "@station/client";
 import { createStore, type StoreApi } from "zustand/vanilla";
 import { safeErrorToToast, toSafeError } from "../services/errors/errors.js";
 import { createNodeFolderService, type TuiFolderService } from "../services/folderService.js";
@@ -202,12 +206,16 @@ function attachSnapshotSource(
   scope: DashboardRuntimeEffectScope,
 ): () => void {
   const apply = (): void => {
-    scope.commit(() =>
-      store.setState(
-        applySnapshotSourceState(store.getState(), source.getState(), Date.now()),
-        true,
-      ),
-    );
+    const occupancyActivityId = beginDashboardSourceRendererOccupancy();
+    scope.commit(() => {
+      const dashboardState = store.getState();
+      const sourceState = source.getState();
+      markDashboardSourceRendererOccupancy(occupancyActivityId, "sourceRead");
+      const nextState = applySnapshotSourceState(dashboardState, sourceState, Date.now());
+      markDashboardSourceRendererOccupancy(occupancyActivityId, "projectionCompleted");
+      store.setState(nextState, true);
+      markDashboardSourceRendererOccupancy(occupancyActivityId, "notificationCompleted");
+    });
   };
   apply();
   return source.subscribe(apply);

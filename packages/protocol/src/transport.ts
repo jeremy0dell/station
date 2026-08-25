@@ -8,10 +8,23 @@ import { isSafeError, runRuntimeBoundary, runRuntimeBoundaryWithTimeout } from "
 import { z } from "zod";
 import { protocolSafeError } from "./messages.js";
 import {
+  armRendererOccupancyDiagnosticWindow,
+  beginCompetingSocketRendererOccupancy,
+  completeCompetingSocketRendererOccupancy,
   markResponseDeliveryClientProtocolPhase,
   prepareExternalLaunchClientProtocolDiagnosticEnabled,
   type ResponseDeliveryDiagnosticScope,
 } from "./prepareExternalLaunchPhaseDiagnostic.js";
+
+export {
+  beginClientRuntimeEventRendererOccupancy,
+  beginDashboardSourceRendererOccupancy,
+  markClientRuntimeEventRendererOccupancy,
+  markDashboardSourceRendererOccupancy,
+  recordRootReactRendererOccupancy,
+  rendererOccupancyDiagnosticEnabled,
+} from "./prepareExternalLaunchPhaseDiagnostic.js";
+
 import { unwrapBoundaryResult } from "./runtime.js";
 
 const DEFAULT_SOCKET_PROBE_TIMEOUT_MS = 1000;
@@ -403,48 +416,56 @@ function ndjsonConnection(socket: Socket): NdjsonConnection {
   };
 
   socket.on("data", (chunk) => {
-    if (responseDeliveryDiagnosticScope !== undefined && !responseDataCallbackRecorded) {
-      responseDataCallbackRecorded = true;
-      markResponseDeliveryClientProtocolPhase(
-        responseDeliveryDiagnosticScope,
-        "responseSocketDataCallbackEntered",
-      );
+    const competingActivityId =
+      responseDeliveryDiagnosticScope === undefined
+        ? beginCompetingSocketRendererOccupancy()
+        : undefined;
+    try {
+      if (responseDeliveryDiagnosticScope !== undefined && !responseDataCallbackRecorded) {
+        responseDataCallbackRecorded = true;
+        markResponseDeliveryClientProtocolPhase(
+          responseDeliveryDiagnosticScope,
+          "responseSocketDataCallbackEntered",
+        );
+      }
+      buffer += chunk;
+      for (;;) {
+        const newline = buffer.indexOf("\n");
+        if (newline < 0) {
+          break;
+        }
+        const line = buffer.slice(0, newline);
+        buffer = buffer.slice(newline + 1);
+        if (line.trim().length === 0) {
+          continue;
+        }
+        try {
+          const diagnosticScope = responseDeliveryDiagnosticScope;
+          if (diagnosticScope !== undefined) {
+            markResponseDeliveryClientProtocolPhase(diagnosticScope, "responseFrameExtracted");
+          }
+          const value: unknown = JSON.parse(line);
+          if (diagnosticScope !== undefined) {
+            markResponseDeliveryClientProtocolPhase(diagnosticScope, "responseJsonParsed");
+          }
+          const message =
+            diagnosticScope === undefined
+              ? { value }
+              : { value, responseDeliveryDiagnosticScope: diagnosticScope };
+          messages.push(message);
+          if (diagnosticScope !== undefined) {
+            markResponseDeliveryClientProtocolPhase(diagnosticScope, "responseQueued");
+          }
+        } catch (error) {
+          // A malformed frame poisons the stream so the generator surfaces the parse error.
+          streamError = error instanceof Error ? error : new Error("Invalid NDJSON frame.");
+          socket.destroy(streamError);
+        }
+      }
+      wake(responseDeliveryDiagnosticScope);
+    } finally {
+      completeCompetingSocketRendererOccupancy(competingActivityId);
     }
-    buffer += chunk;
-    for (;;) {
-      const newline = buffer.indexOf("\n");
-      if (newline < 0) {
-        break;
-      }
-      const line = buffer.slice(0, newline);
-      buffer = buffer.slice(newline + 1);
-      if (line.trim().length === 0) {
-        continue;
-      }
-      try {
-        const diagnosticScope = responseDeliveryDiagnosticScope;
-        if (diagnosticScope !== undefined) {
-          markResponseDeliveryClientProtocolPhase(diagnosticScope, "responseFrameExtracted");
-        }
-        const value: unknown = JSON.parse(line);
-        if (diagnosticScope !== undefined) {
-          markResponseDeliveryClientProtocolPhase(diagnosticScope, "responseJsonParsed");
-        }
-        const message =
-          diagnosticScope === undefined
-            ? { value }
-            : { value, responseDeliveryDiagnosticScope: diagnosticScope };
-        messages.push(message);
-        if (diagnosticScope !== undefined) {
-          markResponseDeliveryClientProtocolPhase(diagnosticScope, "responseQueued");
-        }
-      } catch (error) {
-        // A malformed frame poisons the stream so the generator surfaces the parse error.
-        streamError = error instanceof Error ? error : new Error("Invalid NDJSON frame.");
-        socket.destroy(streamError);
-      }
-    }
-    wake(responseDeliveryDiagnosticScope);
   });
 
   socket.on("error", (error) => {
@@ -467,6 +488,7 @@ function ndjsonConnection(socket: Socket): NdjsonConnection {
       if (prepareExternalLaunchClientProtocolDiagnosticEnabled()) {
         responseDeliveryDiagnosticScope = "active";
         responseDataCallbackRecorded = false;
+        armRendererOccupancyDiagnosticWindow();
         markResponseDeliveryClientProtocolPhase("active", "responseDeliveryDiagnosticArmed");
       }
     },
