@@ -1,18 +1,40 @@
 import { execFileSync } from "node:child_process";
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  realpath,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { delimiter, dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  removeBinaryOutputAfterSourceAdmission,
+  runWithBunExecutable,
+} from "../../../../scripts/build-binary.mjs";
+import {
+  assertNodeVersion,
   buildIdentityPath,
   buildInputMode,
+  buildRepository,
   buildWithIdentity,
+  buildWithToolchainIdentity,
+  checkBuildIdentity,
+  checkBuildToolchain,
   computeBuildIdentity,
+  ensureBuildIdentity,
+  ensureBuildWithToolchainIdentity,
+  ensureRepositoryBuild,
   publishBuildIdentity,
   readBuildIdentity,
   runBuildChild,
   verifyBuildIdentity,
 } from "../../../../scripts/build-identity.mjs";
+import { requiredBunVersion, resolveAndCheckBunVersion } from "../../../../scripts/bun-version.mjs";
 import { environmentWithoutGitLocals } from "../../src/gitEnvironment.js";
 
 describe("build identity", () => {
@@ -108,6 +130,298 @@ describe("build identity", () => {
       "export const build = 'stale-output';\n",
     );
     await expect(verifyBuildIdentity(identity, root)).resolves.toBe(false);
+  });
+
+  it("checks a current identity without mutating it", async () => {
+    const root = await createRepository();
+    roots.push(root);
+    const identity = await computeBuildIdentity(root);
+    await publishBuildIdentity(identity, root);
+    const before = await readFile(buildIdentityPath(root), "utf8");
+
+    await expect(checkBuildIdentity(root)).resolves.toBe(identity);
+    await expect(readFile(buildIdentityPath(root), "utf8")).resolves.toBe(before);
+  });
+
+  it("rejects missing, stale-input, and stale-output identities without mutation", async () => {
+    const root = await createRepository();
+    roots.push(root);
+
+    await expect(checkBuildIdentity(root)).rejects.toThrow("missing or invalid");
+    await expect(readBuildIdentity(root)).rejects.toMatchObject({ code: "ENOENT" });
+
+    const identity = await computeBuildIdentity(root);
+    await publishBuildIdentity(identity, root);
+    await writeFile(join(root, "tracked.txt"), "changed\n");
+    await expect(checkBuildIdentity(root)).rejects.toThrow("does not match");
+    await expect(readBuildIdentity(root)).resolves.toBe(identity);
+
+    await writeFile(join(root, "tracked.txt"), "tracked\n");
+    await writeFile(
+      join(root, "packages", "example", "dist", "index.js"),
+      "export const build = 'stale-output';\n",
+    );
+    await expect(checkBuildIdentity(root)).rejects.toThrow("does not match");
+    await expect(readBuildIdentity(root)).resolves.toBe(identity);
+  });
+
+  it("ensures current output without rebuilding and rebuilds stale states once", async () => {
+    const root = await createRepository();
+    roots.push(root);
+    const current = await computeBuildIdentity(root);
+    await publishBuildIdentity(current, root);
+    let builds = 0;
+
+    await expect(
+      ensureBuildIdentity(root, async () => {
+        builds += 1;
+      }),
+    ).resolves.toBe(current);
+    expect(builds).toBe(0);
+
+    await rm(buildIdentityPath(root));
+    await expect(
+      ensureBuildIdentity(root, async () => {
+        builds += 1;
+      }),
+    ).resolves.toBe(current);
+    expect(builds).toBe(1);
+
+    await writeFile(join(root, "tracked.txt"), "changed\n");
+    await expect(
+      ensureBuildIdentity(root, async () => {
+        builds += 1;
+      }),
+    ).resolves.toMatch(/^[0-9a-f]{64}$/u);
+    expect(builds).toBe(2);
+
+    await writeFile(
+      join(root, "packages", "example", "dist", "index.js"),
+      "export const build = 'stale-output';\n",
+    );
+    await expect(
+      ensureBuildIdentity(root, async () => {
+        builds += 1;
+      }),
+    ).resolves.toMatch(/^[0-9a-f]{64}$/u);
+    expect(builds).toBe(3);
+  });
+
+  it("admits only the Node range declared by the root manifest", () => {
+    expect(() => assertNodeVersion("v24.2.0", ">=24.2 <25")).not.toThrow();
+    expect(() => assertNodeVersion("24.19.0", ">=24.2 <25")).not.toThrow();
+    expect(() => assertNodeVersion("v24.1.9", ">=24.2 <25")).toThrow(
+      "Station requires Node >=24.2 <25; found v24.1.9.",
+    );
+    expect(() => assertNodeVersion("v25.0.0", ">=24.2 <25")).toThrow(
+      "Station requires Node >=24.2 <25; found v25.0.0.",
+    );
+  });
+
+  it("rejects non-string package-manager and Node-engine policy fields", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-build-policy-"));
+    roots.push(root);
+    await writeFile(
+      join(root, "package.json"),
+      JSON.stringify({ packageManager: ["bun@1.4.0"], engines: { node: ">=24.2 <25" } }),
+    );
+    await expect(requiredBunVersion(root)).rejects.toThrow(
+      'Root package.json must declare packageManager as exact "bun@<version>".',
+    );
+
+    await writeFile(
+      join(root, "package.json"),
+      JSON.stringify({ packageManager: "bun@1.4.0", engines: { node: [">=24.2 <25"] } }),
+    );
+    await expect(checkBuildToolchain(root)).rejects.toThrow(
+      "Root package.json must declare engines.node as a supported range.",
+    );
+  });
+
+  it("rejects unsupported build toolchains before replacing a stale identity", async () => {
+    const root = await createRepository();
+    roots.push(root);
+    await writeFile(
+      join(root, "package.json"),
+      JSON.stringify({ packageManager: "bun@1.4.0", engines: { node: ">=24.2 <25" } }),
+    );
+    git(root, ["add", "package.json"]);
+    git(root, ["commit", "--quiet", "-m", "add toolchain policy"]);
+    const identity = await computeBuildIdentity(root);
+    await publishBuildIdentity(identity, root);
+    await writeFile(join(root, "tracked.txt"), "stale\n");
+    const outputPath = join(root, "packages", "example", "dist", "index.js");
+    const outputBeforeRejection = await readFile(outputPath, "utf8");
+
+    const toolRoot = await mkdtemp(join(tmpdir(), "station-build-toolchain-"));
+    roots.push(toolRoot);
+    const bin = join(toolRoot, "bin");
+    const bunLog = join(toolRoot, "bun.log");
+    await mkdir(bin);
+    await writeFile(
+      join(bin, "bun"),
+      '#!/bin/sh\nprintf \'%s\\n\' "$*" >> "$STATION_TEST_BUN_LOG"\nif [ "$1" = --version ]; then printf \'1.3.14\\n\'; fi\n',
+      { mode: 0o755 },
+    );
+    const env = {
+      ...process.env,
+      PATH: `${bin}${delimiter}${process.env.PATH ?? ""}`,
+      STATION_TEST_BUN_LOG: bunLog,
+    };
+    let builds = 0;
+    const runBuild = async () => {
+      builds += 1;
+    };
+
+    await expect(
+      buildWithToolchainIdentity(root, runBuild, { env, nodeVersion: "v22.14.0" }),
+    ).rejects.toThrow("Station requires Node >=24.2 <25; found v22.14.0.");
+    await expect(readFile(bunLog, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(readFile(buildIdentityPath(root), "utf8")).resolves.toBe(`${identity}\n`);
+    await expect(readFile(outputPath, "utf8")).resolves.toBe(outputBeforeRejection);
+
+    await expect(
+      ensureBuildWithToolchainIdentity(root, runBuild, { env, nodeVersion: "v24.19.0" }),
+    ).rejects.toThrow("Station requires Bun 1.4.0; found 1.3.14.");
+    await expect(readFile(bunLog, "utf8")).resolves.toBe("--version\n");
+    await expect(readFile(buildIdentityPath(root), "utf8")).resolves.toBe(`${identity}\n`);
+    await expect(readFile(outputPath, "utf8")).resolves.toBe(outputBeforeRejection);
+    expect(builds).toBe(0);
+
+    await writeFile(
+      join(bin, "bun"),
+      '#!/bin/sh\nprintf \'%s\\t%s\\t%s\\n\' "$0" "$*" "$PATH" >> "$STATION_TEST_BUN_LOG"\nif [ "$1" = --version ]; then printf \'1.4.0\\n\'; fi\n',
+      { mode: 0o755 },
+    );
+    await writeFile(bunLog, "");
+    await buildRepository(root, { env, nodeVersion: "v24.19.0" });
+    expect(builds).toBe(0);
+    const exactBun = await realpath(join(bin, "bun"));
+    await expect(readFile(bunLog, "utf8")).resolves.toBe(
+      [
+        `${exactBun}\t--version\t${env.PATH}`,
+        `${exactBun}\trun turbo run build\t${bin}${delimiter}${env.PATH}`,
+        "",
+      ].join("\n"),
+    );
+    await expect(readBuildIdentity(root)).resolves.not.toBe(identity);
+
+    await writeFile(join(root, "tracked.txt"), "stale-again\n");
+    await writeFile(bunLog, "");
+    await ensureRepositoryBuild(root, { env, nodeVersion: "v24.19.0" });
+    await expect(readFile(bunLog, "utf8")).resolves.toBe(
+      [
+        `${exactBun}\t--version\t${env.PATH}`,
+        `${exactBun}\trun turbo run build\t${bin}${delimiter}${env.PATH}`,
+        "",
+      ].join("\n"),
+    );
+  });
+
+  it("preserves an existing binary when source toolchain admission rejects", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-binary-admission-"));
+    roots.push(root);
+    const outputPath = join(root, "station", "dist", "bin", "stn");
+    const bin = join(root, "tools");
+    await mkdir(dirname(outputPath), { recursive: true });
+    await mkdir(bin);
+    await writeFile(outputPath, "working-binary\n");
+    await writeFile(
+      join(bin, "bun"),
+      "#!/bin/sh\nif [ \"$1\" = --version ]; then printf '1.4.0\\n'; fi\n",
+      { mode: 0o755 },
+    );
+    await writeFile(
+      join(root, "package.json"),
+      JSON.stringify({ packageManager: "bun@1.4.0", engines: { node: ">=24.2 <25" } }),
+    );
+    const env = { ...process.env, PATH: `${bin}${delimiter}${process.env.PATH ?? ""}` };
+
+    await expect(
+      checkBuildToolchain(root, { env, nodeVersion: "v24.19.0" }),
+    ).resolves.toMatchObject({ bunExecutable: await realpath(join(bin, "bun")) });
+    await expect(
+      removeBinaryOutputAfterSourceAdmission(outputPath, () =>
+        checkBuildToolchain(root, { env, nodeVersion: "v22.14.0" }),
+      ),
+    ).rejects.toThrow("Station requires Node >=24.2 <25; found v22.14.0.");
+    await expect(readFile(outputPath, "utf8")).resolves.toBe("working-binary\n");
+
+    await writeFile(
+      join(root, "package.json"),
+      JSON.stringify({ packageManager: "bun@1.4.0", engines: { node: "^24.2.0" } }),
+    );
+    await expect(
+      removeBinaryOutputAfterSourceAdmission(outputPath, () =>
+        checkBuildToolchain(root, { env, nodeVersion: "v24.19.0" }),
+      ),
+    ).rejects.toThrow("Root package.json must declare a supported Node engine; found ^24.2.0.");
+    await expect(readFile(outputPath, "utf8")).resolves.toBe("working-binary\n");
+  });
+
+  it("keeps nested binary-build dispatch on the exact validated Bun executable", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-bun-locator-"));
+    roots.push(root);
+    const runtimeBin = join(root, "runtime", "bun", "bin");
+    const locatorBin = join(root, "runtime", "node_modules", ".bin");
+    const hostileBin = join(root, "hostile-bin");
+    const exactBun = join(runtimeBin, "bun.exe");
+    const hostileLog = join(root, "hostile.log");
+    await Promise.all([
+      mkdir(runtimeBin, { recursive: true }),
+      mkdir(locatorBin, { recursive: true }),
+      mkdir(hostileBin, { recursive: true }),
+    ]);
+    await writeFile(join(root, "package.json"), JSON.stringify({ packageManager: "bun@1.4.0" }));
+    await writeFile(
+      exactBun,
+      [
+        "#!/bin/sh",
+        "set -eu",
+        'if [ "$1" = "--version" ]; then printf \'1.4.0\\n\'; exit 0; fi',
+        'if [ "$1" = "run" ]; then shift; exec "$@"; fi',
+        "exit 64",
+        "",
+      ].join("\n"),
+      { mode: 0o755 },
+    );
+    await symlink(exactBun, join(locatorBin, "bun"));
+    await writeFile(
+      join(hostileBin, "bun"),
+      [
+        "#!/bin/sh",
+        "printf 'invoked\\n' >> \"$STATION_HOSTILE_BUN_LOG\"",
+        'if [ "$1" = "--version" ]; then printf \'1.3.14\\n\'; fi',
+        "",
+      ].join("\n"),
+      { mode: 0o755 },
+    );
+    const environment = {
+      ...process.env,
+      PATH: `${hostileBin}${delimiter}${locatorBin}`,
+      STATION_HOSTILE_BUN_LOG: hostileLog,
+    };
+    const runtime = await resolveAndCheckBunVersion(root, {
+      executable: exactBun,
+      env: environment,
+      cwd: root,
+    });
+
+    const nestedVersion = await runWithBunExecutable(
+      runtime,
+      ["run", "bun", "--version"],
+      root,
+      async (command, args, cwd, env) =>
+        execFileSync(command, args, { cwd, env, encoding: "utf8" }),
+      environment,
+    );
+
+    expect(runtime).toMatchObject({
+      executable: await realpath(exactBun),
+      locatorDirectory: locatorBin,
+    });
+    expect(nestedVersion).toBe("1.4.0\n");
+    await expect(readFile(hostileLog, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("publishes the stable identity after an injected build succeeds", async () => {

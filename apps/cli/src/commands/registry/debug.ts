@@ -22,9 +22,9 @@ export const debugCliCommand: CliCommandNode = {
     { name: "--man", description: "Show the fuller debug command manual." },
   ],
   examples: [
-    "pnpm stn debug trace --latest-failure",
-    "pnpm stn debug logs protocol --component hook",
-    "pnpm stn debug bundle --latest-failure",
+    "stn debug trace --latest-failure",
+    "stn debug logs protocol --component hook",
+    "stn debug bundle --latest-failure",
   ],
   children: [
     {
@@ -58,7 +58,7 @@ export const debugCliCommand: CliCommandNode = {
           description: "Collect evidence after an ISO timestamp.",
         },
       ],
-      examples: ["pnpm stn debug bundle --latest-failure", "pnpm stn debug bundle --last 30m"],
+      examples: ["stn debug bundle --latest-failure", "stn debug bundle --last 30m"],
       notes: [
         "The command contacts the observer when run normally, but its help and manual topics are read-only.",
         "Bundles are written under the configured observer diagnostics directory.",
@@ -85,7 +85,7 @@ export const debugCliCommand: CliCommandNode = {
           description: "Include cause assessment and evidence-role metadata.",
         },
       ],
-      examples: ["pnpm stn debug trace --latest-failure"],
+      examples: ["stn debug trace --latest-failure"],
       notes: [
         "A matched record does not by itself establish an underlying root cause.",
         "causeAssessment separates explicit diagnostic-index roots from observed failure codes.",
@@ -118,10 +118,7 @@ export const debugCliCommand: CliCommandNode = {
           description: "Include match, cause, and operational-boundary evidence.",
         },
       ],
-      examples: [
-        "pnpm stn debug logs protocol",
-        "pnpm stn debug logs --all-components --min-level warn",
-      ],
+      examples: ["stn debug logs protocol", "stn debug logs --all-components --min-level warn"],
       notes: [
         "Queried records include bounded match evidence showing why they matched.",
         "The result separates observed failures from insufficient causal evidence.",

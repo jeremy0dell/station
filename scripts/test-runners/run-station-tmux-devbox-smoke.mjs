@@ -120,7 +120,7 @@ try {
     gitStatus(["diff", "--quiet", "--", hmrTargetRelative]) === 0,
     `HMR target is dirty; refusing to edit ${hmrTarget}`,
   );
-  assert(existsSync(cliPath), `built CLI missing at ${cliPath}; run pnpm build`);
+  assert(existsSync(cliPath), `built CLI missing at ${cliPath}; run bun run build`);
   checked("python3", ["--version"], { env: outerEnv });
   checked("tmux", ["-V"], { env: outerEnv });
   checked("bun", ["--version"], { env: outerEnv });
@@ -142,7 +142,7 @@ try {
   );
   assertIncludes(
     nonInteractiveDev.stderr,
-    "pnpm station:devbox tmux start",
+    "bun run station:devbox tmux start",
     "non-interactive guidance",
   );
   assert(!existsSync(privateRoot), "non-interactive tmux dev created the private root");
@@ -517,7 +517,10 @@ async function proveBaseShellIsolation(manifest) {
     `command -v tmux > ${reportPath}`,
     "Enter",
   ]);
-  await waitFor(() => existsSync(reportPath), "base shell did not write its tmux path");
+  await waitFor(
+    () => existsSync(reportPath) && readFileSync(reportPath, "utf8").trim().length > 0,
+    "base shell did not write its tmux path",
+  );
   const resolvedTmux = readFileSync(reportPath, "utf8").trim();
   assert(
     resolvedTmux === manifest.bareTmuxShimPath,
@@ -528,13 +531,19 @@ async function proveBaseShellIsolation(manifest) {
 async function proveAttachedLaneDevRefusal(manifest) {
   const shimDir = join(outerRoot, "attached-lane-bin");
   const buildMarker = join(outerRoot, "attached-lane-build.marker");
+  const realBun = checked("/bin/sh", ["-c", "command -v bun"], { env: outerEnv }).stdout.trim();
   mkdirSync(shimDir, { recursive: true, mode: 0o700 });
   writeFileSync(
-    join(shimDir, "pnpm"),
-    ["#!/bin/sh", `: > ${shellQuote(buildMarker)}`, "exit 97", ""].join("\n"),
+    join(shimDir, "bun"),
+    [
+      "#!/bin/sh",
+      `if [ "\${1:-}" = run ] && [ "\${2:-}" = build ]; then : > ${shellQuote(buildMarker)}; exit 97; fi`,
+      `exec ${shellQuote(realBun)} "$@"`,
+      "",
+    ].join("\n"),
     "utf8",
   );
-  chmodSync(join(shimDir, "pnpm"), 0o700);
+  chmodSync(join(shimDir, "bun"), 0o700);
 
   const client = spawnPtyCommand("dev", {
     term: "xterm",
@@ -547,7 +556,7 @@ async function proveAttachedLaneDevRefusal(manifest) {
       `attached-lane dev exited as ${JSON.stringify(result)}\n${client.output}`,
     );
     assertIncludes(client.output, "attached client(s)", "attached-lane refusal");
-    assert(!existsSync(buildMarker), "attached-lane refusal ran pnpm build");
+    assert(!existsSync(buildMarker), "attached-lane refusal ran bun run build");
     const after = readManifest();
     assert(
       after.tmuxServerPid === manifest.tmuxServerPid &&
@@ -620,11 +629,21 @@ async function proveFailedStartupRollback() {
 
 async function provePreAttachSignalCleanup() {
   const realTput = checked("/bin/sh", ["-c", "command -v tput"], { env: outerEnv }).stdout.trim();
+  const realBun = checked("/bin/sh", ["-c", "command -v bun"], { env: outerEnv }).stdout.trim();
   assert(realTput.startsWith("/"), `could not resolve the real tput executable: ${realTput}`);
   const shimDir = join(outerRoot, "pre-attach-signal-bin");
   const tputMarker = join(outerRoot, "pre-attach-tput.marker");
   mkdirSync(shimDir, { recursive: true, mode: 0o700 });
-  writeFileSync(join(shimDir, "pnpm"), "#!/bin/sh\nexit 0\n", "utf8");
+  writeFileSync(
+    join(shimDir, "bun"),
+    [
+      "#!/bin/sh",
+      'if [ "$1" = run ] && [ "$2" = build ]; then exit 0; fi',
+      `exec ${shellQuote(realBun)} "$@"`,
+      "",
+    ].join("\n"),
+    "utf8",
+  );
   writeFileSync(
     join(shimDir, "tput"),
     [
@@ -636,7 +655,7 @@ async function provePreAttachSignalCleanup() {
     ].join("\n"),
     "utf8",
   );
-  chmodSync(join(shimDir, "pnpm"), 0o700);
+  chmodSync(join(shimDir, "bun"), 0o700);
   chmodSync(join(shimDir, "tput"), 0o700);
 
   const client = spawnPtyCommand("dev", {
@@ -1117,9 +1136,9 @@ function assertOwnershipOutput(output, manifest) {
     `Host socket:    ${manifest.hostSocketPath}`,
     `base session:   ${manifest.baseSession}`,
     `hidden session: ${manifest.hiddenSession}`,
-    "pnpm station:devbox tmux attach",
-    "pnpm station:devbox tmux logs --follow",
-    "pnpm station:devbox tmux stop",
+    "bun run station:devbox tmux attach",
+    "bun run station:devbox tmux logs --follow",
+    "bun run station:devbox tmux stop",
   ]) {
     assertIncludes(output, expected, "ownership output");
   }

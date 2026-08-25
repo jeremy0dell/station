@@ -362,7 +362,7 @@ function renderSuccessfulApply(projection: TextSetupProjection, theme: SetupThem
   const linkCommand =
     linkAction === undefined
       ? undefined
-      : (["pnpm", "--dir", projection.facts.launchers.packageRoot, "station:link"] as const);
+      : (["bun", "run", "--cwd", projection.facts.launchers.packageRoot, "station:link"] as const);
   if (launcher !== undefined) {
     lines.push(
       "",

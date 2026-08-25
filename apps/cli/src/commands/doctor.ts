@@ -126,9 +126,9 @@ export async function runDoctorCommand(
 }
 
 /**
- * Source `stn` renders the TUI through the station Bun workspace, so missing
- * runtime dependencies surface as a degraded finding; compiled binaries carry
- * the renderer and skip this source-only check.
+ * Source `stn` renders the TUI through the root-managed Station workspace, so
+ * missing runtime dependencies surface as a degraded finding; compiled binaries
+ * carry the renderer and skip this source-only check.
  */
 export async function rendererRuntimeCheck(
   resolve: (command: string) => Promise<string | undefined> = (command) =>
@@ -159,8 +159,7 @@ export async function rendererRuntimeCheck(
       },
     };
   }
-  // Bun is present but the station/ workspace is a separate Bun install that root
-  // `pnpm install` never touches; without it bare stn dies with "@opentui not found".
+  // Bun is present, but the unified root workspace may not have been installed.
   if (!(await uiInstalled())) {
     return {
       name: "renderer-runtime",
@@ -170,7 +169,7 @@ export async function rendererRuntimeCheck(
       error: {
         tag: "RendererRuntimeError",
         code: "STATION_UI_NOT_INSTALLED",
-        message: "The station/ Bun lane has no node_modules (@opentui is missing).",
+        message: "The root Bun workspace has no Station renderer link (@opentui is missing).",
         hint: `${stationUiInstallHint} (scripts/setup/bootstrap.sh does this for you.)`,
       },
     };

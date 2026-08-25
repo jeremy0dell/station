@@ -270,8 +270,8 @@ describe("guided setup command", () => {
     );
 
     expect(result.code).toBe(0);
-    expect(calls.find((call) => call.command === "pnpm")).toMatchObject({
-      args: ["--dir", packageRoot, "station:link"],
+    expect(calls.find((call) => call.command === "bun")).toMatchObject({
+      args: ["run", "--cwd", packageRoot, "station:link"],
       stdio: "inherit",
     });
     expect(chunks.join("")).toContain(
@@ -305,7 +305,7 @@ describe("guided setup command", () => {
           "tmux -V": "tmux 3.5a\n",
           "codex --version": "codex 0.1.0\n",
           "opencode --version": "opencode 1.0.0\n",
-          [`pnpm --dir ${packageRoot} station:link`]: "",
+          [`bun run --cwd ${packageRoot} station:link`]: "",
         }),
         access: fakeAccess([
           "/fake/bin/wt",
@@ -334,8 +334,8 @@ describe("guided setup command", () => {
     );
 
     expect(result.code).toBe(0);
-    expect(calls.find((call) => call.command === "pnpm")).toMatchObject({
-      args: ["--dir", packageRoot, "station:link"],
+    expect(calls.find((call) => call.command === "bun")).toMatchObject({
+      args: ["run", "--cwd", packageRoot, "station:link"],
       stdio: "inherit",
     });
     expect(fs.files[configPath].match(/^\[harness\.(codex|opencode)\]$/gm)).toHaveLength(2);
@@ -415,7 +415,7 @@ describe("guided setup command", () => {
       "wt --version": "worktrunk 1.2.3\n",
       "tmux -V": "tmux 3.5a\n",
       "opencode --version": "opencode 1.0.0\n",
-      [`pnpm --dir ${packageRoot} station:link`]: "",
+      [`bun run --cwd ${packageRoot} station:link`]: "",
     });
     const runner = async (input: ExternalCommandInput): Promise<ExternalCommandResult> => {
       if (input.command === "codex" && input.args?.[0] === "--version") {

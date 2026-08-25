@@ -15,7 +15,7 @@ export const snapshotCliCommand: CliCommandNode = {
       description: "Refuse instead of starting a missing Observer.",
     },
   ],
-  examples: ["pnpm stn snapshot --json --require-running"],
+  examples: ["stn snapshot --json --require-running"],
 };
 
 async function runSnapshotCliCommand(context: CliCommandRunContext) {

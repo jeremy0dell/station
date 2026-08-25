@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-// Scripted smoke for the root `pnpm station:devbox` wrapper. Uses the no-UI seam
+// Scripted smoke for the root `bun run station:devbox` wrapper. Uses the no-UI seam
 // (STATION_ISOLATED_NO_LAUNCH=1) to start the isolated observer without the TUI,
 // then proves the wrapper targets this checkout's .dev-state (not global state)
-// and tears it down. Kept out of pnpm test:all (needs the Station Bun workspace).
+// and tears it down. Kept out of bun run test:all (needs native Host prerequisites).
 //
 // Warning: runs against the real .dev-state for this checkout — it starts and
 // then STOPS the devbox, so a live devbox here will be stopped.
@@ -87,9 +87,9 @@ process.stderr.write(
 
 try {
   if (!options.skipBuild) {
-    spawnChecked("pnpm", ["build"], { label: "build" });
+    spawnChecked("bun", ["run", "build"], { label: "build" });
   } else {
-    assert(existsSync(cli), "built CLI is missing; run pnpm build or omit --skip-build");
+    assert(existsSync(cli), "built CLI is missing; run bun run build or omit --skip-build");
   }
 
   // Starting from a deliberately non-private checkout directory exercises the
@@ -138,10 +138,6 @@ try {
   );
   assertHookDoctors("initial start");
 
-  spawnChecked("bash", [join(repoRoot, "station", "scripts", "link-station-packages.sh")], {
-    label: "link Station packages for persistent Host smoke",
-    env: { ...process.env, STATION_QUIET_PRELAUNCH: "1" },
-  });
   const host = spawn(
     resolvedBun.stdout.trim(),
     [hostEntry, "--socket", hostSock, "--state-dir", join(ds, "observer")],
@@ -229,8 +225,8 @@ try {
     `inaccessible devbox start omitted exact activation state\n${blocked.stderr}`,
   );
   assert(
-    blocked.stderr.includes("pnpm station:devbox status") &&
-      blocked.stderr.includes("pnpm station:devbox start"),
+    blocked.stderr.includes("bun run station:devbox status") &&
+      blocked.stderr.includes("bun run station:devbox start"),
     `inaccessible devbox start omitted recovery commands\n${blocked.stderr}`,
   );
   process.kill(originalPid, 0);
@@ -374,7 +370,7 @@ function parseArgs(args) {
     if (arg === "--skip-build") {
       parsed.skipBuild = true;
     } else if (arg === "-h" || arg === "--help") {
-      process.stdout.write("Usage: pnpm station:devbox:smoke [-- --skip-build]\n");
+      process.stdout.write("Usage: bun run station:devbox:smoke [-- --skip-build]\n");
       process.exit(0);
     } else {
       throw new Error(`Unknown station:devbox smoke option: ${arg}`);

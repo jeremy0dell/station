@@ -48,13 +48,12 @@ credentials, tokens, private source, or unrelated machine data.
 
 ## Set Up a Development Checkout
 
-Development uses Node.js 24.2+ and below 25, pnpm 11, and Bun 1.3.14 for the
-Station renderer and compiled-binary lanes.
+Development uses Node.js 24.2+ and below 25, with Bun 1.4.0 as the repository
+package manager and script dispatcher.
 
 ```sh
-pnpm install
-pnpm build
-cd station && bun install && cd ..
+bun install
+bun run build
 ```
 
 Read [Development](docs/development.md) for contributor orientation and
@@ -82,15 +81,15 @@ that merely restate names or types.
 For documentation-only work, run:
 
 ```sh
-pnpm lint
-pnpm test:diagnostics:policy
+bun run lint
+bun run test:diagnostics:policy
 ```
 
 For implementation work, run the narrowest relevant test while iterating, then
 the deterministic gate before requesting review:
 
 ```sh
-pnpm test:all
+bun run test:all
 ```
 
 Real-provider and broader end-to-end lanes are opt-in. Do not run them against

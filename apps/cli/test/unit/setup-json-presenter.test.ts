@@ -1142,7 +1142,7 @@ describe("setup plan projection", () => {
     ).toBeUndefined();
   });
 
-  it("installs checkout launchers through the pnpm 11-compatible package script", () => {
+  it("installs checkout launchers through the root Bun package script", () => {
     const base = facts();
     const plan = buildSetupPlan(
       facts({
@@ -1181,7 +1181,7 @@ describe("setup plan projection", () => {
     expect(plan.actions.find((action) => action.id === "link-station-launchers")).toMatchObject({
       kind: "run-command",
       selected: false,
-      command: ["pnpm", "--dir", "/tmp/station", "station:link"],
+      command: ["bun", "run", "--cwd", "/tmp/station", "station:link"],
     });
   });
 

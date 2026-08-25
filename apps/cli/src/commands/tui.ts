@@ -132,7 +132,6 @@ export async function runTuiCommand(
       deps,
       buildRendererEnv(parsed, { STATION_SOURCE: "mock" }, options.configPath),
       "dashboard",
-      parsed.persistentPopup,
       options.config?.terminal?.tmux,
       paths.stateDir,
     );
@@ -200,7 +199,6 @@ export async function runTuiCommand(
       options.configPath,
     ),
     parsed.popupMode ? "dashboard" : "station",
-    parsed.persistentPopup,
     options.config?.terminal?.tmux,
     paths.stateDir,
   );
@@ -254,22 +252,19 @@ function runRenderer(
   deps: TuiCommandDeps,
   env: Record<string, string>,
   entry: UiRendererEntry,
-  persistentPopup: boolean,
   popupConfig: TmuxConfig | undefined,
   stateDir: string,
 ): Promise<TuiRunResult> {
   const uiRunId = `ui_${randomUUID()}`;
   const spawnOptions: RendererSpawnOptions = { env, entry, uiRunId };
   return (
-    deps.spawnRenderer?.(spawnOptions) ??
-    spawnRenderer(spawnOptions, deps, persistentPopup, popupConfig, stateDir)
+    deps.spawnRenderer?.(spawnOptions) ?? spawnRenderer(spawnOptions, deps, popupConfig, stateDir)
   );
 }
 
 async function spawnRenderer(
   { env, entry, uiRunId }: RendererSpawnOptions,
   deps: TuiCommandDeps,
-  persistentPopup: boolean,
   popupConfig: TmuxConfig | undefined,
   stateDir: string,
 ): Promise<TuiRunResult> {
@@ -314,27 +309,19 @@ async function spawnRenderer(
   const spawnProcess = deps.spawnProcess ?? spawn;
   const workspaceDir = resolveStationWorkspaceDir();
   const popupRenderer = env.STATION_TUI_POPUP === "1";
-  const sourcePersistentDashboard =
-    override === undefined && !compiled && persistentPopup && entry === "dashboard";
-  if (sourcePersistentDashboard) {
-    const linkResult = await runStationLink(spawnProcess, workspaceDir, childEnv);
-    if (linkResult.code !== 0) {
-      await recordSpawnFailure({
-        tag: "TuiCommandError",
-        code: "TUI_RENDERER_PRELAUNCH_FAILED",
-        message: "The Station renderer prelaunch step failed.",
-      });
-      return linkResult;
-    }
-  }
-  const developmentArgv = ["bun", "run", "--silent", "--cwd", workspaceDir, entry] as const;
-  const rendererArgv = sourcePersistentDashboard
-    ? (["bun", "src/dashboardRenderer/main.tsx"] as const)
-    : selfExecArgv(
-        entry === "dashboard" ? "dashboard" : "tui",
-        developmentArgv,
-        deps.selfExecRuntime,
-      );
+  const developmentArgv = [
+    "bun",
+    "run",
+    "--silent",
+    "--cwd",
+    workspaceDir,
+    sourceRendererScript(entry),
+  ] as const;
+  const rendererArgv = selfExecArgv(
+    entry === "dashboard" ? "dashboard" : "tui",
+    developmentArgv,
+    deps.selfExecRuntime,
+  );
   const [command, ...args] = rendererArgv;
   let child: ReturnType<typeof spawnProcess>;
   try {
@@ -348,7 +335,6 @@ async function spawnRenderer(
         : spawnProcess(command, args, {
             stdio: popupRenderer ? ["inherit", "inherit", "inherit", "ipc"] : "inherit",
             env: childEnv,
-            ...(sourcePersistentDashboard ? { cwd: workspaceDir } : {}),
           });
   } catch (error) {
     await recordSpawnFailure(
@@ -432,25 +418,9 @@ function rendererProcessCode(exitCode: number | null, signal: NodeJS.Signals | n
   return signalNumber === undefined ? 1 : 128 + signalNumber;
 }
 
-async function runStationLink(
-  spawnProcess: typeof spawn,
-  workspaceDir: string,
-  env: NodeJS.ProcessEnv,
-): Promise<TuiRunResult> {
-  const child = spawnProcess("bun", ["run", "--silent", "--cwd", workspaceDir, "link:station"], {
-    stdio: "inherit",
-    env,
-  });
-  return new Promise<TuiRunResult>((resolve) => {
-    let settled = false;
-    const finish = (code: number) => {
-      if (settled) return;
-      settled = true;
-      resolve({ status: "exited", code });
-    };
-    child.once("error", () => finish(1));
-    child.once("exit", (code) => finish(code ?? 1));
-  });
+/** Maps linked source launches to scripts that never build; renderer identity remains fail-closed. */
+function sourceRendererScript(entry: UiRendererEntry): "dashboard:runtime" | "station:runtime" {
+  return entry === "dashboard" ? "dashboard:runtime" : "station:runtime";
 }
 
 function defaultPopupControl(

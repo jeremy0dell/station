@@ -34,6 +34,7 @@ import { StandaloneDashboardApp } from "./StandaloneDashboardApp.js";
 import {
   createPopupRuntime,
   createProcessRendererControlChannel,
+  type PopupRuntime,
 } from "./popupRuntime.js";
 import {
   beginHotDisposal,
@@ -50,6 +51,7 @@ type DashboardRenderer = Pick<CliRenderer, "destroy" | "getSelection">;
 type DashboardHotRoot = { unmount(): void };
 type DashboardRendererHotSlots = StationHotDisposalSlots & {
   __stationDashboardHotRenderer?: DashboardRenderer;
+  __stationDashboardHotPopupRuntime?: PopupRuntime;
 };
 
 /**
@@ -67,8 +69,11 @@ export async function runDashboardMain(): Promise<void> {
     writeToHost: (sequence) => process.stdout.write(sequence),
   });
 
-  // The prior OpenTUI owner must release process-global stdin synchronously before replacement.
-  await invokeCleanup(() => hotSlots.__stationDashboardHotRenderer?.destroy()).catch(
+  // The prior OpenTUI owner must release its process-global stdin listener before replacement.
+  await invokeCleanup(() => destroyDashboardRenderer(hotSlots.__stationDashboardHotRenderer)).catch(
+    reportDashboardHotDisposalFailure,
+  );
+  await invokeCleanup(() => hotSlots.__stationDashboardHotPopupRuntime?.dispose()).catch(
     reportDashboardHotDisposalFailure,
   );
   await waitForHotDisposal(hotSlots);
@@ -152,7 +157,7 @@ export async function runDashboardMain(): Promise<void> {
     releaseRendererResources: [
       () => root?.unmount(),
       () => themeController?.dispose(),
-      () => renderer?.destroy(),
+      () => destroyDashboardRenderer(renderer),
       () => {
         process.off("exit", onProcessExit);
       },
@@ -161,12 +166,18 @@ export async function runDashboardMain(): Promise<void> {
           delete hotSlots.__stationDashboardHotRenderer;
         }
       },
+      () => {
+        if (hotSlots.__stationDashboardHotPopupRuntime === popupRuntime) {
+          delete hotSlots.__stationDashboardHotPopupRuntime;
+        }
+      },
     ],
     disposeWidgetWrites: () => widgetConfigWrites?.dispose() ?? Promise.resolve(),
     disposeDashboardRuntime: () => Promise.resolve(dashboardRuntime.dispose()),
     disposeRuntimeCapabilities: () => popupRuntime.dispose(),
     stopClient: () => client.stop(),
   });
+  hotSlots.__stationDashboardHotPopupRuntime = popupRuntime;
 
   // tmux 3.7 can open its button-3 menu while Station reports mouse movement.
   // Re-enable popup movement once Station requires a tmux release containing
@@ -242,6 +253,18 @@ export async function runDashboardMain(): Promise<void> {
 function reportDashboardHotDisposalFailure(error: unknown): void {
   const safeError = toSafeError(error, { clientLabel: "Station dashboard" });
   process.stderr.write(`[station] ${safeError.code}: ${safeError.message}\n`);
+}
+
+function destroyDashboardRenderer(renderer: DashboardRenderer | undefined): void {
+  if (renderer === undefined) return;
+  const pause = process.stdin.pause;
+  // Bun 1.4 cannot release and reacquire process.stdin's reader while OpenTUI hot-reloads in one process.
+  process.stdin.pause = () => process.stdin;
+  try {
+    renderer.destroy();
+  } finally {
+    process.stdin.pause = pause;
+  }
 }
 
 if (import.meta.main) {

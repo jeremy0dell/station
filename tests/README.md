@@ -12,14 +12,14 @@ compiled files from `dist`.
 For documentation-only changes:
 
 ```sh
-pnpm lint
-pnpm test:diagnostics:policy
+bun run lint
+bun run test:diagnostics:policy
 ```
 
 For an implementation change, finish with:
 
 ```sh
-pnpm test:all
+bun run test:all
 ```
 
 Station renderer changes also require the renderer/PTY lane before the repository
@@ -39,7 +39,7 @@ Observer E2E coverage, then runs the installer smoke. Use the focused scripts in
 Codex hook reconciliation has a focused cross-system gate:
 
 ```sh
-pnpm test:e2e:codex-hook-reconciliation
+bun run test:e2e:codex-hook-reconciliation
 ```
 
 The pre-push hook is intentionally lint-only. It does not replace `test:all` or
@@ -101,13 +101,13 @@ native release builds begin.
 Real lanes use installed tools, credentials, or terminal state and are excluded
 from `test:all`:
 
-- `pnpm test:e2e:worktrunk:real` uses a real Worktrunk installation.
-- `STATION_REAL_TMUX=1 pnpm test:tmux-popup:real` uses an isolated tmux server.
-- `pnpm test:e2e:claude:real`, `test:e2e:codex:real`, and
+- `bun run test:e2e:worktrunk:real` uses a real Worktrunk installation.
+- `STATION_REAL_TMUX=1 bun run test:tmux-popup:real` uses an isolated tmux server.
+- `bun run test:e2e:claude:real`, `test:e2e:codex:real`, and
   `test:e2e:cursor:real` use authenticated agent CLIs.
-- `pnpm test:e2e:pi:real` and `test:e2e:opencode:real` exercise those real
+- `bun run test:e2e:pi:real` and `test:e2e:opencode:real` exercise those real
   harnesses.
-- `pnpm test:e2e:real` runs the product real E2E lane with Worktrunk, tmux,
+- `bun run test:e2e:real` runs the product real E2E lane with Worktrunk, tmux,
   Codex, a built `bin/stn`, and isolated provider homes.
 
 Use [Local development](../docs/local-development.md) for checkout-isolated

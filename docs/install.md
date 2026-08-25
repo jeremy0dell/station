@@ -14,7 +14,7 @@ The compiled binary supports these targets:
 
 Windows and musl Linux are not supported. The binary install needs `curl` and
 either `sha256sum` or `shasum`; it does not require a GitHub account, GitHub CLI,
-a source checkout, Homebrew, Node.js, pnpm, or Bun. `stn setup` handles the
+a source checkout, Homebrew, Node.js, or Bun. `stn setup` handles the
 separate tools needed for the complete agent workflow after Station is
 installed. Report feedback through
 [GitHub Issues](https://github.com/jeremy0dell/station/issues).
@@ -425,7 +425,11 @@ guarantee, and power loss can also leave old/new cross-filesystem `LICENSE`
 metadata. Inspect the absolute installed `stn --version` and both locks before
 retrying after a machine loss.
 
-The compiled binary launches the native TUI and Observer without Node.js, pnpm, Bun, `node_modules`, or a source checkout. External programs are installed separately and gate only the features that use them: Git and Worktrunk for managed worktrees, tmux for popup/provider behavior, Hunk for diff automation, and a supported agent CLI for agent sessions.
+The compiled binary launches the native TUI and Observer without Node.js, Bun,
+`node_modules`, or a source checkout. External programs are installed separately
+and gate only the features that use them: Git and Worktrunk for managed worktrees,
+tmux for popup/provider behavior, Hunk for diff automation, and a supported agent
+CLI for agent sessions.
 
 Every public version carries its own exact-tag stamped installer asset.
 Published tags and assets are immutable; do not delete, move, or overwrite
@@ -442,7 +446,17 @@ stn setup
 stn
 ```
 
-`bootstrap.sh` runs `brew bundle` (Node 24, Bun, Worktrunk, tmux, Hunk), then `pnpm install`, `pnpm build`, the Bun UI install (`cd station && bun install && bun run link:station && bun run repair:node-pty`), and `pnpm station:link`. That final command uses pnpm 11's supported global-add path to expose `stn`, `stn-ingress`, and `stn-tmux-popup` while keeping them bound to the checkout. The Bun step matters: `station/` is a separate Bun workspace, not a pnpm-workspace member, so `pnpm install` never installs it — skip it and bare `stn` refuses to launch with an install hint (the underlying failure is "@opentui not found"). If you manage your own runtimes, the manual steps below are equivalent. See [Development](development.md) for the source workflow and [Testing](../tests/README.md) for gate selection.
+`bootstrap.sh` runs `brew bundle` (Node 24, Bun, Worktrunk, tmux, Hunk), derives
+the exact Bun version from the root `packageManager` policy, and uses that
+version for the root install, build, retained `node-pty` helper repair, and
+`station:link`. The final command publishes only Station's package registration
+and the `stn`, `stn-ingress`, and `stn-tmux-popup` launchers in Bun's configured
+global directories. Link and unlink operations lock those directories and prove
+the exact checkout-owned symlinks before replacing or removing them; a stale
+Station lock must be inspected and removed manually only after confirming no
+link operation is active. If you manage your own runtimes, the manual steps
+below are equivalent. See [Development](development.md) for the source workflow and
+[Testing](../tests/README.md) for gate selection.
 
 ## Development Requirements
 
@@ -464,22 +478,30 @@ Bun, tmux, Hunk, plus keg-only Node 24); Git / Command Line Tools
 are obtained separately, and guided `stn setup` can offer the supported agent
 CLIs described above.
 
-Node.js 24.2+ (and below 25) and pnpm 11 are dev/build prerequisites for this checkout, validated by `stn setup system --check` (not `stn setup check`); setup does not install or change them (use corepack for pnpm, and a Node version manager or `brew node@24` for Node). The repo selects the current Node 24 release with `.node-version` and `.nvmrc` (`24`), so fnm/nvm use the supported release in the checkout instead of falling back to your global default (asdf reads these only with `legacy_version_file = yes` in `~/.asdfrc`).
+Node.js 24.2+ (and below 25) and exact Bun 1.4.0 are dev/build prerequisites
+for this checkout, validated by `stn setup system --check` (not `stn setup
+check`); setup does not install or change them. The repo selects the current
+Node 24 release with `.node-version` and `.nvmrc` (`24`), so fnm/nvm use the
+supported release in the checkout instead of falling back to your global
+default (asdf reads these only with `legacy_version_file = yes` in
+`~/.asdfrc`).
 
 ## Fresh Development Checkout
 
 From the repository root:
 
 ```bash
-pnpm install
-pnpm build
-cd station && bun install && cd ..   # Bun UI lane (separate workspace; pnpm does not install it)
-pnpm stn setup
-pnpm smoke:release
-pnpm smoke:install
+bun install
+bun run build
+bun run stn setup
+bun run smoke:release
+bun run smoke:install
 ```
 
-`cd station && bun install` is required for the terminal UI: bare `stn` renders it by shelling into `bun run` against `station/`, so without the install `stn` refuses to launch and prints the install hint (historically a raw "@opentui not found" error) even though the Bun binary is healthy. `stn doctor` reports this lane explicitly (a `renderer-runtime` warning with code `STATION_UI_NOT_INSTALLED`).
+The root `bun install` includes the terminal UI and its native dependencies.
+Without it, bare source `stn` refuses to launch and prints the root install hint.
+`stn doctor` reports this explicitly as a `renderer-runtime` warning with code
+`STATION_UI_NOT_INSTALLED`.
 
 After STATION is installed:
 
@@ -493,9 +515,9 @@ This configures the core local workflow: the required tools, an agent CLI, and a
 Optional integrations can be added later.
 ```
 
-`pnpm smoke:release` builds by default, creates an isolated temporary config, runs `bin/stn doctor`, `reconcile`, `snapshot --json`, `debug bundle`, and the scripted-agent lane, then stops the observer and removes the temp state.
+`bun run smoke:release` builds by default, creates an isolated temporary config, runs `bin/stn doctor`, `reconcile`, `snapshot --json`, `debug bundle`, and the scripted-agent lane, then stops the observer and removes the temp state.
 
-`pnpm smoke:install` exercises stamped and explicit public selection plus
+`bun run smoke:install` exercises stamped and explicit public selection plus
 release-ID-scoped authenticated draft acceptance; first-argument curl
 isolation; receipt enrollment and preservation; strict expected-installation
 parsing and identity races; strict download arguments;
@@ -508,14 +530,14 @@ and runner self-interruption against local fake release assets. Every child and
 the overall runner have deadlines. It does not contact GitHub or modify the real
 home directory.
 
-Guided setup writes a zero-project config, can enable optional Worktrunk hooks, requires prepared tracking artifacts for selected/default Claude, Codex, Cursor, and OpenCode harnesses, and can install the tmux popup binding. Add the first Git repository explicitly from Station after setup. Generated tmux and hook commands persist the resolved absolute launcher paths, whether they came from an installed runtime or the current checkout, so later processes do not depend on setup's PATH. Hook setup validates the active `stn` runtime and its exact `stn-ingress` sibling; an unrelated launcher elsewhere on `PATH` cannot satisfy that pair. Successful output describes these artifacts as **Prepared**, not runtime Ready. Codex may still require `/hooks` review; setup does not mutate trust state, enable unrelated hooks, or claim delivery was verified. When bare `stn` launchers are not on `PATH`, setup offers `pnpm --dir <checkout> station:link` as the convenience path for bare terminal commands.
+Guided setup writes a zero-project config, can enable optional Worktrunk hooks, requires prepared tracking artifacts for selected/default Claude, Codex, Cursor, and OpenCode harnesses, and can install the tmux popup binding. Add the first Git repository explicitly from Station after setup. Generated tmux and hook commands persist the resolved absolute launcher paths, whether they came from an installed runtime or the current checkout, so later processes do not depend on setup's PATH. Hook setup validates the active `stn` runtime and its exact `stn-ingress` sibling; an unrelated launcher elsewhere on `PATH` cannot satisfy that pair. Successful output describes these artifacts as **Prepared**, not runtime Ready. Codex may still require `/hooks` review; setup does not mutate trust state, enable unrelated hooks, or claim delivery was verified. When bare `stn` launchers are not on `PATH`, setup offers `bun run --cwd <checkout> station:link` as the convenience path for bare terminal commands.
 
 Useful smoke options:
 
 ```bash
-pnpm smoke:release -- --skip-build
-pnpm smoke:release -- --skip-scripted
-pnpm smoke:release -- --keep-temp
+bun run smoke:release -- --skip-build
+bun run smoke:release -- --skip-scripted
+bun run smoke:release -- --keep-temp
 ```
 
 ## Local Command
@@ -523,17 +545,17 @@ pnpm smoke:release -- --keep-temp
 During development, either use the repo-local command:
 
 ```bash
-pnpm stn hooks doctor worktrunk
-pnpm stn doctor
-pnpm stn reconcile --reason manual
-pnpm stn snapshot --json
-pnpm stn
+bun run stn hooks doctor worktrunk
+bun run stn doctor
+bun run stn reconcile --reason manual
+bun run stn snapshot --json
+bun run stn
 ```
 
 or link all three checkout launchers after setup:
 
 ```bash
-pnpm station:link
+bun run station:link
 stn doctor
 ```
 

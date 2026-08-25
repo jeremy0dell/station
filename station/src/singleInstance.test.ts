@@ -345,7 +345,7 @@ describe("TTY identity and legacy upgrade evidence", () => {
   it("does not treat shell wrappers or misleading substrings as process authority", async () => {
     const listing = [
       clearPsListing().trimEnd(),
-      `100 ${TEST_TTY} /bin/bash -c bun run link:station && bun --hot src/main.tsx`,
+      `100 ${TEST_TTY} /bin/bash -c bun run build:ensure && bun --hot src/main.tsx`,
       `101 ${TEST_TTY} bun /tmp/src/main.tsx.backup`,
       `102 ${TEST_TTY} /bin/sh -c /opt/station/stn __tui`,
     ].join("\n");

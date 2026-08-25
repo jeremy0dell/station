@@ -133,7 +133,7 @@ Remaining
            Ingress: <CHECKOUT>/bin/stn-ingress
            tmux popup: <CHECKOUT>/integrations/terminal/tmux/bin/stn-popup
   SKIP      Link STATION launchers               Link stn, stn-ingress, and stn-tmux-popup for bare terminal commands.
-           Run: pnpm --dir <CHECKOUT> station:link
+           Run: bun run --cwd <CHECKOUT> station:link
 
 Use stn instead of the absolute path (optional):
   The absolute commands under Next already work; these steps enable shorter launcher names.

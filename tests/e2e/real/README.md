@@ -2,18 +2,17 @@
 
 This suite runs `bin/stn` and `bin/stn-ingress` against real config TOML, a real observer process, a real Unix socket, real SQLite state, real Worktrunk, real tmux, and real Codex. Every Codex-launching scenario uses one shared fixture with an isolated temporary `CODEX_HOME`; its Station wrapper propagates that home into the Observer and its Codex wrapper enables hook trust bypass only for the temporary project. The Codex hook test installs the generated script at the canonical `<state_dir>/hooks/station-codex-hook.sh`, uses the private `CODEX_HOME` profile config, and verifies `stn-ingress codex` reaches the observer.
 
-It is intentionally excluded from `pnpm test:e2e` and `pnpm test:all`.
+It is intentionally excluded from `bun run test:e2e` and `bun run test:all`.
 
 ## Prerequisites
 
-The native mouse scenario additionally requires Bun 1.3.14, the `station/` Bun dependencies,
-Python 3, and tmux. It drives a real authenticated Codex launch.
+The native mouse scenario additionally requires Bun 1.4.0, the root workspace's Station
+dependencies, Python 3, and tmux. It drives a real authenticated Codex launch.
 
 ```bash
-pnpm install
-cd station && bun install && cd ..
-pnpm build
-pnpm setup:system:check
+bun install
+bun run build
+bun run setup:system:check
 python3 --version
 tmux -V
 codex login status
@@ -28,15 +27,15 @@ STATION_REAL_CODEX=1 \
 STATION_WORKTRUNK_BIN="$(command -v wt)" \
 STATION_TMUX_BIN="$(command -v tmux)" \
 STATION_CODEX_BIN="$(command -v codex)" \
-pnpm test:e2e:real
+bun run test:e2e:real
 ```
 
 For local real E2E from this repository, use the wrapper scripts instead of inline shell variables:
 
 ```bash
-pnpm test:e2e:real:local
-pnpm test:e2e:real:codex-hooks
-pnpm test:e2e:real:codex-hooks:keep-temp
+bun run test:e2e:real:local
+bun run test:e2e:real:codex-hooks
+bun run test:e2e:real:codex-hooks:keep-temp
 ```
 
 The popup navigation test is part of the local real E2E lane. It creates a real Worktrunk worktree, starts a real Codex agent in the tmux workbench, opens the station TUI in a real tmux popup over that agent pane, injects a numeric activation key through the popup TTY, and verifies tmux lands back on the same primary agent pane after the popup exits.
@@ -50,7 +49,7 @@ exactly-once collapse/expand clicks, and a visible row activation that launches 
 changes the Observer snapshot. Run it alone with:
 
 ```bash
-pnpm test:e2e:real:local tests/e2e/real/real-native-tui-mouse.test.ts
+bun run test:e2e:real:local tests/e2e/real/real-native-tui-mouse.test.ts
 ```
 
 ## Isolation
@@ -76,4 +75,4 @@ Real Codex can be slow or model-dependent. The prompts are bounded and target on
 
 The Codex hook lane retains its private profile, canonical hook script, and Observer diagnostics in the test temp root. Use those with `events.jsonl` to confirm that Codex lifecycle hooks such as `SessionStart`, tool-use events, compaction events, subagent events, and `Stop` came from the real Codex process and were ingested as `harness.eventReported` events for provider `codex`.
 
-Pi has a separate opt-in launch-scaffolding lane at `tests/agent/real/pi`. Run it with `pnpm test:e2e:pi:real` and `STATION_REAL_PI=1` when validating the Pi tmux launch path before adding full real Pi callback assertions.
+Pi has a separate opt-in launch-scaffolding lane at `tests/agent/real/pi`. Run it with `bun run test:e2e:pi:real` and `STATION_REAL_PI=1` when validating the Pi tmux launch path before adding full real Pi callback assertions.

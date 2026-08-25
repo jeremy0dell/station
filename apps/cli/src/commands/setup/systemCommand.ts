@@ -73,7 +73,7 @@ type SystemFacts = {
   bun: Awaited<ReturnType<typeof checkSetupBun>>;
   diffViewer: Awaited<ReturnType<typeof checkSetupDiffViewer>>;
   brew: Awaited<ReturnType<typeof checkBrewDependency>>;
-  toolchain: Awaited<ReturnType<typeof checkSetupToolchain>>;
+  toolchain: Awaited<ReturnType<typeof checkSetupToolchain>> | undefined;
 };
 
 async function collectSystemFacts(
@@ -97,12 +97,14 @@ async function collectSystemFacts(
       ...(deps.cwd === undefined ? {} : { cwd: deps.cwd }),
       noBrew: args.noBrew,
     }),
-    checkSetupToolchain({
-      ...(deps.runner === undefined ? {} : { runner: deps.runner }),
-      ...(env === undefined ? {} : { env }),
-      ...(deps.cwd === undefined ? {} : { cwd: deps.cwd }),
-      ...(deps.nodeVersion === undefined ? {} : { nodeVersion: deps.nodeVersion }),
-    }),
+    compiled
+      ? Promise.resolve(undefined)
+      : checkSetupToolchain({
+          ...(deps.runner === undefined ? {} : { runner: deps.runner }),
+          ...(env === undefined ? {} : { env }),
+          ...(deps.cwd === undefined ? {} : { cwd: deps.cwd }),
+          ...(deps.nodeVersion === undefined ? {} : { nodeVersion: deps.nodeVersion }),
+        }),
   ]);
   return { compiled, worktrunk, tmux, bun, diffViewer, brew, toolchain };
 }
@@ -112,17 +114,25 @@ function projectSystemView(
   facts: SystemFacts,
 ): TextSetupSystemView {
   const rows: TextSetupSystemRow[] = [
-    ...applicableSystemTools(facts).map(({ factKey, label }) =>
-      dependencySystemRow(facts[factKey].status, label),
-    ),
+    ...applicableSystemTools(facts)
+      .filter(({ id }) => id !== "bun")
+      .map(({ factKey, label }) => dependencySystemRow(facts[factKey].status, label)),
     {
       status: facts.brew.status === "ok" ? "ok" : facts.brew.status,
       label: setupMessageRef("label.homebrew"),
     },
-    toolchainSystemRow(facts.toolchain.node, setupMessageRef("label.node")),
-    toolchainSystemRow(facts.toolchain.pnpm, setupMessageRef("label.pnpm")),
+    ...(facts.toolchain === undefined
+      ? []
+      : [
+          toolchainSystemRow(facts.toolchain.node, setupMessageRef("label.node")),
+          toolchainSystemRow(facts.toolchain.bun, setupMessageRef("label.bun")),
+        ]),
   ];
-  return { title, rows, hints: runtimeToolchainHints(facts.toolchain) };
+  return {
+    title,
+    rows,
+    hints: facts.toolchain === undefined ? [] : runtimeToolchainHints(facts.toolchain),
+  };
 }
 
 function dependencySystemRow(
@@ -146,8 +156,8 @@ function toolchainSystemRow(
 function systemReady(facts: SystemFacts): boolean {
   return (
     applicableSystemTools(facts).every(({ factKey }) => facts[factKey].status === "ok") &&
-    facts.toolchain.node.status === "ok" &&
-    facts.toolchain.pnpm.status === "ok"
+    (facts.toolchain === undefined ||
+      (facts.toolchain.node.status === "ok" && facts.toolchain.bun.status === "ok"))
   );
 }
 
@@ -202,7 +212,7 @@ function toolchainVersionLabel(fact: ToolchainFact): string {
 
 function runtimeToolchainHints(toolchain: {
   node: ToolchainFact;
-  pnpm: ToolchainFact;
+  bun: ToolchainFact;
 }): TextSetupSystemHint[] {
   const hints: TextSetupSystemHint[] = [];
   if (toolchain.node.status !== "ok") {
@@ -220,13 +230,9 @@ function runtimeToolchainHints(toolchain: {
       ],
     });
   }
-  if (toolchain.pnpm.status !== "ok") {
+  if (toolchain.bun.status !== "ok") {
     hints.push({
-      message: setupMessageRef("system.pnpm-hint"),
-      commands: [
-        ["corepack", "enable"],
-        ["corepack", "prepare", "pnpm@11.0.0", "--activate"],
-      ],
+      message: setupMessageRef("system.bun-hint", { version: toolchain.bun.expected }),
     });
   }
   if (hints.length > 0) {

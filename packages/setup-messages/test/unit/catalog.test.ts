@@ -32,6 +32,7 @@ const fixtureArguments: Readonly<Record<string, string | number>> = {
   source: "configured",
   terminal: "tmux",
   url: "https://example.com/tool",
+  version: "1.4.0",
 };
 
 const placeholderPattern = /\{([A-Za-z][A-Za-z0-9]*)\}/g;

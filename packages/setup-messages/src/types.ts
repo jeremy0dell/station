@@ -37,7 +37,6 @@ export type SetupMessageArguments = {
   "label.command-line-tools": undefined;
   "label.homebrew": undefined;
   "label.node": undefined;
-  "label.pnpm": undefined;
   "detail.version": undefined;
   "detail.path": undefined;
   "detail.repository": undefined;
@@ -255,7 +254,7 @@ export type SetupMessageArguments = {
   "system.install-failed": undefined;
   "system.development-runtime": undefined;
   "system.node-hint": undefined;
-  "system.pnpm-hint": undefined;
+  "system.bun-hint": { version: string };
   "system.unchanged-hint": undefined;
 };
 

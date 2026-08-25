@@ -39,7 +39,7 @@ if [ "$COMMAND" = "prune" ]; then
 fi
 
 if [ ! -f "$CLI" ]; then
-  echo "stn CLI is not built ($CLI missing). Run 'pnpm build' at the repo root first." >&2
+  echo "stn CLI is not built ($CLI missing). Run 'bun run build' at the repo root first." >&2
   exit 1
 fi
 
@@ -91,10 +91,15 @@ export STATION_OBSERVER_STATE_DIR="$DS/observer"
 export STATION_HOOK_SPOOL_DIR="$DS/observer/spool/hooks"
 export STATION_INGRESS_BIN="$ROOT/bin/stn-ingress"
 
-(
-  cd "$STATION_DIR"
-  bun install --frozen-lockfile
-)
+if [ "${STATION_DEV_TOOLCHAIN_PREPARED_ROOT:-}" != "$ROOT" ]; then
+  (
+    cd "$ROOT"
+    bun install --frozen-lockfile
+    # Bun may normalize workspace package-bin modes during install; admit those final outputs.
+    bun run build:ensure
+  )
+fi
+unset STATION_DEV_TOOLCHAIN_PREPARED_ROOT
 
 mkdir -p "$DS/observer"
 
@@ -336,9 +341,9 @@ if ! observer_activation_output="$(node "$CLI" --config "$CFG" observer ensure-e
   echo "Exact-build activation did not complete; its phase and incumbent disposition are reported above." >&2
   echo "The Station Host and hosted agents were not targeted by this operation." >&2
   echo "Inspect current state, resolve the reported cause, then retry:" >&2
-  echo "  pnpm station:devbox status" >&2
-  echo "  pnpm station:devbox start" >&2
-  echo "For intentionally disposable state only, 'pnpm station:devbox reset -- --yes' deletes .dev-state and its agents." >&2
+  echo "  bun run station:devbox status" >&2
+  echo "  bun run station:devbox start" >&2
+  echo "For intentionally disposable state only, 'bun run station:devbox reset -- --yes' deletes .dev-state and its agents." >&2
   exit 1
 fi
 
@@ -351,7 +356,7 @@ for harness in codex claude cursor opencode; do
     echo >&2
     echo "Private $harness hook refresh failed; the Station UI was not opened." >&2
     echo "Hook refresh did not stop the isolated Observer or Host; some private hook files may already be updated." >&2
-    echo "Retry: pnpm station:devbox $COMMAND" >&2
+    echo "Retry: bun run station:devbox $COMMAND" >&2
     exit 1
   fi
   if ! hook_doctor_output="$(node "$CLI" --config "$CFG" hooks doctor "$harness" 2>&1)"; then
@@ -359,7 +364,7 @@ for harness in codex claude cursor opencode; do
     echo >&2
     echo "Private $harness hook validation failed; the Station UI was not opened." >&2
     echo "Hook validation did not stop the isolated Observer or Host; inspect the private hook diagnosis above." >&2
-    echo "Retry: pnpm station:devbox $COMMAND" >&2
+    echo "Retry: bun run station:devbox $COMMAND" >&2
     exit 1
   fi
 done

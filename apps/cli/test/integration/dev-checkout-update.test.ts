@@ -291,7 +291,8 @@ describe("dev-checkout update channel", () => {
 
   it("requires Bun before admitting a development checkout", async () => {
     const fixture = await checkoutFixture();
-    const pathEnv = await toolPath(fixture.root, ["git", "pnpm"], "missing-bun-bin");
+    const pathEnv = await toolPath(fixture.root, ["git"], "missing-bun-bin");
+    await writeFakePnpm(pathEnv);
     let commandRan = false;
     const channel = createDevCheckoutUpdateChannel({
       cliEntryPath: fixture.cliEntryPath,
@@ -574,9 +575,14 @@ async function devToolPath(
   bunVersion: string,
   includePnpm: boolean,
 ): Promise<string> {
-  const bin = await toolPath(root, includePnpm ? ["git", "pnpm"] : ["git"]);
+  const bin = await toolPath(root, ["git"]);
+  if (includePnpm) await writeFakePnpm(bin);
   await writeFakeBun(bin, bunVersion);
   return bin;
+}
+
+async function writeFakePnpm(bin: string): Promise<void> {
+  await writeFile(join(bin, "pnpm"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
 }
 
 async function writeFakeBun(bin: string, version: string): Promise<void> {

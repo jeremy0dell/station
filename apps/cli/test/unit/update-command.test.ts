@@ -774,12 +774,10 @@ describe("stn update command", () => {
 
   it("renders every dev-checkout preparation recovery command in JSON and text", async () => {
     const recoveryCommands: UpdateCommandArgv[] = [
-      ["/opt/pnpm", "--dir", "/repo", "install", "--frozen-lockfile"],
-      ["/opt/bun", "--cwd", "/repo/station", "install", "--frozen-lockfile"],
-      ["/opt/pnpm", "--dir", "/repo", "build"],
-      ["/opt/bun", "run", "--cwd", "/repo/station", "link:station"],
+      ["/opt/bun", "install", "--cwd", "/repo", "--frozen-lockfile"],
+      ["/opt/bun", "run", "--cwd", "/repo", "build"],
       ["/opt/bun", "run", "--cwd", "/repo/station", "repair:node-pty"],
-      ["/opt/pnpm", "--dir", "/repo", "station:link"],
+      ["/opt/bun", "run", "--cwd", "/repo", "station:link"],
     ];
     const preparationFailure = {
       tag: "UpdateError",
@@ -810,12 +808,10 @@ describe("stn update command", () => {
     });
     expect(text).toMatchObject({ code: 1, outputFormat: "text" });
     for (const command of [
-      "/opt/pnpm --dir /repo install --frozen-lockfile",
-      "/opt/bun --cwd /repo/station install --frozen-lockfile",
-      "/opt/pnpm --dir /repo build",
-      "/opt/bun run --cwd /repo/station link:station",
+      "/opt/bun install --cwd /repo --frozen-lockfile",
+      "/opt/bun run --cwd /repo build",
       "/opt/bun run --cwd /repo/station repair:node-pty",
-      "/opt/pnpm --dir /repo station:link",
+      "/opt/bun run --cwd /repo station:link",
     ]) {
       expect(text.output).toContain(command);
     }

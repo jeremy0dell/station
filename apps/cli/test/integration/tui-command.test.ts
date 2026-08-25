@@ -1190,7 +1190,7 @@ describe("CLI tui command", () => {
     expect(stationUiInstalled).toHaveBeenCalledOnce();
     expect(spawnProcess).toHaveBeenCalledWith(
       "bun",
-      ["run", "--silent", "--cwd", resolveStationWorkspaceDir(), "dashboard"],
+      ["run", "--silent", "--cwd", resolveStationWorkspaceDir(), "dashboard:runtime"],
       expect.objectContaining({
         stdio: "inherit",
         env: expect.objectContaining({
@@ -1320,36 +1320,17 @@ describe("CLI tui command", () => {
     const workspaceDir = resolveStationWorkspaceDir();
 
     try {
-      expect(persistent.spawnProcess).toHaveBeenNthCalledWith(
-        1,
+      expect(persistent.spawnProcess).toHaveBeenCalledOnce();
+      expect(persistent.spawnProcess).toHaveBeenCalledWith(
         "bun",
-        ["run", "--silent", "--cwd", workspaceDir, "link:station"],
-        expect.objectContaining({ stdio: "inherit" }),
-      );
-      expect(persistent.spawnProcess).toHaveBeenNthCalledWith(
-        2,
-        "bun",
-        ["src/dashboardRenderer/main.tsx"],
+        ["run", "--silent", "--cwd", workspaceDir, "dashboard:runtime"],
         expect.objectContaining({
-          cwd: workspaceDir,
           stdio: ["inherit", "inherit", "inherit", "ipc"],
         }),
       );
     } finally {
       await persistent.finish();
     }
-  });
-
-  it("does not spawn the persistent source renderer when station linking fails", async () => {
-    const persistent = await startPersistentRenderer({ source: true, linkExitCode: 23 });
-
-    expect(persistent.spawnProcess).toHaveBeenCalledOnce();
-    expect(persistent.spawnProcess).toHaveBeenCalledWith(
-      "bun",
-      ["run", "--silent", "--cwd", resolveStationWorkspaceDir(), "link:station"],
-      expect.objectContaining({ stdio: "inherit" }),
-    );
-    await persistent.finish();
   });
 
   it("preserves the persistent dashboard shell override with IPC", async () => {
@@ -2080,7 +2061,6 @@ class FakeRendererChild extends EventEmitter {
 
 async function startPersistentRenderer(
   options: {
-    linkExitCode?: number;
     popupControl?: NonNullable<TuiCommandDeps["popupControl"]>;
     persistentPopup?: boolean;
     sendError?: Error;
@@ -2089,15 +2069,7 @@ async function startPersistentRenderer(
 ) {
   const fixture = await createTempState();
   const child = new FakeRendererChild(options.sendError ?? null);
-  const linkChild = new EventEmitter();
-  const linkExitCode = options.linkExitCode ?? 0;
-  const spawnProcess = vi.fn(() => {
-    if (options.source === true && spawnProcess.mock.calls.length === 1) {
-      queueMicrotask(() => linkChild.emit("exit", linkExitCode));
-      return linkChild as never;
-    }
-    return child as never;
-  });
+  const spawnProcess = vi.fn(() => child as never);
   const popupControl =
     options.popupControl ??
     ({
@@ -2118,17 +2090,12 @@ async function startPersistentRenderer(
       popupControl,
     },
   );
-  const expectedSpawnCount = options.source === true && linkExitCode === 0 ? 2 : 1;
-  await vi.waitFor(() => expect(spawnProcess).toHaveBeenCalledTimes(expectedSpawnCount));
+  await vi.waitFor(() => expect(spawnProcess).toHaveBeenCalledOnce());
 
   return {
     child,
     spawnProcess,
     finish: async () => {
-      if (options.source === true && linkExitCode !== 0) {
-        await expect(result).resolves.toEqual({ status: "exited", code: linkExitCode });
-        return;
-      }
       child.emit("exit", 0);
       await expect(result).resolves.toEqual({ status: "exited", code: 0 });
     },

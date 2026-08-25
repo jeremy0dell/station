@@ -67,8 +67,8 @@ export type CollectSetupFactsOptions = {
   fs?: SetupFileSystemReader;
   now?: () => Date;
   noBrew?: boolean;
-  // Injectable so tests drive the station/ Bun-lane probe deterministically instead
-  // of touching this checkout's real node_modules.
+  // Injectable so tests drive the root-managed Station renderer probe deterministically
+  // instead of touching this checkout's real node_modules.
   stationUiInstalled?: () => Promise<boolean>;
   // Defaults to process.platform; injectable so machine-state tests can drive the
   // macOS Command Line Tools check on any host.
@@ -357,9 +357,8 @@ async function canExecute(
   }
 }
 
-// Mirrors doctor's rendererRuntimeCheck: the station/ Bun lane only matters when Bun
-// runs the renderer, so a renderer override or a missing Bun (covered by its own
-// required row) makes the lane irrelevant. Otherwise its install state is the signal.
+// Mirrors doctor's rendererRuntimeCheck: the Station renderer graph only matters when
+// Bun runs the renderer, so an override or missing Bun makes that install state irrelevant.
 async function resolveStationUiFact(input: {
   env: CliEnv;
   bunStatus: SetupDependencyFact["status"];

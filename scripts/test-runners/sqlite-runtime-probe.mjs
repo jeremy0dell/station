@@ -11,10 +11,17 @@ assert.ok(expectedLabel, "Expected a probe label.");
 const { createSqliteObserverPersistence, migrations, openObserverSqlite } = await import(
   new URL("../../apps/observer/dist/internal.js", import.meta.url).href
 );
+const { openSqlDatabase } = await import(
+  new URL("../../apps/observer/dist/sqlite/driver.js", import.meta.url).href
+);
+const { openCodexHookLockDatabase } = await import(
+  new URL("../../integrations/harness/codex/dist/hooks/hookMutationLockSqlite.js", import.meta.url)
+    .href
+);
+
+await probeCodexHookLockDatabase(`${databasePath}.codex-hook-lock.sqlite`);
+
 if (action === "seed-v16") {
-  const { openSqlDatabase } = await import(
-    new URL("../../apps/observer/dist/sqlite/driver.js", import.meta.url).href
-  );
   const database = openSqlDatabase(databasePath);
   try {
     for (const migration of migrations.filter(({ version }) => version <= 16)) {
@@ -147,4 +154,32 @@ try {
   ]);
 } finally {
   sqlite.close();
+}
+
+async function probeCodexHookLockDatabase(path) {
+  const lockDatabase = await openCodexHookLockDatabase(path);
+  try {
+    lockDatabase.exec(`
+      CREATE TABLE IF NOT EXISTS codex_hook_lock_runtime_probe (
+        label TEXT PRIMARY KEY
+      );
+      BEGIN IMMEDIATE;
+      INSERT INTO codex_hook_lock_runtime_probe (label) VALUES ('rolled-back');
+      ROLLBACK;
+    `);
+  } finally {
+    lockDatabase.close();
+  }
+
+  const verificationDatabase = openSqlDatabase(path);
+  try {
+    assert.equal(
+      verificationDatabase
+        .prepare("SELECT COUNT(*) AS count FROM codex_hook_lock_runtime_probe")
+        .get()?.count,
+      0,
+    );
+  } finally {
+    verificationDatabase.close();
+  }
 }

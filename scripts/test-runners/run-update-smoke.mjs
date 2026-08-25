@@ -819,19 +819,14 @@ async function prepareTarget(options, root) {
   await mkdir(releaseDir, { recursive: true, mode: 0o700 });
   await cloneCurrentSource(buildRoot);
   const buildEnv = buildEnvironment();
-  await run(findExecutable("pnpm", process.env.PATH), ["install", "--frozen-lockfile"], {
+  await run(findExecutable("bun", process.env.PATH), ["install", "--frozen-lockfile"], {
     cwd: buildRoot,
     env: buildEnv,
     timeoutMs: buildTimeoutMs,
   });
-  await run(findExecutable("bun", process.env.PATH), ["install", "--frozen-lockfile"], {
-    cwd: join(buildRoot, "station"),
-    env: buildEnv,
-    timeoutMs: buildTimeoutMs,
-  });
   await run(
-    findExecutable("pnpm", process.env.PATH),
-    ["build:binary", "--", "--version", options.target.version],
+    findExecutable("bun", process.env.PATH),
+    ["run", "build:binary", "--", "--version", options.target.version],
     { cwd: buildRoot, env: buildEnv, timeoutMs: buildTimeoutMs },
   );
   const buildIdentity = await readBuildIdentity(buildRoot);

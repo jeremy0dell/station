@@ -9,7 +9,7 @@
     "packages/testing!"
   ],
   "ignoreBinaries": [
-    // System-level development dependencies are installed and validated outside pnpm.
+    // System-level development dependencies are installed and validated outside Bun.
     "cc",
     "sshpass",
     "tart"

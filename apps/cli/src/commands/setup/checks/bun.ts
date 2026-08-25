@@ -14,9 +14,9 @@ export function bunInstallHint(command = bunDefinition.command): string {
 }
 
 /**
- * Required Bun probe. Bare `stn` renders the TUI via `bun run` against the
- * station workspace, so a missing Bun makes the primary terminal UI fail to
- * launch. Presence of the command on PATH is enough; absence blocks core setup.
+ * Required source-renderer probe. Bare source `stn` runs the root-managed
+ * Station workspace through Bun, so absence blocks core setup. Exact Bun policy
+ * is reported separately by the source-only development toolchain check.
  */
 export async function checkSetupBun(
   options: SetupDependencyCheckOptions = {},

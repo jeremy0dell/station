@@ -8,7 +8,7 @@ export const notifyCliCommand: CliCommandNode = {
   description: "Run notification helpers used by event hooks.",
   run: runNotifyCliCommand,
   usage: ["stn notify agent-state"],
-  examples: ["pnpm stn event-hooks plan notify-agent-state"],
+  examples: ["stn event-hooks plan notify-agent-state"],
   notes: [
     "Notify commands read hook payloads from stdin when run normally.",
     "They are primarily installed through observer event hooks instead of invoked by hand.",
@@ -18,7 +18,7 @@ export const notifyCliCommand: CliCommandNode = {
       name: "agent-state",
       description: "Notify when a hook event makes an agent idle or in need of attention.",
       usage: ["stn notify agent-state"],
-      examples: ["pnpm stn event-hooks plan notify-agent-state"],
+      examples: ["stn event-hooks plan notify-agent-state"],
     },
   ],
 };

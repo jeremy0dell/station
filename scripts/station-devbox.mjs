@@ -65,21 +65,21 @@ if (backendScript !== undefined) {
 function start() {
   // Always build (Turbo-cached when clean) so the observer/CLI and the dist the
   // Station UI links are never stale — `station:devbox` needs no separate build.
-  run("pnpm", ["build"], { cwd: repoRoot });
+  run("bun", ["run", "build"], { cwd: repoRoot });
   warnHostBuildMismatch();
   process.exit(run("bun", ["run", "station:isolated"], { cwd: STATION_DIR, check: false }));
 }
 
 function dev() {
-  run("pnpm", ["build"], { cwd: repoRoot });
+  run("bun", ["run", "build"], { cwd: repoRoot });
   warnHostBuildMismatch();
   process.exit(run("bun", ["run", "station:isolated", "dev"], { cwd: STATION_DIR, check: false }));
 }
 
 function restart() {
   requireConfig();
-  log("Rebuilding (pnpm build)…");
-  run("pnpm", ["build"], { cwd: repoRoot });
+  log("Rebuilding (bun run build)…");
+  run("bun", ["run", "build"], { cwd: repoRoot });
   log("Recycling the isolated observer (the persistent host + agents survive and reconnect)…");
   run("node", [CLI, "--config", CFG, "observer", "stop"], { cwd: repoRoot });
   run("bash", [ISOLATED_SCRIPT, "start"], {
@@ -140,9 +140,9 @@ function warnHostBuildMismatch() {
   log(
     "  The listening host is not this checkout CLI's expected build (compatibility replace/refuse).",
   );
-  log("  Run `pnpm station:devbox stop` then `start` to recycle the host, or deliberately");
+  log("  Run `bun run station:devbox stop` then `start` to recycle the host, or deliberately");
   log(
-    "  `pnpm stn --config .dev-state/config.toml host handoff` only if you intend to change packaging.",
+    "  `bun run stn -- --config .dev-state/config.toml host handoff` only if you intend to change packaging.",
   );
   const healthLine = output
     .split("\n")
@@ -158,7 +158,7 @@ function logs(args) {
     .map((file) => join(LOG_DIR, file))
     .filter(existsSync);
   if (files.length === 0) {
-    log(`No devbox logs under ${LOG_DIR} — has it been started? (pnpm station:devbox start)`);
+    log(`No devbox logs under ${LOG_DIR} — has it been started? (bun run station:devbox start)`);
     return;
   }
   log(`Logs (${LOG_DIR}):`);
@@ -181,7 +181,7 @@ function reset(args) {
   if (!args.some((arg) => arg === "--yes" || arg === "-y")) {
     process.stderr.write(
       `Refusing to reset without --yes. This deletes everything under ${DS}.\n\n` +
-        "  pnpm station:devbox reset -- --yes\n",
+        "  bun run station:devbox reset -- --yes\n",
     );
     process.exit(1);
   }
@@ -193,7 +193,7 @@ function reset(args) {
 function help() {
   process.stdout.write(
     [
-      "Usage: pnpm station:devbox [start|dev|restart|status|logs|stop|reset]",
+      "Usage: bun run station:devbox [start|dev|restart|status|logs|stop|reset]",
       "",
       "  start            (default) build, sync the isolated Observer to this checkout, then open Station",
       "  dev, --hot       build, sync the isolated Observer to this checkout, then open with UI HMR",
@@ -264,7 +264,7 @@ function run(command, args, options = {}) {
 
 function requireConfig() {
   if (!existsSync(CFG)) {
-    throw new Error("devbox not started — run `pnpm station:devbox start` first.");
+    throw new Error("devbox not started — run `bun run station:devbox start` first.");
   }
 }
 

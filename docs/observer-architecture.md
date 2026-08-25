@@ -1075,8 +1075,8 @@ checks declaration-level role direction and package boundaries, and rejects
 production source cycles. Runtime, type-only, export-from, barrel, workspace-
 alias, import-equals, literal `require`, and literal `import()` edges all
 participate. Nonliteral dynamic module edges fail because their ownership cannot
-be resolved. External literal dynamics such as `bun:sqlite` and `node:sqlite`
-remain recorded external edges rather than source-cycle members.
+be resolved. External imports such as `node:sqlite` remain recorded external
+edges rather than source-cycle members.
 
 The current Observer graph contains 146 production modules and no strongly
 connected component. `migrations/migration.ts` now owns
@@ -1090,8 +1090,8 @@ The reproducible evidence is committed at
 Observer production module, named export, import edge, and intentionally
 unmarked `role: null` export; its controlled declarations and purpose prose come
 only from attached source JSDoc. It is generated evidence, not a second role
-registry. `pnpm architecture:observer:generate` atomically refreshes it after
-successful validation, while `pnpm architecture:observer:check` validates the
+registry. `bun run architecture:observer:generate` atomically refreshes it after
+successful validation, while `bun run architecture:observer:check` validates the
 graph and byte-compares the checked-in artifact.
 
 Role checks are declaration-level rather than file-level and evaluate every
@@ -1103,7 +1103,7 @@ same module retain their own role and direction. Adapter substitution and
 composition relationships that cannot be inferred reliably remain executable
 contract or composition tests.
 
-`pnpm lint` runs the check once. The pre-push hook, `pnpm test:all`, pull-request
+`bun run lint` runs the check once. The pre-push hook, `bun run test:all`, pull-request
 static validation, documentation-only validation, and the `main` smoke inherit
 that execution through lint. Specialized SQLite, logging/config, metadata,
 diagnostics, tmux, and error-normalization boundary tests remain active for

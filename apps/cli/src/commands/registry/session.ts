@@ -2,7 +2,7 @@ import { loadedCommandOptions } from "../cliCommand/helpers.js";
 import type { CliCommandNode, CliCommandRunContext } from "../cliCommand/types.js";
 import { runSessionCommand } from "../session.js";
 
-const sessionExamples = ["pnpm stn session current"] as const;
+const sessionExamples = ["stn session current"] as const;
 const sessionNotes = [
   "Current validates the invoking terminal's live topology and returns a placement source as strict JSON.",
   "Normal execution loads configuration and may start or contact the Observer.",

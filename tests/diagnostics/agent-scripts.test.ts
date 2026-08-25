@@ -249,7 +249,7 @@ describe("agent cleanup/reset scripts", () => {
     });
   });
 
-  it("ignores pnpm argument separators", () => {
+  it("ignores package-script argument separators", () => {
     expect(parseCleanupArgs(["--", "--yes"])).toMatchObject({
       dryRun: false,
     });
@@ -1482,13 +1482,23 @@ describe("tui dev script", () => {
     expect(rootPackage.scripts?.["station:runtime-prune"]).toBe(
       "node scripts/maintenance/runtime-prune.mjs",
     );
-    expect(stationPackage.scripts?.dev).toBe("node ../scripts/native-hmr-runner.mjs");
-    expect(stationPackage.scripts?.["station:isolated"]).toBe("./scripts/station-isolated.sh");
-    expect(stationPackage.scripts?.["station:isolated"]).not.toContain("link:station");
-    expect(stationPackage.scripts?.["station:isolated"]).not.toContain("repair:node-pty");
-    expect(stationPackage.scripts?.station).toContain("./scripts/link-station-packages.sh");
-    expect(stationPackage.scripts?.station).toContain("./scripts/repair-node-pty.sh");
-    expect(nodePtyRepairScript).toMatch(/cd \\"\$\{root\}\\" && bun install --frozen-lockfile/u);
+    expect(stationPackage.scripts?.dev).toBe(
+      "bun run --cwd .. build:ensure && node ../scripts/native-hmr-runner.mjs",
+    );
+    expect(stationPackage.scripts?.["station:isolated"]).toBe(
+      "bun run --cwd .. build:ensure && ./scripts/station-isolated.sh",
+    );
+    expect(stationPackage.scripts?.station).toContain("bun run --cwd .. build:ensure");
+    expect(stationPackage.scripts?.station).toContain("bun run station:runtime");
+    expect(stationPackage.scripts?.["station:runtime"]).toBe(
+      "bun run repair:node-pty && bun src/main.tsx",
+    );
+    expect(stationPackage.scripts?.["station:runtime"]).not.toContain("build:");
+    expect(stationPackage.scripts?.["dashboard:runtime"]).toBe(
+      "bun src/dashboardRenderer/main.tsx",
+    );
+    expect(nodePtyRepairScript).toContain("bun install --frozen-lockfile");
+    expect(isolatedScript).toContain("STATION_DEV_TOOLCHAIN_PREPARED_ROOT:-");
 
     const frozenInstall = isolatedScript.indexOf("bun install --frozen-lockfile");
     expect(isolatedScript).toContain("unset STATION_OPENCODE_PLUGIN_BODY_PATH");
@@ -1517,7 +1527,6 @@ describe("tui dev script", () => {
     expect(hookInstall).toBeLessThan(hookDoctor);
     expect(isolatedScript).toContain("exec bun run dev");
     expect(devboxScript).toContain('run("bun", ["run", "station:isolated", "dev"]');
-    expect(stationPackage.scripts?.dev).not.toContain("bun --hot");
   });
 
   it("routes setup guided E2E entrypoints through the supervised owner", () => {
@@ -1531,9 +1540,8 @@ describe("tui dev script", () => {
     expect(rootPackage.scripts?.["test:e2e:setup:guided"]).toBe(
       "node scripts/test-runners/run-setup-guided-e2e.mjs",
     );
-    expect(rootPackage.scripts?.["test:e2e:setup:guided"]).not.toContain("vitest");
     expect(rootPackage.scripts?.["test:e2e:setup:guided:all-shells"]).toBe(
-      "STATION_SETUP_E2E_ALL_SHELLS=true pnpm test:e2e:setup:guided",
+      "STATION_SETUP_E2E_ALL_SHELLS=true bun run test:e2e:setup:guided",
     );
 
     expect(guidedTestFiles).toEqual([
@@ -1603,8 +1611,8 @@ describe("tui dev script", () => {
     expect(cliPackage.scripts?.["build:identity"]).toBe("node ../../scripts/build-identity.mjs");
 
     const dryRunProcess = spawnSync(
-      "pnpm",
-      ["exec", "turbo", "run", "build:identity", "--filter=@station/cli", "--dry=json"],
+      "bun",
+      ["run", "turbo", "run", "build:identity", "--filter=@station/cli", "--dry=json"],
       {
         cwd: fileURLToPath(new URL("../../", import.meta.url)),
         encoding: "utf8",

@@ -2,15 +2,15 @@
   "name": "STATION Station Experiment",
   "build": {
     "dockerfile": "Dockerfile",
-    "context": ".."
+    "context": "../.."
   },
-  "workspaceFolder": "/workspace/station",
+  "workspaceFolder": "/workspace",
   "workspaceMount": "source=${localWorkspaceFolder}/..,target=/workspace,type=bind,consistency=cached",
   "mounts": [
-    "source=station-station-node-modules,target=/workspace/station/node_modules,type=volume",
+    "source=station-station-node-modules,target=/workspace/node_modules,type=volume",
     "source=station-station-bun-cache,target=/home/bun/.bun/install/cache,type=volume"
   ],
-  "postCreateCommand": "bun install --frozen-lockfile || bun install",
+  "postCreateCommand": "bun install --frozen-lockfile",
   "customizations": {
     "vscode": {
       "extensions": []

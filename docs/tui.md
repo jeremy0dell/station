@@ -10,7 +10,9 @@ follow-up `terminal.focus`; terminal focus remains a separate user action.
 
 ## Renderer And Entry Points
 
-Station is built on OpenTUI (`@opentui/core` + `@opentui/react`) and `react`, running on its own Bun lane outside the root pnpm workspace (see `station/README.md`). There are two Bun entry points:
+Station is built on OpenTUI (`@opentui/core` + `@opentui/react`) and `react` as
+the Bun-executed `@station/workspace` package in the root workspace (see
+`station/README.md`). There are two Bun entry points:
 
 - `station/src/main.tsx` — the native Station workspace: real PTY-backed panes with host-backed persistence.
 - `station/src/dashboardRenderer/main.tsx` — the standalone observer-backed dashboard (live
@@ -114,13 +116,16 @@ replacement popup.
 When the private tmux devbox runs the dashboard under Bun `--hot`, the CLI
 parent and its IPC channel remain authoritative for the lifetime of
 `_station-ui`. A source reload synchronously releases the prior OpenTUI stdin
-owner, unmounts the old React root, and removes appearance listeners. It then
+listener and raw-mode ownership, unmounts the old React root, and removes appearance listeners.
+Bun 1.4 keeps the underlying stdin reader flowing across that replacement because releasing and
+reacquiring it inside one hot process can corrupt the stream. The reload also
 closes the old dashboard effect scope, cancels subscriptions and timers,
 immediately disposes popup control so pending IPC rejects locally, drains all
 already-started dashboard work, stops the old Station client, and only then
 creates the replacement client/dashboard composition in the same Bun process.
-The process-global disposer is installed before replacement can begin and uses
-compare-and-delete so an older settlement cannot erase a newer HMR barrier. The
+Process-global slots make both the renderer and popup-control listener discoverable to the next
+generation even when Bun replaces the module before its disposer settles. The cleanup barrier uses
+compare-and-delete so an older settlement cannot erase a newer generation. The
 renderer disposer deliberately does not disconnect the CLI-owned IPC channel.
 Source build identity is verified once per OS process so a harmless reload
 reuses the accepted identity; a new process still verifies the current checkout
@@ -790,13 +795,16 @@ bun test src/station/input/stationMouse.test.ts
 bun test src/station/view/dashboard.golden.test.tsx
 bun test src/station/importBoundaries.test.ts
 bun run test:vt          # terminal VT model
-bun run test             # full Station suite (links @station packages first)
+bun run test             # full Station suite (ensures current root build output first)
 
 # dashboard-core pure logic (vitest), from the repo root:
-pnpm exec vitest run packages/dashboard-core/test   # or: pnpm test:unit for the full unit suite
+bun run vitest run packages/dashboard-core/test   # or: bun run test:unit for the full unit suite
 ```
 
-Before merging meaningful Station work, run at least the touched focused tests plus the deterministic gate required by the change. For cross-layer Station, observer, protocol, or command changes, prefer the full Station `bun run test` plus the repo `pnpm test:all`.
+Before merging meaningful Station work, run at least the touched focused tests
+plus the deterministic gate required by the change. For cross-layer Station,
+observer, protocol, or command changes, prefer `bun run --cwd station test`
+plus the repository `bun run test:all`.
 
 ## Review Checklist
 

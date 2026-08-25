@@ -25,14 +25,14 @@ export const observerCliCommand: CliCommandNode = {
       description: "Override observer startup or health timeout where supported.",
     },
   ],
-  examples: ["pnpm stn observer status", "pnpm stn observer start"],
+  examples: ["stn observer status", "stn observer start"],
   children: [
     {
       name: "start",
       description: "Start the observer and wait for health.",
       usage: ["stn observer start [--timeout-ms <ms>]"],
       options: [{ name: "--timeout-ms <ms>", description: "Override the startup health timeout." }],
-      examples: ["pnpm stn observer start"],
+      examples: ["stn observer start"],
     },
     {
       name: "ensure-exact-build",
@@ -40,26 +40,26 @@ export const observerCliCommand: CliCommandNode = {
         "Reuse or cooperatively replace the configured Observer so its immutable build exactly matches this CLI.",
       usage: ["stn observer ensure-exact-build [--timeout-ms <ms>]"],
       options: [{ name: "--timeout-ms <ms>", description: "Override the activation timeout." }],
-      examples: ["pnpm stn observer ensure-exact-build"],
+      examples: ["stn observer ensure-exact-build"],
     },
     {
       name: "status",
       description: "Report observer process availability.",
       usage: ["stn observer status"],
-      examples: ["pnpm stn observer status"],
+      examples: ["stn observer status"],
     },
     {
       name: "stop",
       description: "Stop the observer for the configured socket.",
       usage: ["stn observer stop"],
-      examples: ["pnpm stn observer stop"],
+      examples: ["stn observer stop"],
     },
     {
       name: "restart",
       description: "Replace or start the Observer through build-precedence lifecycle policy.",
       usage: ["stn observer restart [--timeout-ms <ms>]"],
       options: [{ name: "--timeout-ms <ms>", description: "Override the startup health timeout." }],
-      examples: ["pnpm stn observer restart"],
+      examples: ["stn observer restart"],
     },
     {
       name: "reap",
@@ -72,7 +72,7 @@ export const observerCliCommand: CliCommandNode = {
           description: "Revalidate and terminate duplicates, escalating to SIGKILL if needed.",
         },
       ],
-      examples: ["pnpm stn observer reap", "pnpm stn observer reap --force"],
+      examples: ["stn observer reap", "stn observer reap --force"],
     },
   ],
 };

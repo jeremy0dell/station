@@ -44,10 +44,10 @@ function main() {
   run("git", ["fetch", "origin", "main"]);
   run("git", ["pull", "--ff-only", "origin", "main"]);
   resetTmuxTuiState();
-  run("pnpm", ["build"]);
-  run("pnpm", ["stn", "observer", "restart"]);
+  run("bun", ["run", "build"]);
+  run("bun", ["run", "stn", "--", "observer", "restart"]);
   if (!skipOpen) {
-    run("pnpm", ["stn"]);
+    run("bun", ["run", "stn"]);
   }
 }
 
@@ -132,7 +132,7 @@ function defaultDevSessionNameForRoot(root) {
 }
 
 function printUsage() {
-  process.stdout.write(`Usage: pnpm station:reset:tmux-tui [-- --dry-run] [-- --no-open]
+  process.stdout.write(`Usage: bun run station:reset:tmux-tui [-- --dry-run] [-- --no-open]
 
 Pulls main, clears only tmux TUI/popup state, rebuilds, restarts the observer,
 then opens station from the rebuilt checkout.

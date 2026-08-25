@@ -53,7 +53,7 @@ build identity, and checksums still match.
 Build a local native artifact from a stable checkout:
 
 ```sh
-pnpm build:binary -- --version 0.0.0-local
+bun run build:binary -- --version 0.0.0-local
 ```
 
 `scripts/build-binary.mjs` first performs the whole-repository source build and
@@ -90,9 +90,8 @@ as ownership roots.
 
 - The TUI runs as a child process so the CLI parent retains exit handling and
   terminal restoration.
-- The Observer selects `bun:sqlite` in compiled mode and `node:sqlite` in source
-  mode. Both implement the same Station database contract and preserve database
-  compatibility across runtimes.
+- The Observer uses `node:sqlite` in both compiled and source mode, preserving
+  one Station database contract and database compatibility across runtimes.
 - Observer attach, handoff, stale-socket recovery, and replacement follow the
   [singleton lifecycle](observer-singleton.md). A higher-build explicit restart
   cooperatively stops an identity-pinned older Observer before spawning its
@@ -180,7 +179,7 @@ belong to the installer contract rather than the compiled executable.
 Run the focused local binary proof with a development version:
 
 ```sh
-pnpm smoke:binary -- --expected-version 0.0.0-local
+bun run smoke:binary -- --expected-version 0.0.0-local
 ```
 
 The smoke builds the binary and exercises version/help output, raw dispatch,
@@ -191,8 +190,8 @@ socket preservation, and the compiled PTY helper.
 The remaining release boundaries have focused commands:
 
 ```sh
-pnpm smoke:install
-pnpm smoke:release
+bun run smoke:install
+bun run smoke:release
 ```
 
 The composed update smoke has two explicit busy-Host outcomes. `full-handoff`

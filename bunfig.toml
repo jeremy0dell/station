@@ -1,0 +1,11 @@
+[install]
+auto = "disable"
+linker = "isolated"
+globalStore = false
+peer = false
+linkWorkspacePackages = true
+saveTextLockfile = true
+
+[run]
+bun = false
+shell = "system"

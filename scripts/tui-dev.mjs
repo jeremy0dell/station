@@ -63,15 +63,8 @@ export async function runTuiDev({ argv = process.argv.slice(2), env = process.en
   await mkdir(dirname(logPath), { recursive: true });
 
   const initialBuild = spawnSync(
-    "pnpm",
-    [
-      "exec",
-      "turbo",
-      "run",
-      "build:identity",
-      "--filter=@station/cli",
-      "--output-logs=errors-only",
-    ],
+    "bun",
+    ["run", "turbo", "run", "build:identity", "--filter=@station/cli", "--output-logs=errors-only"],
     {
       cwd: repoRoot,
       stdio: "inherit",
@@ -95,9 +88,9 @@ export async function runTuiDev({ argv = process.argv.slice(2), env = process.en
 
   writeSync(logFd, `\n--- dev ${new Date().toISOString()} ---\n`);
   const buildWatcher = spawn(
-    "pnpm",
+    "bun",
     [
-      "exec",
+      "run",
       "turbo",
       "watch",
       "build:identity",
@@ -721,7 +714,7 @@ async function guardAgainstForeignDevPopup(options) {
 
   if (!process.stdin.isTTY || !process.stderr.isTTY) {
     throw new Error(
-      "Refusing to start a second dev TUI non-interactively. Stop the other pnpm station:tui-dev process first.",
+      "Refusing to start a second dev TUI non-interactively. Stop the other bun run station:tui-dev process first.",
     );
   }
 

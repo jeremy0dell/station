@@ -1,9 +1,9 @@
 pre-commit:
   commands:
     biome:
-      run: node scripts/run-without-git-locals.mjs pnpm lint
+      run: node scripts/run-without-git-locals.mjs bun run lint
 
 pre-push:
   commands:
     lint:
-      run: node scripts/run-without-git-locals.mjs pnpm test:pre-push
+      run: node scripts/run-without-git-locals.mjs bun run test:pre-push

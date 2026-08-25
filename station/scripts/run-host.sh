@@ -2,6 +2,7 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+repo_root="$(cd "${root}/.." && pwd)"
 script="station"
 source="${STATION_SOURCE:-}"
 
@@ -28,6 +29,6 @@ fi
 
 "${root}/scripts/doctor.sh"
 
-cd "${root}"
+cd "${repo_root}"
 bun install --frozen-lockfile
-exec bun run "${script}"
+exec bun run --cwd "${root}" "${script}"

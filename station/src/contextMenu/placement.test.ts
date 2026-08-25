@@ -27,6 +27,20 @@ describe("context menu placement", () => {
     expect(measureContextMenuWidth([{ ...ITEMS[0]!, shortcut: "R" }])).toBe(17);
   });
 
+  for (const [caseName, label, labelWidth] of [
+    ["SGR escapes", "\u001B[31mred\u001B[0m", 3],
+    ["OSC escapes", "\u001B]8;;https://example.com\u0007link\u001B]8;;\u0007", 4],
+    ["CJK characters", "界", 2],
+    ["combining marks", "e\u0301", 1],
+    ["bidi and variation selectors", "A\u200F\uFE0F", 1],
+    ["emoji modifiers", "👍🏽", 2],
+    ["ZWJ emoji", "👩‍💻", 2],
+  ] as const) {
+    it(`measures ${caseName} by terminal cells`, () => {
+      expect(measureContextMenuWidth([{ ...ITEMS[0]!, label }])).toBe(labelWidth + 4);
+    });
+  }
+
   it("uses bottom-start placement by default", () => {
     expect(placeContextMenu({ x: 4, y: 3 }, { width: 10, height: 4 }, { width: 40, height: 20 })).toEqual({
       left: 4,

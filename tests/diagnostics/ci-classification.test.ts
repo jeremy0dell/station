@@ -126,7 +126,7 @@ describe("standard CI path classification", () => {
     },
     {
       name: "packaged dependency state",
-      paths: ["package.json", "pnpm-lock.yaml", "LICENSE"],
+      paths: ["package.json", "bun.lock", "bunfig.toml", "LICENSE"],
       expected: {
         docs_only: false,
         installer: true,

@@ -217,8 +217,8 @@ record the deviation and exit condition in
 Run the source-derived Observer architecture tooling from the repository root:
 
 ```bash
-pnpm architecture:observer:generate
-pnpm architecture:observer:check
+bun run architecture:observer:generate
+bun run architecture:observer:check
 ```
 
 Generation validates first and then atomically writes

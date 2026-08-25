@@ -24,9 +24,9 @@ official installer. Station does not use the historical Station tap.
 The old `v0.1.0` source-formula release and `v0.7.1-rc.*` binary releases
 were internal packaging previews, not predecessors in the public version line.
 
-Source development still uses Node.js 24.2+ (and below 25), pnpm 11, and Bun
-1.3.14 as documented in [Development](development.md). After a supported native
-install, run:
+Source development still uses Node.js 24.2+ (and below 25) and exact Bun 1.4.0,
+as documented in [Development](development.md). After a supported native install,
+run:
 
 ```sh
 stn setup

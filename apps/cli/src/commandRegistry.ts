@@ -34,13 +34,13 @@ export const cliCommandRegistry: CliCommandNode = {
     { name: "-h, --help", description: "Print concise help for a command path." },
     { name: "--man", description: "Print the fuller manual for a command path." },
   ],
-  examples: ["pnpm stn --help", "pnpm stn doctor --help", "pnpm stn project add --man"],
+  examples: ["stn --help", "stn doctor --help", "stn project add --man"],
   notes: [
     "Help and manual topics are resolved before STATION reads config or starts the observer.",
     "Running STATION without a command opens the popup inside tmux and the fullscreen TUI outside tmux.",
     "Commands that inspect or mutate live state may contact or start the observer when run without --help or --man.",
   ],
-  verification: ["pnpm stn --help", "pnpm stn doctor --help", "pnpm stn project add --man"],
+  verification: ["stn --help", "stn doctor --help", "stn project add --man"],
   children: [
     commandCliCommand,
     debugCliCommand,

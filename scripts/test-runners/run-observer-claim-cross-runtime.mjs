@@ -124,7 +124,7 @@ async function verifySocketSafetyAcrossRuntimes() {
         for (const probeRuntime of ["node", "bun"]) {
           assert.deepEqual(await runSocketProbe(probeRuntime, socketPath, tempRoot), {
             status: "inaccessible",
-            reason: probeRuntime === "node" ? "permission-denied" : "live-holder",
+            reason: "permission-denied",
             errorCode: "PROTOCOL_SOCKET_INACCESSIBLE",
           });
         }

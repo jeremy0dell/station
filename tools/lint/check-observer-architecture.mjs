@@ -197,7 +197,7 @@ export function checkObserverArchitecture(options = {}) {
           path: result.manifestPath,
           ruleId: "GENERATED_MANIFEST_CURRENT",
           message: `Generated architecture evidence is missing or stale at ${result.manifestPath}.`,
-          correctiveAction: "run pnpm architecture:observer:generate",
+          correctiveAction: "run bun run architecture:observer:generate",
         });
   return {
     ...result,

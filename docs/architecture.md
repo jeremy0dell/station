@@ -158,7 +158,11 @@ The Station UI in `station/` is a `@station/client` consumer plus a terminal-hos
 - "New Session" and Fork in Station host the agent in a Station pane by dispatching observer `worktree.create` or `worktree.fork` with the resolved `launchHarness`, rather than launching an external tmux session. The optional field distinguishes launch-bound mutation from ordinary worktree-only commands; Station reuses that exact harness for later external preparation. New Session may carry an existing-root or inline-create Group placement, while Fork may carry source-session Group inheritance with an explicit Ungrouped opt-out; Observer resolves source membership and commits placement with the fresh session seed before target publication. Native deliberate creation settles only after the canonical snapshot carries the complete requested relationship, with one bounded refresh before a non-retryable warning. A pre-launch Group rejection removes only the exact fresh worktree through the ordinary non-force removal command; uncertain removal retains it and closes the flow with recovery guidance. Liveness decisions (launch vs. focus, destructive guards) route through the shared `worktreeHasLiveAgent` contract in `packages/contracts`.
 - Each `DashboardRuntime` owns one private effect scope for dashboard operations, capability completion, directory polling, and failed-row expiry. Disposal closes admission synchronously, detaches subscriptions, clears owned timers, suppresses late state writes, and asynchronously drains already-started bounded work before the renderer composition stops its client.
 
-This subsystem runs on its own Bun lane outside the root pnpm workspace (OpenTUI / native-renderer isolation), with its boundaries kept deliberately narrow. See `docs/local-development.md` for the dev host workflow and `docs/debugging.md` for the runtime-topology checklist.
+This subsystem is the Bun-executed `@station/workspace` package in the root Bun
+workspace. Node 24 remains the source runtime for the CLI, Observer, and default
+PTY bridge, while OpenTUI and renderer dependencies stay owned by Station. See
+`docs/local-development.md` for the dev host workflow and `docs/debugging.md`
+for the runtime-topology checklist.
 
 ## Conflict Rule
 

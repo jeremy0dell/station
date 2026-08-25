@@ -513,8 +513,8 @@ export function formatRuntimePruneResult(result) {
 }
 
 function printRuntimePruneHelp() {
-  process.stdout.write(`Usage: pnpm station:runtime-prune -- --runtime <run_uuid> [--state-dir /absolute/path] [--json]
-       pnpm station:runtime-prune -- --runtime <run_uuid> [--state-dir /absolute/path] --yes --expect-plan <sha256> [--json]
+  process.stdout.write(`Usage: bun run station:runtime-prune -- --runtime <run_uuid> [--state-dir /absolute/path] [--json]
+       bun run station:runtime-prune -- --runtime <run_uuid> [--state-dir /absolute/path] --yes --expect-plan <sha256> [--json]
 
 Plans one registered disposable runtime without mutation. Apply requires the exact
 digest from a fresh eligible plan and revalidates ownership before every action.\n`);

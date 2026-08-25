@@ -1,3 +1,4 @@
+import { DatabaseSync } from "node:sqlite";
 import { z } from "zod";
 
 export type SqlParam = string | number | bigint | Uint8Array | null;
@@ -38,35 +39,21 @@ type NativeSqliteDatabase = {
 
 type NativeSqliteConstructor = new (path: string) => NativeSqliteDatabase;
 
-declare const Bun: object;
-
 const SqliteBusyErrorSchema = z.union([
   z.object({ code: z.literal("ERR_SQLITE_ERROR"), errcode: z.literal(5) }),
   z.object({ code: z.literal("SQLITE_BUSY"), errno: z.literal(5) }),
 ]);
 
-// Import exactly one driver: loading node:sqlite terminates Bun before fallback is possible.
-const openSqlite =
-  typeof Bun !== "undefined"
-    ? // @ts-expect-error bun:sqlite is available only in the Bun runtime selected by this branch.
-      adaptBunSqlite((await import("bun:sqlite")).Database)
-    : adaptNodeSqlite((await import("node:sqlite")).DatabaseSync);
+const SqliteDatabase = DatabaseSync as unknown as NativeSqliteConstructor;
 
-export const openSqlDatabase = (path: string): SqlDatabase => openSqlite(path);
+export const openSqlDatabase = (path: string): SqlDatabase =>
+  adaptDatabase(new SqliteDatabase(path));
 
 export function isSqliteBusyError(error: unknown): boolean {
   return SqliteBusyErrorSchema.safeParse(error).success;
 }
 
-function adaptNodeSqlite(Database: NativeSqliteConstructor): (path: string) => SqlDatabase {
-  return (path) => adaptDatabase(new Database(path), false);
-}
-
-function adaptBunSqlite(Database: NativeSqliteConstructor): (path: string) => SqlDatabase {
-  return (path) => adaptDatabase(new Database(path), true);
-}
-
-function adaptDatabase(database: NativeSqliteDatabase, normalizeMissingRow: boolean): SqlDatabase {
+function adaptDatabase(database: NativeSqliteDatabase): SqlDatabase {
   return {
     exec: (sql) => database.exec(sql),
     prepare: (sql) => {
@@ -79,10 +66,7 @@ function adaptDatabase(database: NativeSqliteDatabase, normalizeMissingRow: bool
             lastInsertRowid: result.lastInsertRowid,
           };
         },
-        get: (...params) => {
-          const row = statement.get(...params);
-          return normalizeMissingRow && row === null ? undefined : row;
-        },
+        get: (...params) => statement.get(...params),
         all: (...params) => statement.all(...params),
       };
     },

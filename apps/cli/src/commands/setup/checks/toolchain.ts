@@ -1,9 +1,14 @@
+import { execFile } from "node:child_process";
+import { dirname, join } from "node:path";
+import { promisify } from "node:util";
 import {
   type ExternalCommandInput,
   type ExternalCommandRunner,
   runExternalCommand,
 } from "@station/runtime";
+import { z } from "zod";
 import type { CliEnv } from "../../../env.js";
+import { resolveStationWorkspaceDir } from "../../../stationWorkspace.js";
 import { setupProbeTimeoutMs } from "./constants.js";
 import { commandEnv } from "./env.js";
 
@@ -22,13 +27,21 @@ export type CheckToolchainOptions = {
   env?: CliEnv;
   cwd?: string;
   nodeVersion?: string;
+  expectedBunVersion?: string;
 };
+
+const execFileAsync = promisify(execFile);
+const BunVersionSchema = z.string().regex(/^[^\s]+$/u);
 
 export async function checkSetupToolchain(
   options: CheckToolchainOptions = {},
-): Promise<{ node: ToolchainFact; pnpm: ToolchainFact }> {
-  const [node, pnpm] = await Promise.all([checkNodeVersion(options), checkPnpmVersion(options)]);
-  return { node, pnpm };
+): Promise<{ node: ToolchainFact; bun: ToolchainFact }> {
+  const expectedBunVersion = options.expectedBunVersion ?? (await sourceBunVersionPolicy());
+  const [node, bun] = await Promise.all([
+    checkNodeVersion(options),
+    checkBunVersion(options, expectedBunVersion),
+  ]);
+  return { node, bun };
 }
 
 function checkNodeVersion(options: CheckToolchainOptions): ToolchainFact {
@@ -60,10 +73,13 @@ function isSupportedNodeVersion(version: string): boolean {
   return major === 24 && (minor > 2 || (minor === 2 && patch >= 0));
 }
 
-async function checkPnpmVersion(options: CheckToolchainOptions): Promise<ToolchainFact> {
+async function checkBunVersion(
+  options: CheckToolchainOptions,
+  expected: string,
+): Promise<ToolchainFact> {
   try {
     const input: ExternalCommandInput = {
-      command: "pnpm",
+      command: "bun",
       args: ["--version"],
       timeoutMs: setupProbeTimeoutMs,
       maxOutputChars: 4096,
@@ -73,30 +89,39 @@ async function checkPnpmVersion(options: CheckToolchainOptions): Promise<Toolcha
     if (env !== undefined) input.env = env;
     const output = await runExternalCommand(input, options.runner);
     const actual = normalizeVersion(`${output.stdout}${output.stderr}`.trim());
-    if (actual.startsWith("11.")) {
+    if (actual === expected) {
       return {
         status: "ok",
-        label: "pnpm",
+        label: "Bun",
         actual,
-        expected: "11.x",
-        message: `pnpm ${actual} is compatible.`,
+        expected,
+        message: `Bun ${actual} matches the repository policy.`,
       };
     }
     return {
       status: "incompatible",
-      label: "pnpm",
+      label: "Bun",
       actual,
-      expected: "11.x",
-      message: `pnpm ${actual} is incompatible; STATION development expects pnpm 11.x.`,
+      expected,
+      message: `Bun ${actual} is incompatible; Station development expects Bun ${expected}.`,
     };
   } catch {
     return {
       status: "missing",
-      label: "pnpm",
-      expected: "11.x",
-      message: "pnpm is not available; STATION development expects pnpm 11.x.",
+      label: "Bun",
+      expected,
+      message: `Bun is not available; Station development expects Bun ${expected}.`,
     };
   }
+}
+
+async function sourceBunVersionPolicy(): Promise<string> {
+  const policyScript = join(dirname(resolveStationWorkspaceDir()), "scripts", "bun-version.mjs");
+  const { stdout } = await execFileAsync(process.execPath, [policyScript, "--print"], {
+    encoding: "utf8",
+    maxBuffer: 4096,
+  });
+  return BunVersionSchema.parse(stdout.trim());
 }
 
 function normalizeVersion(value: string): string {

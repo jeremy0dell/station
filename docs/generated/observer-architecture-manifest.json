@@ -13471,16 +13471,10 @@
       ],
       "imports": [
         {
-          "specifier": "bun:sqlite",
-          "resolvedPath": "bun:sqlite",
-          "edgeKind": "runtime",
-          "bindings": []
-        },
-        {
           "specifier": "node:sqlite",
           "resolvedPath": "node:sqlite",
           "edgeKind": "runtime",
-          "bindings": []
+          "bindings": ["DatabaseSync"]
         },
         {
           "specifier": "zod",

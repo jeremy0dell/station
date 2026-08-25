@@ -121,7 +121,7 @@ export function createSetupOperationAdapter(
       const currentFacts = requireFacts(facts());
       return runExternalOperation(
         operation,
-        ["pnpm", "--dir", currentFacts.launchers.packageRoot, "station:link"],
+        ["bun", "run", "--cwd", currentFacts.launchers.packageRoot, "station:link"],
         { kind: "launcher-link" },
         deps(),
       );

@@ -15,7 +15,7 @@ let observerStopped = false;
 
 try {
   if (!options.skipBuild) {
-    spawnChecked("pnpm", ["build"], { label: "build" });
+    spawnChecked("bun", ["run", "build"], { label: "build" });
   } else {
     assertBuiltCli();
   }
@@ -35,7 +35,7 @@ try {
   assertPathExists(debugBundle.bundlePath, "debug bundle path was not created");
 
   if (!options.skipScripted) {
-    spawnChecked("pnpm", ["test:agent:scripted"], { label: "scripted agent smoke" });
+    spawnChecked("bun", ["run", "test:agent:scripted"], { label: "scripted agent smoke" });
   }
 
   const summary = {
@@ -73,7 +73,7 @@ function parseArgs(args) {
       parsed.skipScripted = true;
     } else if (arg === "-h" || arg === "--help") {
       process.stdout.write(
-        "Usage: pnpm smoke:release [-- --skip-build --skip-scripted --keep-temp]\n",
+        "Usage: bun run smoke:release [-- --skip-build --skip-scripted --keep-temp]\n",
       );
       process.exit(0);
     } else {
@@ -85,7 +85,7 @@ function parseArgs(args) {
 
 function assertBuiltCli() {
   const entry = join(repoRoot, "apps", "cli", "dist", "main.js");
-  assert(existsSync(entry), "built CLI is missing; run pnpm build or omit --skip-build");
+  assert(existsSync(entry), "built CLI is missing; run bun run build or omit --skip-build");
 }
 
 function writeSmokeConfig(input) {

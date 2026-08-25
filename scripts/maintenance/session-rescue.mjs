@@ -952,9 +952,9 @@ function errorMessage(error) {
 
 function printHelp() {
   process.stdout.write(`Usage:
-  pnpm station:sessions:save -- --devbox [--output <path>]
-  pnpm station:sessions:save -- --config <config.toml> [--codex-home <path>] [--claude-config-dir <path>] [--output <path>]
-  pnpm station:sessions:verify -- <archive-path>
+  bun run station:sessions:save -- --devbox [--output <path>]
+  bun run station:sessions:save -- --config <config.toml> [--codex-home <path>] [--claude-config-dir <path>] [--output <path>]
+  bun run station:sessions:verify -- <archive-path>
 
 The save is read-only with respect to Station, provider sessions, and worktrees. It never stops,
 closes, resumes, writes to, resizes, or unlinks a live runtime. Archives contain sensitive session

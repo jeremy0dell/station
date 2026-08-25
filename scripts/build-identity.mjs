@@ -5,12 +5,15 @@ import { lstat, mkdir, open, readdir, readFile, readlink, rename, rm } from "nod
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { environmentWithBunRuntime, resolveAndCheckBunVersion } from "./bun-version.mjs";
 
 const execFileAsync = promisify(execFile);
 const BUILD_IDENTITY_PATTERN = /^[0-9a-f]{64}$/u;
 const BUILD_IDENTITY_DOMAIN = "station-build-identity-v1";
 const BUILD_INPUT_IDENTITY_DOMAIN = "station-build-input-identity-v1";
 const BUILD_OUTPUT_IDENTITY_DOMAIN = "station-build-output-identity-v1";
+const NODE_ENGINE_PATTERN = /^>=(0|[1-9]\d*)\.(0|[1-9]\d*) <(0|[1-9]\d*)$/u;
+const NODE_VERSION_PATTERN = /^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/u;
 const repoRoot = fileURLToPath(new URL("../", import.meta.url));
 const gitLocalEnvironmentVariables = [
   "GIT_ALTERNATE_OBJECT_DIRECTORIES",
@@ -186,6 +189,26 @@ export async function verifyBuildIdentity(identity, root = repoRoot) {
   }
 }
 
+/**
+ * Checks the published identity against current inputs and outputs without mutation.
+ */
+export async function checkBuildIdentity(root = repoRoot) {
+  let identity;
+  try {
+    identity = await readBuildIdentity(root);
+  } catch (error) {
+    throw new Error("Station build identity is missing or invalid; run bun run build.", {
+      cause: error,
+    });
+  }
+  if (!(await verifyBuildIdentity(identity, root))) {
+    throw new Error(
+      "Station build identity does not match the current checkout and production outputs; run bun run build.",
+    );
+  }
+  return identity;
+}
+
 /** Atomically publishes one validated identity through a private fsynced temporary file. */
 export async function publishBuildIdentity(identity, root = repoRoot) {
   if (!BUILD_IDENTITY_PATTERN.test(identity)) {
@@ -238,16 +261,107 @@ export async function buildWithIdentity(root, runBuildTask) {
   }
 }
 
-async function build() {
-  await buildWithIdentity(repoRoot, () =>
-    runBuildChild("pnpm", ["exec", "turbo", "run", "build"], repoRoot),
+/**
+ * Returns the current identity without work, or performs one build and publishes
+ * its identity when inputs or production outputs are stale.
+ */
+export async function ensureBuildIdentity(root, runBuildTask) {
+  try {
+    return await checkBuildIdentity(root);
+  } catch {
+    await buildWithIdentity(root, runBuildTask);
+    return readBuildIdentity(root);
+  }
+}
+
+/** Rejects a Node runtime outside the root manifest's supported development range. */
+export function assertNodeVersion(actual, engine) {
+  if (typeof actual !== "string" || typeof engine !== "string") {
+    throw new Error("Node runtime and root engines.node policy must both be strings.");
+  }
+  const policy = NODE_ENGINE_PATTERN.exec(engine);
+  if (policy === null) {
+    throw new Error(`Root package.json must declare a supported Node engine; found ${engine}.`);
+  }
+  const version = NODE_VERSION_PATTERN.exec(actual.trim());
+  const minimumMajor = Number(policy[1]);
+  const minimumMinor = Number(policy[2]);
+  const upperMajor = Number(policy[3]);
+  const actualMajor = version === null ? Number.NaN : Number(version[1]);
+  const actualMinor = version === null ? Number.NaN : Number(version[2]);
+  const satisfiesMinimum =
+    actualMajor > minimumMajor || (actualMajor === minimumMajor && actualMinor >= minimumMinor);
+  if (!satisfiesMinimum || actualMajor >= upperMajor) {
+    throw new Error(`Station requires Node ${engine}; found ${actual}.`);
+  }
+}
+
+/** Validates the source build runtimes before any output or identity can be replaced. */
+export async function checkBuildToolchain(root = repoRoot, options = {}) {
+  const manifest = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
+  const nodeEngine = manifest?.engines?.node;
+  if (typeof nodeEngine !== "string") {
+    throw new Error("Root package.json must declare engines.node as a supported range.");
+  }
+  assertNodeVersion(options.nodeVersion ?? process.version, nodeEngine);
+  const environment = options.env ?? process.env;
+  const bun = await resolveAndCheckBunVersion(root, { env: environment, cwd: root });
+  return {
+    bunExecutable: bun.executable,
+    bunLocatorDirectory: bun.locatorDirectory,
+    env: environmentWithBunRuntime(bun, environment),
+  };
+}
+
+/** Runs a full identity build only after its source toolchain is admitted. */
+export async function buildWithToolchainIdentity(root, runBuildTask, options = {}) {
+  const toolchain = await checkBuildToolchain(root, options);
+  await buildWithIdentity(root, () => runBuildTask(toolchain));
+}
+
+/** Rebuilds stale output only after admitting the source toolchain that will mutate it. */
+export async function ensureBuildWithToolchainIdentity(root, runBuildTask, options = {}) {
+  try {
+    return await checkBuildIdentity(root);
+  } catch {
+    const toolchain = await checkBuildToolchain(root, options);
+    await buildWithIdentity(root, () => runBuildTask(toolchain));
+    return readBuildIdentity(root);
+  }
+}
+
+/** Builds one repository through the same admitted Bun executable that was version-checked. */
+export async function buildRepository(root = repoRoot, options = {}) {
+  await buildWithToolchainIdentity(
+    root,
+    (toolchain) =>
+      runBuildChild(toolchain.bunExecutable, ["run", "turbo", "run", "build"], root, toolchain.env),
+    options,
   );
+}
+
+async function build() {
+  await buildRepository(repoRoot);
+}
+
+/** Ensures one repository through the same admitted Bun executable when outputs are stale. */
+export async function ensureRepositoryBuild(root = repoRoot, options = {}) {
+  return ensureBuildWithToolchainIdentity(
+    root,
+    (toolchain) =>
+      runBuildChild(toolchain.bunExecutable, ["run", "turbo", "run", "build"], root, toolchain.env),
+    options,
+  );
+}
+
+async function ensureBuild() {
+  await ensureRepositoryBuild(repoRoot);
 }
 
 async function requireCurrentBuildIdentity(identity) {
   if (!(await verifyBuildIdentity(identity, repoRoot))) {
     throw new Error(
-      "Station build identity does not match the current checkout and production outputs; run pnpm build.",
+      "Station build identity does not match the current checkout and production outputs; run bun run build.",
     );
   }
 }
@@ -274,7 +388,8 @@ export async function runBuildChild(command, args, cwd, env = process.env) {
 }
 
 async function runGit(root, args) {
-  const { stdout } = await execFileAsync("git", ["-C", root, ...args], {
+  // Build admission must not change when a launcher inherits a different global Git ignore file.
+  const { stdout } = await execFileAsync("git", ["-C", root, "-c", "core.excludesFile=", ...args], {
     encoding: "buffer",
     env: environmentWithoutGitLocals(),
     maxBuffer: 64 * 1024 * 1024,
@@ -325,10 +440,14 @@ if (invokedPath === fileURLToPath(import.meta.url)) {
     const args = process.argv.slice(2);
     if (args.length === 0) {
       await build();
+    } else if (args.length === 1 && args[0] === "--check") {
+      await checkBuildIdentity(repoRoot);
+    } else if (args.length === 1 && args[0] === "--ensure") {
+      await ensureBuild();
     } else if (args.length === 2 && args[0] === "--verify" && args[1] !== undefined) {
       await requireCurrentBuildIdentity(args[1]);
     } else {
-      throw new Error("Usage: build-identity.mjs [--verify <identity>]");
+      throw new Error("Usage: build-identity.mjs [--check|--ensure|--verify <identity>]");
     }
   } catch (error) {
     process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);

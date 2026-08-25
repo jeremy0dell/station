@@ -249,7 +249,7 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           command -v tmux >/dev/null 2>&1 || brew install tmux
-          pnpm build
+          bun run build
       - name: Install exact public predecessor
         if: runner.os == 'macOS'
         env:
@@ -333,7 +333,7 @@ jobs:
           TAG: ${{ inputs.tag }}
           TARGET_BUILD_IDENTITY: ${{ needs.promote.outputs.target_build_identity }}
         run: |
-          pnpm smoke:update -- \
+          bun run smoke:update -- \
             --incumbent-binary "$RUNNER_TEMP/update-incumbent/bin/stn" \
             --incumbent-version "${PREVIOUS_TAG#v}" \
             --public-target-tag "$TAG" \

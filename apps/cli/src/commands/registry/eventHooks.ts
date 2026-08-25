@@ -19,7 +19,7 @@ export const eventHooksCliCommand: CliCommandNode = {
     { name: "--yes, -y", description: "Confirm event hook installation." },
     { name: "--force", description: "Replace an installed hook even if it already matches." },
   ],
-  examples: ["pnpm stn event-hooks plan notify-agent-state", "pnpm stn event-hooks doctor"],
+  examples: ["stn event-hooks plan notify-agent-state", "stn event-hooks doctor"],
   children: [
     {
       name: "plan",
@@ -33,7 +33,7 @@ export const eventHooksCliCommand: CliCommandNode = {
           description: "Show the replacement block even when the hook matches.",
         },
       ],
-      examples: ["pnpm stn event-hooks plan notify-agent-state"],
+      examples: ["stn event-hooks plan notify-agent-state"],
     },
     {
       name: "install",
@@ -48,13 +48,13 @@ export const eventHooksCliCommand: CliCommandNode = {
           description: "Replace an installed hook even if it already matches.",
         },
       ],
-      examples: ["pnpm stn event-hooks install notify-agent-state --yes"],
+      examples: ["stn event-hooks install notify-agent-state --yes"],
     },
     {
       name: "doctor",
       description: "Check whether the built-in agent state notification event hook is usable.",
       usage: ["stn event-hooks doctor"],
-      examples: ["pnpm stn event-hooks doctor"],
+      examples: ["stn event-hooks doctor"],
     },
   ],
 };
