@@ -66,7 +66,8 @@ export type StationHostClientOptions = {
 
 /**
  * One successful attachment attempt to an exact Host PTY lifetime. Its frame
- * iterator and detach operation release only this attempt, even after replacement.
+ * iterator includes frames sent immediately after its valid acknowledgement,
+ * and detach releases only this attempt even after replacement.
  */
 export type HostAttachment = {
   ack: HostAttachAck;
@@ -124,6 +125,7 @@ type Pending = {
   resolve: (response: HostResponse) => void;
   reject: (error: unknown) => void;
   timer: ReturnType<typeof setTimeout>;
+  reduceResponse?: (response: HostResponse) => void;
 };
 
 type FrameSink = {
@@ -181,7 +183,12 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
           if (entry !== undefined) {
             clearTimeout(entry.timer);
             pending.delete(response.data.id);
-            entry.resolve(response.data);
+            try {
+              entry.reduceResponse?.(response.data);
+              entry.resolve(response.data);
+            } catch (error) {
+              entry.reject(error);
+            }
           }
           continue;
         }
@@ -250,6 +257,7 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
     params: unknown,
     schema: { parse(value: unknown): TResult },
     includeClientIdentity = false,
+    reduceResponse?: (response: HostResponse) => void,
   ): Promise<TResult> {
     const active = await ensureConnection();
     const id = `h${nextId++}`;
@@ -263,7 +271,9 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
           ),
         );
       }, timeoutMs);
-      pending.set(id, { resolve, reject, timer });
+      const entry: Pending = { resolve, reject, timer };
+      if (reduceResponse !== undefined) entry.reduceResponse = reduceResponse;
+      pending.set(id, entry);
       active.send(
         hostRequest(id, method, params, includeClientIdentity ? clientIdentity : undefined),
       );
@@ -295,9 +305,10 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
     method: string,
     params: unknown,
     schema: { parse(value: unknown): TResult },
+    reduceResponse?: (response: HostResponse) => void,
   ): Promise<TResult> {
     await ensureCompatible();
-    return rawRequest(method, params, schema, true);
+    return rawRequest(method, params, schema, true, reduceResponse);
   }
 
   function createSink(): FrameSink {
@@ -453,9 +464,30 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
       };
       const { ptyId } = requestedRef;
       const sink = createSink();
+      let sinkInstalled = false;
       let ack: HostAttachAck;
       try {
-        ack = await request("host.attach", { ...requestedRef, intent }, HostAttachAckSchema);
+        ack = await request(
+          "host.attach",
+          { ...requestedRef, intent },
+          HostAttachAckSchema,
+          (response) => {
+            if (!response.ok) return;
+            const candidate = HostAttachAckSchema.safeParse(response.result);
+            if (
+              !candidate.success ||
+              !isSameHostPtyRef(requestedRef, candidate.data) ||
+              !isSameHostPtyIdentity(requestedIdentity, candidate.data)
+            ) {
+              return;
+            }
+            sinksByPty.get(ptyId)?.release();
+            if (!sink.ended) {
+              sink.register(candidate.data);
+              sinkInstalled = true;
+            }
+          },
+        );
       } catch (error) {
         sink.release();
         throw error;
@@ -477,10 +509,12 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
           "Station host acknowledged a different PTY identity than the client expected.",
         );
       }
-      // The server acknowledges before it can send frames, so routing starts only after validation.
-      sinksByPty.get(ptyId)?.release();
-      if (!sink.ended) {
-        sink.register(ack);
+      if (!sinkInstalled) {
+        sink.release();
+        throw new StationHostProviderError(
+          "HOST_ATTACHMENT_MISMATCH",
+          "Station host attachment routing was unavailable after acknowledgement.",
+        );
       }
       return {
         ack,

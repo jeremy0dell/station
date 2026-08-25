@@ -578,7 +578,7 @@ describe("createStationHostClient", () => {
     client.dispose();
   });
 
-  it("routes frames only after a valid acknowledgement installs the attempt sink", async () => {
+  it("routes a frame sent immediately after a valid acknowledgement", async () => {
     const { client: clientConn, server } = inMemoryNdjsonConnectionPair();
     void (async () => {
       for await (const message of server.messages()) {
@@ -595,7 +595,6 @@ describe("createStationHostClient", () => {
         } else if (request.method === "host.attach") {
           server.send({ type: "data", ptyId: PTY_REF.ptyId, data: "before-ack" });
           server.send(hostSuccess(request.id, attachAck()));
-          await delay(0);
           server.send({ type: "data", ptyId: PTY_REF.ptyId, data: "after-ack" });
         }
       }
