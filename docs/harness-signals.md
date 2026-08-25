@@ -83,8 +83,11 @@ Normalized events are `HarnessEventReport` / `HarnessEventObservation`
    and opens attention as usual. Codex `PermissionRequest` has no reviewer field
    or resolution identity. Its adapter therefore uses only a strictly parsed,
    matching `turn_context` from the bounded provider transcript tail to recognize
-   `auto_review`; unavailable or changed transcript evidence remains a real
-   `needs_attention` signal rather than risking a hidden user approval.
+   `auto_review`, and reads that transcript only after Station correlation admits
+   the hook. A malformed newest matching context makes the evidence unavailable;
+   the adapter never falls back to an older reviewer. Unavailable or changed
+   transcript evidence remains a real `needs_attention` signal rather than risking
+   a hidden user approval.
 4. **Blocking states beat activity.** A tool call that *is* the user request
    (Codex `request_user_input`) must normalize as `needs_attention`, not as
    tool activity. When a provider separates prompt-open from tool preflight,

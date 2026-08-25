@@ -58,6 +58,7 @@ export type ProviderHookSenderDeps = ProviderHookDeliveryDeps & {
   writeSpool?: typeof writeProviderHookSpoolRecord;
   hookId?: () => string;
   logger?: JsonlLogger;
+  codexPermissionReviewerEnricher?: typeof enrichCodexPermissionReviewerEvidence;
 };
 
 export type SendProviderHookEventInput = ProviderHookSenderOptions & {
@@ -215,8 +216,8 @@ export async function sendClaudeHookPayload(
 /**
  * ADAPTER
  *
- * Admits Codex's forwarded events, adds bounded provider-private permission-reviewer
- * evidence when available, then applies Station correlation and shared harness ingress.
+ * Admits Codex's forwarded events, applies Station correlation, then adds bounded
+ * provider-private permission-reviewer evidence before shared harness ingress.
  */
 export async function sendCodexHookPayload(
   input: SendCodexHookInput,
@@ -236,9 +237,8 @@ export async function sendCodexHookPayload(
     payload: input.payload,
     env: input.env ?? process.env,
   });
-  const enrichedPayload = await enrichCodexPermissionReviewerEvidence(identityPayload);
   const correlationFailure = providerHookCorrelationFailureReason(
-    enrichedPayload,
+    identityPayload,
     input.projectRoots,
   );
   if (correlationFailure !== undefined) {
@@ -248,6 +248,9 @@ export async function sendCodexHookPayload(
       deps,
     );
   }
+  const enrichPermissionReviewer =
+    deps.codexPermissionReviewerEnricher ?? enrichCodexPermissionReviewerEvidence;
+  const enrichedPayload = await enrichPermissionReviewer(identityPayload);
 
   return sendProviderHookEvent(
     {

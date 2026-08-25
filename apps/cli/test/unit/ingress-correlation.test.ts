@@ -270,6 +270,49 @@ describe("provider hook ingress correlation", () => {
     await expect(listHookSpoolFiles(fixture.hookSpoolDir)).resolves.toEqual([]);
   });
 
+  it("rejects an uncorrelated Codex permission request before transcript enrichment", async () => {
+    const fixture = await createTempState();
+    const configPath = await writeConfigWithProject(fixture.root, fixture.root);
+    const hookLogPath = componentLogPath(fixture.stateDir, "hook");
+    const capture = capturingHookLogger(hookLogPath);
+    const forbidden = ingressWorkForbiddenDeps(capture.logger, "hook_codex_before_transcript");
+    let enrichmentCalls = 0;
+
+    const receipt = await runProviderIngressCommand(
+      ["--config", configPath, "--no-auto-start", "codex"],
+      {
+        stdin: JSON.stringify({
+          ...codexPayload(),
+          hook_event_name: "PermissionRequest",
+          transcript_path: "/outside/should-not-be-read.jsonl",
+          cwd: "/station-outside-roots/codex-permission",
+        }),
+        env: {},
+      },
+      {
+        ...forbidden.deps,
+        codexPermissionReviewerEnricher: async () => {
+          enrichmentCalls += 1;
+          throw new Error("uncorrelated hooks must not read provider transcripts");
+        },
+      },
+    );
+
+    expect(receipt).toMatchObject({
+      provider: "codex",
+      event: "PermissionRequest",
+      accepted: false,
+      status: "ignored",
+    });
+    expect(enrichmentCalls).toBe(0);
+    expect(forbidden.calls).toMatchObject({
+      client: 0,
+      delivery: 0,
+      startup: 0,
+      spool: 0,
+    });
+  });
+
   it("constructs ignored-correlation evidence without sensitive provider context", async () => {
     const fixture = await createTempState();
     const repositoryRoot = join(fixture.root, "repository-root-SENTINEL-47a8");

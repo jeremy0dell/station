@@ -11,6 +11,7 @@ const CodexPermissionReviewerUnavailableReasonSchema = z.enum([
   "transcript_path_missing",
   "transcript_unreadable",
   "turn_context_not_found",
+  "turn_context_malformed",
   "transcript_scan_limit_reached",
   "approvals_reviewer_unrecognized",
 ]);
@@ -63,8 +64,10 @@ export type CodexPermissionReviewerEnrichmentOptions = {
 };
 
 /**
- * Adds provider-private reviewer evidence to a Codex PermissionRequest payload.
- * Raw payloads cannot supply this field; only a matching transcript turn context can resolve it.
+ * ADAPTER
+ *
+ * Removes caller-supplied reviewer claims and reads a bounded Codex transcript tail so only a
+ * strictly parsed, matching turn context can add provider-private permission-reviewer evidence.
  */
 export async function enrichCodexPermissionReviewerEvidence(
   payload: unknown,
@@ -116,7 +119,8 @@ async function reviewerEvidenceFromTranscript(
     const line = lines[index];
     if (line === undefined || !line.includes("turn_context") || !line.includes(turnId)) continue;
     const context = transcriptTurnContext(line);
-    if (context === undefined || context.turnId !== turnId) continue;
+    if (context === undefined) return unavailableEvidence("turn_context_malformed");
+    if (context.turnId !== turnId) continue;
     if (context.reviewer === undefined) {
       return unavailableEvidence("approvals_reviewer_unrecognized");
     }

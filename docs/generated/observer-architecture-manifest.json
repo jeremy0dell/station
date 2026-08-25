@@ -14372,11 +14372,18 @@
       "declaration": "sendCodexHookPayload",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Admits Codex's forwarded events, adds bounded provider-private permission-reviewer evidence when available, then applies Station correlation and shared harness ingress.",
+      "purpose": "Admits Codex's forwarded events, applies Station correlation, then adds bounded provider-private permission-reviewer evidence before shared harness ingress.",
       "dependencies": [
         {
           "path": "apps/cli/src/ingress/sender.ts",
           "declaration": "sendProviderHookEvent",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "integrations/harness/codex/src/permissionReviewerEvidence.ts",
+          "declaration": "enrichCodexPermissionReviewerEvidence",
           "kind": "function",
           "role": "ADAPTER",
           "edgeKind": "runtime"
@@ -17248,6 +17255,14 @@
           "edgeKind": "runtime"
         }
       ]
+    },
+    {
+      "path": "integrations/harness/codex/src/permissionReviewerEvidence.ts",
+      "declaration": "enrichCodexPermissionReviewerEvidence",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Removes caller-supplied reviewer claims and reads a bounded Codex transcript tail so only a strictly parsed, matching turn context can add provider-private permission-reviewer evidence.",
+      "dependencies": []
     },
     {
       "path": "integrations/harness/codex/src/provider.ts",

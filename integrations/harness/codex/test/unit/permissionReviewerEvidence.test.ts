@@ -51,6 +51,22 @@ describe("Codex permission reviewer evidence", () => {
     });
   });
 
+  it("does not reuse older evidence when the newest matching context is malformed", async () => {
+    const transcriptPath = await writeTranscript([
+      turnContext("turn_1", "auto_review"),
+      '{"type":"turn_context","payload":{"turn_id":"turn_1","approvals_reviewer":',
+    ]);
+
+    const enriched = await enrichCodexPermissionReviewerEvidence(permissionRequest(transcriptPath));
+
+    expect(enriched).toMatchObject({
+      [CODEX_PERMISSION_REVIEWER_EVIDENCE_FIELD]: {
+        status: "unavailable",
+        reason: "turn_context_malformed",
+      },
+    });
+  });
+
   it("reports missing, unreadable, and scan-limited transcripts conservatively", async () => {
     const scanLimitedPath = await writeTranscript([
       turnContext("turn_1", "auto_review"),
