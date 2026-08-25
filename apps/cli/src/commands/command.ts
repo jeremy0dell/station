@@ -74,6 +74,7 @@ type ParsedCommandArgs =
  *
  * Starts or selects the pinned Observer, dispatches one typed Station command, and optionally
  * reloads its durable terminal outcome through the race-safe protocol completion wait.
+ * Post-dispatch wait failures retain the accepted command and trace correlation.
  */
 export async function executeTypedObserverCommand<TCommand extends StationCommand>(
   command: TCommand,
@@ -96,9 +97,14 @@ export async function executeTypedObserverCommand<TCommand extends StationComman
     };
   }
 
-  const record = await waitForCommand(client, receipt.commandId, timeoutMs);
+  let record: CommandRecord;
+  try {
+    record = await waitForCommand(client, receipt.commandId, timeoutMs);
+  } catch (error) {
+    throw correlateCommandWaitError(error, receipt);
+  }
   if (record.status !== "succeeded" && record.status !== "failed") {
-    throw commandWaitTimeoutError();
+    throw correlateCommandWaitError(commandWaitTimeoutError(), receipt);
   }
   assertMatchingCommandCompletion(command, receipt, record);
   if (record.status === "succeeded") {
@@ -295,6 +301,20 @@ function commandWaitTimeoutError(): SafeError {
     code: "COMMAND_WAIT_TIMEOUT",
     message: "Command did not finish before the timeout.",
   };
+}
+
+function correlateCommandWaitError(error: unknown, receipt: AcceptedCommandReceipt): unknown {
+  if (!isSafeError(error)) {
+    return error;
+  }
+  const correlated: SafeError = {
+    ...error,
+    commandId: receipt.commandId,
+  };
+  if (receipt.traceId !== undefined) {
+    correlated.traceId = receipt.traceId;
+  }
+  return correlated;
 }
 
 function mapCommandWaitError(error: unknown): never {

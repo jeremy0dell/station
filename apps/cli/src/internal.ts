@@ -13,6 +13,7 @@ export * from "./commands/project.js";
 export * from "./commands/providerHookAdapters.js";
 export * from "./commands/reconcile.js";
 export * from "./commands/session.js";
+export * from "./commands/sessionSummary.js";
 export * from "./commands/setup/index.js";
 export * from "./commands/snapshot.js";
 export * from "./commands/tui.js";
