@@ -200,6 +200,7 @@ ownership even where current ownership is still a deviation.
 | Diagnostic evidence | Driven | `DiagnosticEvidenceSource` | `createLocalDiagnosticEvidenceSource` | Conforming read-only role: the adapter captures resolved local state, log, diagnostics, socket, and hook-spool locations while only typed measurements and bounded evidence cross the port; command/event journals, providers, core, and SQLite remain separate inputs. |
 | Observer incumbent lifecycle | Driven | `ObserverIncumbentLifecycle` | local protocol client adapter | Handoff may read health and request controlled stop without importing transport mechanics into policy or orchestration. |
 | Observer process identity | Driven | `ObserverProcessIdentityEvidenceSource` | bounded local `ps`/`lsof`/`/proc` process-evidence adapter | One shared read-only verifier compares executable provenance, exact argv, OS start token, per-launch token, build selector, and resolved socket. Handoff, stale-evidence repair, and equivalent reap checks consume this verifier; no parallel weaker verifier exists. |
+| Exact Observer inspection | Driven | `ExactObserverInspectionPorts` | CLI status, pidfile/process-evidence, and identity-pinned recovery adapters | The Observer-owned read-only use case captures health, strict pidfile, complete cooperative process generation, executable provenance, recovery assessment, and selected handles, then revalidates health, pidfile, and process evidence around the recovery read. Installed-path replacement is visible only through its cooperative process-evidence port and grants no signal, reap, handoff, or repair authority. |
 | Observer process evidence | Driven | `ObserverProcessEvidenceSource` | local `lsof`/`ps`/`/proc`/pidfile/signal adapter | Extends exact identity evidence with socket-holder, strict pidfile, and signal capabilities for handoff. `lsof` is primary socket ownership and handoff reads only the requested incumbent PID; repair receives narrower ports without signal authority. |
 | Observer process existence | Driven | `ObserverProcessExistenceEvidenceSource` | bounded local `ps` adapter | Distinguishes positively absent from running and unavailable without sending signal zero; unavailable evidence is never stale-process proof. |
 | Observer pidfile repair | Driven | `ObserverProcessIdentityRepair` | strict local pidfile adapter | Reads a private regular strict identity and atomically compare-removes only that exact value through rename, parse, delete-or-restore mechanics. It cannot unlink sockets or signal processes. |
@@ -226,7 +227,7 @@ areas contain the following responsibilities:
 | `sessionRecoveryAssessment.ts` | read-only recovery classification and newest-eligible handle selection | Application use case that combines one inventory with one captured graph and provider capabilities, reuses the canonical eligibility policy, and returns provider-neutral decisions without launching, reconciling, or mutating persistence. |
 | `reconcile/` | provider reads, correlation, graph construction, Group projection, and core state | Reconcile-owned Group repair, command-local Group projection, and deterministic policies; provider I/O remains at its driven edges. `reconcileResult.ts` owns the `ReconcileTiming` result record returned by `runReconcileOnce`, while `core.ts` re-exports it for compatibility. |
 | `hooks/` | raw hook persistence and adapter handoff, report ingestion, dedupe, readiness, spool I/O, and ingress queue | One adapter-to-report normalization path; non-report hooks are reconcile hints, and queue orchestration stays separate from filesystem spool adapters. |
-| `runtime/` | API assembly, process lifecycle, scheduling, event delivery, server bridge, and external launch | Observer composition plus application operations; transport and infrastructure stay at the edge. |
+| `runtime/` | API assembly, process lifecycle, exact read-only ownership inspection, scheduling, event delivery, server bridge, and external launch | Observer composition plus application operations; transport and infrastructure stay at the edge. Exact inspection consumes purpose-specific status, pidfile, cooperative process, and pinned recovery ports without lifecycle mutation authority. |
 | `stationLogger.ts`, `commands/projectConfigWriter.ts` | Observer-private logging and authoritative project-configuration capabilities | Driven application ports free of JSONL records and configuration/home-path plumbing. |
 | `runtime/logging.ts`, `runtime/projectConfigWriter.ts` | Redacted JSONL writes and `@station/config` project mutation translation | Outbound adapters retaining log, config, and home paths at composition. |
 | `providers/` | provider aggregation and health cache | Provider aggregation and health only; provider modules must not own or import application orchestration. |
@@ -355,12 +356,28 @@ Station Host is outside the Observer singleton lifecycle and continues to own
 live PTYs independently.
 
 Checkout-local devbox composition may explicitly request exact-build activation
-for its configured socket. The CLI process adapter reuses exact health or
-cooperatively stops the identity-pinned non-exact incumbent before starting the
-caller build, then requires exact health as the postcondition. This orchestration
-does not address the Station Host socket, so the Host and its PTYs remain outside
-the replacement. It is an explicit configured-runtime operation rather than a
-change to singleton ordering or automatic handoff authority.
+for its configured socket. Before its first await, the CLI composition root
+strictly parses and clones a current-only command whose authority is either a
+fresh absence proof or one complete expected Observer generation. Exact
+inspection supplies health, strict pidfile, cooperative process and executable
+provenance, recovery assessment, and selected-handle evidence. Restart binds
+that inspection to one physical current-schema NDJSON connection: health,
+recovery, revalidated health, one cooperative stop, a `stopped: true` receipt,
+and peer EOF share the same connection without negotiation or reconnect.
+Complete expected-generation and selected-handle equality is checked immediately
+before stop; drift, connection loss, PID reuse, handle substitution, or a later
+non-target owner refuses without mutating the replacement owner.
+
+One absolute deadline covers admission, OS evidence subprocesses, the pinned
+session, preserve-incumbent child startup, child health, and an independent final
+exact inspection. Mutation starts only after fresh absence or the proven pinned
+stop. A final target must be a complete exact generation; the admitted generation
+cannot count after known or uncertain stop/start mutation, while an independently
+proven target winner may succeed and a later non-target winner remains preserved.
+Failures retain stable activation phase, admitted-incumbent disposition, and
+typed cause. The operation adds no private transport or wire method, retry loop,
+signal, reap, repair, Host, update, or compatibility authority. Generic singleton
+ordering and ordinary status, start, restart, and stop behavior remain unchanged.
 
 Singleton startup may hand commands, hooks, ingress, and generic protocol clients
 the healthy winner selected by the existing attach-versus-handoff policy. After

@@ -1,13 +1,16 @@
 import type { StationConfig } from "@station/config";
 import type { ReconcileReceipt } from "@station/contracts";
 import { createObserverClient } from "@station/protocol";
-import { runRuntimeBoundaryWithTimeout } from "@station/runtime";
 import {
   assertObserverRunning,
   type ObserverProcessDeps,
   startObserver,
 } from "../observerProcess.js";
 import { resolveObserverPaths } from "../paths.js";
+import {
+  reconcilePersistedState,
+  requireCurrentObserverIdentity,
+} from "../persistedStateReconcile.js";
 
 export type ReconcileCommandOptions = {
   config?: StationConfig;
@@ -15,6 +18,11 @@ export type ReconcileCommandOptions = {
   timeoutMs?: number;
 };
 
+/**
+ * COMPOSITION ROOT
+ *
+ * Proves one current Observer and binds only its reconcile method to the use case.
+ */
 export async function runReconcileCommand(
   args: string[],
   options: ReconcileCommandOptions = {},
@@ -25,36 +33,28 @@ export async function runReconcileCommand(
   const paths = resolveObserverPaths(options.config);
   const status = await startObserver({ ...options, paths, timeoutMs }, deps);
   assertObserverRunning(status);
-  const client =
-    deps.clientFactory?.(paths.socketPath) ??
-    createObserverClient({
-      socketPath: paths.socketPath,
-      timeoutMs,
-      ...(status.health.version === undefined
-        ? {}
-        : { expectedBuildVersion: status.health.version }),
-    });
-  const result = await runRuntimeBoundaryWithTimeout(
+  const observerIdentity = requireCurrentObserverIdentity(status.health, status.paths.socketPath);
+  return reconcilePersistedState(
     {
-      operation: "cli.reconcile.run",
+      observerIdentity,
       timeoutMs,
-      error: {
-        tag: "ReconcileCommandError",
-        code: "RECONCILE_RPC_FAILED",
-        message: "Reconcile command could not contact the observer.",
-      },
-      timeoutError: {
-        tag: "TimeoutError",
-        code: "RECONCILE_RPC_TIMEOUT",
-        message: "Reconcile command timed out while contacting the observer.",
-      },
+      ...(parsed.reason === undefined ? {} : { reason: parsed.reason }),
     },
-    async () => client.reconcile(parsed.reason),
+    (request) => {
+      const { observerIdentity, timeoutMs: requestTimeoutMs } = request;
+      const clientOptions = {
+        expectedObserverIdentity: observerIdentity,
+        timeoutMs: requestTimeoutMs,
+      };
+      const client =
+        deps.clientFactory?.(observerIdentity.socketPath, clientOptions) ??
+        createObserverClient({
+          socketPath: observerIdentity.socketPath,
+          ...clientOptions,
+        });
+      return { reconcile: (reason) => client.reconcile(reason) };
+    },
   );
-  if (!result.ok) {
-    throw result.error;
-  }
-  return result.value;
 }
 
 function parseReconcileArgs(args: string[]): { reason?: string } {

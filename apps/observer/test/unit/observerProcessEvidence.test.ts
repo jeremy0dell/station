@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import type { SafeError } from "@station/contracts";
 import { describe, expect, it, vi } from "vitest";
 import {
   createLocalObserverProcessEvidence,
@@ -60,7 +61,7 @@ describe("local Observer process evidence", () => {
     const evidence = createLocalObserverProcessEvidence({
       execFile: () => wrapper,
       readProcessArgv: () => undefined,
-      processExecutableMatches: () => false,
+      processExecutableProvenance: () => "mismatch",
     });
 
     expect(() => evidence.listObserverProcesses()).toThrow(
@@ -90,7 +91,7 @@ describe("local Observer process evidence", () => {
     const evidence = createLocalObserverProcessEvidence({
       execFile,
       readProcessArgv: () => undefined,
-      processExecutableMatches: () => true,
+      processExecutableProvenance: () => "exact",
     });
 
     try {
@@ -98,8 +99,34 @@ describe("local Observer process evidence", () => {
       expect(execFile).toHaveBeenCalledWith(
         expect.any(String),
         expect.arrayContaining(["-p", "42"]),
+        1_000,
       );
       expect(() => evidence.listObserverProcesses()).toThrow("ENOENT");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps replaced installed-path evidence on the cooperative-only port", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "stn-process-evidence-"));
+    const executable = join(dir, "stn");
+    await writeFile(executable, "");
+    const listing = ` 42 Sat Jul  4 17:45:33 2026 ${executable} __observer --socket /tmp/observer.sock --state-dir /tmp/state --startup-timeout-ms 10000 --build-version ${BUILD} --process-token ${TOKEN}\n`;
+    const evidence = createLocalObserverProcessEvidence({
+      execFile: () => listing,
+      readProcessArgv: () => undefined,
+      processExecutableProvenance: () => "installed-path-replaced",
+    });
+    try {
+      expect(evidence.readCooperativeObserverProcess(42)).toMatchObject({
+        executableProvenance: "installed-path-replaced",
+      });
+      expect(() => evidence.readObserverProcess(42)).toThrow(
+        expect.objectContaining({ code: "OBSERVER_PROCESS_INSTALLED_PATH_REPLACED" }),
+      );
+      expect(() => evidence.listObserverProcesses()).toThrow(
+        expect.objectContaining({ code: "OBSERVER_PROCESS_INSTALLED_PATH_REPLACED" }),
+      );
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
@@ -136,7 +163,7 @@ describe("local Observer process evidence", () => {
     const base = {
       execFile: () => listing,
       readProcessArgv: () => undefined,
-      processExecutableMatches: () => true,
+      processExecutableProvenance: () => "exact",
     };
     const zero = createLocalObserverProcessEvidence({
       ...base,
@@ -201,7 +228,7 @@ describe("local Observer process evidence", () => {
     const evidence = createLocalObserverProcessEvidence({
       execFile: () => (reads++ < 2 ? listing : ""),
       readProcessArgv: () => undefined,
-      processExecutableMatches: () => true,
+      processExecutableProvenance: () => "exact",
       execFileStatus: () => ({
         status: 0,
         stdout: "p42\0\nfcwd\0tDIR\0\n",
@@ -237,8 +264,106 @@ describe("local Observer process evidence", () => {
     expect(evidence.signal(10, "SIGTERM")).toBe("sent");
     expect(evidence.signal(10, 0)).toBe("absent");
     const expectedPs = process.platform === "darwin" ? "/bin/ps" : "/usr/bin/ps";
-    expect(socketHolders).toHaveBeenCalledWith("/a/o.sock");
+    expect(socketHolders).toHaveBeenCalledWith("/a/o.sock", 1_000);
     expect(execFile.mock.calls.map(([file]) => file)).toEqual([expectedPs, expectedPs]);
+  });
+
+  it("preserves the configured fixed subprocess timeout for ordinary callers", () => {
+    const timeouts: number[] = [];
+    const evidence = createLocalObserverProcessEvidence({
+      evidenceTimeoutMs: 250,
+      nowMs: () => 10_000,
+      execFile: (_file, args, timeoutMs) => {
+        timeouts.push(timeoutMs);
+        return args.includes("lstart=") ? "Sat Jul  4 17:45:33 2026\n" : "";
+      },
+    });
+
+    expect(evidence.listObserverProcesses()).toEqual([]);
+    expect(evidence.processStartToken(42)).toBe("Sat Jul  4 17:45:33 2026");
+    expect(timeouts).toEqual([250, 250]);
+  });
+
+  it("shrinks every process-evidence subprocess seam from one absolute deadline", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "stn-process-evidence-"));
+    const executable = join(dir, "stn");
+    await writeFile(executable, "");
+    let nowMs = 0;
+    const calls: Array<{ kind: string; timeoutMs: number }> = [];
+    const listing = ` 42 Sat Jul  4 17:45:33 2026 ${executable} __observer --socket /tmp/observer.sock --state-dir /tmp/state --startup-timeout-ms 10000 --build-version ${BUILD} --process-token ${TOKEN}\n`;
+    const evidence = createLocalObserverProcessEvidence({
+      evidenceTimeoutMs: 1_000,
+      evidenceDeadlineMs: 1_000,
+      nowMs: () => {
+        nowMs += 10;
+        return nowMs;
+      },
+      execFile: (_file, args, timeoutMs) => {
+        calls.push({ kind: "exec", timeoutMs });
+        return args.includes("pid=,lstart=,command=") ? listing : "Sat Jul  4 17:45:33 2026\n";
+      },
+      execFileStatus: (_file, args, timeoutMs) => {
+        calls.push({ kind: "status", timeoutMs });
+        return args.includes("-F0pft")
+          ? { status: 0, stdout: "p42\0\nfcwd\0tDIR\0\n", stderr: "" }
+          : { status: 0, stdout: "Sat Jul  4 17:45:33 2026\n", stderr: "" };
+      },
+      readProcessArgv: () => undefined,
+      processExecutableProvenance: (_pid, _path, timeoutMs) => {
+        calls.push({ kind: "provenance", timeoutMs });
+        return "exact";
+      },
+      socketHolders: (_path, timeoutMs) => {
+        calls.push({ kind: "holders", timeoutMs });
+        return [42];
+      },
+    });
+
+    try {
+      const entry = evidence.listObserverProcesses()[0];
+      if (entry === undefined) throw new Error("Expected one Observer process entry.");
+      expect(evidence.socketHolders(entry.socketPath ?? "")).toEqual([42]);
+      expect(evidence.processStartToken(entry.pid)).toBe("Sat Jul  4 17:45:33 2026");
+      expect(evidence.readProcessExistence(entry.pid)).toMatchObject({ status: "running" });
+      expect(evidence.unixSocketFdCount(entry)).toBe(0);
+      expect(calls).toEqual([
+        { kind: "exec", timeoutMs: 990 },
+        { kind: "provenance", timeoutMs: 980 },
+        { kind: "holders", timeoutMs: 970 },
+        { kind: "exec", timeoutMs: 960 },
+        { kind: "status", timeoutMs: 950 },
+        { kind: "exec", timeoutMs: 940 },
+        { kind: "provenance", timeoutMs: 930 },
+        { kind: "status", timeoutMs: 920 },
+        { kind: "exec", timeoutMs: 910 },
+        { kind: "provenance", timeoutMs: 900 },
+      ]);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses process evidence before spawning after the absolute deadline", () => {
+    const execFile = vi.fn(() => "");
+    const evidence = createLocalObserverProcessEvidence({
+      evidenceDeadlineMs: 1_000,
+      nowMs: () => 1_000,
+      execFile,
+    });
+
+    let first: SafeError | undefined;
+    try {
+      evidence.listObserverProcesses();
+    } catch (error) {
+      first = error as SafeError;
+    }
+    expect(first).toMatchObject({ code: "OBSERVER_PROCESS_EVIDENCE_DEADLINE_EXCEEDED" });
+    if (first === undefined) throw new Error("Expected deadline evidence refusal.");
+    first.code = "MUTATED_BY_CALLER";
+    expect(() => evidence.listObserverProcesses()).toThrow(
+      expect.objectContaining({ code: "OBSERVER_PROCESS_EVIDENCE_DEADLINE_EXCEEDED" }),
+    );
+    expect(execFile).not.toHaveBeenCalled();
   });
 
   it("distinguishes bounded process existence from unavailable evidence without signaling", () => {

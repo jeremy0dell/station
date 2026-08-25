@@ -78,6 +78,7 @@ describe("provider hook ingress command", () => {
         socketPath: fixture.socketPath,
         stateDir: fixture.stateDir,
       }),
+      startupTimeoutMs: expect.any(Number),
       observerCommand: [process.execPath, observerEntry],
     });
   });

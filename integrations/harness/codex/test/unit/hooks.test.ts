@@ -13,6 +13,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { reconcileProviderHooks } from "@station/observer/internal";
 import { providerHookScriptRoutesByStationEnv } from "@station/runtime";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -32,6 +33,7 @@ import {
   parseTomlDocument,
   stringifyTomlDocument,
 } from "../../src/hooks/hookConfigEditor";
+import { CodexHookSetupError } from "../../src/hooks/hookErrors";
 import { withCodexHookMutationLock } from "../../src/hooks/hookMutationLock";
 
 describe("Codex hook setup", () => {
@@ -597,6 +599,64 @@ describe("Codex hook setup", () => {
     await expect(access(hookScriptPath)).rejects.toThrow();
   });
 
+  it("preserves a selected provider failure when cancellation becomes observable before catch", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-codex-hooks-late-cancel-failure-"));
+    const controller = new AbortController();
+    const providerFailure = new CodexHookSetupError(
+      "CODEX_HOOK_WRITE_FAILED",
+      "Selected provider write failure.",
+    );
+
+    await expect(
+      reconcileCodexHooks({
+        hookScriptPath: join(root, "state", "hooks", "station-codex-hook.sh"),
+        artifactOwner: owner("/station/bin/stn-ingress", "a"),
+        env: codexEnv(root),
+        enabled: true,
+        signal: controller.signal,
+        beginMutation: () => {
+          controller.abort(new Error("late cancellation"));
+          throw providerFailure;
+        },
+      }),
+    ).resolves.toMatchObject({
+      status: "write-failed",
+      changed: false,
+      error: { code: "CODEX_HOOK_WRITE_FAILED" },
+      followUp: { action: "retry" },
+    });
+  });
+
+  it("preserves an aborted signal reason through config-read error wrapping", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-codex-hooks-wrapped-cancel-"));
+    const codexHome = join(root, "codex-home");
+    await mkdir(codexHome, { recursive: true });
+    await writeFile(join(codexHome, "config.toml"), "# provider config\n", "utf8");
+    const controller = new AbortController();
+    const cancellation = {
+      tag: "CancellationError",
+      code: "CODEX_HOOK_RECONCILIATION_CANCELLED",
+      message: "Canonical caller cancellation.",
+    };
+
+    const result = reconcileProviderHooks("codex", () =>
+      reconcileCodexHooks({
+        hookScriptPath: join(root, "state", "hooks", "station-codex-hook.sh"),
+        artifactOwner: owner("/station/bin/stn-ingress", "a"),
+        env: { CODEX_HOME: codexHome },
+        enabled: true,
+        signal: controller.signal,
+      }),
+    );
+    queueMicrotask(() => controller.abort(cancellation));
+
+    await expect(result).resolves.toMatchObject({
+      provider: "codex",
+      status: "inspection-failed",
+      error: cancellation,
+    });
+  });
+
   it("reports unchanged when the first artifact write fails", async () => {
     const root = await mkdtemp(join(tmpdir(), "station-codex-hooks-first-write-failure-"));
     const codexHome = join(root, "codex-home");
@@ -997,7 +1057,8 @@ describe("Codex hook setup", () => {
       await holder;
     }
 
-    await expect(reconciliation).resolves.toEqual({
+    const result = await reconciliation;
+    expect(result).toEqual({
       provider: "codex",
       status: "ownership-conflict",
       changed: false,
