@@ -2433,3 +2433,109 @@ typechecks; 15 Protocol transport unit tests; 43 Protocol integration tests;
 8 Observer integration tests; 65 focused Station tests; Biome;
 `git diff --check`; the skipped runner compile; and the structural native
 smoke.
+
+## BENCH-049-I registered subscription handoff plan
+
+Governing sources are `docs/debugging.md`, `docs/architecture.md`,
+`docs/observer-architecture.md`, `docs/architecture-documentation.md`,
+`docs/configuration.md`, `tests/README.md`, the original experiment protocol,
+BENCH-048-I, and BENCH-048-P. BENCH-048 rejected recorded renderer work as the
+dominant attribution, but its post-result gap decomposition located
+2.354/3.546ms median/p95 unoccupied time. Approximate ordering placed
+1.003/1.741ms between the preceding socket callback and `worktree.updated`
+runtime entry and 0.979/2.020ms before `session.created`. Source inspection
+shows that each subscription frame crosses the transport async generator,
+protocol envelope parsing and strict `StationEventSchema` validation, the
+service iterator, and the runtime iterator before typed application. BENCH-049
+asks whether that exact asynchronous handoff owns the missing active interval
+and records OpenTUI's existing frame-completion notification to distinguish
+handoff work from post-React native rendering.
+
+BENCH-049 inherits BENCH-048's twenty native repetitions, idle-before-active
+same-process control, forty separate admissions, one-minute-load ceiling,
+49-worktree fixture, ordinary Observer restart, warm preserved Host, exact
+renderer-child identity, phase layers, renderer occupancy trace, exit-only
+persistence, and all correctness/product guards. It extends the same memory
+trace without changing any public or shared payload. While the active window is
+armed, the transport assigns an internal activity identity to each parsed
+object using a `WeakMap`; later layers propagate that identity through their
+already-created validated object using another weak association. No string,
+symbol, property, wrapper, or diagnostic field is added to the NDJSON value,
+protocol envelope, Station event, service contract, or runtime state.
+
+Each candidate subscription frame records strict repeated phases:
+
+- socket frame parsed and queued, socket wake completed, and socket callback
+  completed;
+- transport iterator dequeued, protocol read resumed, envelope parsed, and
+  strict event validation completed with the validated Station event type;
+- subscription `next()` completed, runtime iterator resumed, and runtime event
+  application entered; and
+- the existing OpenTUI `frame` EventEmitter notification, captured by a
+  synchronous timestamp-only listener with its monotonically increasing frame
+  id. It records completion position only and contributes no occupancy
+  duration.
+
+Target activities are only the validated `worktree.updated` and
+`session.created` frames. Every phase sequence must strictly parse, be
+monotonic, preserve one activity identity, and remain inside the armed window.
+Analysis clips socket-callback-completed-to-runtime-event-entered handoff
+intervals to active server-send-to-response-callback, unions overlaps, and
+partitions each handoff into transport iterator resumption, protocol parsing
+and validation, subscription completion, service/runtime promise propagation,
+and final runtime entry. It then unions those handoffs with BENCH-048's outer
+renderer occupancy intervals; it never adds overlapping time. OpenTUI frame
+completion is reported only by position relative to React completion,
+subscription socket delivery, and runtime entry.
+
+All twenty runs must again pass forty admissions with immediate-turn p95 at
+most 1ms, process-launch p95 at most 5ms, and one-minute load at most twice the
+logical CPU count. All inherited exact safety predicates, exit-only traces,
+nonnegative cross-process order, and 1ms reconstruction bounds remain.
+User-facing p95 stays at most 380ms, attachment p95 at most 30ms, transport
+residual p95 at most 35ms, and active response-egress p95 at most 15ms.
+
+Attribute material missing time to subscription handoff only if at least
+fifteen runs contain both exact target activity sequences, handoff p95 explains
+at least 20% of active pre-callback p95, renderer-plus-handoff p95 explains at
+least 80%, and at least fifteen runs explain 75% of their own active interval.
+Blind prediction: all twenty runs contain exactly one complete
+`worktree.updated` and one complete `session.created` handoff; combined handoff
+p95 explains at least 25% of active pre-callback p95; the combined
+renderer-plus-handoff union explains at least 85% of active p95; at least
+eighteen runs explain 80% individually; and at least fifteen runs contain an
+OpenTUI frame completion between the post-send worktree React completion and
+`session.created` runtime entry. Any failed trace, admission, safety, product,
+attribution, or prediction condition rejects the hypothesis mechanically.
+
+Expected temporary files are all BENCH-048 diagnostic files, including
+`packages/protocol/src/prepareExternalLaunchPhaseDiagnostic.ts`,
+`packages/protocol/src/transport.ts`, `packages/protocol/src/client.ts`,
+`packages/client/src/rendererOccupancyDiagnostic.ts`,
+`packages/client/src/observerRuntime.ts`, `packages/client/src/index.ts`,
+`packages/dashboard-core/src/state/runtime.ts`, `station/src/main.tsx`, and
+`tests/performance/quick-session/compiledQuickSessionTui.real.test.ts`, plus
+the earlier inherited Observer, Station managed-launch, and probe diagnostic
+files named by BENCH-048-I. No production test, contract/schema, provider,
+connector, runtime config, package manifest, architecture, benchmark, report,
+or user documentation change is expected. Raw JSON, an archive-only report,
+and this ledger are the evidence artifacts.
+
+JSDoc impact is explicit: temporary protocol functions document weak identity
+tracking and phase propagation without payload mutation; the temporary client
+bridge documents its already-armed observation-only scope; and the OpenTUI
+frame marker documents that the existing synchronous completion event grants
+no render authority. Concise comments protect the weak-association and
+callback-before-parse invariants. No backend/connector contract or controlled
+Observer seam changes. All diagnostic JSDoc is reverted after classification.
+
+Validation before the authoritative run repeats Protocol, Client, Dashboard
+Core, Observer, and Station typechecks; Protocol transport unit and
+client/server integration tests; Client runtime/reducer tests; Dashboard
+runtime tests; Observer external-launch tests; focused Station dashboard,
+managed-launch, Observer-client, probe, and render-profiler tests; Biome;
+`git diff --check`; skipped-runner compilation; and a timing-blind structural
+native smoke. No production optimization is registered. Acceptance authorizes
+only a separately preregistered candidate at the single dominant measured
+handoff phase; rejection redirects the next diagnostic to OpenTUI/native frame
+execution or OS process scheduling outside both measured unions.
