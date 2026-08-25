@@ -211,10 +211,9 @@ describe("ToastOverlayView actions", () => {
 
     await act(async () => {
       await fixture.setup.mockMouse.click(copy.col, copy.row, MouseButtons.LEFT);
-      await fixture.setup.flush();
     });
 
-    const copiedFrame = fixture.frame();
+    const copiedFrame = await fixture.setup.waitForFrame((frame) => frame.includes("[ copied ]"));
     const copiedHeader = renderableGolden(copiedFrame, surface)
       .split("\n")
       .find((line) => line.includes("[ copied ]"));
