@@ -386,6 +386,9 @@ async function readResponseForRequest<TMethod extends ProtocolMethod>(
   usePreviousLifecycleSchema = false,
 ): Promise<ProtocolResult<TMethod>> {
   const diagnosePrepareExternalLaunch = method === "agent.prepareExternalLaunch";
+  if (diagnosePrepareExternalLaunch) {
+    connection.armPrepareExternalLaunchResponseDeliveryDiagnostic();
+  }
   const request = protocolRequest(id, method, params);
   if (diagnosePrepareExternalLaunch) {
     markPrepareExternalLaunchClientProtocolPhase("prepareRequestConstructed");
