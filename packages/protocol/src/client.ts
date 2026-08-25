@@ -25,6 +25,7 @@ import {
   protocolSafeError,
   protocolSocketClosedError,
 } from "./messages.js";
+import { markPrepareExternalLaunchClientProtocolPhase } from "./prepareExternalLaunchPhaseDiagnostic.js";
 import { unwrapBoundaryResult } from "./runtime.js";
 import { connectUnixSocket, type NdjsonConnection } from "./transport.js";
 
@@ -254,6 +255,10 @@ async function requestProtocolMethod<TMethod extends ProtocolMethod>(
   method: TMethod,
   params?: unknown,
 ): Promise<ProtocolResult<TMethod>> {
+  const diagnosePrepareExternalLaunch = method === "agent.prepareExternalLaunch";
+  if (diagnosePrepareExternalLaunch) {
+    markPrepareExternalLaunchClientProtocolPhase("protocolEntered");
+  }
   const expectedObserver =
     method === "observer.health" ? undefined : resolveExpectedObserver(options);
   const acceptPreviousLifecycleSchema =
@@ -262,10 +267,22 @@ async function requestProtocolMethod<TMethod extends ProtocolMethod>(
   const result = await runRuntimeBoundaryWithTimeout(
     protocolClientBoundary(method, requestTimeoutMs(options)),
     async ({ signal }) => {
-      const request = (usePreviousLifecycleSchema: boolean) =>
-        openRequestConnection(options, signal, async (connection) => {
+      if (diagnosePrepareExternalLaunch) {
+        markPrepareExternalLaunchClientProtocolPhase("boundaryTaskEntered");
+      }
+      const request = async (usePreviousLifecycleSchema: boolean) => {
+        if (diagnosePrepareExternalLaunch) {
+          markPrepareExternalLaunchClientProtocolPhase("socketConnectStarted");
+        }
+        return openRequestConnection(options, signal, async (connection) => {
+          if (diagnosePrepareExternalLaunch) {
+            markPrepareExternalLaunchClientProtocolPhase("socketConnected");
+          }
           const iterator = connection.messages()[Symbol.asyncIterator]();
           if (expectedObserver !== undefined) {
+            if (diagnosePrepareExternalLaunch) {
+              markPrepareExternalLaunchClientProtocolPhase("expectedObserverHealthStarted");
+            }
             await assertExpectedObserver(
               connection,
               iterator,
@@ -274,8 +291,14 @@ async function requestProtocolMethod<TMethod extends ProtocolMethod>(
               acceptPreviousLifecycleSchema,
               usePreviousLifecycleSchema,
             );
+            if (diagnosePrepareExternalLaunch) {
+              markPrepareExternalLaunchClientProtocolPhase("expectedObserverHealthCompleted");
+            }
           }
-          return readResponseForRequest(
+          if (diagnosePrepareExternalLaunch) {
+            markPrepareExternalLaunchClientProtocolPhase("prepareRequestStarted");
+          }
+          const response = await readResponseForRequest(
             connection,
             iterator,
             id,
@@ -284,10 +307,19 @@ async function requestProtocolMethod<TMethod extends ProtocolMethod>(
             acceptPreviousLifecycleSchema,
             usePreviousLifecycleSchema,
           );
+          if (diagnosePrepareExternalLaunch) {
+            markPrepareExternalLaunchClientProtocolPhase("prepareResponseCompleted");
+          }
+          return response;
         });
+      };
 
       try {
-        return await request(false);
+        const response = await request(false);
+        if (diagnosePrepareExternalLaunch) {
+          markPrepareExternalLaunchClientProtocolPhase("boundaryTaskCompleted");
+        }
+        return response;
       } catch (error) {
         if (
           !acceptPreviousLifecycleSchema ||
@@ -302,7 +334,11 @@ async function requestProtocolMethod<TMethod extends ProtocolMethod>(
     },
   );
 
-  return unwrapBoundaryResult(result);
+  const response = unwrapBoundaryResult(result);
+  if (diagnosePrepareExternalLaunch) {
+    markPrepareExternalLaunchClientProtocolPhase("protocolCompleted");
+  }
+  return response;
 }
 
 function protocolClientBoundary(method: ProtocolMethod, timeoutMs: number) {
