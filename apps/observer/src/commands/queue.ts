@@ -437,6 +437,10 @@ function commandScope(command: StationCommand): string {
     case "session.importRecoveryHandle":
       return `worktree:${command.payload.worktreeId}`;
     case "worktree.create":
+      return `worktree-create:${JSON.stringify([
+        command.payload.projectId,
+        command.payload.branch,
+      ])}`;
     case "worktree.fork":
     case "session.create":
     case "session.fork":
