@@ -4,6 +4,10 @@ import { basename, isAbsolute } from "node:path";
 import { resolveObserverSocketForProcessArgs } from "@station/config";
 import { ObserverProcessTokenSchema, type SafeError } from "@station/contracts";
 import { z } from "zod";
+import type {
+  ObserverCooperativeProcessEntry,
+  ObserverCooperativeProcessEvidenceSource,
+} from "./observerCooperativeProcessIdentity.js";
 import {
   type ObserverProcessSignalResult,
   observerBuildSelectorIsValid,
@@ -38,19 +42,21 @@ const requiredObserverFlags = [
 ] as const;
 
 type ExecFileStatus = { status: number | null; stdout: string; stderr: string };
+type ExecutableProvenance = ObserverCooperativeProcessEntry["executableProvenance"] | "mismatch";
 
 type LocalObserverProcessEvidenceDeps = {
   execFile?: (file: string, args: readonly string[]) => string;
   execFileStatus?: (file: string, args: readonly string[]) => ExecFileStatus;
   readProcessArgv?: (pid: number) => string[] | undefined;
-  processExecutableMatches?: (pid: number, expectedPath: string) => boolean;
+  processExecutableProvenance?: (pid: number, expectedPath: string) => ExecutableProvenance;
   socketHolders?: (socketPath: string) => number[];
   signal?: (pid: number, signal: NodeJS.Signals | 0) => void;
   evidenceTimeoutMs?: number;
 };
 
 export type LocalObserverProcessEvidenceSource = ObserverDuplicateProcessEvidenceSource &
-  ObserverProcessExistenceEvidenceSource;
+  ObserverProcessExistenceEvidenceSource &
+  ObserverCooperativeProcessEvidenceSource;
 
 /**
  * ADAPTER
@@ -74,20 +80,25 @@ export function createLocalObserverProcessEvidence(
   const execFileStatus =
     deps.execFileStatus ?? ((file, args) => defaultExecFileStatus(file, args, evidenceTimeoutMs));
   const readProcessArgv = deps.readProcessArgv ?? defaultReadProcessArgv;
-  const processExecutableMatches =
-    deps.processExecutableMatches ??
-    ((pid, expectedPath) => defaultProcessExecutableMatches(pid, expectedPath, execFileStatus));
+  const processExecutableProvenance =
+    deps.processExecutableProvenance ??
+    ((pid: number, expectedPath: string) =>
+      defaultProcessExecutableProvenance(pid, expectedPath, execFileStatus));
   const signal = deps.signal ?? process.kill;
-  const readEntries = (args: readonly string[]): ObserverProcessEntry[] => {
+  const readCooperativeEntries = (args: readonly string[]): ObserverCooperativeProcessEntry[] => {
     const parsed = parseObserverProcessList(execFile(psPath, args));
     return parsed.map((entry) =>
-      requireExactLocalObserverProcess(entry, readProcessArgv, processExecutableMatches),
+      requireExactLocalObserverProcess(entry, readProcessArgv, processExecutableProvenance),
     );
   };
-  const readObserverProcess = (pid: number): ObserverProcessEntry | undefined =>
-    readEntries(["-ww", "-p", String(pid), "-o", "pid=,lstart=,command="]).find(
+  const readCooperativeProcess = (pid: number): ObserverCooperativeProcessEntry | undefined =>
+    readCooperativeEntries(["-ww", "-p", String(pid), "-o", "pid=,lstart=,command="]).find(
       (entry) => entry.pid === pid,
     );
+  const readObserverProcess = (pid: number): ObserverProcessEntry | undefined => {
+    const processEntry = readCooperativeProcess(pid);
+    return processEntry === undefined ? undefined : exactInstalledProcess(processEntry);
+  };
   const readExactProcess = (expected: ObserverProcessEntry): ObserverProcessEntry => {
     const current = readObserverProcess(expected.pid);
     if (current === undefined || !observerProcessEntriesMatch(current, expected)) {
@@ -98,7 +109,9 @@ export function createLocalObserverProcessEvidence(
 
   return {
     readObserverProcess,
-    listObserverProcesses: () => readEntries(processListArgs()),
+    readCooperativeObserverProcess: readCooperativeProcess,
+    listObserverProcesses: () =>
+      readCooperativeEntries(processListArgs()).map(exactInstalledProcess),
     socketHolders: deps.socketHolders ?? readObserverSocketHolderPids,
     processStartToken: (pid) => readProcessStartToken(pid, execFile),
     readProcessExistence: (pid) => readLocalProcessExistence(pid, execFileStatus),
@@ -325,14 +338,15 @@ function looksLikeIdentifiedObserver(command: string): boolean {
 function requireExactLocalObserverProcess(
   entry: ObserverProcessEntry,
   readProcessArgv: (pid: number) => string[] | undefined,
-  processExecutableMatches: (pid: number, expectedPath: string) => boolean,
-): ObserverProcessEntry {
+  processExecutableProvenance: (pid: number, expectedPath: string) => ExecutableProvenance,
+): ObserverCooperativeProcessEntry {
   const exactArgv = readProcessArgv(entry.pid);
+  const executableProvenance = processExecutableProvenance(entry.pid, entry.executablePath);
   if (
     (exactArgv !== undefined &&
       (exactArgv.length !== entry.argv.length ||
         exactArgv.some((value, index) => value !== entry.argv[index]))) ||
-    !processExecutableMatches(entry.pid, entry.executablePath)
+    executableProvenance === "mismatch"
   ) {
     throw observerProcessExecutableArgvMismatch();
   }
@@ -342,7 +356,11 @@ function requireExactLocalObserverProcess(
       throw new Error(`Observer process ${entry.pid} did not have exact source provenance.`);
     }
   }
-  return { ...entry, executablePath: realpathSync(entry.executablePath) };
+  return {
+    ...entry,
+    executablePath: realpathSync(entry.executablePath),
+    executableProvenance,
+  };
 }
 
 function observerProcessExecutableArgvMismatch(): Error & SafeError {
@@ -352,6 +370,21 @@ function observerProcessExecutableArgvMismatch(): Error & SafeError {
     message: "Observer process evidence did not match the exact executable and argv.",
   };
   return Object.assign(new Error(safeError.message), safeError);
+}
+
+function exactInstalledProcess(
+  processEntry: ObserverCooperativeProcessEntry,
+): ObserverProcessEntry {
+  if (processEntry.executableProvenance === "installed-path-replaced") {
+    const error: SafeError = {
+      tag: "ObserverProcessEvidenceError",
+      code: "OBSERVER_PROCESS_INSTALLED_PATH_REPLACED",
+      message: "Observer executable provenance changed after process launch.",
+    };
+    throw Object.assign(new Error(error.message), error);
+  }
+  const { executableProvenance: _ignored, ...exact } = processEntry;
+  return { ...exact, argv: [...exact.argv] };
 }
 
 function processListArgs(): string[] {
@@ -437,15 +470,22 @@ function defaultReadProcessArgv(pid: number): string[] | undefined {
   return commandLine.subarray(0, -1).toString("utf8").split("\0");
 }
 
-function defaultProcessExecutableMatches(
+function defaultProcessExecutableProvenance(
   pid: number,
   expectedPath: string,
   execFileStatus: (file: string, args: readonly string[]) => ExecFileStatus,
-): boolean {
+): ExecutableProvenance {
   const expected = realpathSync(expectedPath);
   const expectedIdentity = statSync(expected, { bigint: true });
   if (process.platform !== "darwin") {
-    return realpathSync(readlinkSync(`/proc/${pid}/exe`)) === expected;
+    const processExecutable = `/proc/${pid}/exe`;
+    const linkedPath = readlinkSync(processExecutable).replace(/ \(deleted\)$/u, "");
+    if (linkedPath !== expected) return "mismatch";
+    const runningIdentity = statSync(processExecutable, { bigint: true });
+    return runningIdentity.dev === expectedIdentity.dev &&
+      runningIdentity.ino === expectedIdentity.ino
+      ? "exact"
+      : "installed-path-replaced";
   }
   const result = execFileStatus(lsofPath, [
     "-nP",
@@ -460,7 +500,8 @@ function defaultProcessExecutableMatches(
     throw new Error(`Executable provenance was unavailable for PID ${pid}.`);
   }
   const lines = strictLsofLines(result.stdout, pid);
-  return lines.slice(1).some((line) => {
+  let installedPathReplaced = false;
+  for (const line of lines.slice(1)) {
     const fields = strictNulFields(line);
     const device = fields[1];
     const inode = fields[2];
@@ -474,18 +515,20 @@ function defaultProcessExecutableMatches(
       !/^i[1-9]\d*$/u.test(inode) ||
       name?.startsWith("n") !== true
     ) {
-      return false;
+      continue;
     }
     try {
-      return (
-        realpathSync(name.slice(1)) === expected &&
+      if (realpathSync(name.slice(1)) !== expected) continue;
+      if (
         BigInt(device.slice(1)) === expectedIdentity.dev &&
         BigInt(inode.slice(1)) === expectedIdentity.ino
-      );
-    } catch {
-      return false;
-    }
-  });
+      ) {
+        return "exact";
+      }
+      installedPathReplaced = true;
+    } catch {}
+  }
+  return installedPathReplaced ? "installed-path-replaced" : "mismatch";
 }
 
 function signalProcess(

@@ -29,6 +29,7 @@ export * from "./reconcile/graph.js";
 export * from "./reconcile/statusProjection.js";
 export * from "./runtime/api.js";
 export * from "./runtime/eventBus.js";
+export * from "./runtime/inspectExactObserverOwner.js";
 export * from "./runtime/logging.js";
 export * from "./runtime/main.js";
 export * from "./runtime/observerBootClaim.js";

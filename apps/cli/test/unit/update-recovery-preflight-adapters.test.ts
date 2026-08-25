@@ -1,8 +1,7 @@
 import { emptyConfig } from "@station/config";
 import type { ObserverProcessIdentity, ObserverRecoveryAssessment } from "@station/contracts";
 import { STATION_SCHEMA_VERSION } from "@station/contracts";
-import { ProviderRegistry } from "@station/observer/internal";
-import type { createObserverClient } from "@station/protocol";
+import { type ExactObserverOwnershipEvidence, ProviderRegistry } from "@station/observer/internal";
 import { FakeHarnessProvider, FakeTerminalProvider, FakeWorktreeProvider } from "@station/testing";
 import { describe, expect, it, vi } from "vitest";
 import { createUpdateRecoveryPreflightPorts } from "../../src/update/recoveryPreflightAdapters";
@@ -27,6 +26,7 @@ const processEntry = {
   buildVersion: identity.version,
   socketPath,
   startupTimeoutMs: 5_000,
+  executableProvenance: "exact" as const,
 };
 const artifacts = {
   installed: { version: "1.0.0" },
@@ -35,19 +35,22 @@ const artifacts = {
 
 describe("createUpdateRecoveryPreflightPorts", () => {
   it("keeps stopped, stale, and unhealthy Observer evidence typed without querying recovery", async () => {
-    const cases = [
+    const cases: Array<{
+      evidence: ExactObserverOwnershipEvidence;
+      expected: { status: string; reason?: string };
+    }> = [
       {
-        status: { status: "stopped" as const, paths: observerPaths() },
+        evidence: { status: "absent" },
         expected: { status: "absent" },
       },
       {
-        status: { status: "stale" as const, paths: observerPaths() },
+        evidence: { status: "blocked", reason: "stale-socket" },
         expected: { status: "unknown", reason: "stale-socket" },
       },
       {
-        status: {
-          status: "unhealthy" as const,
-          paths: observerPaths(),
+        evidence: {
+          status: "blocked",
+          reason: "unhealthy",
           error: {
             tag: "ObserverConnectionError",
             code: "OBSERVER_HEALTH_FAILED",
@@ -59,17 +62,12 @@ describe("createUpdateRecoveryPreflightPorts", () => {
     ];
 
     for (const testCase of cases) {
-      const readObserverIdentity = vi.fn(async () =>
-        testCase.status.status === "stopped" ? undefined : identity,
-      );
-      const clientFactory = vi.fn();
+      const inspectObserverOwner = vi.fn(async () => testCase.evidence);
       const ports = createUpdateRecoveryPreflightPorts({
         config: testConfig(),
         providers: providerRegistry(),
         currentBuildInfo,
-        observerStatus: async () => testCase.status,
-        readObserverIdentity,
-        observerDeps: { clientFactory },
+        inspectObserverOwner,
         hostStatus: async () => ({
           action: "status",
           socketPath: "/private/runtime/host.sock",
@@ -78,43 +76,19 @@ describe("createUpdateRecoveryPreflightPorts", () => {
       });
 
       await expect(ports.inspectObserver(artifacts)).resolves.toMatchObject(testCase.expected);
-      expect(readObserverIdentity).toHaveBeenCalledTimes(
-        testCase.status.status === "stopped" ? 1 : 0,
-      );
-      expect(clientFactory).not.toHaveBeenCalled();
+      expect(inspectObserverOwner).toHaveBeenCalledOnce();
     }
   });
 
-  it("uses the shared exact verifier, pins the Observer query, and redacts Host inventory", async () => {
+  it("projects complete exact inspection and redacts private Observer and Host evidence", async () => {
     const assessment = selectedAssessment();
-    const getSessionRecoveryAssessment = vi.fn(async () => assessment);
-    const readObserverProcess = vi.fn(() => processEntry);
+    const inspectObserverOwner = vi.fn(async () => exactObserver(identity.version, assessment));
     const providers = providerRegistry();
     const ports = createUpdateRecoveryPreflightPorts({
       config: testConfig(),
       providers,
       currentBuildInfo,
-      observerStatus: async () => ({
-        status: "running",
-        paths: observerPaths(),
-        health: {
-          schemaVersion: STATION_SCHEMA_VERSION,
-          status: "healthy",
-          pid: identity.pid,
-          startedAt: now,
-          version: identity.version,
-          socketPath,
-        },
-      }),
-      readObserverIdentity: async () => identity,
-      observerIdentitySource: {
-        processStartToken: () => identity.osStartTime,
-        readObserverProcess,
-      },
-      observerDeps: {
-        clientFactory: () =>
-          ({ getSessionRecoveryAssessment }) as ReturnType<typeof createObserverClient>,
-      },
+      inspectObserverOwner,
       hostStatus: async () => ({
         action: "status",
         socketPath: "/private/runtime/host.sock",
@@ -154,8 +128,7 @@ describe("createUpdateRecoveryPreflightPorts", () => {
       relation: "different",
       recovery: { status: "assessed" },
     });
-    expect(readObserverProcess).toHaveBeenCalledTimes(2);
-    expect(getSessionRecoveryAssessment).toHaveBeenCalledOnce();
+    expect(inspectObserverOwner).toHaveBeenCalledOnce();
     expect(host).toMatchObject({
       status: "inspected",
       relation: "different",
@@ -176,18 +149,11 @@ describe("createUpdateRecoveryPreflightPorts", () => {
   });
 
   it("reports an exact live Observer process when its socket is missing", async () => {
-    const clientFactory = vi.fn();
     const ports = createUpdateRecoveryPreflightPorts({
       config: testConfig(),
       providers: providerRegistry(),
       currentBuildInfo,
-      observerStatus: async () => ({ status: "stopped", paths: observerPaths() }),
-      readObserverIdentity: async () => identity,
-      observerIdentitySource: {
-        processStartToken: () => identity.osStartTime,
-        readObserverProcess: () => processEntry,
-      },
-      observerDeps: { clientFactory },
+      inspectObserverOwner: async () => ({ status: "blocked", reason: "process-without-socket" }),
       hostStatus: async () => ({
         action: "status",
         socketPath: "/private/runtime/host.sock",
@@ -200,40 +166,14 @@ describe("createUpdateRecoveryPreflightPorts", () => {
       reason: "process-without-socket",
       error: { code: "UPDATE_PREFLIGHT_OBSERVER_PROCESS_WITHOUT_SOCKET" },
     });
-    expect(clientFactory).not.toHaveBeenCalled();
   });
 
   it("returns typed unknown when exact process evidence drifts after the single API read", async () => {
-    let reads = 0;
-    const getSessionRecoveryAssessment = vi.fn(async () => emptyAssessment());
     const ports = createUpdateRecoveryPreflightPorts({
       config: testConfig(),
       providers: providerRegistry(),
       currentBuildInfo,
-      observerStatus: async () => ({
-        status: "running",
-        paths: observerPaths(),
-        health: {
-          schemaVersion: STATION_SCHEMA_VERSION,
-          status: "healthy",
-          pid: identity.pid,
-          startedAt: now,
-          version: identity.version,
-          socketPath,
-        },
-      }),
-      readObserverIdentity: async () => identity,
-      observerIdentitySource: {
-        processStartToken: () => identity.osStartTime,
-        readObserverProcess: () => {
-          reads += 1;
-          return reads === 1 ? processEntry : { ...processEntry, processToken: "drifted-token" };
-        },
-      },
-      observerDeps: {
-        clientFactory: () =>
-          ({ getSessionRecoveryAssessment }) as ReturnType<typeof createObserverClient>,
-      },
+      inspectObserverOwner: async () => ({ status: "blocked", reason: "identity-drift" }),
       hostStatus: async () => ({
         action: "status",
         socketPath: "/private/runtime/host.sock",
@@ -246,7 +186,6 @@ describe("createUpdateRecoveryPreflightPorts", () => {
       reason: "identity-mismatch",
       error: { code: "UPDATE_PREFLIGHT_OBSERVER_IDENTITY_DRIFT" },
     });
-    expect(getSessionRecoveryAssessment).toHaveBeenCalledOnce();
   });
 
   it("keeps unproven and older idle Host build evidence explicit", async () => {
@@ -280,7 +219,6 @@ describe("createUpdateRecoveryPreflightPorts", () => {
         config: testConfig(),
         providers: providerRegistry(),
         currentBuildInfo,
-        observerStatus: async () => ({ status: "stopped", paths: observerPaths() }),
         hostStatus: async () => ({
           action: "status",
           socketPath: "/private/runtime/host.sock",
@@ -332,7 +270,6 @@ describe("createUpdateRecoveryPreflightPorts", () => {
         config: testConfig(),
         providers: providerRegistry(),
         currentBuildInfo,
-        observerStatus: async () => ({ status: "stopped", paths: observerPaths() }),
         hostStatus: async () => ({
           action: "status",
           socketPath: "/private/runtime/host.sock",
@@ -362,47 +299,28 @@ describe("createUpdateRecoveryPreflightPorts", () => {
     "host",
   ] as const)("compares %s immutable identity for same-display targets without a revision", async (runtime) => {
     const target = { version: "1.0.0" };
-    const cases = [
+    const cases: ReadonlyArray<{
+      runningIdentity: string | undefined;
+      expectedRelation: "matching-target" | "different" | "unknown";
+    }> = [
       { runningIdentity: currentBuildIdentity, expectedRelation: "matching-target" },
-      { runningIdentity: undefined, expectedRelation: "unknown" },
+      ...(runtime === "host"
+        ? [{ runningIdentity: undefined, expectedRelation: "unknown" as const }]
+        : []),
       { runningIdentity: "different-build-identity", expectedRelation: "different" },
-    ] as const;
+    ];
 
     for (const testCase of cases) {
       const exactObserverSelector = `1.0.0+station.${"a".repeat(64)}`;
       const observerBuildVersion =
         testCase.runningIdentity === currentBuildIdentity
           ? exactObserverSelector
-          : testCase.runningIdentity === undefined
-            ? "1.0.0"
-            : `1.0.0+station.${"b".repeat(64)}`;
+          : `1.0.0+station.${"b".repeat(64)}`;
       const ports = createUpdateRecoveryPreflightPorts({
         config: testConfig(),
         providers: providerRegistry(),
         currentBuildInfo,
-        observerStatus: async () => ({
-          status: "running",
-          paths: observerPaths(),
-          health: {
-            schemaVersion: STATION_SCHEMA_VERSION,
-            status: "healthy",
-            pid: identity.pid,
-            startedAt: now,
-            version: observerBuildVersion,
-            socketPath,
-          },
-        }),
-        readObserverIdentity: async () => ({ ...identity, version: observerBuildVersion }),
-        observerIdentitySource: {
-          processStartToken: () => identity.osStartTime,
-          readObserverProcess: () => ({ ...processEntry, buildVersion: observerBuildVersion }),
-        },
-        observerDeps: {
-          clientFactory: () =>
-            ({ getSessionRecoveryAssessment: async () => emptyAssessment() }) as ReturnType<
-              typeof createObserverClient
-            >,
-        },
+        inspectObserverOwner: async () => exactObserver(observerBuildVersion),
         hostStatus: async () => ({
           action: "status",
           socketPath: "/private/runtime/host.sock",
@@ -435,7 +353,6 @@ describe("createUpdateRecoveryPreflightPorts", () => {
       config: testConfig(),
       providers: providerRegistry(),
       currentBuildInfo,
-      observerStatus: async () => ({ status: "stopped", paths: observerPaths() }),
       hostStatus: async () => ({
         action: "status",
         socketPath: "/private/runtime/host.sock",
@@ -455,6 +372,27 @@ describe("createUpdateRecoveryPreflightPorts", () => {
   });
 });
 
+function exactObserver(
+  version: string,
+  assessment: ObserverRecoveryAssessment = emptyAssessment(),
+): ExactObserverOwnershipEvidence {
+  const currentIdentity = { ...identity, version };
+  return {
+    status: "exact",
+    health: {
+      schemaVersion: STATION_SCHEMA_VERSION,
+      status: "healthy",
+      pid: currentIdentity.pid,
+      startedAt: now,
+      version,
+      socketPath,
+    },
+    processIdentity: currentIdentity,
+    process: { ...processEntry, buildVersion: version },
+    recovery: { status: "assessed", assessment },
+  };
+}
+
 function providerRegistry(): ProviderRegistry {
   const harness = Object.assign(new FakeHarnessProvider({ id: "codex" }), {
     hookHealth: async () => ({ provider: "codex" as const, status: "healthy" as const }),
@@ -471,17 +409,6 @@ function testConfig() {
     ...emptyConfig(),
     observer: { socketPath },
     harness: { codex: { installHooks: true, resume: true } },
-  };
-}
-
-function observerPaths() {
-  return {
-    socketPath,
-    stateDir: "/private/runtime/state",
-    dbPath: "/private/runtime/state/observer.sqlite",
-    logDir: "/private/runtime/state/logs",
-    diagnosticsDir: "/private/runtime/state/diagnostics",
-    hookSpoolDir: "/private/runtime/state/hooks",
   };
 }
 

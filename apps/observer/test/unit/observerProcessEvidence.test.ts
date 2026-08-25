@@ -60,7 +60,7 @@ describe("local Observer process evidence", () => {
     const evidence = createLocalObserverProcessEvidence({
       execFile: () => wrapper,
       readProcessArgv: () => undefined,
-      processExecutableMatches: () => false,
+      processExecutableProvenance: () => "mismatch",
     });
 
     expect(() => evidence.listObserverProcesses()).toThrow(
@@ -90,7 +90,7 @@ describe("local Observer process evidence", () => {
     const evidence = createLocalObserverProcessEvidence({
       execFile,
       readProcessArgv: () => undefined,
-      processExecutableMatches: () => true,
+      processExecutableProvenance: () => "exact",
     });
 
     try {
@@ -100,6 +100,31 @@ describe("local Observer process evidence", () => {
         expect.arrayContaining(["-p", "42"]),
       );
       expect(() => evidence.listObserverProcesses()).toThrow("ENOENT");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps replaced installed-path evidence on the cooperative-only port", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "stn-process-evidence-"));
+    const executable = join(dir, "stn");
+    await writeFile(executable, "");
+    const listing = ` 42 Sat Jul  4 17:45:33 2026 ${executable} __observer --socket /tmp/observer.sock --state-dir /tmp/state --startup-timeout-ms 10000 --build-version ${BUILD} --process-token ${TOKEN}\n`;
+    const evidence = createLocalObserverProcessEvidence({
+      execFile: () => listing,
+      readProcessArgv: () => undefined,
+      processExecutableProvenance: () => "installed-path-replaced",
+    });
+    try {
+      expect(evidence.readCooperativeObserverProcess(42)).toMatchObject({
+        executableProvenance: "installed-path-replaced",
+      });
+      expect(() => evidence.readObserverProcess(42)).toThrow(
+        expect.objectContaining({ code: "OBSERVER_PROCESS_INSTALLED_PATH_REPLACED" }),
+      );
+      expect(() => evidence.listObserverProcesses()).toThrow(
+        expect.objectContaining({ code: "OBSERVER_PROCESS_INSTALLED_PATH_REPLACED" }),
+      );
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
@@ -136,7 +161,7 @@ describe("local Observer process evidence", () => {
     const base = {
       execFile: () => listing,
       readProcessArgv: () => undefined,
-      processExecutableMatches: () => true,
+      processExecutableProvenance: () => "exact",
     };
     const zero = createLocalObserverProcessEvidence({
       ...base,
@@ -201,7 +226,7 @@ describe("local Observer process evidence", () => {
     const evidence = createLocalObserverProcessEvidence({
       execFile: () => (reads++ < 2 ? listing : ""),
       readProcessArgv: () => undefined,
-      processExecutableMatches: () => true,
+      processExecutableProvenance: () => "exact",
       execFileStatus: () => ({
         status: 0,
         stdout: "p42\0\nfcwd\0tDIR\0\n",

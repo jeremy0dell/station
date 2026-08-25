@@ -89,6 +89,7 @@ The claim-holding repair applies this decision table:
 | absent or same stale inode/birth identity | pidfile absent on two reads | idempotent clean result |
 | absent or same stale identity | PID positively absent | atomically remove the exact pidfile with reason `process-missing` |
 | absent or same stale identity | OS start token, executable/argv, process token, build selector, or socket argv differs | atomically remove the exact pidfile with the typed drift reason |
+| absent or same stale identity | installed path replaced after the admitted process launched | typed uncertainty refusal; preserve pidfile evidence |
 | absent or same stale identity | exact live Observer generation | typed `OBSERVER_STALE_EVIDENCE_UNCERTAIN` refusal; preserve evidence |
 | absent or same stale identity | malformed, insecure, inaccessible, timed-out, or otherwise uncertain evidence | typed fail-closed refusal; preserve evidence |
 | listening, inaccessible, or changed socket/pidfile owner | any | typed refusal; preserve the current owner's evidence |
@@ -102,6 +103,9 @@ the admission baseline; it never adopts or deletes a successor's evidence. Cance
 deadline exhaustion before commit refuses. Once the atomic filesystem operation begins it
 settles to delete the admitted exact value or restore what it claimed. Repeating repair after
 a successful removal returns the same clean state.
+
+Cooperative read-only inspection may retain `installed-path-replaced` provenance as evidence,
+but it grants no handoff, repair, reap, or signal authority.
 
 An idempotent `stn observer stop` returns `stopped: false` plus strict `evidenceRepair`
 summary when no incumbent exists. Startup and restart carry a repair refusal through the
