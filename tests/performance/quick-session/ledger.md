@@ -75,6 +75,7 @@ the winning design, and the remaining product-level frontier.
 | BENCH-041-P | BENCH-040-I's 349ms tail completed its worktree command at 181ms but did not foreground the pane until 317ms; the native path serially waits for canonical worktree observation, Observer launch preparation/Host spawn, Host attachment resolution, pane publication, and dashboard settlement. | Diagnostic only: rebuild the exact reverted EXP-016 foreground/automatic-dismissal behavior with monotonic in-memory markers at each successful phase, emit the marker array only at UI process exit, and run twenty immediate-input product repetitions. | Attribute only if every run is safe; every required marker occurs exactly once and monotonically; phase sums are exact; at least two command-completion-to-focus intervals exceed 75ms; and one named phase supplies at least 60% of total p95 plus at least 50% of each of at least two intervals over 75ms. The diagnostic user-facing p95 must remain at most 380ms and attachment-resolution p95 at most 25ms. Prediction: `prepareExternalLaunch` supplies at least 70% of total p95 and at least half of every interval over 75ms; attachment resolution p95 is at most 10ms. | Accepted for attribution; prediction partly disproved. Command-completion-to-close was 52/81ms median/p95. `prepareExternalLaunch` was 31/60ms, supplied 73.9% of total p95, and supplied at least half of three of four intervals over 75ms. Attachment resolution was 13/24.982ms, passing the 25ms guard by 0.018ms but missing the predicted 10ms. User-facing p95 was 345ms. | All twenty exact traces were monotonic, phase-sum coherent, and emitted only at UI exit. Every BENCH-040 identity, immediate exact-once token, canonical, inventory, stop, stderr, and root predicate passed. | Retain the phase attribution only; revert all diagnostic and foreground behavior. The prediction failed because one tail attributed 48.4% to prepare and attachment p95 exceeded 10ms. | Which operation inside Observer `prepareExternalLaunch` owns its 60ms p95: mutation admission, Host inventory, persistence, process launch, or narrow canonical projection? |
 | BENCH-042-O | BENCH-041-P attributed 60ms p95 to the client-visible `prepareExternalLaunch` RPC, but that Observer use case serially includes mutation admission, managed-target inventory, harness preflight, session persistence, managed workspace opening, launch-plan construction, Host process launch, and narrow canonical projection. | Diagnostic only: retain BENCH-041's exact product behavior and UI markers, add monotonic Observer-side marks for those subphases, write one strict artifact only when the Observer exits, and run twenty fresh immediate-input repetitions. | Attribute only if all twenty UI and Observer traces are exact, monotonic, sum-coherent, and exit-only; client RPC minus Observer internal duration has nonnegative p95 at most 15ms; at least two internal preparations exceed 40ms; and one subphase supplies at least 50% of internal p95 plus at least half of at least two over-40ms samples. User p95 must stay at most 380ms and attachment p95 at most 30ms. Prediction: Host process launch supplies at least 60% of internal p95 and at least half of every over-40ms preparation; target inventory and persistence p95 are at most 10ms each, canonical projection p95 at most 5ms, and transport residual p95 at most 10ms. | Rejected. The valid twenty-run attempt measured user intent-to-exact-input acknowledgement at 224/345ms median/p95, client-visible preparation at 33/46ms, Observer-internal preparation at 16/23ms, and client-minus-Observer residual at 18/24ms. Host process launch was the largest Observer subphase at 11/19ms and 80.9% of internal p95; target inventory, persistence, and canonical projection p95s were 4.2/1.3/1.3ms. No internal preparation exceeded 40ms, so zero required tail intervals existed, and residual p95 missed the 15ms attribution gate and 10ms prediction. | All twenty product runs and both marker layers were exact, monotonic, sum-coherent, exit-only, and safe; user p95 passed 380ms and attachment p95 was 18.7ms. Two earlier attempts were retained but invalid: the first exposed an empty-event TUI writer before Observer stop, and the second proved that reversing shutdown let that TUI writer overwrite the Observer trace. Restricting exit output to the process with recorded events corrected only the diagnostic witness. | Reject attribution mechanically and revert the temporary Observer/UI instrumentation and foreground candidate. The within-Observer Host share is descriptive only because the registered residual and tail requirements failed. | Which part of the roughly 24ms p95 client/Observer residual belongs to client request construction/serialization, socket queue/write/read, Observer request dispatch before use-case entry, and response serialization/delivery? |
 | BENCH-043-T | BENCH-042-O measured 24.070ms p95 between the UI's client-visible `prepareExternalLaunch` duration and Observer use-case entry-to-return. The protocol client opens a fresh Unix socket and validates the expected Observer build with a health request before the actual launch request. | Diagnostic only: retain BENCH-042's exact behavior and traces; add exit-only client marks around runtime-boundary admission, socket connection, expected-build health validation, actual request/response, and settlement, plus Observer protocol marks around request admission, use-case dispatch, and response send. | Attribute only if twenty UI/client/server/Observer traces are exact, monotonic, exit-only, and phase-sum coherent within 0.1ms; reconstructed residual differs from client-minus-Observer residual by at most 1ms per run; at least two residuals exceed 20ms; and one named residual segment supplies at least 40% of residual p95 plus at least half of at least two over-20ms residuals. User p95 must be at most 380ms, attachment p95 at most 30ms, and residual p95 at most 35ms. Prediction: expected-build health validation supplies at least 50% of residual p95 and at least half of every over-20ms residual; socket connect, actual-request wire/client work, Observer pre-use-case dispatch, and Observer post-use-case response each have p95 at most 5ms; combined outer client settlement p95 is at most 3ms. | Rejected. All twenty exact residual decompositions had zero reconstruction error. Residual was 17.601/76.251ms median/p95 and user latency 222/853.612ms, failing the 35ms and 380ms perturbation guards. Actual-request wire/client work was largest at 9.105/48.862ms, 64.1% of residual p95, and at least half of three of nine over-20ms tails. Expected-build health was 4.180/24.603ms and only 32.3% of residual p95, disproving the prediction. | Every product predicate and all four UI/client/server/Observer trace layers passed. Attachment resolution was 11.009/18.785ms; socket connect 0.504/2.113ms; Observer pre-use-case 0.846/1.221ms; post-use-case 2.441/5.840ms; combined outer settlement 0.386/0.992ms. One prior attempt stopped after three safe runs on a blank startup frame; seven exact orphaned `st-qtu-*` TUI processes from earlier runs were identified and terminated before the authoritative attempt. Its one-minute load was 16.0–23.4 on ten logical CPUs. | Reject attribution mechanically and revert all temporary instrumentation and foreground behavior. The descriptive wire/client split cannot authorize a production optimization because both perturbation guards failed. | Under an explicit load-admission gate, does a deeper request-send/server-receive and server-send/client-receive trace reproduce actual-request wire/client dominance without violating user/residual guards? |
+| BENCH-044-W | BENCH-043-T descriptively attributed 48.862ms p95 to actual-request wire/client work but failed its perturbation guards under high scheduler preemption. That remainder combines request validation/encoding/send, client-to-server scheduling, server response validation/encoding/send, server-to-client scheduling, and client response validation. | Diagnostic only: retain BENCH-043 behavior and traces; require a pre-run 50-turn event-loop and ten-spawn stability sentinel; add comparable epoch marks around request construction/send, expected-health server receipt/send, prepare server receipt/response construction/send, client response-frame receipt, and response validation. | Admit each repetition only after set-immediate p95 is at most 1ms and `/usr/bin/true` spawn p95 at most 5ms, recording every attempt and failing after 300s. Attribute only if twenty safe traces have nonnegative cross-process ordering; client, server, health, actual-request, and residual reconstruction errors are each at most 1ms; at least two actual wire/client intervals exceed 10ms; and one segment supplies at least 50% of actual wire/client p95 plus at least half of at least two over-10ms intervals. User p95 must be at most 380ms, attachment p95 at most 30ms, and total residual p95 at most 35ms. Prediction: client response-frame-to-result validation supplies at least 50% of actual wire/client p95 and at least half of every over-10ms interval; request construction/send p95 is at most 2ms; ingress and egress scheduling p95 are each at most 5ms; expected-health p95 at most 10ms; server response construction/send p95 at most 5ms. | Pending. | Pending. No sample is filtered after its product run starts. Every BENCH-043 product predicate and exit-only trace contract remains binding; no protocol validation, identity proof, timeout, connection, request, response, or launch behavior changes. | Pending; revert all diagnostic and foreground behavior regardless of outcome. | If client validation dominates, can duplicate response parsing be removed while retaining one strict boundary parse; if scheduling dominates, is a persistent multiplexed client connection a measured simplification? |
 
 ## EXP-008 preregistered change plan
 
@@ -1818,3 +1819,76 @@ named tmux session was touched. The valid run still observed one-minute load
 between 16.0 and 23.4 on ten logical CPUs, with user-facing p95 tails up to
 2.280s. Both raw attempts are retained. All temporary behavior and
 instrumentation must be reverted from the review branch.
+
+## BENCH-044-W registered diagnostic plan
+
+Governing sources are `docs/debugging.md`, `docs/architecture.md`,
+`docs/observer-architecture.md`, `docs/architecture-documentation.md`,
+`tests/README.md`, the original experiment protocol, BENCH-042-O, and
+BENCH-043-T. BENCH-043 is authoritative only as a rejection: actual-request
+wire/client work was descriptively largest at 9.105/48.862ms median/p95, but
+total residual and user p95 missed fixed perturbation guards under elevated
+scheduler preemption. Load average alone does not explain stability because
+BENCH-041/042 remained bounded at overlapping one-minute loads.
+
+BENCH-044 retains the exact temporary foreground, automatic-close,
+immediate-input, UI/client/server/Observer traces, twenty-repetition compiled
+product boundary, and full correctness matrix. Before each repetition begins,
+the runner executes fifty `setImmediate` turns and ten sequential
+`/usr/bin/true` processes. It records every admission attempt and waits one
+second between failures, admitting only when event-loop p95 is at most 1ms and
+process-spawn p95 at most 5ms; failure to admit within 300s rejects the attempt.
+No timing sample is discarded or filtered after its product repetition starts.
+
+Protocol marks gain comparable `performance.timeOrigin + performance.now()`
+timestamps. Client marks divide prepare-request construction, send, response-
+frame receipt, envelope validation, result validation, and settlement. Server
+marks identify expected-health request receipt/response send, prepare request
+receipt, response construction, and response send. The runner reconstructs the
+health round trip, actual prepare round trip, BENCH-043 wire/client remainder,
+and whole residual independently. Negative cross-process ordering or more than
+1ms error at any reconstruction invalidates the run.
+
+Expected temporary files inherited from BENCH-043 are
+`station/src/app/dashboardCapabilities.ts`,
+`station/src/app/dashboardCapabilities.test.ts`,
+`station/src/input/runtime/managedLaunch.ts`,
+`station/src/input/runtime/managedLaunch.test.ts`,
+`station/src/input/runtime/managedLaunchAttempt.ts`,
+`station/src/input/runtime/managedLaunchPhaseDiagnostic.ts`,
+`apps/observer/src/runtime/externalLaunch.ts`,
+`apps/observer/src/runtime/externalLaunchPhaseDiagnostic.ts`,
+`packages/protocol/src/client.ts`, `packages/protocol/src/server.ts`,
+`packages/protocol/src/prepareExternalLaunchPhaseDiagnostic.ts`, and
+`tests/performance/quick-session/compiledQuickSessionTui.real.test.ts`.
+BENCH-044 changes only those last four protocol/runner files beyond the archived
+BENCH-043 state. Raw JSON, a standalone archive summary, and this ledger are the
+evidence artifacts. No package manifest, shared contract/schema, provider,
+connector, configuration, architecture, permanent test, report, or user-
+documentation change is expected.
+
+JSDoc impact is explicit: the temporary protocol recorder documentation will
+add its cross-process comparable-clock contract. Existing temporary UI and
+Observer recorder JSDoc remains unchanged. No retained backend, connector, or
+protocol JSDoc change is expected because all instrumentation will be reverted
+after classification.
+
+The table row freezes the decision before restoring diagnostic source. All
+twenty repetitions must pass admission and every BENCH-043 safety predicate.
+All trace orders and adjacent phase sums remain exact; health, actual-request,
+wire/client, and full-residual reconstructions must be nonnegative and within
+1ms. At least two wire/client intervals must exceed 10ms. A phase is dominant
+only if it supplies at least 50% of wire/client p95 and at least half of at least
+two over-10ms intervals. User-facing p95 remains bounded at 380ms, attachment
+p95 at 30ms, and residual p95 at 35ms. Prediction: client response-frame-to-
+result validation supplies at least 50% of wire/client p95 and at least half of
+every tail; request construction/send p95 is at most 2ms, ingress and egress
+scheduling p95 each at most 5ms, expected-health p95 at most 10ms, and server
+response construction/send p95 at most 5ms. Any failed condition rejects
+attribution mechanically.
+
+Validation before the product run will repeat Protocol, Observer, and Station
+typechecks; Protocol client/server integration, Observer external-launch unit,
+focused temporary dashboard/managed-launch tests, Biome, `git diff --check`, and
+the runner's skipped-mode compile. No production optimization is registered
+until BENCH-044 passes every stability, attribution, and product guard.
