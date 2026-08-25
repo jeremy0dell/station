@@ -73,6 +73,7 @@ the winning design, and the remaining product-level frontier.
 | EXP-016 | Native Quick Session already publishes a managed pane as the dashboard overlay's return target, so making only that shortcut a foreground landing and dismissing only its proven successful landing should remove the second gesture without weakening failure visibility. | Temporarily carried an explicit foreground request through native managed launch, closed the overlay only for `success` with `landed: true`, and left deliberate Create, Fork, notices, failures, and non-landing success unchanged. | BENCH-038-F Ctrl-O intent-to-interactive was 213/634ms median/p95 over five alternating control runs; BENCH-039-S was 410ms once after fixing the terminal-provider expectation. Keep only with ten safe control and ten safe candidate runs, candidate intent-to-interactive median/p95 at most 200/350ms, candidate p95 at least 25% below the fresh control, automatic overlay-dismissal-to-input-ack p95 at most 100ms, no dismissal input byte in candidate runs, and every exact identity, canonical, input, inventory, stop, stderr, phase, and root predicate true. Prediction: automatic candidate intent-to-interactive p95 is at most 300ms and at least 40% below fresh Ctrl-O control. | Rejected. Fresh Ctrl-O control was 220/2348ms median/p95; automatic dismissal was 196/358ms, improving median 11% and p95 84.8%. The candidate passed the 200ms median and relative rules but missed the 350ms absolute p95 by 7.8ms, missed the 100ms overlay-dismissal-to-input-ack p95 at 154ms, and missed its 300ms prediction by 58ms. | All ten control and ten candidate runs passed every named identity, canonical, input, inventory, stop, stderr, phase, and root predicate. Candidate runs sent no dismissal byte. Focused tests proved successful landing, non-landing success, notice, launch failure, deliberate Create, Fork, canonical continuation, and foreground/background propagation; Station typecheck passed. | Revert completely under the preregistered rule; retain the runner and raw control/candidate evidence only on the continuation archive. | Can native managed launch expose bounded child-input readiness so automatic dismissal occurs only when the pane can immediately acknowledge input? |
 | BENCH-040-I | EXP-016's runner waited for the scripted harness-ready marker before writing input, although automatic dismissal had already focused a Host-backed PTY that should accept and buffer controller input immediately. | Diagnostic only: reuse the exact rejected candidate binary and send the input token within 10ms of automatic overlay dismissal, then observe the independent ready marker and exact acknowledgement without rebuilding or changing production source. | EXP-016 automatic candidate was 196/358ms median/p95 intent-to-interactive and 24/154ms dismissal-to-ack. Its sole tail waited 100ms after dismissal for Host ready, then 54ms after write. Accept only if ten safe runs all write within 10ms of dismissal, at least one write precedes harness readiness by at least 25ms, every token is acknowledged exactly once, intent-to-interactive median/p95 are at most 200/320ms, p95 improves at least 10% over 358ms, dismissal-to-ack p95 is at most 120ms, and every EXP-016 identity, canonical, inventory, stop, stderr, phase, and root predicate passes. Prediction: at least one pre-ready write is retained without loss and intent-to-interactive p95 is at most 310ms. | Rejected. Immediate input produced 184/349ms intent-to-interactive: median passed, but p95 missed 320ms by 29ms, improved only 2.4% rather than 10%, and missed the 310ms prediction. Dismissal-to-ack passed narrowly at 24/118ms. | All ten runs passed every named safety predicate, wrote within 0.064ms of dismissal, and acknowledged the exact token once. One live-observed run safely wrote 115ms before Host readiness; no candidate sent a dismissal byte. | Retain the buffer-safety attribution, but reject the diagnostic mechanically and do not retroactively accept EXP-016. The remaining 349ms tail accumulated before automatic focus. | Which successful managed-launch phase between command completion and foreground pane focus owns the remaining tail? |
 | BENCH-041-P | BENCH-040-I's 349ms tail completed its worktree command at 181ms but did not foreground the pane until 317ms; the native path serially waits for canonical worktree observation, Observer launch preparation/Host spawn, Host attachment resolution, pane publication, and dashboard settlement. | Diagnostic only: rebuild the exact reverted EXP-016 foreground/automatic-dismissal behavior with monotonic in-memory markers at each successful phase, emit the marker array only at UI process exit, and run twenty immediate-input product repetitions. | Attribute only if every run is safe; every required marker occurs exactly once and monotonically; phase sums are exact; at least two command-completion-to-focus intervals exceed 75ms; and one named phase supplies at least 60% of total p95 plus at least 50% of each of at least two intervals over 75ms. The diagnostic user-facing p95 must remain at most 380ms and attachment-resolution p95 at most 25ms. Prediction: `prepareExternalLaunch` supplies at least 70% of total p95 and at least half of every interval over 75ms; attachment resolution p95 is at most 10ms. | Accepted for attribution; prediction partly disproved. Command-completion-to-close was 52/81ms median/p95. `prepareExternalLaunch` was 31/60ms, supplied 73.9% of total p95, and supplied at least half of three of four intervals over 75ms. Attachment resolution was 13/24.982ms, passing the 25ms guard by 0.018ms but missing the predicted 10ms. User-facing p95 was 345ms. | All twenty exact traces were monotonic, phase-sum coherent, and emitted only at UI exit. Every BENCH-040 identity, immediate exact-once token, canonical, inventory, stop, stderr, and root predicate passed. | Retain the phase attribution only; revert all diagnostic and foreground behavior. The prediction failed because one tail attributed 48.4% to prepare and attachment p95 exceeded 10ms. | Which operation inside Observer `prepareExternalLaunch` owns its 60ms p95: mutation admission, Host inventory, persistence, process launch, or narrow canonical projection? |
+| BENCH-042-O | BENCH-041-P attributed 60ms p95 to the client-visible `prepareExternalLaunch` RPC, but that Observer use case serially includes mutation admission, managed-target inventory, harness preflight, session persistence, managed workspace opening, launch-plan construction, Host process launch, and narrow canonical projection. | Diagnostic only: retain BENCH-041's exact product behavior and UI markers, add monotonic Observer-side marks for those subphases, write one strict artifact only when the Observer exits, and run twenty fresh immediate-input repetitions. | Attribute only if all twenty UI and Observer traces are exact, monotonic, sum-coherent, and exit-only; client RPC minus Observer internal duration has nonnegative p95 at most 15ms; at least two internal preparations exceed 40ms; and one subphase supplies at least 50% of internal p95 plus at least half of at least two over-40ms samples. User p95 must stay at most 380ms and attachment p95 at most 30ms. Prediction: Host process launch supplies at least 60% of internal p95 and at least half of every over-40ms preparation; target inventory and persistence p95 are at most 10ms each, canonical projection p95 at most 5ms, and transport residual p95 at most 10ms. | Pending. | Pending. Observer output is parsed with a strict schema after clean stop; any diagnostic file present before Observer exit or any missing/duplicate marker fails safety. Every BENCH-041 product predicate remains binding. | Pending; revert both diagnostic layers and the foreground candidate after attribution regardless of outcome. | Can the attributed Observer subphase be shortened or overlapped while preserving exact session seed, terminal binding, and canonical publication ordering? |
 
 ## EXP-008 preregistered change plan
 
@@ -1650,3 +1651,57 @@ BENCH-041 authorizes attribution only. The next diagnostic must divide Observer
 launch preparation across mutation admission, managed-target inventory,
 persistence, managed workspace opening, harness-plan construction, Host process
 launch, and narrow canonical projection before selecting production work.
+
+## BENCH-042-O registered diagnostic plan
+
+Governing sources are `docs/debugging.md`, `docs/architecture.md`,
+`docs/observer-architecture.md`, `docs/architecture-documentation.md`,
+`tests/README.md`, the original experiment protocol, and BENCH-041-P. The
+accepted runtime evidence is authoritative: client-visible
+`prepareExternalLaunch` was 31/60ms median/p95, supplied 73.9% of the internal
+command-completion-to-focus p95, and dominated three of four intervals over
+75ms. Host attachment resolution was separately 13/24.982ms.
+
+BENCH-042 retains the exact temporary BENCH-041 foreground, automatic-close,
+immediate-input, UI phase-recorder, and twenty-repetition product boundary. It
+adds an Observer-owned diagnostic recorder and marks entry into
+`prepareExternalLaunch`, worktree-mutation admission, managed-target inventory,
+harness preflight, fresh-session persistence, managed workspace opening,
+harness launch-plan construction, Host managed-process launch, narrow canonical
+projection, and successful return. Marks remain in memory. The Observer writes
+one strict JSON artifact to the repetition-specific temporary path only in its
+normal process-exit handler, after the runner has proved the file absent before
+Observer stop.
+
+Expected temporary files from BENCH-041 are
+`station/src/app/dashboardCapabilities.ts`,
+`station/src/app/dashboardCapabilities.test.ts`,
+`station/src/input/runtime/managedLaunch.ts`,
+`station/src/input/runtime/managedLaunch.test.ts`,
+`station/src/input/runtime/managedLaunchAttempt.ts`,
+`station/src/input/runtime/managedLaunchPhaseDiagnostic.ts`, and
+`tests/performance/quick-session/compiledQuickSessionTui.real.test.ts`.
+BENCH-042 additionally changes `apps/observer/src/runtime/externalLaunch.ts` and
+adds `apps/observer/src/runtime/externalLaunchPhaseDiagnostic.ts`. Raw JSON, a
+standalone archive summary, and this ledger are the evidence artifacts. No
+package, contract, protocol, provider, connector, configuration, architecture,
+permanent test, report, or user-documentation change is expected.
+
+JSDoc impact is explicit: the temporary Observer recorder documents its
+exit-only, no-pre-interaction-I/O contract. BENCH-041's temporary request and UI
+recorder JSDoc remains unchanged. No retained backend or connector JSDoc change
+is expected, because all instrumentation and foreground behavior will be
+reverted after classification.
+
+The table row fixes the decision before restoring or editing diagnostic source.
+All required Observer markers must occur exactly once and monotonically; their
+adjacent durations must sum within 0.1ms of Observer entry-to-return. The p95 of
+client RPC duration minus Observer internal duration must be nonnegative and at
+most 15ms. At least two internal preparations must exceed 40ms. A subphase is
+dominant only if it supplies at least 50% of internal p95 and at least half of
+at least two over-40ms samples. User-facing p95 remains bounded at 380ms and
+attachment-resolution p95 at 30ms. Prediction: Host managed-process launch
+supplies at least 60% of internal p95 and at least half of every over-40ms
+sample; managed-target inventory and persistence p95 are each at most 10ms,
+narrow canonical projection p95 at most 5ms, and transport residual p95 at most
+10ms. Any failed condition rejects attribution mechanically.
