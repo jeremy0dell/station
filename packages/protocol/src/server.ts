@@ -75,6 +75,9 @@ async function handleConnection(
         connection.send(errorResponse(requestId(message), "Invalid protocol request."));
         continue;
       }
+      if (request.data.method === "observer.health" && request.data.id.endsWith("_health")) {
+        markPrepareExternalLaunchServerProtocolPhase("expectedObserverHealthRequestParsed");
+      }
       if (request.data.method === "agent.prepareExternalLaunch") {
         markPrepareExternalLaunchServerProtocolPhase("prepareRequestParsed");
       }
@@ -133,6 +136,9 @@ async function routeRequest(
   }
   try {
     sendResult(connection, request.id, request.method, result.value);
+    if (request.method === "observer.health" && request.id.endsWith("_health")) {
+      markPrepareExternalLaunchServerProtocolPhase("expectedObserverHealthResponseSent");
+    }
     if (request.method === "agent.prepareExternalLaunch") {
       markPrepareExternalLaunchServerProtocolPhase("prepareResponseSent");
     }
@@ -259,7 +265,11 @@ function sendResult(
   method: ProtocolMethod,
   value: unknown,
 ): void {
-  connection.send(protocolSuccessResponse(id, method, value));
+  const response = protocolSuccessResponse(id, method, value);
+  if (method === "agent.prepareExternalLaunch") {
+    markPrepareExternalLaunchServerProtocolPhase("prepareResponseConstructed");
+  }
+  connection.send(response);
 }
 
 async function streamEvents(
